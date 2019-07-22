@@ -1,0 +1,155 @@
+syntax = "proto3";
+
+package iface;
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/iface;iface";
+
+import "google/protobuf/timestamp.proto";
+
+enum ProtocolOptions {
+  VERSION = 0;
+  MINIMUM_VERSION = 1;
+  SWARM_IDENTIFIER = 2;
+  CONTENT_INTEGRITY_PROTECTION_METHOD = 3;
+  MERKLE_HASH_TREE_FUNCTION = 4;
+  LIVE_SIGNATURE_ALGORITHM = 5;
+  CHUNK_ADDRESSING_METHOD = 6;
+  LIVE_DISCARD_WINDOW = 7;
+  SUPPORTED_MESSAGES = 8;
+  CHUNK_SIZE = 9;
+  END_OPTION = 255;
+}
+
+enum Version {
+  VERSION_RFC7574 = 0;
+}
+
+enum ContentIntegrityProtectionMethod {
+  NONE = 0;
+  MERKLE_HASH_TREE = 1;
+  SIGN_ALL = 2;
+  UNIFIED_MERKLE_TREE = 3;
+}
+
+enum MerkleHashTreeFunction {
+  SHA1 = 0;
+  SHA224 = 1;
+  SHA256 = 2;
+  SHA384 = 3;
+  SHA512 = 4;
+}
+
+enum LiveSignatureAlgorithm {
+  RSASHA1 = 0;
+  RSASHA256 = 1;
+  ECDSAP256SHA256 = 2;
+  ECDSAP384SHA384 = 3;
+}
+
+enum ChunkAddressingMethod {
+  BIN32 = 0;
+  BYTE_RANGE64 = 1;
+  CHUNK_RANGE32 = 2;
+  BIN64 = 3;
+  CHUNK_RANGE64 = 4;
+}
+
+enum MessageTypes {
+  HANDSHAKE = 0;
+  DATA = 1;
+  ACK = 2;
+  HAVE = 3;
+  INTEGRITY = 4;
+  PEX_RESV4 = 5;
+  PEX_REQ = 6;
+  SIGNED_INTEGRITY = 7;
+  REQUEST = 8;
+  CANCEL = 9;
+  CHOKE = 10;
+  UNCHOKE = 11;
+  PEX_RESV6 = 12;
+  PEX_RESCERT = 13;
+}
+
+message Bin32ChunkAddress {
+  uint32 value = 1;
+}
+
+message LiveSignature {
+  bytes value = 1;
+}
+
+message IntegrityHash {
+  bytes value = 1;
+}
+
+message SupportedMessages {
+  repeated ProtocolOptions values = 1;
+}
+
+message Handshake {
+  uint32 channel_id = 1;
+  SupportedMessages options = 2;
+}
+
+message Data {
+  Bin32ChunkAddress address = 1;
+  bytes data = 2;
+  google.protobuf.Timestamp timestamp = 3;
+}
+
+message Ack {
+  Bin32ChunkAddress address = 1;
+  google.protobuf.Timestamp delay_sample = 2;
+}
+
+message Have {
+  Bin32ChunkAddress address = 1;
+}
+
+message Integrity {
+  Bin32ChunkAddress address = 1;
+  bytes hash = 2;
+}
+
+message SignedIntegrity {
+  Bin32ChunkAddress address = 1;
+  google.protobuf.Timestamp timestamp = 2;
+  bytes signature = 3;
+}
+
+message Request {
+  Bin32ChunkAddress address = 1;
+}
+
+message Cancel {
+  Bin32ChunkAddress address = 1;
+}
+
+message Choke {}
+
+message Unchoke {}
+
+message Datagram {
+  message Message {
+    oneof data_oneof {
+      Handshake Handshake = 1;
+      Data Data = 2;
+      Ack Ack = 3;
+      Have Have = 4;
+      Integrity Integrity = 5;
+      SignedIntegrity SignedIntegrity = 6;
+      Request Request = 7;
+      Cancel Cancel = 8;
+      Choke Choke = 9;
+      Unchoke Unchoke = 10;
+    }
+  }
+
+  uint32 channel_id = 11;
+  repeated Message messages = 12;
+}
+
+message Signal {
+  string uid = 1;
+	bytes data = 2;
+}
