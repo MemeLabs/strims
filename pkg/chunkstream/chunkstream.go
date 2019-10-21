@@ -180,10 +180,6 @@ func (c *Reader) Read(p []byte) (n int, err error) {
 	return
 }
 
-func (c *Reader) headerFull() bool {
-	return len(c.header) == headerLen
-}
-
 func (c *Reader) readHeader(p []byte) (n int) {
 	off := len(c.header)
 	c.header = c.header[:headerLen]

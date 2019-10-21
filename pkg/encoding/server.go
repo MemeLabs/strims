@@ -113,12 +113,9 @@ func (s *MemeServer) Listen(ctx context.Context) (err error) {
 	}
 }
 
-// var glock sync.Mutex
-
 // readDatagram ...
 func (s *MemeServer) readDatagram() (err error) {
 	n, c, err := s.t.Read(s.readBuf)
-	// log.Println("read", n, c)
 	if err != nil {
 		if err == io.EOF {
 			return nil
@@ -136,9 +133,6 @@ func (s *MemeServer) readDatagram() (err error) {
 
 	for b := s.readBuf[:n]; len(b) != 0; {
 		n, err = r.Datagram.Unmarshal(b)
-		// glock.Lock()
-		// spew.Dump(r.Datagram)
-		// glock.Unlock()
 		if err != nil {
 			return
 		}

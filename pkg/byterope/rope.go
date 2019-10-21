@@ -1,7 +1,5 @@
 package byterope
 
-// TODO: reimplement with contracts
-
 // Rope data structure for byte slices
 type Rope [][]byte
 

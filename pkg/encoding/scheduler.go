@@ -114,8 +114,6 @@ func (s *Scheduler) peerWriteInterval(peer *Peer) (i time.Duration) {
 }
 
 func (s *Scheduler) printPeerDebugLog(peer *Peer) {
-	return
-
 	peer.Lock()
 	// spew.Dump(peer)
 	if peer.ledbat.Debug() {
