@@ -5,44 +5,91 @@ import (
 	"io"
 )
 
+// NewMemeWriter ...
+func NewMemeWriter(c TransportConn) *MemeWriter {
+	return &MemeWriter{
+		Conn: c,
+		buf:  make([]byte, c.Transport().MTU()),
+	}
+}
+
+// MemeWriter ...
 type MemeWriter struct {
-	d *Datagram
-	t Transport
-	c TransportConn
+	Conn  TransportConn
+	buf   []byte
+	len   int
+	cid   uint32
+	dirty bool
 }
 
-func (w MemeWriter) SetChannelID(id uint32) {
-	w.d.ChannelID = id
-}
-
-func (w MemeWriter) Write(m Message) {
-	// TODO: check byte length sum against t.MTU()
-	w.d.Messages = append(w.d.Messages, m)
-}
-
-func (w MemeWriter) Flush() error {
-	if len(w.d.Messages) == 0 {
-		return nil
+// BeginFrame ...
+func (w *MemeWriter) BeginFrame(channelID uint32) {
+	if w.cid == channelID {
+		return
 	}
 
-	b := make([]byte, 1500)
-	n := w.d.Marshal(b)
-	// spew.Dump("writing", b[:n])
-	return w.t.Write(b[:n], w.c)
+	if w.dirty {
+		w.Write(&End{})
+	}
+
+	w.cid = channelID
+	w.dirty = false
 }
 
+// Write ...
+func (w *MemeWriter) Write(messages ...Message) {
+	m := Messages(messages)
+
+	if w.len+m.ByteLen() > w.Conn.Transport().MTU() {
+		w.Flush()
+	}
+
+	if !w.dirty {
+		w.dirty = true
+
+		d := Datagram{ChannelID: w.cid}
+		w.len += d.Marshal(w.buf[w.len:])
+	}
+
+	w.len += m.Marshal(w.buf[w.len:])
+}
+
+// Flush ...
+func (w *MemeWriter) Flush() (err error) {
+	if !w.dirty {
+		return
+	}
+	err = w.Conn.Write(w.buf[:w.len])
+
+	w.len = 0
+	w.dirty = false
+
+	return
+}
+
+// Dirty ...
+func (w *MemeWriter) Dirty() bool {
+	return w.dirty
+}
+
+// MemeRequest ...
 type MemeRequest struct {
 	Datagram
 	Conn TransportConn
 }
 
-type MemeHandler func(w MemeWriter, r *MemeRequest)
+// MemeHandler ...
+type MemeHandler func(w *MemeWriter, r *MemeRequest)
 
+// MemeServer ...
 type MemeServer struct {
-	t       Transport
-	Handler MemeHandler
+	t        Transport
+	Handler  MemeHandler
+	readBuf  []byte
+	writeBuf []byte
 }
 
+// Listen ...
 func (s *MemeServer) Listen(ctx context.Context) (err error) {
 	defer s.Shutdown()
 
@@ -55,7 +102,9 @@ func (s *MemeServer) Listen(ctx context.Context) (err error) {
 		return
 	}
 
-	// TODO: writer cache for buffered output?
+	buf := make([]byte, s.t.MTU()*2)
+	s.readBuf = buf[:s.t.MTU()]
+	s.writeBuf = buf[s.t.MTU():]
 
 	for {
 		if err = s.readDatagram(); err != nil {
@@ -64,15 +113,12 @@ func (s *MemeServer) Listen(ctx context.Context) (err error) {
 	}
 }
 
-func (s *MemeServer) readDatagram() (err error) {
-	// defer func() {
-	// 	if err := recover(); err != nil {
-	// 		// TODO: drop the peer?
-	// 		fmt.Println(err)
-	// 	}
-	// }()
+// var glock sync.Mutex
 
-	b, c, err := s.t.Read()
+// readDatagram ...
+func (s *MemeServer) readDatagram() (err error) {
+	n, c, err := s.t.Read(s.readBuf)
+	// log.Println("read", n, c)
 	if err != nil {
 		if err == io.EOF {
 			return nil
@@ -80,25 +126,33 @@ func (s *MemeServer) readDatagram() (err error) {
 		return
 	}
 
-	r := &MemeRequest{Conn: c}
-	if _, err = r.Datagram.Unmarshal(b); err != nil {
-		return
+	r := MemeRequest{
+		Conn: c,
 	}
-
 	w := MemeWriter{
-		d: &Datagram{},
-		t: s.t,
-		c: c,
+		Conn: c,
+		buf:  s.writeBuf,
 	}
 
-	s.Handler(w, r)
+	for b := s.readBuf[:n]; len(b) != 0; {
+		n, err = r.Datagram.Unmarshal(b)
+		// glock.Lock()
+		// spew.Dump(r.Datagram)
+		// glock.Unlock()
+		if err != nil {
+			return
+		}
+		b = b[n:]
 
-	// TODO: reuse writer/defer flush
+		s.Handler(&w, &r)
+	}
+
 	w.Flush()
 
 	return
 }
 
+// Shutdown ...
 func (s *MemeServer) Shutdown() (err error) {
 	return s.t.Close()
 }

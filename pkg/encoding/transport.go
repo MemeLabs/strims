@@ -2,22 +2,28 @@ package encoding
 
 import "sync"
 
+// Transport ...
 type Transport interface {
 	Write([]byte, TransportConn) error
-	Read() ([]byte, TransportConn, error)
+	Read([]byte) (int, TransportConn, error)
 	Listen() error
 	Close() error
 	Status() TransportStatus
 	MTU() int
 }
 
+// TransportConn ...
 type TransportConn interface {
 	String() string
 	addressInterface()
+	Transport() Transport
+	Write([]byte) error
 }
 
+// TransportStatus ...
 type TransportStatus int
 
+// statuses
 const (
 	StatusClosed TransportStatus = iota
 	StatusListening

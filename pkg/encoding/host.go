@@ -10,13 +10,23 @@ import (
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
+	"github.com/MemeLabs/go-ppspp/pkg/debug"
+	"github.com/nareix/joy4/format"
 )
 
+func init() {
+	format.RegisterAll()
+}
+
+// HostOptions ...
 type HostOptions struct {
 	Context    context.Context
 	Transports []Transport
 }
 
+// NewDefaultHostOptions ...
 func NewDefaultHostOptions() *HostOptions {
 	return &HostOptions{
 		Context: context.Background(),
@@ -28,12 +38,11 @@ func NewDefaultHostOptions() *HostOptions {
 	}
 }
 
+// NewHost ...
 func NewHost(o *HostOptions) (c *Host) {
 	c = &Host{
-		ctx:      o.Context,
-		swarms:   map[string]*Swarm{},
-		peers:    map[string]*Peer{},
-		channels: NewChannelsMap(),
+		ctx:       o.Context,
+		scheduler: NewScheduler(o.Context),
 	}
 
 	c.servers = make([]*MemeServer, len(o.Transports))
@@ -47,30 +56,103 @@ func NewHost(o *HostOptions) (c *Host) {
 	return c
 }
 
+// Host ...
 type Host struct {
-	ctx     context.Context
-	servers []*MemeServer
-	nextUID int64
-	swarms  map[string]*Swarm
-	// TODO: this should be a kad routing table
-	peersLock sync.Mutex
-	peers     map[string]*Peer
-	channels  *ChannelsMap
+	sync.Mutex
+
+	ctx       context.Context
+	prevUID   int64
+	servers   []*MemeServer
+	swarms    sync.Map
+	peers     sync.Map
+	channels  sync.Map
+	scheduler *Scheduler
 }
 
-func (h *Host) NextUID() int64 {
-	return atomic.AddInt64(&h.nextUID, 1)
+// nextUID ...
+func (h *Host) nextUID() int64 {
+	return atomic.AddInt64(&h.prevUID, 1)
 }
 
-func (h *Host) createChannelID() uint32 {
-	for {
-		channelID := uint32(rand.Int63n(math.MaxUint32))
-		if _, ok := h.channels.Get(channelID); !ok {
-			return channelID
-		}
+// Close ...
+func (h *Host) Close() (err error) {
+	// h.scheduler.Close()
+	return
+}
+
+// HostSwarm ...
+func (h *Host) HostSwarm(s *Swarm) {
+	h.swarms.Store(s.ID.String(), s)
+}
+
+// JoinSwarm ...
+func (h *Host) JoinSwarm(id *SwarmID, addr string) (err error) {
+	s := NewDefaultSwarm(id)
+	h.swarms.Store(id.String(), s)
+
+	c := UDPConn{
+		t: h.servers[0].t.(*UDPTransport),
 	}
+	c.a, err = net.ResolveUDPAddr("udp", addr)
+	if err != nil {
+		return
+	}
+
+	cid := uint32(rand.Int63n(math.MaxUint32))
+	p := h.peer(c)
+	ch := newChannel(channelOptions{
+		ID:    cid,
+		Swarm: s,
+		Peer:  p,
+		Conn:  c,
+	})
+	h.channels.Store(cid, ch)
+	p.channels.Store(cid, ch)
+	s.channels.Store(cid, ch)
+
+	w := NewMemeWriter(c)
+	ch.OfferHandshake(w)
+	w.Flush()
+
+	go func() {
+		s.chunks.debug = true
+
+		cr := s.chunks.Reader()
+		log.Println("offset", int64(cr.Offset()))
+		r, err := chunkstream.NewReader(cr, int64(cr.Offset()))
+		if err != nil {
+			log.Panic(err)
+		}
+		b := make([]byte, 5*1024*1024)
+		bn := 0
+		rb := b
+		for {
+			n, err := r.Read(rb)
+			if err == chunkstream.EOR {
+				debug.Green("got chunk", bn)
+				rb = b
+			} else if err != nil {
+				log.Println("read failed with error", err)
+				break
+			}
+			bn += n
+
+			if h.ctx.Err() == context.Canceled {
+				break
+			}
+		}
+	}()
+
+	// TODO: probably return a reader?
+	return
 }
 
+// RemoveSwarm ...
+func (h *Host) RemoveSwarm(id *SwarmID) {
+	h.swarms.Delete(id.String())
+}
+
+// Run ...
 func (h *Host) Run() (err error) {
 	defer func() {
 		if err != nil {
@@ -81,10 +163,11 @@ func (h *Host) Run() (err error) {
 	ctx, cancel := context.WithCancel(h.ctx)
 
 	wg := &sync.WaitGroup{}
+
+	// TODO: uncomment this...
+	// go h.timeoutPeerChannels(ctx)
+
 	wg.Add(len(h.servers))
-
-	go h.timeoutPeerChannels(ctx)
-
 	for _, s := range h.servers {
 		go func(s *MemeServer) {
 			if err := s.Listen(ctx); err != nil {
@@ -103,6 +186,7 @@ func (h *Host) Run() (err error) {
 	return
 }
 
+// Shutdown ...
 func (h *Host) Shutdown() (err error) {
 	log.Println("shutting down")
 
@@ -116,7 +200,7 @@ func (h *Host) Shutdown() (err error) {
 
 func (h *Host) timeoutPeerChannels(ctx context.Context) {
 	checkIvl := 5 * time.Second
-	timeout := 5 * time.Second
+	timeout := 30 * time.Second
 
 	t := time.NewTicker(checkIvl)
 	for {
@@ -126,176 +210,115 @@ func (h *Host) timeoutPeerChannels(ctx context.Context) {
 			return
 		}
 
-		removed := []*Peer{}
-
-		deadline := time.Now().Add(-timeout).Unix()
-		h.peersLock.Lock()
-		for k, p := range h.peers {
-			if p.LastActive() < deadline {
-				delete(h.peers, k)
-				removed = append(removed, p)
+		deadline := time.Now().Add(-timeout)
+		removed := map[*Peer]bool{}
+		h.peers.Range(func(id interface{}, pi interface{}) bool {
+			if deadline.After(pi.(*Peer).LastActive()) {
+				removed[pi.(*Peer)] = true
+				h.peers.Delete(id)
 			}
-		}
-		h.peersLock.Unlock()
+			return true
+		})
 
-		for _, p := range removed {
-			// TODO: encapsulation? lul
-			for id, c := range p.channels.channels {
-				c.p.channels.Delete(id)
+		h.channels.Range(func(id interface{}, ci interface{}) bool {
+			if removed[ci.(*channel).peer] {
+				ci.(*channel).Close()
+				h.channels.Delete(id)
+				ci.(*channel).Swarm().channels.Delete(id)
 			}
+			return true
+		})
+
+		for p := range removed {
+			h.scheduler.RemovePeer(p)
 		}
 	}
 }
 
-func (h *Host) handleMemeRequest(w MemeWriter, r *MemeRequest) {
+func (h *Host) handleMemeRequest(w *MemeWriter, r *MemeRequest) {
 	if len(r.Messages) == 0 {
 		return
 	}
 
-	channel, ok := h.channels.Get(r.ChannelID)
-	if !ok {
-		var err error
-		channel, err = h.createChannel(r)
-		if err != nil {
-			return
-		}
+	channel, err := h.channel(r)
+	if err != nil {
+		log.Println("failed creating channel", err)
+		return
 	}
-	channel.p.UpdateLastActive()
 	channel.HandleMemeRequest(w, r)
-
-	// TODO: check dgram channelID matches req transport addr?
-	// channel.s.handleMemeRequest(w, r)
-
-	// spew.Dump(map[string]interface{}{"w": w, "r": r})
 }
 
-func (h *Host) createChannel(r *MemeRequest) (*PeerChannel, error) {
-	// spew.Dump(w, r)
-	log.Println("began handshake...")
-
-	if r.ChannelID != 0 {
-		return nil, errors.New("handshake: non-zero channel id")
+func (h *Host) peer(c TransportConn) (peer *Peer) {
+	pi, ok := h.peers.Load(c.String())
+	if ok {
+		return pi.(*Peer)
 	}
 
-	handshake, ok := r.Messages[0].(*Handshake)
-	if !ok {
-		return nil, errors.New("handshake: first message is not handshake")
+	pi, loaded := h.peers.LoadOrStore(c.String(), NewPeer(h.nextUID(), c))
+	peer = pi.(*Peer)
+	if !loaded {
+		h.scheduler.AddPeer(h.ctx, peer)
+	}
+	return
+}
+
+func (h *Host) channel(r *MemeRequest) (c *channel, err error) {
+	ci, ok := h.channels.Load(r.ChannelID)
+	if ok {
+		return ci.(*channel), nil
 	}
 
-	swarmIDOptionIf, ok := handshake.Options.Find(SwarmIdentifierOption)
-	if !ok {
-		return nil, errors.New("handshake: handshake has no swarm id")
+	sid, err := readHandshakeRequest(r)
+	if err != nil {
+		return
 	}
-	swarmID := &SwarmID{
-		PublicKey: *swarmIDOptionIf.(*SwarmIdentifierProtocolOption),
-	}
-	swarm, ok := h.swarms[swarmID.String()]
+	si, ok := h.swarms.Load(sid.String())
 	if !ok {
 		return nil, errors.New("handshake: unknown swarm")
 	}
 
-	// TODO: one channel per peer per swarm
-
-	h.peersLock.Lock()
-	peer, ok := h.peers[r.Conn.String()]
-	if !ok {
-		peer = NewPeer(h.NextUID())
-		h.peers[r.Conn.String()] = peer
-	}
-	h.peersLock.Unlock()
-
-	// TODO: limit channels per peer?
-
-	pc := &PeerChannel{
-		ID:       h.createChannelID(),
-		RemoteID: handshake.ChannelID,
-		s:        swarm,
-		p:        peer,
-		// t:  Transport
-		// c: w.c,
-	}
-	h.channels.Insert(pc.ID, pc)
-	peer.channels.Insert(pc.ID, pc)
-
-	return pc, nil
-}
-
-func (h *Host) TestSend(addr string) (err error) {
-	log.Println(addr)
-
-	s := &Swarm{
-		UID: h.NextUID(),
-		ID: &SwarmID{
-			PublicKey: make([]byte, 64),
-		},
-		channels: NewChannelsMap(),
-	}
-
-	p := NewPeer(h.NextUID())
-
-	t := h.servers[0].t
-
-	c := &UDPConn{
-		t: t.(*UDPTransport),
-	}
-
-	pc := &PeerChannel{
-		ID: h.createChannelID(),
-		s:  s,
-		p:  p,
-		// t:  t,
-		// c:  c,
-	}
-
-	c.a, err = net.ResolveUDPAddr("udp", addr)
-	if err != nil {
-		return
-	}
-
-	// this should be the remote id
-	h.channels.Insert(pc.ID, pc)
-	h.swarms[s.ID.String()] = s
-	h.peers[c.String()] = p
+	peer := h.peer(r.Conn)
 
 	for {
-		time.Sleep(time.Second)
-
-		swarmID := SwarmIdentifierProtocolOption(s.ID.Binary())
-
-		d := &Datagram{
-			ChannelID: 0,
-			Messages: []Message{
-				&Handshake{
-					ChannelID: pc.ID,
-					Options: []ProtocolOption{
-						&VersionProtocolOption{Value: 1},
-						&MinimumVersionProtocolOption{Value: 1},
-						&swarmID,
-					},
-				},
-				&Request{NewBin32ChunkAddress(16)},
-				NewData(Bin(16), make(Buffer, 128)),
-			},
-		}
-		buf := make([]byte, 1500)
-		n := d.Marshal(buf)
-		// spew.Dump(buf[:n])
-		err = c.Write(buf[:n])
-		if err != nil {
+		cid := uint32(rand.Int63n(math.MaxUint32))
+		c = newChannel(channelOptions{
+			ID:    cid,
+			Swarm: si.(*Swarm),
+			Peer:  peer,
+			Conn:  r.Conn,
+		})
+		_, ok = h.channels.LoadOrStore(cid, c)
+		if !ok {
+			peer.channels.Store(cid, c)
+			si.(*Swarm).channels.Store(cid, c)
 			return
 		}
 	}
 }
 
-func (h *Host) TestReceive() (err error) {
-	s := NewSwarm(
-		h.NextUID(),
-		&SwarmID{
-			PublicKey: make([]byte, 64),
-		},
-	)
+func readHandshakeRequest(r *MemeRequest) (sid *SwarmID, err error) {
+	if r.ChannelID != 0 {
+		return nil, errors.New("handshake: non-zero channel id")
+	}
+	if len(r.Messages) == 0 {
+		return nil, errors.New("handshake: first message is empty")
+	}
 
-	h.swarms[s.ID.String()] = s
+	hs, ok := r.Messages[0].(*Handshake)
+	if !ok {
+		return nil, errors.New("handshake: first message is not handshake")
+	}
+	swarmIDOptionIf, ok := hs.Options.Find(SwarmIdentifierOption)
+	if !ok {
+		return nil, errors.New("handshake: handshake has no swarm id")
+	}
 
-	select {}
+	sid = NewSwarmID(*swarmIDOptionIf.(*SwarmIdentifierProtocolOption))
+	return
 }
+
+// // StreamSwarmOptions ...
+// type StreamSwarmOptions struct {
+// 	id    []byte
+// 	queue *pubsub.Queue
+// }

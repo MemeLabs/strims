@@ -1,62 +1,77 @@
 package encoding
 
+// MessageType ...
 type MessageType uint8
 
+// String ...
 func (m MessageType) String() string {
 	switch m {
-	case HANDSHAKE:
-		return "HANDSHAKE"
-	case DATA:
-		return "DATA"
-	case ACK:
-		return "ACK"
-	case HAVE:
-		return "HAVE"
-	case INTEGRITY:
-		return "INTEGRITY"
-	case PEX_RESv4:
-		return "PEX_RESv4"
-	case PEX_REQ:
-		return "PEX_REQ"
-	case SIGNED_INTEGRITY:
-		return "SIGNED_INTEGRITY"
-	case REQUEST:
-		return "REQUEST"
-	case CANCEL:
-		return "CANCEL"
-	case CHOKE:
-		return "CHOKE"
-	case UNCHOKE:
-		return "UNCHOKE"
-	case PEX_RESv6:
-		return "PEX_RESv6"
-	case PEX_REScert:
-		return "PEX_REScert"
+	case HandshakeMessage:
+		return "Handshake"
+	case DataMessage:
+		return "Data"
+	case AckMessage:
+		return "Ack"
+	case HaveMessage:
+		return "Have"
+	case IntegrityMessage:
+		return "Integrity"
+	case PExResV4Message:
+		return "PExResV4"
+	case PExReqMessage:
+		return "PExReq"
+	case SignedIntegrityMessage:
+		return "SignedIntegrity"
+	case RequestMessage:
+		return "Request"
+	case CancelMessage:
+		return "Cancel"
+	case ChokeMessage:
+		return "Choke"
+	case UnchokeMessage:
+		return "Unchoke"
+	case PExResV6Message:
+		return "PExResV6"
+	case PExResCertMessage:
+		return "PExResCert"
+	case PingMessage:
+		return "PingMessage"
+	case PongMessage:
+		return "PongMessage"
+	case EndMessage:
+		return "EndMessage"
 	}
 	panic("invalid message type")
 }
 
+// message types
 const (
-	HANDSHAKE MessageType = iota
-	DATA
-	ACK
-	HAVE
-	INTEGRITY
-	PEX_RESv4
-	PEX_REQ
-	SIGNED_INTEGRITY
-	REQUEST
-	CANCEL
-	CHOKE
-	UNCHOKE
-	PEX_RESv6
-	PEX_REScert
+	HandshakeMessage MessageType = iota
+	DataMessage
+	AckMessage
+	HaveMessage
+	IntegrityMessage
+	PExResV4Message
+	PExReqMessage
+	SignedIntegrityMessage
+	RequestMessage
+	CancelMessage
+	ChokeMessage
+	UnchokeMessage
+	PExResV6Message
+	PExResCertMessage
+	PingMessage
+	PongMessage
+	EndMessage MessageType = 255
 )
 
+// ChunkSize ...
 const ChunkSize int = 1024
 
+// ProtocolOptionType ...
 type ProtocolOptionType uint8
 
+// String ...
 func (m ProtocolOptionType) String() string {
 	switch m {
 	case VersionOption:
@@ -85,6 +100,7 @@ func (m ProtocolOptionType) String() string {
 	panic("invalid protocol option")
 }
 
+// protocol options
 const (
 	VersionOption ProtocolOptionType = iota
 	MinimumVersionOption

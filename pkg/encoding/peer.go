@@ -1,100 +1,147 @@
 package encoding
 
 import (
+	"math/rand"
+	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/ema"
+	"github.com/MemeLabs/go-ppspp/pkg/ledbat"
 )
 
+// TODO: this shouldn't be part of the public interface
+// TODO: locking madness...
+
+const minPingInterval = time.Second
+
+// Peer ...
 type Peer struct {
-	UID        int64
-	channels   *ChannelsMap
-	lastActive int64
+	sync.Mutex
+
+	id                  int64
+	conn                TransportConn
+	channels            sync.Map
+	lastActive          int64
+	ledbat              *ledbat.Controller
+	chunkIntervalMean   ema.Mean
+	lastChunkTime       time.Time
+	requestedChunkCount uint64
+	sentChunkCount      uint64
+	ackedChunkCount     uint64
+	prevAckedChunkCount uint64
+	receivedChunkCount  uint64
+	cancelledChunkCount uint64
+	rttSampleChannel    uint32
+	rttSampleBin        binmap.Bin
+	rttSampleTime       time.Time
 }
 
-func NewPeer(uid int64) *Peer {
+// NewPeer ...
+func NewPeer(id int64, conn TransportConn) *Peer {
 	return &Peer{
-		UID:        uid,
-		channels:   NewChannelsMap(),
-		lastActive: time.Now().Unix(),
+		id:                id,
+		conn:              conn,
+		lastActive:        time.Now().Unix(),
+		ledbat:            ledbat.New(),
+		chunkIntervalMean: ema.New(0.05),
+		rttSampleBin:      binmap.None,
 	}
 }
 
+// UpdateLastActive ...
 func (p *Peer) UpdateLastActive() {
-	atomic.StoreInt64(&p.lastActive, time.Now().Unix())
+	atomic.StoreInt64(&p.lastActive, time.Now().UnixNano())
 }
 
-func (p *Peer) LastActive() int64 {
-	return atomic.LoadInt64(&p.lastActive)
+// LastActive ...
+func (p *Peer) LastActive() time.Time {
+	return time.Unix(0, atomic.LoadInt64(&p.lastActive))
 }
 
-type PeerChannel struct {
-	ID       uint32
-	RemoteID uint32
-	s        *Swarm
-	p        *Peer
-	t        Transport
-	c        TransportConn
+// OutstandingChunks ...
+func (p *Peer) OutstandingChunks() int {
+	return int(p.requestedChunkCount - (p.receivedChunkCount + p.cancelledChunkCount))
 }
 
-func (c *PeerChannel) HandleMemeRequest(w MemeWriter, r *MemeRequest) {
-	w.SetChannelID(c.RemoteID)
+// AddRequestedChunks ...
+func (p *Peer) AddRequestedChunks(n uint64) {
+	p.requestedChunkCount += n
+}
 
-	for _, mi := range r.Messages {
-		switch m := mi.(type) {
-		case *Handshake:
-			c.HandleHandshake(w, m)
-		case *Data:
-			c.HandleData(w, m)
-		case *Ack:
-			c.HandleAck(w, m)
-		case *Have:
-			c.HandleHave(w, m)
-		case *Request:
-			c.HandleRequest(w, m)
-		case *Cancel:
-			c.HandleCancel(w, m)
-		case *Choke:
-			c.HandleChoke(w, m)
-		case *Unchoke:
-			c.HandleUnchoke(w, m)
-		}
+// AddAckedChunk ...
+func (p *Peer) AddAckedChunk() {
+	p.ackedChunkCount++
+}
+
+// NewlyAckedCount ...
+func (p *Peer) NewlyAckedCount() uint64 {
+	c := p.prevAckedChunkCount
+	p.prevAckedChunkCount = p.ackedChunkCount
+	return p.ackedChunkCount - c
+}
+
+// AddSentChunk ...
+func (p *Peer) AddSentChunk() {
+	p.ledbat.StartDebugging()
+	p.sentChunkCount++
+}
+
+// AddCancelledChunk ...
+func (p *Peer) AddCancelledChunk() {
+	p.cancelledChunkCount++
+}
+
+// AddReceivedChunk ...
+func (p *Peer) AddReceivedChunk() {
+	p.receivedChunkCount++
+
+	now := p.LastActive()
+	ivl := now.Sub(p.lastChunkTime)
+	if ivl != 0 && !p.lastChunkTime.IsZero() {
+		p.chunkIntervalMean.Update(float64(ivl))
+	}
+	p.lastChunkTime = now
+}
+
+// TrackBinRTT ...
+func (p *Peer) TrackBinRTT(cid uint32, b binmap.Bin) (ok bool) {
+	if ok = p.rttSampleBin.IsNone(); ok {
+		p.rttSampleChannel = cid
+		p.rttSampleBin = b
+		p.rttSampleTime = time.Now()
+	}
+	return
+}
+
+// TrackPingRTT ...
+func (p *Peer) TrackPingRTT() (nonce uint64, ok bool) {
+	if ok = time.Since(p.rttSampleTime) > minPingInterval; ok {
+		// with even nonces Contains(nonce) is an equality check
+		nonce = uint64(rand.Int63()) << 1
+
+		p.rttSampleChannel = 0
+		p.rttSampleBin = binmap.Bin(nonce)
+		p.rttSampleTime = time.Now()
+	}
+	return
+}
+
+// AddRTTSample ...
+func (p *Peer) AddRTTSample(cid uint32, b binmap.Bin) {
+	if p.rttSampleChannel == cid && p.rttSampleBin.Contains(b) {
+		p.ledbat.AddRTTSample(time.Since(p.rttSampleTime))
+		p.rttSampleBin = binmap.None
 	}
 }
 
-func (c *PeerChannel) HandleHandshake(w MemeWriter, v *Handshake) {
-	w.Write(&Handshake{
-		ChannelID: c.ID,
-		Options:   v.Options,
-	})
+// ChunkIntervalMean ...
+func (p *Peer) ChunkIntervalMean() time.Duration {
+	return time.Duration(p.chunkIntervalMean.Value())
 }
 
-func (c *PeerChannel) HandleData(w MemeWriter, v *Data) {
-	w.Write(&Ack{
-		Address:     v.Address,
-		DelaySample: v.Timestamp,
-	})
-}
-
-func (c *PeerChannel) HandleAck(w MemeWriter, v *Ack) {
-	return
-}
-
-func (c *PeerChannel) HandleHave(w MemeWriter, v *Have) {
-	return
-}
-
-func (c *PeerChannel) HandleRequest(w MemeWriter, v *Request) {
-	return
-}
-
-func (c *PeerChannel) HandleCancel(w MemeWriter, v *Cancel) {
-	return
-}
-
-func (c *PeerChannel) HandleChoke(w MemeWriter, v *Choke) {
-	return
-}
-
-func (c *PeerChannel) HandleUnchoke(w MemeWriter, v *Unchoke) {
-	return
+// Close ...
+func (p *Peer) Close() {
+	// TODO: send empty handshake (ppspp goodbye)
 }
