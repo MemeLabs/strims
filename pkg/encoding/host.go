@@ -11,8 +11,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/nareix/joy4/format"
 )
 
@@ -86,7 +84,7 @@ func (h *Host) HostSwarm(s *Swarm) {
 }
 
 // JoinSwarm ...
-func (h *Host) JoinSwarm(id *SwarmID, addr string) (err error) {
+func (h *Host) JoinSwarm(id *SwarmID, addr string) (r *ChunkBufferReader, err error) {
 	s := NewDefaultSwarm(id)
 	h.swarms.Store(id.String(), s)
 
@@ -114,36 +112,7 @@ func (h *Host) JoinSwarm(id *SwarmID, addr string) (err error) {
 	ch.OfferHandshake(w)
 	w.Flush()
 
-	go func() {
-		s.chunks.debug = true
-
-		cr := s.chunks.Reader()
-		log.Println("offset", int64(cr.Offset()))
-		r, err := chunkstream.NewReader(cr, int64(cr.Offset()))
-		if err != nil {
-			log.Panic(err)
-		}
-		b := make([]byte, 5*1024*1024)
-		bn := 0
-		rb := b
-		for {
-			n, err := r.Read(rb)
-			if err == chunkstream.EOR {
-				debug.Green("got chunk", bn)
-				rb = b
-			} else if err != nil {
-				log.Println("read failed with error", err)
-				break
-			}
-			bn += n
-
-			if h.ctx.Err() == context.Canceled {
-				break
-			}
-		}
-	}()
-
-	// TODO: probably return a reader?
+	r = s.chunks.Reader()
 	return
 }
 

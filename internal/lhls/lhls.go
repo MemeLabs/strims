@@ -52,27 +52,30 @@ func (m *Segment) Close() (err error) {
 
 // ReadAt ...
 func (m *Segment) ReadAt(p []byte, off int64) (n int, err error) {
-	m.cond.L.Lock()
-
-	buf := m.buf
-
 	low := int(off)
-	if low == len(m.buf) && !m.closed {
-		m.cond.Wait()
-	}
-
 	high := low + len(p)
-	if high >= len(m.buf) {
-		high = len(m.buf)
 
-		if m.closed {
+	m.cond.L.Lock()
+	for {
+		if high >= len(m.buf) && !m.closed {
+			m.cond.Wait()
+		}
+
+		if high >= len(m.buf) {
+			if !m.closed {
+				continue
+			}
+			high = len(m.buf)
 			err = io.EOF
 		}
+		break
 	}
 
+	buf := m.buf
 	m.cond.L.Unlock()
 
 	n = copy(p, buf[low:high])
+
 	return
 }
 
@@ -104,8 +107,8 @@ type StreamOptions struct {
 
 // DefaultStreamOptions ...
 var DefaultStreamOptions = StreamOptions{
-	BufferSize:  4 * 1024 * 1024,
-	HistorySize: 10,
+	BufferSize:  1 * 1024 * 1024,
+	HistorySize: 5,
 }
 
 // Stream ...
@@ -114,7 +117,7 @@ type Stream struct {
 	audioCodecData av.AudioCodecData
 	videoCodecData av.VideoCodecData
 	lock           sync.RWMutex
-	streams        []av.CodecData
+	header         []av.CodecData
 	segments       []*Segment
 	index          int
 }
@@ -142,7 +145,8 @@ func (l *Stream) Range() (int, int) {
 	return low, l.index
 }
 
-func (l *Stream) nextSegment() io.WriteCloser {
+// NextWriter ...
+func (l *Stream) NextWriter() io.WriteCloser {
 	b := NewSegment(l.opt.BufferSize)
 
 	l.lock.Lock()
@@ -159,8 +163,8 @@ func (l *Stream) nextSegment() io.WriteCloser {
 }
 
 // WriteHeader ...
-func (l *Stream) WriteHeader(streams []av.CodecData) {
-	l.streams = streams
+func (l *Stream) WriteHeader(header []av.CodecData) {
+	l.header = header
 }
 
 // CopyPackets ...
@@ -173,9 +177,9 @@ func (l *Stream) CopyPackets(src av.PacketReader) (err error) {
 	}
 
 	for {
-		segment := l.nextSegment()
+		segment := l.NextWriter()
 		muxer := ts.NewMuxer(segment)
-		if err = muxer.WriteHeader(l.streams); err != nil {
+		if err = muxer.WriteHeader(l.header); err != nil {
 			return
 		}
 		log.Println(pkt.Time, pkt.CompositionTime)

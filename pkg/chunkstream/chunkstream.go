@@ -9,6 +9,8 @@ import (
 	"errors"
 	"io"
 	"math"
+
+	"github.com/MemeLabs/go-ppspp/pkg/debug"
 )
 
 // errors ...
@@ -59,6 +61,7 @@ type Writer struct {
 	buf  []byte
 	off  int
 	woff int
+	n    uint64
 }
 
 // Write implements io.Writer
@@ -66,6 +69,7 @@ func (c *Writer) Write(p []byte) (n int, err error) {
 	for {
 		dn := copy(c.buf[c.off:], p[n:])
 		n += dn
+		c.n += uint64(dn)
 		c.off += dn
 		if n == len(p) && c.off < len(c.buf) {
 			return
@@ -84,8 +88,10 @@ func (c *Writer) Write(p []byte) (n int, err error) {
 // after every input segment and before Close()
 func (c *Writer) Flush() (err error) {
 	if c.woff != 0 {
+		debug.Red("skipped write")
 		return ErrHeaderWritten
 	}
+	debug.Blue("flushed chunkstream")
 
 	binary.BigEndian.PutUint16(c.buf, uint16(c.off-headerLen))
 	c.buf[0] |= eorFlag
@@ -149,6 +155,8 @@ func (c *Reader) Read(p []byte) (n int, err error) {
 		n = c.roff - c.off
 	} else if len(p) > c.size-c.off {
 		n = c.size - c.off
+	} else {
+		n = len(p)
 	}
 
 	p = p[:n]
@@ -157,14 +165,8 @@ func (c *Reader) Read(p []byte) (n int, err error) {
 		return
 	}
 
-	for i := 0; i < n; i++ {
-		if p[i] != 0 {
-			break
-		}
-	}
-
 	if !c.headerRead {
-		n -= c.readHeader(p)
+		n -= c.readHeader(p[:n])
 	}
 
 	c.off += n
@@ -176,7 +178,6 @@ func (c *Reader) Read(p []byte) (n int, err error) {
 		c.off = 0
 		c.headerRead = false
 	}
-
 	return
 }
 

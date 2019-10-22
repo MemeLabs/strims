@@ -1,22 +1,22 @@
-package ema
+package ma
 
-// New ...
-func New(alpha float64) Mean {
-	return Mean{
+// NewExponential ...
+func NewExponential(alpha float64) Exponential {
+	return Exponential{
 		alpha:  alpha,
 		weight: 1,
 	}
 }
 
-// Mean ...
-type Mean struct {
+// Exponential ...
+type Exponential struct {
 	value  float64
 	alpha  float64
 	weight float64
 }
 
 // Value ...
-func (a *Mean) Value() float64 {
+func (a *Exponential) Value() float64 {
 	if a.weight == 1 {
 		return 0
 	}
@@ -24,18 +24,18 @@ func (a *Mean) Value() float64 {
 }
 
 // Set ...
-func (a *Mean) Set(v float64) {
+func (a *Exponential) Set(v float64) {
 	a.value = v
 	a.weight = 0
 }
 
 // Empty ...
-func (a *Mean) Empty() bool {
+func (a *Exponential) Empty() bool {
 	return a.weight == 1
 }
 
 // Update ...
-func (a *Mean) Update(v float64) {
+func (a *Exponential) Update(v float64) {
 	a.value = a.alpha*v + (1-a.alpha)*a.value
 	a.weight *= a.alpha
 }

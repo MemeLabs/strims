@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/debug"
 )
 
 // Priority ...
@@ -60,30 +61,31 @@ func (s *Scheduler) AddPeer(ctx context.Context, peer *Peer) {
 	s.close.Store(peer, close)
 
 	go func() {
-		reschedule := time.NewTicker(rescheduleInterval)
-		debug := time.NewTicker(1 * time.Second)
+		rescheduleTicker := time.NewTicker(rescheduleInterval)
+		debugTicker := time.NewTicker(2 * time.Second)
 
 		// TODO: cgo hack until tickers are fixed? https://github.com/golang/go/issues/27707
 		writeInterval := defaultWriteInterval
-		write := time.NewTicker(writeInterval)
+		writeTicker := time.NewTicker(writeInterval)
 
 		w := NewMemeWriter(peer.conn)
 
 		for {
 			select {
-			case <-write.C:
+			case <-writeTicker.C:
 				s.runPeer(peer, w)
 			case <-ctx.Done():
 				return
-			case <-reschedule.C:
+			case <-rescheduleTicker.C:
 				newWriteInterval := s.peerWriteInterval(peer)
 				// log.Println("newWriteInterval", unsafe.Pointer(peer), newWriteInterval)
 				if writeInterval != newWriteInterval {
-					write.Stop()
-					write = time.NewTicker(newWriteInterval)
+					debug.Yellow("new write interval", newWriteInterval)
+					writeTicker.Stop()
+					writeTicker = time.NewTicker(newWriteInterval)
 					writeInterval = newWriteInterval
 				}
-			case <-debug.C:
+			case <-debugTicker.C:
 				s.printPeerDebugLog(peer)
 			}
 		}
@@ -114,6 +116,8 @@ func (s *Scheduler) peerWriteInterval(peer *Peer) (i time.Duration) {
 }
 
 func (s *Scheduler) printPeerDebugLog(peer *Peer) {
+	return
+
 	peer.Lock()
 	// spew.Dump(peer)
 	if peer.ledbat.Debug() {
@@ -218,6 +222,7 @@ func (s *Scheduler) runPeer(p *Peer, w *MemeWriter) {
 		c := ci.(*channel)
 		c.Lock()
 		c.swarm.Lock()
+		// TODO: avoid holding swarm lock during io...
 
 		w.BeginFrame(c.remoteID)
 
@@ -240,6 +245,7 @@ func (s *Scheduler) runPeer(p *Peer, w *MemeWriter) {
 			c.requestedBinHistory.Push(b)
 		}
 
+		// TODO: rlock c.swarm.chunks here
 		for p.ledbat.FlightSize() < p.ledbat.CWND() {
 			rb := c.requestedBins.FindFilled()
 			if rb.IsNone() {
@@ -274,11 +280,11 @@ func (s *Scheduler) runPeer(p *Peer, w *MemeWriter) {
 	})
 
 	// only send pings opportunistically with other messages
-	if w.Dirty() {
-		if nonce, ok := p.TrackPingRTT(); ok {
-			w.Write(&Ping{Nonce{nonce}})
-		}
+	// if w.Dirty() {
+	if nonce, ok := p.TrackPingRTT(); ok {
+		w.Write(&Ping{Nonce{nonce}})
 	}
+	// }
 
 	if err := w.Flush(); err != nil {
 		log.Println(err)
@@ -312,7 +318,7 @@ func (s *Scheduler) peerRequestCapacity(p *Peer) int {
 	if planForDuration < minWriteInterval {
 		planForDuration = minWriteInterval
 	}
-	planForDuration *= 2
+	planForDuration *= 4
 	if planForDuration > time.Second {
 		planForDuration = time.Second
 	}
@@ -326,12 +332,25 @@ func (s *Scheduler) peerRequestCapacity(p *Peer) int {
 		capacity = 1
 	}
 
+	// if !p.ledbat.Debug() {
+	// 	log.Println(
+	// 		"\np.ledbat.RTTMean()", p.ledbat.RTTMean(),
+	// 		"\nminWriteInterval", minWriteInterval,
+	// 		"\np.ChunkIntervalMean()", p.ChunkIntervalMean(),
+	// 		"\nplanForDuration", planForDuration,
+	// 		"\np.OutstandingChunks()", p.OutstandingChunks(),
+	// 		"\ncapacity", capacity,
+	// 	)
+	// }
+
 	return capacity
 }
 
 // TODO: select more bins than we need...
 // TODO: chunk picker?
 func (s *Scheduler) requestBins(count int, c *channel) (bins []binmap.Bin, n int) {
+	// TODO: lock c.swarm.requestedBins here
+
 	var rc = uint64(count)
 	var ab, bb binmap.Bin
 Done:

@@ -97,27 +97,30 @@ func (s *chunkBuffer) contains(b binmap.Bin) bool {
 	return s.tail() <= b.BaseLeft() && b.BaseRight() < s.head && s.bins.FilledAt(b)
 }
 
-func (s *chunkBuffer) Reader() *chunkBufferReader {
+func (s *chunkBuffer) Reader() *ChunkBufferReader {
 	s.cond.L.Lock()
 	defer s.cond.L.Unlock()
 
-	return &chunkBufferReader{
+	return &ChunkBufferReader{
 		prev: s.next,
 		b:    s,
 	}
 }
 
-type chunkBufferReader struct {
+// ChunkBufferReader ...
+type ChunkBufferReader struct {
 	prev binmap.Bin
 	off  uint64
 	b    *chunkBuffer
 }
 
-func (r *chunkBufferReader) Offset() uint64 {
+// Offset ...
+func (r *ChunkBufferReader) Offset() uint64 {
 	return binByte(r.prev) + uint64(r.off)
 }
 
-func (r *chunkBufferReader) Read(p []byte) (n int, err error) {
+// Read ...
+func (r *ChunkBufferReader) Read(p []byte) (n int, err error) {
 	r.b.cond.L.Lock()
 	defer r.b.cond.L.Unlock()
 

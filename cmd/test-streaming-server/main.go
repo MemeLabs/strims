@@ -5,7 +5,6 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
-	"io"
 	"log"
 	mathrand "math/rand"
 	"net/http"
@@ -14,8 +13,10 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
-	"time"
 
+	"github.com/MemeLabs/go-ppspp/internal/egress"
+	"github.com/MemeLabs/go-ppspp/internal/ingress"
+	"github.com/MemeLabs/go-ppspp/internal/lhls"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
 	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/encoding"
@@ -28,45 +29,6 @@ func init() {
 		panic(err)
 	}
 	mathrand.Seed(int64(binary.BigEndian.Uint64(b)))
-}
-
-func startTestWriter(ctx context.Context, w io.Writer) (err error) {
-	cw, err := chunkstream.NewWriter(w)
-	if err != nil {
-		return
-	}
-	t := time.NewTicker(10 * time.Millisecond)
-
-	b := make([]byte, 9e3)
-	for i := range b {
-		b[i] = 255
-	}
-	// _, err = rand.Read(b)
-	// if err != nil {
-	// 	return
-	// }
-	sum := 0
-
-	for {
-		select {
-		case <-t.C:
-			n, err := cw.Write(b)
-			if err != nil {
-				return err
-			}
-			sum += n
-			// if sum > 9e4 {
-			if sum > 812500 {
-				log.Println("flush")
-				if err = cw.Flush(); err != nil {
-					return err
-				}
-				sum = 0
-			}
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
 }
 
 func randAddr() string {
@@ -86,23 +48,14 @@ func runA(ctx context.Context, ch chan joinOpts) {
 	})
 
 	go func() {
-		time.Sleep(200 * time.Millisecond)
+		srv := ingress.New(ctx, h)
+		go srv.ListenAndServe()
 
-		w, err := encoding.NewWriter(encoding.DefaultSwarmWriterOptions)
-		if err != nil {
-			panic(err)
-		}
-
-		s := w.Swarm()
-		ch <- joinOpts{
-			SwarmID: s.ID,
-			Address: "localhost" + listenAddr,
-		}
-
-		h.HostSwarm(s)
-		err = startTestWriter(ctx, w)
-		if err != nil {
-			log.Println(err)
+		for s := range srv.DebugSwarms {
+			ch <- joinOpts{
+				SwarmID: s.ID,
+				Address: "localhost" + listenAddr,
+			}
 		}
 	}()
 
@@ -126,6 +79,9 @@ func runB(ctx context.Context, ch chan joinOpts) {
 		},
 	})
 
+	srv := egress.New()
+	go srv.ListenAndServe()
+
 	go func() {
 		for opt := range ch {
 			log.Printf("joining swarm %s at %s", opt.SwarmID, opt.Address)
@@ -134,32 +90,46 @@ func runB(ctx context.Context, ch chan joinOpts) {
 				log.Println(err)
 			}
 
+			c := &egress.Channel{
+				Stream: lhls.NewDefaultStream(),
+			}
+			srv.AddChannel(c)
+
 			go func() {
-				log.Println("offset", int64(cr.Offset()))
+				defer srv.RemoveChannel(c)
+
 				r, err := chunkstream.NewReader(cr, int64(cr.Offset()))
 				if err != nil {
 					log.Panic(err)
 				}
-				b := make([]byte, 5*1024*1024)
-				bn := 0
-				rb := b
-				for {
-					n, err := r.Read(rb)
-					if err == chunkstream.EOR {
-						debug.Green("got chunk", bn)
-						rb = b
-					} else if err != nil {
-						log.Println("read failed with error", err)
-						break
-					}
-					bn += n
 
-					if ctx.Err() == context.Canceled {
-						break
+				b := make([]byte, 4096)
+				for {
+					w := c.Stream.NextWriter()
+					var wn int
+					for {
+						n, err := r.Read(b)
+						if err != nil && err != chunkstream.EOR {
+							log.Println("read failed with error", err)
+						}
+						w.Write(b[:n])
+						wn += n
+
+						if err == chunkstream.EOR {
+							break
+						}
+						if ctx.Err() == context.Canceled {
+							return
+						}
+					}
+
+					debug.Green("closed chunk", wn)
+					if err := w.Close(); err != nil {
+						log.Println("error closing segment", err)
+						return
 					}
 				}
 			}()
-
 		}
 	}()
 

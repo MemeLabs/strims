@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/ema"
 	"github.com/MemeLabs/go-ppspp/pkg/ledbat"
+	"github.com/MemeLabs/go-ppspp/pkg/ma"
 )
 
 // TODO: this shouldn't be part of the public interface
@@ -25,7 +25,7 @@ type Peer struct {
 	channels            sync.Map
 	lastActive          int64
 	ledbat              *ledbat.Controller
-	chunkIntervalMean   ema.Mean
+	chunkIntervalMean   ma.Simple
 	lastChunkTime       time.Time
 	requestedChunkCount uint64
 	sentChunkCount      uint64
@@ -45,7 +45,7 @@ func NewPeer(id int64, conn TransportConn) *Peer {
 		conn:              conn,
 		lastActive:        time.Now().Unix(),
 		ledbat:            ledbat.New(),
-		chunkIntervalMean: ema.New(0.05),
+		chunkIntervalMean: ma.NewSimple(500, 10*time.Millisecond),
 		rttSampleBin:      binmap.None,
 	}
 }
@@ -96,13 +96,7 @@ func (p *Peer) AddCancelledChunk() {
 // AddReceivedChunk ...
 func (p *Peer) AddReceivedChunk() {
 	p.receivedChunkCount++
-
-	now := p.LastActive()
-	ivl := now.Sub(p.lastChunkTime)
-	if ivl != 0 && !p.lastChunkTime.IsZero() {
-		p.chunkIntervalMean.Update(float64(ivl))
-	}
-	p.lastChunkTime = now
+	p.chunkIntervalMean.Add(1)
 }
 
 // TrackBinRTT ...
@@ -138,7 +132,7 @@ func (p *Peer) AddRTTSample(cid uint32, b binmap.Bin) {
 
 // ChunkIntervalMean ...
 func (p *Peer) ChunkIntervalMean() time.Duration {
-	return time.Duration(p.chunkIntervalMean.Value())
+	return p.chunkIntervalMean.Interval()
 }
 
 // Close ...
