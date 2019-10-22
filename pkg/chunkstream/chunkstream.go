@@ -61,7 +61,6 @@ type Writer struct {
 	buf  []byte
 	off  int
 	woff int
-	n    uint64
 }
 
 // Write implements io.Writer
@@ -69,7 +68,6 @@ func (c *Writer) Write(p []byte) (n int, err error) {
 	for {
 		dn := copy(c.buf[c.off:], p[n:])
 		n += dn
-		c.n += uint64(dn)
 		c.off += dn
 		if n == len(p) && c.off < len(c.buf) {
 			return
@@ -88,7 +86,6 @@ func (c *Writer) Write(p []byte) (n int, err error) {
 // after every input segment and before Close()
 func (c *Writer) Flush() (err error) {
 	if c.woff != 0 {
-		debug.Red("skipped write")
 		return ErrHeaderWritten
 	}
 	debug.Blue("flushed chunkstream")
@@ -106,14 +103,6 @@ func (c *Writer) Flush() (err error) {
 	c.buf[2] = 0
 	c.buf[3] = 0
 	return
-}
-
-// Close implements io.Closer. Closes the underlying writer.
-func (c *Writer) Close() (err error) {
-	if wc, ok := c.w.(io.WriteCloser); ok {
-		return wc.Close()
-	}
-	return nil
 }
 
 // NewReader ...

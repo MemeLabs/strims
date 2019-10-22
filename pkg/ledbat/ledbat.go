@@ -167,17 +167,17 @@ func (l *Controller) DigestDelaySamples() {
 	// if no acks have been received in cto (heavy congestion) reset cwnd
 	// and adjust cto
 	// TODO: this is just cto...
-	// timeout := l.cto
-	// if timeout < time.Second*2 {
-	// 	timeout = time.Second * 2
-	// }
-	// if l.flightSize > 0 && time.Now().Sub(l.lastAckTime) > timeout {
-	// 	l.cwnd = minCWND * mss
-	// 	l.cto = 2 * l.cto
-	// 	if l.cto > time.Second {
-	// 		l.cto = time.Second
-	// 	}
-	// }
+	timeout := l.cto
+	if timeout < time.Second*2 {
+		timeout = time.Second * 2
+	}
+	if l.flightSize > 0 && time.Now().Sub(l.lastAckTime) > timeout {
+		l.cwnd = minCWND * mss
+		l.cto = 2 * l.cto
+		if l.cto > time.Second {
+			l.cto = time.Second
+		}
+	}
 
 	if l.ackSize == 0 {
 		return
@@ -234,11 +234,11 @@ func (l *Controller) AddDataLoss(size int, retransmitting bool) {
 	}
 	l.lastDataLoss = now
 
-	// cwnd := l.cwnd / 2
-	// if min := minCWND * mss; min > cwnd {
-	// 	cwnd = min
-	// }
-	// if cwnd < l.cwnd {
-	// 	l.cwnd = cwnd
-	// }
+	cwnd := l.cwnd / 2
+	if min := minCWND * mss; min > cwnd {
+		cwnd = min
+	}
+	if cwnd < l.cwnd {
+		l.cwnd = cwnd
+	}
 }

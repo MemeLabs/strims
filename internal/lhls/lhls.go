@@ -25,28 +25,41 @@ type Segment struct {
 }
 
 // NewSegment ...
-func NewSegment(n int) *Segment {
+func NewSegment() *Segment {
 	return &Segment{
 		cond: sync.Cond{L: &sync.Mutex{}},
-		buf:  make([]byte, 0, n),
 	}
+}
+
+// Reset ...
+func (m *Segment) Reset() {
+	m.cond.L.Lock()
+	defer m.cond.L.Unlock()
+
+	m.closed = true
+	m.cond.Broadcast()
+
+	m.closed = false
+	m.buf = m.buf[:0]
 }
 
 // Write ...
 func (m *Segment) Write(p []byte) (n int, err error) {
 	m.cond.L.Lock()
+	defer m.cond.L.Unlock()
+
 	m.buf = append(m.buf, p...)
 	m.cond.Broadcast()
-	m.cond.L.Unlock()
 	return len(p), nil
 }
 
 // Close ...
 func (m *Segment) Close() (err error) {
 	m.cond.L.Lock()
+	defer m.cond.L.Unlock()
+
 	m.closed = true
 	m.cond.Broadcast()
-	m.cond.L.Unlock()
 	return
 }
 
@@ -101,13 +114,11 @@ func (m *SegmentReader) Read(p []byte) (n int, err error) {
 
 // StreamOptions ...
 type StreamOptions struct {
-	BufferSize  int
 	HistorySize int
 }
 
 // DefaultStreamOptions ...
 var DefaultStreamOptions = StreamOptions{
-	BufferSize:  1 * 1024 * 1024,
 	HistorySize: 5,
 }
 
@@ -119,47 +130,49 @@ type Stream struct {
 	lock           sync.RWMutex
 	header         []av.CodecData
 	segments       []*Segment
-	index          int
+	index          uint64
 }
 
 // NewStream ...
-func NewStream(opt StreamOptions) *Stream {
-	return &Stream{opt: opt}
+func NewStream(opt StreamOptions) (s *Stream) {
+	s = &Stream{
+		opt:      opt,
+		segments: make([]*Segment, opt.HistorySize),
+	}
+
+	for i := 0; i < opt.HistorySize; i++ {
+		s.segments[i] = NewSegment()
+	}
+	return
 }
 
 // NewDefaultStream ...
 func NewDefaultStream() *Stream {
-	return &Stream{opt: DefaultStreamOptions}
+	return NewStream(DefaultStreamOptions)
 }
 
 // Range ...
-func (l *Stream) Range() (int, int) {
+func (l *Stream) Range() (low uint64, high uint64) {
 	l.lock.RLock()
 	defer l.lock.RUnlock()
 
-	low := l.index - len(l.segments)
-	if low < 0 {
-		low = 0
+	high = l.index
+	if high >= uint64(l.opt.HistorySize) {
+		low = high - uint64(l.opt.HistorySize)
 	}
-
-	return low, l.index
+	return
 }
 
 // NextWriter ...
 func (l *Stream) NextWriter() io.WriteCloser {
-	b := NewSegment(l.opt.BufferSize)
-
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
 	l.index++
-	if l.index > l.opt.HistorySize {
-		copy(l.segments, l.segments[1:])
-		l.segments = l.segments[:l.opt.HistorySize-1]
-	}
-	l.segments = append(l.segments, b)
+	i := l.index % uint64(l.opt.HistorySize)
+	l.segments[i].Reset()
 
-	return b
+	return l.segments[i]
 }
 
 // WriteHeader ...
@@ -204,15 +217,12 @@ func (l *Stream) CopyPackets(src av.PacketReader) (err error) {
 }
 
 // SegmentReader ...
-func (l *Stream) SegmentReader(i int) (r io.Reader, err error) {
-	l.lock.RLock()
-	defer l.lock.RUnlock()
-
-	index := len(l.segments) - (l.index - i)
-	if index < 0 || index >= len(l.segments) {
+func (l *Stream) SegmentReader(i uint64) (r io.Reader, err error) {
+	min, max := l.Range()
+	if i < min || i > max {
 		return nil, ErrNotFound
 	}
 
-	r = &SegmentReader{src: l.segments[index]}
+	r = &SegmentReader{src: l.segments[i%uint64(l.opt.HistorySize)]}
 	return
 }

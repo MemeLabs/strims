@@ -14,8 +14,6 @@ import (
 	"sync"
 	"syscall"
 
-	"github.com/MemeLabs/go-ppspp/internal/egress"
-	"github.com/MemeLabs/go-ppspp/internal/ingress"
 	"github.com/MemeLabs/go-ppspp/internal/lhls"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
 	"github.com/MemeLabs/go-ppspp/pkg/debug"
@@ -48,7 +46,7 @@ func runA(ctx context.Context, ch chan joinOpts) {
 	})
 
 	go func() {
-		srv := ingress.New(ctx, h)
+		srv := lhls.NewIngress(ctx, h)
 		go srv.ListenAndServe()
 
 		for s := range srv.DebugSwarms {
@@ -79,7 +77,7 @@ func runB(ctx context.Context, ch chan joinOpts) {
 		},
 	})
 
-	srv := egress.New()
+	srv := lhls.NewEgress()
 	go srv.ListenAndServe()
 
 	go func() {
@@ -90,11 +88,13 @@ func runB(ctx context.Context, ch chan joinOpts) {
 				log.Println(err)
 			}
 
-			c := &egress.Channel{
+			// TODO: move this to lhls.Egress
+			c := &lhls.Channel{
 				Stream: lhls.NewDefaultStream(),
 			}
 			srv.AddChannel(c)
 
+			// TODO: move this to lhls.Channel
 			go func() {
 				defer srv.RemoveChannel(c)
 

@@ -266,6 +266,9 @@ func (v *Handshake) Marshal(b []byte) (size int) {
 		size += option.Marshal(b[size:])
 	}
 
+	b[size] = byte(EndOption)
+	size++
+
 	return
 }
 

@@ -7,15 +7,6 @@ import (
 	"time"
 )
 
-var clog colorLogger
-
-type colorLogger struct{}
-
-// func args(c string, vs []interface{}) []interface{} {
-
-// 	return vs
-// }
-
 func printLog(color string, vs []interface{}) {
 	_, f, l, _ := runtime.Caller(2)
 	_, file := path.Split(f)

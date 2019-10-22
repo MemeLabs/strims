@@ -1,4 +1,4 @@
-package ingress
+package lhls
 
 import (
 	"context"
@@ -16,9 +16,9 @@ func init() {
 	format.RegisterAll()
 }
 
-// New ...
-func New(ctx context.Context, host *encoding.Host) (c *Server) {
-	c = &Server{
+// NewIngress ...
+func NewIngress(ctx context.Context, host *encoding.Host) (c *Ingress) {
+	c = &Ingress{
 		ctx:         ctx,
 		host:        host,
 		close:       make(chan struct{}, 1),
@@ -30,8 +30,8 @@ func New(ctx context.Context, host *encoding.Host) (c *Server) {
 	return c
 }
 
-// Server ...
-type Server struct {
+// Ingress ...
+type Ingress struct {
 	ctx   context.Context
 	close chan struct{}
 	host  *encoding.Host
@@ -42,7 +42,7 @@ type Server struct {
 	DebugSwarms chan *encoding.Swarm
 }
 
-func (h *Server) handlePublish(conn *rtmp.Conn) {
+func (h *Ingress) handlePublish(conn *rtmp.Conn) {
 	// app, stream := rtmp.SplitPath(conn.URL)
 	w, err := encoding.NewWriter(encoding.DefaultSwarmWriterOptions)
 	if err != nil {
@@ -87,11 +87,11 @@ func (h *Server) handlePublish(conn *rtmp.Conn) {
 }
 
 // ListenAndServe ...
-func (h *Server) ListenAndServe() error {
+func (h *Ingress) ListenAndServe() error {
 	return h.server.ListenAndServe()
 }
 
-func (h *Server) copyPackets(w *chunkstream.Writer, src *rtmp.Conn) (err error) {
+func (h *Ingress) copyPackets(w *chunkstream.Writer, src *rtmp.Conn) (err error) {
 	streams, err := src.Streams()
 	if err != nil {
 		return

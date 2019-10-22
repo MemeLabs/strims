@@ -221,6 +221,11 @@ func (s *Scheduler) runPeer(p *Peer, w *MemeWriter) {
 	p.channels.Range(func(_ interface{}, ci interface{}) bool {
 		c := ci.(*channel)
 		c.Lock()
+
+		if c.choked {
+			return true
+		}
+
 		c.swarm.Lock()
 		// TODO: avoid holding swarm lock during io...
 
@@ -275,16 +280,15 @@ func (s *Scheduler) runPeer(p *Peer, w *MemeWriter) {
 
 		c.swarm.Unlock()
 		c.Unlock()
-
 		return true
 	})
 
 	// only send pings opportunistically with other messages
-	// if w.Dirty() {
-	if nonce, ok := p.TrackPingRTT(); ok {
-		w.Write(&Ping{Nonce{nonce}})
+	if w.Dirty() {
+		if nonce, ok := p.TrackPingRTT(); ok {
+			w.Write(&Ping{Nonce{nonce}})
+		}
 	}
-	// }
 
 	if err := w.Flush(); err != nil {
 		log.Println(err)

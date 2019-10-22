@@ -118,19 +118,22 @@ func (c *channel) HandleMemeRequest(w *MemeWriter, r *MemeRequest) {
 }
 
 func (c *channel) handleHandshake(w *MemeWriter, v *Handshake) {
+	c.Lock()
+	defer c.Unlock()
+
 	log.Println("received handshake")
 
-	c.Lock()
 	cid := v.ChannelID
 	c.remoteID = cid
-	c.Unlock()
 
 	// TODO: set live discard window
 	// TODO: verify protocol options
+	// TODO: close channels on empty handshake
 
 	w.BeginFrame(cid)
 
 	if c.handshakeSent {
+		// TODO: send PEX REQ here
 		return
 	}
 	c.handshakeSent = true
@@ -140,6 +143,20 @@ func (c *channel) handleHandshake(w *MemeWriter, v *Handshake) {
 		ChannelID: c.id,
 		Options:   v.Options,
 	})
+
+	c.swarm.Lock()
+	defer c.swarm.Unlock()
+
+	b := c.swarm.loadedBins.FindFilled()
+	for {
+		b = c.swarm.loadedBins.Cover(b)
+		w.Write(&Have{Address(b)})
+
+		b = c.swarm.loadedBins.FindFilledAfter(b.BaseRight() + 2)
+		if b.IsNone() {
+			break
+		}
+	}
 }
 
 func (c *channel) handleData(w *MemeWriter, v *Data) {
