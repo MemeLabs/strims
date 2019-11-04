@@ -5,6 +5,7 @@ import (
 	"crypto/rand"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"log"
 	mathrand "math/rand"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"os/signal"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/lhls"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
@@ -30,7 +32,7 @@ func init() {
 }
 
 func randAddr() string {
-	return fmt.Sprintf(":%d", mathrand.Intn(50000)+10000)
+	return fmt.Sprintf("127.0.0.1:%d", mathrand.Intn(50000)+10000)
 }
 
 func runA(ctx context.Context, ch chan joinOpts) {
@@ -42,6 +44,11 @@ func runA(ctx context.Context, ch chan joinOpts) {
 			&encoding.UDPTransport{
 				Address: listenAddr,
 			},
+			&encoding.WRTCTransport{
+				Adapter: &encoding.NativeWRTCAdapter{
+					SignalAddress: "0.0.0.0:8082",
+				},
+			},
 		},
 	})
 
@@ -52,7 +59,7 @@ func runA(ctx context.Context, ch chan joinOpts) {
 		for s := range srv.DebugSwarms {
 			ch <- joinOpts{
 				SwarmID: s.ID,
-				Address: "localhost" + listenAddr,
+				Address: listenAddr,
 			}
 		}
 	}()
@@ -83,7 +90,8 @@ func runB(ctx context.Context, ch chan joinOpts) {
 	go func() {
 		for opt := range ch {
 			log.Printf("joining swarm %s at %s", opt.SwarmID, opt.Address)
-			cr, err := h.JoinSwarm(opt.SwarmID, opt.Address)
+			uri := encoding.TransportURI(encoding.UDPScheme + opt.Address)
+			cr, err := h.JoinSwarm(opt.SwarmID, uri)
 			if err != nil {
 				log.Println(err)
 			}
@@ -109,13 +117,13 @@ func runB(ctx context.Context, ch chan joinOpts) {
 					var wn int
 					for {
 						n, err := r.Read(b)
-						if err != nil && err != chunkstream.EOR {
+						if err != nil && err != io.EOF {
 							log.Println("read failed with error", err)
 						}
 						w.Write(b[:n])
 						wn += n
 
-						if err == chunkstream.EOR {
+						if err == io.EOF {
 							break
 						}
 						if ctx.Err() == context.Canceled {
@@ -123,7 +131,7 @@ func runB(ctx context.Context, ch chan joinOpts) {
 						}
 					}
 
-					debug.Green("closed chunk", wn)
+					// debug.Green("closed chunk", wn)
 					if err := w.Close(); err != nil {
 						log.Println("error closing segment", err)
 						return
@@ -141,26 +149,44 @@ func runB(ctx context.Context, ch chan joinOpts) {
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lmicroseconds)
 	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
+		log.Println(http.ListenAndServe("127.0.0.1:6060", nil))
 	}()
 
 	log.Println("starting...")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	ch := make(chan joinOpts)
+	joinSrc := make(chan joinOpts)
+	joinDsts := make([]chan joinOpts, 0)
 	wg := sync.WaitGroup{}
-	wg.Add(2)
+
+	// for i := 0; i < 1; i++ {
+	// 	wg.Add(1)
+	// 	go func() {
+	// 		joinDst := make(chan joinOpts)
+	// 		joinDsts = append(joinDsts, joinDst)
+	// 		runB(ctx, joinDst)
+	// 		wg.Done()
+	// 	}()
+	// }
+
 	go func() {
-		runA(ctx, ch)
-		wg.Done()
+		for join := range joinSrc {
+			debug.Blue(join.SwarmID.String(), join.Address)
+			for _, dst := range joinDsts {
+				dst <- join
+			}
+		}
 	}()
+
+	wg.Add(1)
 	go func() {
-		runB(ctx, ch)
+		time.Sleep(100 * time.Millisecond)
+		runA(ctx, joinSrc)
 		wg.Done()
 	}()
 
 	signals := make(chan os.Signal, 1)
-	signal.Notify(signals)
+	signal.Notify(signals, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-signals
 	log.Println("received signal:", sig)
 

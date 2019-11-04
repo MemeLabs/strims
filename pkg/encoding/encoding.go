@@ -3,6 +3,7 @@ package encoding
 import (
 	"encoding/binary"
 	"errors"
+	"net"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
@@ -233,11 +234,11 @@ EachProtocolOption:
 		var option ProtocolOption
 		switch optionType {
 		case VersionOption:
-			option = new(VersionProtocolOption)
+			option = &VersionProtocolOption{}
 		case MinimumVersionOption:
-			option = new(MinimumVersionProtocolOption)
+			option = &MinimumVersionProtocolOption{}
 		case SwarmIdentifierOption:
-			option = new(SwarmIdentifierProtocolOption)
+			option = &SwarmIdentifierProtocolOption{}
 		case EndOption:
 			break EachProtocolOption
 		default:
@@ -372,10 +373,34 @@ func (v *Timestamp) ByteLen() int {
 	return 8
 }
 
+// DelaySample ...
+type DelaySample struct {
+	time.Duration
+}
+
+// Unmarshal ...
+func (v *DelaySample) Unmarshal(b []byte) (int, error) {
+	v.Duration = time.Duration(binary.BigEndian.Uint64(b))
+
+	return 8, nil
+}
+
+// Marshal ...
+func (v *DelaySample) Marshal(b []byte) (size int) {
+	binary.BigEndian.PutUint64(b, uint64(v.Duration))
+
+	return 8
+}
+
+// ByteLen ...
+func (v *DelaySample) ByteLen() int {
+	return 8
+}
+
 // Ack ...
 type Ack struct {
 	Address     Address
-	DelaySample Timestamp
+	DelaySample DelaySample
 }
 
 // Type ...
@@ -489,6 +514,116 @@ func (v *Cancel) Type() MessageType {
 	return CancelMessage
 }
 
+// PExResV4 ...
+type PExResV4 struct {
+	IP   net.IP
+	Port uint16
+}
+
+// Type ...
+func (v *PExResV4) Type() MessageType {
+	return PExResV4Message
+}
+
+// Unmarshal ...
+func (v *PExResV4) Unmarshal(b []byte) (size int, err error) {
+	v.IP = net.IPv4(b[0], b[1], b[2], b[3])
+	size += 4
+
+	v.Port = binary.BigEndian.Uint16(b[size:])
+	size += 2
+
+	return
+}
+
+// Marshal ...
+func (v *PExResV4) Marshal(b []byte) (size int) {
+	size += copy(b, v.IP[12:])
+
+	binary.BigEndian.PutUint16(b[size:], v.Port)
+	size += 2
+
+	return
+}
+
+// ByteLen ...
+func (v *PExResV4) ByteLen() int {
+	return 6
+}
+
+// PExResV6 ...
+type PExResV6 struct {
+	IP   net.IP
+	Port uint16
+}
+
+// Type ...
+func (v *PExResV6) Type() MessageType {
+	return PExResV6Message
+}
+
+// Unmarshal ...
+func (v *PExResV6) Unmarshal(b []byte) (size int, err error) {
+	v.IP = net.IP(b[:16])
+	size += 16
+
+	v.Port = binary.BigEndian.Uint16(b)
+	size += 2
+
+	return
+}
+
+// Marshal ...
+func (v *PExResV6) Marshal(b []byte) (size int) {
+	size += copy(b, v.IP)
+
+	binary.BigEndian.PutUint16(b, v.Port)
+	size += 2
+
+	return
+}
+
+// ByteLen ...
+func (v *PExResV6) ByteLen() int {
+	return 18
+}
+
+// PExResURI ...
+type PExResURI struct {
+	URI string
+}
+
+// Type ...
+func (v *PExResURI) Type() MessageType {
+	return PExResURIMessage
+}
+
+// Unmarshal ...
+func (v *PExResURI) Unmarshal(b []byte) (size int, err error) {
+	n := int(binary.BigEndian.Uint16(b))
+	size += 2
+
+	v.URI = string(b[size : size+n])
+	size += n
+
+	return
+}
+
+// Marshal ...
+func (v *PExResURI) Marshal(b []byte) (size int) {
+	binary.BigEndian.PutUint16(b, uint16(len(v.URI)))
+	size += 2
+
+	size += copy(b[2:], []byte(v.URI))
+
+	return
+}
+
+// ByteLen ...
+func (v *PExResURI) ByteLen() int {
+	return 2 + len(v.URI)
+}
+
 // Empty ...
 type Empty struct{}
 
@@ -525,6 +660,16 @@ type Unchoke struct {
 // Type ...
 func (v *Unchoke) Type() MessageType {
 	return UnchokeMessage
+}
+
+// PExReq ...
+type PExReq struct {
+	Empty
+}
+
+// Type ...
+func (v *PExReq) Type() MessageType {
+	return PExReqMessage
 }
 
 // End ...
@@ -572,6 +717,14 @@ func (v *Messages) Unmarshal(b []byte) (n int, err error) {
 			msg = &Ping{}
 		case PongMessage:
 			msg = &Pong{}
+		case PExReqMessage:
+			msg = &PExReq{}
+		case PExResV4Message:
+			msg = &PExResV4{}
+		case PExResV6Message:
+			msg = &PExResV6{}
+		case PExResURIMessage:
+			msg = &PExResURI{}
 		case EndMessage:
 			return
 		default:

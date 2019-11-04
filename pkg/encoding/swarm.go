@@ -16,7 +16,8 @@ type SwarmOptions struct {
 func NewDefaultSwarmOptions() SwarmOptions {
 	return SwarmOptions{
 		// ChunkSize:  1024,    // this isn't actually configurable...
-		LiveWindow: 1 << 14, // 16MB
+		// LiveWindow: 1 << 14, // 16MB
+		LiveWindow: 1 << 16, // 64MB
 	}
 }
 
@@ -52,6 +53,8 @@ type Swarm struct {
 	firstRequestBin binmap.Bin
 	loadedBins      *binmap.Map
 	requestedBins   *binmap.Map
+	// TODO: hax
+	joinThings chan joinThing
 }
 
 // if chunks and requestedBins locked swarms wouldn't need a lock...?

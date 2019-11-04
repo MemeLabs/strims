@@ -40,7 +40,13 @@ func (w *MemeWriter) BeginFrame(channelID uint32) {
 func (w *MemeWriter) Write(messages ...Message) {
 	m := Messages(messages)
 
-	if w.len+m.ByteLen() > w.Conn.Transport().MTU() {
+	expected := w.len + m.ByteLen()
+	if !w.dirty {
+		// datagram header length
+		expected += 4
+	}
+
+	if expected >= w.Conn.Transport().MTU() {
 		w.Flush()
 	}
 
@@ -87,6 +93,8 @@ type MemeServer struct {
 	Handler  MemeHandler
 	readBuf  []byte
 	writeBuf []byte
+
+	// DecoderOptions func(cid uint32) (DecoderOptions, error)
 }
 
 // Listen ...
@@ -98,7 +106,7 @@ func (s *MemeServer) Listen(ctx context.Context) (err error) {
 		s.Shutdown()
 	}()
 
-	if err = s.t.Listen(); err != nil {
+	if err = s.t.Listen(ctx); err != nil {
 		return
 	}
 

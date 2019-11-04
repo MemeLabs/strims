@@ -6,7 +6,6 @@ import (
 	"log"
 	"math"
 	"math/rand"
-	"net"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -36,11 +35,19 @@ func NewDefaultHostOptions() *HostOptions {
 	}
 }
 
+type joinThing struct {
+	uri   TransportURI
+	swarm *Swarm
+}
+
 // NewHost ...
 func NewHost(o *HostOptions) (c *Host) {
 	c = &Host{
 		ctx:       o.Context,
 		scheduler: NewScheduler(o.Context),
+		// peerThing:  NewPeerThing(),
+		transports: map[string]Transport{},
+		joinThings: make(chan joinThing, 64),
 	}
 
 	c.servers = make([]*MemeServer, len(o.Transports))
@@ -49,7 +56,12 @@ func NewHost(o *HostOptions) (c *Host) {
 			t:       t,
 			Handler: c.handleMemeRequest,
 		}
+
+		c.transports[t.Scheme()] = t
 	}
+
+	// TODO: hax
+	go c.doJoinThing()
 
 	return c
 }
@@ -58,13 +70,16 @@ func NewHost(o *HostOptions) (c *Host) {
 type Host struct {
 	sync.Mutex
 
-	ctx       context.Context
-	prevUID   int64
-	servers   []*MemeServer
-	swarms    sync.Map
-	peers     sync.Map
-	channels  sync.Map
-	scheduler *Scheduler
+	ctx        context.Context
+	prevUID    int64
+	servers    []*MemeServer
+	transports map[string]Transport
+	swarms     sync.Map
+	peers      sync.Map
+	channels   sync.Map
+	scheduler  *Scheduler
+	// peerThing  *PeerThing
+	joinThings chan joinThing
 }
 
 // nextUID ...
@@ -80,37 +95,74 @@ func (h *Host) Close() (err error) {
 
 // HostSwarm ...
 func (h *Host) HostSwarm(s *Swarm) {
+	// TODO: hax
+	s.joinThings = h.joinThings
 	h.swarms.Store(s.ID.String(), s)
 }
 
-// JoinSwarm ...
-func (h *Host) JoinSwarm(id *SwarmID, addr string) (r *ChunkBufferReader, err error) {
-	s := NewDefaultSwarm(id)
-	h.swarms.Store(id.String(), s)
+func (h *Host) doJoinThing() {
+	for {
+		select {
+		case <-h.ctx.Done():
+			return
+		case t := <-h.joinThings:
+			if err := h.joinSwarm(t.swarm, t.uri); err != nil {
+				// debug.Red(err, t.uri)
+			}
+		}
+	}
+}
 
-	c := UDPConn{
-		t: h.servers[0].t.(*UDPTransport),
-	}
-	c.a, err = net.ResolveUDPAddr("udp", addr)
+func (h *Host) joinSwarm(s *Swarm, uri TransportURI) (err error) {
+	p, err := h.dialPeer(uri)
 	if err != nil {
-		return
+		return err
 	}
+
+	found := false
+	p.channels.Range(func(_ interface{}, ci interface{}) bool {
+		found = ci.(*channel).swarm == s
+		return !found
+	})
+	if found {
+		return errors.New("this peer already has a channel for this swarm")
+	}
+
+	p.Lock()
+	defer p.Unlock()
 
 	cid := uint32(rand.Int63n(math.MaxUint32))
-	p := h.peer(c)
 	ch := newChannel(channelOptions{
 		ID:    cid,
 		Swarm: s,
 		Peer:  p,
-		Conn:  c,
+		Conn:  p.conn,
 	})
 	h.channels.Store(cid, ch)
 	p.channels.Store(cid, ch)
 	s.channels.Store(cid, ch)
 
-	w := NewMemeWriter(c)
+	w := NewMemeWriter(p.conn)
 	ch.OfferHandshake(w)
 	w.Flush()
+
+	return nil
+}
+
+// ErrUnsupportedTransport ...
+var ErrUnsupportedTransport = errors.New("Unsupported transport")
+
+// JoinSwarm ...
+func (h *Host) JoinSwarm(id *SwarmID, uri TransportURI) (r *ChunkBufferReader, err error) {
+	s := NewDefaultSwarm(id)
+	// TODO: hax
+	s.joinThings = h.joinThings
+
+	h.swarms.Store(id.String(), s)
+
+	if err = h.joinSwarm(s, uri); err != nil {
+		return
+	}
 
 	r = s.chunks.Reader()
 	return
@@ -137,14 +189,14 @@ func (h *Host) Run() (err error) {
 	// go h.timeoutPeerChannels(ctx)
 
 	wg.Add(len(h.servers))
-	for _, s := range h.servers {
-		go func(s *MemeServer) {
-			if err := s.Listen(ctx); err != nil {
+	for i := range h.servers {
+		go func(i int) {
+			if err := h.servers[i].Listen(ctx); err != nil {
 				log.Println("server error", err)
 			}
 			cancel()
 			wg.Done()
-		}(s)
+		}(i)
 	}
 
 	wg.Wait()
@@ -217,16 +269,39 @@ func (h *Host) handleMemeRequest(w *MemeWriter, r *MemeRequest) {
 	channel.HandleMemeRequest(w, r)
 }
 
-func (h *Host) peer(c TransportConn) (peer *Peer) {
-	pi, ok := h.peers.Load(c.String())
+func (h *Host) dialPeer(uri TransportURI) (p *Peer, err error) {
+	pi, ok := h.peers.Load(uri)
 	if ok {
-		return pi.(*Peer)
+		return pi.(*Peer), nil
 	}
 
-	pi, loaded := h.peers.LoadOrStore(c.String(), NewPeer(h.nextUID(), c))
-	peer = pi.(*Peer)
-	if !loaded {
-		h.scheduler.AddPeer(h.ctx, peer)
+	t, ok := h.transports[uri.Scheme()]
+	if !ok {
+		return nil, ErrUnsupportedTransport
+	}
+
+	c, err := t.Dial(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	return h.storePeer(c)
+}
+
+func (h *Host) storePeer(c TransportConn) (p *Peer, err error) {
+	uri := c.URI()
+	pi, ok := h.peers.Load(uri)
+	if ok {
+		c.Close()
+		return pi.(*Peer), nil
+	}
+
+	pi, loaded := h.peers.LoadOrStore(uri, NewPeer(h.nextUID(), c))
+	p = pi.(*Peer)
+	if loaded {
+		c.Close()
+	} else {
+		h.scheduler.AddPeer(h.ctx, p)
 	}
 	return
 }
@@ -246,7 +321,10 @@ func (h *Host) channel(r *MemeRequest) (c *channel, err error) {
 		return nil, errors.New("handshake: unknown swarm")
 	}
 
-	peer := h.peer(r.Conn)
+	peer, err := h.storePeer(r.Conn)
+	if err != nil {
+		return nil, err
+	}
 
 	for {
 		cid := uint32(rand.Int63n(math.MaxUint32))

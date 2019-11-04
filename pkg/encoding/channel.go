@@ -8,6 +8,14 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
 
+// consts ...
+const (
+	// PeerRequestInterval    = 2 * time.Minute
+	// MinPeerRequestInterval = time.Minute
+	PeerRequestInterval    = 10 * time.Second
+	MinPeerRequestInterval = 5 * time.Second
+)
+
 // channelOptions ...
 type channelOptions struct {
 	ID    uint32
@@ -53,6 +61,9 @@ type channel struct {
 	sentBinHistory      *binHistory // recently sent bins
 	requestedBinHistory *binHistory // bins recently requested from the peer
 	acks                []Ack
+	peerRequest         bool
+	peerRequestTime     time.Time
+	sentPeerRequestTime time.Time
 }
 
 func (c *channel) Swarm() *Swarm {
@@ -89,8 +100,6 @@ func (c *channel) HandleMemeRequest(w *MemeWriter, r *MemeRequest) {
 	c.peer.UpdateLastActive()
 	w.BeginFrame(c.remoteID)
 
-	// spew.Dump(r)
-
 	for _, mi := range r.Messages {
 		switch m := mi.(type) {
 		case *Handshake:
@@ -113,6 +122,10 @@ func (c *channel) HandleMemeRequest(w *MemeWriter, r *MemeRequest) {
 			c.handlePing(w, m)
 		case *Pong:
 			c.handlePong(w, m)
+		case *PExReq:
+			c.handlePExReq(w, m)
+		case *PExResURI:
+			c.handlePExResURI(w, m)
 		}
 	}
 }
@@ -133,7 +146,6 @@ func (c *channel) handleHandshake(w *MemeWriter, v *Handshake) {
 	w.BeginFrame(cid)
 
 	if c.handshakeSent {
-		// TODO: send PEX REQ here
 		return
 	}
 	c.handshakeSent = true
@@ -163,7 +175,7 @@ func (c *channel) handleData(w *MemeWriter, v *Data) {
 	c.Lock()
 	c.acks = append(c.acks, Ack{
 		Address:     v.Address,
-		DelaySample: v.Timestamp,
+		DelaySample: DelaySample{time.Now().Sub(v.Timestamp.Time)},
 	})
 	c.Unlock()
 
@@ -187,8 +199,7 @@ func (c *channel) handleAck(w *MemeWriter, v *Ack) {
 	c.Unlock()
 
 	c.peer.Lock()
-	c.peer.ledbat.AddDelaySample(time.Now().Sub(v.DelaySample.Time), ChunkSize)
-	c.peer.AddRTTSample(c.id, b)
+	c.peer.ledbat.AddDelaySample(v.DelaySample.Duration, ChunkSize)
 	c.peer.AddAckedChunk()
 	c.peer.Unlock()
 }
@@ -241,4 +252,17 @@ func (c *channel) handlePong(w *MemeWriter, v *Pong) {
 	c.peer.Lock()
 	c.peer.AddRTTSample(0, binmap.Bin(v.Nonce.Value))
 	c.peer.Unlock()
+}
+
+func (c *channel) handlePExReq(w *MemeWriter, v *PExReq) {
+	c.Lock()
+	defer c.Unlock()
+	c.peerRequest = true
+}
+
+func (c *channel) handlePExResURI(w *MemeWriter, v *PExResURI) {
+	c.swarm.joinThings <- joinThing{
+		uri:   TransportURI(v.URI),
+		swarm: c.swarm,
+	}
 }

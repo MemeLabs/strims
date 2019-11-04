@@ -35,11 +35,13 @@ func (m MessageType) String() string {
 	case PExResCertMessage:
 		return "PExResCert"
 	case PingMessage:
-		return "PingMessage"
+		return "Ping"
 	case PongMessage:
-		return "PongMessage"
+		return "Pong"
+	case PExResURIMessage:
+		return "PExResURI"
 	case EndMessage:
-		return "EndMessage"
+		return "End"
 	}
 	panic("invalid message type")
 }
@@ -62,6 +64,7 @@ const (
 	PExResCertMessage
 	PingMessage
 	PongMessage
+	PExResURIMessage
 	EndMessage MessageType = 255
 )
 

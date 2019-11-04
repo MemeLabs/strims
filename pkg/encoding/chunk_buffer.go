@@ -18,7 +18,7 @@ func newChunkBuffer(n int) (c *chunkBuffer, err error) {
 	c = &chunkBuffer{
 		size: uint64(n),
 		mask: uint64(n) - 1,
-		head: binmap.Bin(n),
+		head: binmap.Bin(n * 2),
 		bins: binmap.New(),
 		buf:  make([]byte, n*ChunkSize),
 		cond: sync.Cond{L: &sync.Mutex{}},
@@ -53,9 +53,13 @@ func (s *chunkBuffer) Set(b binmap.Bin, p []byte) {
 	}
 
 	s.bins.Set(b)
-	next := s.bins.FindEmptyAfter(s.next)
-	if next != 0 && !next.IsNone() && next != s.next {
+	if b == s.next {
+		next := s.bins.FindEmptyAfter(s.next)
+		if next.IsNone() {
+			next = s.next + 2
+		}
 		s.next = next
+
 		s.cond.Broadcast()
 	}
 }
@@ -90,7 +94,7 @@ func (s *chunkBuffer) index(b binmap.Bin) int {
 }
 
 func (s *chunkBuffer) tail() binmap.Bin {
-	return s.head - binmap.Bin(s.size)
+	return s.head - binmap.Bin(s.size*2)
 }
 
 func (s *chunkBuffer) contains(b binmap.Bin) bool {
@@ -100,9 +104,11 @@ func (s *chunkBuffer) contains(b binmap.Bin) bool {
 func (s *chunkBuffer) Reader() *ChunkBufferReader {
 	s.cond.L.Lock()
 	defer s.cond.L.Unlock()
+	s.cond.Wait()
 
 	return &ChunkBufferReader{
-		prev: s.next,
+		prev: s.next - 2,
+		off:  binByte(s.next - 2),
 		b:    s,
 	}
 }
@@ -116,7 +122,7 @@ type ChunkBufferReader struct {
 
 // Offset ...
 func (r *ChunkBufferReader) Offset() uint64 {
-	return binByte(r.prev) + uint64(r.off)
+	return r.off
 }
 
 // Read ...

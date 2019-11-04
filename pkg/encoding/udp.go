@@ -1,9 +1,14 @@
 package encoding
 
 import (
+	"context"
 	"log"
 	"net"
+	"strings"
 )
+
+// UDPScheme TransportURI scheme
+const UDPScheme = "udp://"
 
 // UDPConn ...
 type UDPConn struct {
@@ -11,22 +16,24 @@ type UDPConn struct {
 	a net.Addr
 }
 
-// addressInterface ...
-func (c UDPConn) addressInterface() {}
-
 // Transport ...
 func (c UDPConn) Transport() Transport {
 	return c.t
 }
 
-// String ...
-func (c UDPConn) String() string {
-	return c.a.String()
+// URI ...
+func (c UDPConn) URI() TransportURI {
+	return TransportURI(UDPScheme + c.a.String())
 }
 
 // Write ...
 func (c UDPConn) Write(b []byte) (err error) {
 	return c.t.Write(b, c)
+}
+
+// Close ...
+func (c UDPConn) Close() error {
+	return nil
 }
 
 // NewUDPTransport ...
@@ -47,7 +54,7 @@ func (t *UDPTransport) MTU() int {
 }
 
 // Listen ...
-func (t *UDPTransport) Listen() (err error) {
+func (t *UDPTransport) Listen(ctx context.Context) (err error) {
 	t.conn, err = net.ListenPacket("udp", t.Address)
 	if err != nil {
 		t.setStatus(StatusError)
@@ -81,4 +88,24 @@ func (t *UDPTransport) Read(b []byte) (n int, a TransportConn, err error) {
 func (t *UDPTransport) Write(b []byte, a TransportConn) (err error) {
 	_, err = t.conn.WriteTo(b, a.(UDPConn).a)
 	return
+}
+
+// Dial ...
+func (t *UDPTransport) Dial(uri TransportURI) (tc TransportConn, err error) {
+	as := strings.TrimPrefix(string(uri), UDPScheme)
+	a, err := net.ResolveUDPAddr("udp", as)
+	if err != nil {
+		return
+	}
+
+	tc = UDPConn{
+		t: t,
+		a: a,
+	}
+	return
+}
+
+// Scheme ...
+func (t *UDPTransport) Scheme() string {
+	return UDPScheme
 }

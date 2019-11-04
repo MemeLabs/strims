@@ -9,17 +9,12 @@ import (
 	"errors"
 	"io"
 	"math"
-
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
 )
 
 // errors ...
 var (
 	ErrHeaderWritten = errors.New("header already written")
 	ErrSizeRange     = errors.New("header interval out of range")
-
-	// EOR emitted when the last bytes of a segment has been received
-	EOR = errors.New("end of record")
 )
 
 const (
@@ -88,7 +83,6 @@ func (c *Writer) Flush() (err error) {
 	if c.woff != 0 {
 		return ErrHeaderWritten
 	}
-	debug.Blue("flushed chunkstream")
 
 	binary.BigEndian.PutUint16(c.buf, uint16(c.off-headerLen))
 	c.buf[0] |= eorFlag
@@ -161,7 +155,7 @@ func (c *Reader) Read(p []byte) (n int, err error) {
 	c.off += n
 	if c.off == c.roff {
 		c.roff = math.MaxInt32
-		err = EOR
+		err = io.EOF
 	}
 	if c.off == c.size {
 		c.off = 0

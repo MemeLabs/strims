@@ -9,12 +9,7 @@ import (
 	"sync"
 
 	"github.com/gorilla/mux"
-	"github.com/nareix/joy4/format"
 )
-
-func init() {
-	format.RegisterAll()
-}
 
 // Channel ...
 type Channel struct {

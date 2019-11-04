@@ -12,6 +12,13 @@ type SwarmID struct {
 	PublicKey []byte
 }
 
+// ParseSwarmID ...
+func ParseSwarmID(key string) (s *SwarmID, err error) {
+	s = &SwarmID{}
+	s.PublicKey, err = base64.URLEncoding.DecodeString(key)
+	return
+}
+
 // NewSwarmID ...
 func NewSwarmID(key []byte) *SwarmID {
 	b := make([]byte, len(key))

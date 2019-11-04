@@ -51,7 +51,7 @@ type Scheduler struct {
 const (
 	defaultWriteInterval = 200 * time.Millisecond
 	maxWriteInterval     = time.Second
-	minWriteInterval     = 10 * time.Millisecond
+	minWriteInterval     = 50 * time.Millisecond
 	rescheduleInterval   = 200 * time.Millisecond
 )
 
@@ -179,6 +179,17 @@ func (s *Scheduler) runPeer(p *Peer, w *MemeWriter) {
 	p.Lock()
 	defer p.Unlock()
 
+	s.sendPeerTimeouts(p, w)
+	s.sendPeerExchange(p, w)
+	s.sendPeerData(p, w)
+	s.sendPeerPing(p, w)
+
+	if err := w.Flush(); err != nil {
+		log.Println(err)
+	}
+}
+
+func (s *Scheduler) sendPeerTimeouts(p *Peer, w *MemeWriter) {
 	// TODO: separate read and write timeouts
 	// timeout := time.Now().Add(-p.ledbat.CTO() * 2)
 	timeout := time.Now().Add(-2 * time.Second)
@@ -216,7 +227,9 @@ func (s *Scheduler) runPeer(p *Peer, w *MemeWriter) {
 
 		return true
 	})
+}
 
+func (s *Scheduler) sendPeerData(p *Peer, w *MemeWriter) {
 	requesteCapacity := s.peerRequestCapacity(p)
 	p.channels.Range(func(_ interface{}, ci interface{}) bool {
 		c := ci.(*channel)
@@ -282,17 +295,57 @@ func (s *Scheduler) runPeer(p *Peer, w *MemeWriter) {
 		c.Unlock()
 		return true
 	})
+}
 
+func (s *Scheduler) sendPeerPing(p *Peer, w *MemeWriter) {
 	// only send pings opportunistically with other messages
 	if w.Dirty() {
 		if nonce, ok := p.TrackPingRTT(); ok {
 			w.Write(&Ping{Nonce{nonce}})
 		}
 	}
+}
 
-	if err := w.Flush(); err != nil {
-		log.Println(err)
-	}
+func (s *Scheduler) sendPeerExchange(p *Peer, w *MemeWriter) {
+	p.channels.Range(func(_ interface{}, ci interface{}) bool {
+		c := ci.(*channel)
+		c.Lock()
+		defer c.Unlock()
+
+		if time.Since(c.sentPeerRequestTime) > PeerRequestInterval {
+			c.sentPeerRequestTime = time.Now()
+
+			// TODO: send request count..?
+			w.Write(&PExReq{})
+		}
+
+		if !c.peerRequest || time.Since(c.peerRequestTime) < MinPeerRequestInterval {
+			return true
+		}
+		c.peerRequest = false
+		c.peerRequestTime = time.Now()
+
+		c.swarm.Lock()
+		defer c.swarm.Unlock()
+
+		// n := 0
+		c.swarm.channels.Range(func(_ interface{}, ci interface{}) bool {
+			rc := ci.(*channel)
+			if rc.id == c.id {
+				return true
+			}
+
+			// n++
+			// log.Println("writing pex uri", rc.conn.URI())
+			w.Write(&PExResURI{
+				URI: string(rc.conn.URI()),
+			})
+			return true
+		})
+		// debug.Red("sent pex uri", n)
+
+		return true
+	})
 }
 
 func (s *Scheduler) channelAddedBins(c *channel) (bins []binmap.Bin) {
@@ -351,9 +404,13 @@ func (s *Scheduler) peerRequestCapacity(p *Peer) int {
 }
 
 // TODO: select more bins than we need...
-// TODO: chunk picker?
+// TODO: chunk picker interface
 func (s *Scheduler) requestBins(count int, c *channel) (bins []binmap.Bin, n int) {
 	// TODO: lock c.swarm.requestedBins here
+
+	if c.swarm.requestedBins.Empty() {
+		return s.requestFirstBins(count, c)
+	}
 
 	var rc = uint64(count)
 	var ab, bb binmap.Bin
@@ -361,8 +418,6 @@ Done:
 	for rc > 0 {
 		if c.swarm.requestedBins.Filled() {
 			ab = c.swarm.requestedBins.RootBin().BaseRight() + 2
-		} else if c.swarm.requestedBins.Empty() {
-			ab = 0
 		} else {
 			ab = c.swarm.requestedBins.FindEmptyAfter(ab)
 		}
@@ -391,12 +446,56 @@ Done:
 		}
 		rc -= ab.BaseLength()
 
-		// TODO: limits on contiguous chunk lengths to improve source diversity?
+		// TODO: limit contiguous chunk lengths to improve source diversity?
 
 		bins = append(bins, ab)
 		c.swarm.requestedBins.Set(ab)
 
 		ab = ab.BaseRight() + 2
 	}
-	return bins, count - int(rc)
+
+	n = count - int(rc)
+	return
+}
+
+func (s *Scheduler) requestFirstBins(count int, c *channel) (bins []binmap.Bin, n int) {
+	// TODO: select some range of bins near the tail of the peer's available
+	// set... maybe try to pick the start of the last chunkstream segment?
+
+	if c.availableBins.Empty() {
+		return
+	}
+
+	// find the last available bin from this peer
+	var ab binmap.Bin
+	nab := ab
+	for {
+		nab = c.availableBins.FindFilledAfter(nab)
+		if nab.IsNone() || nab.IsAll() || !c.availableBins.RootBin().Contains(nab) {
+			break
+		}
+		ab = nab.BaseRight()
+
+		nab = c.availableBins.Cover(nab).BaseRight()
+		if nab.IsNone() || nab.IsAll() || !c.availableBins.RootBin().Contains(nab) {
+			break
+		}
+		ab = nab
+		nab += 2
+	}
+
+	log.Println("starting with", ab)
+	bins = append(bins, ab)
+	c.swarm.requestedBins.Set(ab)
+
+	// TODO: hax...
+	c.swarm.chunks.next = ab + 2
+
+	// fill from 0 to ab so the first empty bin is ab + 2
+	for ab > 0 {
+		ab = c.swarm.requestedBins.Cover(ab - 2)
+		c.swarm.requestedBins.Set(ab)
+		ab = ab.BaseLeft()
+	}
+	return
 }

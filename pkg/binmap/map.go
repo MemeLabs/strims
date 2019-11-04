@@ -742,14 +742,15 @@ func (m *Map) Clone() *Map {
 }
 
 // FindEmptyAfter ...
-func (m *Map) FindEmptyAfter(b Bin) Bin {
+func (m *Map) FindEmptyAfter(target Bin) Bin {
+	b := target
 	if m.EmptyAt(b) {
 		return b
 	}
 
 	for {
 		b = b.Parent()
-		if !m.FilledAt(b) {
+		if !m.FilledAt(b) && b > target {
 			break
 		}
 		if b == m.rootBin {
@@ -758,7 +759,7 @@ func (m *Map) FindEmptyAfter(b Bin) Bin {
 	}
 
 	for {
-		if !m.FilledAt(b.Left()) {
+		if !m.FilledAt(b.Left()) && b.Left() > target {
 			b = b.Left()
 		} else if !m.FilledAt(b.Right()) {
 			b = b.Right()
