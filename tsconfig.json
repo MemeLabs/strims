@@ -1,0 +1,14 @@
+{
+  "compilerOptions": {
+    "outDir": "./dist/",
+    "sourceMap": true,
+    "noImplicitAny": false,
+    "module": "commonjs",
+    "target": "esnext",
+    "jsx": "react",
+    "allowJs": true,
+    "moduleResolution": "node",
+    "lib": ["dom", "es6", "es2017", "esnext.asynciterable"]
+  },
+  "exclude": ["dist", "node_modules"]
+}

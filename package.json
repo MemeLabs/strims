@@ -1,0 +1,54 @@
+{
+  "name": "memes",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "webpack-dev-server --mode development & nodemon --watch ./pkg -e go --exec 'touch src/p2p.go'",
+    "server": "nodemon --watch ./pkg --watch ./cmd/server -e go --delay 0.5 --signal SIGINT --exec 'go run ./cmd/server || exit 1'",
+    "client": "nodemon --watch ./pkg --watch ./cmd/client -e go --delay 0.5 --signal SIGINT --exec 'go run ./cmd/client || exit 1'",
+    "dev": "webpack --mode development",
+    "build": "webpack --mode production"
+  },
+  "dependencies": {
+    "mux.js": "^5.5.1",
+    "react-async": "^9.0.0",
+    "react-use": "^13.1.0"
+  },
+  "devDependencies": {
+    "@types/react-router-dom": "^4.3.5",
+    "autoprefixer": "^9.7.0",
+    "classnames": "^2.2.6",
+    "clean-webpack-plugin": "^2.0.1",
+    "css-loader": "^2.1.1",
+    "farce": "^0.2.8",
+    "file-loader": "^3.0.1",
+    "golang-wasm-async-loader": "file:./vendor/webpack-golang-wasm-async-loader",
+    "html-webpack-plugin": "^3.2.0",
+    "mini-css-extract-plugin": "^0.6.0",
+    "node-sass": "^4.13.0",
+    "nodemon": "^1.19.4",
+    "postcss-loader": "^3.0.0",
+    "react": "^16.11.0",
+    "react-dom": "^16.11.0",
+    "react-helmet": "^5.2.1",
+    "react-router-dom": "^5.1.2",
+    "resolve-url-loader": "^3.1.0",
+    "sass-loader": "^7.3.1",
+    "style-loader": "^0.23.1",
+    "terser-webpack-plugin": "^1.4.1",
+    "ts-loader": "^5.4.5",
+    "tslint": "^5.20.0",
+    "typescript": "^3.6.4",
+    "typescript-tslint-plugin": "^0.3.1",
+    "uglifyjs-webpack-plugin": "^2.2.0",
+    "url-loader": "^1.1.2",
+    "webpack": "^4.41.2",
+    "webpack-bundle-analyzer": "^3.6.0",
+    "webpack-cli": "^3.3.9",
+    "webpack-dev-server": "^3.9.0"
+  },
+  "browserslist": [
+    "defaults"
+  ]
+}
