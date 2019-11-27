@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"log"
 	"runtime"
 	"syscall/js"
@@ -14,17 +13,12 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/wasmio"
 )
 
-const channelWriteTimeout = 100 * time.Millisecond
-
-var errChannelWriteTimeout = errors.New("channel write timeout")
-
 func init() {
 	// things fall apart after a few thousand allocations unless we run gc
 	// manually. if this isn't a go bug we should think of a better way to
 	// schedule this...
 	go func() {
 		for range time.NewTicker(5 * time.Second).C {
-			// for range time.NewTicker(100 * time.Millisecond).C {
 			runtime.GC()
 		}
 	}()

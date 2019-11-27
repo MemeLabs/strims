@@ -4,7 +4,6 @@ const CleanWebpackPlugin = require('clean-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
 const webpack = require('webpack');
-// const { BuildGoPlugin } = require('./src/webpack/build-go-plugin');
 
 module.exports = (env, argv) => {
   const scriptModuleRule = {

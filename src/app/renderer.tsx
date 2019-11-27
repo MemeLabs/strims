@@ -4,11 +4,11 @@ import * as ReactDOM from "react-dom";
 import Provider from "../components/Provider";
 import Client from "../service/client";
 
-const proc = spawn("./dist/app/p2p");
-window.addEventListener("beforeunload", () => proc.kill());
-proc.stderr.on("data", (d: Buffer) => console.log(d.toString()));
+const p2p = spawn("./dist/app/p2p");
+window.addEventListener("beforeunload", () => p2p.kill());
+p2p.stderr.on("data", (d: Buffer) => console.log(d.toString()));
 
-const client = new Client(proc.stdin, proc.stdout);
+const client = new Client(p2p.stdin, p2p.stdout);
 
 window.addEventListener("DOMContentLoaded", () => {
   const root = document.createElement("div");
