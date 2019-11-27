@@ -149,6 +149,7 @@ type nodeHeapEntry struct {
 	Interface
 	d ID
 }
+
 type nodeHeap []nodeHeapEntry
 
 func (h *nodeHeap) Reset() {

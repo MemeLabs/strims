@@ -28,4 +28,16 @@ export default class Client extends RPCHost {
   public getIngressStreams(v: api_pb.GetIngressStreamsRequest): EventEmitter {
     return this.expectMany(this.call("getIngressStreams", v));
   }
+
+  public startHLSIngress(v: api_pb.StartHLSIngressRequest): Promise<api_pb.StartHLSIngressResponse> {
+    return this.expectOne(this.call("startHLSIngress", v));
+  }
+
+  public stopHLSIngress(v: api_pb.StartHLSIngressRequest): Promise<api_pb.StartHLSIngressResponse> {
+    return this.expectOne(this.call("stopHLSIngress", v));
+  }
+
+  public startHLSEgress(v: api_pb.StopHLSEgressRequest): Promise<api_pb.StopHLSEgressResponse> {
+    return this.expectOne(this.call("startHLSEgress", v));
+  }
 }

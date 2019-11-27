@@ -4,7 +4,7 @@ import { EventEmitter } from "events";
 export default class Bus extends EventEmitter {
   private data: Buffer;
   private writeQueue: Promise<any>;
-  private onWrite: (n: number) => void;
+  private onWrite: (n: number) => Promise<any>;
 
   constructor(size: number = 65536) {
     super();
