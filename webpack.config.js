@@ -4,12 +4,18 @@ const CleanWebpackPlugin = require('clean-webpack-plugin');
 const MiniCssExtractPlugin = require('mini-css-extract-plugin');
 const TerserPlugin = require('terser-webpack-plugin');
 const webpack = require('webpack');
+// const { BuildGoPlugin } = require('./src/webpack/build-go-plugin');
 
 module.exports = (env, argv) => {
   const scriptModuleRule = {
     test: /\.tsx?$/,
     use: [
-      'ts-loader',
+      {
+        loader: 'ts-loader',
+        options: {
+          transpileOnly: true,
+        },
+      },
     ],
     exclude: /node_modules/
   };
@@ -24,9 +30,7 @@ module.exports = (env, argv) => {
         options: {
           ident: 'postcss',
           plugins: () => [
-            require('autoprefixer')({
-              browsers: ['last 2 versions'],
-            })
+            require('autoprefixer')()
           ]
         }
       },
@@ -34,8 +38,19 @@ module.exports = (env, argv) => {
     ]
   };
 
+  const staticModuleRule = {
+    test: /\.(png|jpg|gif|woff|woff2|eot|ttf|svg)$/i,
+    use: [
+      {
+        loader: 'url-loader',
+        options: {
+          limit: 8192,
+        },
+      },
+    ],
+  };
+
   const plugins = [
-    new CleanWebpackPlugin(),
     new HtmlWebpackPlugin({
       title: 'Loading...',
       favicon: path.resolve(__dirname, 'assets', 'favicon.ico'),
@@ -44,6 +59,8 @@ module.exports = (env, argv) => {
   ];
 
   if (argv.mode === 'production') {
+    scriptModuleRule.use = ['ts-loader'];
+
     styleModuleRule.use.unshift(MiniCssExtractPlugin.loader);
 
     plugins.push(new MiniCssExtractPlugin({
@@ -54,63 +71,30 @@ module.exports = (env, argv) => {
     styleModuleRule.use.unshift('style-loader');
   }
 
-  return {
+  const createElectronBuild = (target, fileName) => ({
+    target: `electron-${target}`,
     entry: {
-      app: './src/index.tsx',
+      [target]: path.join(__dirname, 'src', 'app', fileName || `${target}.ts`),
     },
     devtool: 'inline-source-map',
     output: {
-      filename: '[name].[hash].js',
-      chunkFilename: '[id].[chunkhash].js',
-      path: path.resolve(__dirname, 'dist'),
-      publicPath: '/',
+      filename: '[name].js',
+      chunkFilename: '[id].js',
+      path: path.resolve(__dirname, 'dist', 'app'),
     },
-    devServer: {
-      // https: true,
-      hot: false,
-      historyApiFallback: {
-        index: '/'
-      },
-      host: '0.0.0.0',
-      proxy: {
-        // '/api': 'http://localhost:8081',
-      },
-      contentBase: [
-        path.join(__dirname, 'pkg'),
-        path.join(__dirname, 'assets')
-      ],
-    },
-    watch: true,
     module: {
       rules: [
         scriptModuleRule,
         styleModuleRule,
-        {
-          test: /\.go/,
-          use: ['golang-wasm-async-loader'],
-        },
-        {
-          test: /\.(png|jpg|gif|woff|woff2|eot|ttf|svg)$/i,
-          use: [
-            {
-              loader: 'url-loader',
-              options: {
-                limit: 8192,
-              },
-            },
-          ],
-        },
-        {
-          test: /\.(wasm)$/,
-          loader: "file",
-        }
+        staticModuleRule,
       ]
     },
-    node: {
-        fs: false,
-    },
     resolve: {
-      extensions: [ '.go', '.tsx', '.ts', '.js' ]
+      extensions: [ '.tsx', '.ts', '.js' ]
+    },
+    node: {
+      __dirname: false,
+      __filename: false
     },
     optimization: {
       minimizer: [
@@ -119,7 +103,78 @@ module.exports = (env, argv) => {
           parallel: true,
         }),
       ],
+    }
+  });
+
+  return [
+    {
+      entry: {
+        index: path.join(__dirname, 'src', 'web', 'index.tsx'),
+      },
+      devtool: 'inline-source-map',
+      output: {
+        filename: '[name].[hash].js',
+        chunkFilename: '[id].[chunkhash].js',
+        path: path.resolve(__dirname, 'dist', 'web'),
+        publicPath: '/',
+      },
+      devServer: {
+        // https: true,
+        hot: false,
+        historyApiFallback: {
+          index: '/'
+        },
+        host: '0.0.0.0',
+        proxy: {
+          // '/api': 'http://localhost:8081',
+        },
+        contentBase: [
+          path.join(__dirname, 'pkg'),
+          path.join(__dirname, 'assets')
+        ],
+      },
+      module: {
+        rules: [
+          scriptModuleRule,
+          styleModuleRule,
+          staticModuleRule,
+          {
+            test: /\.go/,
+            use: ['golang-wasm-async-loader'],
+          },
+          {
+            test: /\.(wasm)$/,
+            loader: "file",
+          }
+        ]
+      },
+      node: {
+        fs: false,
+      },
+      resolve: {
+        extensions: [ '.go', '.tsx', '.ts', '.js' ]
+      },
+      optimization: {
+        minimizer: [
+          new TerserPlugin({
+            cache: true,
+            parallel: true,
+          }),
+        ],
+      },
+      plugins,
     },
-    plugins
-  };
+    Object.assign(
+      createElectronBuild('renderer', 'renderer.tsx'),
+      {
+        plugins: [
+          new HtmlWebpackPlugin({
+            title: 'Loading...',
+          }),
+        ],
+      },
+    ),
+    createElectronBuild('main'),
+    createElectronBuild('preload'),
+  ];
 }

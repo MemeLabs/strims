@@ -2,6 +2,7 @@ package encoding
 
 import (
 	"sync"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
@@ -32,12 +33,40 @@ func NewSwarm(id *SwarmID, o SwarmOptions) (s *Swarm, err error) {
 	s = &Swarm{
 		ID: id,
 		// ChunkSize:     o.ChunkSize,
-		LiveWindow:    o.LiveWindow,
-		loadedBins:    binmap.New(),
-		requestedBins: binmap.New(),
+		LiveWindow:     o.LiveWindow,
+		loadedBins:     binmap.New(),
+		requestedBins:  binmap.New(),
+		peerCandidates: newPeerCandidateMap(),
 	}
 	s.chunks, err = newChunkBuffer(o.LiveWindow)
 	return
+}
+
+type peerCandidateMap struct {
+	l sync.Mutex
+	m map[TransportURI]peerCandidate
+}
+
+type peerCandidate struct {
+	URI      TransportURI
+	LastSeen time.Time
+}
+
+func newPeerCandidateMap() *peerCandidateMap {
+	return &peerCandidateMap{
+		m: map[TransportURI]peerCandidate{},
+	}
+}
+
+func (m *peerCandidateMap) AddURI(u TransportURI) {
+	m.l.Lock()
+	defer m.l.Unlock()
+
+	m.m[u] = peerCandidate{
+		URI:      u,
+		LastSeen: time.Now(),
+	}
+	// send to channel...?
 }
 
 // Swarm ...
@@ -54,7 +83,12 @@ type Swarm struct {
 	loadedBins      *binmap.Map
 	requestedBins   *binmap.Map
 	// TODO: hax
-	joinThings chan joinThing
+	joinThings     chan joinThing
+	peerCandidates *peerCandidateMap
+}
+
+func (s *Swarm) AddPeerCandidate(t TransportURI) {
+
 }
 
 // if chunks and requestedBins locked swarms wouldn't need a lock...?

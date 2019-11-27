@@ -56,8 +56,7 @@ func startTestWriter(ctx context.Context, w io.Writer) (err error) {
 			}
 			sum += n
 			// if sum > 9e4 {
-			if sum > 812500 {
-				log.Println("flush")
+			if sum > 3e6 {
 				if err = cw.Flush(); err != nil {
 					return err
 				}
@@ -70,7 +69,7 @@ func startTestWriter(ctx context.Context, w io.Writer) (err error) {
 }
 
 func randAddr() string {
-	return fmt.Sprintf(":%d", mathrand.Intn(50000)+10000)
+	return fmt.Sprintf("127.0.0.1:%d", mathrand.Intn(50000)+10000)
 }
 
 func runA(ctx context.Context, ch chan joinOpts) {
@@ -96,7 +95,7 @@ func runA(ctx context.Context, ch chan joinOpts) {
 		s := w.Swarm()
 		ch <- joinOpts{
 			SwarmID: s.ID,
-			Address: "localhost" + listenAddr,
+			Address: listenAddr,
 		}
 
 		h.HostSwarm(s)
@@ -129,9 +128,10 @@ func runB(ctx context.Context, ch chan joinOpts) {
 	go func() {
 		for opt := range ch {
 			log.Printf("joining swarm %s at %s", opt.SwarmID, opt.Address)
-			cr, err := h.JoinSwarm(opt.SwarmID, opt.Address)
+			uri := encoding.TransportURI(encoding.UDPScheme + opt.Address)
+			cr, err := h.JoinSwarm(opt.SwarmID, uri)
 			if err != nil {
-				log.Println(err)
+				log.Panic(err)
 			}
 
 			go func() {
@@ -140,19 +140,18 @@ func runB(ctx context.Context, ch chan joinOpts) {
 				if err != nil {
 					log.Panic(err)
 				}
-				b := make([]byte, 5*1024*1024)
-				bn := 0
-				rb := b
+				b := make([]byte, 4*1024)
+				total := 0
 				for {
-					n, err := r.Read(rb)
-					if err == chunkstream.EOR {
-						debug.Green("got chunk", bn)
-						rb = b
+					n, err := r.Read(b)
+					if err == io.EOF {
+						debug.Green("got chunk", total)
+						total = 0
 					} else if err != nil {
 						log.Println("read failed with error", err)
 						break
 					}
-					bn += n
+					total += n
 
 					if ctx.Err() == context.Canceled {
 						break
@@ -171,21 +170,39 @@ func runB(ctx context.Context, ch chan joinOpts) {
 func main() {
 	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lmicroseconds)
 	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
+		log.Println(http.ListenAndServe("127.0.0.1:6060", nil))
 	}()
 
 	log.Println("starting...")
 
 	ctx, cancel := context.WithCancel(context.Background())
-	ch := make(chan joinOpts)
+	joinSrc := make(chan joinOpts)
+	joinDsts := make([]chan joinOpts, 0)
 	wg := sync.WaitGroup{}
-	wg.Add(2)
+
+	for i := 0; i < 1; i++ {
+		wg.Add(1)
+		go func() {
+			joinDst := make(chan joinOpts)
+			joinDsts = append(joinDsts, joinDst)
+			runB(ctx, joinDst)
+			wg.Done()
+		}()
+	}
+
 	go func() {
-		runA(ctx, ch)
-		wg.Done()
+		for join := range joinSrc {
+			debug.Blue(join.SwarmID.String(), join.Address)
+			for _, dst := range joinDsts {
+				dst <- join
+			}
+		}
 	}()
+
+	wg.Add(1)
 	go func() {
-		runB(ctx, ch)
+		time.Sleep(100 * time.Millisecond)
+		runA(ctx, joinSrc)
 		wg.Done()
 	}()
 

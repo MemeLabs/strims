@@ -1,6 +1,6 @@
 module github.com/MemeLabs/go-ppspp
 
-go 1.12
+go 1.13
 
 require (
 	github.com/aaronpowell/webpack-golang-wasm-async-loader v0.1.0
@@ -15,32 +15,25 @@ require (
 	github.com/gorilla/mux v1.7.3
 	github.com/gorilla/websocket v1.4.1
 	github.com/hashicorp/go-multierror v1.0.0 // indirect
+	github.com/ipfs/go-cid v0.0.3
+	github.com/ipfs/go-datastore v0.1.1
 	github.com/ipfs/go-log v0.0.1
-	github.com/libp2p/go-conn-security v0.1.0 // indirect
-	github.com/libp2p/go-libp2p v0.4.0
-	github.com/libp2p/go-libp2p-circuit v0.1.4 // indirect
+	github.com/libp2p/go-libp2p v0.4.1
 	github.com/libp2p/go-libp2p-core v0.2.4
 	github.com/libp2p/go-libp2p-crypto v0.1.0
-	github.com/libp2p/go-libp2p-discovery v0.1.0
-	github.com/libp2p/go-libp2p-host v0.1.0 // indirect
-	github.com/libp2p/go-libp2p-interface-connmgr v0.1.0 // indirect
-	github.com/libp2p/go-libp2p-interface-pnet v0.1.0 // indirect
-	github.com/libp2p/go-libp2p-kad-dht v0.1.1
-	github.com/libp2p/go-libp2p-metrics v0.1.0 // indirect
-	github.com/libp2p/go-libp2p-net v0.1.0
+	github.com/libp2p/go-libp2p-discovery v0.2.0
+	github.com/libp2p/go-libp2p-kad-dht v0.3.0
+	github.com/libp2p/go-libp2p-peer v0.2.0
 	github.com/libp2p/go-libp2p-peerstore v0.1.4
-	github.com/libp2p/go-libp2p-protocol v0.1.0
-	github.com/libp2p/go-libp2p-secio v0.2.1 // indirect
-	github.com/libp2p/go-libp2p-transport v0.1.0 // indirect
-	github.com/libp2p/go-libp2p-webrtc-direct v0.0.0-20190821181026-e838527c2cec
-	github.com/libp2p/go-stream-muxer v0.1.0 // indirect
-	github.com/libp2p/go-ws-transport v0.1.2
+	github.com/libp2p/go-libp2p-pubsub v0.2.1
+	github.com/libp2p/go-libp2p-routing v0.1.0
+	github.com/libp2p/go-libp2p-swarm v0.2.2
 	github.com/lucas-clemente/quic-go v0.12.1 // indirect
 	github.com/marten-seemann/qtls v0.4.1 // indirect
 	github.com/mattn/go-colorable v0.1.4 // indirect
 	github.com/mattn/go-isatty v0.0.10 // indirect
 	github.com/multiformats/go-multiaddr v0.1.1
-	github.com/multiformats/go-multiaddr-dns v0.2.0 // indirect
+	github.com/multiformats/go-multihash v0.0.8
 	github.com/nareix/joy4 v0.0.0-20181022032202-3ddbc8f9d431
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
 	github.com/pion/turnc v0.0.6 // indirect

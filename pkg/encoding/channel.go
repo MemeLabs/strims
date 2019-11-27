@@ -261,8 +261,5 @@ func (c *channel) handlePExReq(w *MemeWriter, v *PExReq) {
 }
 
 func (c *channel) handlePExResURI(w *MemeWriter, v *PExResURI) {
-	c.swarm.joinThings <- joinThing{
-		uri:   TransportURI(v.URI),
-		swarm: c.swarm,
-	}
+	c.swarm.AddPeerCandidate(TransportURI(v.URI))
 }

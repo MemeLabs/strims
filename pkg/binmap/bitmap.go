@@ -76,11 +76,11 @@ func (b bitmap) Get(i uint32) bool {
 }
 
 func (b bitmap) Empty() bool {
-	return b == 0
+	return b == bitmapEmpty
 }
 
 func (b bitmap) Filled() bool {
-	return b == math.MaxUint32
+	return b == bitmapFilled
 }
 
 func bitmapBin(b bitmap) Bin {

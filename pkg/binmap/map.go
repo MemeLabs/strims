@@ -533,8 +533,7 @@ func (m *Map) testBin(target Bin, v bitmap) bool {
 		if target > b {
 			return c.RightBitmap() == v
 		}
-		return !m.mapCell(r).HasRef() &&
-			c.LeftBitmap() == v && c.RightBitmap() == v
+		return !m.mapCell(r).HasRef() && c.LeftBitmap() == v && c.RightBitmap() == v
 	}
 
 	var bm bitmap
@@ -549,16 +548,14 @@ func (m *Map) testBin(target Bin, v bitmap) bool {
 
 // Empty ...
 func (m *Map) Empty() bool {
-	c := m.dataCell(rootRef)
-	return !m.mapCell(rootRef).HasRef() &&
-		c.LeftBitmap() == bitmapEmpty && c.RightBitmap() == bitmapEmpty
+	c, mc := m.cell(rootRef)
+	return !mc.HasRef() && c.LeftBitmap().Empty() && c.RightBitmap().Empty()
 }
 
 // Filled ...
 func (m *Map) Filled() bool {
-	c := m.dataCell(rootRef)
-	return !m.mapCell(rootRef).HasRef() &&
-		c.LeftBitmap() == bitmapFilled && c.RightBitmap() == bitmapFilled
+	c, mc := m.cell(rootRef)
+	return !mc.HasRef() && c.LeftBitmap().Filled() && c.RightBitmap().Filled()
 }
 
 // EmptyAt ...

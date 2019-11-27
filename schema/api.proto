@@ -1,0 +1,30 @@
+syntax = "proto3";
+
+option go_package = "service";
+
+message JoinSwarmRequest {
+  string swarmUri = 1;
+}
+
+message JoinSwarmResponse {}
+
+message LeaveSwarmRequest {
+  string swarmUri = 1;
+}
+
+message LeaveSwarmResponse {}
+
+message GetIngressStreamsRequest {}
+
+message GetIngressStreamsResponse {
+  string swarmUri = 1;
+}
+
+message StartHLSIngressRequest {}
+message StartHLSIngressResponse {}
+
+message StartHLSEgressRequest {}
+message StartHLSEgressResponse {}
+
+message StopHLSEgressRequest {}
+message StopHLSEgressResponse {}

@@ -32,6 +32,7 @@ func NewJSWRTCAdapter(v js.Value) (r *JSWRTCAdapter) {
 
 // JSWRTCAdapter ...
 type JSWRTCAdapter struct {
+	transportState
 	v    js.Value
 	cond sync.Cond
 	cid  int

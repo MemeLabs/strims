@@ -118,6 +118,11 @@ func (t *WRTCTransport) Scheme() string {
 	return WRTCScheme
 }
 
+// connect string parser...
+// wrtc://rendezvous-proto/rendezvous-server:port/uuid?
+// ex:
+// wrtc://wrtc/peer-id/remote-peer-id
+// wrtc://wss/server.tld:1234/remote-peer-id
 func resolveThing(uri TransportURI) (t *thing, err error) {
 	parts := strings.Split(strings.TrimPrefix(string(uri), WRTCScheme), "/")
 	if len(parts) != 3 {

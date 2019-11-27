@@ -4,20 +4,28 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "webpack-dev-server --mode development & nodemon --watch ./pkg -e go --exec 'touch src/p2p.go'",
-    "server": "nodemon --watch ./pkg --watch ./cmd/server -e go --delay 0.5 --signal SIGINT --exec 'go run ./cmd/server || exit 1'",
-    "client": "nodemon --watch ./pkg --watch ./cmd/client -e go --delay 0.5 --signal SIGINT --exec 'go run ./cmd/client || exit 1'",
-    "dev": "webpack --mode development",
+    "app": "electron ./dist/app/main.js",
+    "app:webpack": "webpack --mode development --watch",
+    "app:go": "nodemon --watch ./pkg --watch ./cmd/app -e go --delay 0.1 --signal SIGINT --exec 'go build -o ./dist/app/p2p ./cmd/app || exit 1'",
+    "pb:watch": "nodemon --watch ./schema -e proto --delay 0.1 --signal SIGINT --exec './schema/build.sh || exit 1'",
+    "dev:app": "npm run app:webpack & npm run app:go & npm run pb:watch & npm run app",
+    "web": "webpack-dev-server --mode development --watch",
+    "web:go": "nodemon --watch ./pkg -e go --exec 'touch src/web/p2p.go'",
+    "dev:web": "npm run web:go & npm run web",
     "build": "webpack --mode production"
   },
   "dependencies": {
+    "@types/google-protobuf": "^3.7.2",
+    "electron": "^6.0.8",
+    "google-protobuf": "^3.11.0-rc.2",
     "mux.js": "^5.5.1",
     "react-async": "^9.0.0",
-    "react-use": "^13.1.0"
+    "react-use": "^13.2.1",
+    "ts-protoc-gen": "^0.12.0"
   },
   "devDependencies": {
     "@types/react-router-dom": "^4.3.5",
-    "autoprefixer": "^9.7.0",
+    "autoprefixer": "^9.7.1",
     "classnames": "^2.2.6",
     "clean-webpack-plugin": "^2.0.1",
     "css-loader": "^2.1.1",
@@ -38,14 +46,14 @@
     "style-loader": "^0.23.1",
     "terser-webpack-plugin": "^1.4.1",
     "ts-loader": "^5.4.5",
-    "tslint": "^5.20.0",
-    "typescript": "^3.6.4",
+    "tslint": "^5.20.1",
+    "typescript": "^3.6.0",
     "typescript-tslint-plugin": "^0.3.1",
     "uglifyjs-webpack-plugin": "^2.2.0",
     "url-loader": "^1.1.2",
     "webpack": "^4.41.2",
     "webpack-bundle-analyzer": "^3.6.0",
-    "webpack-cli": "^3.3.9",
+    "webpack-cli": "^3.3.10",
     "webpack-dev-server": "^3.9.0"
   },
   "browserslist": [
