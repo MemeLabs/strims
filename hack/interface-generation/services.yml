@@ -1,0 +1,21 @@
+package: services
+interfaces:
+    - name: Swarm
+      methods:
+      -
+        name: JoinSwarm
+        type: unary
+        inputs:
+            - 'r *JoinSwarmRequest'
+            - 'test string'
+        outputs:
+            - '*JoinSwarmResponse'
+            - 'error'
+      -
+        name: LeaveSwarm
+        type: unary
+        inputs:
+            - 'r *LeaveSwarmRequest'
+        outputs:
+            - '*LeaveSwarmResponse'
+            - 'error'
