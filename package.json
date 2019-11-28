@@ -4,14 +4,15 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "pb": "nodemon --watch ./schema -e proto --delay 0.1 --signal SIGINT --exec './schema/build.sh || exit 1'",
+    "pb:types": "nodemon --watch ./schema -e proto --delay 0.1 --signal SIGINT --exec './schema/build.sh || exit 1'",
+    "pb:register": "nodemon --watch ./schema -e proto --delay 0.1 --signal SIGINT --exec './ts-codegen.sh || exit 1'",
     "app": "electron ./dist/app/main.js",
     "app:webpack": "webpack --mode development --watch",
     "app:go": "nodemon --watch ./pkg --watch ./cmd/app -e go --delay 0.1 --signal SIGINT --exec 'go build -o ./dist/app/p2p ./cmd/app || exit 1'",
-    "dev:app": "npx run-p pb app:webpack app:go app",
+    "dev:app": "npx run-p pb:* app:webpack app:go app",
     "web": "webpack-dev-server --mode development --watch",
     "web:go": "nodemon --watch ./pkg -e go --exec 'touch src/web/p2p.go'",
-    "dev:web": "npx run-p pb web:go web",
+    "dev:web": "npx run-p pb:* web:go web",
     "build": "webpack --mode production"
   },
   "devDependencies": {
