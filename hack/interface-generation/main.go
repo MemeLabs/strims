@@ -4,11 +4,12 @@ import (
 	"flag"
 	"fmt"
 	"go/format"
-	"html/template"
 	"io/ioutil"
 	"log"
 	"os"
+	"text/template"
 
+	"golang.org/x/tools/imports"
 	"gopkg.in/yaml.v2"
 )
 
@@ -17,7 +18,7 @@ const TEMPLATE string = `package {{.Package}}
 {{range .Interfaces}}
 type {{.Name}} interface {
 {{range .Methods}}
-{{.Name}}({{.Input}}) ({{.Output}}, error)
+{{.Name}}(ctx context.Context, {{.Input}}) ({{.Output}}, error)
 {{end}}
 }
 {{end}}`
@@ -39,10 +40,11 @@ type Config struct {
 func main() {
 	config := Config{}
 
-	inputPath := *flag.String("input", "services.yml", "path to the input file")
-	outputPath := *flag.String("output", "./", "path to output generated code")
+	inputPath := flag.String("input", "services.yml", "path to the input file")
+	outputPath := flag.String("output", "./", "path to output generated code")
+	flag.Parse()
 
-	configYml, err := ioutil.ReadFile(inputPath)
+	configYml, err := ioutil.ReadFile(*inputPath)
 	if err != nil {
 		log.Fatal(fmt.Errorf("failed to open input file: %v", err))
 	}
@@ -51,7 +53,7 @@ func main() {
 		log.Fatal(fmt.Errorf("failed to unmarshal yaml file: %v", err))
 	}
 
-	outputFilePath := outputPath + config.Package + ".go"
+	outputFilePath := *outputPath + config.Package + ".go"
 
 	file, err := os.Create(outputFilePath)
 	if err != nil {
@@ -74,7 +76,12 @@ func main() {
 		log.Fatal(fmt.Errorf("failed to format generated file: %v", err))
 	}
 
-	if err = ioutil.WriteFile(outputFilePath, formattedFile, 0777); err != nil {
+	imp, err := imports.Process(outputFilePath, formattedFile, nil)
+	if err != nil {
+		log.Fatal(fmt.Errorf("failed to import pkgs: %v", err))
+	}
+
+	if err = ioutil.WriteFile(outputFilePath, imp, 0777); err != nil {
 		log.Fatal(fmt.Errorf("failed to write formatted file: %v", err))
 	}
 }

@@ -1,6 +1,7 @@
 package: services
 interfaces:
-    - name: Swarm
+    - 
+      name: Service 
       methods:
       -
         name: JoinSwarm
@@ -12,3 +13,23 @@ interfaces:
         type: unary
         input: 'r *LeaveSwarmRequest'
         output: '*LeaveSwarmResponse'
+      -
+        name: StartHLSIngress
+        type: unary
+        input: 'r *StartHLSIngressRequest'
+        output: '*StartHLSIngressResponse'
+      -
+        name: StartHLSEgress
+        type: unary
+        input: 'r *StartHLSEgressRequest'
+        output: '*StartHLSEgressResponse'
+      -
+        name: StopHLSEgress
+        type: unary
+        input: 'r *StopHLSEgressRequest'
+        output: '*StopHLSEgressResponse'
+      -
+        name: GetIngressStreams
+        type: unary
+        input: 'r *GetIngressStreamsRequest'
+        output: '*GetIngressStreamsResponse'
