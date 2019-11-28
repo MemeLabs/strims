@@ -4,8 +4,8 @@
 import * as jspb from "google-protobuf";
 
 export class JoinSwarmRequest extends jspb.Message {
-  getSwarmuri(): string;
-  setSwarmuri(value: string): void;
+  getSwarmUri(): string;
+  setSwarmUri(value: string): void;
 
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): JoinSwarmRequest.AsObject;
@@ -19,7 +19,7 @@ export class JoinSwarmRequest extends jspb.Message {
 
 export namespace JoinSwarmRequest {
   export type AsObject = {
-    swarmuri: string,
+    swarmUri: string,
   }
 }
 
@@ -40,8 +40,8 @@ export namespace JoinSwarmResponse {
 }
 
 export class LeaveSwarmRequest extends jspb.Message {
-  getSwarmuri(): string;
-  setSwarmuri(value: string): void;
+  getSwarmUri(): string;
+  setSwarmUri(value: string): void;
 
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): LeaveSwarmRequest.AsObject;
@@ -55,7 +55,7 @@ export class LeaveSwarmRequest extends jspb.Message {
 
 export namespace LeaveSwarmRequest {
   export type AsObject = {
-    swarmuri: string,
+    swarmUri: string,
   }
 }
 
@@ -92,8 +92,8 @@ export namespace GetIngressStreamsRequest {
 }
 
 export class GetIngressStreamsResponse extends jspb.Message {
-  getSwarmuri(): string;
-  setSwarmuri(value: string): void;
+  getSwarmUri(): string;
+  setSwarmUri(value: string): void;
 
   serializeBinary(): Uint8Array;
   toObject(includeInstance?: boolean): GetIngressStreamsResponse.AsObject;
@@ -107,7 +107,7 @@ export class GetIngressStreamsResponse extends jspb.Message {
 
 export namespace GetIngressStreamsResponse {
   export type AsObject = {
-    swarmuri: string,
+    swarmUri: string,
   }
 }
 

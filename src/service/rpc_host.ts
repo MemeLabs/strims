@@ -1,8 +1,9 @@
 import { EventEmitter } from "events";
 import * as proto from "google-protobuf";
 import * as any_pb from "google-protobuf/google/protobuf/any_pb";
-import { Readable, Writable } from "stream";
+import { PassThrough, Readable as NodeReadable, Writable } from "stream";
 import * as rpc_pb from "./rpc_pb";
+import { Readable } from "./stream";
 
 const HEADER_LEN = 4;
 const CALL_TIMEOUT = 1000;
@@ -42,7 +43,7 @@ export class RPCHost extends EventEmitter {
   private callId: number;
   private callbacks: Map<number, CallbackHandler>;
 
-  constructor(w: Writable, r: Readable, service: any = {}) {
+  constructor(w: Writable, r: NodeReadable, service: any = {}) {
     super();
     this.w = w;
     this.service = service;
@@ -91,8 +92,10 @@ export class RPCHost extends EventEmitter {
     });
   }
 
-  public expectMany(m: rpc_pb.Call): EventEmitter {
-    const e = new EventEmitter();
+  public expectMany<T>(m: rpc_pb.Call): Readable<T> {
+    const e = new PassThrough({
+      objectMode: true,
+    });
 
     this.callbacks.set(m.getId(), (r: any) => {
       if (r instanceof rpc_pb.Error) {
@@ -100,16 +103,16 @@ export class RPCHost extends EventEmitter {
         e.emit("error", new Error(r.getMessage()));
       } else if (r instanceof rpc_pb.Close) {
         this.callbacks.delete(m.getId());
-        e.emit("close");
+        e.push(null);
       } else {
-        e.emit("data", r);
+        e.push(r);
       }
     });
 
-    return e;
+    return e as any;
   }
 
-  private createHandler(r: Readable) {
+  private createHandler(r: NodeReadable) {
     r.on("data", (data: Buffer) => {
       while (data.length !== 0) {
         const size = decodeFixed32(data);
@@ -161,7 +164,7 @@ export class RPCHost extends EventEmitter {
       res.setMessage(e.message);
     }
 
-    if (res instanceof Readable) {
+    if (res instanceof NodeReadable) {
       res.on("data", (d) => this.call(CALLBACK_METHOD, d, msg.getId()));
       res.on("close", () => this.call(CALLBACK_METHOD, new rpc_pb.Close(), msg.getId()));
     } else if (res instanceof Promise) {

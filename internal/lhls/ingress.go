@@ -19,10 +19,9 @@ func init() {
 // NewIngress ...
 func NewIngress(ctx context.Context, host *encoding.Host) (c *Ingress) {
 	c = &Ingress{
-		ctx:         ctx,
-		host:        host,
-		close:       make(chan struct{}, 1),
-		DebugSwarms: make(chan *encoding.Swarm, 0),
+		ctx:   ctx,
+		host:  host,
+		close: make(chan struct{}, 1),
 	}
 
 	c.server.HandlePublish = c.handlePublish
@@ -32,14 +31,27 @@ func NewIngress(ctx context.Context, host *encoding.Host) (c *Ingress) {
 
 // Ingress ...
 type Ingress struct {
-	ctx   context.Context
-	close chan struct{}
-	host  *encoding.Host
+	ctx        context.Context
+	close      chan struct{}
+	host       *encoding.Host
+	server     rtmp.Server
+	swarms     sync.Map
+	swarmChans sync.Map
+}
 
-	server rtmp.Server
-	swarms sync.Map
+// Notify ...
+func (h *Ingress) Notify(ch chan *encoding.Swarm) {
+	go h.swarms.Range(func(_ interface{}, si interface{}) bool {
+		ch <- si.(*encoding.Swarm)
+		return true
+	})
 
-	DebugSwarms chan *encoding.Swarm
+	h.swarmChans.Store(ch, ch)
+}
+
+// Stop ...
+func (h *Ingress) Stop(ch chan *encoding.Swarm) {
+	h.swarmChans.Delete(ch)
 }
 
 func (h *Ingress) handlePublish(conn *rtmp.Conn) {
@@ -58,12 +70,10 @@ func (h *Ingress) handlePublish(conn *rtmp.Conn) {
 	h.swarms.Store(s.ID.String(), s)
 	h.host.HostSwarm(s)
 
-	select {
-	case h.DebugSwarms <- s:
-	default:
-		log.Println("unable to publish swarm, discarding")
-		return
-	}
+	h.swarmChans.Range(func(_ interface{}, chi interface{}) bool {
+		chi.(chan *encoding.Swarm) <- s
+		return true
+	})
 
 	go func() {
 		if err := h.copyPackets(cw, conn); err != nil {

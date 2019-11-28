@@ -70,7 +70,7 @@ proto.JoinSwarmRequest.prototype.toObject = function(opt_includeInstance) {
  */
 proto.JoinSwarmRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
-    swarmuri: jspb.Message.getFieldWithDefault(msg, 1, "")
+    swarmUri: jspb.Message.getFieldWithDefault(msg, 1, "")
   };
 
   if (includeInstance) {
@@ -109,7 +109,7 @@ proto.JoinSwarmRequest.deserializeBinaryFromReader = function(msg, reader) {
     switch (field) {
     case 1:
       var value = /** @type {string} */ (reader.readString());
-      msg.setSwarmuri(value);
+      msg.setSwarmUri(value);
       break;
     default:
       reader.skipField();
@@ -140,7 +140,7 @@ proto.JoinSwarmRequest.prototype.serializeBinary = function() {
  */
 proto.JoinSwarmRequest.serializeBinaryToWriter = function(message, writer) {
   var f = undefined;
-  f = message.getSwarmuri();
+  f = message.getSwarmUri();
   if (f.length > 0) {
     writer.writeString(
       1,
@@ -151,16 +151,16 @@ proto.JoinSwarmRequest.serializeBinaryToWriter = function(message, writer) {
 
 
 /**
- * optional string swarmUri = 1;
+ * optional string swarm_uri = 1;
  * @return {string}
  */
-proto.JoinSwarmRequest.prototype.getSwarmuri = function() {
+proto.JoinSwarmRequest.prototype.getSwarmUri = function() {
   return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
 };
 
 
 /** @param {string} value */
-proto.JoinSwarmRequest.prototype.setSwarmuri = function(value) {
+proto.JoinSwarmRequest.prototype.setSwarmUri = function(value) {
   jspb.Message.setProto3StringField(this, 1, value);
 };
 
@@ -328,7 +328,7 @@ proto.LeaveSwarmRequest.prototype.toObject = function(opt_includeInstance) {
  */
 proto.LeaveSwarmRequest.toObject = function(includeInstance, msg) {
   var f, obj = {
-    swarmuri: jspb.Message.getFieldWithDefault(msg, 1, "")
+    swarmUri: jspb.Message.getFieldWithDefault(msg, 1, "")
   };
 
   if (includeInstance) {
@@ -367,7 +367,7 @@ proto.LeaveSwarmRequest.deserializeBinaryFromReader = function(msg, reader) {
     switch (field) {
     case 1:
       var value = /** @type {string} */ (reader.readString());
-      msg.setSwarmuri(value);
+      msg.setSwarmUri(value);
       break;
     default:
       reader.skipField();
@@ -398,7 +398,7 @@ proto.LeaveSwarmRequest.prototype.serializeBinary = function() {
  */
 proto.LeaveSwarmRequest.serializeBinaryToWriter = function(message, writer) {
   var f = undefined;
-  f = message.getSwarmuri();
+  f = message.getSwarmUri();
   if (f.length > 0) {
     writer.writeString(
       1,
@@ -409,16 +409,16 @@ proto.LeaveSwarmRequest.serializeBinaryToWriter = function(message, writer) {
 
 
 /**
- * optional string swarmUri = 1;
+ * optional string swarm_uri = 1;
  * @return {string}
  */
-proto.LeaveSwarmRequest.prototype.getSwarmuri = function() {
+proto.LeaveSwarmRequest.prototype.getSwarmUri = function() {
   return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
 };
 
 
 /** @param {string} value */
-proto.LeaveSwarmRequest.prototype.setSwarmuri = function(value) {
+proto.LeaveSwarmRequest.prototype.setSwarmUri = function(value) {
   jspb.Message.setProto3StringField(this, 1, value);
 };
 
@@ -702,7 +702,7 @@ proto.GetIngressStreamsResponse.prototype.toObject = function(opt_includeInstanc
  */
 proto.GetIngressStreamsResponse.toObject = function(includeInstance, msg) {
   var f, obj = {
-    swarmuri: jspb.Message.getFieldWithDefault(msg, 1, "")
+    swarmUri: jspb.Message.getFieldWithDefault(msg, 1, "")
   };
 
   if (includeInstance) {
@@ -741,7 +741,7 @@ proto.GetIngressStreamsResponse.deserializeBinaryFromReader = function(msg, read
     switch (field) {
     case 1:
       var value = /** @type {string} */ (reader.readString());
-      msg.setSwarmuri(value);
+      msg.setSwarmUri(value);
       break;
     default:
       reader.skipField();
@@ -772,7 +772,7 @@ proto.GetIngressStreamsResponse.prototype.serializeBinary = function() {
  */
 proto.GetIngressStreamsResponse.serializeBinaryToWriter = function(message, writer) {
   var f = undefined;
-  f = message.getSwarmuri();
+  f = message.getSwarmUri();
   if (f.length > 0) {
     writer.writeString(
       1,
@@ -783,16 +783,16 @@ proto.GetIngressStreamsResponse.serializeBinaryToWriter = function(message, writ
 
 
 /**
- * optional string swarmUri = 1;
+ * optional string swarm_uri = 1;
  * @return {string}
  */
-proto.GetIngressStreamsResponse.prototype.getSwarmuri = function() {
+proto.GetIngressStreamsResponse.prototype.getSwarmUri = function() {
   return /** @type {string} */ (jspb.Message.getFieldWithDefault(this, 1, ""));
 };
 
 
 /** @param {string} value */
-proto.GetIngressStreamsResponse.prototype.setSwarmuri = function(value) {
+proto.GetIngressStreamsResponse.prototype.setSwarmUri = function(value) {
   jspb.Message.setProto3StringField(this, 1, value);
 };
 

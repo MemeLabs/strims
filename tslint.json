@@ -21,7 +21,8 @@
         "named-imports-order": "case-insensitive"
       }
     ],
-    "object-literal-sort-keys": false
+    "object-literal-sort-keys": false,
+    "unified-signatures": false
   },
   "jsRules": {
     "max-line-length": false

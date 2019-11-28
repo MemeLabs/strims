@@ -1,7 +1,6 @@
-import { EventEmitter } from "events";
 import * as api_pb from "./api_pb";
 import { RPCHost } from "./rpc_host";
-
+import { Readable } from "./stream";
 import "./types";
 
 export default class Client extends RPCHost {
@@ -13,7 +12,7 @@ export default class Client extends RPCHost {
     return this.expectOne(this.call("leaveSwarm", v));
   }
 
-  public getIngressStreams(v: api_pb.GetIngressStreamsRequest): EventEmitter {
+  public getIngressStreams(v: api_pb.GetIngressStreamsRequest): Readable<api_pb.GetIngressStreamsResponse> {
     return this.expectMany(this.call("getIngressStreams", v));
   }
 

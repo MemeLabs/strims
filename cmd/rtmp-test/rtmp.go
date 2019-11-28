@@ -35,6 +35,8 @@ func main() {
 		name, _ := rtmp.SplitPath(conn.URL)
 		streams, _ := conn.Streams()
 
+		log.Println("new rtmp stream", name)
+
 		l.Lock()
 		ch, ok := channels[name]
 		if !ok {
@@ -80,7 +82,7 @@ func main() {
 			w.Header().Set("Access-Control-Allow-Origin", "*")
 			w.WriteHeader(200)
 
-			segment, _ := strconv.Atoi(params["segment"])
+			segment, _ := strconv.ParseUint(params["segment"], 10, 64)
 			cr, err := ch.stream.SegmentReader(segment)
 			if err != nil {
 				log.Println("reader not found")
@@ -132,10 +134,12 @@ func main() {
 
 	go http.ListenAndServe(":8089", nil)
 
-	server.ListenAndServe()
+	if err := server.ListenAndServe(); err != nil {
+		log.Panic(err)
+	}
 
 	// ffmpeg -re -i movie.flv -c copy -f flv rtmp://localhost/movie
 	// ffmpeg -f avfoundation -i "0:0" .... -f flv rtmp://localhost/screen
-	// ffplay http://localhost:8089/movie
-	// ffplay http://localhost:8089/screen
+	// ffplay http://localhost:8089/hls/movie/index.m3u8
+	// ffplay http://localhost:8089/hls/screen/index.m3u8
 }

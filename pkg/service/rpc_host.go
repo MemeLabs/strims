@@ -135,8 +135,7 @@ func (c *RPCHost) handleCall(ctx context.Context, m *Call) {
 		return
 	}
 
-	// TODO: include a context
-	rs := method.Call([]reflect.Value{reflect.ValueOf(arg)})
+	rs := method.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(arg)})
 	if len(rs) == 0 {
 		c.Call(ctx, callbackMethod, &Undefined{}, withParentID(m.GetId()))
 		return

@@ -16,13 +16,23 @@ type Channel struct {
 	Stream *Stream
 }
 
+// EgressOptions ...
+type EgressOptions struct {
+	Addr string
+}
+
+// DefaultEgressOptions ...
+var DefaultEgressOptions = &EgressOptions{
+	Addr: ":8089",
+}
+
 // NewEgress ...
-func NewEgress() (s *Egress) {
+func NewEgress(opt *EgressOptions) (s *Egress) {
 	s = &Egress{
 		channels: map[string]*Channel{},
 	}
 	s.Server = http.Server{
-		Addr:    ":8089",
+		Addr:    opt.Addr,
 		Handler: s.httpHandler(),
 	}
 	return

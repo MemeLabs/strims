@@ -56,7 +56,11 @@ func runA(ctx context.Context, ch chan joinOpts) {
 		srv := lhls.NewIngress(ctx, h)
 		go srv.ListenAndServe()
 
-		for s := range srv.DebugSwarms {
+		swarms := make(chan *encoding.Swarm)
+		srv.Notify(swarms)
+		defer srv.Stop(swarms)
+
+		for s := range swarms {
 			ch <- joinOpts{
 				SwarmID: s.ID,
 				Address: listenAddr,
@@ -84,7 +88,7 @@ func runB(ctx context.Context, ch chan joinOpts) {
 		},
 	})
 
-	srv := lhls.NewEgress()
+	srv := lhls.NewEgress(lhls.DefaultEgressOptions)
 	go srv.ListenAndServe()
 
 	go func() {
@@ -159,15 +163,15 @@ func main() {
 	joinDsts := make([]chan joinOpts, 0)
 	wg := sync.WaitGroup{}
 
-	// for i := 0; i < 1; i++ {
-	// 	wg.Add(1)
-	// 	go func() {
-	// 		joinDst := make(chan joinOpts)
-	// 		joinDsts = append(joinDsts, joinDst)
-	// 		runB(ctx, joinDst)
-	// 		wg.Done()
-	// 	}()
-	// }
+	for i := 0; i < 1; i++ {
+		wg.Add(1)
+		go func() {
+			joinDst := make(chan joinOpts)
+			joinDsts = append(joinDsts, joinDst)
+			runB(ctx, joinDst)
+			wg.Done()
+		}()
+	}
 
 	go func() {
 		for join := range joinSrc {

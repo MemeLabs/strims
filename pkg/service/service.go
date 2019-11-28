@@ -1,6 +1,8 @@
 package service
 
 import (
+	"context"
+
 	"github.com/MemeLabs/go-ppspp/internal/lhls"
 	"github.com/MemeLabs/go-ppspp/pkg/encoding"
 )
@@ -20,11 +22,16 @@ type Service struct {
 }
 
 // JoinSwarm ...
-func (s *Service) JoinSwarm(r *JoinSwarmRequest) (*JoinSwarmResponse, error) {
+func (s *Service) JoinSwarm(ctx context.Context, r *JoinSwarmRequest) (*JoinSwarmResponse, error) {
 	return &JoinSwarmResponse{}, nil
 }
 
 // LeaveSwarm ...
-func (s *Service) LeaveSwarm(r *LeaveSwarmRequest) (*LeaveSwarmResponse, error) {
+func (s *Service) LeaveSwarm(ctx context.Context, r *LeaveSwarmRequest) (*LeaveSwarmResponse, error) {
 	return &LeaveSwarmResponse{}, nil
+}
+
+// BootstrapDHT ...
+func (s *Service) BootstrapDHT(ctx context.Context, r *BootstrapDHTRequest) (*BootstrapDHTResponse, error) {
+	return &BootstrapDHTResponse{}, nil
 }
