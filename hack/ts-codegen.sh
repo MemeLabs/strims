@@ -8,4 +8,4 @@ echo "import { registerType } from \"./rpc_host\";" >>${FILE}
 echo "" >>${FILE}
 
 awk '/message/ { { printf "registerType(\"%s\", api_pb.%s)\n", $2, $2}; }' \
-	../schema/api.proto >>"src/service/types.ts"
+	../schema/api.proto >>${FILE}

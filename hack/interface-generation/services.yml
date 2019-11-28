@@ -5,17 +5,10 @@ interfaces:
       -
         name: JoinSwarm
         type: unary
-        inputs:
-            - 'r *JoinSwarmRequest'
-            - 'test string'
-        outputs:
-            - '*JoinSwarmResponse'
-            - 'error'
+        input: 'r *JoinSwarmRequest'
+        output: '*JoinSwarmResponse'
       -
         name: LeaveSwarm
         type: unary
-        inputs:
-            - 'r *LeaveSwarmRequest'
-        outputs:
-            - '*LeaveSwarmResponse'
-            - 'error'
+        input: 'r *LeaveSwarmRequest'
+        output: '*LeaveSwarmResponse'
