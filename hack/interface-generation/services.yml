@@ -1,0 +1,14 @@
+package: services
+interfaces:
+    - name: Swarm
+      methods:
+      -
+        name: JoinSwarm
+        type: unary
+        input: 'r *JoinSwarmRequest'
+        output: '*JoinSwarmResponse'
+      -
+        name: LeaveSwarm
+        type: unary
+        input: 'r *LeaveSwarmRequest'
+        output: '*LeaveSwarmResponse'
