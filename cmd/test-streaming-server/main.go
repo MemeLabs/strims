@@ -41,7 +41,7 @@ func runA(ctx context.Context, ch chan joinOpts) {
 	h := encoding.NewHost(&encoding.HostOptions{
 		Context: ctx,
 		Transports: []encoding.Transport{
-			&encoding.UDPTransport{
+			&encoding.DTLSTransport{
 				Address: listenAddr,
 			},
 			&encoding.WRTCTransport{
@@ -82,7 +82,7 @@ func runB(ctx context.Context, ch chan joinOpts) {
 	h := encoding.NewHost(&encoding.HostOptions{
 		Context: ctx,
 		Transports: []encoding.Transport{
-			&encoding.UDPTransport{
+			&encoding.DTLSTransport{
 				Address: randAddr(),
 			},
 		},
@@ -94,10 +94,11 @@ func runB(ctx context.Context, ch chan joinOpts) {
 	go func() {
 		for opt := range ch {
 			log.Printf("joining swarm %s at %s", opt.SwarmID, opt.Address)
-			uri := encoding.TransportURI(encoding.UDPScheme + opt.Address)
+			uri := encoding.TransportURI(encoding.DTLSScheme + opt.Address)
 			cr, err := h.JoinSwarm(opt.SwarmID, uri)
 			if err != nil {
 				log.Println(err)
+				return
 			}
 
 			// TODO: move this to lhls.Egress
@@ -113,6 +114,7 @@ func runB(ctx context.Context, ch chan joinOpts) {
 				r, err := chunkstream.NewReader(cr, int64(cr.Offset()))
 				if err != nil {
 					log.Panic(err)
+					return
 				}
 
 				b := make([]byte, 4096)
@@ -135,7 +137,7 @@ func runB(ctx context.Context, ch chan joinOpts) {
 						}
 					}
 
-					// debug.Green("closed chunk", wn)
+					debug.Green("closed chunk", wn)
 					if err := w.Close(); err != nil {
 						log.Println("error closing segment", err)
 						return
@@ -175,7 +177,7 @@ func main() {
 
 	go func() {
 		for join := range joinSrc {
-			debug.Blue(join.SwarmID.String(), join.Address)
+			// debug.Blue(join.SwarmID.String(), join.Address)
 			for _, dst := range joinDsts {
 				dst <- join
 			}

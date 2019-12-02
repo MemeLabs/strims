@@ -4,12 +4,12 @@ set -e
 pushd $(/bin/pwd) > /dev/null
 
 BASE="$(realpath $0)"
-cd "$(dirname $BASE)"
+cd "$(dirname $BASE)/.."
 
-PROTOC_GEN_TS_PATH="../node_modules/.bin/protoc-gen-ts"
-SCHEMA_DIR="../schema"
-JS_DIR="../src/service"
-GO_DIR="../pkg/service"
+PROTOC_GEN_TS_PATH="node_modules/.bin/protoc-gen-ts"
+SCHEMA_DIR="schema"
+JS_DIR="src/service"
+GO_DIR="pkg/service"
 
 protoc \
     --plugin "protoc-gen-ts=${PROTOC_GEN_TS_PATH}" \

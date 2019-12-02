@@ -484,7 +484,6 @@ func (s *Scheduler) requestFirstBins(count int, c *channel) (bins []binmap.Bin, 
 		nab += 2
 	}
 
-	log.Println("starting with", ab)
 	bins = append(bins, ab)
 	c.swarm.requestedBins.Set(ab)
 

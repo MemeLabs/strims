@@ -207,3 +207,89 @@ export namespace StopHLSEgressResponse {
   }
 }
 
+export class MonitorSwarmsRequest extends jspb.Message {
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): MonitorSwarmsRequest.AsObject;
+  static toObject(includeInstance: boolean, msg: MonitorSwarmsRequest): MonitorSwarmsRequest.AsObject;
+  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+  static serializeBinaryToWriter(message: MonitorSwarmsRequest, writer: jspb.BinaryWriter): void;
+  static deserializeBinary(bytes: Uint8Array): MonitorSwarmsRequest;
+  static deserializeBinaryFromReader(message: MonitorSwarmsRequest, reader: jspb.BinaryReader): MonitorSwarmsRequest;
+}
+
+export namespace MonitorSwarmsRequest {
+  export type AsObject = {
+  }
+}
+
+export class MonitorSwarmsResponse extends jspb.Message {
+  getType(): SwarmEventTypeMap[keyof SwarmEventTypeMap];
+  setType(value: SwarmEventTypeMap[keyof SwarmEventTypeMap]): void;
+
+  getId(): string;
+  setId(value: string): void;
+
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): MonitorSwarmsResponse.AsObject;
+  static toObject(includeInstance: boolean, msg: MonitorSwarmsResponse): MonitorSwarmsResponse.AsObject;
+  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+  static serializeBinaryToWriter(message: MonitorSwarmsResponse, writer: jspb.BinaryWriter): void;
+  static deserializeBinary(bytes: Uint8Array): MonitorSwarmsResponse;
+  static deserializeBinaryFromReader(message: MonitorSwarmsResponse, reader: jspb.BinaryReader): MonitorSwarmsResponse;
+}
+
+export namespace MonitorSwarmsResponse {
+  export type AsObject = {
+    type: SwarmEventTypeMap[keyof SwarmEventTypeMap],
+    id: string,
+  }
+}
+
+export class BootstrapDHTRequest extends jspb.Message {
+  clearTransportUrisList(): void;
+  getTransportUrisList(): Array<string>;
+  setTransportUrisList(value: Array<string>): void;
+  addTransportUris(value: string, index?: number): string;
+
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): BootstrapDHTRequest.AsObject;
+  static toObject(includeInstance: boolean, msg: BootstrapDHTRequest): BootstrapDHTRequest.AsObject;
+  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+  static serializeBinaryToWriter(message: BootstrapDHTRequest, writer: jspb.BinaryWriter): void;
+  static deserializeBinary(bytes: Uint8Array): BootstrapDHTRequest;
+  static deserializeBinaryFromReader(message: BootstrapDHTRequest, reader: jspb.BinaryReader): BootstrapDHTRequest;
+}
+
+export namespace BootstrapDHTRequest {
+  export type AsObject = {
+    transportUrisList: Array<string>,
+  }
+}
+
+export class BootstrapDHTResponse extends jspb.Message {
+  serializeBinary(): Uint8Array;
+  toObject(includeInstance?: boolean): BootstrapDHTResponse.AsObject;
+  static toObject(includeInstance: boolean, msg: BootstrapDHTResponse): BootstrapDHTResponse.AsObject;
+  static extensions: {[key: number]: jspb.ExtensionFieldInfo<jspb.Message>};
+  static extensionsBinary: {[key: number]: jspb.ExtensionFieldBinaryInfo<jspb.Message>};
+  static serializeBinaryToWriter(message: BootstrapDHTResponse, writer: jspb.BinaryWriter): void;
+  static deserializeBinary(bytes: Uint8Array): BootstrapDHTResponse;
+  static deserializeBinaryFromReader(message: BootstrapDHTResponse, reader: jspb.BinaryReader): BootstrapDHTResponse;
+}
+
+export namespace BootstrapDHTResponse {
+  export type AsObject = {
+  }
+}
+
+export interface SwarmEventTypeMap {
+  CREATE_SWARM: 0;
+  UPDATE_SWARM: 1;
+  DELETE_SWARM: 2;
+}
+
+export const SwarmEventType: SwarmEventTypeMap;
+

@@ -3,6 +3,7 @@ package encoding
 import (
 	"context"
 	"io"
+	"log"
 )
 
 // NewMemeWriter ...
@@ -107,6 +108,7 @@ func (s *MemeServer) Listen(ctx context.Context) (err error) {
 	}()
 
 	if err = s.t.Listen(ctx); err != nil {
+		log.Println(err)
 		return
 	}
 
@@ -145,7 +147,6 @@ func (s *MemeServer) readDatagram() (err error) {
 			return
 		}
 		b = b[n:]
-
 		s.Handler(&w, &r)
 	}
 

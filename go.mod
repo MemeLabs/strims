@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/aaronpowell/webpack-golang-wasm-async-loader v0.1.0
+	github.com/aead/ecdh v0.2.0
 	github.com/awesome-gocui/gocui v0.6.0
 	github.com/btcsuite/btcd v0.20.0-beta // indirect
 	github.com/davecgh/go-spew v1.1.1
@@ -36,6 +37,7 @@ require (
 	github.com/multiformats/go-multihash v0.0.8
 	github.com/nareix/joy4 v0.0.0-20181022032202-3ddbc8f9d431
 	github.com/opentracing/opentracing-go v1.1.0 // indirect
+	github.com/pion/dtls v1.5.4
 	github.com/pion/turnc v0.0.6 // indirect
 	github.com/pion/webrtc/v2 v2.1.11
 	github.com/pkg/errors v0.8.1
@@ -48,7 +50,7 @@ require (
 	github.com/yutopp/go-amf0 v0.0.0-20180803120851-48851794bb1f // indirect
 	github.com/yutopp/go-flv v0.2.0
 	github.com/yutopp/go-rtmp v0.0.0-20190215174111-679b17dc8194
-	golang.org/x/crypto v0.0.0-20191029031824-8986dd9e96cf // indirect
+	golang.org/x/crypto v0.0.0-20191029031824-8986dd9e96cf
 	golang.org/x/net v0.0.0-20191028085509-fe3aa8a45271 // indirect
 	golang.org/x/sys v0.0.0-20191029155521-f43be2a4598c // indirect
 	golang.org/x/tools v0.0.0-20190311212946-11955173bddd

@@ -7,6 +7,8 @@ github.com/Seize/joy4 v0.0.8 h1:wG7awuz+v4LIyJlPiuXYt2fcH4dEj2MC5Ib4fPd05NI=
 github.com/Seize/joy4 v0.0.8/go.mod h1:l2OVEo5xnZOOkIiqh3Jqku/pTBOGp/tTYTJue78zpO0=
 github.com/aaronpowell/webpack-golang-wasm-async-loader v0.1.0 h1:gYymEdYesT3li4DCAuWpDjn41JpnQT+VRqjf80DLOd8=
 github.com/aaronpowell/webpack-golang-wasm-async-loader v0.1.0/go.mod h1:VU4cr4THfNFFVh8sA959Girn/S/BLCTHhNXV7okbWv0=
+github.com/aead/ecdh v0.2.0 h1:pYop54xVaq/CEREFEcukHRZfTdjiWvYIsZDXXrBapQQ=
+github.com/aead/ecdh v0.2.0/go.mod h1:a9HHtXuSo8J1Js1MwLQx2mBhkXMT6YwUmVVEY4tTB8U=
 github.com/aead/siphash v1.0.1/go.mod h1:Nywa3cDsYNNK3gaciGTWPwHt0wlpNV15vwmswBAUSII=
 github.com/armon/consul-api v0.0.0-20180202201655-eb2c6b5be1b6/go.mod h1:grANhF5doyWs3UAsr3K4I6qtAmlQcZDesFNEHPZAzj8=
 github.com/awesome-gocui/gocui v0.6.0 h1:hhDJiQC12tEsJNJ+iZBBVaSSLFYo9llFuYpQlL5JZVI=
@@ -377,6 +379,8 @@ github.com/pion/dtls v1.3.5/go.mod h1:CjlPLfQdsTg3G4AEXjJp8FY5bRweBlxHrgoFrN+fQs
 github.com/pion/dtls v1.5.0/go.mod h1:CjlPLfQdsTg3G4AEXjJp8FY5bRweBlxHrgoFrN+fQsk=
 github.com/pion/dtls v1.5.2 h1:cIVSR1GPGfUAnRS1nl7jSdpoB63WOLANSu4ewpwRHzg=
 github.com/pion/dtls v1.5.2/go.mod h1:v4ULmyyV65geAZQBBckCjgMhmngTqz7HQVsQVYnfkGo=
+github.com/pion/dtls v1.5.4 h1:q8pXFMF7T+EAVO4auQU/ds+5yh5yOK6NiTN/4NQ0dB0=
+github.com/pion/dtls v1.5.4/go.mod h1:eVHevf4AM8R9+Pxa29q4aiI2iIbfMWOW1WgEcSCGpHU=
 github.com/pion/ice v0.4.0 h1:BdTXHTjzdsJHGi9yMFnj9ffgr+Kg2oHVv1qk4B0mQ8A=
 github.com/pion/ice v0.4.0/go.mod h1:/gw3aFmD/pBG8UM3TcEHs6HuaOEMSd/v1As3TodE7Ss=
 github.com/pion/ice v0.5.5/go.mod h1:FSTDLP+ian3PtxRjervtyDP2AOqt2c6cvfebZ7dwLnI=

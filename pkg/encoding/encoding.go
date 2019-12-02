@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/dht"
 )
 
 // errors ...
@@ -622,6 +623,96 @@ func (v *PExResURI) Marshal(b []byte) (size int) {
 // ByteLen ...
 func (v *PExResURI) ByteLen() int {
 	return 2 + len(v.URI)
+}
+
+// DHTHandshake ...
+type DHTHandshake struct {
+	ID          dht.ID
+	Certificate []byte
+}
+
+// DHTRelay ...
+type DHTRelay struct {
+	ID    dht.ID
+	From  dht.ID
+	To    dht.ID
+	Hops  uint8
+	Trace []dht.ID
+	Value []byte
+}
+
+// Type ...
+func (v *DHTRelay) Type() MessageType {
+	return DHTRelayMessage
+}
+
+// Unmarshal ...
+func (v *DHTRelay) Unmarshal(b []byte) (size int, err error) {
+	if v.ID, err = dht.UnmarshalID(b[size:]); err != nil {
+		return
+	}
+	size += dht.IDBytes
+
+	if v.From, err = dht.UnmarshalID(b[size:]); err != nil {
+		return
+	}
+	size += dht.IDBytes
+
+	if v.To, err = dht.UnmarshalID(b[size:]); err != nil {
+		return
+	}
+	size += dht.IDBytes
+
+	v.Hops = b[size]
+	size++
+
+	v.Trace = make([]dht.ID, v.Hops)
+	for i := uint8(0); i < v.Hops; i++ {
+		if v.Trace[i], err = dht.UnmarshalID(b[size:]); err != nil {
+			return
+		}
+		size += dht.IDBytes
+	}
+
+	n := int(binary.BigEndian.Uint16(b))
+	size += 2
+
+	v.Value = b[size : size+n]
+	size += n
+
+	return
+}
+
+// Marshal ...
+func (v *DHTRelay) Marshal(b []byte) (size int) {
+	v.ID.Marshal(b[size:])
+	size += dht.IDBytes
+
+	v.From.Marshal(b[size:])
+	size += dht.IDBytes
+
+	v.To.Marshal(b[size:])
+	size += dht.IDBytes
+
+	b[size] = v.Hops
+	size++
+
+	for _, id := range v.Trace {
+		id.Marshal(b[size:])
+		size += dht.IDBytes
+	}
+
+	binary.BigEndian.PutUint16(b[size:], uint16(len(v.Value)))
+	size += 2
+
+	size += copy(b[size:], v.Value)
+
+	return
+}
+
+// ByteLen ...
+func (v *DHTRelay) ByteLen() int {
+	return dht.IDBytes*(3+int(v.Hops)) + 3
 }
 
 // Empty ...

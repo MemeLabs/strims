@@ -20,6 +20,34 @@ var _ = math.Inf
 // proto package needs to be updated.
 const _ = proto.ProtoPackageIsVersion3 // please upgrade the proto package
 
+type SwarmEventType int32
+
+const (
+	SwarmEventType_CREATE_SWARM SwarmEventType = 0
+	SwarmEventType_UPDATE_SWARM SwarmEventType = 1
+	SwarmEventType_DELETE_SWARM SwarmEventType = 2
+)
+
+var SwarmEventType_name = map[int32]string{
+	0: "CREATE_SWARM",
+	1: "UPDATE_SWARM",
+	2: "DELETE_SWARM",
+}
+
+var SwarmEventType_value = map[string]int32{
+	"CREATE_SWARM": 0,
+	"UPDATE_SWARM": 1,
+	"DELETE_SWARM": 2,
+}
+
+func (x SwarmEventType) String() string {
+	return proto.EnumName(SwarmEventType_name, int32(x))
+}
+
+func (SwarmEventType) EnumDescriptor() ([]byte, []int) {
+	return fileDescriptor_00212fb1f9d3bf1c, []int{0}
+}
+
 type JoinSwarmRequest struct {
 	SwarmUri             string   `protobuf:"bytes,1,opt,name=swarm_uri,json=swarmUri,proto3" json:"swarm_uri,omitempty"`
 	XXX_NoUnkeyedLiteral struct{} `json:"-"`
@@ -416,7 +444,156 @@ func (m *StopHLSEgressResponse) XXX_DiscardUnknown() {
 
 var xxx_messageInfo_StopHLSEgressResponse proto.InternalMessageInfo
 
+type MonitorSwarmsRequest struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *MonitorSwarmsRequest) Reset()         { *m = MonitorSwarmsRequest{} }
+func (m *MonitorSwarmsRequest) String() string { return proto.CompactTextString(m) }
+func (*MonitorSwarmsRequest) ProtoMessage()    {}
+func (*MonitorSwarmsRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_00212fb1f9d3bf1c, []int{12}
+}
+
+func (m *MonitorSwarmsRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_MonitorSwarmsRequest.Unmarshal(m, b)
+}
+func (m *MonitorSwarmsRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_MonitorSwarmsRequest.Marshal(b, m, deterministic)
+}
+func (m *MonitorSwarmsRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MonitorSwarmsRequest.Merge(m, src)
+}
+func (m *MonitorSwarmsRequest) XXX_Size() int {
+	return xxx_messageInfo_MonitorSwarmsRequest.Size(m)
+}
+func (m *MonitorSwarmsRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_MonitorSwarmsRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MonitorSwarmsRequest proto.InternalMessageInfo
+
+type MonitorSwarmsResponse struct {
+	Type                 SwarmEventType `protobuf:"varint,1,opt,name=type,proto3,enum=SwarmEventType" json:"type,omitempty"`
+	Id                   string         `protobuf:"bytes,2,opt,name=id,proto3" json:"id,omitempty"`
+	XXX_NoUnkeyedLiteral struct{}       `json:"-"`
+	XXX_unrecognized     []byte         `json:"-"`
+	XXX_sizecache        int32          `json:"-"`
+}
+
+func (m *MonitorSwarmsResponse) Reset()         { *m = MonitorSwarmsResponse{} }
+func (m *MonitorSwarmsResponse) String() string { return proto.CompactTextString(m) }
+func (*MonitorSwarmsResponse) ProtoMessage()    {}
+func (*MonitorSwarmsResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_00212fb1f9d3bf1c, []int{13}
+}
+
+func (m *MonitorSwarmsResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_MonitorSwarmsResponse.Unmarshal(m, b)
+}
+func (m *MonitorSwarmsResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_MonitorSwarmsResponse.Marshal(b, m, deterministic)
+}
+func (m *MonitorSwarmsResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_MonitorSwarmsResponse.Merge(m, src)
+}
+func (m *MonitorSwarmsResponse) XXX_Size() int {
+	return xxx_messageInfo_MonitorSwarmsResponse.Size(m)
+}
+func (m *MonitorSwarmsResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_MonitorSwarmsResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_MonitorSwarmsResponse proto.InternalMessageInfo
+
+func (m *MonitorSwarmsResponse) GetType() SwarmEventType {
+	if m != nil {
+		return m.Type
+	}
+	return SwarmEventType_CREATE_SWARM
+}
+
+func (m *MonitorSwarmsResponse) GetId() string {
+	if m != nil {
+		return m.Id
+	}
+	return ""
+}
+
+type BootstrapDHTRequest struct {
+	TransportUris        []string `protobuf:"bytes,1,rep,name=transport_uris,json=transportUris,proto3" json:"transport_uris,omitempty"`
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *BootstrapDHTRequest) Reset()         { *m = BootstrapDHTRequest{} }
+func (m *BootstrapDHTRequest) String() string { return proto.CompactTextString(m) }
+func (*BootstrapDHTRequest) ProtoMessage()    {}
+func (*BootstrapDHTRequest) Descriptor() ([]byte, []int) {
+	return fileDescriptor_00212fb1f9d3bf1c, []int{14}
+}
+
+func (m *BootstrapDHTRequest) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_BootstrapDHTRequest.Unmarshal(m, b)
+}
+func (m *BootstrapDHTRequest) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_BootstrapDHTRequest.Marshal(b, m, deterministic)
+}
+func (m *BootstrapDHTRequest) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BootstrapDHTRequest.Merge(m, src)
+}
+func (m *BootstrapDHTRequest) XXX_Size() int {
+	return xxx_messageInfo_BootstrapDHTRequest.Size(m)
+}
+func (m *BootstrapDHTRequest) XXX_DiscardUnknown() {
+	xxx_messageInfo_BootstrapDHTRequest.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BootstrapDHTRequest proto.InternalMessageInfo
+
+func (m *BootstrapDHTRequest) GetTransportUris() []string {
+	if m != nil {
+		return m.TransportUris
+	}
+	return nil
+}
+
+type BootstrapDHTResponse struct {
+	XXX_NoUnkeyedLiteral struct{} `json:"-"`
+	XXX_unrecognized     []byte   `json:"-"`
+	XXX_sizecache        int32    `json:"-"`
+}
+
+func (m *BootstrapDHTResponse) Reset()         { *m = BootstrapDHTResponse{} }
+func (m *BootstrapDHTResponse) String() string { return proto.CompactTextString(m) }
+func (*BootstrapDHTResponse) ProtoMessage()    {}
+func (*BootstrapDHTResponse) Descriptor() ([]byte, []int) {
+	return fileDescriptor_00212fb1f9d3bf1c, []int{15}
+}
+
+func (m *BootstrapDHTResponse) XXX_Unmarshal(b []byte) error {
+	return xxx_messageInfo_BootstrapDHTResponse.Unmarshal(m, b)
+}
+func (m *BootstrapDHTResponse) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	return xxx_messageInfo_BootstrapDHTResponse.Marshal(b, m, deterministic)
+}
+func (m *BootstrapDHTResponse) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_BootstrapDHTResponse.Merge(m, src)
+}
+func (m *BootstrapDHTResponse) XXX_Size() int {
+	return xxx_messageInfo_BootstrapDHTResponse.Size(m)
+}
+func (m *BootstrapDHTResponse) XXX_DiscardUnknown() {
+	xxx_messageInfo_BootstrapDHTResponse.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_BootstrapDHTResponse proto.InternalMessageInfo
+
 func init() {
+	proto.RegisterEnum("SwarmEventType", SwarmEventType_name, SwarmEventType_value)
 	proto.RegisterType((*JoinSwarmRequest)(nil), "JoinSwarmRequest")
 	proto.RegisterType((*JoinSwarmResponse)(nil), "JoinSwarmResponse")
 	proto.RegisterType((*LeaveSwarmRequest)(nil), "LeaveSwarmRequest")
@@ -429,24 +606,36 @@ func init() {
 	proto.RegisterType((*StartHLSEgressResponse)(nil), "StartHLSEgressResponse")
 	proto.RegisterType((*StopHLSEgressRequest)(nil), "StopHLSEgressRequest")
 	proto.RegisterType((*StopHLSEgressResponse)(nil), "StopHLSEgressResponse")
+	proto.RegisterType((*MonitorSwarmsRequest)(nil), "MonitorSwarmsRequest")
+	proto.RegisterType((*MonitorSwarmsResponse)(nil), "MonitorSwarmsResponse")
+	proto.RegisterType((*BootstrapDHTRequest)(nil), "BootstrapDHTRequest")
+	proto.RegisterType((*BootstrapDHTResponse)(nil), "BootstrapDHTResponse")
 }
 
 func init() { proto.RegisterFile("api.proto", fileDescriptor_00212fb1f9d3bf1c) }
 
 var fileDescriptor_00212fb1f9d3bf1c = []byte{
-	// 210 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0xe2, 0x4c, 0x2c, 0xc8, 0xd4,
-	0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x57, 0xd2, 0xe7, 0x12, 0xf0, 0xca, 0xcf, 0xcc, 0x0b, 0x2e, 0x4f,
-	0x2c, 0xca, 0x0d, 0x4a, 0x2d, 0x2c, 0x4d, 0x2d, 0x2e, 0x11, 0x92, 0xe6, 0xe2, 0x2c, 0x06, 0xf1,
-	0xe3, 0x4b, 0x8b, 0x32, 0x25, 0x18, 0x15, 0x18, 0x35, 0x38, 0x83, 0x38, 0xc0, 0x02, 0xa1, 0x45,
-	0x99, 0x4a, 0xc2, 0x5c, 0x82, 0x48, 0x1a, 0x8a, 0x0b, 0xf2, 0xf3, 0x8a, 0x53, 0x95, 0x0c, 0xb8,
-	0x04, 0x7d, 0x52, 0x13, 0xcb, 0x52, 0x89, 0x37, 0x46, 0x84, 0x4b, 0x08, 0x59, 0x07, 0xd4, 0x1c,
-	0x29, 0x2e, 0x09, 0xf7, 0xd4, 0x12, 0xcf, 0xbc, 0xf4, 0xa2, 0xd4, 0xe2, 0xe2, 0xe0, 0x92, 0xa2,
-	0xd4, 0xc4, 0xdc, 0x62, 0xa8, 0x71, 0x4a, 0x16, 0x5c, 0x92, 0x58, 0xe4, 0x20, 0x1a, 0xf1, 0xdb,
-	0x25, 0xc1, 0x25, 0x16, 0x5c, 0x92, 0x58, 0x54, 0xe2, 0xe1, 0x13, 0x0c, 0xd5, 0x0e, 0x33, 0x53,
-	0x92, 0x4b, 0x1c, 0x43, 0x06, 0xea, 0x14, 0x71, 0x2e, 0x51, 0x98, 0x94, 0x2b, 0x8a, 0x1e, 0x24,
-	0xd3, 0x5c, 0x51, 0xb5, 0x88, 0x71, 0x89, 0x04, 0x97, 0xe4, 0x17, 0x60, 0xe8, 0x00, 0x1b, 0x85,
-	0x22, 0x0e, 0xd1, 0xe0, 0xc4, 0x19, 0xc5, 0x5e, 0x9c, 0x5a, 0x54, 0x96, 0x99, 0x9c, 0x9a, 0xc4,
-	0x06, 0x8e, 0x0e, 0x63, 0x40, 0x00, 0x00, 0x00, 0xff, 0xff, 0x8a, 0x7b, 0xde, 0x06, 0x9b, 0x01,
-	0x00, 0x00,
+	// 346 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x92, 0x4d, 0x4f, 0xea, 0x40,
+	0x14, 0x86, 0x6f, 0x7b, 0x6f, 0xae, 0xf6, 0x44, 0x2b, 0x94, 0xaf, 0xa2, 0x1b, 0x52, 0x63, 0x42,
+	0x5c, 0xa0, 0xd1, 0x8d, 0x0b, 0x37, 0x20, 0xa3, 0x68, 0x4a, 0x62, 0x5a, 0x88, 0x89, 0x1b, 0x32,
+	0xca, 0xc4, 0xcc, 0x82, 0xce, 0x38, 0x73, 0xc0, 0xf0, 0xef, 0x4d, 0x87, 0xf2, 0x51, 0x31, 0xc6,
+	0x65, 0x9f, 0x37, 0xcf, 0x3b, 0x67, 0x4e, 0x07, 0x1c, 0x2a, 0x79, 0x4b, 0x2a, 0x81, 0x22, 0x38,
+	0x83, 0xc2, 0x83, 0xe0, 0x49, 0xfc, 0x41, 0xd5, 0x24, 0x62, 0xef, 0x53, 0xa6, 0xd1, 0x3b, 0x02,
+	0x47, 0xa7, 0xdf, 0xa3, 0xa9, 0xe2, 0xbe, 0xd5, 0xb0, 0x9a, 0x4e, 0xb4, 0x6b, 0xc0, 0x50, 0xf1,
+	0xa0, 0x04, 0xc5, 0x0d, 0x41, 0x4b, 0x91, 0x68, 0x16, 0x9c, 0x43, 0x31, 0x64, 0x74, 0xc6, 0x7e,
+	0x5f, 0x53, 0x06, 0x6f, 0xd3, 0xc8, 0x7a, 0x0e, 0xc1, 0xbf, 0x63, 0x78, 0x9f, 0xbc, 0x29, 0xa6,
+	0x75, 0x8c, 0x8a, 0xd1, 0x89, 0xce, 0xea, 0x82, 0x2b, 0xa8, 0x7f, 0x93, 0x2d, 0xc4, 0x9f, 0xcf,
+	0xf2, 0xa1, 0x1a, 0x23, 0x55, 0xd8, 0x0b, 0xe3, 0x4c, 0x5f, 0x76, 0xd6, 0xa1, 0xb6, 0x95, 0x64,
+	0xa3, 0xd4, 0xa0, 0xb2, 0x8c, 0x48, 0xce, 0xd9, 0x68, 0x23, 0x79, 0xa5, 0x0a, 0xe5, 0x18, 0x85,
+	0xdc, 0x32, 0x4c, 0x55, 0x8e, 0xaf, 0x85, 0xbe, 0x48, 0x38, 0x0a, 0x65, 0xd6, 0xb0, 0x12, 0x42,
+	0xa8, 0x7c, 0xe1, 0xd9, 0x35, 0x8f, 0xe1, 0x1f, 0xce, 0x25, 0x33, 0x37, 0x74, 0x2f, 0x0e, 0x5a,
+	0x26, 0x26, 0x33, 0x96, 0xe0, 0x60, 0x2e, 0x59, 0x64, 0x42, 0xcf, 0x05, 0x9b, 0x8f, 0x7d, 0xdb,
+	0x2c, 0xc1, 0xe6, 0xe3, 0xe0, 0x1a, 0x4a, 0x1d, 0x21, 0x50, 0xa3, 0xa2, 0xb2, 0xdb, 0x1b, 0x2c,
+	0x7f, 0xcf, 0x09, 0xb8, 0xa8, 0x68, 0xa2, 0xa5, 0x50, 0x98, 0xae, 0x4d, 0xfb, 0x56, 0xe3, 0x6f,
+	0xd3, 0x89, 0xf6, 0x57, 0x74, 0xa8, 0xb8, 0x4e, 0x67, 0xcc, 0xdb, 0x8b, 0x51, 0x4e, 0x6f, 0xc1,
+	0xcd, 0x9f, 0xee, 0x15, 0x60, 0xef, 0x26, 0x22, 0xed, 0x01, 0x19, 0xc5, 0x4f, 0xed, 0xa8, 0x5f,
+	0xf8, 0x93, 0x92, 0xe1, 0x63, 0x77, 0x4d, 0xac, 0x94, 0x74, 0x49, 0x48, 0x56, 0xc4, 0xee, 0x38,
+	0xcf, 0x3b, 0x9a, 0xa9, 0x19, 0x7f, 0x65, 0x2f, 0xff, 0xcd, 0x93, 0xbc, 0xfc, 0x0c, 0x00, 0x00,
+	0xff, 0xff, 0x4d, 0x65, 0x38, 0x0e, 0x9f, 0x02, 0x00, 0x00,
 }

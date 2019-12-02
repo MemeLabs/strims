@@ -40,6 +40,8 @@ func (m MessageType) String() string {
 		return "Pong"
 	case PExResURIMessage:
 		return "PExResURI"
+	case DHTRelayMessage:
+		return "DHTRelay"
 	case EndMessage:
 		return "End"
 	}
@@ -65,6 +67,7 @@ const (
 	PingMessage
 	PongMessage
 	PExResURIMessage
+	DHTRelayMessage
 	EndMessage MessageType = 255
 )
 

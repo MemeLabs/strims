@@ -3,13 +3,13 @@ syntax = "proto3";
 option go_package = "service";
 
 message JoinSwarmRequest {
-  string swarmUri = 1;
+  string swarm_uri = 1;
 }
 
 message JoinSwarmResponse {}
 
 message LeaveSwarmRequest {
-  string swarmUri = 1;
+  string swarm_uri = 1;
 }
 
 message LeaveSwarmResponse {}
@@ -17,7 +17,7 @@ message LeaveSwarmResponse {}
 message GetIngressStreamsRequest {}
 
 message GetIngressStreamsResponse {
-  string swarmUri = 1;
+  string swarm_uri = 1;
 }
 
 message StartHLSIngressRequest {}
@@ -28,3 +28,24 @@ message StartHLSEgressResponse {}
 
 message StopHLSEgressRequest {}
 message StopHLSEgressResponse {}
+
+message MonitorSwarmsRequest {}
+
+enum SwarmEventType {
+  CREATE_SWARM = 0;
+  UPDATE_SWARM = 1;
+  DELETE_SWARM = 2;
+}
+
+message MonitorSwarmsResponse {
+  SwarmEventType type = 1;
+  string id = 2;
+}
+
+message BootstrapDHTRequest {
+  repeated string transport_uris = 1;
+}
+
+message BootstrapDHTResponse {
+
+}
