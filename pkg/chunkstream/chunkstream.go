@@ -27,7 +27,7 @@ const (
 
 // chunk size consts
 const (
-	MaxSize     = math.MaxUint16 >> 1
+	MaxSize     = (math.MaxUint16 >> 1) - headerLen
 	DefaultSize = MaxSize
 )
 
@@ -44,7 +44,7 @@ func NewWriterSize(w io.Writer, size int) (c *Writer, err error) {
 
 	c = &Writer{
 		w:   w,
-		buf: make([]byte, size+headerLen),
+		buf: make([]byte, size),
 		off: headerLen,
 	}
 	return
@@ -84,7 +84,7 @@ func (c *Writer) Flush() (err error) {
 		return ErrHeaderWritten
 	}
 
-	binary.BigEndian.PutUint16(c.buf, uint16(c.off-headerLen))
+	binary.BigEndian.PutUint16(c.buf, uint16(c.off))
 	c.buf[0] |= eorFlag
 
 	c.woff, err = c.w.Write(c.buf[:c.off])
@@ -94,8 +94,6 @@ func (c *Writer) Flush() (err error) {
 
 	c.buf[0] = 0
 	c.buf[1] = 0
-	c.buf[2] = 0
-	c.buf[3] = 0
 	return
 }
 
@@ -114,7 +112,7 @@ func NewReaderSize(r io.Reader, offset int64, size int) (c *Reader, err error) {
 		r:      r,
 		header: make([]byte, 0, headerLen),
 		size:   size,
-		off:    int(offset % int64(size+headerLen)),
+		off:    int(offset % int64(size)),
 		roff:   math.MaxInt32,
 	}
 	return
@@ -122,44 +120,44 @@ func NewReaderSize(r io.Reader, offset int64, size int) (c *Reader, err error) {
 
 // Reader ...
 type Reader struct {
-	r          io.Reader
-	header     []byte
-	headerRead bool
-	size       int // chunk byte length
-	off        int // read offset in current chunk
-	roff       int // record end index in current chunk (int max when undefined)
+	r      io.Reader
+	header []byte
+	size   int // chunk byte length
+	off    int // read offset in current chunk
+	roff   int // record end index in current chunk (int max when undefined)
 }
 
 // Read implements io.Reader
 func (c *Reader) Read(p []byte) (n int, err error) {
-	if !c.headerRead {
+	if c.off < headerLen {
 		n = headerLen - len(c.header)
 	} else if len(p) > c.roff-c.off {
 		n = c.roff - c.off
 	} else if len(p) > c.size-c.off {
 		n = c.size - c.off
-	} else {
+	}
+
+	if n == 0 || n > len(p) {
 		n = len(p)
 	}
 
-	p = p[:n]
-	n, err = c.r.Read(p)
+	rn, err := c.r.Read(p[:n])
 	if err != nil {
 		return
 	}
+	n = rn
 
-	if !c.headerRead {
-		n -= c.readHeader(p[:n])
+	if c.off < headerLen {
+		n -= c.readHeader(p[:rn])
 	}
 
-	c.off += n
+	c.off += rn
 	if c.off == c.roff {
 		c.roff = math.MaxInt32
 		err = io.EOF
 	}
 	if c.off == c.size {
 		c.off = 0
-		c.headerRead = false
 	}
 	return
 }
@@ -170,7 +168,7 @@ func (c *Reader) readHeader(p []byte) (n int) {
 	n = copy(c.header[off:], p)
 
 	if off+n < headerLen {
-		c.header = c.header[:n]
+		c.header = c.header[:off+n]
 		return
 	}
 
@@ -179,7 +177,6 @@ func (c *Reader) readHeader(p []byte) (n int) {
 		c.roff = int(binary.BigEndian.Uint16(c.header))
 	}
 
-	c.headerRead = true
 	c.header = c.header[:0]
 	return
 }

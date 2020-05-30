@@ -4,11 +4,19 @@
     "sourceMap": true,
     "noImplicitAny": false,
     "module": "commonjs",
-    "target": "esnext",
+    "target": "es2018",
     "jsx": "react",
     "allowJs": true,
     "moduleResolution": "node",
-    "lib": ["dom", "es6", "es2017", "esnext.asynciterable"]
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "lib": ["dom", "es6", "es2018", "esnext.asynciterable"]
   },
+  "include": [
+    ".eslintrc.js",
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "src/**/*.js",
+  ],
   "exclude": ["dist", "node_modules"]
 }

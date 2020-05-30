@@ -6,20 +6,26 @@ pushd $(/bin/pwd) > /dev/null
 BASE="$(realpath $0)"
 cd "$(dirname $BASE)/.."
 
-PROTOC_GEN_TS_PATH="node_modules/.bin/protoc-gen-ts"
 SCHEMA_DIR="schema"
-JS_DIR="src/service"
-GO_DIR="pkg/service"
+JS_DIR="src/lib/pb"
+GO_DIR="pkg/pb"
 
-protoc \
-    --plugin "protoc-gen-ts=${PROTOC_GEN_TS_PATH}" \
-    --js_out "import_style=commonjs,binary:${JS_DIR}" \
-    --ts_out $JS_DIR \
-    -I $SCHEMA_DIR \
+npx pbjs \
+    -t static-module \
+    -w es6 \
+    --force-number \
+    -o "${JS_DIR}/pb.js" \
+    -p $SCHEMA_DIR \
     rpc.proto api.proto
+npx pbts \
+    -o "${JS_DIR}/pb.d.ts" \
+    "${JS_DIR}/pb.js"
+
+bash ./hack/ts-codegen.sh
 
 protoc \
     --go_out $GO_DIR \
+    --go_opt=paths=source_relative \
     -I $SCHEMA_DIR \
     rpc.proto api.proto
 

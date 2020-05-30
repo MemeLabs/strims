@@ -1,8 +1,33 @@
 package: services
 interfaces:
-    - 
-      name: Service 
+    -
+      name: Service
       methods:
+      -
+        name: CreateNetwork
+        type: unary
+        input: 'r *CreateNetworkRequest'
+        output: '*CreateNetworkResponse'
+      -
+        name: UpdateNetwork
+        type: unary
+        input: 'r *UpdateNetworkRequest'
+        output: '*UpdateNetworkResponse'
+      -
+        name: DeleteNetwork
+        type: unary
+        input: 'r *DeleteNetworkRequest'
+        output: '*DeleteNetworkResponse'
+      -
+        name: GetNetwork
+        type: unary
+        input: 'r *GetNetworkRequest'
+        output: '*GetNetworkResponse'
+      -
+        name: GetNetworks
+        type: unary
+        input: 'r *GetNetworksRequest'
+        output: '*GetNetworksResponse'
       -
         name: JoinSwarm
         type: unary

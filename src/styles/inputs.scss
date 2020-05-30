@@ -1,0 +1,132 @@
+@import "colors.scss";
+@import "mixins.scss";
+
+.input {
+  font-size: 1em;
+  padding: 0.5em;
+  margin: 0.25em 0;
+  border-radius: 0.25em;
+  box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
+
+  @include color-scheme('dark') {
+    background: $slate-400;
+    color: $gray-300;
+  }
+  @include color-scheme('light') {
+    background: $gray-500;
+    color: $slate-200;
+  }
+
+  &::placeholder {
+    @include color-scheme('dark') {
+      color: $gray-100;
+    }
+    @include color-scheme('light') {
+      color: lighten($slate-500, 20);
+    }
+  }
+
+  &:disabled {
+    background: $slate-300;
+  }
+}
+
+.input_error {
+  display: block;
+  background: lighten($red-base, 30%);
+  padding: 0.5em;
+  border: 1px solid lighten($red-base, 40%);
+  color: white;
+  border-radius: 0.25em;
+  box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
+
+  &__icon {
+    padding-right: 0.5em;
+    vertical-align: middle;
+    height: 1.3em;
+    width: 1.3em;
+  }
+
+  &__text {
+    display: inline;
+    vertical-align: middle;
+
+    &::first-letter {
+      text-transform: capitalize;
+    }
+  }
+}
+
+.input_label {
+  display: block;
+  display: flex;
+  flex-direction: column;
+  margin: 10px 0;
+
+  &--required>:first-child::after {
+    content: "*";
+    color: red;
+    padding-left: 0.2em
+  }
+
+  &__text {
+    display: block;
+    font-size: 1em;
+    text-transform: uppercase;
+
+    @include color-scheme('dark') {
+      color: $gray-500;
+    }
+    @include color-scheme('light') {
+      color: $slate-500;
+    }
+  }
+}
+
+.input_buttons {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
+}
+
+.input_button {
+  cursor: pointer;
+
+  @include color-scheme('dark') {
+    background: $gray-400;
+    color: #222;
+  }
+  @include color-scheme('light') {
+    background: $gray-200;
+
+  }
+
+  &:hover {
+    @include color-scheme('dark') {
+      background: $gray-500;
+      color: #222;
+    }
+    @include color-scheme('light') {
+      background: $gray-300;
+    }
+  }
+
+  &--borderless {
+    border: none;
+    box-shadow: none;
+
+    &, &:hover {
+      @include color-scheme('dark') {
+        background: transparent;
+      }
+      @include color-scheme('light') {
+        background: transparent;
+      }
+    }
+  }
+}
+
+.input_select {
+  color: black;
+}

@@ -3,6 +3,7 @@ package encoding
 import (
 	"errors"
 	"net/url"
+	"strconv"
 	"strings"
 )
 
@@ -10,55 +11,113 @@ import (
 
 // errors ...
 var (
-	ErrInvalidURIScheme = errors.New("invalid uri scheme")
+	ErrInvalidURI = errors.New("invalid uri")
 )
 
-var protocolOptionToURIKey = map[ProtocolOptionType]string{
-	ContentIntegrityProtectionMethodOption: "x.im",
-	MerkleHashTreeFunctionOption:           "x.hf",
-	LiveSignatureAlgorithmOption:           "x.sa",
-	ChunkAddressingMethodOption:            "x.am",
-	ChunkSizeOption:                        "x.cs",
+var protocolOptions = []struct {
+	Type ProtocolOptionType
+	Key  string
+}{
+	{
+		ContentIntegrityProtectionMethodOption,
+		"x.im",
+	},
+	{
+		MerkleHashTreeFunctionOption,
+		"x.hf",
+	},
+	{
+		LiveSignatureAlgorithmOption,
+		"x.sa",
+	},
+	{
+		ChunkAddressingMethodOption,
+		"x.am",
+	},
+	{
+		ChunkSizeOption,
+		"x.cs",
+	},
 }
 
 var uriScheme = "magnet:"
+var urnPrefix = "urn:ppspp:"
+
+// URIOptions ...
+type URIOptions map[ProtocolOptionType]uint8
 
 // NewURI ...
-func NewURI() *URI {
+func NewURI(id SwarmID, options URIOptions) *URI {
 	return &URI{
-		options: map[ProtocolOptionType]uint8{},
+		ID:      id,
+		Options: options,
 	}
 }
 
 // URI ...
 type URI struct {
-	id      SwarmID
-	options map[ProtocolOptionType]uint8
+	ID      SwarmID
+	Options URIOptions
 }
 
 // String ...
 func (u *URI) String() string {
-	return ""
+	var s strings.Builder
+	s.WriteString(uriScheme)
+	s.WriteString("?xt=")
+	s.WriteString(urnPrefix)
+	s.WriteString(u.ID.String())
+
+	for _, opt := range protocolOptions {
+		v, ok := u.Options[opt.Type]
+		if !ok {
+			continue
+		}
+		s.WriteRune('&')
+		s.WriteString(opt.Key)
+		s.WriteRune('=')
+		s.WriteString(strconv.FormatUint(uint64(v), 10))
+	}
+
+	return s.String()
 }
 
 // ParseURI ...
 func ParseURI(s string) (u *URI, err error) {
-	if !strings.HasPrefix(s, uriScheme) {
-		return nil, ErrInvalidURIScheme
+	u = &URI{
+		Options: URIOptions{},
 	}
 
-	query, err := url.ParseQuery(s[len(uriScheme):])
+	parts := strings.SplitN(s, "?", 2)
+	if len(parts) != 2 || parts[0] != uriScheme {
+		return nil, ErrInvalidURI
+	}
+
+	query, err := url.ParseQuery(parts[1])
 	if err != nil {
 		return
 	}
 
-	u = NewURI()
+	xt := query.Get("xt")
+	if !strings.HasPrefix(xt, urnPrefix) {
+		return nil, ErrInvalidURI
+	}
+	u.ID, err = DecodeSwarmID(strings.TrimPrefix(xt, urnPrefix))
+	if err != nil {
+		return
+	}
 
-	_ = query
-
-	// for t, key := range protocolOptionToURIKey {
-	// 	if query[key]
-	// }
+	for _, opt := range protocolOptions {
+		vs, ok := query[opt.Key]
+		if !ok {
+			continue
+		}
+		v, err := strconv.ParseUint(vs[0], 10, 8)
+		if err != nil {
+			return nil, err
+		}
+		u.Options[opt.Type] = uint8(v)
+	}
 
 	return
 }

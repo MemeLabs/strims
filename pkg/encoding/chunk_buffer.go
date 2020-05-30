@@ -2,7 +2,6 @@ package encoding
 
 import (
 	"errors"
-	"log"
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
@@ -72,7 +71,6 @@ func (s *chunkBuffer) Slice(b binmap.Bin) (d byterope.Rope, ok bool) {
 		l := int(binByte(b.BaseLeft() - s.tail()))
 		h := int(binByte(b.BaseRight()-s.tail())) + ChunkSize
 		i := s.index(s.tail())
-		log.Println(i, l, h)
 		return byterope.New(s.buf[i:], s.buf[:i]).Slice(l, h), true
 	}
 	return

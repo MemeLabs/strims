@@ -1,35 +1,715 @@
 syntax = "proto3";
 
-option go_package = "service";
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+
+message CreateProfileRequest {
+  string name = 1;
+  string password = 2;
+}
+message CreateProfileResponse {
+  string session_id = 1;
+  Profile profile = 2;
+}
+message UpdateProfileRequest {
+  string name = 1;
+  string password = 2;
+}
+message UpdateProfileResponse {
+  Profile profile = 1;
+}
+message DeleteProfileRequest {
+  uint64 id = 1;
+}
+message DeleteProfileResponse {}
+message LoadProfileRequest {
+  uint64 id = 1;
+  string name = 2;
+  string password = 3;
+}
+message LoadProfileResponse {
+  string session_id = 1;
+  Profile profile = 2;
+}
+message GetProfileRequest {
+  string session_id = 1;
+}
+message GetProfileResponse {
+  Profile profile = 2;
+}
+message GetProfilesRequest {}
+message GetProfilesResponse {
+  repeated ProfileSummary profiles = 1;
+}
+message LoadSessionRequest {
+  string session_id = 1;
+}
+message LoadSessionResponse {
+  string session_id = 1;
+  Profile profile = 2;
+}
+
+message CreateNetworkRequest {
+  string name = 1;
+}
+message CreateNetworkResponse {
+  Network network = 1;
+}
+message UpdateNetworkRequest {
+  uint64 id = 1;
+  string name = 2;
+}
+message UpdateNetworkResponse {
+  Network network = 1;
+}
+message DeleteNetworkRequest {
+  uint64 id = 1;
+}
+message DeleteNetworkResponse {}
+message GetNetworkRequest {
+  uint64 id = 1;
+}
+message GetNetworkResponse {
+  Network network = 1;
+}
+message GetNetworksRequest {}
+message GetNetworksResponse {
+  repeated Network networks = 1;
+}
+
+message GetNetworkMembershipsRequest {}
+message GetNetworkMembershipsResponse {
+  repeated NetworkMembership network_memberships = 1;
+}
+message DeleteNetworkMembershipRequest {
+  uint64 id = 1;
+}
+message DeleteNetworkMembershipResponse {}
+
+message CreateBootstrapClientRequest {
+  oneof client_options {
+    BootstrapClientWebSocketOptions websocket_options = 1;
+  }
+}
+message CreateBootstrapClientResponse {
+  BootstrapClient bootstrap_client = 1;
+}
+message UpdateBootstrapClientRequest {
+  uint64 id = 1;
+  oneof client_options {
+    BootstrapClientWebSocketOptions websocket_options = 2;
+  }
+}
+message UpdateBootstrapClientResponse {
+  BootstrapClient bootstrap_client = 1;
+}
+message DeleteBootstrapClientRequest {
+  uint64 id = 1;
+}
+message DeleteBootstrapClientResponse {}
+message GetBootstrapClientRequest {
+  uint64 id = 1;
+}
+message GetBootstrapClientResponse {
+  BootstrapClient bootstrap_client = 1;
+}
+message GetBootstrapClientsRequest {}
+message GetBootstrapClientsResponse {
+  repeated BootstrapClient bootstrap_clients = 1;
+}
+
+// message ServiceAdvertisement {
+//   bytes host_id = 1;
+//   uint32 port = 2;
+//   bytes key = 3;
+//   string name = 4;
+//   string mime_type = 5;
+// }
+
+message PeerIndexMessage {
+  message Record {
+    bytes hash = 1;
+    bytes key = 2;
+    bytes host_id = 3;
+    uint32 port = 4;
+    int64 timestamp = 5;
+    bytes signature = 6;
+  }
+
+  message Publish {
+    Record record = 1;
+  }
+
+  message Unpublish {
+    Record record = 1;
+  }
+
+  message SearchRequest {
+    uint64 request_id = 1;
+    bytes hash = 2;
+  }
+
+  message SearchResponse {
+    uint64 request_id = 1;
+    repeated Record records = 2;
+  }
+
+  oneof body {
+    Publish publish = 1;
+    Unpublish unpublish = 2;
+    SearchRequest search_request = 3;
+    SearchResponse search_response = 4;
+  }
+}
+
+// ---
+
+message ChatMessage {
+  message MessageRequest {
+    string body = 1;
+  }
+
+  oneof body {
+    MessageRequest message = 1;
+  }
+}
+
+message ChatRoom {
+  string name = 1;
+}
+
+message ChatServer {
+  uint64 id  = 1;
+  bytes network_key = 2;
+  ChatRoom chat_room = 3;
+}
+
+message CreateChatServerRequest {
+  bytes network_key = 2;
+  ChatRoom chat_room = 3;
+}
+message CreateChatServerResponse {
+  ChatServer chat_server = 1;
+}
+message UpdateChatServerRequest {
+  uint64 id = 1;
+  bytes network_key = 2;
+  ChatRoom chat_room = 3;
+}
+message UpdateChatServerResponse {
+  ChatServer chat_server = 1;
+}
+message DeleteChatServerRequest {
+  uint64 id = 1;
+}
+message DeleteChatServerResponse {}
+message GetChatServerRequest {
+  uint64 id = 1;
+}
+message GetChatServerResponse {
+  ChatServer chat_server = 1;
+}
+message GetChatServersRequest {}
+message GetChatServersResponse {
+  repeated ChatServer chat_servers = 1;
+}
+
+message ChatClientOpenRequest {
+  uint32 network_id = 1;
+  bytes host_id = 2;
+  uint32 port = 3;
+}
+
+message ChatClientEvent {
+  message Message {
+    int64 sent_time = 1;
+    int64 server_time = 2;
+    string body = 3;
+  }
+
+  message Padding {
+    bytes body = 1;
+  }
+
+  message Open {
+    uint32 client_id = 1;
+  }
+
+  message Close {}
+
+  oneof body {
+    Open open = 1;
+    Message message = 2;
+    Close close = 3;
+    Padding padding = 4;
+  }
+}
+
+message ChatClientCallRequest {
+  message Message {
+    int64 time = 1;
+    string body = 2;
+  }
+
+  message RunServer {}
+
+  message RunClient {}
+
+  uint32 client_id = 1;
+  oneof body {
+    Message message = 2;
+    RunClient run_client = 3;
+    RunServer run_server = 4;
+  }
+}
+
+message NetworkAddress {
+  bytes host_id = 1;
+  uint32 port = 2;
+}
+
+message VideoServerOpenRequest {}
+message VideoServerOpenResponse {
+  uint32 id = 1;
+}
+
+message VideoServerWriteRequest {
+  uint32 id = 1;
+  bytes data = 2;
+  bool flush = 3;
+}
+message VideoServerWriteResponse {}
+
+message VideoClientOpenRequest {}
+
+message VideoClientEvent {
+  message Data {
+    bytes data = 1;
+    bool flush = 2;
+  }
+
+  message Open {
+    uint32 id = 1;
+  }
+
+  message Close {}
+
+  oneof body {
+    Data data = 1;
+    Open open = 2;
+    Close close = 3;
+  }
+}
+
+message VideoClientCallRequest {
+  message Data {
+    bytes body = 1;
+  }
+
+  message RunServer {}
+
+  message RunClient {}
+
+  uint32 id = 1;
+  oneof body {
+    Data data = 2;
+    RunClient run_client = 3;
+    RunServer run_server = 4;
+  }
+}
+
+// ---
+
+message StartVPNRequest {}
+message StartVPNResponse {}
+message StopVPNRequest {}
+message StopVPNResponse {}
+
+// ---
 
 message JoinSwarmRequest {
   string swarm_uri = 1;
 }
-
 message JoinSwarmResponse {}
-
 message LeaveSwarmRequest {
   string swarm_uri = 1;
 }
-
 message LeaveSwarmResponse {}
-
 message GetIngressStreamsRequest {}
-
 message GetIngressStreamsResponse {
   string swarm_uri = 1;
 }
-
 message StartHLSIngressRequest {}
 message StartHLSIngressResponse {}
-
 message StartHLSEgressRequest {}
 message StartHLSEgressResponse {}
-
 message StopHLSEgressRequest {}
 message StopHLSEgressResponse {}
-
 message MonitorSwarmsRequest {}
+
+// ---
+
+message StartSwarmRequest {}
+message StartSwarmResponse {
+  uint32 id = 1;
+}
+message WriteToSwarmRequest {
+  uint32 id = 1;
+  bytes data = 2;
+}
+message WriteToSwarmResponse {
+  string error = 1;
+}
+message StopSwarmRequest {
+  uint32 id = 1;
+}
+message StopSwarmResponse {}
+message PublishSwarmRequest {
+  uint32 id = 1;
+}
+message PublishSwarmResponse {}
+
+// ---
+
+message PProfRequest {
+  string name = 1;
+  bool debug = 2;
+  bool gc = 3;
+}
+message PProfResponse {
+  string name = 1;
+  bytes data = 2;
+}
+
+// ---
+
+message StorageKey {
+  KDFType kdf_type = 1;
+  oneof kdf_options {
+    PBKDF2Options pbkdf2_options = 2;
+  }
+
+  message PBKDF2Options {
+    uint32 iterations = 1;
+    uint32 key_size = 2;
+    bytes salt = 3;
+  }
+}
+
+message MonitorSwarmsResponse {
+  SwarmEventType type = 1;
+  string id = 2;
+}
+message BootstrapDHTRequest {
+  repeated string transport_uris = 1;
+}
+message BootstrapDHTResponse {}
+
+message NegotiateWRTCRequest {
+  WRTCSDPType type = 1;
+  string session_description = 2;
+}
+message NegotiateWRTCResponse {
+  string candidate = 1;
+}
+
+message Key {
+  KeyType type = 1;
+  bytes private = 2;
+  bytes public = 3;
+}
+
+message CertificateRequest {
+  bytes key = 1;
+  KeyType key_type = 2;
+  uint32 key_usage = 3;
+  bytes signature = 4;
+}
+
+message Certificate {
+  bytes key = 1;
+  KeyType key_type = 2;
+  uint32 key_usage = 3;
+  uint64 not_before = 4;
+  uint64 not_after = 5;
+  bytes serial_number = 6;
+  bytes signature = 7;
+  oneof parent_oneof {
+    Certificate parent = 8;
+  }
+}
+
+message Network {
+  uint64 id = 1;
+  string name = 2;
+  Key key = 3;
+  Certificate certificate = 4;
+}
+
+message NetworkMembership {
+  uint64 id = 1;
+  uint64 created_at = 2;
+  string name = 3;
+  Certificate ca_certificate = 4;
+  Certificate certificate = 5;
+  uint64 last_seen_at = 6;
+}
+
+message BootstrapClient {
+  uint64 id = 1;
+  oneof client_options {
+    BootstrapClientWebSocketOptions websocket_options = 2;
+  }
+}
+
+message BootstrapClientWebSocketOptions {
+  string url = 1;
+}
+
+message Profile {
+  uint64 id = 1;
+  string name = 2;
+  bytes secret = 3;
+  Key key = 4;
+  repeated Network networks = 5;
+  repeated NetworkMembership network_memberships = 6;
+}
+
+message ProfileSummary {
+  uint64 id = 1;
+  string name = 2;
+}
+
+message PeerInit {
+  uint32 protocol_version = 1;
+  Certificate certificate = 2;
+  bytes iv = 3;
+}
+
+message NetworkHandshake {
+  message Init {
+    int32 key_count = 1;
+    uint32 discriminator = 2;
+  }
+
+  message NetworkBinding {
+    uint32 port = 1;
+    Certificate certificate = 2;
+  }
+
+  message NetworkBindings {
+    uint32 discriminator = 1;
+    repeated NetworkBinding network_bindings = 2;
+  }
+
+  oneof body {
+    Init init = 1;
+    NetworkBindings network_bindings = 2;
+  }
+}
+
+message HashTableMessage {
+  message Record {
+    bytes key = 1;
+    bytes salt = 2;
+    bytes value = 3;
+    int64 timestamp = 4;
+    bytes signature = 5;
+  }
+
+  message Publish {
+    Record record = 1;
+  }
+
+  message Unpublish {
+    Record record = 1;
+  }
+
+  message GetRequest {
+    uint64 request_id = 1;
+    bytes hash = 2;
+  }
+
+  message GetResponse {
+    uint64 request_id = 1;
+    Record record = 2;
+  }
+
+  oneof body {
+    Publish publish = 1;
+    Unpublish unpublish = 2;
+    GetRequest get_request = 3;
+    GetResponse get_response = 4;
+  }
+}
+
+message PeerExchangeMessage {
+  message Request {
+    uint32 count = 1;
+  }
+
+  message Response {
+    repeated bytes ids = 1;
+  }
+
+  message Offer {
+    uint64 mediation_id = 1;
+    bytes data = 2;
+  }
+
+  message Answer {
+    uint64 mediation_id = 1;
+    bytes data = 2;
+  }
+
+  message IceCandidate {
+    uint64 mediation_id = 1;
+    uint64 index = 2;
+    bytes data = 3;
+  }
+
+  message CallbackRequest {}
+
+  oneof body {
+    Request request = 1;
+    Response response = 2;
+    Offer offer = 3;
+    Answer answer = 4;
+    IceCandidate ice_candidate = 5;
+    CallbackRequest callback_request = 6;
+  }
+}
+
+message SwarmThingMessage {
+  message Open {
+    bytes swarm_id = 1;
+    uint32 port = 2;
+  }
+
+  message Close {
+    bytes swarm_id = 1;
+  }
+
+  oneof body {
+    Open open = 1;
+    Close close = 2;
+  }
+}
+
+message BrokerPeerRequest {
+  int32 conn_mtu = 1;
+}
+
+message BrokerPeerEvent {
+  message Open {
+    uint64 peer_id = 1;
+  }
+
+  message Data {
+    bytes data = 1;
+  }
+
+  message InitRequired {
+    bytes data = 1;
+  }
+
+  message Keys {
+    repeated bytes keys = 1;
+  }
+
+  oneof body {
+    Open open = 1;
+    Data data = 2;
+    InitRequired init_required = 3;
+    Keys keys = 4;
+  }
+}
+
+message BrokerPeerInitRequest {
+  uint64 peer_id = 1;
+  uint32 discriminator = 2;
+  repeated bytes keys = 3;
+}
+
+message BrokerPeerDataRequest {
+  uint64 peer_id = 1;
+  bytes data = 2;
+}
+
+message ReadMetricsRequest {
+  MetricsFormat format = 1;
+}
+
+message ReadMetricsResponse {
+  bytes data = 1;
+}
+
+message CreateNetworkInvitationRequest {
+  Key signing_key = 1;
+  Certificate signing_cert = 2;
+}
+
+message CreateNetworkInvitationResponse {
+  Invitation invitation = 1;
+  string invitation_b64 = 2;
+  bytes invitation_bytes = 3;
+}
+
+message Invitation {
+  uint32 version = 1;
+  bytes data = 2;
+}
+
+message InvitationV0 {
+  bytes key = 1;
+  Certificate certificate = 2;
+}
+
+message CreateNetworkMembershipFromInvitationRequest {
+  oneof invitation {
+    string invitation_b64 = 1;
+    bytes invitation_bytes = 2;
+  }
+}
+
+message CreateNetworkMembershipFromInvitationResponse {
+
+}
+
+enum MetricsFormat {
+  METRICS_FORMAT_TEXT = 0;
+  METRICS_FORMAT_PROTO_DELIM = 1;
+  METRICS_FORMAT_PROTO_TEXT = 2;
+  METRICS_FORMAT_PROTO_COMPACT = 3;
+  METRICS_FORMAT_OPEN_METRICS = 4;
+}
+
+enum KDFType {
+  KDF_TYPE_UNDEFINED = 0;
+  KDF_TYPE_PBKDF2_SHA256 = 1;
+}
+
+enum KeyType {
+  KEY_TYPE_UNDEFINED = 0;
+  KEY_TYPE_ED25519 = 1;
+  KEY_TYPE_X25519 = 2;
+}
+
+enum KeyUsage {
+  KEY_USAGE_UNDEFINED = 0;
+  // PEER allows bearer to connect with members of the signator's network
+  KEY_USAGE_PEER = 1;
+  // BOOTSTRAP allows the bearer to connect to a network's signators. Invites
+  // including transient keys with bootstrap certs allow new members to request
+  // peer certs.
+  KEY_USAGE_BOOTSTRAP= 2;
+  // SIGN allows the bearer to sign certificates.
+  KEY_USAGE_SIGN = 4;
+  // BROKER allows the bearer to negotiate connections between a network's
+  // members.
+  KEY_USAGE_BROKER = 8;
+  // ENCIPHERMENT allows the key to be used for encrypting messages.
+  KEY_USAGE_ENCIPHERMENT = 16;
+}
 
 enum SwarmEventType {
   CREATE_SWARM = 0;
@@ -37,15 +717,7 @@ enum SwarmEventType {
   DELETE_SWARM = 2;
 }
 
-message MonitorSwarmsResponse {
-  SwarmEventType type = 1;
-  string id = 2;
-}
-
-message BootstrapDHTRequest {
-  repeated string transport_uris = 1;
-}
-
-message BootstrapDHTResponse {
-
+enum WRTCSDPType {
+  OFFER = 0;
+  ANSWER = 1;
 }

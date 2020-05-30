@@ -1,0 +1,60 @@
+
+/* --- */
+
+.idle {
+  height: 100vh;
+  width: 100vw;
+  overflow: hidden;
+  position: relative;
+
+  &::before, &::after {
+    z-index: -1;
+    content: "";
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+  }
+
+  &::before {
+    height: 100vh;
+    width: 100vw;
+    background: radial-gradient(#091113, #000);
+  }
+
+  &::after {
+    margin-top: -350px;
+    margin-left: -350px;
+    height: calc(100vh + 700px);
+    width: calc(100vw + 700px);
+    background-image: url("../images/noise.png");
+    animation: idle-jitter 500ms infinite
+  }
+}
+
+@keyframes idle-jitter {
+  0% {
+    transform: translate3d(-95px, -105px, 0);
+    animation-timing-function: step-end;
+  }
+  20% {
+    transform: translate3d(-18px, -2px, 0);
+    animation-timing-function: step-end;
+  }
+  40% {
+    transform: translate3d(-166px, -127px, 0);
+    animation-timing-function: step-end;
+  }
+  60% {
+    transform: translate3d(-77px, -90px, 0);
+    animation-timing-function: step-end;
+  }
+  80% {
+    transform: translate3d(-134px, -54px, 0);
+    animation-timing-function: step-end;
+  }
+  100% {
+    transform: translate3d(-35px, -114px, 0);
+    animation-timing-function: step-end;
+  }
+}

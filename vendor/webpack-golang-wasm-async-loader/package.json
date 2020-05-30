@@ -18,13 +18,12 @@
   "license": "MIT",
   "devDependencies": {
     "@types/webassembly-js-api": "0.0.2",
+    "@types/webpack": "^4.41.13",
     "typescript": "^3.7.2"
   },
-  "dependencies": {
-    "@types/webpack": "^4.4.23"
-  },
+  "dependencies": {},
   "peerDependencies": {
-    "webpack": "^4.29.0"
+    "webpack": "^4.43.0"
   },
   "engines": {
     "node": ">= 8.0.0"

@@ -98,31 +98,31 @@
 		}
 	}
 
-	if (!global.crypto) {
-		const nodeCrypto = require("crypto");
-		global.crypto = {
-			getRandomValues(b) {
-				nodeCrypto.randomFillSync(b);
-			},
-		};
-	}
+	// if (!global.crypto) {
+	// 	const nodeCrypto = require("crypto");
+	// 	global.crypto = {
+	// 		getRandomValues(b) {
+	// 			nodeCrypto.randomFillSync(b);
+	// 		},
+	// 	};
+	// }
 
-	if (!global.performance) {
-		global.performance = {
-			now() {
-				const [sec, nsec] = process.hrtime();
-				return sec * 1000 + nsec / 1000000;
-			},
-		};
-	}
+	// if (!global.performance) {
+	// 	global.performance = {
+	// 		now() {
+	// 			const [sec, nsec] = process.hrtime();
+	// 			return sec * 1000 + nsec / 1000000;
+	// 		},
+	// 	};
+	// }
 
-	if (!global.TextEncoder) {
-		global.TextEncoder = require("util").TextEncoder;
-	}
+	// if (!global.TextEncoder) {
+	// 	global.TextEncoder = require("util").TextEncoder;
+	// }
 
-	if (!global.TextDecoder) {
-		global.TextDecoder = require("util").TextDecoder;
-	}
+	// if (!global.TextDecoder) {
+	// 	global.TextDecoder = require("util").TextDecoder;
+	// }
 
 	// End of polyfills for common API.
 

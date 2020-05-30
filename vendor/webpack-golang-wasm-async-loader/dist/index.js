@@ -1,8 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const child_process_1 = require("child_process");
+const crypto = require("crypto");
 const fs_1 = require("fs");
 const path_1 = require("path");
-const child_process_1 = require("child_process");
 const proxyBuilder = (filename) => `
 export default gobridge(fetch('${filename}').then(response => response.arrayBuffer()));
 `;
@@ -15,20 +16,27 @@ function loader(contents) {
             GOROOT: process.env.GOROOT,
             GOCACHE: path_1.join(__dirname, "./.gocache"),
             GOOS: "js",
-            GOARCH: "wasm"
-        }
+            GOARCH: "wasm",
+        },
     };
     const goBin = getGoBin(opts.env.GOROOT);
     const outFile = `${this.resourcePath}.wasm`;
-    const args = ["build", "-o", outFile, this.resourcePath];
+    const args = ["build", "-mod", "readonly"];
+    if (this.mode === "production") {
+        args.push("-trimpath", "-ldflags", "-s -w");
+    }
+    args.push("-o", outFile, this.resourcePath);
     child_process_1.execFile(goBin, args, opts, (err) => {
         if (err) {
             cb(err);
             return;
         }
-        let out = fs_1.readFileSync(outFile);
+        const out = fs_1.readFileSync(outFile);
+        const hash = crypto.createHash("sha256");
+        hash.write(out);
+        const digest = hash.digest().toString("hex").substring(0, 20);
         fs_1.unlinkSync(outFile);
-        const emittedFilename = path_1.basename(this.resourcePath, ".go") + ".wasm";
+        const emittedFilename = path_1.basename(this.resourcePath, ".go") + `.${digest}.wasm`;
         this.emitFile(emittedFilename, out, null);
         cb(null, [
             "require('!",
@@ -37,7 +45,7 @@ function loader(contents) {
             "import gobridge from '",
             path_1.join(__dirname, "..", "dist", "gobridge.js"),
             "';",
-            proxyBuilder(emittedFilename)
+            proxyBuilder(emittedFilename),
         ].join(""));
     });
 }

@@ -1,37 +1,116 @@
 package service
 
 import (
-	"context"
+	"crypto/rand"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"path"
+	"runtime"
+	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/lhls"
-	"github.com/MemeLabs/go-ppspp/pkg/encoding"
+	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/petar/GoLLRB/llrb"
 )
 
-// New ...
-func New(h *encoding.Host) *Service {
-	return &Service{
-		h: h,
+type peerSetItem vpn.PeerIndexHost
+
+func (t *peerSetItem) Less(oi llrb.Item) bool {
+	o, ok := oi.(*peerSetItem)
+	if !ok {
+		return true
+	}
+	if t.Port == o.Port {
+		return t.HostID.Less(o.HostID)
+	}
+	return t.Port < o.Port
+}
+
+func newPeerSet() *peerSet {
+	return &peerSet{
+		values: llrb.New(),
 	}
 }
 
-// Service ...
-type Service struct {
-	h       *encoding.Host
-	ingress *lhls.Ingress
-	egress  *lhls.Egress
+type peerSet struct {
+	values *llrb.LLRB
 }
 
-// JoinSwarm ...
-func (s *Service) JoinSwarm(ctx context.Context, r *JoinSwarmRequest) (*JoinSwarmResponse, error) {
-	return &JoinSwarmResponse{}, nil
+func (s *peerSet) LoadFrom(idx vpn.PeerIndex, key, salt []byte, ttl time.Duration) error {
+	search, err := idx.Search(key, salt)
+	if err != nil {
+		return err
+	}
+
+	search.SetTimeout(ttl)
+	for h := range search.Hosts() {
+		s.Insert(h)
+	}
+	return nil
 }
 
-// LeaveSwarm ...
-func (s *Service) LeaveSwarm(ctx context.Context, r *LeaveSwarmRequest) (*LeaveSwarmResponse, error) {
-	return &LeaveSwarmResponse{}, nil
+func (s *peerSet) Insert(h *vpn.PeerIndexHost) {
+	item := (*peerSetItem)(h)
+	old, ok := s.values.Get(item).(*peerSetItem)
+	if !ok || old.Timestamp.Before(h.Timestamp) {
+		s.values.ReplaceOrInsert(item)
+	}
 }
 
-// BootstrapDHT ...
-func (s *Service) BootstrapDHT(ctx context.Context, r *BootstrapDHTRequest) (*BootstrapDHTResponse, error) {
-	return &BootstrapDHTResponse{}, nil
+func (s *peerSet) Slice() []*vpn.PeerIndexHost {
+	vs := make([]*vpn.PeerIndexHost, 0, s.values.Len())
+	s.values.AscendLessThan(llrb.Inf(1), func(t llrb.Item) bool {
+		vs = append(vs, (*vpn.PeerIndexHost)(t.(*peerSetItem)))
+		return true
+	})
+	return vs
+}
+
+func latestHashValue(r vpn.HashTableGetReceiver, ttl time.Duration) ([]byte, bool) {
+	r.SetTimeout(ttl)
+
+	var timestamp time.Time
+	var value []byte
+	for v := range r.Values() {
+		if v.Timestamp.After(timestamp) {
+			timestamp = v.Timestamp
+			value = v.Value
+		}
+	}
+
+	return value, value != nil
+}
+
+func jsonDump(i interface{}) {
+	_, file, line, _ := runtime.Caller(1)
+	b, err := json.MarshalIndent(i, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf(
+		"%s %s:%d: %s\n",
+		time.Now().Format("2006/01/02 15:04:05.000000"),
+		path.Base(file),
+		line, string(b),
+	)
+}
+
+func streamToWriter(w io.Writer) {
+	// b := make([]byte, 1024*384) // 30mbps
+	// b := make([]byte, 1024*256) // 20mbps
+	b := make([]byte, 1024*75) // 6mbps
+	for i := 0; i < len(b); i += 1024 * 64 {
+		n := 1024 * 64
+		if i+n > len(b) {
+			n = len(b) - i
+		}
+		rand.Read(b[i : i+n])
+	}
+	for range time.NewTicker(time.Millisecond * 100).C {
+		if _, err := w.Write(b); err != nil {
+			log.Println("write error")
+			return
+		}
+	}
 }

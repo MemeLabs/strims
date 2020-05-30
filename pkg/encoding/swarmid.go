@@ -2,70 +2,47 @@ package encoding
 
 import (
 	"bytes"
-	"encoding/base64"
-	"io/ioutil"
-	"log"
+	"encoding/base32"
 )
 
 // SwarmID ...
-type SwarmID struct {
-	PublicKey []byte
-}
+type SwarmID []byte
 
-// ParseSwarmID ...
-func ParseSwarmID(key string) (s *SwarmID, err error) {
-	s = &SwarmID{}
-	s.PublicKey, err = base64.URLEncoding.DecodeString(key)
-	return
+// DecodeSwarmID ...
+func DecodeSwarmID(key string) (SwarmID, error) {
+	s, err := base32.StdEncoding.DecodeString(key)
+	return SwarmID(s), err
 }
 
 // NewSwarmID ...
-func NewSwarmID(key []byte) *SwarmID {
+func NewSwarmID(key []byte) SwarmID {
 	b := make([]byte, len(key))
 	copy(b, key)
-	return &SwarmID{PublicKey: b}
+	return SwarmID(b)
 }
 
 // LiveSignatureByteLength ...
-func (s *SwarmID) LiveSignatureByteLength() int {
+func (s SwarmID) LiveSignatureByteLength() int {
 	// ECDSAP256SHA256
 	return 64
 }
 
 // String ...
-func (s *SwarmID) String() string {
-	return base64.URLEncoding.EncodeToString(s.PublicKey)
+func (s SwarmID) String() string {
+	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(s)
 }
 
 // Binary ...
-func (s *SwarmID) Binary() []byte {
-	return s.PublicKey
+func (s SwarmID) Binary() []byte {
+	return s
+}
+
+// Equals ...
+func (s SwarmID) Equals(o SwarmID) bool {
+	return s.Compare(o) == 0
 }
 
 // Compare ...
-func (s *SwarmID) Compare(id *SwarmID) bool {
-	return bytes.Compare(s.PublicKey, id.PublicKey) == 0
-}
-
-var idStash = &idStasher{}
-
-type idStasher struct{}
-
-// Store ...
-func (i *idStasher) Store(id *SwarmID) error {
-	log.Println("stashed id", id.String())
-	return ioutil.WriteFile("/tmp/id-stash.bin", id.Binary(), 0644)
-}
-
-// Retrieve ...
-func (i *idStasher) Retrieve() (*SwarmID, error) {
-	d, err := ioutil.ReadFile("/tmp/id-stash.bin")
-	if err != nil {
-		return nil, err
-	}
-
-	id := NewSwarmID(d)
-	log.Println("retrieved id", id.String())
-
-	return id, nil
+func (s SwarmID) Compare(o SwarmID) int {
+	return bytes.Compare([]byte(s), []byte(o))
 }

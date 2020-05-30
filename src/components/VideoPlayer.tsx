@@ -13,19 +13,19 @@ const SwarmPlayer = ({
   mimeType,
   useMediaSource = useSwarmMediaSource,
 }: Meme) => {
-  const [videoState, videoProps, videoControls] = useVideo();
-  const [mediaSource, truncateMediaSource] = useMediaSource(reader, {mimeType});
+  const [ videoState, videoProps, videoControls ] = useVideo();
+  const [ mediaSource, truncateMediaSource ] = useMediaSource(reader, { mimeType });
 
   React.useEffect(() => {
     videoControls.setSrc(URL.createObjectURL(mediaSource));
     videoControls.play();
-  }, [videoProps.ref, mediaSource]);
+  }, [ videoProps.ref, mediaSource ]);
 
-  React.useEffect(() => truncateMediaSource(60), [videoState.bufferEnd]);
+  React.useEffect(() => truncateMediaSource(60), [ videoState.bufferEnd ]);
 
   return (
     <video
-      style={{maxWidth: "100vw"}}
+      style={{ maxWidth: "100vw" }}
       onClick={(e) => e.preventDefault()}
       className="video_player__video"
       {...videoProps}

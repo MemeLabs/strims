@@ -44,7 +44,7 @@ func (s *binHistory) resize(size uint64) {
 	}
 }
 
-func (s *binHistory) Push(b binmap.Bin) {
+func (s *binHistory) Push(b binmap.Bin, t time.Time) {
 	i, ok := s.ring.Push()
 	if !ok {
 		s.grow()
@@ -52,7 +52,7 @@ func (s *binHistory) Push(b binmap.Bin) {
 	}
 
 	s.values[i] = binHistoryEntry{
-		Time: time.Now(),
+		Time: t,
 		Bin:  b,
 	}
 	return

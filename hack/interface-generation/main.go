@@ -53,7 +53,7 @@ func main() {
 		log.Fatal(fmt.Errorf("failed to unmarshal yaml file: %v", err))
 	}
 
-	outputFilePath := *outputPath + config.Package + ".go"
+	outputFilePath := *outputPath + config.Package + ".if.go"
 
 	file, err := os.Create(outputFilePath)
 	if err != nil {

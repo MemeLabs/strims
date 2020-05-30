@@ -15,7 +15,7 @@ if (!g.__gobridge__) {
 const bridge = g.__gobridge__;
 
 function sleep() {
-  return new Promise(requestAnimationFrame);
+  return new Promise((resolve) => setTimeout(resolve, 0));
 }
 
 export default function(getBytes: Promise<Buffer>) {
@@ -39,7 +39,7 @@ export default function(getBytes: Promise<Buffer>) {
           return new Promise(async (resolve, reject) => {
             const run = () => {
               const cb = (err: any, ...msg: any[]) => (err ? reject(err) : resolve(...msg));
-              bridge[key].apply(undefined, [...args, cb]);
+              bridge[key].apply(undefined, [ ...args, cb ]);
             };
 
             while (!ready) {

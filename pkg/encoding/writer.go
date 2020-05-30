@@ -2,13 +2,9 @@ package encoding
 
 import (
 	"bufio"
-	"crypto/ecdsa"
-	"crypto/elliptic"
-	"crypto/rand"
-	"crypto/x509"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/nareix/joy4/av"
+	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
 // constants...
@@ -20,10 +16,11 @@ const (
 
 // SwarmWriterOptions ...
 type SwarmWriterOptions struct {
+	SwarmOptions
+	Key *pb.Key
 	// ChunkSize          int
-	ChunksPerSignature int
-	LiveDiscardWindow  int
-	Streams            []av.CodecData
+	// ChunksPerSignature int
+	// LiveDiscardWindow  int
 	// ChunkAddressingMethod ChunkAddressingMethod,
 	// ContentIntegrityProtectionMethod ContentIntegrityProtectionMethod,
 	// MerkleHashTreeFunction MerkleHashTreeFunction,
@@ -32,9 +29,10 @@ type SwarmWriterOptions struct {
 
 // DefaultSwarmWriterOptions ...
 var DefaultSwarmWriterOptions = SwarmWriterOptions{
+	SwarmOptions: NewDefaultSwarmOptions(),
 	// ChunkSize:          DefaultChunkSize,
-	ChunksPerSignature: DefaultChunksPerSignature,
-	LiveDiscardWindow:  DefaultBufferSize,
+	// ChunksPerSignature: DefaultChunksPerSignature,
+	// LiveDiscardWindow:  DefaultBufferSize,
 	// ChunkAddressingMethod: ChunkAddressingMethod.Bin32,
 	// ContentIntegrityProtectionMethod: ContentIntegrityProtectionMethod.UnifiedMerkleTree,
 	// MerkleHashTreeFunction: MerkleHashTreeFunction.SHA256,
@@ -43,22 +41,25 @@ var DefaultSwarmWriterOptions = SwarmWriterOptions{
 
 // NewWriter ...
 func NewWriter(o SwarmWriterOptions) (w *SwarmWriter, err error) {
-	privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return
-	}
+	// privateKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	// if err != nil {
+	// 	return
+	// }
 
-	encodedPub, err := x509.MarshalPKIXPublicKey(privateKey.Public())
-	if err != nil {
-		return
-	}
+	// encodedPub, err := x509.MarshalPKIXPublicKey(privateKey.Public())
+	// if err != nil {
+	// 	return
+	// }
 
 	// signatureSize := o.ChunkSize * o.ChunksPerSignature
 
 	// signer := NewSigner(privateKey, crypto.SHA256)
 
-	id := NewSwarmID(encodedPub)
-	s := NewDefaultSwarm(id)
+	id := NewSwarmID(o.Key.Public)
+	s, err := NewSwarm(id, o.SwarmOptions)
+	if err != nil {
+		return
+	}
 
 	bw := bufio.NewWriterSize(&swarmWriter{s: s}, ChunkSize)
 

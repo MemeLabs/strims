@@ -2,5 +2,5 @@ node_modules
 dist
 *.out
 *.test
-*.g_
+*.g_*
 *.wasm

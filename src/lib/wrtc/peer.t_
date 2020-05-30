@@ -1,0 +1,22 @@
+import Bus from "../wasmio_bus";
+
+export default class WRTCPeer {
+  public id: number;
+  public pc: RTCPeerConnection;
+  public dc: RTCDataChannel;
+  private bus: Bus;
+
+  constructor(id: number, pc: RTCPeerConnection, dc: RTCDataChannel) {
+    this.id = id;
+    this.pc = pc;
+    this.dc = dc;
+    this.bus = new Bus();
+
+    this.bus.on("data", (d) => this.dc.send(d));
+    this.bus.on("close", () => this.pc.close());
+  }
+
+  public close() {
+    this.pc.close();
+  }
+}

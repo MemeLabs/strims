@@ -92,7 +92,7 @@ func (h *Ingress) handlePublish(conn *rtmp.Conn) {
 		}
 
 		h.swarms.Delete(s.ID.String())
-		h.host.RemoveSwarm(s.ID)
+		// h.host.RemoveSwarm(s.ID)
 	}()
 }
 

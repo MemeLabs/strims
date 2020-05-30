@@ -1,0 +1,3 @@
+[submodule "vendor/client_golang"]
+	path = vendor/client_golang
+	url = https://github.com/slugalisk/client_golang.git

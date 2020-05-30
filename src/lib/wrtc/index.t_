@@ -1,0 +1,164 @@
+import { EventEmitter } from "events";
+import Bus from "../wasmio_bus";
+import Peer from "./peer";
+import wsSignal from "./ws_signal";
+
+export interface DialOptions {
+  signalProtocol: string
+  signalAddress: string
+  id: string
+}
+
+export interface JSWRTCConn {
+  pc: RTCPeerConnection
+  bus: Bus
+}
+
+export class Negotiator extends EventEmitter {
+  public bus: Bus;
+
+  constructor(bus: Bus) {
+    super();
+    this.bus = bus;
+  }
+
+  public sendICECandiate(c: RTCIceCandidate) {
+    JSON.stringify({c});
+  }
+}
+
+export class Bridge {
+  // public ondata: (cid: number, n: number) => void;
+  // public onclose: (cid: number) => void;
+  public onpeer: (bus: Bus) => void;
+  private peers: Map<number, Peer>;
+  // private data: Uint8Array;
+  //
+  // private nextCID: number;
+
+  constructor() {
+    this.peers = new Map();
+    // this.data = new Uint8Array(32000);
+    // this.buf = new Bus(32000);
+    // this.nextCID = 0;
+  }
+
+  // public write(cid: number, n: number) {
+  //   // console.log("write", n, this.data.subarray(0, n));
+  //   const c = this.peers.get(cid);
+  //   if (c) {
+  //     c.dc.send(this.data.subarray(0, n));
+  //   }
+  // }
+
+  // public close(cid: number) {
+  //   const c = this.peers.get(cid);
+  //   if (c) {
+  //     c.close();
+  //     this.peers.delete(cid);
+  //   }
+  // }
+
+  public newConn(): JSWRTCConn {
+    const bus = new Bus(65536);
+    const pc = new RTCPeerConnection({
+      iceServers: [
+        {
+          urls: ["stun:stun.l.google.com:19302"],
+        },
+      ],
+    });
+
+    const dc = pc.createDataChannel("data", {
+      ordered: false,
+      negotiated: true,
+    });
+    dc.binaryType = "arraybuffer";
+
+    dc.onmessage = (e) => bus.write(e.data);
+
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === "closed") {
+        bus.close();
+      }
+    };
+
+    bus.on("data", (d) => dc.send(d));
+    bus.on("close", () => pc.close());
+
+    return {pc, bus};
+  }
+
+  public async offerConn(c: JSWRTCConn, n: Negotiator) {
+    const offer = await c.pc.createOffer();
+
+  }
+
+  public dial({signalProtocol, signalAddress, id}: DialOptions): Bus {
+    const bus = new Bus(32000);
+
+
+    // pc.ondatachannel = ({channel}) => {
+    //   channel.binaryType = "arraybuffer";
+    //   channel.onmessage = (e) => bus.write(e.data);
+    //   bus.on("data", (d) => channel.send(d));
+    // };
+
+    // // pc.onicecandidate = (e) => sendICECandidate(e.candidate);
+
+
+
+    // const {offer, sendAnswer} = wsSignal(`${signalProtocol}://${signalAddress}/${id}`);
+    // (async () => {
+    //   await pc.setRemoteDescription(await offer);
+    //   const answer = await pc.createAnswer();
+    //   await pc.setLocalDescription(answer);
+    //   sendAnswer(answer);
+    // })();
+
+    return bus;
+  }
+
+  // TODO: dial via channel or via signal server...
+  // public dial({signalProtocol, signalAddress, id}: DialOptions, cb: (id: number) => void): number {
+  //   const {offer, sendAnswer} = wsSignal(`${signalProtocol}://${signalAddress}/${id}`);
+
+  //   const pc = new RTCPeerConnection({
+  //     iceServers: [
+  //       {
+  //         urls: ["stun:stun.l.google.com:19302"],
+  //       },
+  //     ],
+  //   });
+
+  //   const cid = this.nextCID++;
+
+  //   (async () => {
+  //     pc.ondatachannel = ({channel}) => {
+  //       channel.binaryType = "arraybuffer";
+
+  //       channel.onmessage = (e) => {
+  //         this.data.set(new Uint8Array(e.data));
+  //         this.ondata(cid, e.data.byteLength);
+  //       };
+
+  //       this.peers.set(cid, new Peer(cid, pc, channel));
+  //       cb(cid);
+  //     };
+
+  //     pc.oniceconnectionstatechange = () => {
+  //       if (pc.iceConnectionState === "closed") {
+  //         this.onclose(cid);
+  //       }
+  //     };
+
+  //     await pc.setRemoteDescription(await offer);
+
+  //     const answer = await pc.createAnswer();
+  //     await pc.setLocalDescription(answer);
+  //     sendAnswer(answer);
+  //   })();
+
+  //   return;
+  // }
+}

@@ -1,12 +1,18 @@
 package encoding
 
 import (
+	"encoding/json"
+	"fmt"
+	"io"
 	"math/rand"
+	"path"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ledbat"
 	"github.com/MemeLabs/go-ppspp/pkg/ma"
 )
@@ -14,15 +20,21 @@ import (
 // TODO: this shouldn't be part of the public interface
 // TODO: locking madness...
 
-const minPingInterval = time.Second
+// ReadWriteFlusher ...
+type ReadWriteFlusher interface {
+	io.WriteCloser
+	MTU() int
+	Flush() error
+}
+
+const minPingInterval = time.Second * 10
 
 // Peer ...
 type Peer struct {
 	sync.Mutex
 
-	id                  int64
-	conn                TransportConn
-	channels            sync.Map
+	// id                  int64
+	channels            channels
 	lastActive          int64
 	ledbat              *ledbat.Controller
 	chunkIntervalMean   ma.Simple
@@ -39,11 +51,9 @@ type Peer struct {
 }
 
 // NewPeer ...
-func NewPeer(id int64, conn TransportConn) *Peer {
+func NewPeer() *Peer {
 	return &Peer{
-		id:                id,
-		conn:              conn,
-		lastActive:        time.Now().Unix(),
+		lastActive:        iotime.Load().Unix(),
 		ledbat:            ledbat.New(),
 		chunkIntervalMean: ma.NewSimple(500, 10*time.Millisecond),
 		rttSampleBin:      binmap.None,
@@ -52,7 +62,7 @@ func NewPeer(id int64, conn TransportConn) *Peer {
 
 // UpdateLastActive ...
 func (p *Peer) UpdateLastActive() {
-	atomic.StoreInt64(&p.lastActive, time.Now().UnixNano())
+	atomic.StoreInt64(&p.lastActive, iotime.Load().UnixNano())
 }
 
 // LastActive ...
@@ -100,24 +110,24 @@ func (p *Peer) AddReceivedChunk() {
 }
 
 // TrackBinRTT ...
-func (p *Peer) TrackBinRTT(cid uint32, b binmap.Bin) (ok bool) {
-	if ok = p.rttSampleBin.IsNone(); ok {
-		p.rttSampleChannel = cid
-		p.rttSampleBin = b
-		p.rttSampleTime = time.Now()
-	}
-	return
-}
+// func (p *Peer) TrackBinRTT(cid uint32, b binmap.Bin) (ok bool) {
+// 	if ok = p.rttSampleBin.IsNone(); ok {
+// 		p.rttSampleChannel = cid
+// 		p.rttSampleBin = b
+// 		p.rttSampleTime = time.Now()
+// 	}
+// 	return
+// }
 
 // TrackPingRTT ...
-func (p *Peer) TrackPingRTT() (nonce uint64, ok bool) {
-	if ok = time.Since(p.rttSampleTime) > minPingInterval; ok {
+func (p *Peer) TrackPingRTT(t time.Time) (nonce uint64, ok bool) {
+	if ok = t.Sub(p.rttSampleTime) > minPingInterval; ok {
 		// with even nonces Contains(nonce) is an equality check
 		nonce = uint64(rand.Int63()) << 1
 
 		p.rttSampleChannel = 0
 		p.rttSampleBin = binmap.Bin(nonce)
-		p.rttSampleTime = time.Now()
+		p.rttSampleTime = t
 	}
 	return
 }
@@ -125,7 +135,7 @@ func (p *Peer) TrackPingRTT() (nonce uint64, ok bool) {
 // AddRTTSample ...
 func (p *Peer) AddRTTSample(cid uint32, b binmap.Bin) {
 	if p.rttSampleChannel == cid && p.rttSampleBin.Contains(b) {
-		p.ledbat.AddRTTSample(time.Since(p.rttSampleTime))
+		p.ledbat.AddRTTSample(iotime.Load().Sub(p.rttSampleTime))
 		p.rttSampleBin = binmap.None
 	}
 }
@@ -138,4 +148,18 @@ func (p *Peer) ChunkIntervalMean() time.Duration {
 // Close ...
 func (p *Peer) Close() {
 	// TODO: send empty handshake (ppspp goodbye)
+}
+
+func jsonDump(i interface{}) {
+	_, file, line, _ := runtime.Caller(1)
+	b, err := json.MarshalIndent(i, "", "  ")
+	if err != nil {
+		panic(err)
+	}
+	fmt.Printf(
+		"%s %s:%d: %s\n",
+		time.Now().Format("2006/01/02 15:04:05.000000"),
+		path.Base(file),
+		line, string(b),
+	)
 }

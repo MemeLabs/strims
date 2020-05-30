@@ -2,7 +2,6 @@ package encoding
 
 import (
 	"sync"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
@@ -23,72 +22,41 @@ func NewDefaultSwarmOptions() SwarmOptions {
 }
 
 // NewDefaultSwarm ...
-func NewDefaultSwarm(id *SwarmID) (s *Swarm) {
+func NewDefaultSwarm(id SwarmID) (s *Swarm) {
 	s, _ = NewSwarm(id, NewDefaultSwarmOptions())
 	return
 }
 
 // NewSwarm ...
-func NewSwarm(id *SwarmID, o SwarmOptions) (s *Swarm, err error) {
+func NewSwarm(id SwarmID, o SwarmOptions) (s *Swarm, err error) {
 	s = &Swarm{
 		ID: id,
+		URI: &URI{
+			ID:      id,
+			Options: URIOptions{},
+		},
 		// ChunkSize:     o.ChunkSize,
-		LiveWindow:     o.LiveWindow,
-		loadedBins:     binmap.New(),
-		requestedBins:  binmap.New(),
-		peerCandidates: newPeerCandidateMap(),
+		LiveWindow:    o.LiveWindow,
+		requestedBins: binmap.New(),
 	}
 	s.chunks, err = newChunkBuffer(o.LiveWindow)
 	return
-}
-
-type peerCandidateMap struct {
-	l sync.Mutex
-	m map[TransportURI]peerCandidate
-}
-
-type peerCandidate struct {
-	URI      TransportURI
-	LastSeen time.Time
-}
-
-func newPeerCandidateMap() *peerCandidateMap {
-	return &peerCandidateMap{
-		m: map[TransportURI]peerCandidate{},
-	}
-}
-
-func (m *peerCandidateMap) AddURI(u TransportURI) {
-	m.l.Lock()
-	defer m.l.Unlock()
-
-	m.m[u] = peerCandidate{
-		URI:      u,
-		LastSeen: time.Now(),
-	}
-	// send to channel...?
 }
 
 // Swarm ...
 type Swarm struct {
 	sync.Mutex
 
-	ID *SwarmID
+	ID  SwarmID
+	URI *URI
 	// ChunkSize  int
 	LiveWindow int
 
-	channels        sync.Map
+	channelsLock    sync.Mutex
+	channels        channels
 	chunks          *chunkBuffer
 	firstRequestBin binmap.Bin
-	loadedBins      *binmap.Map
 	requestedBins   *binmap.Map
-	// TODO: hax
-	joinThings     chan joinThing
-	peerCandidates *peerCandidateMap
-}
-
-func (s *Swarm) AddPeerCandidate(t TransportURI) {
-
 }
 
 // if chunks and requestedBins locked swarms wouldn't need a lock...?
@@ -103,21 +71,57 @@ func (s *Swarm) WriteChunk(b binmap.Bin, d []byte) {
 	s.Lock()
 	s.chunks.Set(b, d)
 
-	// TODO: this is stored twice, once  here and once in chunks... remove this
-	s.loadedBins.Set(b)
-
 	// TODO: prevents server from requesting loaded bins... rename
 	s.requestedBins.Set(b)
 	s.Unlock()
 
-	s.channels.Range(func(id interface{}, ci interface{}) bool {
-		c := ci.(*channel)
+	s.channelsLock.Lock()
+	for _, c := range s.channels {
 		c.Lock()
-		defer c.Unlock()
-
 		c.addedBins.Set(b)
-		return true
+		c.Unlock()
+	}
+	s.channelsLock.Unlock()
+}
+
+// ReadChannel ...
+func (s *Swarm) ReadChannel(p *Peer, l ReadWriteFlusher) Channel {
+	ch := newChannel(channelOptions{
+		Swarm: s,
+		Peer:  p,
+		Conn:  l,
 	})
+
+	p.Lock()
+	p.channels.Insert(ch)
+	p.Unlock()
+
+	s.channelsLock.Lock()
+	s.channels.Insert(ch)
+	s.channelsLock.Unlock()
+
+	ch.Lock()
+	ch.OfferHandshake()
+	ch.Unlock()
+
+	go func() {
+		<-ch.Done()
+
+		p.Lock()
+		p.channels.Remove(ch)
+		p.Unlock()
+
+		s.channelsLock.Lock()
+		s.channels.Remove(ch)
+		s.channelsLock.Unlock()
+	}()
+
+	return ch
+}
+
+// Reader ...
+func (s *Swarm) Reader() *ChunkBufferReader {
+	return s.chunks.Reader()
 }
 
 // Leave ...

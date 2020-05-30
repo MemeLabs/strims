@@ -4,6 +4,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ma"
 )
 
@@ -14,9 +15,11 @@ const (
 	gain            = 1
 	baseHistory     = 4
 	currentDelays   = 10
-	initCWND        = 2
-	minCWND         = 2
-	mss             = 1024
+	// initCWND        = 2
+	// gotta go fast
+	initCWND = 32
+	minCWND  = 2
+	mss      = 1024
 
 	// rfc6298
 	coefG = 1
@@ -132,7 +135,7 @@ func (l *Controller) AddDelaySample(d time.Duration, size int) {
 
 	l.ackSize += size
 
-	l.lastAckTime = time.Now()
+	l.lastAckTime = iotime.Load()
 }
 
 func (l *Controller) updateCurrentDelay(d time.Duration) {
@@ -144,7 +147,7 @@ func (l *Controller) updateCurrentDelay(d time.Duration) {
 }
 
 func (l *Controller) updateBaseDelay(d time.Duration) {
-	now := time.Now().Truncate(time.Minute)
+	now := iotime.Load().Truncate(time.Minute)
 	if now != l.lastRollover {
 		l.lastRollover = now
 
@@ -171,7 +174,7 @@ func (l *Controller) DigestDelaySamples() {
 	if timeout < time.Second*2 {
 		timeout = time.Second * 2
 	}
-	if l.flightSize > 0 && time.Now().Sub(l.lastAckTime) > timeout {
+	if l.flightSize > 0 && iotime.Load().Sub(l.lastAckTime) > timeout {
 		l.cwnd = minCWND * mss
 		l.cto = 2 * l.cto
 		if l.cto > time.Second {
@@ -223,16 +226,15 @@ func (l *Controller) AddDataLoss(size int, retransmitting bool) {
 		}
 	}
 
-	now := time.Now()
 	// TODO: should this be CTO?
 	timeout := time.Duration(l.rttMean.Value())
 	if timeout < time.Second*2 {
 		timeout = time.Second * 2
 	}
-	if l.lastDataLoss.IsZero() && now.Sub(l.lastDataLoss) < timeout {
+	if l.lastDataLoss.IsZero() && iotime.Load().Sub(l.lastDataLoss) < timeout {
 		return
 	}
-	l.lastDataLoss = now
+	l.lastDataLoss = iotime.Load()
 
 	cwnd := l.cwnd / 2
 	if min := minCWND * mss; min > cwnd {

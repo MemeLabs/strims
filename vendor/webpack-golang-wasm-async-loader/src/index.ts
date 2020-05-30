@@ -1,7 +1,8 @@
+import { execFile } from "child_process";
+import * as crypto from "crypto";
+import { readFileSync, unlinkSync } from "fs";
+import { basename, join } from "path";
 import * as webpack from "webpack";
-import {readFileSync, unlinkSync} from "fs";
-import {basename, join} from "path";
-import {execFile} from "child_process";
 
 const proxyBuilder = (filename: string) => `
 export default gobridge(fetch('${filename}').then(response => response.arrayBuffer()));
@@ -18,13 +19,18 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
       GOROOT: process.env.GOROOT,
       GOCACHE: join(__dirname, "./.gocache"),
       GOOS: "js",
-      GOARCH: "wasm"
-    }
+      GOARCH: "wasm",
+    },
   };
 
   const goBin = getGoBin(opts.env.GOROOT);
   const outFile = `${this.resourcePath}.wasm`;
-  const args = ["build", "-o", outFile, this.resourcePath];
+
+  const args = [ "build", "-mod", "readonly" ];
+  if (this.mode === "production") {
+    args.push("-trimpath", "-ldflags", "-s -w");
+  }
+  args.push("-o", outFile, this.resourcePath);
 
   execFile(goBin, args, opts, (err) => {
     if (err) {
@@ -32,9 +38,14 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
       return;
     }
 
-    let out = readFileSync(outFile);
+    const out = readFileSync(outFile);
+
+    const hash = crypto.createHash("sha256");
+    hash.write(out);
+    const digest = hash.digest().toString("hex").substring(0, 20);
+
     unlinkSync(outFile);
-    const emittedFilename = basename(this.resourcePath, ".go") + ".wasm";
+    const emittedFilename = basename(this.resourcePath, ".go") + `.${digest}.wasm`;
     this.emitFile(emittedFilename, out, null);
 
     cb(
@@ -46,8 +57,8 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
         "import gobridge from '",
         join(__dirname, "..", "dist", "gobridge.js"),
         "';",
-        proxyBuilder(emittedFilename)
-      ].join("")
+        proxyBuilder(emittedFilename),
+      ].join(""),
     );
   });
 }

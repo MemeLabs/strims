@@ -1,0 +1,25 @@
+@import "colors.scss";
+@import "mixins.scss";
+
+.settings_link {
+  padding: 10px;
+  margin: 5px;
+  background: $slate-300;
+  border: 1px solid $slate-500;
+  display: inline-block;
+}
+
+.network_page {
+  padding: 20px;
+}
+
+.thing_list {
+  margin: 20px 0;
+
+  .thing_list__item {
+    border-radius: 4px;
+    border: 1px solid $slate-500;
+    background: $slate-300;
+    padding: 20px;
+  }
+}

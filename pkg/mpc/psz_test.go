@@ -29,10 +29,10 @@ func testPSZ(vlen, ilen int) error {
 			rng.Read(bset[i])
 		}
 
-		// for i := 0; i < 100; i++ {
+		// for i := 0; i < 10000; i++ {
 		// 	b := make([]byte, 16)
 		// 	rng.Read(b)
-		// 	bset = append(bset, b)
+		// 	aset = append(aset, b)
 		// }
 
 		log.Printf("sending %d, receiving %d", len(aset), len(bset))
