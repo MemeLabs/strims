@@ -70,7 +70,7 @@ type pbNetworks []*pb.Network
 
 func (n pbNetworks) Find(key []byte) *pb.Network {
 	for _, in := range n {
-		if bytes.Compare(in.Key.Public, key) == 0 {
+		if bytes.Equal(in.Key.Public, key) {
 			return in
 		}
 	}

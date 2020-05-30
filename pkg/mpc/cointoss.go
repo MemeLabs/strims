@@ -66,7 +66,7 @@ func cointossReceive(conn Conn, seeds []Block) (out []Block, err error) {
 			return nil, err
 		}
 		rng.Read(rc[:])
-		if bytes.Compare(cs[i][:], rc[:]) != 0 {
+		if !bytes.Equal(cs[i][:], rc[:]) {
 			return nil, errors.New("commitment check failed")
 		}
 
