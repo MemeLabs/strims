@@ -108,7 +108,7 @@ func testPSZ(vlen, ilen int) error {
 		i := sort.Search(ilen, func(i int) bool {
 			return bytes.Compare(v, results[i]) <= 0
 		})
-		if i == ilen || bytes.Compare(v, results[i]) != 0 {
+		if i == ilen || !bytes.Equal(v, results[i]) {
 			return errors.New("missing expected result from intersection")
 		}
 	}

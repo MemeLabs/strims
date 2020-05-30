@@ -65,7 +65,7 @@ func TestTranspose(t *testing.T) {
 	}
 
 	transposeMatrix(input, 16, 4)
-	if bytes.Compare(input, output) != 0 {
+	if !bytes.Equal(input, output) {
 		t.Error("output mismatch")
 		t.FailNow()
 	}

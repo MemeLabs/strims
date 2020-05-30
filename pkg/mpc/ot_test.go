@@ -73,7 +73,7 @@ func testOT(
 		} else {
 			expected = values[i][1]
 		}
-		if bytes.Compare(res[i][:], expected[:]) != 0 {
+		if !bytes.Equal(res[i][:], expected[:]) {
 			return errors.New("received unexpected value")
 		}
 	}

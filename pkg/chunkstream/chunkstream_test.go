@@ -45,7 +45,7 @@ func TestWriter(t *testing.T) {
 	}
 	for _, h := range headers {
 		oh := o[h.index : h.index+2]
-		if bytes.Compare(oh, h.value) != 0 {
+		if !bytes.Equal(oh, h.value) {
 			t.Errorf("expected %x at %d, found %x", h.value, h.index, oh)
 		}
 	}
@@ -77,7 +77,7 @@ func TestReader(t *testing.T) {
 		t.Errorf("%d bytes read, expected %d", n, len(b))
 	}
 
-	if bytes.Compare(o[:n], b) != 0 {
+	if !bytes.Equal(o[:n], b) {
 		t.Errorf("expected \n%s\nread \n%s", spew.Sdump(b), spew.Sdump(o[:n]))
 	}
 }
@@ -112,7 +112,7 @@ func TestOffsetReader(t *testing.T) {
 		t.Errorf("%d bytes read, expected %d", n, off+len(b))
 	}
 
-	if bytes.Compare(o[off:n], b) != 0 {
+	if !bytes.Equal(o[off:n], b) {
 		t.Errorf("expected \n%s\nread \n%s", spew.Sdump(b), spew.Sdump(o[off:n]))
 	}
 }

@@ -150,7 +150,7 @@ func (h *Networks) findIndexByKey(key []byte) (int, bool) {
 	i := sort.Search(end, func(i int) bool {
 		return bytes.Compare(key, h.networks[i].CAKey()) >= 0
 	})
-	return i, i < end && bytes.Compare(key, h.networks[i].CAKey()) == 0
+	return i, i < end && bytes.Equal(key, h.networks[i].CAKey())
 }
 
 func newNetworkBootstrap(n *Networks, peer *Peer) *networkBootstrap {
@@ -358,10 +358,10 @@ func (h *networkBootstrap) handleNetworkBindings(discriminator uint32, networkBi
 	for i, pb := range peerNetworkBindings {
 		b := networkBindings[i]
 
-		if bytes.Compare(h.peer.Certificate.Key, pb.Certificate.Key) != 0 {
+		if bytes.Equal(h.peer.Certificate.Key, pb.Certificate.Key) {
 			return errors.New("init and network certificate key mismatch")
 		}
-		if bytes.Compare(certificateParentKey(b.Certificate), certificateParentKey(pb.Certificate)) != 0 {
+		if bytes.Equal(certificateParentKey(b.Certificate), certificateParentKey(pb.Certificate)) {
 			return errors.New("network ca mismatch")
 		}
 		if pb.Port > uint32(math.MaxUint16) {
