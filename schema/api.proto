@@ -646,6 +646,7 @@ message ReadMetricsResponse {
 message CreateNetworkInvitationRequest {
   Key signing_key = 1;
   Certificate signing_cert = 2;
+  string network_name = 3;
 }
 
 message CreateNetworkInvitationResponse {
@@ -662,6 +663,8 @@ message Invitation {
 message InvitationV0 {
   bytes key = 1;
   Certificate certificate = 2;
+  KeyType key_type = 3;
+  string network_name = 4;
 }
 
 message CreateNetworkMembershipFromInvitationRequest {
@@ -672,7 +675,7 @@ message CreateNetworkMembershipFromInvitationRequest {
 }
 
 message CreateNetworkMembershipFromInvitationResponse {
-
+  NetworkMembership membership = 1;
 }
 
 enum MetricsFormat {

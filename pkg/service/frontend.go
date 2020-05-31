@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/base64"
 	"errors"
+	"fmt"
 	"runtime"
 	"runtime/pprof"
 	"sync/atomic"
@@ -659,7 +660,7 @@ func (s *Frontend) CreateNetworkInvitation(ctx context.Context, r *pb.CreateNetw
 		return nil, err
 	}
 
-	validDuration := time.Now().AddDate(0, 0, 7).Sub(time.Now())
+	validDuration := time.Hour * 24 * 7 // seven days
 	hostKey := r.SigningKey
 	signingCert := r.SigningCert
 
@@ -676,7 +677,9 @@ func (s *Frontend) CreateNetworkInvitation(ctx context.Context, r *pb.CreateNetw
 
 	b, err := proto.Marshal(&pb.InvitationV0{
 		Key:         key.Private,
+		KeyType:     key.Type,
 		Certificate: inviteCert,
+		NetworkName: r.NetworkName,
 	})
 	if err != nil {
 		return nil, err
@@ -686,6 +689,9 @@ func (s *Frontend) CreateNetworkInvitation(ctx context.Context, r *pb.CreateNetw
 		Version: 0,
 		Data:    b,
 	})
+	if err != nil {
+		return nil, err
+	}
 
 	b64 := base64.StdEncoding.WithPadding(base64.NoPadding).EncodeToString(b)
 
@@ -697,5 +703,49 @@ func (s *Frontend) CreateNetworkInvitation(ctx context.Context, r *pb.CreateNetw
 
 // CreateNetworkMembershipFromInvitation ...
 func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r *pb.CreateNetworkMembershipFromInvitationRequest) (*pb.CreateNetworkMembershipFromInvitationResponse, error) {
-	return &pb.CreateNetworkMembershipFromInvitationResponse{}, nil
+	session := rpc.ContextSession(ctx)
+	if session.Anonymous() {
+		return nil, ErrAuthenticationRequired
+	}
+
+	var invBytes []byte
+
+	switch x := r.Invitation.(type) {
+	case *pb.CreateNetworkMembershipFromInvitationRequest_InvitationB64:
+		var err error
+		invBytes, err = base64.StdEncoding.DecodeString(r.GetInvitationB64())
+		if err != nil {
+			return nil, err
+		}
+	case *pb.CreateNetworkMembershipFromInvitationRequest_InvitationBytes:
+		invBytes = r.GetInvitationBytes()
+	case nil:
+		return nil, errors.New("Invitation has no content")
+	default:
+		return nil, fmt.Errorf("Invitation has unexpected type %T", x)
+	}
+
+	var wrapper pb.Invitation
+	err := proto.Unmarshal(invBytes, &wrapper)
+	if err != nil {
+		return nil, err
+	}
+
+	var invitation *pb.InvitationV0
+	err = proto.Unmarshal(wrapper.Data, invitation)
+	if err != nil {
+		return nil, err
+	}
+
+	inviteCSR := &pb.CertificateRequest{
+		Key:      session.Profile().Key.Public,
+		KeyType:  pb.KeyType_KEY_TYPE_ED25519,
+		KeyUsage: uint32(pb.KeyUsage_KEY_USAGE_PEER),
+	}
+
+	membership, err := dao.NewNetworkMembershipFromInvite(invitation, inviteCSR)
+
+	return &pb.CreateNetworkMembershipFromInvitationResponse{
+		Membership: membership,
+	}, nil
 }

@@ -66,6 +66,7 @@ const NetworkTable = ({ networks, onDelete }: { networks: pb.INetwork[]; onDelet
       const invitation = await client.createNetworkInvitation({
         signingKey: network.key,
         signingCert: network.certificate,
+        networkName: network.name,
       });
       console.log(wrapString(invitation.invitationB64, 64));
     };
