@@ -18,7 +18,7 @@ import (
 )
 
 type TestDriver struct {
-	dir    string
+	file   string
 	ds     dao.MetadataStore
 	store  dao.Store
 	host   *rpc.Host
@@ -39,13 +39,13 @@ func Setup(c Config) *TestDriver {
 		panic(err)
 	}
 
-	tempDir := os.TempDir()
+	file := tempfile()
 
 	go func() {
 		log.Println(http.ListenAndServe(c.SrvAddr, nil))
 	}()
 
-	store, err := kv.NewKVStore(tempfile())
+	store, err := kv.NewKVStore(file)
 	if err != nil {
 		log.Fatalf("failed to open db: %s", err)
 	}
@@ -76,13 +76,13 @@ func Setup(c Config) *TestDriver {
 		store:  store,
 		host:   host,
 		Client: client,
-		dir:    tempDir,
+		file:   file,
 		log:    c.Log,
 	}
 }
 
 func (d *TestDriver) Teardown() error {
-	return os.RemoveAll(d.dir)
+	return os.RemoveAll(d.file)
 }
 
 func (d *TestDriver) Logf(format string, a ...interface{}) {
