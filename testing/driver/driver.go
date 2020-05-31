@@ -22,7 +22,7 @@ type TestDriver struct {
 	ds     dao.MetadataStore
 	store  dao.Store
 	host   *rpc.Host
-	client *rpc.Client
+	Client *rpc.Client
 	log    io.Writer
 }
 
@@ -75,14 +75,13 @@ func Setup(c Config) *TestDriver {
 		ds:     *ds,
 		store:  store,
 		host:   host,
-		client: client,
+		Client: client,
 		dir:    tempDir,
 		log:    c.Log,
 	}
 }
 
 func (d *TestDriver) Teardown() error {
-
 	return os.RemoveAll(d.dir)
 }
 
