@@ -118,26 +118,44 @@ func NewNetwork(name string) (*pb.Network, error) {
 	return network, nil
 }
 
-// NewNetworkMembershipFromNetwork ...
+// NewNetworkMembershipFromNetwork generates a network membership from a network
 func NewNetworkMembershipFromNetwork(network *pb.Network, csr *pb.CertificateRequest) (*pb.NetworkMembership, error) {
+	return NewNetworkMembership(network.Name, network.Certificate, network.Certificate, network.Key, csr)
+}
+
+// NewNetworkMembershipFromInvite generates a network membership from a network invitation
+func NewNetworkMembershipFromInvite(invite *pb.InvitationV0, csr *pb.CertificateRequest) (*pb.NetworkMembership, error) {
+	networkCert := GetRootCert(invite.Certificate)
+
+	signingKey := &pb.Key{
+		Public: invite.Key,
+		Type:   pb.KeyType_KEY_TYPE_ED25519,
+	}
+
+	return NewNetworkMembership(invite.NetworkName, networkCert, invite.Certificate, signingKey, csr)
+}
+
+// NewNetworkMembership generates a new network membership using the given parameters
+func NewNetworkMembership(networkName string, networkCert *pb.Certificate, parentCert *pb.Certificate, csrSigningKey *pb.Key, csr *pb.CertificateRequest) (*pb.NetworkMembership, error) {
 	id, err := generateSnowflake()
 	if err != nil {
 		return nil, err
 	}
+
 	now := time.Now()
 	membership := &pb.NetworkMembership{
 		Id:            id,
 		CreatedAt:     uint64(now.Unix()),
-		Name:          network.Name,
-		CaCertificate: network.Certificate,
+		Name:          networkName,
+		CaCertificate: networkCert,
 		LastSeenAt:    uint64(now.Unix()),
 	}
 
-	membership.Certificate, err = SignCertificateRequest(csr, defaultCertTTL, network.Key)
+	membership.Certificate, err = SignCertificateRequest(csr, defaultCertTTL, csrSigningKey)
 	if err != nil {
 		return nil, err
 	}
-	membership.Certificate.ParentOneof = &pb.Certificate_Parent{Parent: network.Certificate}
+	membership.Certificate.ParentOneof = &pb.Certificate_Parent{Parent: parentCert}
 
 	return membership, nil
 }

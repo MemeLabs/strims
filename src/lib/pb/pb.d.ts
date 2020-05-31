@@ -15129,6 +15129,9 @@ export interface ICreateNetworkInvitationRequest {
 
     /** CreateNetworkInvitationRequest signingCert */
     signingCert?: (ICertificate|null);
+
+    /** CreateNetworkInvitationRequest networkName */
+    networkName?: (string|null);
 }
 
 /** Represents a CreateNetworkInvitationRequest. */
@@ -15145,6 +15148,9 @@ export class CreateNetworkInvitationRequest implements ICreateNetworkInvitationR
 
     /** CreateNetworkInvitationRequest signingCert. */
     public signingCert?: (ICertificate|null);
+
+    /** CreateNetworkInvitationRequest networkName. */
+    public networkName: string;
 
     /**
      * Creates a new CreateNetworkInvitationRequest instance using the specified properties.
@@ -15423,6 +15429,9 @@ export interface IInvitationV0 {
 
     /** InvitationV0 certificate */
     certificate?: (ICertificate|null);
+
+    /** InvitationV0 networkName */
+    networkName?: (string|null);
 }
 
 /** Represents an InvitationV0. */
@@ -15439,6 +15448,9 @@ export class InvitationV0 implements IInvitationV0 {
 
     /** InvitationV0 certificate. */
     public certificate?: (ICertificate|null);
+
+    /** InvitationV0 networkName. */
+    public networkName: string;
 
     /**
      * Creates a new InvitationV0 instance using the specified properties.
@@ -15612,6 +15624,9 @@ export class CreateNetworkMembershipFromInvitationRequest implements ICreateNetw
 
 /** Properties of a CreateNetworkMembershipFromInvitationResponse. */
 export interface ICreateNetworkMembershipFromInvitationResponse {
+
+    /** CreateNetworkMembershipFromInvitationResponse membership */
+    membership?: (INetworkMembership|null);
 }
 
 /** Represents a CreateNetworkMembershipFromInvitationResponse. */
@@ -15622,6 +15637,9 @@ export class CreateNetworkMembershipFromInvitationResponse implements ICreateNet
      * @param [properties] Properties to set
      */
     constructor(properties?: ICreateNetworkMembershipFromInvitationResponse);
+
+    /** CreateNetworkMembershipFromInvitationResponse membership. */
+    public membership?: (INetworkMembership|null);
 
     /**
      * Creates a new CreateNetworkMembershipFromInvitationResponse instance using the specified properties.

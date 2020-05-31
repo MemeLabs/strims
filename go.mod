@@ -17,7 +17,6 @@ require (
 	github.com/nareix/joy4 v0.0.0-20181022032202-3ddbc8f9d431
 	github.com/onsi/gomega v1.10.1 // indirect
 	github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99
-	github.com/pion/dtls v1.5.4
 	github.com/pion/webrtc/v2 v2.2.14
 	github.com/prometheus/client_golang v1.6.0
 	github.com/prometheus/common v0.10.0
@@ -26,7 +25,7 @@ require (
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37
 	golang.org/x/sync v0.0.0-20200317015054-43a5402ce75a
 	golang.org/x/tools v0.0.0-20200522201501-cb1345f3a375
-	google.golang.org/protobuf v1.23.0
+	google.golang.org/protobuf v1.24.0
 	gopkg.in/yaml.v2 v2.3.0
 	lukechampine.com/uint128 v1.0.0
 )

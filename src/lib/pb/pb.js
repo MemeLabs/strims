@@ -33985,6 +33985,7 @@ export const CreateNetworkInvitationRequest = $root.CreateNetworkInvitationReque
      * @interface ICreateNetworkInvitationRequest
      * @property {IKey|null} [signingKey] CreateNetworkInvitationRequest signingKey
      * @property {ICertificate|null} [signingCert] CreateNetworkInvitationRequest signingCert
+     * @property {string|null} [networkName] CreateNetworkInvitationRequest networkName
      */
 
     /**
@@ -34019,6 +34020,14 @@ export const CreateNetworkInvitationRequest = $root.CreateNetworkInvitationReque
     CreateNetworkInvitationRequest.prototype.signingCert = null;
 
     /**
+     * CreateNetworkInvitationRequest networkName.
+     * @member {string} networkName
+     * @memberof CreateNetworkInvitationRequest
+     * @instance
+     */
+    CreateNetworkInvitationRequest.prototype.networkName = "";
+
+    /**
      * Creates a new CreateNetworkInvitationRequest instance using the specified properties.
      * @function create
      * @memberof CreateNetworkInvitationRequest
@@ -34046,6 +34055,8 @@ export const CreateNetworkInvitationRequest = $root.CreateNetworkInvitationReque
             $root.Key.encode(message.signingKey, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         if (message.signingCert != null && Object.hasOwnProperty.call(message, "signingCert"))
             $root.Certificate.encode(message.signingCert, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        if (message.networkName != null && Object.hasOwnProperty.call(message, "networkName"))
+            writer.uint32(/* id 3, wireType 2 =*/26).string(message.networkName);
         return writer;
     };
 
@@ -34085,6 +34096,9 @@ export const CreateNetworkInvitationRequest = $root.CreateNetworkInvitationReque
                 break;
             case 2:
                 message.signingCert = $root.Certificate.decode(reader, reader.uint32());
+                break;
+            case 3:
+                message.networkName = reader.string();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -34131,6 +34145,9 @@ export const CreateNetworkInvitationRequest = $root.CreateNetworkInvitationReque
             if (error)
                 return "signingCert." + error;
         }
+        if (message.networkName != null && message.hasOwnProperty("networkName"))
+            if (!$util.isString(message.networkName))
+                return "networkName: string expected";
         return null;
     };
 
@@ -34156,6 +34173,8 @@ export const CreateNetworkInvitationRequest = $root.CreateNetworkInvitationReque
                 throw TypeError(".CreateNetworkInvitationRequest.signingCert: object expected");
             message.signingCert = $root.Certificate.fromObject(object.signingCert);
         }
+        if (object.networkName != null)
+            message.networkName = String(object.networkName);
         return message;
     };
 
@@ -34175,11 +34194,14 @@ export const CreateNetworkInvitationRequest = $root.CreateNetworkInvitationReque
         if (options.defaults) {
             object.signingKey = null;
             object.signingCert = null;
+            object.networkName = "";
         }
         if (message.signingKey != null && message.hasOwnProperty("signingKey"))
             object.signingKey = $root.Key.toObject(message.signingKey, options);
         if (message.signingCert != null && message.hasOwnProperty("signingCert"))
             object.signingCert = $root.Certificate.toObject(message.signingCert, options);
+        if (message.networkName != null && message.hasOwnProperty("networkName"))
+            object.networkName = message.networkName;
         return object;
     };
 
@@ -34670,6 +34692,7 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
      * @interface IInvitationV0
      * @property {Uint8Array|null} [key] InvitationV0 key
      * @property {ICertificate|null} [certificate] InvitationV0 certificate
+     * @property {string|null} [networkName] InvitationV0 networkName
      */
 
     /**
@@ -34704,6 +34727,14 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
     InvitationV0.prototype.certificate = null;
 
     /**
+     * InvitationV0 networkName.
+     * @member {string} networkName
+     * @memberof InvitationV0
+     * @instance
+     */
+    InvitationV0.prototype.networkName = "";
+
+    /**
      * Creates a new InvitationV0 instance using the specified properties.
      * @function create
      * @memberof InvitationV0
@@ -34731,6 +34762,8 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
             writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
         if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
             $root.Certificate.encode(message.certificate, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        if (message.networkName != null && Object.hasOwnProperty.call(message, "networkName"))
+            writer.uint32(/* id 4, wireType 2 =*/34).string(message.networkName);
         return writer;
     };
 
@@ -34770,6 +34803,9 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
                 break;
             case 2:
                 message.certificate = $root.Certificate.decode(reader, reader.uint32());
+                break;
+            case 4:
+                message.networkName = reader.string();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -34814,6 +34850,9 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
             if (error)
                 return "certificate." + error;
         }
+        if (message.networkName != null && message.hasOwnProperty("networkName"))
+            if (!$util.isString(message.networkName))
+                return "networkName: string expected";
         return null;
     };
 
@@ -34839,6 +34878,8 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
                 throw TypeError(".InvitationV0.certificate: object expected");
             message.certificate = $root.Certificate.fromObject(object.certificate);
         }
+        if (object.networkName != null)
+            message.networkName = String(object.networkName);
         return message;
     };
 
@@ -34864,11 +34905,14 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
                     object.key = $util.newBuffer(object.key);
             }
             object.certificate = null;
+            object.networkName = "";
         }
         if (message.key != null && message.hasOwnProperty("key"))
             object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
         if (message.certificate != null && message.hasOwnProperty("certificate"))
             object.certificate = $root.Certificate.toObject(message.certificate, options);
+        if (message.networkName != null && message.hasOwnProperty("networkName"))
+            object.networkName = message.networkName;
         return object;
     };
 
@@ -35128,6 +35172,7 @@ export const CreateNetworkMembershipFromInvitationResponse = $root.CreateNetwork
      * Properties of a CreateNetworkMembershipFromInvitationResponse.
      * @exports ICreateNetworkMembershipFromInvitationResponse
      * @interface ICreateNetworkMembershipFromInvitationResponse
+     * @property {INetworkMembership|null} [membership] CreateNetworkMembershipFromInvitationResponse membership
      */
 
     /**
@@ -35144,6 +35189,14 @@ export const CreateNetworkMembershipFromInvitationResponse = $root.CreateNetwork
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
+
+    /**
+     * CreateNetworkMembershipFromInvitationResponse membership.
+     * @member {INetworkMembership|null|undefined} membership
+     * @memberof CreateNetworkMembershipFromInvitationResponse
+     * @instance
+     */
+    CreateNetworkMembershipFromInvitationResponse.prototype.membership = null;
 
     /**
      * Creates a new CreateNetworkMembershipFromInvitationResponse instance using the specified properties.
@@ -35169,6 +35222,8 @@ export const CreateNetworkMembershipFromInvitationResponse = $root.CreateNetwork
     CreateNetworkMembershipFromInvitationResponse.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
+        if (message.membership != null && Object.hasOwnProperty.call(message, "membership"))
+            $root.NetworkMembership.encode(message.membership, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         return writer;
     };
 
@@ -35203,6 +35258,9 @@ export const CreateNetworkMembershipFromInvitationResponse = $root.CreateNetwork
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
+            case 1:
+                message.membership = $root.NetworkMembership.decode(reader, reader.uint32());
+                break;
             default:
                 reader.skipType(tag & 7);
                 break;
@@ -35238,6 +35296,11 @@ export const CreateNetworkMembershipFromInvitationResponse = $root.CreateNetwork
     CreateNetworkMembershipFromInvitationResponse.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
+        if (message.membership != null && message.hasOwnProperty("membership")) {
+            let error = $root.NetworkMembership.verify(message.membership);
+            if (error)
+                return "membership." + error;
+        }
         return null;
     };
 
@@ -35252,7 +35315,13 @@ export const CreateNetworkMembershipFromInvitationResponse = $root.CreateNetwork
     CreateNetworkMembershipFromInvitationResponse.fromObject = function fromObject(object) {
         if (object instanceof $root.CreateNetworkMembershipFromInvitationResponse)
             return object;
-        return new $root.CreateNetworkMembershipFromInvitationResponse();
+        let message = new $root.CreateNetworkMembershipFromInvitationResponse();
+        if (object.membership != null) {
+            if (typeof object.membership !== "object")
+                throw TypeError(".CreateNetworkMembershipFromInvitationResponse.membership: object expected");
+            message.membership = $root.NetworkMembership.fromObject(object.membership);
+        }
+        return message;
     };
 
     /**
@@ -35264,8 +35333,15 @@ export const CreateNetworkMembershipFromInvitationResponse = $root.CreateNetwork
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    CreateNetworkMembershipFromInvitationResponse.toObject = function toObject() {
-        return {};
+    CreateNetworkMembershipFromInvitationResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.membership = null;
+        if (message.membership != null && message.hasOwnProperty("membership"))
+            object.membership = $root.NetworkMembership.toObject(message.membership, options);
+        return object;
     };
 
     /**
