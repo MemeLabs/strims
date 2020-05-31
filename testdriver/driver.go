@@ -6,7 +6,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
@@ -27,7 +26,6 @@ type TestDriver struct {
 }
 
 type Config struct {
-	SrvAddr string
 	VpnAddr string
 	Log     io.Writer
 }
@@ -40,10 +38,6 @@ func Setup(c Config) *TestDriver {
 	}
 
 	file := tempfile()
-
-	go func() {
-		log.Println(http.ListenAndServe(c.SrvAddr, nil))
-	}()
 
 	store, err := kv.NewKVStore(file)
 	if err != nil {

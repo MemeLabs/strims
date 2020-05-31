@@ -18,7 +18,6 @@ var td *driver.TestDriver
 
 func TestMain(m *testing.M) {
 	conf := driver.Config{
-		SrvAddr: "localhost:6060",
 		VpnAddr: "0.0.0.0:8082",
 	}
 
