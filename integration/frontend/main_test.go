@@ -9,8 +9,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/integration/driver"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	driver "github.com/MemeLabs/go-ppspp/testdriver"
 	"github.com/stretchr/testify/assert"
 )
 
