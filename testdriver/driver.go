@@ -1,13 +1,13 @@
-package driver
+package testdriver
 
 import (
 	"context"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net/http"
 	"os"
-	"path"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
@@ -45,7 +45,7 @@ func Setup(c Config) *TestDriver {
 		log.Println(http.ListenAndServe(c.SrvAddr, nil))
 	}()
 
-	store, err := kv.NewKVStore(path.Join(tempDir, ".strims"))
+	store, err := kv.NewKVStore(tempfile())
 	if err != nil {
 		log.Fatalf("failed to open db: %s", err)
 	}
@@ -87,4 +87,18 @@ func (d *TestDriver) Teardown() error {
 
 func (d *TestDriver) Logf(format string, a ...interface{}) {
 	fmt.Fprintf(d.log, format+"\n", a...)
+}
+
+func tempfile() string {
+	f, err := ioutil.TempFile("", "strims-")
+	if err != nil {
+		panic(err)
+	}
+	if err := f.Close(); err != nil {
+		panic(err)
+	}
+	if err := os.Remove(f.Name()); err != nil {
+		panic(err)
+	}
+	return f.Name()
 }
