@@ -1,0 +1,3 @@
+src/lib/pb/pb.* linguist-generated
+pkg/pb/* linguist-generated
+vendor linguist-vendored
