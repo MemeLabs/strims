@@ -1,3 +1,5 @@
 src/lib/pb/pb.* linguist-generated
 pkg/pb/* linguist-generated
 vendor linguist-vendored
+go.sum linguist-generated
+package-lock.json linguist-generated
