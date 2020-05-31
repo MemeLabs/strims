@@ -9,6 +9,7 @@ import (
 	"path"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -42,7 +43,7 @@ func Setup(c Config) *TestDriver {
 		log.Println(http.ListenAndServe(c.SrvAddr, nil))
 	}()
 
-	store, err := NewKVStore(path.Join(tempDir, ".strims"))
+	store, err := kv.NewKVStore(path.Join(tempDir, ".strims"))
 	if err != nil {
 		log.Fatalf("failed to open db: %s", err)
 	}

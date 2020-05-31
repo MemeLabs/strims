@@ -8,6 +8,7 @@ import (
 	"path"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -24,7 +25,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to locate home directory: %s", err)
 	}
-	kv, err := NewKVStore(path.Join(homeDir, ".strims"))
+	kv, err := kv.NewKVStore(path.Join(homeDir, ".strims"))
 	if err != nil {
 		log.Fatalf("failed to open db: %s", err)
 	}
