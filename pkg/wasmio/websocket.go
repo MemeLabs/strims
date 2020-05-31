@@ -53,7 +53,7 @@ type WebSocketProxy struct {
 }
 
 // MTU ...
-func (w *WebSocketProxy) MTU() int {
+func (p *WebSocketProxy) MTU() int {
 	return webSocketMTU
 }
 

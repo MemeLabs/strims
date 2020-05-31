@@ -52,7 +52,7 @@ func (h *Networks) handlePeers() {
 	ch := make(chan *Peer, 16)
 	h.host.NotifyPeer(ch)
 	for p := range ch {
-		newNetworkBootstrap(h, p)
+		newNetworkBootstrap(h.host.logger, h, p)
 	}
 }
 
@@ -153,20 +153,26 @@ func (h *Networks) findIndexByKey(key []byte) (int, bool) {
 	return i, i < end && bytes.Equal(key, h.networks[i].CAKey())
 }
 
-func newNetworkBootstrap(n *Networks, peer *Peer) *networkBootstrap {
+func newNetworkBootstrap(logger *zap.Logger, n *Networks, peer *Peer) *networkBootstrap {
 	b := &networkBootstrap{
+		logger:     logger,
 		networks:   n,
 		peer:       peer,
 		links:      make(map[*Network]*networkLink),
 		handshakes: make(chan *pb.NetworkHandshake),
 	}
 
-	go b.doBootstrap()
+	go func() {
+		if err := b.doBootstrap(); err != nil {
+			logger.Error("failed to bootstrap peer networks", zap.Error(err))
+		}
+	}()
 
 	return b
 }
 
 type networkBootstrap struct {
+	logger     *zap.Logger
 	networks   *Networks
 	peer       *Peer
 	links      map[*Network]*networkLink
@@ -200,7 +206,12 @@ func (h *networkBootstrap) doBootstrap() (err error) {
 		return err
 	}
 
-	go h.readHandshakes(ch)
+	go func() {
+		if err := h.readHandshakes(ch); err != nil {
+			h.logger.Error("failed to read handshake", zap.Error(err))
+			h.peer.Close()
+		}
+	}()
 
 	for {
 		select {
@@ -237,7 +248,6 @@ func (h *networkBootstrap) readHandshakes(ch *FrameReadWriter) error {
 	for {
 		var handshake pb.NetworkHandshake
 		if err := ReadProtoStream(ch, &handshake); err != nil {
-			h.peer.Close()
 			return err
 		}
 		h.handshakes <- &handshake
@@ -358,10 +368,10 @@ func (h *networkBootstrap) handleNetworkBindings(discriminator uint32, networkBi
 	for i, pb := range peerNetworkBindings {
 		b := networkBindings[i]
 
-		if bytes.Equal(h.peer.Certificate.Key, pb.Certificate.Key) {
+		if !bytes.Equal(h.peer.Certificate.Key, pb.Certificate.Key) {
 			return errors.New("init and network certificate key mismatch")
 		}
-		if bytes.Equal(certificateParentKey(b.Certificate), certificateParentKey(pb.Certificate)) {
+		if !bytes.Equal(certificateParentKey(b.Certificate), certificateParentKey(pb.Certificate)) {
 			return errors.New("network ca mismatch")
 		}
 		if pb.Port > uint32(math.MaxUint16) {
