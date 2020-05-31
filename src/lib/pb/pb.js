@@ -34692,7 +34692,6 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
      * @interface IInvitationV0
      * @property {Uint8Array|null} [key] InvitationV0 key
      * @property {ICertificate|null} [certificate] InvitationV0 certificate
-     * @property {KeyType|null} [keyType] InvitationV0 keyType
      * @property {string|null} [networkName] InvitationV0 networkName
      */
 
@@ -34726,14 +34725,6 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
      * @instance
      */
     InvitationV0.prototype.certificate = null;
-
-    /**
-     * InvitationV0 keyType.
-     * @member {KeyType} keyType
-     * @memberof InvitationV0
-     * @instance
-     */
-    InvitationV0.prototype.keyType = 0;
 
     /**
      * InvitationV0 networkName.
@@ -34771,8 +34762,6 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
             writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
         if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
             $root.Certificate.encode(message.certificate, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-        if (message.keyType != null && Object.hasOwnProperty.call(message, "keyType"))
-            writer.uint32(/* id 3, wireType 0 =*/24).int32(message.keyType);
         if (message.networkName != null && Object.hasOwnProperty.call(message, "networkName"))
             writer.uint32(/* id 4, wireType 2 =*/34).string(message.networkName);
         return writer;
@@ -34814,9 +34803,6 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
                 break;
             case 2:
                 message.certificate = $root.Certificate.decode(reader, reader.uint32());
-                break;
-            case 3:
-                message.keyType = reader.int32();
                 break;
             case 4:
                 message.networkName = reader.string();
@@ -34864,15 +34850,6 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
             if (error)
                 return "certificate." + error;
         }
-        if (message.keyType != null && message.hasOwnProperty("keyType"))
-            switch (message.keyType) {
-            default:
-                return "keyType: enum value expected";
-            case 0:
-            case 1:
-            case 2:
-                break;
-            }
         if (message.networkName != null && message.hasOwnProperty("networkName"))
             if (!$util.isString(message.networkName))
                 return "networkName: string expected";
@@ -34901,20 +34878,6 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
                 throw TypeError(".InvitationV0.certificate: object expected");
             message.certificate = $root.Certificate.fromObject(object.certificate);
         }
-        switch (object.keyType) {
-        case "KEY_TYPE_UNDEFINED":
-        case 0:
-            message.keyType = 0;
-            break;
-        case "KEY_TYPE_ED25519":
-        case 1:
-            message.keyType = 1;
-            break;
-        case "KEY_TYPE_X25519":
-        case 2:
-            message.keyType = 2;
-            break;
-        }
         if (object.networkName != null)
             message.networkName = String(object.networkName);
         return message;
@@ -34942,15 +34905,12 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
                     object.key = $util.newBuffer(object.key);
             }
             object.certificate = null;
-            object.keyType = options.enums === String ? "KEY_TYPE_UNDEFINED" : 0;
             object.networkName = "";
         }
         if (message.key != null && message.hasOwnProperty("key"))
             object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
         if (message.certificate != null && message.hasOwnProperty("certificate"))
             object.certificate = $root.Certificate.toObject(message.certificate, options);
-        if (message.keyType != null && message.hasOwnProperty("keyType"))
-            object.keyType = options.enums === String ? $root.KeyType[message.keyType] : message.keyType;
         if (message.networkName != null && message.hasOwnProperty("networkName"))
             object.networkName = message.networkName;
         return object;

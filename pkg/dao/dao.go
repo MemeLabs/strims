@@ -129,7 +129,7 @@ func NewNetworkMembershipFromInvite(invite *pb.InvitationV0, csr *pb.Certificate
 
 	signingKey := &pb.Key{
 		Public: invite.Key,
-		Type:   invite.KeyType,
+		Type:   pb.KeyType_KEY_TYPE_ED25519,
 	}
 
 	return NewNetworkMembership(invite.NetworkName, networkCert, invite.Certificate, signingKey, csr)

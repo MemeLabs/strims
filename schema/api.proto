@@ -663,7 +663,6 @@ message Invitation {
 message InvitationV0 {
   bytes key = 1;
   Certificate certificate = 2;
-  KeyType key_type = 3;
   string network_name = 4;
 }
 

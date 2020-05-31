@@ -15430,9 +15430,6 @@ export interface IInvitationV0 {
     /** InvitationV0 certificate */
     certificate?: (ICertificate|null);
 
-    /** InvitationV0 keyType */
-    keyType?: (KeyType|null);
-
     /** InvitationV0 networkName */
     networkName?: (string|null);
 }
@@ -15451,9 +15448,6 @@ export class InvitationV0 implements IInvitationV0 {
 
     /** InvitationV0 certificate. */
     public certificate?: (ICertificate|null);
-
-    /** InvitationV0 keyType. */
-    public keyType: KeyType;
 
     /** InvitationV0 networkName. */
     public networkName: string;

@@ -677,7 +677,6 @@ func (s *Frontend) CreateNetworkInvitation(ctx context.Context, r *pb.CreateNetw
 
 	b, err := proto.Marshal(&pb.InvitationV0{
 		Key:         key.Private,
-		KeyType:     key.Type,
 		Certificate: inviteCert,
 		NetworkName: r.NetworkName,
 	})
@@ -744,6 +743,9 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 	}
 
 	membership, err := dao.NewNetworkMembershipFromInvite(invitation, inviteCSR)
+	if err != nil {
+		return nil, err
+	}
 
 	return &pb.CreateNetworkMembershipFromInvitationResponse{
 		Membership: membership,
