@@ -8,6 +8,7 @@ import (
 	"os"
 	"path"
 
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -20,7 +21,7 @@ func newManager(logger *zap.Logger) (*manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to locate home directory: %s", err)
 	}
-	store, err := NewKVStore(path.Join(homeDir, ".strims"))
+	store, err := kv.NewKVStore(path.Join(homeDir, ".strims"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %s", err)
 	}
