@@ -1,6 +1,7 @@
 package driver
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -17,11 +18,12 @@ import (
 )
 
 type TestDriver struct {
-	dir   string
-	ds    dao.MetadataStore
-	store dao.Store
-	svc   *rpc.Host
-	log   io.Writer
+	dir    string
+	ds     dao.MetadataStore
+	store  dao.Store
+	host   *rpc.Host
+	client *rpc.Client
+	log    io.Writer
 }
 
 type Config struct {
@@ -47,6 +49,7 @@ func Setup(c Config) *TestDriver {
 	if err != nil {
 		log.Fatalf("failed to open db: %s", err)
 	}
+
 	ds, err := dao.NewMetadataStore(store)
 	if err != nil {
 		panic(err)
@@ -62,12 +65,19 @@ func Setup(c Config) *TestDriver {
 		log.Fatal(err)
 	}
 
+	host := rpc.NewHost(svc)
+	hr, hw := io.Pipe()
+	cr, cw := io.Pipe()
+	go host.Handle(context.Background(), cw, hr)
+	client := rpc.NewClient(hw, cr)
+
 	return &TestDriver{
-		ds:    *ds,
-		store: store,
-		svc:   rpc.NewHost(svc),
-		dir:   tempDir,
-		log:   c.Log,
+		ds:     *ds,
+		store:  store,
+		host:   host,
+		client: client,
+		dir:    tempDir,
+		log:    c.Log,
 	}
 }
 
