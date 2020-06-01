@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const defaultCertTTL = time.Hour * 24 * 365 * 2
+const defaultCertTTL = time.Hour * 24 * 365 * 2 // ~two years
 
 // validation errors
 var (
@@ -162,4 +162,10 @@ func GetRootCert(cert *pb.Certificate) *pb.Certificate {
 		cert = cert.GetParent()
 	}
 	return cert
+}
+
+// CertIsExpired returns true if the cert NotBefore or NotAfter dates are violated
+func CertIsExpired(cert *pb.Certificate) bool {
+	now := uint64(time.Now().UTC().Unix())
+	return cert.NotAfter <= now && cert.NotBefore >= now
 }

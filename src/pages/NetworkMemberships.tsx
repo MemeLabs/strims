@@ -25,7 +25,7 @@ const JoinForm = ({ onCreate }: { onCreate: (res: pb.CreateNetworkMembershipFrom
             message: "invite is required",
           },
           pattern: {
-            value: /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/i, // https://stackoverflow.com/a/475217/5698680
+            value: /^[a-zA-Z0-9+\/]+={0,2}$/,
             message: "invalid invite string",
           },
         })}
