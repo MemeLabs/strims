@@ -731,8 +731,8 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 		return nil, err
 	}
 
-	var invitation *pb.InvitationV0
-	err = proto.Unmarshal(wrapper.Data, invitation)
+	var invitation pb.InvitationV0
+	err = proto.Unmarshal(wrapper.Data, &invitation)
 	if err != nil {
 		return nil, err
 	}
@@ -748,7 +748,7 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 		KeyUsage: uint32(pb.KeyUsage_KEY_USAGE_PEER),
 	}
 
-	membership, err := dao.NewNetworkMembershipFromInvite(invitation, inviteCSR)
+	membership, err := dao.NewNetworkMembershipFromInvite(&invitation, inviteCSR)
 	if err != nil {
 		return nil, err
 	}
