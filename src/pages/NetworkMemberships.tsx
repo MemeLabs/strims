@@ -6,6 +6,43 @@ import { MainLayout } from "../components/MainLayout";
 import { useCall, useLazyCall } from "../contexts/Api";
 import * as pb from "../lib/pb";
 
+const JoinForm = ({ onCreate }: { onCreate: (res: pb.CreateNetworkMembershipFromInvitationResponse) => void }) => {
+  const [{ value, error, loading }, createMembership] = useLazyCall("createNetworkMembershipFromInvitation", { onComplete: onCreate });
+  const { register, handleSubmit, errors } = useForm({
+    mode: "onBlur",
+  });
+
+  const onSubmit = (data) => createMembership(new pb.CreateNetworkMembershipFromInvitationRequest(data));
+
+  return (
+    <form className="invite_form" onSubmit={handleSubmit(onSubmit)}>
+      {error && <InputError error={error.message || "Error creating membership"} />}
+      <TextInput
+        error={errors.invitationB64}
+        inputRef={register({
+          required: {
+            value: true,
+            message: "invite is required",
+          },
+          pattern: {
+            value: /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/i, // https://stackoverflow.com/a/475217/5698680
+            message: "invalid invite string",
+          },
+        })}
+        label="Invite string"
+        name="invitationB64"
+        placeholder="Enter an invite string"
+        required
+      />
+      <div className="input_buttons">
+        <button className="input input_button" disabled={loading}>
+          Create Memberhip
+        </button>
+      </div>
+    </form>
+  );
+};
+
 const NetworkTable = ({ networks, onDelete }: { networks: pb.INetworkMembership[]; onDelete: () => void }) => {
   const [, deleteNetworkMembership] = useLazyCall("deleteNetworkMembership", { onComplete: onDelete });
 
@@ -47,6 +84,7 @@ const NetworkMembershipsPage = () => {
           Chat Servers
         </Link>
         <main className="network_page">
+        <JoinForm onCreate={() => getNetworkMemberships()} />
           <h1>Network Membership</h1>
           <h2>Recommended Networks</h2>
           <p>Manage your connected networks</p>

@@ -143,4 +143,7 @@ export default class Client extends RPCHost {
   public createNetworkInvitation(v: pb.ICreateNetworkInvitationRequest = new pb.CreateNetworkInvitationRequest()): Promise<pb.CreateNetworkInvitationResponse> {
     return this.expectOne(this.call("createNetworkInvitation", new pb.CreateNetworkInvitationRequest(v)));
   }
+  public createNetworkMembershipFromInvitation(v: pb.ICreateNetworkMembershipFromInvitationRequest = new pb.CreateNetworkMembershipFromInvitationRequest()): Promise<pb.CreateNetworkMembershipFromInvitationResponse> {
+    return this.expectOne(this.call("createNetworkMembershipFromInvitation", new pb.CreateNetworkMembershipFromInvitationRequest(v)));
+  }
 }

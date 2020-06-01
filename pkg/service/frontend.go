@@ -747,6 +747,8 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 		return nil, err
 	}
 
+	session.Store().InsertNetworkMembership(membership)
+
 	return &pb.CreateNetworkMembershipFromInvitationResponse{
 		Membership: membership,
 	}, nil
