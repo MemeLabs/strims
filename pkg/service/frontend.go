@@ -25,6 +25,7 @@ const metadataTable = "default"
 var (
 	ErrProfileNameNotAvailable = errors.New("profile name not available")
 	ErrAuthenticationRequired  = errors.New("method requires authentication")
+	ErrAlreadyJoinedNetwork    = errors.New("user already has a membership for that network")
 )
 
 // Options ...
@@ -736,6 +737,11 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 		return nil, err
 	}
 
+	err = dao.VerifyCertificate(invitation.Certificate)
+	if err != nil {
+		return nil, err
+	}
+
 	inviteCSR := &pb.CertificateRequest{
 		Key:      session.Profile().Key.Public,
 		KeyType:  pb.KeyType_KEY_TYPE_ED25519,
@@ -747,7 +753,34 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 		return nil, err
 	}
 
+	err = s.SaveNetworkMembership(ctx, membership)
+	if err != nil {
+		return nil, err
+	}
+
 	return &pb.CreateNetworkMembershipFromInvitationResponse{
 		Membership: membership,
 	}, nil
+}
+
+// SaveNetworkMembership saves a networks membership or returns an error if the user is already has a valid membership for that network
+func (s *Frontend) SaveNetworkMembership(ctx context.Context, newMembership *pb.NetworkMembership) error {
+	session := rpc.ContextSession(ctx)
+	if session.Anonymous() {
+		return ErrAuthenticationRequired
+	}
+
+	memberships, err := session.Store().GetNetworkMemberships()
+	if err != nil {
+		return err
+	}
+
+	for _, m := range memberships {
+		// naïve approach, should we compare ca certs instead?
+		if m.Name == newMembership.Name && !dao.CertIsExpired(m.Certificate) {
+			return ErrAlreadyJoinedNetwork
+		}
+	}
+
+	return session.Store().InsertNetworkMembership(newMembership)
 }

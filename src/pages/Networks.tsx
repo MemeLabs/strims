@@ -68,7 +68,8 @@ const NetworkTable = ({ networks, onDelete }: { networks: pb.INetwork[]; onDelet
         signingCert: network.certificate,
         networkName: network.name,
       });
-      console.log(wrapString(invitation.invitationB64, 64));
+      navigator.clipboard.writeText(invitation.invitationB64);
+      console.log("copied invite to clipboard");
     };
 
     return (
