@@ -20,6 +20,7 @@ require (
 	github.com/pion/webrtc/v2 v2.2.14
 	github.com/prometheus/client_golang v1.6.0
 	github.com/prometheus/common v0.10.0
+	github.com/stretchr/testify v1.5.1
 	go.etcd.io/bbolt v1.3.4
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20200510223506-06a226fb4e37

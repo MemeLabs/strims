@@ -128,8 +128,8 @@ func NewNetworkMembershipFromInvite(invite *pb.InvitationV0, csr *pb.Certificate
 	networkCert := GetRootCert(invite.Certificate)
 
 	signingKey := &pb.Key{
-		Public: invite.Key,
-		Type:   pb.KeyType_KEY_TYPE_ED25519,
+		Private: invite.Key,
+		Type:    pb.KeyType_KEY_TYPE_ED25519,
 	}
 
 	return NewNetworkMembership(invite.NetworkName, networkCert, invite.Certificate, signingKey, csr)
