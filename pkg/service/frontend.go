@@ -247,6 +247,19 @@ func (s *Frontend) DeleteNetworkMembership(ctx context.Context, r *pb.DeleteNetw
 		return nil, ErrAuthenticationRequired
 	}
 
+	membership, err := session.Store().GetNetworkMembership(r.Id)
+	if err != nil {
+		return nil, err
+	}
+	controller, err := s.getNetworkController(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := controller.StopNetwork(membership); err != nil {
+		return nil, err
+	}
+
 	if err := session.Store().DeleteNetworkMembership(r.Id); err != nil {
 		return nil, err
 	}
