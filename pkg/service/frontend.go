@@ -167,9 +167,6 @@ func (s *Frontend) CreateNetwork(ctx context.Context, r *pb.CreateNetworkRequest
 	if err != nil {
 		return nil, err
 	}
-	if err := session.Store().InsertNetwork(network); err != nil {
-		return nil, err
-	}
 
 	csr, err := dao.NewCertificateRequest(session.Profile().Key, pb.KeyUsage_KEY_USAGE_PEER)
 	if err != nil {
@@ -179,7 +176,9 @@ func (s *Frontend) CreateNetwork(ctx context.Context, r *pb.CreateNetworkRequest
 	if err != nil {
 		return nil, err
 	}
-	if err := session.Store().InsertNetworkMembership(membership); err != nil {
+
+	_, err = s.SaveNetworkMembership(ctx, membership, network)
+	if err != nil {
 		return nil, err
 	}
 
@@ -713,7 +712,7 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 	switch x := r.Invitation.(type) {
 	case *pb.CreateNetworkMembershipFromInvitationRequest_InvitationB64:
 		var err error
-		invBytes, err = base64.StdEncoding.DecodeString(r.GetInvitationB64())
+		invBytes, err = base64.StdEncoding.WithPadding(base64.NoPadding).DecodeString(r.GetInvitationB64())
 		if err != nil {
 			return nil, err
 		}
@@ -753,7 +752,7 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 		return nil, err
 	}
 
-	err = s.SaveNetworkMembership(ctx, membership)
+	_, err = s.SaveNetworkMembership(ctx, membership, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -763,24 +762,62 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 	}, nil
 }
 
-// SaveNetworkMembership saves a networks membership or returns an error if the user is already has a valid membership for that network
-func (s *Frontend) SaveNetworkMembership(ctx context.Context, newMembership *pb.NetworkMembership) error {
+// SaveNetworkMembership saves and initates a network membership.
+// it returns an error if the user is already has a valid membership for that network
+func (s *Frontend) SaveNetworkMembership(ctx context.Context, newMembership *pb.NetworkMembership, network *pb.Network) (*vpn.Network, error) {
 	session := rpc.ContextSession(ctx)
 	if session.Anonymous() {
-		return ErrAuthenticationRequired
+		return nil, ErrAuthenticationRequired
 	}
 
 	memberships, err := session.Store().GetNetworkMemberships()
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	for _, m := range memberships {
 		// naïve approach, should we compare ca certs instead?
 		if m.Name == newMembership.Name && !dao.CertIsExpired(m.Certificate) {
-			return ErrAlreadyJoinedNetwork
+			return nil, ErrAlreadyJoinedNetwork
 		}
 	}
 
-	return session.Store().InsertNetworkMembership(newMembership)
+	controller, err := s.getNetworkController(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if network != nil {
+		err = session.Store().InsertNetwork(network)
+		if err != nil {
+			return nil, err
+		}
+	}
+	err = session.Store().InsertNetworkMembership(newMembership)
+	if err != nil {
+		return nil, err
+	}
+
+	return controller.StartNetwork(newMembership, network)
+}
+
+// loads the NetworksController fron the session store
+// TODO: move to (s *Session) getNetworkController ?
+func (s *Frontend) getNetworkController(ctx context.Context) (*NetworksController, error) {
+	session := rpc.ContextSession(ctx)
+	if session.Anonymous() {
+		return nil, ErrAuthenticationRequired
+	}
+
+	d, ok := session.Values.Load(vpnKey)
+	if !ok {
+		return nil, errors.New("could not get vpn data")
+	}
+
+	data, ok := d.(vpnData)
+	if !ok {
+		return nil, errors.New("vpn data has unexpected type")
+	}
+
+	return data.controller, nil
 }
