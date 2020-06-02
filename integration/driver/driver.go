@@ -6,6 +6,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net/http"
 	"os"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
@@ -13,21 +14,30 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
 
 type TestDriver struct {
-	file   string
-	ds     dao.MetadataStore
-	store  dao.Store
-	host   *rpc.Host
-	Client *rpc.Client
-	log    io.Writer
+	file    string
+	srvAddr string
+	ds      dao.MetadataStore
+	store   dao.Store
+	host    *rpc.Host
+	Client  *rpc.Client
+	log     io.Writer
 }
 
 type Config struct {
 	VpnAddr string
+	SrvAddr string
 	Log     io.Writer
+}
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool {
+		return true
+	},
 }
 
 func Setup(c Config) *TestDriver {
@@ -62,16 +72,22 @@ func Setup(c Config) *TestDriver {
 	host := rpc.NewHost(svc)
 	hr, hw := io.Pipe()
 	cr, cw := io.Pipe()
-	go host.Handle(context.Background(), cw, hr)
 	client := rpc.NewClient(hw, cr)
 
+	go func() {
+		if err := host.Handle(context.Background(), cw, hr); err != nil {
+			log.Fatalf("failed to setup host handler: %s", err)
+		}
+	}()
+
 	return &TestDriver{
-		ds:     *ds,
-		store:  store,
-		host:   host,
-		Client: client,
-		file:   file,
-		log:    c.Log,
+		ds:      *ds,
+		store:   store,
+		srvAddr: c.SrvAddr,
+		host:    host,
+		Client:  client,
+		file:    file,
+		log:     c.Log,
 	}
 }
 
