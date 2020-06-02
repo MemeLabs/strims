@@ -1,6 +1,9 @@
 package dao
 
 import (
+	"bytes"
+	"fmt"
+
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
@@ -137,6 +140,30 @@ func (s *ProfileStore) GetNetworkMemberships() ([]*pb.NetworkMembership, error) 
 		return nil, err
 	}
 	return vs, nil
+}
+
+// GetNetworkMembershipForNetwork returns the membership belonging to the given network
+func (s *ProfileStore) GetNetworkMembershipForNetwork(netID uint64) (*pb.NetworkMembership, error) {
+	network, err := s.GetNetwork(netID)
+	if err != nil {
+		if err == ErrRecordNotFound {
+			return nil, fmt.Errorf("could not find network: %w", err)
+		}
+		return nil, err
+	}
+
+	memebrships, err := s.GetNetworkMemberships()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, membership := range memebrships {
+		if bytes.Equal(membership.CaCertificate.Key, network.Certificate.Key) {
+			return membership, nil
+		}
+	}
+
+	return nil, ErrRecordNotFound
 }
 
 // InsertBootstrapClient ...

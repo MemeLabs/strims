@@ -192,7 +192,19 @@ func (s *Frontend) DeleteNetwork(ctx context.Context, r *pb.DeleteNetworkRequest
 		return nil, ErrAuthenticationRequired
 	}
 
+	membership, err := session.Store().GetNetworkMembershipForNetwork(r.Id)
+	if err != nil {
+		return nil, err
+	}
+
+	s.DeleteNetworkMembership(ctx, &pb.DeleteNetworkMembershipRequest{
+		Id: membership.Id,
+	})
+
 	if err := session.Store().DeleteNetwork(r.Id); err != nil {
+		if err == dao.ErrRecordNotFound {
+			return nil, fmt.Errorf("could not delete network: %w", err)
+		}
 		return nil, err
 	}
 	return &pb.DeleteNetworkResponse{}, nil
@@ -249,6 +261,9 @@ func (s *Frontend) DeleteNetworkMembership(ctx context.Context, r *pb.DeleteNetw
 
 	membership, err := session.Store().GetNetworkMembership(r.Id)
 	if err != nil {
+		if err == dao.ErrRecordNotFound {
+			return nil, fmt.Errorf("could not delete network membership: %w", err)
+		}
 		return nil, err
 	}
 	controller, err := s.getNetworkController(ctx)
@@ -789,8 +804,13 @@ func (s *Frontend) SaveNetworkMembership(ctx context.Context, newMembership *pb.
 	}
 
 	for _, m := range memberships {
-		// naïve approach, should we compare ca certs instead?
-		if m.Name == newMembership.Name && !dao.CertIsExpired(m.Certificate) {
+		if bytes.Equal(m.CaCertificate.Key, newMembership.CaCertificate.Key) {
+			if dao.CertIsExpired(m.Certificate) {
+				if err := session.Store().DeleteNetworkMembership(m.Id); err != nil {
+					return nil, fmt.Errorf("could delete old membership: %w", err)
+				}
+				continue
+			}
 			return nil, ErrAlreadyJoinedNetwork
 		}
 	}
