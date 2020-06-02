@@ -126,13 +126,7 @@ func NewNetworkMembershipFromNetwork(network *pb.Network, csr *pb.CertificateReq
 // NewNetworkMembershipFromInvite generates a network membership from a network invitation
 func NewNetworkMembershipFromInvite(invite *pb.InvitationV0, csr *pb.CertificateRequest) (*pb.NetworkMembership, error) {
 	networkCert := GetRootCert(invite.Certificate)
-
-	signingKey := &pb.Key{
-		Private: invite.Key,
-		Type:    pb.KeyType_KEY_TYPE_ED25519,
-	}
-
-	return NewNetworkMembership(invite.NetworkName, networkCert, invite.Certificate, signingKey, csr)
+	return NewNetworkMembership(invite.NetworkName, networkCert, invite.Certificate, invite.Key, csr)
 }
 
 // NewNetworkMembership generates a new network membership using the given parameters

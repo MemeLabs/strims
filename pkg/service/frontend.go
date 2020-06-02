@@ -704,7 +704,7 @@ func (s *Frontend) CreateNetworkInvitation(ctx context.Context, r *pb.CreateNetw
 	inviteCert.ParentOneof = &pb.Certificate_Parent{Parent: signingCert}
 
 	b, err := proto.Marshal(&pb.InvitationV0{
-		Key:         key.Private,
+		Key:         key,
 		Certificate: inviteCert,
 		NetworkName: r.NetworkName,
 	})

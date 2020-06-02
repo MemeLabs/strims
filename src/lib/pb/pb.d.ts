@@ -15425,7 +15425,7 @@ export class Invitation implements IInvitation {
 export interface IInvitationV0 {
 
     /** InvitationV0 key */
-    key?: (Uint8Array|null);
+    key?: (IKey|null);
 
     /** InvitationV0 certificate */
     certificate?: (ICertificate|null);
@@ -15444,7 +15444,7 @@ export class InvitationV0 implements IInvitationV0 {
     constructor(properties?: IInvitationV0);
 
     /** InvitationV0 key. */
-    public key: Uint8Array;
+    public key?: (IKey|null);
 
     /** InvitationV0 certificate. */
     public certificate?: (ICertificate|null);

@@ -34690,7 +34690,7 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
      * Properties of an InvitationV0.
      * @exports IInvitationV0
      * @interface IInvitationV0
-     * @property {Uint8Array|null} [key] InvitationV0 key
+     * @property {IKey|null} [key] InvitationV0 key
      * @property {ICertificate|null} [certificate] InvitationV0 certificate
      * @property {string|null} [networkName] InvitationV0 networkName
      */
@@ -34712,11 +34712,11 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
 
     /**
      * InvitationV0 key.
-     * @member {Uint8Array} key
+     * @member {IKey|null|undefined} key
      * @memberof InvitationV0
      * @instance
      */
-    InvitationV0.prototype.key = $util.newBuffer([]);
+    InvitationV0.prototype.key = null;
 
     /**
      * InvitationV0 certificate.
@@ -34759,7 +34759,7 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
         if (!writer)
             writer = $Writer.create();
         if (message.key != null && Object.hasOwnProperty.call(message, "key"))
-            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
+            $root.Key.encode(message.key, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
             $root.Certificate.encode(message.certificate, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
         if (message.networkName != null && Object.hasOwnProperty.call(message, "networkName"))
@@ -34799,7 +34799,7 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.key = reader.bytes();
+                message.key = $root.Key.decode(reader, reader.uint32());
                 break;
             case 2:
                 message.certificate = $root.Certificate.decode(reader, reader.uint32());
@@ -34842,9 +34842,11 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
     InvitationV0.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.key != null && message.hasOwnProperty("key"))
-            if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
-                return "key: buffer expected";
+        if (message.key != null && message.hasOwnProperty("key")) {
+            let error = $root.Key.verify(message.key);
+            if (error)
+                return "key." + error;
+        }
         if (message.certificate != null && message.hasOwnProperty("certificate")) {
             let error = $root.Certificate.verify(message.certificate);
             if (error)
@@ -34868,11 +34870,11 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
         if (object instanceof $root.InvitationV0)
             return object;
         let message = new $root.InvitationV0();
-        if (object.key != null)
-            if (typeof object.key === "string")
-                $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
-            else if (object.key.length)
-                message.key = object.key;
+        if (object.key != null) {
+            if (typeof object.key !== "object")
+                throw TypeError(".InvitationV0.key: object expected");
+            message.key = $root.Key.fromObject(object.key);
+        }
         if (object.certificate != null) {
             if (typeof object.certificate !== "object")
                 throw TypeError(".InvitationV0.certificate: object expected");
@@ -34897,18 +34899,12 @@ export const InvitationV0 = $root.InvitationV0 = (() => {
             options = {};
         let object = {};
         if (options.defaults) {
-            if (options.bytes === String)
-                object.key = "";
-            else {
-                object.key = [];
-                if (options.bytes !== Array)
-                    object.key = $util.newBuffer(object.key);
-            }
+            object.key = null;
             object.certificate = null;
             object.networkName = "";
         }
         if (message.key != null && message.hasOwnProperty("key"))
-            object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
+            object.key = $root.Key.toObject(message.key, options);
         if (message.certificate != null && message.hasOwnProperty("certificate"))
             object.certificate = $root.Certificate.toObject(message.certificate, options);
         if (message.networkName != null && message.hasOwnProperty("networkName"))
