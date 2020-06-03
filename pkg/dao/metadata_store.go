@@ -2,6 +2,7 @@ package dao
 
 import (
 	"errors"
+	"fmt"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"google.golang.org/protobuf/proto"
@@ -30,6 +31,11 @@ func NewMetadataStore(store Store) (*MetadataStore, error) {
 type MetadataStore struct {
 	store Store
 	key   *StorageKey
+}
+
+// CreaCreateStoreIfNotExists ...
+func (s *MetadataStore) CreateStoreIfNotExists(table string) error {
+	return fmt.Errorf("unimplemented")
 }
 
 // CreateProfile ...

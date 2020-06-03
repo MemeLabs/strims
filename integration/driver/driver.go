@@ -2,11 +2,9 @@ package driver
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
-	"net/http"
 	"os"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
@@ -14,31 +12,23 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
-	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )
 
 type TestDriver struct {
-	file     string
+	File     string
 	srvAddr  string
 	ds       dao.MetadataStore
-	store    dao.Store
+	Store    dao.Store
 	host     *rpc.Host
 	Client   *rpc.Client
 	Frontend *service.Frontend
-	log      io.Writer
 }
 
 type Config struct {
 	VpnAddr string
-	SrvAddr string
-	Log     io.Writer
-}
-
-var upgrader = websocket.Upgrader{
-	CheckOrigin: func(r *http.Request) bool {
-		return true
-	},
+	File    string
+	Store   dao.Store
 }
 
 func Setup(c Config) *TestDriver {
@@ -48,20 +38,23 @@ func Setup(c Config) *TestDriver {
 		panic(err)
 	}
 
-	file := tempfile()
-
-	store, err := kv.NewKVStore(file)
-	if err != nil {
-		log.Fatalf("failed to open db: %s", err)
+	if c.Store == nil && c.File == "" {
+		file := tempfile()
+		store, err := kv.NewKVStore(file)
+		if err != nil {
+			log.Fatalf("failed to open db: %s", err)
+		}
+		c.Store = store
+		c.File = file
 	}
 
-	ds, err := dao.NewMetadataStore(store)
+	ds, err := dao.NewMetadataStore(c.Store)
 	if err != nil {
 		panic(err)
 	}
 
 	svc, err := service.New(service.Options{
-		Store: store,
+		Store: ds,
 		VPNOptions: []vpn.HostOption{
 			vpn.WithInterface(vpn.NewWSInterface(logger, c.VpnAddr)),
 		},
@@ -83,22 +76,16 @@ func Setup(c Config) *TestDriver {
 
 	return &TestDriver{
 		ds:       *ds,
-		store:    store,
-		srvAddr:  c.SrvAddr,
+		Store:    c.Store,
 		host:     host,
 		Client:   client,
 		Frontend: svc,
-		file:     file,
-		log:      c.Log,
+		File:     c.File,
 	}
 }
 
 func (d *TestDriver) Teardown() error {
-	return os.RemoveAll(d.file)
-}
-
-func (d *TestDriver) Logf(format string, a ...interface{}) {
-	fmt.Fprintf(d.log, format+"\n", a...)
+	return os.RemoveAll(d.File)
 }
 
 func tempfile() string {

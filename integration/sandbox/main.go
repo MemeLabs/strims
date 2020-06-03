@@ -5,7 +5,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/integration/driver"
@@ -29,13 +28,12 @@ func main() {
 
 	sugar := logger.Sugar()
 
-	conf := driver.Config{
-		VpnAddr: *addr,
-		Log:     os.Stdout,
-	}
-
+	conf := driver.Config{VpnAddr: *addr}
 	drvr := driver.Setup(conf)
 	sugar.Debug("driver established")
+
+	conf.File = drvr.File
+	conf.Store = drvr.Store
 
 	profileRequest := &pb.CreateProfileRequest{
 		Name:     "jbpratt",
@@ -74,12 +72,18 @@ func main() {
 	}
 	sugar.Debugf("createBootstrapClient response: %v", bootstrapResponse)
 
-	// start host / bostrap client ??
-	startVPNRequest := &pb.StartVPNRequest{}
-	startVPNResponse, err := drvr.Frontend.StartVPN(ctx, startVPNRequest)
-	sugar.Debugf("startVPN response: %v", startVPNResponse)
+	for i := 0; i < *peers; i++ {
+		d := driver.Setup(conf)
+		// start host / bootstrap client ??
+		startVPNRequest := &pb.StartVPNRequest{}
+		startVPNResponse, err := d.Frontend.StartVPN(ctx, startVPNRequest)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-	// TODO: start peer hosts
+		sugar.Debugf("startVPN response (%d): %v", i, startVPNResponse)
+		defer d.Teardown()
+	}
 
 	sugar.Infof("listening on %q", conf.VpnAddr)
 	defer drvr.Teardown()
