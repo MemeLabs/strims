@@ -17,8 +17,6 @@ import (
 
 type TestDriver struct {
 	File     string
-	srvAddr  string
-	ds       dao.MetadataStore
 	Store    dao.Store
 	host     *rpc.Host
 	Client   *rpc.Client
@@ -48,13 +46,8 @@ func Setup(c Config) *TestDriver {
 		c.File = file
 	}
 
-	ds, err := dao.NewMetadataStore(c.Store)
-	if err != nil {
-		panic(err)
-	}
-
 	svc, err := service.New(service.Options{
-		Store: ds,
+		Store: c.Store,
 		VPNOptions: []vpn.HostOption{
 			vpn.WithInterface(vpn.NewWSInterface(logger, c.VpnAddr)),
 		},
@@ -75,7 +68,6 @@ func Setup(c Config) *TestDriver {
 	}()
 
 	return &TestDriver{
-		ds:       *ds,
 		Store:    c.Store,
 		host:     host,
 		Client:   client,
