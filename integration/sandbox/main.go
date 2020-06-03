@@ -73,18 +73,16 @@ func main() {
 	sugar.Debugf("createBootstrapClient response: %v", bootstrapResponse)
 
 	for i := 0; i < *peers; i++ {
-		d := driver.Setup(conf)
+		_ = driver.Setup(conf)
 		// start host / bootstrap client ??
-		startVPNRequest := &pb.StartVPNRequest{}
-		startVPNResponse, err := d.Frontend.StartVPN(ctx, startVPNRequest)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		sugar.Debugf("startVPN response (%d): %v", i, startVPNResponse)
-		defer d.Teardown()
+	}
+	startVPNRequest := &pb.StartVPNRequest{}
+	startVPNResponse, err := drvr.Frontend.StartVPN(ctx, startVPNRequest)
+	if err != nil {
+		log.Fatal(err)
 	}
 
+	sugar.Debugf("startVPN response: %v", startVPNResponse)
 	sugar.Infof("listening on %q", conf.VpnAddr)
 	defer drvr.Teardown()
 	select {}
