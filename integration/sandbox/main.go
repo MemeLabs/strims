@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"log"
 	"os"
 	"time"
 
@@ -40,39 +41,45 @@ func main() {
 		Name:     "jbpratt",
 		Password: "ilovemajora",
 	}
-	profileResponse := &pb.CreateProfileResponse{}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
 
-	if err := drvr.Client.CallUnary(ctx, "createProfile", profileRequest, profileResponse); err != nil {
-		sugar.Fatal("failed to call createProfile", err)
+	// create profile
+	profileResponse, err := drvr.Frontend.CreateProfile(ctx, profileRequest)
+	if err != nil {
+		log.Fatal(err)
 	}
 	sugar.Debugf("createProfile response: %v", profileResponse)
 
+	// create network
 	networkRequest := &pb.CreateNetworkRequest{Name: "strims"}
-	networkResponse := &pb.CreateNetworkResponse{}
-
-	if err := drvr.Client.CallUnary(ctx, "createNetwork", networkRequest, networkResponse); err != nil {
-		sugar.Fatal("failed to call createNetwork", err)
+	networkResponse, err := drvr.Frontend.CreateNetwork(ctx, networkRequest)
+	if err != nil {
+		log.Fatal(err)
 	}
 	sugar.Debugf("createNetwork: %v", networkResponse)
 
-	for i := 0; i < *peers; i++ {
-		bootstrapRequest := &pb.CreateBootstrapClientRequest{
-			ClientOptions: &pb.CreateBootstrapClientRequest_WebsocketOptions{
-				WebsocketOptions: &pb.BootstrapClientWebSocketOptions{
-					Url: fmt.Sprintf("ws://%s", conf.VpnAddr),
-				},
+	bootstrapRequest := &pb.CreateBootstrapClientRequest{
+		ClientOptions: &pb.CreateBootstrapClientRequest_WebsocketOptions{
+			WebsocketOptions: &pb.BootstrapClientWebSocketOptions{
+				Url: fmt.Sprintf("ws://%s", conf.VpnAddr),
 			},
-		}
-		bootstrapResponse := &pb.CreateBootstrapClientResponse{}
-
-		if err := drvr.Client.CallUnary(ctx, "createBootstrapClient", bootstrapRequest, bootstrapResponse); err != nil {
-			sugar.Fatal("failed to call createBootstrapClient", err)
-		}
-		sugar.Debugf("createBootstrapClient (%d): %v", i, bootstrapResponse)
+		},
 	}
+	// add boostrap client
+	bootstrapResponse, err := drvr.Frontend.CreateBootstrapClient(ctx, bootstrapRequest)
+	if err != nil {
+		log.Fatal(err)
+	}
+	sugar.Debugf("createBootstrapClient response: %v", bootstrapResponse)
+
+	// start host / bostrap client ??
+	startVPNRequest := &pb.StartVPNRequest{}
+	startVPNResponse, err := drvr.Frontend.StartVPN(ctx, startVPNRequest)
+	sugar.Debugf("startVPN response: %v", startVPNResponse)
+
+	// TODO: start peer hosts
 
 	sugar.Infof("listening on %q", conf.VpnAddr)
 	defer drvr.Teardown()

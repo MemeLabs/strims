@@ -19,13 +19,14 @@ import (
 )
 
 type TestDriver struct {
-	file    string
-	srvAddr string
-	ds      dao.MetadataStore
-	store   dao.Store
-	host    *rpc.Host
-	Client  *rpc.Client
-	log     io.Writer
+	file     string
+	srvAddr  string
+	ds       dao.MetadataStore
+	store    dao.Store
+	host     *rpc.Host
+	Client   *rpc.Client
+	Frontend *service.Frontend
+	log      io.Writer
 }
 
 type Config struct {
@@ -81,13 +82,14 @@ func Setup(c Config) *TestDriver {
 	}()
 
 	return &TestDriver{
-		ds:      *ds,
-		store:   store,
-		srvAddr: c.SrvAddr,
-		host:    host,
-		Client:  client,
-		file:    file,
-		log:     c.Log,
+		ds:       *ds,
+		store:    store,
+		srvAddr:  c.SrvAddr,
+		host:     host,
+		Client:   client,
+		Frontend: svc,
+		file:     file,
+		log:      c.Log,
 	}
 }
 
