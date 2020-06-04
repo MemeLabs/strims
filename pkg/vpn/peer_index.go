@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
@@ -79,7 +80,7 @@ func (s *peerIndex) HandleMessage(msg *Message) (forward bool, err error) {
 }
 
 func (s *peerIndex) handlePublish(r *pb.PeerIndexMessage_Record) error {
-	if !verifyProto(r) {
+	if !verifyPeerIndexRecord(r) {
 		return errors.New("invalid record signature")
 	}
 
@@ -87,7 +88,7 @@ func (s *peerIndex) handlePublish(r *pb.PeerIndexMessage_Record) error {
 }
 
 func (s *peerIndex) handleUnpublish(r *pb.PeerIndexMessage_Record) error {
-	if !verifyProto(r) {
+	if !verifyPeerIndexRecord(r) {
 		return errors.New("invalid record signature")
 	}
 
@@ -113,7 +114,7 @@ func (s *peerIndex) handleSearchRequest(m *pb.PeerIndexMessage_SearchRequest, or
 
 func (s *peerIndex) handleSearchResponse(m *pb.PeerIndexMessage_SearchResponse) error {
 	for _, r := range m.Records {
-		if !verifyProto(r) {
+		if !verifyPeerIndexRecord(r) {
 			continue
 		}
 		if !sendPeerIndexSearchResponse(&s.searchResponseChans, m.RequestId, r) {
@@ -457,7 +458,7 @@ type peerIndexPublisher struct {
 
 func (p *peerIndexPublisher) update() error {
 	p.record.Timestamp = time.Now().Unix()
-	if err := signProto(p.record, p.network.host.Key()); err != nil {
+	if err := signPeerIndexRecord(p.record, p.network.host.Key()); err != nil {
 		return err
 	}
 	return nil
@@ -491,4 +492,49 @@ func (p *peerIndexPublisher) unpublish() {
 		},
 	}
 	sendProto(p.network, p.target, PeerIndexPort, PeerIndexPort, msg)
+}
+
+type peerIndexMarshaler struct {
+	*pb.PeerIndexMessage_Record
+}
+
+func (r peerIndexMarshaler) Size() int {
+	return 12 + len(r.Hash) + len(r.Key) + len(r.HostId)
+}
+
+func (r peerIndexMarshaler) Marshal(b []byte) int {
+	n := copy(b, r.Hash)
+	n += copy(b[n:], r.Key)
+	n += copy(b[n:], r.HostId)
+	binary.BigEndian.PutUint32(b[n:], uint32(r.Port))
+	n += 4
+	binary.BigEndian.PutUint64(b[n:], uint64(r.Timestamp))
+	n += 8
+	return n
+}
+
+func signPeerIndexRecord(r *pb.PeerIndexMessage_Record, key *pb.Key) error {
+	if key.Type != pb.KeyType_KEY_TYPE_ED25519 {
+		return errors.New("unsupported key type")
+	}
+
+	m := peerIndexMarshaler{r}
+	b := frameBuffer(uint16(m.Size()))
+	defer freeFrameBuffer(b)
+	m.Marshal(b)
+
+	r.Signature = ed25519.Sign(ed25519.PrivateKey(key.Private), b)
+	return nil
+}
+
+func verifyPeerIndexRecord(r *pb.PeerIndexMessage_Record) bool {
+	m := peerIndexMarshaler{r}
+	b := frameBuffer(uint16(m.Size()))
+	defer freeFrameBuffer(b)
+	m.Marshal(b)
+
+	if len(r.Key) != ed25519.PublicKeySize {
+		return false
+	}
+	return ed25519.Verify(r.Key, b, r.Signature)
 }

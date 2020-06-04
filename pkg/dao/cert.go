@@ -3,6 +3,7 @@ package dao
 import (
 	"crypto/ed25519"
 	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"time"
 
@@ -92,10 +93,8 @@ func SignCertificateRequest(
 		return nil, err
 	}
 
-	certBytes, err := proto.Marshal(cert)
-	if err != nil {
-		return nil, err
-	}
+	certBytes := serializeCertificate(cert)
+
 	switch key.Type {
 	case pb.KeyType_KEY_TYPE_ED25519:
 		cert.Signature = ed25519.Sign(key.Private, certBytes)
@@ -118,13 +117,7 @@ func VerifyCertificate(cert *pb.Certificate) error {
 			return ErrUnsupportedKeyUsage
 		}
 
-		temp := proto.Clone(cert).(*pb.Certificate)
-		temp.Signature = nil
-		temp.ParentOneof = nil
-		certBytes, err := proto.Marshal(temp)
-		if err != nil {
-			return err
-		}
+		certBytes := serializeCertificate(cert)
 
 		var validSig bool
 		switch signingCert.KeyType {
@@ -168,4 +161,22 @@ func GetRootCert(cert *pb.Certificate) *pb.Certificate {
 func CertIsExpired(cert *pb.Certificate) bool {
 	now := uint64(time.Now().UTC().Unix())
 	return cert.NotAfter <= now && cert.NotBefore >= now
+}
+
+// serializeCertificate returns a stable byte representation of a certificate
+func serializeCertificate(cert *pb.Certificate) []byte {
+	b := make([]byte, 192+len(cert.Key)+len(cert.SerialNumber))
+
+	n := copy(b, cert.Key)
+	binary.BigEndian.PutUint32(b[n:], uint32(cert.KeyType))
+	n += 4
+	binary.BigEndian.PutUint32(b[n:], cert.KeyUsage)
+	n += 4
+	binary.BigEndian.PutUint64(b[n:], cert.NotBefore)
+	n += 8
+	binary.BigEndian.PutUint64(b[n:], cert.NotAfter)
+	n += 8
+	n += copy(b[n:], cert.SerialNumber)
+
+	return b
 }

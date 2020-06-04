@@ -1,16 +1,12 @@
 package vpn
 
 import (
-	"crypto/ed25519"
 	"encoding/binary"
-	"errors"
 	"io"
 	"math"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 func sendProto(network *Network, id kademlia.ID, port, srcPort uint16, msg proto.Message) error {
@@ -23,58 +19,6 @@ func sendProto(network *Network, id kademlia.ID, port, srcPort uint16, msg proto
 	}
 
 	return network.Send(id, port, srcPort, b)
-}
-
-func signProto(msg proto.Message, key *pb.Key) error {
-	if key.Type != pb.KeyType_KEY_TYPE_ED25519 {
-		return errors.New("unsupported key type")
-	}
-
-	r := msg.ProtoReflect()
-	fields := r.Descriptor().Fields()
-	keyField := fields.ByName("key")
-	signatureField := fields.ByName("signature")
-
-	r.Set(keyField, protoreflect.ValueOfBytes(key.Public))
-	r.Set(signatureField, protoreflect.ValueOfBytes(nil))
-
-	b := frameBuffer(uint16(proto.Size(msg)))
-	defer freeFrameBuffer(b)
-
-	b, err := proto.MarshalOptions{}.MarshalAppend(b[:0], msg)
-	if err != nil {
-		return err
-	}
-
-	signature := ed25519.Sign(ed25519.PrivateKey(key.Private), b)
-	r.Set(signatureField, protoreflect.ValueOfBytes(signature))
-	return nil
-}
-
-func verifyProto(msg proto.Message) bool {
-	r := msg.ProtoReflect()
-	fields := r.Descriptor().Fields()
-	keyField := fields.ByName("key")
-	signatureField := fields.ByName("signature")
-
-	key := r.Get(keyField).Bytes()
-	signature := r.Get(signatureField).Bytes()
-
-	c := proto.Clone(msg)
-	c.ProtoReflect().Set(signatureField, protoreflect.ValueOfBytes(nil))
-
-	b := frameBuffer(uint16(proto.Size(c)))
-	defer freeFrameBuffer(b)
-
-	b, err := proto.MarshalOptions{}.MarshalAppend(b[:0], c)
-	if err != nil {
-		return false
-	}
-
-	if len(key) != ed25519.PublicKeySize {
-		return false
-	}
-	return ed25519.Verify(ed25519.PublicKey(key), b, signature)
 }
 
 func ReadProtoStream(r io.Reader, m proto.Message) error {

@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"bytes"
+	"crypto/ed25519"
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
@@ -78,7 +79,7 @@ func (s *hashTable) HandleMessage(msg *Message) (forward bool, err error) {
 }
 
 func (s *hashTable) handlePublish(r *pb.HashTableMessage_Record) error {
-	if !verifyProto(r) {
+	if !verifyHashTableRecord(r) {
 		return errors.New("invalid record signature")
 	}
 
@@ -86,7 +87,7 @@ func (s *hashTable) handlePublish(r *pb.HashTableMessage_Record) error {
 }
 
 func (s *hashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
-	if !verifyProto(r) {
+	if !verifyHashTableRecord(r) {
 		return errors.New("invalid record signature")
 	}
 
@@ -111,7 +112,7 @@ func (s *hashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHo
 }
 
 func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse) error {
-	if !verifyProto(m.Record) {
+	if !verifyHashTableRecord(m.Record) {
 		return nil
 	}
 
@@ -400,7 +401,7 @@ type hashTablePublisher struct {
 
 func (p *hashTablePublisher) update() error {
 	p.record.Timestamp = time.Now().Unix()
-	if err := signProto(p.record, p.key); err != nil {
+	if err := signHashTableRecord(p.record, p.key); err != nil {
 		return err
 	}
 	return nil
@@ -434,4 +435,47 @@ func (p *hashTablePublisher) unpublish() {
 		},
 	}
 	sendProto(p.network, p.target, HashTablePort, HashTablePort, msg)
+}
+
+type hashTableRecordMarshaler struct {
+	*pb.HashTableMessage_Record
+}
+
+func (r hashTableRecordMarshaler) Size() int {
+	return 8 + len(r.Key) + len(r.Salt) + len(r.Value)
+}
+
+func (r hashTableRecordMarshaler) Marshal(b []byte) int {
+	n := copy(b, r.Key)
+	n += copy(b[n:], r.Salt)
+	n += copy(b[n:], r.Value)
+	binary.BigEndian.PutUint64(b[n:], uint64(r.Timestamp))
+	n += 8
+	return n
+}
+
+func signHashTableRecord(r *pb.HashTableMessage_Record, key *pb.Key) error {
+	if key.Type != pb.KeyType_KEY_TYPE_ED25519 {
+		return errors.New("unsupported key type")
+	}
+
+	m := hashTableRecordMarshaler{r}
+	b := frameBuffer(uint16(m.Size()))
+	defer freeFrameBuffer(b)
+	m.Marshal(b)
+
+	r.Signature = ed25519.Sign(ed25519.PrivateKey(key.Private), b)
+	return nil
+}
+
+func verifyHashTableRecord(r *pb.HashTableMessage_Record) bool {
+	m := hashTableRecordMarshaler{r}
+	b := frameBuffer(uint16(m.Size()))
+	defer freeFrameBuffer(b)
+	m.Marshal(b)
+
+	if len(r.Key) != ed25519.PublicKeySize {
+		return false
+	}
+	return ed25519.Verify(r.Key, b, r.Signature)
 }
