@@ -19,8 +19,6 @@ on:
       - 'vendor'
       - 'pkg'
 
-
-
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -30,4 +28,3 @@ jobs:
         submodules: true
     - name: Build image
       run: docker build -f cmd/svc/Dockerfile . -t docker.pkg.github.com/slugalisk/go-ppspp/svc:latest
-
