@@ -4,16 +4,16 @@ WORKDIR /go/src/app
 
 COPY . . 
 
-RUN go build -trimpath ./cmd/svc
+RUN export CGO_ENABLED=0 && go build -trimpath ./cmd/svc
 
 
-FROM ubuntu:18.04
-
+FROM alpine:latest
+ 
 WORKDIR /app
 
 COPY --from=build /go/src/app/svc .
 
-RUN useradd -m svc
+RUN adduser svc --disabled-password && echo "svc:" | chpasswd
 
 USER svc
 
