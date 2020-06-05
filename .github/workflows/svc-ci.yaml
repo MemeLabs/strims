@@ -1,0 +1,20 @@
+name: svc-ci
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+
+    - name: Build image
+      run: docker build -f cmd/svc/Dockerfile . -t svc:latest
+
