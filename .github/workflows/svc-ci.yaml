@@ -1,0 +1,30 @@
+name: svc-ci
+
+on:
+  push:
+    paths:
+      - '.github/workflows/svc-cd.yaml'
+      - 'cmd/svc'
+      - 'go.mod'
+      - 'go.sum'
+      - 'vendor'
+      - 'pkg'
+
+  pull_request:
+    paths:
+      - '.github/workflows/svc-cd.yaml'
+      - 'cmd/svc'
+      - 'go.mod'
+      - 'go.sum'
+      - 'vendor'
+      - 'pkg'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - name: Build image
+      run: docker build -f cmd/svc/Dockerfile . -t docker.pkg.github.com/slugalisk/go-ppspp/svc:latest

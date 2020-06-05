@@ -1,0 +1,29 @@
+name: svc-cd
+
+on:
+  push:
+    paths:
+      - '.github/workflows/svc-cd.yaml'
+      - 'cmd/svc'
+      - 'go.mod'
+      - 'go.sum'
+      - 'vendor'
+      - 'pkg'
+    branches: [ master ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - name: Docker login
+      env:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      run: docker login https://docker.pkg.github.com -u ${username} -p ${password}
+    - name: Build image
+      run: docker build -f cmd/svc/Dockerfile . -t docker.pkg.github.com/slugalisk/go-ppspp/svc:latest
+    - name: Publish image
+      run: docker push docker.pkg.github.com/slugalisk/go-ppspp/svc:latest
