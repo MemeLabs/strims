@@ -2,11 +2,24 @@ name: svc-ci
 
 on:
   push:
-    branches:
-      - '*'
+    paths:
+      - '.github/workflows/svc-cd.yaml'
+      - 'cmd/svc'
+      - 'go.mod'
+      - 'go.sum'
+      - 'vendor'
+      - 'pkg'
+
   pull_request:
-    branches:
-      - '*'
+    paths:
+      - '.github/workflows/svc-cd.yaml'
+      - 'cmd/svc'
+      - 'go.mod'
+      - 'go.sum'
+      - 'vendor'
+      - 'pkg'
+
+
 
 jobs:
   build:

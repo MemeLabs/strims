@@ -2,8 +2,13 @@ name: svc-cd
 
 on:
   push:
-    branches: [ master ]
-  pull_request:
+    paths:
+      - '.github/workflows/svc-cd.yaml'
+      - 'cmd/svc'
+      - 'go.mod'
+      - 'go.sum'
+      - 'vendor'
+      - 'pkg'
     branches: [ master ]
 
 jobs:
