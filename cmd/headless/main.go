@@ -9,8 +9,15 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/url"
 	"os"
+	"os/exec"
+	"os/signal"
+	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/chromedp/cdproto/network"
@@ -25,60 +32,35 @@ import (
 var (
 	target       string
 	headlessURL  string
-	heuristics   bool
 	timeout      int
 	quiet        bool
 	setup        bool
+	frontend     bool
+	quit         chan bool
 	containerIDS []string
 	cli          *client.Client
+	_, b, _, _   = runtime.Caller(0)
+	basepath     = filepath.Join(filepath.Dir(b), "../..")
 )
 
-func init() {
-	flag.StringVar(&target, "url", "https://strims.gg/", "the URL to analyze")
+func main() {
+	flag.StringVar(&target, "url", "https://localhost:8080/", "address of frontend")
 	flag.StringVar(&headlessURL, "remote", "localhost:9222", "the endpoint of the headless instance")
-	flag.IntVar(&timeout, "timeout", 500, "time in seconds to wait for the site to load and a result to be detected")
+	flag.IntVar(&timeout, "timeout", 20, "time in seconds to wait for the site to load and a result to be detected")
 	flag.BoolVar(&quiet, "quiet", false, "discard debug output")
-	flag.BoolVar(&setup, "setup", true, "Pull")
+	flag.BoolVar(&setup, "setup", true, "Pull docker images (chromium, cmd/svc)")
+	flag.BoolVar(&frontend, "frontend", true, "start frontend")
 	flag.Parse()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
 	dcli, err := client.NewEnvClient()
 	if err != nil {
 		log.Fatal(err)
 	}
 	cli = dcli
-}
 
-func setupDocker(conf *container.Config, hostConf *container.HostConfig, name string) (string, error) {
-	ctx := context.Background()
-	reader, err := cli.ImagePull(ctx, conf.Image, types.ImagePullOptions{})
-	if err != nil {
-		return "", err
-	}
-
-	io.Copy(os.Stdout, reader)
-
-	resp, err := cli.ContainerCreate(ctx, conf, hostConf, nil, name)
-	if err != nil {
-		return "", err
-	}
-
-	containerIDS = append(containerIDS, resp.ID)
-
-	return resp.ID, cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{})
-}
-
-func tearDown() error {
-	fmt.Println("tearing down containers")
-	for _, id := range containerIDS {
-		if err := cli.ContainerStop(context.Background(), id, nil); err != nil {
-			return err
-		}
-	}
-
-	return nil
-}
-
-func main() {
 	if setup {
 		hostBinding := nat.PortBinding{
 			HostIP:   "localhost",
@@ -91,19 +73,23 @@ func main() {
 
 		portBinding := nat.PortMap{containerPort: []nat.PortBinding{hostBinding}}
 		chromeConf := &container.Config{
-			Image: "docker.io/zenika/alpine-chrome",
+			Image:      "docker.io/zenika/alpine-chrome",
+			Entrypoint: strslice.StrSlice{"chromium-browser"},
 			Cmd: strslice.StrSlice{
 				"--headless", "--disable-gpu", "--no-sandbox", "--remote-debugging-address=0.0.0.0",
 				"--remote-debugging-port=9222", "--enable-logging", "--autoplay-policy=no-user-gesture-required",
 				"--disable-software-rasterizer", "--disable-dev-shm-usage", "--disable-sync",
 				"--disable-background-networking", "--no-first-run", "--no-pings",
 				"--metrics-recording-only", "--safebrowsing-disable-auto-update", "--mute-audio",
+				"--ignore-certificate-errors", // we may eventually want to use test certs
 			},
-			Entrypoint: strslice.StrSlice{"chromium-browser"},
 		}
-		chromeID, err := setupDocker(chromeConf,
+		_, err = setupAndRunContainer(
+			ctx,
+			chromeConf,
 			&container.HostConfig{
 				PortBindings: portBinding,
+				NetworkMode:  "host",
 				AutoRemove:   true,
 			},
 			"headless-chromium",
@@ -112,56 +98,76 @@ func main() {
 			log.Fatal(err)
 		}
 
-		conJson, err := cli.ContainerInspect(context.Background(), chromeID)
-		if err != nil {
-			log.Fatal(err)
-		}
+		/*
+			conJson, err := cli.ContainerInspect(ctx, chromeID)
+			if err != nil {
+				log.Fatal(err)
+			}
+		*/
 
-		headlessURL = fmt.Sprintf("%s:%d", conJson.NetworkSettings.DefaultNetworkSettings.IPAddress, 9222)
+		// headlessURL = fmt.Sprintf("%s:%d", conJson.NetworkSettings.DefaultNetworkSettings.IPAddress, 9222)
 		/*
 			svcConf := &container.Config{}
 			go func() {
-				if err := setupDocker(svcConf, nil, ""); err != nil {
+				if err := setupContainer(svcConf, nil, ""); err != nil {
 					log.Fatal(err)
 				}
 			}()
 		*/
+		defer tearDown(cancel)
 	}
 
-	time.Sleep(3 * time.Second)
+	var wg sync.WaitGroup
+	if frontend {
+		wg.Add(1)
+		go func() {
+			log.Println("starting the frontend")
+			cmd := exec.CommandContext(ctx, "npm", "run", "dev:web")
+			cmd.Dir = basepath
+			if err := cmd.Run(); err != nil {
+				log.Fatal(err)
+			}
+			wg.Done()
+		}()
+		time.Sleep(15 * time.Second)
+	}
 
-	hb, err := NewHeadlessBrowser(headlessURL, heuristics, quiet)
+	hb, err := NewHeadlessBrowser(headlessURL, quiet)
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	resultChan := make(chan *network.Request, 100)
+	wg.Add(1)
 	go func() {
-		err := hb.Run(target, time.Second*time.Duration(timeout), resultChan)
+		log.Println("running chromedriver")
+		err := hb.Run(&wg, target, time.Second*time.Duration(timeout), resultChan)
 		if err != nil {
+			tearDown(cancel)
 			log.Fatalf("FATAL: %q", err)
 		}
 	}()
 
-	defer func() {
-		if err := tearDown(); err != nil {
-			log.Fatal(err)
-		}
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		tearDown(cancel)
+		os.Exit(1)
 	}()
 
-	select {}
+	wg.Wait()
 }
 
 type HeadlessBrowser struct {
-	Info          *InstanceInfo
-	stopChan      chan bool
-	UseHeuristics bool
-	Quiet         bool
+	Info     *InstanceInfo
+	stopChan chan bool
+	Quiet    bool
 }
 
 // NewHeadlessBrowser connects to a headless browser at remote.
 // If quiet is true, debug output is suppressed.
-func NewHeadlessBrowser(remote string, useHeuristics bool, quiet bool) (*HeadlessBrowser, error) {
+func NewHeadlessBrowser(remote string, quiet bool) (*HeadlessBrowser, error) {
 	ii, err := GetInstanceInfo(remote)
 	if err != nil {
 		return nil, fmt.Errorf("Unable to connect to instance: %q", err)
@@ -174,20 +180,22 @@ func NewHeadlessBrowser(remote string, useHeuristics bool, quiet bool) (*Headles
 	)
 
 	return &HeadlessBrowser{
-		Info:          ii,
-		stopChan:      make(chan bool, 1),
-		UseHeuristics: useHeuristics,
-		Quiet:         quiet,
+		Info:     ii,
+		stopChan: make(chan bool, 1),
+		Quiet:    quiet,
 	}, nil
 }
 
 // ExtractURL visits the given targetURL until it finds a new url that is accepted by matcherFunc or timeout expires.
-func (hb *HeadlessBrowser) Run(targetURL string, timeout time.Duration, resultChan chan *network.Request) error {
+func (hb *HeadlessBrowser) Run(wg *sync.WaitGroup, targetURL string, timeout time.Duration, resultChan chan *network.Request) error {
+	defer wg.Done()
+
 	timeoutTicker := time.NewTicker(timeout)
 
 	// source: https://github.com/chromedp/chromedp/blob/master/allocate_test.go
 	allocCtx, allocCancel := chromedp.NewRemoteAllocator(context.Background(), hb.Info.WebSocketDebuggerURL)
 	defer allocCancel()
+
 	ctx, cancel := chromedp.NewContext(allocCtx)
 	defer cancel()
 
@@ -212,29 +220,46 @@ func (hb *HeadlessBrowser) Run(targetURL string, timeout time.Duration, resultCh
 			}
 			log.Printf("REQUEST: %q", ev.Request.URL)
 
-			/*
-				url, err := url.Parse(ev.Request.URL)
-				if err != nil {
-					log.Printf("request %q error: %q", ev.Request.URL, err)
-				}
-				if url.String() != targetURL {
-					// Navigation stalls if channel is blocked...
-					go func() { resultChan <- ev.Request }()
-				}
-			*/
+			url, err := url.Parse(ev.Request.URL)
+			if err != nil {
+				log.Printf("request %q error: %q", ev.Request.URL, err)
+			}
+			if url.String() != targetURL {
+				// Navigation stalls if channel is blocked...
+				go func() { resultChan <- ev.Request }()
+			}
 		}
 	})
 
 	if err := chromedp.Run(ctx,
 		network.Enable(),             // enable network events
 		chromedp.Navigate(targetURL), // navigate to url
+		chromedp.WaitVisible("#root", chromedp.ByID),
+		chromedp.ActionFunc(func(context.Context) error {
+			log.Printf(">>>>>>>>>>>>>>>>>>>> LANDING PAGE IS VISIBLE")
+			return nil
+		}),
 	); err != nil {
 		return err
 	}
 
-	log.Println("waiting for page to finish loading...")
-	err := waitToFinishLoading(ctx, timeoutTicker)
-	if err != nil {
+	/*
+		log.Println("waiting for page to finish loading...")
+		err := waitToFinishLoading(ctx, timeoutTicker)
+		if err != nil {
+			return err
+		}
+	*/
+
+	if err := chromedp.Run(ctx,
+		chromedp.SendKeys(`//input[@name="name"]`, "jbpratt"),
+		chromedp.SendKeys(`//input[@name="password"]`, "ilovemajora"),
+		chromedp.Click(`//a[contains(@class, "input_button")]`, chromedp.NodeVisible),
+		chromedp.ActionFunc(func(context.Context) error {
+			log.Printf(">>>>>>>>>>>>>>>>>> ATTEMPTED LOGIN")
+			return nil
+		}),
+	); err != nil {
 		return err
 	}
 
@@ -279,4 +304,37 @@ func waitToFinishLoading(ctx context.Context, timeoutTicker *time.Ticker) error 
 			return errors.New("timeout while waiting to finish loading")
 		}
 	}
+}
+
+func setupAndRunContainer(ctx context.Context, conf *container.Config, hostConf *container.HostConfig, name string) (string, error) {
+	reader, err := cli.ImagePull(ctx, conf.Image, types.ImagePullOptions{})
+	if err != nil {
+		return "", err
+	}
+
+	io.Copy(os.Stdout, reader)
+
+	resp, err := cli.ContainerCreate(ctx, conf, hostConf, nil, name)
+	if err != nil {
+		return "", err
+	}
+
+	containerIDS = append(containerIDS, resp.ID)
+	log.Println(containerIDS)
+
+	return resp.ID, cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{})
+}
+
+func tearDown(cancel context.CancelFunc) error {
+	log.Println("tearing everything down")
+	cancel()
+
+	for _, id := range containerIDS {
+		log.Printf("stopping container: %s\n", id)
+		if err := cli.ContainerStop(context.Background(), id, nil); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
