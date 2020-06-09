@@ -15,12 +15,13 @@ import (
 	"go.uber.org/zap"
 )
 
-type TestDriver struct {
-	File     string
-	Store    dao.Store
-	host     *rpc.Host
-	Client   *rpc.Client
-	Frontend *service.Frontend
+type Driver struct {
+	file   string
+	ds     dao.MetadataStore
+	store  dao.Store
+	host   *rpc.Host
+	Client *rpc.Client
+	log    io.Writer
 }
 
 type Config struct {
@@ -29,8 +30,7 @@ type Config struct {
 	Store   dao.Store
 }
 
-func Setup(c Config) *TestDriver {
-
+func Setup(c Config) *Driver {
 	logger, err := zap.NewDevelopment()
 	if err != nil {
 		panic(err)
@@ -61,23 +61,22 @@ func Setup(c Config) *TestDriver {
 	cr, cw := io.Pipe()
 	client := rpc.NewClient(hw, cr)
 
-	go func() {
-		if err := host.Handle(context.Background(), cw, hr); err != nil {
-			log.Fatalf("failed to setup host handler: %s", err)
-		}
-	}()
-
-	return &TestDriver{
-		Store:    c.Store,
-		host:     host,
-		Client:   client,
-		Frontend: svc,
-		File:     c.File,
+	return &Driver{
+		ds:     *ds,
+		store:  store,
+		host:   host,
+		Client: client,
+		file:   file,
+		log:    c.Log,
 	}
 }
 
-func (d *TestDriver) Teardown() error {
-	return os.RemoveAll(d.File)
+func (d *Driver) Teardown() error {
+	return os.RemoveAll(d.file)
+}
+
+func (d *Driver) Logf(format string, a ...interface{}) {
+	fmt.Fprintf(d.log, format+"\n", a...)
 }
 
 func tempfile() string {
@@ -86,9 +85,6 @@ func tempfile() string {
 		panic(err)
 	}
 	if err := f.Close(); err != nil {
-		panic(err)
-	}
-	if err := os.Remove(f.Name()); err != nil {
 		panic(err)
 	}
 	return f.Name()
