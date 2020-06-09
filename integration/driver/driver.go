@@ -2,7 +2,6 @@ package driver
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -17,17 +16,17 @@ import (
 )
 
 type TestDriver struct {
-	file   string
-	ds     dao.MetadataStore
-	store  dao.Store
-	host   *rpc.Host
-	Client *rpc.Client
-	log    io.Writer
+	File     string
+	Store    dao.Store
+	host     *rpc.Host
+	Client   *rpc.Client
+	Frontend *service.Frontend
 }
 
 type Config struct {
 	VpnAddr string
-	Log     io.Writer
+	File    string
+	Store   dao.Store
 }
 
 func Setup(c Config) *TestDriver {
@@ -37,20 +36,18 @@ func Setup(c Config) *TestDriver {
 		panic(err)
 	}
 
-	file := tempfile()
-
-	store, err := kv.NewKVStore(file)
-	if err != nil {
-		log.Fatalf("failed to open db: %s", err)
-	}
-
-	ds, err := dao.NewMetadataStore(store)
-	if err != nil {
-		panic(err)
+	if c.Store == nil && c.File == "" {
+		file := tempfile()
+		store, err := kv.NewKVStore(file)
+		if err != nil {
+			log.Fatalf("failed to open db: %s", err)
+		}
+		c.Store = store
+		c.File = file
 	}
 
 	svc, err := service.New(service.Options{
-		Store: store,
+		Store: c.Store,
 		VPNOptions: []vpn.HostOption{
 			vpn.WithInterface(vpn.NewWSInterface(logger, c.VpnAddr)),
 		},
@@ -62,25 +59,25 @@ func Setup(c Config) *TestDriver {
 	host := rpc.NewHost(svc)
 	hr, hw := io.Pipe()
 	cr, cw := io.Pipe()
-	go host.Handle(context.Background(), cw, hr)
 	client := rpc.NewClient(hw, cr)
 
+	go func() {
+		if err := host.Handle(context.Background(), cw, hr); err != nil {
+			log.Fatalf("failed to setup host handler: %s", err)
+		}
+	}()
+
 	return &TestDriver{
-		ds:     *ds,
-		store:  store,
-		host:   host,
-		Client: client,
-		file:   file,
-		log:    c.Log,
+		Store:    c.Store,
+		host:     host,
+		Client:   client,
+		Frontend: svc,
+		File:     c.File,
 	}
 }
 
 func (d *TestDriver) Teardown() error {
-	return os.RemoveAll(d.file)
-}
-
-func (d *TestDriver) Logf(format string, a ...interface{}) {
-	fmt.Fprintf(d.log, format+"\n", a...)
+	return os.RemoveAll(d.File)
 }
 
 func tempfile() string {
