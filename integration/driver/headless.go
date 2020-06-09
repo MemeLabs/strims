@@ -1,6 +1,6 @@
 // frontend_driver is a chromedp driver running the frontend for testing
 // https://github.com/MemeLabs/url-extract
-package main
+package driver
 
 import (
 	"context"
@@ -43,7 +43,7 @@ var (
 	basepath     = filepath.Join(filepath.Dir(b), "../..")
 )
 
-func main() {
+func RunHeadless() {
 	flag.StringVar(&target, "url", "https://localhost:8080/", "address of frontend")
 	flag.StringVar(&headlessURL, "remote", "localhost:9222", "the endpoint of the headless instance")
 	flag.IntVar(&timeout, "timeout", 20, "time in seconds to wait for the site to load and a result to be detected")
@@ -234,11 +234,6 @@ func (hb *HeadlessBrowser) Run(wg *sync.WaitGroup, targetURL string, timeout tim
 	if err := chromedp.Run(ctx,
 		network.Enable(),             // enable network events
 		chromedp.Navigate(targetURL), // navigate to url
-		chromedp.WaitVisible("#root", chromedp.ByID),
-		chromedp.ActionFunc(func(context.Context) error {
-			log.Printf(">>>>>>>>>>>>>>>>>>>> LANDING PAGE IS VISIBLE")
-			return nil
-		}),
 	); err != nil {
 		return err
 	}
@@ -250,18 +245,6 @@ func (hb *HeadlessBrowser) Run(wg *sync.WaitGroup, targetURL string, timeout tim
 			return err
 		}
 	*/
-
-	if err := chromedp.Run(ctx,
-		chromedp.SendKeys(`//input[@name="name"]`, "jbpratt"),
-		chromedp.SendKeys(`//input[@name="password"]`, "ilovemajora"),
-		chromedp.Click(`//a[contains(@class, "input_button")]`, chromedp.NodeVisible),
-		chromedp.ActionFunc(func(context.Context) error {
-			log.Printf(">>>>>>>>>>>>>>>>>> ATTEMPTED LOGIN")
-			return nil
-		}),
-	); err != nil {
-		return err
-	}
 
 	select {
 	case <-timeoutTicker.C:

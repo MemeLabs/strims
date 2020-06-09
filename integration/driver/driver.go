@@ -16,7 +16,7 @@ import (
 	"go.uber.org/zap"
 )
 
-type TestDriver struct {
+type Driver struct {
 	file   string
 	ds     dao.MetadataStore
 	store  dao.Store
@@ -30,7 +30,7 @@ type Config struct {
 	Log     io.Writer
 }
 
-func Setup(c Config) *TestDriver {
+func Setup(c Config) *Driver {
 
 	logger, err := zap.NewDevelopment()
 	if err != nil {
@@ -65,7 +65,7 @@ func Setup(c Config) *TestDriver {
 	go host.Handle(context.Background(), cw, hr)
 	client := rpc.NewClient(hw, cr)
 
-	return &TestDriver{
+	return &Driver{
 		ds:     *ds,
 		store:  store,
 		host:   host,
@@ -75,11 +75,11 @@ func Setup(c Config) *TestDriver {
 	}
 }
 
-func (d *TestDriver) Teardown() error {
+func (d *Driver) Teardown() error {
 	return os.RemoveAll(d.file)
 }
 
-func (d *TestDriver) Logf(format string, a ...interface{}) {
+func (d *Driver) Logf(format string, a ...interface{}) {
 	fmt.Fprintf(d.log, format+"\n", a...)
 }
 
@@ -89,9 +89,6 @@ func tempfile() string {
 		panic(err)
 	}
 	if err := f.Close(); err != nil {
-		panic(err)
-	}
-	if err := os.Remove(f.Name()); err != nil {
 		panic(err)
 	}
 	return f.Name()
