@@ -6,13 +6,21 @@ import { MainLayout } from "../components/MainLayout";
 import { useCall, useLazyCall } from "../contexts/Api";
 import * as pb from "../lib/pb";
 
-const JoinForm = ({ onCreate }: { onCreate: (res: pb.CreateNetworkMembershipFromInvitationResponse) => void }) => {
-  const [{ value, error, loading }, createMembership] = useLazyCall("createNetworkMembershipFromInvitation", { onComplete: onCreate });
+const JoinForm = ({
+  onCreate,
+}: {
+  onCreate: (res: pb.CreateNetworkMembershipFromInvitationResponse) => void;
+}) => {
+  const [
+    { value, error, loading },
+    createMembership,
+  ] = useLazyCall("createNetworkMembershipFromInvitation", { onComplete: onCreate });
   const { register, handleSubmit, errors } = useForm({
     mode: "onBlur",
   });
 
-  const onSubmit = (data) => createMembership(new pb.CreateNetworkMembershipFromInvitationRequest(data));
+  const onSubmit = (data) =>
+    createMembership(new pb.CreateNetworkMembershipFromInvitationRequest(data));
 
   return (
     <form className="invite_form" onSubmit={handleSubmit(onSubmit)}>
@@ -43,8 +51,17 @@ const JoinForm = ({ onCreate }: { onCreate: (res: pb.CreateNetworkMembershipFrom
   );
 };
 
-const NetworkTable = ({ networks, onDelete }: { networks: pb.INetworkMembership[]; onDelete: () => void }) => {
-  const [, deleteNetworkMembership] = useLazyCall("deleteNetworkMembership", { onComplete: onDelete });
+const NetworkTable = ({
+  networks,
+  onDelete,
+}: {
+  networks: pb.INetworkMembership[];
+  onDelete: () => void;
+}) => {
+  const [, deleteNetworkMembership] = useLazyCall("deleteNetworkMembership", {
+    onComplete: onDelete,
+    onError: (err) => console.log(err),
+  });
 
   if (!networks) {
     return null;
@@ -57,7 +74,9 @@ const NetworkTable = ({ networks, onDelete }: { networks: pb.INetworkMembership[
       <div className="thing_list__item" key={network.id}>
         {i}
         <span>{network.name}</span>
-        <button onClick={handleDelete}>delete</button>
+        <button className="input input_button" onClick={handleDelete}>
+          delete
+        </button>
         <pre>{JSON.stringify(network, null, 2)}</pre>
       </div>
     );
@@ -84,7 +103,7 @@ const NetworkMembershipsPage = () => {
           Chat Servers
         </Link>
         <main className="network_page">
-        <JoinForm onCreate={() => getNetworkMemberships()} />
+          <JoinForm onCreate={() => getNetworkMemberships()} />
           <h1>Network Membership</h1>
           <h2>Recommended Networks</h2>
           <p>Manage your connected networks</p>

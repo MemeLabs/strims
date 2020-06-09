@@ -2,11 +2,13 @@ package service
 
 import (
 	"bytes"
-	"sync/atomic"
+	"errors"
+	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
 
@@ -23,30 +25,25 @@ type NetworkServices struct {
 	Swarms       SwarmNetwork
 }
 
-// NetworkServiceConstructor ...
-type NetworkServiceConstructor func(n *NetworkServices) Frontend
-
 // NewNetworksController ...
 func NewNetworksController(logger *zap.Logger, store *dao.ProfileStore) *NetworksController {
 	return &NetworksController{
-		logger:         logger,
-		store:          store,
-		services:       map[string]NetworkServiceConstructor{},
-		serviceOptions: map[uint32]NetworkServices{},
+		logger: logger,
+		store:  store,
 	}
 }
 
 // NetworksController ...
 type NetworksController struct {
-	logger          *zap.Logger
-	store           *dao.ProfileStore
-	services        map[string]NetworkServiceConstructor
-	serviceOptions  map[uint32]NetworkServices
-	host            *vpn.Host
-	networks        *vpn.Networks
-	hashTableStore  *vpn.HashTableStore
-	peerIndexStore  *vpn.PeerIndexStore
-	swarmController *swarmController
+	logger              *zap.Logger
+	store               *dao.ProfileStore
+	networkServicesLock sync.Mutex
+	networkServices     networkServicesMap
+	host                *vpn.Host
+	networks            *vpn.Networks
+	hashTableStore      *vpn.HashTableStore
+	peerIndexStore      *vpn.PeerIndexStore
+	swarmController     *swarmController
 }
 
 // WithNetworkController ...
@@ -88,26 +85,31 @@ func (c *NetworksController) startProfileNetworks() error {
 	}
 
 	for _, m := range memberships {
-		_, err := c.StartNetwork(m, pbNetworks(networks).Find(m.Certificate.GetParent().Key))
+		_, err := c.StartNetwork(m.Certificate)
 		if err != nil {
 			c.logger.Error("failed to start network", zap.Error(err))
+			continue
+		}
+
+		options := pbNetworks(networks).Find(dao.GetRootCert(m.Certificate).Key)
+		if options != nil {
+			c.StartNetworkAuthorityServices(m.Certificate, options)
 		}
 	}
 
 	return nil
 }
 
-// ServiceOptions ...
-func (c *NetworksController) ServiceOptions(i uint32) NetworkServices {
-	return c.serviceOptions[i]
+// NetworkServices ...
+func (c *NetworksController) NetworkServices(key []byte) (*NetworkServices, bool) {
+	c.networkServicesLock.Lock()
+	defer c.networkServicesLock.Unlock()
+	return c.networkServices.Get(key)
 }
 
 // StartNetwork ...
-func (c *NetworksController) StartNetwork(
-	membership *pb.NetworkMembership,
-	options *pb.Network,
-) (*vpn.Network, error) {
-	network, err := c.networks.AddNetwork(membership.Certificate)
+func (c *NetworksController) StartNetwork(cert *pb.Certificate) (*NetworkServices, error) {
+	network, err := c.networks.AddNetwork(cert)
 	if err != nil {
 		return nil, err
 	}
@@ -120,61 +122,51 @@ func (c *NetworksController) StartNetwork(
 	network.SetHandler(vpn.PeerIndexPort, peerIndex)
 	network.SetHandler(vpn.PeerExchangePort, peerExchange)
 
-	opt := NetworkServices{
+	svc := &NetworkServices{
 		Network:      network,
 		HashTable:    hashTable,
 		PeerIndex:    peerIndex,
 		PeerExchange: peerExchange,
 		Swarms:       c.swarmController.AddNetwork(network),
 	}
+	c.networkServicesLock.Lock()
+	c.networkServices.Insert(dao.GetRootCert(cert).Key, svc)
+	c.networkServicesLock.Unlock()
 
-	c.serviceOptions[atomic.AddUint32(&nextServiceOptionID, 1)] = opt
-
-	if options != nil {
-		c.startNetworkAuthorityServices(&opt, options)
-	}
-
-	return network, nil
+	return svc, nil
 }
 
-func (c *NetworksController) startNetworkAuthorityServices(opt *NetworkServices, options *pb.Network) {
+// StartNetworkAuthorityServices ...
+func (c *NetworksController) StartNetworkAuthorityServices(cert *pb.Certificate, options *pb.Network) error {
+	c.networkServicesLock.Lock()
+	svc, ok := c.networkServices.Get(dao.GetRootCert(cert).Key)
+	c.networkServicesLock.Unlock()
+	if !ok {
+		return errors.New("unknown network")
+	}
+
+	_ = svc
+
 	// TODO: some sort of replication?
 	// hot standby?
 
-	d := NewDirectoryService(opt, options)
-
+	// d := NewDirectoryService(svc, options)
 	// go d.Run()
+	// svc.Network.SetHandler(vpn.DirectoryPort, d)
 
-	opt.Network.SetHandler(vpn.DirectoryPort, d)
-
+	return nil
 }
 
 // StopNetwork ...
-func (c *NetworksController) StopNetwork(membership *pb.NetworkMembership) error {
-	network, ok := c.networks.FindByKey(membership.Certificate.GetParent().Key)
+func (c *NetworksController) StopNetwork(cert *pb.Certificate) error {
+	c.networkServicesLock.Lock()
+	svc, ok := c.networkServices.Get(dao.GetRootCert(cert).Key)
+	c.networkServicesLock.Unlock()
 	if !ok {
 		return nil
 	}
-	return c.networks.RemoveNetwork(network)
-}
 
-func (c *NetworksController) temp() {
-	// hostOptions = append(hostOptions, vpn.WithNetworks(networks))
-
-	// chatServers, err := session.Store().GetChatServers()
-	// if err != nil {
-	// 	return nil, err
-	// }
-	// for _, s := range chatServers {
-	// 	n, ok := networks.FindByKey(s.NetworkKey)
-	// 	if !ok {
-	// 		log.Printf("chat server %d bound to unknown network %x", s.Id, s.NetworkKey)
-	// 		continue
-	// 	}
-	// 	if err := n.HostService(vpn.NewChatService(n, s.ChatRoom)); err != nil {
-	// 		return nil, err
-	// 	}
-	// }
+	return c.networks.RemoveNetwork(svc.Network)
 }
 
 // NetworkController ...
@@ -185,80 +177,33 @@ type NetworkController struct {
 	pex *vpn.PeerExchange
 }
 
-// func RunDefaultServices(host *vpn.Host, networks *vpn.Networks) {
-// 	for _, n := range networks.Networks() {
-// 		handleNetwork(host, n)
-// 	}
-
-// 	ch := make(chan *vpn.Network, 1)
-// 	networks.NotifyNetwork(ch)
-// 	for n := range ch {
-// 		handleNetwork(host, n)
-// 	}
-// }
-
-func handleNetwork(host *vpn.Host, n *vpn.Network) {
-	// n.SetHandler(1, newStore(n))
-
-	// pex := vpn.NewPeerExchange(n)
-	// n.SetHandler(2, pex)
-	// go func() {
-	// 	for range time.NewTicker(time.Second * 10).C {
-	// 		pex.RequestPeers()
-	// 	}
-	// }()
+type networkServicesMap struct {
+	m llrb.LLRB
 }
 
-// // HostService ...
-// func (n *Network) HostService(s NetworkService) error {
-// 	port, err := n.ReservePort()
-// 	if err != nil {
-// 		return err
-// 	}
-// 	n.SetHandler(port, s)
+func (m *networkServicesMap) Insert(k []byte, v *NetworkServices) {
+	m.m.InsertNoReplace(networkServicesMapEntry{k, v})
+}
 
-// 	if as, ok := s.(AdvertiseableService); ok {
-// 		n.ScheduleServiceAdvertisements(as, port)
-// 	}
+func (m *networkServicesMap) Delete(k []byte) {
+	m.m.Delete(networkServicesMapEntry{k, nil})
+}
 
-// 	return nil
-// }
+func (m *networkServicesMap) Get(k []byte) (*NetworkServices, bool) {
+	if it := m.m.Get(networkServicesMapEntry{k, nil}); it != nil {
+		return it.(networkServicesMapEntry).v, true
+	}
+	return nil, false
+}
 
-// // TODO: does this really belong here...? move to... ServiceManager? lifecycle?
-// func (n *Network) ScheduleServiceAdvertisements(as AdvertiseableService, port uint16) {
-// 	go func() {
-// 		// TODO: build service advertisement message...
-// 		// * host id
-// 		// * port
-// 		// * service name/description?
-// 		// * mime type?
-// 		// * service specific conn info?
-// 		// * service "type"? what is this...? mime type? protocol type? proto uri?
-// 		// * service version?
-// 		// * service specific health/activity metrics? viewers/chatters/bitrate/resolution/???
-// 		// * metadata ppspp stream uri?
+type networkServicesMapEntry struct {
+	k []byte
+	v *NetworkServices
+}
 
-// 		// b := make([]byte, 128)
-
-// 		// for range time.NewTicker(time.Second * 5).C {
-// 		// 	a := as.ServiceAdvertisement()
-// 		// 	a.HostId = n.hostID.Bytes()
-// 		// 	a.Port = uint32(port)
-
-// 		// 	if err := n.Send(NewHostID(n.CAKey(), 0), 0, b); err != nil {
-// 		// 		log.Println(err)
-// 		// 	}
-// 		// }
-
-// 		// m.WriteTo(w io.Writer, hostID kademlia.ID, key *pb.Key)
-
-// 	}()
-// }
-
-// type NetworkService interface {
-// 	HandleMessage(m *Message) (bool, error)
-// }
-
-// type AdvertiseableService interface {
-// 	ServiceAdvertisement() *pb.ServiceAdvertisement
-// }
+func (t networkServicesMapEntry) Less(oi llrb.Item) bool {
+	if o, ok := oi.(networkServicesMapEntry); ok {
+		return bytes.Compare(t.k, o.k) == -1
+	}
+	return !oi.Less(t)
+}

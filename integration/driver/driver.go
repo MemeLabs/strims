@@ -2,7 +2,6 @@ package driver
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -27,30 +26,28 @@ type Driver struct {
 
 type Config struct {
 	VpnAddr string
-	Log     io.Writer
+	File    string
+	Store   dao.Store
 }
 
 func Setup(c Config) *Driver {
-
 	logger, err := zap.NewDevelopment()
 	if err != nil {
 		panic(err)
 	}
 
-	file := tempfile()
-
-	store, err := kv.NewKVStore(file)
-	if err != nil {
-		log.Fatalf("failed to open db: %s", err)
-	}
-
-	ds, err := dao.NewMetadataStore(store)
-	if err != nil {
-		panic(err)
+	if c.Store == nil && c.File == "" {
+		file := tempfile()
+		store, err := kv.NewKVStore(file)
+		if err != nil {
+			log.Fatalf("failed to open db: %s", err)
+		}
+		c.Store = store
+		c.File = file
 	}
 
 	svc, err := service.New(service.Options{
-		Store: store,
+		Store: c.Store,
 		VPNOptions: []vpn.HostOption{
 			vpn.WithInterface(vpn.NewWSInterface(logger, c.VpnAddr)),
 		},
@@ -62,7 +59,6 @@ func Setup(c Config) *Driver {
 	host := rpc.NewHost(svc)
 	hr, hw := io.Pipe()
 	cr, cw := io.Pipe()
-	go host.Handle(context.Background(), cw, hr)
 	client := rpc.NewClient(hw, cr)
 
 	return &Driver{

@@ -1,4 +1,5 @@
 src/lib/pb/pb.* linguist-generated
+src/lib/pb/register_types.ts  linguist-generated
 pkg/pb/* linguist-generated
 vendor linguist-vendored
 go.sum linguist-generated

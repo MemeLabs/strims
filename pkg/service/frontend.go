@@ -4,11 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"runtime"
 	"runtime/pprof"
-	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
@@ -177,7 +177,16 @@ func (s *Frontend) CreateNetwork(ctx context.Context, r *pb.CreateNetworkRequest
 		return nil, err
 	}
 
-	_, err = s.SaveNetworkMembership(ctx, membership, network)
+	err = session.Store().InsertNetwork(network)
+	if err != nil {
+		return nil, err
+	}
+	err = s.saveNetworkMembership(ctx, membership)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.startNetwork(ctx, membership, network)
 	if err != nil {
 		return nil, err
 	}
@@ -271,7 +280,7 @@ func (s *Frontend) DeleteNetworkMembership(ctx context.Context, r *pb.DeleteNetw
 		return nil, err
 	}
 
-	if err := controller.StopNetwork(membership); err != nil {
+	if err := controller.StopNetwork(membership.Certificate); err != nil {
 		return nil, err
 	}
 
@@ -343,6 +352,38 @@ func (s *Frontend) GetBootstrapClients(ctx context.Context, r *pb.GetBootstrapCl
 	}
 
 	return &pb.GetBootstrapClientsResponse{BootstrapClients: clients}, nil
+}
+
+// GetBootstrapPeers ...
+func (s *Frontend) GetBootstrapPeers(ctx context.Context, r *pb.GetBootstrapPeersRequest) (*pb.GetBootstrapPeersResponse, error) {
+	svc, err := s.getBootstrapService(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	peers := []*pb.BootstrapPeer{}
+	for _, k := range svc.GetPeerKeys() {
+		peers = append(peers, &pb.BootstrapPeer{
+			Key:   k,
+			Label: hex.EncodeToString(k),
+		})
+	}
+
+	return &pb.GetBootstrapPeersResponse{Peers: peers}, nil
+}
+
+// PublishNetworkToBootstrapPeer ...
+func (s *Frontend) PublishNetworkToBootstrapPeer(ctx context.Context, r *pb.PublishNetworkToBootstrapPeerRequest) (*pb.PublishNetworkToBootstrapPeerResponse, error) {
+	svc, err := s.getBootstrapService(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := svc.PublishNetwork(r.Key, r.Network); err != nil {
+		return nil, err
+	}
+
+	return &pb.PublishNetworkToBootstrapPeerResponse{}, nil
 }
 
 // CreateChatServer ...
@@ -424,8 +465,9 @@ type vpnKeyType struct{}
 var vpnKey = vpnKeyType{}
 
 type vpnData struct {
-	host       *vpn.Host
-	controller *NetworksController
+	host             *vpn.Host
+	controller       *NetworksController
+	bootstrapService *BootstrapService
 }
 
 // StartVPN ...
@@ -444,21 +486,29 @@ func (s *Frontend) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (*pb.Sta
 			return nil, err
 		}
 
-		controller := NewNetworksController(s.logger, session.Store())
-		hostOptions = append(hostOptions, WithNetworkController(controller))
+		networkController := NewNetworksController(s.logger, session.Store())
+		hostOptions = append(hostOptions, WithNetworkController(networkController))
+
+		bootstrapService := NewBootstrapService(
+			s.logger,
+			session.Store(),
+			networkController,
+			BootstrapServiceOptions{},
+		)
+		hostOptions = append(hostOptions, WithBootstrapService(bootstrapService))
 
 		clients, err := session.Store().GetBootstrapClients()
 		if err != nil {
 			return nil, err
 		}
-		hostOptions = append(hostOptions, vpn.WithBootstrapClients(clients))
+		hostOptions = append(hostOptions, WithBootstrapClients(clients))
 
 		host, err := vpn.NewHost(s.logger, profile.Key, hostOptions...)
 		if err != nil {
 			return nil, err
 		}
 
-		session.Values.Store(vpnKey, vpnData{host, controller})
+		session.Values.Store(vpnKey, vpnData{host, networkController, bootstrapService})
 	}
 
 	return &pb.StartVPNResponse{}, nil
@@ -482,47 +532,48 @@ func (s *Frontend) StopVPN(ctx context.Context, r *pb.StopVPNRequest) (*pb.StopV
 
 // OpenVideoClient ...
 func (s *Frontend) OpenVideoClient(ctx context.Context, r *pb.VideoClientOpenRequest) (<-chan *pb.VideoClientEvent, error) {
-	session := rpc.ContextSession(ctx)
-	if session.Anonymous() {
-		return nil, ErrAuthenticationRequired
-	}
+	// session := rpc.ContextSession(ctx)
+	// if session.Anonymous() {
+	// 	return nil, ErrAuthenticationRequired
+	// }
 
-	s.logger.Debug("start swarm...")
+	// s.logger.Debug("start swarm...")
 
-	v := NewVideoThing()
+	// v := NewVideoThing()
 
 	ch := make(chan *pb.VideoClientEvent, 1)
-	go v.RunClient(ch)
+	// go v.RunClient(ch)
 
-	id := atomic.AddUint32(&idThing, 1)
-	session.Values.Store(id, v)
+	// id := atomic.AddUint32(&idThing, 1)
+	// session.Values.Store(id, v)
 
-	ch <- &pb.VideoClientEvent{
-		Body: &pb.VideoClientEvent_Open_{
-			Open: &pb.VideoClientEvent_Open{
-				Id: id,
-			},
-		},
-	}
+	// ch <- &pb.VideoClientEvent{
+	// 	Body: &pb.VideoClientEvent_Open_{
+	// 		Open: &pb.VideoClientEvent_Open{
+	// 			Id: id,
+	// 		},
+	// 	},
+	// }
 
 	return ch, nil
 }
 
 // OpenVideoServer ...
 func (s *Frontend) OpenVideoServer(ctx context.Context, r *pb.VideoServerOpenRequest) (*pb.VideoServerOpenResponse, error) {
-	session := rpc.ContextSession(ctx)
-	if session.Anonymous() {
-		return nil, ErrAuthenticationRequired
-	}
+	// session := rpc.ContextSession(ctx)
+	// if session.Anonymous() {
+	// 	return nil, ErrAuthenticationRequired
+	// }
 
-	s.logger.Debug("start swarm...")
+	// s.logger.Debug("start swarm...")
 
-	v := NewVideoThing()
-	v.RunServer()
+	// v := NewVideoThing()
+	// v.RunServer()
 
-	id := atomic.AddUint32(&idThing, 1)
-	session.Values.Store(id, v)
+	// id := atomic.AddUint32(&idThing, 1)
+	// session.Values.Store(id, v)
 
+	var id uint32
 	return &pb.VideoServerOpenResponse{Id: id}, nil
 }
 
@@ -569,9 +620,12 @@ func (s *Frontend) PublishSwarm(ctx context.Context, r *pb.PublishSwarmRequest) 
 		return nil, errors.New("vpnData does not exist")
 	}
 
-	if err := t.PublishSwarm(vpnDataIf.(vpnData).controller.ServiceOptions(1)); err != nil {
-		return nil, err
-	}
+	_ = vpnDataIf
+	_ = t
+
+	// if err := t.PublishSwarm(vpnDataIf.(vpnData).controller.ServiceOptions(1)); err != nil {
+	// 	return nil, err
+	// }
 
 	return &pb.PublishSwarmResponse{}, nil
 }
@@ -624,54 +678,55 @@ func (s *Frontend) OpenChatClient(ctx context.Context, r *pb.ChatClientOpenReque
 
 	ch := make(chan *pb.ChatClientEvent, 1)
 
-	vpnDataIf, ok := session.Values.Load(vpnKey)
-	if !ok {
-		return nil, errors.New("vpnData does not exist")
-	}
+	// vpnDataIf, ok := session.Values.Load(vpnKey)
+	// if !ok {
+	// 	return nil, errors.New("vpnData does not exist")
+	// }
 
-	c := NewChatThing(ch, vpnDataIf.(vpnData))
+	// TODO: pass in NetworkServices corresponding to host network
+	// c := NewChatThing(ch, vpnDataIf.(vpnData))
 
-	id := atomic.AddUint32(&idThing, 1)
-	session.Values.Store(id, c)
+	// id := atomic.AddUint32(&idThing, 1)
+	// session.Values.Store(id, c)
 
-	ch <- &pb.ChatClientEvent{
-		Body: &pb.ChatClientEvent_Open_{
-			Open: &pb.ChatClientEvent_Open{
-				ClientId: id,
-			},
-		},
-	}
+	// ch <- &pb.ChatClientEvent{
+	// 	Body: &pb.ChatClientEvent_Open_{
+	// 		Open: &pb.ChatClientEvent_Open{
+	// 			ClientId: id,
+	// 		},
+	// 	},
+	// }
 
-	go func() {
-		for e := range c.events {
-			ch <- e
-		}
-	}()
+	// go func() {
+	// 	for e := range c.events {
+	// 		ch <- e
+	// 	}
+	// }()
 
 	return ch, nil
 }
 
 // CallChatClient ...
 func (s *Frontend) CallChatClient(ctx context.Context, r *pb.ChatClientCallRequest) error {
-	session := rpc.ContextSession(ctx)
-	if session.Anonymous() {
-		return ErrAuthenticationRequired
-	}
+	// session := rpc.ContextSession(ctx)
+	// if session.Anonymous() {
+	// 	return ErrAuthenticationRequired
+	// }
 
-	clientIf, _ := session.Values.Load(r.ClientId)
-	client, ok := clientIf.(*ChatThing)
-	if !ok {
-		return errors.New("client id does not exist")
-	}
+	// clientIf, _ := session.Values.Load(r.ClientId)
+	// client, ok := clientIf.(*ChatThing)
+	// if !ok {
+	// 	return errors.New("client id does not exist")
+	// }
 
-	switch b := r.Body.(type) {
-	case *pb.ChatClientCallRequest_Message_:
-		client.SendMessage(b.Message)
-	case *pb.ChatClientCallRequest_RunClient_:
-		client.RunClient()
-	case *pb.ChatClientCallRequest_RunServer_:
-		go client.RunServer()
-	}
+	// switch b := r.Body.(type) {
+	// case *pb.ChatClientCallRequest_Message_:
+	// 	client.SendMessage(b.Message)
+	// case *pb.ChatClientCallRequest_RunClient_:
+	// 	client.RunClient()
+	// case *pb.ChatClientCallRequest_RunServer_:
+	// 	go client.RunServer()
+	// }
 
 	return nil
 }
@@ -780,7 +835,12 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 		return nil, err
 	}
 
-	_, err = s.SaveNetworkMembership(ctx, membership, nil)
+	err = s.saveNetworkMembership(ctx, membership)
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.startNetwork(ctx, membership, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -790,48 +850,47 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 	}, nil
 }
 
-// SaveNetworkMembership saves and initates a network membership.
+// saveNetworkMembership saves a network membership.
 // it returns an error if the user is already has a valid membership for that network
-func (s *Frontend) SaveNetworkMembership(ctx context.Context, newMembership *pb.NetworkMembership, network *pb.Network) (*vpn.Network, error) {
+func (s *Frontend) saveNetworkMembership(ctx context.Context, membership *pb.NetworkMembership) error {
 	session := rpc.ContextSession(ctx)
 	if session.Anonymous() {
-		return nil, ErrAuthenticationRequired
+		return ErrAuthenticationRequired
 	}
 
-	memberships, err := session.Store().GetNetworkMemberships()
-	if err != nil {
-		return nil, err
+	old, err := session.Store().GetNetworkMembershipByNetworkKey(dao.GetRootCert(membership.Certificate).Key)
+	if err != nil && err != dao.ErrRecordNotFound {
+		return err
 	}
+	if old != nil {
+		if !dao.CertIsExpired(old.Certificate) {
+			return ErrAlreadyJoinedNetwork
+		}
 
-	for _, m := range memberships {
-		if bytes.Equal(m.CaCertificate.Key, newMembership.CaCertificate.Key) {
-			if dao.CertIsExpired(m.Certificate) {
-				if err := session.Store().DeleteNetworkMembership(m.Id); err != nil {
-					return nil, fmt.Errorf("could delete old membership: %w", err)
-				}
-				continue
-			}
-			return nil, ErrAlreadyJoinedNetwork
+		if err := session.Store().DeleteNetworkMembership(old.Id); err != nil {
+			return fmt.Errorf("could not delete old membership: %w", err)
 		}
 	}
 
+	return session.Store().InsertNetworkMembership(membership)
+}
+
+func (s *Frontend) startNetwork(ctx context.Context, membership *pb.NetworkMembership, network *pb.Network) error {
 	controller, err := s.getNetworkController(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	if network != nil {
-		err = session.Store().InsertNetwork(network)
-		if err != nil {
-			return nil, err
-		}
-	}
-	err = session.Store().InsertNetworkMembership(newMembership)
-	if err != nil {
-		return nil, err
+	// TODO: restart/update network with new cert?
+	if _, err := controller.StartNetwork(membership.Certificate); err != nil {
+		return err
 	}
 
-	return controller.StartNetwork(newMembership, network)
+	if network == nil {
+		return nil
+	}
+
+	return controller.StartNetworkAuthorityServices(membership.Certificate, network)
 }
 
 // loads the NetworksController fron the session store
@@ -853,4 +912,23 @@ func (s *Frontend) getNetworkController(ctx context.Context) (*NetworksControlle
 	}
 
 	return data.controller, nil
+}
+
+func (s *Frontend) getBootstrapService(ctx context.Context) (*BootstrapService, error) {
+	session := rpc.ContextSession(ctx)
+	if session.Anonymous() {
+		return nil, ErrAuthenticationRequired
+	}
+
+	d, ok := session.Values.Load(vpnKey)
+	if !ok {
+		return nil, errors.New("could not get vpn data")
+	}
+
+	data, ok := d.(vpnData)
+	if !ok {
+		return nil, errors.New("vpn data has unexpected type")
+	}
+
+	return data.bootstrapService, nil
 }

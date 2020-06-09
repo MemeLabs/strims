@@ -16,10 +16,32 @@
 .thing_list {
   margin: 20px 0;
 
-  .thing_list__item {
+  &__item {
     border-radius: 4px;
     border: 1px solid $slate-500;
     background: $slate-300;
     padding: 20px;
+  }
+
+  &__modal_mask {
+    background: rgba(0, 0,0, 0.5);
+    content: "";
+    height: 100vh;
+    left: 0;
+    position: fixed;
+    top: 0;
+    width: 100vw;
+    z-index: 1;
+  }
+
+  &__modal {
+    background: white;
+    left: 50%;
+    margin-left: -420px;
+    padding: 20px;
+    position: fixed;
+    top: 50%;
+    width: 800px;
+    z-index: 999;
   }
 }

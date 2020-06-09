@@ -1,13 +1,17 @@
 import * as React from "react";
-import { useForm } from "react-hook-form";
+import ReactDOM from "react-dom";
+import Select from "react-select";
+import { useForm, Controller } from "react-hook-form";
 import { Link } from "react-router-dom";
-import { InputError, TextInput } from "../components/Form";
+import { InputError, InputLabel, TextInput } from "../components/Form";
 import { MainLayout } from "../components/MainLayout";
 import { useCall, useLazyCall, useClient } from "../contexts/Api";
 import * as pb from "../lib/pb";
 
 const NetworkForm = ({ onCreate }: { onCreate: (res: pb.CreateNetworkResponse) => void }) => {
-  const [{ value, error, loading }, createNetwork] = useLazyCall("createNetwork", { onComplete: onCreate });
+  const [{ value, error, loading }, createNetwork] = useLazyCall("createNetwork", {
+    onComplete: onCreate,
+  });
   const { register, handleSubmit, errors } = useForm({
     mode: "onBlur",
   });
@@ -51,10 +55,86 @@ const wrapString = (str: string, cols: number) =>
 
 const unwrapString = (str: string) => str.replace(/\n/g, "");
 
-const NetworkTable = ({ networks, onDelete }: { networks: pb.INetwork[]; onDelete: () => void }) => {
+const PublishNetworkModal = ({
+  network,
+  onClose,
+}: {
+  network: pb.INetwork;
+  onClose: () => void;
+}) => {
+  const [bootstrapPeersRes] = useCall("getBootstrapPeers");
+  const client = useClient();
+  const { register, handleSubmit, errors, control } = useForm({
+    mode: "onBlur",
+  });
+
+  const onSubmit = (data) => {
+    console.log(data);
+    client.publishNetworkToBootstrapPeer({
+      key: data.peer.value.value,
+      network: network,
+    });
+    onClose();
+  };
+
+  if (bootstrapPeersRes.loading) {
+    return null;
+  }
+
+  return ReactDOM.createPortal(
+    <>
+      <div className="thing_list__modal_mask"></div>
+      <div className="thing_list__modal">
+        <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
+          <InputLabel required={true} text="Peer">
+            <Controller
+              as={Select}
+              className="input_select"
+              placeholder="Select peer"
+              options={bootstrapPeersRes.value?.peers.map((p) => ({
+                value: p.key,
+                label: p.label,
+              }))}
+              onChange={([selected]) => ({ value: selected })}
+              name="peer"
+              control={control}
+              value={{}}
+              rules={{
+                required: {
+                  value: true,
+                  message: "Network is required",
+                },
+              }}
+            />
+            <InputError error={errors.peer} />
+          </InputLabel>
+          <div className="input_buttons">
+            <button className="input input_button" onClick={onClose}>
+              Cancel
+            </button>
+            <button className="input input_button">Publish Network</button>
+          </div>
+        </form>
+      </div>
+    </>,
+    document.body
+  );
+};
+
+const NetworkTable = ({
+  networks,
+  onDelete,
+}: {
+  networks: pb.INetwork[];
+  onDelete: () => void;
+}) => {
   const [, deleteNetwork] = useLazyCall("deleteNetwork", { onComplete: onDelete });
   const client = useClient();
 
+  const [publishNetwork, setPublishNetwork] = React.useState<pb.INetwork>();
+  const modal = publishNetwork && (
+    <PublishNetworkModal network={publishNetwork} onClose={() => setPublishNetwork(null)} />
+  );
   if (!networks) {
     return null;
   }
@@ -72,6 +152,8 @@ const NetworkTable = ({ networks, onDelete }: { networks: pb.INetwork[]; onDelet
       console.log("copied invite to clipboard");
     };
 
+    const handlePublish = () => setPublishNetwork(network);
+
     return (
       <div className="thing_list__item" key={network.id}>
         {i}
@@ -82,11 +164,19 @@ const NetworkTable = ({ networks, onDelete }: { networks: pb.INetwork[]; onDelet
         <button onClick={handleCreateInvite} className="input input_button">
           create invite
         </button>
+        <button onClick={handlePublish} className="input input_button">
+          publish
+        </button>
         <pre>{JSON.stringify(network, null, 2)}</pre>
       </div>
     );
   });
-  return <div className="thing_list">{rows}</div>;
+  return (
+    <div className="thing_list">
+      {modal}
+      {rows}
+    </div>
+  );
 };
 
 const NetworksPage = () => {
