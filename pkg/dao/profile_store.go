@@ -142,6 +142,21 @@ func (s *ProfileStore) GetNetworkMemberships() ([]*pb.NetworkMembership, error) 
 	return vs, nil
 }
 
+// GetNetworkMembershipByNetworkKey returns the membership belonging to the given network
+func (s *ProfileStore) GetNetworkMembershipByNetworkKey(k []byte) (*pb.NetworkMembership, error) {
+	memberships, err := s.GetNetworkMemberships()
+	if err != nil {
+		return nil, err
+	}
+
+	for _, im := range memberships {
+		if bytes.Equal(GetRootCert(im.Certificate).Key, k) {
+			return im, nil
+		}
+	}
+	return nil, ErrRecordNotFound
+}
+
 // GetNetworkMembershipForNetwork returns the membership belonging to the given network
 func (s *ProfileStore) GetNetworkMembershipForNetwork(netID uint64) (*pb.NetworkMembership, error) {
 	network, err := s.GetNetwork(netID)
@@ -152,18 +167,7 @@ func (s *ProfileStore) GetNetworkMembershipForNetwork(netID uint64) (*pb.Network
 		return nil, err
 	}
 
-	memebrships, err := s.GetNetworkMemberships()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, membership := range memebrships {
-		if bytes.Equal(membership.CaCertificate.Key, network.Certificate.Key) {
-			return membership, nil
-		}
-	}
-
-	return nil, ErrRecordNotFound
+	return s.GetNetworkMembershipByNetworkKey(network.Certificate.Key)
 }
 
 // InsertBootstrapClient ...

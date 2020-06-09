@@ -3985,6 +3985,456 @@ export class GetBootstrapClientsResponse implements IGetBootstrapClientsResponse
     public toJSON(): { [k: string]: any };
 }
 
+/** Properties of a GetBootstrapPeersRequest. */
+export interface IGetBootstrapPeersRequest {
+}
+
+/** Represents a GetBootstrapPeersRequest. */
+export class GetBootstrapPeersRequest implements IGetBootstrapPeersRequest {
+
+    /**
+     * Constructs a new GetBootstrapPeersRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IGetBootstrapPeersRequest);
+
+    /**
+     * Creates a new GetBootstrapPeersRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns GetBootstrapPeersRequest instance
+     */
+    public static create(properties?: IGetBootstrapPeersRequest): GetBootstrapPeersRequest;
+
+    /**
+     * Encodes the specified GetBootstrapPeersRequest message. Does not implicitly {@link GetBootstrapPeersRequest.verify|verify} messages.
+     * @param message GetBootstrapPeersRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IGetBootstrapPeersRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified GetBootstrapPeersRequest message, length delimited. Does not implicitly {@link GetBootstrapPeersRequest.verify|verify} messages.
+     * @param message GetBootstrapPeersRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IGetBootstrapPeersRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a GetBootstrapPeersRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns GetBootstrapPeersRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetBootstrapPeersRequest;
+
+    /**
+     * Decodes a GetBootstrapPeersRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns GetBootstrapPeersRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetBootstrapPeersRequest;
+
+    /**
+     * Verifies a GetBootstrapPeersRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a GetBootstrapPeersRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns GetBootstrapPeersRequest
+     */
+    public static fromObject(object: { [k: string]: any }): GetBootstrapPeersRequest;
+
+    /**
+     * Creates a plain object from a GetBootstrapPeersRequest message. Also converts values to other types if specified.
+     * @param message GetBootstrapPeersRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: GetBootstrapPeersRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this GetBootstrapPeersRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a GetBootstrapPeersResponse. */
+export interface IGetBootstrapPeersResponse {
+
+    /** GetBootstrapPeersResponse peers */
+    peers?: (IBootstrapPeer[]|null);
+}
+
+/** Represents a GetBootstrapPeersResponse. */
+export class GetBootstrapPeersResponse implements IGetBootstrapPeersResponse {
+
+    /**
+     * Constructs a new GetBootstrapPeersResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IGetBootstrapPeersResponse);
+
+    /** GetBootstrapPeersResponse peers. */
+    public peers: IBootstrapPeer[];
+
+    /**
+     * Creates a new GetBootstrapPeersResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns GetBootstrapPeersResponse instance
+     */
+    public static create(properties?: IGetBootstrapPeersResponse): GetBootstrapPeersResponse;
+
+    /**
+     * Encodes the specified GetBootstrapPeersResponse message. Does not implicitly {@link GetBootstrapPeersResponse.verify|verify} messages.
+     * @param message GetBootstrapPeersResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IGetBootstrapPeersResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified GetBootstrapPeersResponse message, length delimited. Does not implicitly {@link GetBootstrapPeersResponse.verify|verify} messages.
+     * @param message GetBootstrapPeersResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IGetBootstrapPeersResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a GetBootstrapPeersResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns GetBootstrapPeersResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetBootstrapPeersResponse;
+
+    /**
+     * Decodes a GetBootstrapPeersResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns GetBootstrapPeersResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetBootstrapPeersResponse;
+
+    /**
+     * Verifies a GetBootstrapPeersResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a GetBootstrapPeersResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns GetBootstrapPeersResponse
+     */
+    public static fromObject(object: { [k: string]: any }): GetBootstrapPeersResponse;
+
+    /**
+     * Creates a plain object from a GetBootstrapPeersResponse message. Also converts values to other types if specified.
+     * @param message GetBootstrapPeersResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: GetBootstrapPeersResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this GetBootstrapPeersResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BootstrapPeer. */
+export interface IBootstrapPeer {
+
+    /** BootstrapPeer key */
+    key?: (Uint8Array|null);
+
+    /** BootstrapPeer label */
+    label?: (string|null);
+}
+
+/** Represents a BootstrapPeer. */
+export class BootstrapPeer implements IBootstrapPeer {
+
+    /**
+     * Constructs a new BootstrapPeer.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBootstrapPeer);
+
+    /** BootstrapPeer key. */
+    public key: Uint8Array;
+
+    /** BootstrapPeer label. */
+    public label: string;
+
+    /**
+     * Creates a new BootstrapPeer instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BootstrapPeer instance
+     */
+    public static create(properties?: IBootstrapPeer): BootstrapPeer;
+
+    /**
+     * Encodes the specified BootstrapPeer message. Does not implicitly {@link BootstrapPeer.verify|verify} messages.
+     * @param message BootstrapPeer message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBootstrapPeer, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BootstrapPeer message, length delimited. Does not implicitly {@link BootstrapPeer.verify|verify} messages.
+     * @param message BootstrapPeer message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBootstrapPeer, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BootstrapPeer message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BootstrapPeer
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BootstrapPeer;
+
+    /**
+     * Decodes a BootstrapPeer message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BootstrapPeer
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BootstrapPeer;
+
+    /**
+     * Verifies a BootstrapPeer message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BootstrapPeer message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BootstrapPeer
+     */
+    public static fromObject(object: { [k: string]: any }): BootstrapPeer;
+
+    /**
+     * Creates a plain object from a BootstrapPeer message. Also converts values to other types if specified.
+     * @param message BootstrapPeer
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BootstrapPeer, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BootstrapPeer to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a PublishNetworkToBootstrapPeerRequest. */
+export interface IPublishNetworkToBootstrapPeerRequest {
+
+    /** PublishNetworkToBootstrapPeerRequest key */
+    key?: (Uint8Array|null);
+
+    /** PublishNetworkToBootstrapPeerRequest network */
+    network?: (INetwork|null);
+}
+
+/** Represents a PublishNetworkToBootstrapPeerRequest. */
+export class PublishNetworkToBootstrapPeerRequest implements IPublishNetworkToBootstrapPeerRequest {
+
+    /**
+     * Constructs a new PublishNetworkToBootstrapPeerRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IPublishNetworkToBootstrapPeerRequest);
+
+    /** PublishNetworkToBootstrapPeerRequest key. */
+    public key: Uint8Array;
+
+    /** PublishNetworkToBootstrapPeerRequest network. */
+    public network?: (INetwork|null);
+
+    /**
+     * Creates a new PublishNetworkToBootstrapPeerRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns PublishNetworkToBootstrapPeerRequest instance
+     */
+    public static create(properties?: IPublishNetworkToBootstrapPeerRequest): PublishNetworkToBootstrapPeerRequest;
+
+    /**
+     * Encodes the specified PublishNetworkToBootstrapPeerRequest message. Does not implicitly {@link PublishNetworkToBootstrapPeerRequest.verify|verify} messages.
+     * @param message PublishNetworkToBootstrapPeerRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IPublishNetworkToBootstrapPeerRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified PublishNetworkToBootstrapPeerRequest message, length delimited. Does not implicitly {@link PublishNetworkToBootstrapPeerRequest.verify|verify} messages.
+     * @param message PublishNetworkToBootstrapPeerRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IPublishNetworkToBootstrapPeerRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a PublishNetworkToBootstrapPeerRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns PublishNetworkToBootstrapPeerRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): PublishNetworkToBootstrapPeerRequest;
+
+    /**
+     * Decodes a PublishNetworkToBootstrapPeerRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns PublishNetworkToBootstrapPeerRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): PublishNetworkToBootstrapPeerRequest;
+
+    /**
+     * Verifies a PublishNetworkToBootstrapPeerRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a PublishNetworkToBootstrapPeerRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns PublishNetworkToBootstrapPeerRequest
+     */
+    public static fromObject(object: { [k: string]: any }): PublishNetworkToBootstrapPeerRequest;
+
+    /**
+     * Creates a plain object from a PublishNetworkToBootstrapPeerRequest message. Also converts values to other types if specified.
+     * @param message PublishNetworkToBootstrapPeerRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: PublishNetworkToBootstrapPeerRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this PublishNetworkToBootstrapPeerRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a PublishNetworkToBootstrapPeerResponse. */
+export interface IPublishNetworkToBootstrapPeerResponse {
+}
+
+/** Represents a PublishNetworkToBootstrapPeerResponse. */
+export class PublishNetworkToBootstrapPeerResponse implements IPublishNetworkToBootstrapPeerResponse {
+
+    /**
+     * Constructs a new PublishNetworkToBootstrapPeerResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IPublishNetworkToBootstrapPeerResponse);
+
+    /**
+     * Creates a new PublishNetworkToBootstrapPeerResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns PublishNetworkToBootstrapPeerResponse instance
+     */
+    public static create(properties?: IPublishNetworkToBootstrapPeerResponse): PublishNetworkToBootstrapPeerResponse;
+
+    /**
+     * Encodes the specified PublishNetworkToBootstrapPeerResponse message. Does not implicitly {@link PublishNetworkToBootstrapPeerResponse.verify|verify} messages.
+     * @param message PublishNetworkToBootstrapPeerResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IPublishNetworkToBootstrapPeerResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified PublishNetworkToBootstrapPeerResponse message, length delimited. Does not implicitly {@link PublishNetworkToBootstrapPeerResponse.verify|verify} messages.
+     * @param message PublishNetworkToBootstrapPeerResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IPublishNetworkToBootstrapPeerResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a PublishNetworkToBootstrapPeerResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns PublishNetworkToBootstrapPeerResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): PublishNetworkToBootstrapPeerResponse;
+
+    /**
+     * Decodes a PublishNetworkToBootstrapPeerResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns PublishNetworkToBootstrapPeerResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): PublishNetworkToBootstrapPeerResponse;
+
+    /**
+     * Verifies a PublishNetworkToBootstrapPeerResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a PublishNetworkToBootstrapPeerResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns PublishNetworkToBootstrapPeerResponse
+     */
+    public static fromObject(object: { [k: string]: any }): PublishNetworkToBootstrapPeerResponse;
+
+    /**
+     * Creates a plain object from a PublishNetworkToBootstrapPeerResponse message. Also converts values to other types if specified.
+     * @param message PublishNetworkToBootstrapPeerResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: PublishNetworkToBootstrapPeerResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this PublishNetworkToBootstrapPeerResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
 /** Properties of a PeerIndexMessage. */
 export interface IPeerIndexMessage {
 
@@ -15710,6 +16160,387 @@ export class CreateNetworkMembershipFromInvitationResponse implements ICreateNet
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BootstrapServiceMessage. */
+export interface IBootstrapServiceMessage {
+
+    /** BootstrapServiceMessage brokerOffer */
+    brokerOffer?: (BootstrapServiceMessage.IBrokerOffer|null);
+
+    /** BootstrapServiceMessage publishRequest */
+    publishRequest?: (BootstrapServiceMessage.IPublishRequest|null);
+
+    /** BootstrapServiceMessage publishResponse */
+    publishResponse?: (BootstrapServiceMessage.IPublishResponse|null);
+}
+
+/** Represents a BootstrapServiceMessage. */
+export class BootstrapServiceMessage implements IBootstrapServiceMessage {
+
+    /**
+     * Constructs a new BootstrapServiceMessage.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBootstrapServiceMessage);
+
+    /** BootstrapServiceMessage brokerOffer. */
+    public brokerOffer?: (BootstrapServiceMessage.IBrokerOffer|null);
+
+    /** BootstrapServiceMessage publishRequest. */
+    public publishRequest?: (BootstrapServiceMessage.IPublishRequest|null);
+
+    /** BootstrapServiceMessage publishResponse. */
+    public publishResponse?: (BootstrapServiceMessage.IPublishResponse|null);
+
+    /** BootstrapServiceMessage body. */
+    public body?: ("brokerOffer"|"publishRequest"|"publishResponse");
+
+    /**
+     * Creates a new BootstrapServiceMessage instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BootstrapServiceMessage instance
+     */
+    public static create(properties?: IBootstrapServiceMessage): BootstrapServiceMessage;
+
+    /**
+     * Encodes the specified BootstrapServiceMessage message. Does not implicitly {@link BootstrapServiceMessage.verify|verify} messages.
+     * @param message BootstrapServiceMessage message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBootstrapServiceMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BootstrapServiceMessage message, length delimited. Does not implicitly {@link BootstrapServiceMessage.verify|verify} messages.
+     * @param message BootstrapServiceMessage message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBootstrapServiceMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BootstrapServiceMessage message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BootstrapServiceMessage
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BootstrapServiceMessage;
+
+    /**
+     * Decodes a BootstrapServiceMessage message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BootstrapServiceMessage
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BootstrapServiceMessage;
+
+    /**
+     * Verifies a BootstrapServiceMessage message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BootstrapServiceMessage message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BootstrapServiceMessage
+     */
+    public static fromObject(object: { [k: string]: any }): BootstrapServiceMessage;
+
+    /**
+     * Creates a plain object from a BootstrapServiceMessage message. Also converts values to other types if specified.
+     * @param message BootstrapServiceMessage
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BootstrapServiceMessage, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BootstrapServiceMessage to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+export namespace BootstrapServiceMessage {
+
+    /** Properties of a BrokerOffer. */
+    interface IBrokerOffer {
+    }
+
+    /** Represents a BrokerOffer. */
+    class BrokerOffer implements IBrokerOffer {
+
+        /**
+         * Constructs a new BrokerOffer.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: BootstrapServiceMessage.IBrokerOffer);
+
+        /**
+         * Creates a new BrokerOffer instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns BrokerOffer instance
+         */
+        public static create(properties?: BootstrapServiceMessage.IBrokerOffer): BootstrapServiceMessage.BrokerOffer;
+
+        /**
+         * Encodes the specified BrokerOffer message. Does not implicitly {@link BootstrapServiceMessage.BrokerOffer.verify|verify} messages.
+         * @param message BrokerOffer message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: BootstrapServiceMessage.IBrokerOffer, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified BrokerOffer message, length delimited. Does not implicitly {@link BootstrapServiceMessage.BrokerOffer.verify|verify} messages.
+         * @param message BrokerOffer message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: BootstrapServiceMessage.IBrokerOffer, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a BrokerOffer message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns BrokerOffer
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BootstrapServiceMessage.BrokerOffer;
+
+        /**
+         * Decodes a BrokerOffer message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns BrokerOffer
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BootstrapServiceMessage.BrokerOffer;
+
+        /**
+         * Verifies a BrokerOffer message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a BrokerOffer message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns BrokerOffer
+         */
+        public static fromObject(object: { [k: string]: any }): BootstrapServiceMessage.BrokerOffer;
+
+        /**
+         * Creates a plain object from a BrokerOffer message. Also converts values to other types if specified.
+         * @param message BrokerOffer
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: BootstrapServiceMessage.BrokerOffer, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this BrokerOffer to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a PublishRequest. */
+    interface IPublishRequest {
+
+        /** PublishRequest name */
+        name?: (string|null);
+
+        /** PublishRequest certificate */
+        certificate?: (ICertificate|null);
+    }
+
+    /** Represents a PublishRequest. */
+    class PublishRequest implements IPublishRequest {
+
+        /**
+         * Constructs a new PublishRequest.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: BootstrapServiceMessage.IPublishRequest);
+
+        /** PublishRequest name. */
+        public name: string;
+
+        /** PublishRequest certificate. */
+        public certificate?: (ICertificate|null);
+
+        /**
+         * Creates a new PublishRequest instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns PublishRequest instance
+         */
+        public static create(properties?: BootstrapServiceMessage.IPublishRequest): BootstrapServiceMessage.PublishRequest;
+
+        /**
+         * Encodes the specified PublishRequest message. Does not implicitly {@link BootstrapServiceMessage.PublishRequest.verify|verify} messages.
+         * @param message PublishRequest message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: BootstrapServiceMessage.IPublishRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified PublishRequest message, length delimited. Does not implicitly {@link BootstrapServiceMessage.PublishRequest.verify|verify} messages.
+         * @param message PublishRequest message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: BootstrapServiceMessage.IPublishRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a PublishRequest message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns PublishRequest
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BootstrapServiceMessage.PublishRequest;
+
+        /**
+         * Decodes a PublishRequest message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns PublishRequest
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BootstrapServiceMessage.PublishRequest;
+
+        /**
+         * Verifies a PublishRequest message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a PublishRequest message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns PublishRequest
+         */
+        public static fromObject(object: { [k: string]: any }): BootstrapServiceMessage.PublishRequest;
+
+        /**
+         * Creates a plain object from a PublishRequest message. Also converts values to other types if specified.
+         * @param message PublishRequest
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: BootstrapServiceMessage.PublishRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this PublishRequest to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a PublishResponse. */
+    interface IPublishResponse {
+
+        /** PublishResponse error */
+        error?: (string|null);
+    }
+
+    /** Represents a PublishResponse. */
+    class PublishResponse implements IPublishResponse {
+
+        /**
+         * Constructs a new PublishResponse.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: BootstrapServiceMessage.IPublishResponse);
+
+        /** PublishResponse error. */
+        public error: string;
+
+        /** PublishResponse body. */
+        public body?: "error";
+
+        /**
+         * Creates a new PublishResponse instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns PublishResponse instance
+         */
+        public static create(properties?: BootstrapServiceMessage.IPublishResponse): BootstrapServiceMessage.PublishResponse;
+
+        /**
+         * Encodes the specified PublishResponse message. Does not implicitly {@link BootstrapServiceMessage.PublishResponse.verify|verify} messages.
+         * @param message PublishResponse message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: BootstrapServiceMessage.IPublishResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified PublishResponse message, length delimited. Does not implicitly {@link BootstrapServiceMessage.PublishResponse.verify|verify} messages.
+         * @param message PublishResponse message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: BootstrapServiceMessage.IPublishResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a PublishResponse message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns PublishResponse
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BootstrapServiceMessage.PublishResponse;
+
+        /**
+         * Decodes a PublishResponse message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns PublishResponse
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BootstrapServiceMessage.PublishResponse;
+
+        /**
+         * Verifies a PublishResponse message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a PublishResponse message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns PublishResponse
+         */
+        public static fromObject(object: { [k: string]: any }): BootstrapServiceMessage.PublishResponse;
+
+        /**
+         * Creates a plain object from a PublishResponse message. Also converts values to other types if specified.
+         * @param message PublishResponse
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: BootstrapServiceMessage.PublishResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this PublishResponse to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
 }
 
 /** MetricsFormat enum. */

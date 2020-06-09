@@ -120,17 +120,28 @@ func NewNetwork(name string) (*pb.Network, error) {
 
 // NewNetworkMembershipFromNetwork generates a network membership from a network
 func NewNetworkMembershipFromNetwork(network *pb.Network, csr *pb.CertificateRequest) (*pb.NetworkMembership, error) {
-	return NewNetworkMembership(network.Name, network.Certificate, network.Certificate, network.Key, csr)
+	return NewNetworkMembershipFromCSR(network.Name, network.Certificate, network.Certificate, network.Key, csr)
 }
 
 // NewNetworkMembershipFromInvite generates a network membership from a network invitation
 func NewNetworkMembershipFromInvite(invite *pb.InvitationV0, csr *pb.CertificateRequest) (*pb.NetworkMembership, error) {
 	networkCert := GetRootCert(invite.Certificate)
-	return NewNetworkMembership(invite.NetworkName, networkCert, invite.Certificate, invite.Key, csr)
+	return NewNetworkMembershipFromCSR(invite.NetworkName, networkCert, invite.Certificate, invite.Key, csr)
 }
 
-// NewNetworkMembership generates a new network membership using the given parameters
-func NewNetworkMembership(networkName string, networkCert *pb.Certificate, parentCert *pb.Certificate, csrSigningKey *pb.Key, csr *pb.CertificateRequest) (*pb.NetworkMembership, error) {
+// NewNetworkMembershipFromCSR generates a new network membership using the given parameters
+func NewNetworkMembershipFromCSR(networkName string, networkCert *pb.Certificate, parentCert *pb.Certificate, csrSigningKey *pb.Key, csr *pb.CertificateRequest) (*pb.NetworkMembership, error) {
+	cert, err := SignCertificateRequest(csr, defaultCertTTL, csrSigningKey)
+	if err != nil {
+		return nil, err
+	}
+	cert.ParentOneof = &pb.Certificate_Parent{Parent: parentCert}
+
+	return NewNetworkMembershipFromCertificate(networkName, cert)
+}
+
+// NewNetworkMembershipFromCertificate ...
+func NewNetworkMembershipFromCertificate(networkName string, cert *pb.Certificate) (*pb.NetworkMembership, error) {
 	id, err := generateSnowflake()
 	if err != nil {
 		return nil, err
@@ -141,15 +152,10 @@ func NewNetworkMembership(networkName string, networkCert *pb.Certificate, paren
 		Id:            id,
 		CreatedAt:     uint64(now.Unix()),
 		Name:          networkName,
-		CaCertificate: networkCert,
+		CaCertificate: GetRootCert(cert),
+		Certificate:   cert,
 		LastSeenAt:    uint64(now.Unix()),
 	}
-
-	membership.Certificate, err = SignCertificateRequest(csr, defaultCertTTL, csrSigningKey)
-	if err != nil {
-		return nil, err
-	}
-	membership.Certificate.ParentOneof = &pb.Certificate_Parent{Parent: parentCert}
 
 	return membership, nil
 }

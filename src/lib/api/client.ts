@@ -146,4 +146,10 @@ export default class Client extends RPCHost {
   public createNetworkMembershipFromInvitation(v: pb.ICreateNetworkMembershipFromInvitationRequest = new pb.CreateNetworkMembershipFromInvitationRequest()): Promise<pb.CreateNetworkMembershipFromInvitationResponse> {
     return this.expectOne(this.call("createNetworkMembershipFromInvitation", new pb.CreateNetworkMembershipFromInvitationRequest(v)));
   }
+  public getBootstrapPeers(v: pb.IGetBootstrapPeersRequest = new pb.GetBootstrapPeersRequest()): Promise<pb.GetBootstrapPeersResponse> {
+    return this.expectOne(this.call("getBootstrapPeers", new pb.GetBootstrapPeersRequest(v)));
+  }
+  public publishNetworkToBootstrapPeer(v: pb.IPublishNetworkToBootstrapPeerRequest = new pb.PublishNetworkToBootstrapPeerRequest()): Promise<pb.PublishNetworkToBootstrapPeerResponse> {
+    return this.expectOne(this.call("publishNetworkToBootstrapPeer", new pb.PublishNetworkToBootstrapPeerRequest(v)));
+  }
 }

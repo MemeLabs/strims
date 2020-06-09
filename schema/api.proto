@@ -116,6 +116,21 @@ message GetBootstrapClientsRequest {}
 message GetBootstrapClientsResponse {
   repeated BootstrapClient bootstrap_clients = 1;
 }
+message GetBootstrapPeersRequest {}
+message GetBootstrapPeersResponse {
+  repeated BootstrapPeer peers = 1;
+}
+
+message BootstrapPeer {
+  bytes key = 1;
+  string label = 2;
+}
+
+message PublishNetworkToBootstrapPeerRequest {
+  bytes key = 1;
+  Network network = 2;
+}
+message PublishNetworkToBootstrapPeerResponse {}
 
 // message ServiceAdvertisement {
 //   bytes host_id = 1;
@@ -675,6 +690,27 @@ message CreateNetworkMembershipFromInvitationRequest {
 
 message CreateNetworkMembershipFromInvitationResponse {
   NetworkMembership membership = 1;
+}
+
+message BootstrapServiceMessage {
+  message BrokerOffer {}
+
+  message PublishRequest {
+    string name = 1;
+    Certificate certificate = 2;
+  }
+
+  message PublishResponse {
+    oneof body {
+      string error = 1;
+    }
+  }
+
+  oneof body {
+    BrokerOffer broker_offer = 1;
+    PublishRequest publish_request = 2;
+    PublishResponse publish_response = 3;
+  }
 }
 
 enum MetricsFormat {

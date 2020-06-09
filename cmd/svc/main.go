@@ -21,23 +21,7 @@ func main() {
 		log.Println(http.ListenAndServe("localhost:6060", nil))
 	}()
 
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatalf("failed to locate home directory: %s", err)
-	}
-	kv, err := kv.NewKVStore(path.Join(homeDir, ".strims"))
-	if err != nil {
-		log.Fatalf("failed to open db: %s", err)
-	}
-	ds, err := dao.NewMetadataStore(kv)
-	if err != nil {
-		panic(err)
-	}
-
-	profileID := 4303395559
-	key := []byte{127, 190, 70, 244, 47, 123, 114, 24, 159, 15, 221, 25, 228, 167, 124, 142, 211, 181, 221, 93, 127, 68, 234, 112, 77, 144, 43, 75, 241, 229, 201, 51}
-
-	_, profileStore, err := ds.LoadSession(uint64(profileID), dao.NewStorageKeyFromBytes(key))
+	profileStore, err := initProfileStore()
 	if err != nil {
 		panic(err)
 	}
@@ -52,39 +36,62 @@ func main() {
 		panic(err)
 	}
 
+	networkController := service.NewNetworksController(logger, profileStore)
+
+	bootstrapService := service.NewBootstrapService(
+		logger,
+		profileStore,
+		networkController,
+		service.BootstrapServiceOptions{
+			EnablePublishing: true,
+		},
+	)
+
 	_, err = vpn.NewHost(
 		logger,
 		profile.Key,
 		vpn.WithNetworkBroker(vpn.NewNetworkBroker()),
 		vpn.WithInterface(vpn.NewWSInterface(logger, "0.0.0.0:8082")),
 		vpn.WithInterface(vpn.NewWebRTCInterface(&vpn.WebRTCDialer{})),
-		service.WithNetworkController(service.NewNetworksController(logger, profileStore)),
+		service.WithNetworkController(networkController),
+		service.WithBootstrapService(bootstrapService),
 	)
 	if err != nil {
 		panic(err)
 	}
 
-	// h := &vpn.Host{
-	// 	Interfaces: []vpn.Interface{
-	// 		&wsInterface{
-	// 			Address: "0.0.0.0:8082",
-	// 		},
-	// 	},
-	// }
-
-	// _ = h
-
-	// m, err := newManager(logger)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// go m.Run()
-
-	// var d webRTCDialer
-	// client := vpn.NewClient(profileStore, h, d.DialWebRTC)
-	// client.Start()
-
 	select {}
 
 	return
+}
+
+func initProfileStore() (*dao.ProfileStore, error) {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("failed to locate home directory: %s", err)
+	}
+	kv, err := kv.NewKVStore(path.Join(homeDir, ".strims"))
+	if err != nil {
+		log.Fatalf("failed to open db: %s", err)
+	}
+	ds, err := dao.NewMetadataStore(kv)
+	if err != nil {
+		panic(err)
+	}
+
+	profiles, err := ds.GetProfiles()
+	if err != nil {
+		return nil, err
+	}
+
+	name := "test"
+	pw := "test"
+
+	if len(profiles) == 0 {
+		_, profileStore, err := ds.CreateProfile(name, pw)
+		return profileStore, err
+	}
+
+	_, profileStore, err := ds.LoadProfile(profiles[0].Id, pw)
+	return profileStore, err
 }

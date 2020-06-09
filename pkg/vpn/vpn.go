@@ -267,19 +267,6 @@ func (l *instrumentedLink) Write(p []byte) (int, error) {
 	return n, err
 }
 
-// WithBootstrapClients ...
-func WithBootstrapClients(clients []*pb.BootstrapClient) HostOption {
-	return func(host *Host) error {
-		for _, o := range clients {
-			switch o := o.ClientOptions.(type) {
-			case *pb.BootstrapClient_WebsocketOptions:
-				go host.Dial(WebSocketAddr(o.WebsocketOptions.Url))
-			}
-		}
-		return nil
-	}
-}
-
 func jsonDump(i interface{}) {
 	_, file, line, _ := runtime.Caller(1)
 	b, err := json.MarshalIndent(i, "", "  ")

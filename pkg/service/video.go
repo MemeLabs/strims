@@ -40,23 +40,23 @@ type VideoThing struct {
 
 // PublishSwarm ...
 func (t *VideoThing) PublishSwarm(svc NetworkServices) error {
-	peers, err := getPeersGetter(svc, t.key, []byte("video"))()
-	if err != nil {
-		return err
-	}
+	// peers, err := getPeersGetter(svc, t.key, []byte("video"))()
+	// if err != nil {
+	// 	return err
+	// }
 
-	for _, peer := range peers {
-		svc.PeerExchange.Connect(peer.HostID)
-	}
+	// for _, peer := range peers {
+	// 	svc.PeerExchange.Connect(peer.HostID)
+	// }
 
-	p, err := svc.PeerIndex.Publish(t.key.Public, []byte("video"), 0)
-	if err != nil {
-		return err
-	}
+	// p, err := svc.PeerIndex.Publish(t.key.Public, []byte("video"), 0)
+	// if err != nil {
+	// 	return err
+	// }
 
-	svc.Swarms.OpenSwarm(t.s)
+	// svc.Swarms.OpenSwarm(t.s)
 
-	t.p = append(t.p, videoPublisher{p, svc.Swarms})
+	// t.p = append(t.p, videoPublisher{p, svc.Swarms})
 	return nil
 }
 

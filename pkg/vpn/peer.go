@@ -101,14 +101,14 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key) (*Peer, error) {
 	}
 
 	_ = block
+	// link = &cipherLink{
+	// 	writeStream: cipher.NewCFBEncrypter(block, iv[:]),
+	// 	readStream:  cipher.NewCFBDecrypter(block, init.Iv),
+	// 	link:        link,
+	// }
 
 	p := &Peer{
-		logger: logger,
-		// Link: &cipherLink{
-		// 	writeStream: cipher.NewCFBEncrypter(block, iv[:]),
-		// 	readStream:  cipher.NewCFBDecrypter(block, init.Iv),
-		// 	link:        link,
-		// },
+		logger:       logger,
 		Link:         link,
 		Certificate:  init.Certificate.GetParent(),
 		handlers:     map[uint16]FrameHandler{},
