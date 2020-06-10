@@ -1,323 +1,363 @@
-// frontend_driver is a chromedp driver running the frontend for testing
-// https://github.com/MemeLabs/url-extract
 package driver
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"flag"
 	"fmt"
-	"io"
 	"log"
-	"net/url"
+	"net/http"
 	"os"
-	"os/exec"
 	"os/signal"
-	"path/filepath"
-	"runtime"
-	"strings"
-	"sync"
+	"strconv"
 	"syscall"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
+	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/avast/retry-go"
 	"github.com/chromedp/cdproto/network"
+	"github.com/chromedp/cdproto/runtime"
 	"github.com/chromedp/chromedp"
 	"github.com/docker/docker/api/types"
 	"github.com/docker/docker/api/types/container"
+	"github.com/docker/docker/api/types/filters"
 	"github.com/docker/docker/api/types/strslice"
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
+	"github.com/gorilla/websocket"
+	"golang.org/x/sync/errgroup"
 )
 
-var (
-	target       string
-	headlessURL  string
-	timeout      int
-	quiet        bool
-	setup        bool
-	frontend     bool
-	quit         chan bool
-	containerIDS []string
-	cli          *client.Client
-	_, b, _, _   = runtime.Caller(0)
-	basepath     = filepath.Join(filepath.Dir(b), "../..")
+const (
+	chromeDebuggerPort = 9222
+
+	// configured in webpack.config.js
+	webpackDevServerPort = 8080
+	testClientBridgePort = 8083
+	testClientFilename   = "test.html"
 )
 
-func RunHeadless() {
-	flag.StringVar(&target, "url", "https://localhost:8080/", "address of frontend")
-	flag.StringVar(&headlessURL, "remote", "localhost:9222", "the endpoint of the headless instance")
-	flag.IntVar(&timeout, "timeout", 20, "time in seconds to wait for the site to load and a result to be detected")
-	flag.BoolVar(&quiet, "quiet", false, "discard debug output")
-	flag.BoolVar(&setup, "setup", true, "Pull docker images (chromium, cmd/svc)")
-	flag.BoolVar(&frontend, "frontend", true, "start frontend")
-	flag.Parse()
+// NewHeadless ...
+func NewHeadless() (*rpc.Client, error) {
+	sig := make(chan os.Signal, 1)
+	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	bridge := newTestClientBridgeServer()
 
-	dcli, err := client.NewEnvClient()
-	if err != nil {
-		log.Fatal(err)
-	}
-	cli = dcli
-
-	if setup {
-		hostBinding := nat.PortBinding{
-			HostIP:   "localhost",
-			HostPort: "9222",
-		}
-		containerPort, err := nat.NewPort("tcp", "9222")
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		portBinding := nat.PortMap{containerPort: []nat.PortBinding{hostBinding}}
-		chromeConf := &container.Config{
-			Image:      "docker.io/zenika/alpine-chrome",
-			Entrypoint: strslice.StrSlice{"chromium-browser"},
-			Cmd: strslice.StrSlice{
-				"--headless", "--disable-gpu", "--no-sandbox", "--remote-debugging-address=0.0.0.0",
-				"--remote-debugging-port=9222", "--enable-logging", "--autoplay-policy=no-user-gesture-required",
-				"--disable-software-rasterizer", "--disable-dev-shm-usage", "--disable-sync",
-				"--disable-background-networking", "--no-first-run", "--no-pings",
-				"--metrics-recording-only", "--safebrowsing-disable-auto-update", "--mute-audio",
-				"--ignore-certificate-errors", // we may eventually want to use test certs
-			},
-		}
-		_, err = setupAndRunContainer(
-			ctx,
-			chromeConf,
-			&container.HostConfig{
-				PortBindings: portBinding,
-				NetworkMode:  "host",
-				AutoRemove:   true,
-			},
-			"headless-chromium",
-		)
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		/*
-			conJson, err := cli.ContainerInspect(ctx, chromeID)
-			if err != nil {
-				log.Fatal(err)
-			}
-		*/
-
-		// headlessURL = fmt.Sprintf("%s:%d", conJson.NetworkSettings.DefaultNetworkSettings.IPAddress, 9222)
-		/*
-			svcConf := &container.Config{}
-			go func() {
-				if err := setupContainer(svcConf, nil, ""); err != nil {
-					log.Fatal(err)
-				}
-			}()
-		*/
-		defer tearDown(cancel)
-	}
-
-	var wg sync.WaitGroup
-	if frontend {
-		wg.Add(1)
-		go func() {
-			log.Println("starting the frontend")
-			cmd := exec.CommandContext(ctx, "npm", "run", "dev:web")
-			cmd.Dir = basepath
-			if err := cmd.Run(); err != nil {
-				log.Fatal(err)
-			}
-			wg.Done()
-		}()
-		time.Sleep(15 * time.Second)
-	}
-
-	hb, err := NewHeadlessBrowser(headlessURL, quiet)
+	chrome, err := newChromeContainer()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	resultChan := make(chan *network.Request, 100)
-	wg.Add(1)
-	go func() {
-		log.Println("running chromedriver")
-		err := hb.Run(&wg, target, time.Second*time.Duration(timeout), resultChan)
-		if err != nil {
-			tearDown(cancel)
-			log.Fatalf("FATAL: %q", err)
-		}
-	}()
+	var eg errgroup.Group
 
-	c := make(chan os.Signal)
-	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-c
-		tearDown(cancel)
-		os.Exit(1)
-	}()
+	eg.Go(bridge.Run)
 
-	wg.Wait()
-}
-
-type HeadlessBrowser struct {
-	Info     *InstanceInfo
-	stopChan chan bool
-	Quiet    bool
-}
-
-// NewHeadlessBrowser connects to a headless browser at remote.
-// If quiet is true, debug output is suppressed.
-func NewHeadlessBrowser(remote string, quiet bool) (*HeadlessBrowser, error) {
-	ii, err := GetInstanceInfo(remote)
-	if err != nil {
-		return nil, fmt.Errorf("Unable to connect to instance: %q", err)
-	}
-
-	log.Printf("Found instace %q with User-Agent %q. Using debuggerURL %q.",
-		ii.Browser,
-		ii.UserAgent,
-		ii.WebSocketDebuggerURL,
-	)
-
-	return &HeadlessBrowser{
-		Info:     ii,
-		stopChan: make(chan bool, 1),
-		Quiet:    quiet,
-	}, nil
-}
-
-// ExtractURL visits the given targetURL until it finds a new url that is accepted by matcherFunc or timeout expires.
-func (hb *HeadlessBrowser) Run(wg *sync.WaitGroup, targetURL string, timeout time.Duration, resultChan chan *network.Request) error {
-	defer wg.Done()
-
-	timeoutTicker := time.NewTicker(timeout)
-
-	// source: https://github.com/chromedp/chromedp/blob/master/allocate_test.go
-	allocCtx, allocCancel := chromedp.NewRemoteAllocator(context.Background(), hb.Info.WebSocketDebuggerURL)
-	defer allocCancel()
-
-	ctx, cancel := chromedp.NewContext(allocCtx)
-	defer cancel()
-
-	chromedp.ListenTarget(ctx, func(ev interface{}) {
-		switch ev := ev.(type) {
-
-		case *network.EventWebSocketCreated:
-			if hb.Quiet {
-				break
-			}
-			log.Printf("WEBSOCKET: %q", ev.URL)
-
-		case *network.EventLoadingFailed:
-			if hb.Quiet {
-				break
-			}
-			log.Printf("FAILED: %q", ev.ErrorText)
-
-		case *network.EventRequestWillBeSent:
-			if hb.Quiet {
-				break
-			}
-			log.Printf("REQUEST: %q", ev.Request.URL)
-
-			url, err := url.Parse(ev.Request.URL)
-			if err != nil {
-				log.Printf("request %q error: %q", ev.Request.URL, err)
-			}
-			if url.String() != targetURL {
-				// Navigation stalls if channel is blocked...
-				go func() { resultChan <- ev.Request }()
-			}
-		}
-	})
-
-	if err := chromedp.Run(ctx,
-		network.Enable(),             // enable network events
-		chromedp.Navigate(targetURL), // navigate to url
-	); err != nil {
-		return err
-	}
-
-	/*
-		log.Println("waiting for page to finish loading...")
-		err := waitToFinishLoading(ctx, timeoutTicker)
+	eg.Go(func() error {
+		c, err := newDevServerClient(chrome.Description.NetworkSettings.IPAddress)
 		if err != nil {
 			return err
 		}
-	*/
+		return c.Run(fmt.Sprintf(
+			"https://%s:%d/%s",
+			chrome.Description.NetworkSettings.Gateway,
+			webpackDevServerPort,
+			testClientFilename,
+		))
+	})
+
+	waitErr := make(chan error, 1)
+	go func() { waitErr <- eg.Wait() }()
+
+	timeout := make(chan struct{})
+
+	go func() {
+		select {
+		case <-timeout:
+		case err := <-waitErr:
+			if err != nil {
+				log.Println("exited with error", err)
+			}
+		case s := <-sig:
+			log.Printf("received signal: %s", s)
+		}
+
+		signal.Stop(sig)
+		bridge.Close()
+		chrome.Stop()
+	}()
 
 	select {
-	case <-timeoutTicker.C:
-		chromedp.Run(ctx,
-			chromedp.Stop(),
-		)
-		return errors.New("timeout")
-	case <-hb.stopChan:
-		chromedp.Run(ctx,
-			chromedp.Stop(),
-		)
-		log.Println("stopped!")
-		return nil
-	}
-}
-
-// Stop trys to abort ExtractURL and shuts down the headless browser instance.
-func (hb *HeadlessBrowser) Stop() {
-	hb.stopChan <- true
-}
-
-// waitToFinishLoading waits for site to finish loading (since clicking buttons mights not work correctly otherwise)
-// source: https://github.com/chromedp/chromedp/issues/252
-// Only returns with an error on timeout.
-func waitToFinishLoading(ctx context.Context, timeoutTicker *time.Ticker) error {
-	state := "notloaded"
-	script := `document.readyState`
-	checkTicker := time.NewTicker(time.Millisecond * 100)
-	for {
-		select {
-		case <-checkTicker.C:
-			err := chromedp.Run(ctx, chromedp.EvaluateAsDevTools(script, &state))
-			if err != nil {
-				log.Printf("error in eval: %q", err)
-			}
-			if strings.Compare(state, "complete") == 0 {
-				return nil
-			}
-		case <-timeoutTicker.C:
-			return errors.New("timeout while waiting to finish loading")
+	case <-time.After(30 * time.Second):
+		close(timeout)
+		return nil, errors.New("timeout")
+	case c, ok := <-bridge.Clients:
+		if !ok {
+			return nil, errors.New("client bridge closed")
 		}
+		return c, nil
 	}
 }
 
-func setupAndRunContainer(ctx context.Context, conf *container.Config, hostConf *container.HostConfig, name string) (string, error) {
-	reader, err := cli.ImagePull(ctx, conf.Image, types.ImagePullOptions{})
-	if err != nil {
-		return "", err
+func newTestClientBridgeServer() *testClientBridgeServer {
+	return &testClientBridgeServer{
+		Clients: make(chan *rpc.Client, 1),
 	}
-
-	io.Copy(os.Stdout, reader)
-
-	resp, err := cli.ContainerCreate(ctx, conf, hostConf, nil, name)
-	if err != nil {
-		return "", err
-	}
-
-	containerIDS = append(containerIDS, resp.ID)
-	log.Println(containerIDS)
-
-	return resp.ID, cli.ContainerStart(ctx, resp.ID, types.ContainerStartOptions{})
 }
 
-func tearDown(cancel context.CancelFunc) error {
-	log.Println("tearing everything down")
-	cancel()
+type testClientBridgeServer struct {
+	upgrader websocket.Upgrader
+	server   http.Server
+	Clients  chan *rpc.Client
+}
 
-	for _, id := range containerIDS {
-		log.Printf("stopping container: %s\n", id)
-		if err := cli.ContainerStop(context.Background(), id, nil); err != nil {
+func (t *testClientBridgeServer) Run() error {
+	t.server = http.Server{
+		Addr:    fmt.Sprintf("0.0.0.0:%d", testClientBridgePort),
+		Handler: http.HandlerFunc(t.handleRequest),
+	}
+	log.Println("starting server at", t.server.Addr)
+	return t.server.ListenAndServe()
+}
+
+func (t *testClientBridgeServer) Close() {
+	t.server.Close()
+	close(t.Clients)
+}
+
+func (t *testClientBridgeServer) handleRequest(w http.ResponseWriter, r *http.Request) {
+	c, err := t.upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Print("upgrade:", err)
+		return
+	}
+
+	rw := vpn.NewWSReadWriter(c)
+	client := rpc.NewClient(rw, rw)
+
+	t.Clients <- client
+
+	<-client.Done()
+	rw.Close()
+}
+
+// chromeContainer ...
+type chromeContainer struct {
+	docker      *client.Client
+	Description *types.ContainerJSON
+}
+
+// newChromeContainer ...
+func newChromeContainer() (c *chromeContainer, err error) {
+	c = &chromeContainer{}
+
+	c.docker, err = client.NewEnvClient()
+	if err != nil {
+		return nil, err
+	}
+
+	hostBinding := nat.PortBinding{
+		HostIP:   "localhost",
+		HostPort: strconv.Itoa(chromeDebuggerPort),
+	}
+	containerPort, err := nat.NewPort("tcp", strconv.Itoa(chromeDebuggerPort))
+	if err != nil {
+		return nil, err
+	}
+
+	portBinding := nat.PortMap{containerPort: []nat.PortBinding{hostBinding}}
+	containerConfig := &container.Config{
+		Image:      "docker.io/zenika/alpine-chrome",
+		Entrypoint: strslice.StrSlice{"chromium-browser"},
+		Cmd: strslice.StrSlice{
+			"--headless",
+			"--disable-gpu",
+			"--no-sandbox",
+			"--remote-debugging-address=0.0.0.0",
+			fmt.Sprintf("--remote-debugging-port=%d", chromeDebuggerPort),
+			"--enable-logging",
+			"--autoplay-policy=no-user-gesture-required",
+			"--disable-software-rasterizer",
+			"--disable-dev-shm-usage",
+			"--disable-sync",
+			"--disable-background-networking",
+			"--no-first-run",
+			"--no-pings",
+			"--metrics-recording-only",
+			"--safebrowsing-disable-auto-update",
+			"--mute-audio",
+			"--ignore-certificate-errors",
+		},
+	}
+
+	if err := c.downloadImage(containerConfig.Image); err != nil {
+		return nil, err
+	}
+
+	c.Description, err = c.runContainer(
+		containerConfig,
+		&container.HostConfig{
+			PortBindings: portBinding,
+			AutoRemove:   true,
+		},
+		fmt.Sprintf("headless-chromium-%d", time.Now().Unix()),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	return c, nil
+}
+
+func (c *chromeContainer) downloadImage(ref string) error {
+	f := filters.NewArgs()
+	f.Add("reference", ref)
+	images, err := c.docker.ImageList(context.Background(), types.ImageListOptions{Filters: f})
+	if err != nil {
+		return err
+	}
+
+	if len(images) == 0 {
+		_, err := c.docker.ImagePull(context.Background(), ref, types.ImagePullOptions{})
+		if err != nil {
 			return err
 		}
 	}
 
 	return nil
+}
+
+func (c *chromeContainer) runContainer(conf *container.Config, hostConf *container.HostConfig, name string) (*types.ContainerJSON, error) {
+	resp, err := c.docker.ContainerCreate(context.Background(), conf, hostConf, nil, name)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := c.docker.ContainerStart(context.Background(), resp.ID, types.ContainerStartOptions{}); err != nil {
+		return nil, err
+	}
+
+	description, err := c.docker.ContainerInspect(context.Background(), resp.ID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &description, nil
+}
+
+// Stop ...
+func (c *chromeContainer) Stop() error {
+	var timeout time.Duration
+	return c.docker.ContainerStop(context.Background(), c.Description.ID, &timeout)
+}
+
+// devServerClient ...
+type devServerClient struct {
+	Info *chromeInstanceInfo
+	stop chan struct{}
+}
+
+// newDevServerClient ...
+func newDevServerClient(chromeDebuggerHost string) (*devServerClient, error) {
+	b := &devServerClient{
+		stop: make(chan struct{}),
+	}
+
+	err := retry.Do(func() (err error) {
+		b.Info, err = getChromeInstanceInfo(fmt.Sprintf("%s:%d", chromeDebuggerHost, chromeDebuggerPort))
+		return err
+	})
+	if err != nil {
+		return nil, fmt.Errorf("Unable to connect to instance: %q", err)
+	}
+
+	log.Printf("Found instace %q with User-Agent %q. Using debuggerURL %q.",
+		b.Info.Browser,
+		b.Info.UserAgent,
+		b.Info.WebSocketDebuggerURL,
+	)
+
+	return b, nil
+}
+
+// Run ...
+func (b *devServerClient) Run(url string) error {
+	allocCtx, allocCancel := chromedp.NewRemoteAllocator(context.Background(), b.Info.WebSocketDebuggerURL)
+	defer allocCancel()
+
+	ctx, cancel := chromedp.NewContext(allocCtx)
+	defer cancel()
+
+	done := make(chan error)
+
+	chromedp.ListenTarget(ctx, func(ev interface{}) {
+		switch ev := ev.(type) {
+		case *network.EventWebSocketCreated:
+			log.Printf("WEBSOCKET: %q", ev.URL)
+		case *network.EventLoadingFailed:
+			log.Printf("FAILED: %q", ev.ErrorText)
+		case *network.EventRequestWillBeSent:
+			log.Printf("REQUEST: %q", ev.Request.URL)
+		case *runtime.EventConsoleAPICalled:
+			fmt.Printf("* console.%s call:\n", ev.Type)
+			for _, arg := range ev.Args {
+				fmt.Printf("%s - %s\n", arg.Type, arg.Value)
+			}
+		case *runtime.EventExceptionThrown:
+			if ev.ExceptionDetails.Exception.ClassName == "Success" {
+				done <- nil
+			} else {
+				done <- fmt.Errorf("js exception: %s", ev.ExceptionDetails.Exception.Description)
+			}
+		}
+	})
+
+	if err := chromedp.Run(ctx, network.Enable(), chromedp.Navigate(url)); err != nil {
+		return err
+	}
+
+	select {
+	case <-b.stop:
+		return errors.New("stop called")
+	case err := <-done:
+		return err
+	}
+}
+
+// Stop ...
+func (b *devServerClient) Stop() {
+	close(b.stop)
+}
+
+// chromeInstanceInfo is the information that is provided by the debugger instance.
+// By default, the information is exposed on http://localhost:9222/json/version
+// reference: https://chromium.googlesource.com/external/github.com/mafredri/cdp/+/a974e2fd933e19fc0bbde4ea092df45158e782bf
+type chromeInstanceInfo struct {
+	Browser              string `json:"Browser"`
+	ProtocolVersion      string `json:"Protocol-Version"`
+	UserAgent            string `json:"User-Agent"`
+	V8Version            string `json:"V8-Version"`
+	WebKitVersion        string `json:"WebKit-Version"`
+	WebSocketDebuggerURL string `json:"webSocketDebuggerUrl"`
+}
+
+// getChromeInstanceInfo fetches information about an instance running at the given endpoint.
+// E.g. "localhost:9222".
+func getChromeInstanceInfo(endpoint string) (*chromeInstanceInfo, error) {
+	client := &http.Client{
+		Timeout: time.Second * 3,
+	}
+
+	resp, err := client.Get(fmt.Sprintf("http://%s/json/version", endpoint))
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	var ii chromeInstanceInfo
+	if err = json.NewDecoder(resp.Body).Decode(&ii); err != nil {
+		return nil, err
+	}
+	return &ii, err
 }

@@ -1,40 +1,13 @@
+import "../styles/main.scss";
 
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 import Worker from "worker-loader!./svc.worker";
+
 import Client from "../lib/api/client";
 import { WindowBridge } from "../lib/bridge";
+import { WSReadWriter } from "../lib/ws";
 import App from "../root/App";
-
-import "../styles/main.scss";
-
-class WSReadWriter {
-  public ws: Promise<WebSocket>;
-
-  constructor(uri: string) {
-    const ws = new WebSocket(uri);
-    ws.binaryType = "arraybuffer";
-
-    this.ws = new Promise((resolve, reject) => {
-      ws.onopen = () => resolve(ws);
-      ws.onerror = reject;
-    });
-  }
-
-  public on(method: string, handler: (...args: any[]) => any) {
-    this.ws.then((ws) => {
-      if (method === "data") {
-        ws.addEventListener("message", (e) => handler(new Uint8Array(e.data)));
-      } else {
-        ws.addEventListener(method, handler);
-      }
-    });
-  }
-
-  public write(data: Uint8Array) {
-    this.ws.then((ws) => ws.send(data));
-  }
-}
 
 (async () => {
   const bridge = new WindowBridge(Worker as any);

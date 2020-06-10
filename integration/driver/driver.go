@@ -1,7 +1,7 @@
 package driver
 
 import (
-	"context"
+	"fmt"
 	"io"
 	"io/ioutil"
 	"log"
@@ -61,13 +61,16 @@ func Setup(c Config) *Driver {
 	cr, cw := io.Pipe()
 	client := rpc.NewClient(hw, cr)
 
+	_ = hr
+	_ = cw
+
 	return &Driver{
-		ds:     *ds,
-		store:  store,
+		// ds:     *ds,
+		// store:  store,
 		host:   host,
 		Client: client,
-		file:   file,
-		log:    c.Log,
+		// file:   file,
+		// log:    c.Log,
 	}
 }
 

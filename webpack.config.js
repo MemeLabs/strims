@@ -16,7 +16,7 @@ module.exports = (env, argv) => {
         },
       },
     ],
-    exclude: /node_modules/
+    exclude: /node_modules/,
   };
 
   const styleModuleRule = {
@@ -28,13 +28,11 @@ module.exports = (env, argv) => {
         loader: "postcss-loader",
         options: {
           ident: "postcss",
-          plugins: () => [
-            require("autoprefixer")()
-          ]
-        }
+          plugins: () => [require("autoprefixer")()],
+        },
       },
       "sass-loader",
-    ]
+    ],
   };
 
   const staticModuleRule = {
@@ -52,8 +50,14 @@ module.exports = (env, argv) => {
   const plugins = [
     new CleanWebpackPlugin(),
     new HtmlWebpackPlugin({
+      chunks: ["index"],
       title: "Loading...",
       favicon: path.resolve(__dirname, "assets", "favicon.ico"),
+    }),
+    new HtmlWebpackPlugin({
+      filename: "test.html",
+      chunks: ["test"],
+      title: "test",
     }),
     new webpack.HotModuleReplacementPlugin(),
   ];
@@ -63,10 +67,12 @@ module.exports = (env, argv) => {
 
     styleModuleRule.use.unshift(MiniCssExtractPlugin.loader);
 
-    plugins.push(new MiniCssExtractPlugin({
-      filename: "[name].[contenthash].css",
-      chunkFilename: "[id].[contenthash].css"
-    }));
+    plugins.push(
+      new MiniCssExtractPlugin({
+        filename: "[name].[contenthash].css",
+        chunkFilename: "[id].[contenthash].css",
+      })
+    );
   } else {
     styleModuleRule.use.unshift("style-loader");
   }
@@ -83,18 +89,14 @@ module.exports = (env, argv) => {
       path: path.resolve(__dirname, "dist", "desktop"),
     },
     module: {
-      rules: [
-        scriptModuleRule,
-        styleModuleRule,
-        staticModuleRule,
-      ]
+      rules: [scriptModuleRule, styleModuleRule, staticModuleRule],
     },
     resolve: {
-      extensions: [ ".tsx", ".ts", ".js" ]
+      extensions: [".tsx", ".ts", ".js"],
     },
     node: {
       __dirname: false,
-      __filename: false
+      __filename: false,
     },
     optimization: {
       minimizer: [
@@ -103,7 +105,7 @@ module.exports = (env, argv) => {
           parallel: true,
         }),
       ],
-    }
+    },
   });
 
   return [
@@ -123,7 +125,7 @@ module.exports = (env, argv) => {
         https: true,
         hot: true,
         historyApiFallback: {
-          index: "/"
+          index: "/",
         },
         host: "0.0.0.0",
         proxy: {
@@ -134,12 +136,9 @@ module.exports = (env, argv) => {
           "/manage": {
             target: "ws://localhost:8083",
             ws: true,
-          }
+          },
         },
-        contentBase: [
-          path.join(__dirname, "pkg"),
-          path.join(__dirname, "assets")
-        ],
+        contentBase: [path.join(__dirname, "pkg"), path.join(__dirname, "assets")],
       },
       module: {
         rules: [
@@ -151,7 +150,7 @@ module.exports = (env, argv) => {
             use: ["golang-wasm-async-loader"],
           },
           {
-            test: /\.(wasm)$/,
+            test: /\.wasm$/,
             loader: "file-loader",
           },
           {
@@ -159,16 +158,16 @@ module.exports = (env, argv) => {
             loader: "worker-loader",
             options: {
               inline: true,
-              fallback: true
-            }
-          }
-        ]
+              fallback: true,
+            },
+          },
+        ],
       },
       node: {
         fs: false,
       },
       resolve: {
-        extensions: [ ".go", ".tsx", ".ts", ".js" ]
+        extensions: [".go", ".tsx", ".ts", ".js"],
       },
       optimization: {
         minimizer: [
@@ -193,4 +192,4 @@ module.exports = (env, argv) => {
     // createElectronBuild("main"),
     // createElectronBuild("preload"),
   ];
-}
+};

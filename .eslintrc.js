@@ -32,7 +32,7 @@ module.exports = {
     "@typescript-eslint/no-use-before-define": "off",
     "@typescript-eslint/unified-signatures": "off",
     "prefer-arrow/prefer-arrow-functions": "error",
-    complexity: "off",
+    "complexity": "off",
     "max-classes-per-file": "off",
     "max-len": "off",
     "no-bitwise": "off",

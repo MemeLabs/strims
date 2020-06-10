@@ -5,13 +5,15 @@
   "main": "index.js",
   "scripts": {
     "pb:gen": "nodemon --watch ./schema -e proto --delay 0.1 --signal SIGINT --exec './hack/pb-codegen.sh || exit 1'",
-    "app": "electron ./dist/app/main.js",
+    "app:electron": "electron ./dist/app/main.js",
     "app:webpack": "webpack --mode development --watch",
     "app:go": "nodemon --watch ./pkg --watch ./cmd/app -e go --delay 0.1 --signal SIGINT --exec 'go build -o ./dist/app/p2p ./cmd/app || exit 1'",
-    "dev:app": "run-p pb:* app:webpack app:go app",
-    "web": "webpack-dev-server --mode development --watch",
+    "dev:app": "run-p pb:* app:webpack app:go app:electron",
+    "web:webpack": "webpack-dev-server --mode development --watch",
     "web:go": "nodemon --watch ./pkg -e go --exec 'touch src/web/svc.go'",
-    "dev:web": "run-p pb:* web:go web",
+    "web:test:integration": "nodemon --watch ./pkg --watch ./integration -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly ./integration/web || exit 1'",
+    "dev:web": "run-p pb:* web:go web:webpack",
+    "test:web": "run-p dev:web web:test:integration",
     "svc": "nodemon --watch ./pkg --watch ./cmd/svc -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly ./cmd/svc || exit 1'",
     "dev:svc": "run-p pb:* svc",
     "build": "webpack --mode production"
@@ -33,6 +35,7 @@
     "electron": "^7.3.0",
     "electron-json-storage": "^4.1.8",
     "eslint": "^7.1.0",
+    "eslint-config-prettier": "^6.11.0",
     "eslint-plugin-import": "^2.20.2",
     "eslint-plugin-jsdoc": "^25.4.2",
     "eslint-plugin-prefer-arrow": "^1.2.1",
@@ -41,6 +44,7 @@
     "golang-wasm-async-loader": "file:./vendor/webpack-golang-wasm-async-loader",
     "google-protobuf": "^3.12.0",
     "html-webpack-plugin": "^3.2.0",
+    "import-sort-style-module": "^6.0.0",
     "mediastream-to-webm": "^1.0.2",
     "mini-css-extract-plugin": "^0.8.2",
     "mux.js": "^5.6.2",
@@ -49,6 +53,7 @@
     "npm-run-all": "^4.1.5",
     "postcss-loader": "^3.0.0",
     "prettier": "^2.0.5",
+    "prettier-plugin-import-sort": "0.0.4",
     "protobufjs": "git://github.com/protobufjs/protobuf.js.git#ceb73356d99a8747c08cb7051f3b3551ae8a3a0e",
     "protoc-gen-ts": "0.0.5",
     "react": "^16.13.1",
@@ -84,5 +89,10 @@
   "browserslist": [
     "defaults"
   ],
-  "dependencies": {}
+  "importSort": {
+    ".js, .jsx, .ts, .tsx": {
+      "style": "module",
+      "parser": "typescript"
+    }
+  }
 }

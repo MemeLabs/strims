@@ -52,6 +52,11 @@ func (c *Client) Close() {
 	c.closeOnce.Do(func() { c.cancel() })
 }
 
+// Done ...
+func (c *Client) Done() <-chan struct{} {
+	return c.ctx.Done()
+}
+
 // Call ...
 func (c *Client) Call(ctx context.Context, method string, req proto.Message) error {
 	_, err := call(ctx, c.conn, method, req)
