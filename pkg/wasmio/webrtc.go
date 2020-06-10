@@ -229,6 +229,21 @@ func (p *WebRTCProxy) DataChannelID(label string) (int, error) {
 	}
 }
 
+const dataChannelMTU = 16 * 1024
+
+// DataChannelProxy ...
+type DataChannelProxy interface {
+	MTU() int
+	Write(b []byte) (int, error)
+	Read(b []byte) (n int, err error)
+	Close() error
+}
+
+// NewDataChannelProxy ...
+func NewDataChannelProxy(bridge js.Value, id int) (DataChannelProxy, error) {
+	return newChannel(dataChannelMTU, bridge, "openDataChannel", id)
+}
+
 // RTCSessionDescription ...
 type RTCSessionDescription struct {
 	Type string `json:"type"`
