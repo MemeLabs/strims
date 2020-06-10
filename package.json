@@ -11,7 +11,7 @@
     "dev:app": "run-p pb:* app:webpack app:go app:electron",
     "web:webpack": "webpack-dev-server --mode development --watch",
     "web:go": "nodemon --watch ./pkg -e go --exec 'touch src/web/svc.go'",
-    "web:test:integration": "nodemon --watch ./pkg --watch ./integration -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly ./integration/web || exit 1'",
+    "web:test:integration": "nodemon --watch ./pkg --watch ./integration --watch ./src -e go,js,jsx,ts,tsx --delay 0.1 --signal SIGINT --exec 'go test -mod=readonly ./integration/frontend -tags web -count 1 -v 1 || exit 1'",
     "dev:web": "run-p pb:* web:go web:webpack",
     "test:web": "run-p dev:web web:test:integration",
     "svc": "nodemon --watch ./pkg --watch ./cmd/svc -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly ./cmd/svc || exit 1'",

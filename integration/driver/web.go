@@ -10,6 +10,7 @@ import (
 	"os"
 	"os/signal"
 	"strconv"
+	"sync"
 	"syscall"
 	"time"
 
@@ -26,7 +27,6 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/gorilla/websocket"
-	"golang.org/x/sync/errgroup"
 )
 
 const (
@@ -38,66 +38,74 @@ const (
 	testClientFilename   = "test.html"
 )
 
-// NewHeadless ...
-func NewHeadless() (*rpc.Client, error) {
-	sig := make(chan os.Signal, 1)
-	signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
+// NewWeb ...
+func NewWeb() (Driver, error) {
+	d := &webDriver{}
 
-	bridge := newTestClientBridgeServer()
+	d.sig = make(chan os.Signal)
+	signal.Notify(d.sig, syscall.SIGINT, syscall.SIGTERM)
 
+	d.bridge = newTestClientBridgeServer()
+	go d.bridge.Run()
+
+	go func() {
+		<-d.sig
+		d.Close()
+	}()
+
+	return d, nil
+}
+
+type webDriver struct {
+	sig       chan os.Signal
+	bridge    *testClientBridgeServer
+	clients   []webDriverClient
+	closeOnce sync.Once
+}
+
+type webDriverClient struct {
+	chrome    *chromeContainer
+	devClient *devServerClient
+}
+
+// TODO: allow creating multiple clients
+func (d *webDriver) Client() *rpc.Client {
 	chrome, err := newChromeContainer()
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var eg errgroup.Group
+	devClient, err := newDevServerClient(chrome.Description.NetworkSettings.IPAddress)
+	if err != nil {
+		log.Fatal(err)
+	}
 
-	eg.Go(bridge.Run)
-
-	eg.Go(func() error {
-		c, err := newDevServerClient(chrome.Description.NetworkSettings.IPAddress)
-		if err != nil {
-			return err
-		}
-		return c.Run(fmt.Sprintf(
+	go func() {
+		devClient.Run(fmt.Sprintf(
 			"https://%s:%d/%s",
 			chrome.Description.NetworkSettings.Gateway,
 			webpackDevServerPort,
 			testClientFilename,
 		))
-	})
-
-	waitErr := make(chan error, 1)
-	go func() { waitErr <- eg.Wait() }()
-
-	timeout := make(chan struct{})
-
-	go func() {
-		select {
-		case <-timeout:
-		case err := <-waitErr:
-			if err != nil {
-				log.Println("exited with error", err)
-			}
-		case s := <-sig:
-			log.Printf("received signal: %s", s)
-		}
-
-		signal.Stop(sig)
-		bridge.Close()
 		chrome.Stop()
 	}()
 
-	select {
-	case <-time.After(30 * time.Second):
-		close(timeout)
-		return nil, errors.New("timeout")
-	case c, ok := <-bridge.Clients:
-		if !ok {
-			return nil, errors.New("client bridge closed")
+	d.clients = append(d.clients, webDriverClient{chrome, devClient})
+
+	return <-d.bridge.Clients
+}
+
+func (d *webDriver) Close() {
+	d.closeOnce.Do(func() {
+		signal.Stop(d.sig)
+		close(d.sig)
+		d.bridge.Close()
+
+		for _, c := range d.clients {
+			c.devClient.Stop()
+			c.chrome.Stop()
 		}
-		return c, nil
-	}
+	})
 }
 
 func newTestClientBridgeServer() *testClientBridgeServer {
