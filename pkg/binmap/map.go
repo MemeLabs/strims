@@ -686,7 +686,7 @@ func (m *Map) FindEmpty() Bin {
 			return m.rootBin.Left()
 		}
 		b = m.rootBin.Left()
-		bm = ^c.LeftBitmap()
+		bm = c.LeftBitmap()
 		return offsetBitmapBin(b, ^bm)
 	} else if mc.RightRef() {
 		r = c.RightRef()
@@ -699,7 +699,7 @@ func (m *Map) FindEmpty() Bin {
 			return m.rootBin.Sibling()
 		}
 		b = m.rootBin.Right()
-		bm = ^c.RightBitmap()
+		bm = c.RightBitmap()
 		return offsetBitmapBin(b, ^bm)
 	}
 
