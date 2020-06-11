@@ -87,7 +87,6 @@ func TestFind(t *testing.T) {
 	assert.Equal(NewBin(0, 2), hole.FindEmpty().BaseLeft())
 }
 
-/*
 func TestAlloc(t *testing.T) {
 	assert := assert.New(t)
 	b := New()
@@ -96,9 +95,8 @@ func TestAlloc(t *testing.T) {
 	b.Reset(NewBin(1, 0))
 	b.Reset(NewBin(1, 1))
 
-  assert.Equal(1, b.CellsNumber())
+	assert.Equal(1, b.allocCount)
 }
-*/
 
 func TestCover(t *testing.T) {
 	assert := assert.New(t)
@@ -110,28 +108,6 @@ func TestCover(t *testing.T) {
 	assert.Equal(NewBin(2, 0), b.Cover(NewBin(0, 3)))
 	assert.Equal(NewBin(2, 0), b.Cover(NewBin(2, 0)))
 }
-
-/*
-func TestCopyRange(t *testing.T) {
-	assert := assert.New(t)
-	add := New()
-	data := New()
-	data.Set(NewBin(2, 0))
-	data.Set(NewBin(2, 2))
-	data.Set(NewBin(1, 7))
-	add.Set(NewBin(2, 1))
-	add.Set(NewBin(1, 4))
-	add.Set(NewBin(0, 13))
-	add.Set(NewBin(5, 118))
-	//     binmap_t::copy(data, add, NewBin(3,0));
-	assert.False(data.EmptyAt(NewBin(3, 0)))
-	assert.False(data.FilledAt(NewBin(3, 0)))
-	assert.True(data.EmptyAt(NewBin(2, 0)))
-	assert.True(data.FilledAt(NewBin(2, 1)))
-	assert.True(data.EmptyAt(NewBin(1, 6)))
-	assert.True(data.FilledAt(NewBin(1, 7)))
-}
-*/
 
 func TestSeqLength(t *testing.T) {
 	assert := assert.New(t)
@@ -173,21 +149,19 @@ func TestEmptyFilled(t *testing.T) {
 	assert.True(b.FilledAt(NewBin(2, 1)))
 }
 
-/*
-func TestFindEmptyStart(t *testing.T) {
+func TestFindEmptyAfter(t *testing.T) {
 	assert := assert.New(t)
 	hole := New()
 
 	for s := 0; s < 8; s++ {
 		for i := s; i < 8; i++ {
 			hole.Set(NewBin(3, 0))
-			hole.Reset(NewBin(3, uint64(i)))
+			hole.Reset(NewBin(0, uint64(i)))
 			f := hole.FindEmptyAfter(NewBin(0, uint64(s)))
 			assert.Equal(NewBin(0, uint64(i)), f)
 		}
 	}
 }
-*/
 
 func TestFindFilled1(t *testing.T) {
 	assert := assert.New(t)
