@@ -1,5 +1,10 @@
 package dao
 
+import (
+	"fmt"
+	"strings"
+)
+
 // NewKVStore ...
 func NewKVStore(path string) (*KVStore, error) {
 	db := make(map[string]map[string][]byte)
@@ -27,13 +32,19 @@ func (s *KVStore) DeleteStore(table string) error {
 
 // View ...
 func (s *KVStore) View(table string, fn func(tx Tx) error) error {
-	b := s.store[table]
+	b, ok := s.store[table]
+	if !ok {
+		return fmt.Errorf("bucket not found %s", table)
+	}
 	return fn(KVTx{b})
 }
 
 // Update ...
 func (s *KVStore) Update(table string, fn func(tx Tx) error) error {
-	b := s.store[table]
+	b, ok := s.store[table]
+	if !ok {
+		return fmt.Errorf("bucket not found %s", table)
+	}
 	return fn(KVTx{b})
 }
 
@@ -56,10 +67,21 @@ func (t KVTx) Delete(key string) error {
 
 // Get ...
 func (t KVTx) Get(key string) (value []byte, err error) {
-	return t.b[key], nil
+	val, ok := t.b[key]
+	if !ok {
+		return nil, ErrRecordNotFound
+	}
+	return val, nil
 }
 
 // ScanPrefix ...
 func (t KVTx) ScanPrefix(prefix string) (values [][]byte, err error) {
-	return nil, nil
+
+	for key, v := range t.b {
+		if strings.HasPrefix(prefix, key) {
+			values = append(values, append([]byte{}, v...))
+		}
+	}
+
+	return values, nil
 }
