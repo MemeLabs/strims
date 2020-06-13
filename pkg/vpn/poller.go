@@ -1,14 +1,14 @@
 package vpn
 
 import (
-	"sync"
+	"context"
 	"time"
 )
 
 // NewPoller ...
-func NewPoller(ivl time.Duration, tick func(t time.Time), stop func()) *Poller {
+func NewPoller(ctx context.Context, ivl time.Duration, tick func(t time.Time), stop func()) *Poller {
 	p := &Poller{
-		stop: make(chan struct{}, 1),
+		ctx: ctx,
 	}
 	go p.run(ivl, tick, stop)
 	return p
@@ -16,8 +16,7 @@ func NewPoller(ivl time.Duration, tick func(t time.Time), stop func()) *Poller {
 
 // Poller ...
 type Poller struct {
-	stop     chan struct{}
-	stopOnce sync.Once
+	ctx context.Context
 }
 
 func (a *Poller) run(ivl time.Duration, tick func(t time.Time), stop func()) {
@@ -25,7 +24,7 @@ func (a *Poller) run(ivl time.Duration, tick func(t time.Time), stop func()) {
 	tick(time.Now())
 	for {
 		select {
-		case <-a.stop:
+		case <-a.ctx.Done():
 			if stop != nil {
 				stop()
 			}
@@ -34,12 +33,4 @@ func (a *Poller) run(ivl time.Duration, tick func(t time.Time), stop func()) {
 			tick(now)
 		}
 	}
-}
-
-// Stop ...
-func (a *Poller) Stop() {
-	a.stopOnce.Do(func() {
-		a.stop <- struct{}{}
-		close(a.stop)
-	})
 }

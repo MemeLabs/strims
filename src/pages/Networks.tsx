@@ -1,11 +1,12 @@
 import * as React from "react";
 import ReactDOM from "react-dom";
-import Select from "react-select";
-import { useForm, Controller } from "react-hook-form";
+import { Controller, useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
+import Select from "react-select";
+
 import { InputError, InputLabel, TextInput } from "../components/Form";
 import { MainLayout } from "../components/MainLayout";
-import { useCall, useLazyCall, useClient } from "../contexts/Api";
+import { useCall, useClient, useLazyCall } from "../contexts/Api";
 import * as pb from "../lib/pb";
 
 const NetworkForm = ({ onCreate }: { onCreate: (res: pb.CreateNetworkResponse) => void }) => {
@@ -69,9 +70,8 @@ const PublishNetworkModal = ({
   });
 
   const onSubmit = (data) => {
-    console.log(data);
     client.publishNetworkToBootstrapPeer({
-      key: data.peer.value.value,
+      key: data.peer.value,
       network: network,
     });
     onClose();
@@ -95,10 +95,8 @@ const PublishNetworkModal = ({
                 value: p.key,
                 label: p.label,
               }))}
-              onChange={([selected]) => ({ value: selected })}
               name="peer"
               control={control}
-              value={{}}
               rules={{
                 required: {
                   value: true,

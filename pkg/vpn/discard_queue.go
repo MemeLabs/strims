@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"container/list"
+	"context"
 	"sync"
 	"time"
 )
@@ -10,7 +11,7 @@ type discardQueueItem interface {
 	Deadline() time.Time
 }
 
-func newDiscardQueue(ivl, lifespan time.Duration) *discardQueue {
+func newDiscardQueue(ctx context.Context, ivl, lifespan time.Duration) *discardQueue {
 	epoch := time.Now()
 
 	q := &discardQueue{
@@ -25,7 +26,7 @@ func newDiscardQueue(ivl, lifespan time.Duration) *discardQueue {
 		q.timers[i] = list.New()
 	}
 
-	q.Poller = NewPoller(ivl, q.tick, nil)
+	q.poller = NewPoller(ctx, ivl, q.tick, nil)
 
 	return q
 }
@@ -37,7 +38,7 @@ type discardQueue struct {
 	ivl     time.Duration
 	epoch   time.Time
 	now     time.Time
-	*Poller
+	poller  *Poller
 }
 
 func (q *discardQueue) tick(now time.Time) {

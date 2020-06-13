@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
@@ -37,14 +38,13 @@ type peerSet struct {
 	values *llrb.LLRB
 }
 
-func (s *peerSet) LoadFrom(idx vpn.PeerIndex, key, salt []byte, ttl time.Duration) error {
-	search, err := idx.Search(key, salt)
+func (s *peerSet) LoadFrom(ctx context.Context, idx vpn.PeerIndex, key, salt []byte) error {
+	hosts, err := idx.Search(ctx, key, salt)
 	if err != nil {
 		return err
 	}
 
-	search.SetTimeout(ttl)
-	for h := range search.Hosts() {
+	for h := range hosts {
 		s.Insert(h)
 	}
 	return nil
@@ -65,21 +65,6 @@ func (s *peerSet) Slice() []*vpn.PeerIndexHost {
 		return true
 	})
 	return vs
-}
-
-func latestHashValue(r vpn.HashTableGetReceiver, ttl time.Duration) ([]byte, bool) {
-	r.SetTimeout(ttl)
-
-	var timestamp time.Time
-	var value []byte
-	for v := range r.Values() {
-		if v.Timestamp.After(timestamp) {
-			timestamp = v.Timestamp
-			value = v.Value
-		}
-	}
-
-	return value, value != nil
 }
 
 func jsonDump(i interface{}) {

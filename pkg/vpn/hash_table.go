@@ -2,19 +2,21 @@ package vpn
 
 import (
 	"bytes"
+	"context"
 	"crypto/ed25519"
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
 	"unsafe"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/petar/GoLLRB/llrb"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -27,18 +29,20 @@ var nextHashTableID uint32
 
 // HashTable ...
 type HashTable interface {
-	Set(key *pb.Key, salt, value []byte) (HashTablePublisher, error)
-	Get(key, salt []byte) (HashTableGetReceiver, error)
+	Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error)
+	Get(ctx context.Context, key, salt []byte) (<-chan *HashTableValue, error)
 	HandleMessage(msg *Message) (forward bool, err error)
 }
 
-func NewHashTable(n *Network, store *HashTableStore) HashTable {
+// NewHashTable ...
+func NewHashTable(logger *zap.Logger, n *Network, store *HashTableStore) HashTable {
 	id := atomic.AddUint32(&nextHashTableID, 1)
 	if id == 0 {
 		panic("hash table id overflow")
 	}
 
 	return &hashTable{
+		logger:  logger,
 		id:      id,
 		store:   store,
 		network: n,
@@ -46,6 +50,7 @@ func NewHashTable(n *Network, store *HashTableStore) HashTable {
 }
 
 type hashTable struct {
+	logger              *zap.Logger
 	id                  uint32
 	store               *HashTableStore
 	network             *Network
@@ -121,11 +126,11 @@ func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse) error 
 	return nil
 }
 
-func (s *hashTable) Set(key *pb.Key, salt, value []byte) (HashTablePublisher, error) {
-	return newHashTablePublisher(s.network, key, salt, value)
+func (s *hashTable) Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error) {
+	return newHashTablePublisher(ctx, s.logger, s.network, key, salt, value)
 }
 
-func (s *hashTable) Get(key, salt []byte) (HashTableGetReceiver, error) {
+func (s *hashTable) Get(ctx context.Context, key, salt []byte) (<-chan *HashTableValue, error) {
 	hash := hashTableRecordHash(key, salt)
 	target, err := kademlia.UnmarshalID(hash)
 	if err != nil {
@@ -136,7 +141,6 @@ func (s *hashTable) Get(key, salt []byte) (HashTableGetReceiver, error) {
 	if err != nil {
 		return nil, err
 	}
-	r := newHashTableGetReceiver(&s.searchResponseChans, rid)
 
 	msg := &pb.HashTableMessage{
 		Body: &pb.HashTableMessage_GetRequest_{
@@ -147,11 +151,18 @@ func (s *hashTable) Get(key, salt []byte) (HashTableGetReceiver, error) {
 		},
 	}
 	if err := sendProto(s.network, target, HashTablePort, HashTablePort, msg); err != nil {
-		r.Close()
 		return nil, err
 	}
 
-	return r, nil
+	values := make(chan *HashTableValue, 32)
+	s.searchResponseChans.Store(rid, values)
+	go func() {
+		<-ctx.Done()
+		s.searchResponseChans.Delete(rid)
+		close(values)
+	}()
+
+	return values, nil
 }
 
 func newHashTableItemKey(hashTableID uint32, hash []byte, localHostID kademlia.ID) (k hashTableItemKey) {
@@ -202,24 +213,28 @@ func (p *hashTableItem) Deadline() time.Time {
 	return time.Unix(p.Record().Timestamp, 0).Add(hashTableMaxRecordAge)
 }
 
-func NewHashTableStore(hostID kademlia.ID) *HashTableStore {
+// NewHashTableStore ...
+func NewHashTableStore(ctx context.Context, logger *zap.Logger, hostID kademlia.ID) *HashTableStore {
 	p := &HashTableStore{
+		logger:       logger,
 		hostID:       hostID,
 		records:      llrb.New(),
-		discardQueue: newDiscardQueue(hashTableDiscardInterval, hashTableMaxRecordAge),
+		discardQueue: newDiscardQueue(ctx, hashTableDiscardInterval, hashTableMaxRecordAge),
 	}
 
-	p.Poller = NewPoller(hashTableDiscardInterval, p.tick, p.discardQueue.Stop)
+	p.poller = NewPoller(ctx, hashTableDiscardInterval, p.tick, nil)
 
 	return p
 }
 
+// HashTableStore ...
 type HashTableStore struct {
+	logger       *zap.Logger
 	hostID       kademlia.ID
 	lock         sync.Mutex
 	records      *llrb.LLRB
 	discardQueue *discardQueue
-	*Poller
+	poller       *Poller
 }
 
 func (p *HashTableStore) tick(t time.Time) {
@@ -235,6 +250,7 @@ func (p *HashTableStore) tick(t time.Time) {
 	}
 }
 
+// Insert ...
 func (p *HashTableStore) Insert(hashTableID uint32, r *pb.HashTableMessage_Record) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -253,12 +269,18 @@ func (p *HashTableStore) Insert(hashTableID uint32, r *pb.HashTableMessage_Recor
 	}
 
 	if prev.Record().Timestamp < r.Timestamp {
+		p.logger.Debug(
+			"inserting hash table item",
+			logutil.ByteHex("key", r.Key),
+			logutil.ByteHex("salt", r.Salt),
+		)
 		prev.SetRecord(r)
 	}
 
 	return nil
 }
 
+// Remove ...
 func (p *HashTableStore) Remove(hashTableID uint32, r *pb.HashTableMessage_Record) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -266,12 +288,18 @@ func (p *HashTableStore) Remove(hashTableID uint32, r *pb.HashTableMessage_Recor
 	item := newHashTableItem(hashTableID, p.hostID, r)
 	prev, ok := p.records.Get(item).(*hashTableItem)
 	if ok && prev.Record().Timestamp < r.Timestamp {
+		p.logger.Debug(
+			"removing hash table item",
+			logutil.ByteHex("key", r.Key),
+			logutil.ByteHex("salt", r.Salt),
+		)
 		p.records.Delete(item)
 	}
 
 	return nil
 }
 
+// Get ...
 func (p *HashTableStore) Get(hashTableID uint32, hash []byte) *pb.HashTableMessage_Record {
 	p.lock.Lock()
 	defer p.lock.Unlock()
@@ -296,28 +324,6 @@ type HashTableValue struct {
 	Value     []byte
 }
 
-// HashTableGetReceiver ...
-type HashTableGetReceiver interface {
-	Values() <-chan *HashTableValue
-	SetTimeout(d time.Duration)
-	Close()
-}
-
-func newHashTableGetReceiver(chans *sync.Map, requestID uint64) *hashTableGetReceiver {
-	hosts := make(chan *HashTableValue, 32)
-	chans.Store(requestID, hosts)
-
-	p := &hashTableGetReceiver{
-		requestID: requestID,
-		chans:     chans,
-		hosts:     hosts,
-	}
-
-	runtime.SetFinalizer(p, func(r *hashTableGetReceiver) { r.Close() })
-
-	return p
-}
-
 type hashTableGetReceiver struct {
 	requestID uint64
 	chans     *sync.Map
@@ -327,20 +333,6 @@ type hashTableGetReceiver struct {
 
 func (p *hashTableGetReceiver) Values() <-chan *HashTableValue {
 	return p.hosts
-}
-
-func (p *hashTableGetReceiver) SetTimeout(d time.Duration) {
-	go func() {
-		time.Sleep(d)
-		p.Close()
-	}()
-}
-
-func (p *hashTableGetReceiver) Close() {
-	p.closeOnce.Do(func() {
-		close(p.hosts)
-		p.chans.Delete(p.requestID)
-	})
 }
 
 func sendHashTableGetResponse(chans *sync.Map, requestID uint64, r *pb.HashTableMessage_Record) bool {
@@ -362,52 +354,67 @@ func sendHashTableGetResponse(chans *sync.Map, requestID uint64, r *pb.HashTable
 	}
 }
 
-// HashTablePublisher ...
-type HashTablePublisher interface {
-	Stop()
-}
-
-func newHashTablePublisher(network *Network, key *pb.Key, salt, value []byte) (*hashTablePublisher, error) {
+func newHashTablePublisher(ctx context.Context, logger *zap.Logger, network *Network, key *pb.Key, salt, value []byte) (*HashTablePublisher, error) {
 	target, err := kademlia.UnmarshalID(hashTableRecordHash(key.Public, salt))
 	if err != nil {
 		return nil, err
 	}
 
 	record := &pb.HashTableMessage_Record{
+		Key:   key.Public,
 		Salt:  salt,
 		Value: value,
 	}
 
-	p := &hashTablePublisher{
+	ctx, cancel := context.WithCancel(ctx)
+
+	p := &HashTablePublisher{
+		logger:  logger,
 		key:     key,
 		record:  record,
 		target:  target,
 		network: network,
+		close:   cancel,
 	}
 
-	p.Poller = NewPoller(hashTableSetInterval, p.publish, p.unpublish)
-	runtime.SetFinalizer(p, func(p *hashTablePublisher) { p.Stop() })
+	p.poller = NewPoller(ctx, hashTableSetInterval, p.publish, p.unpublish)
 
 	return p, nil
 }
 
-type hashTablePublisher struct {
+// HashTablePublisher ...
+type HashTablePublisher struct {
+	logger  *zap.Logger
+	lock    sync.Mutex
 	key     *pb.Key
 	record  *pb.HashTableMessage_Record
 	target  kademlia.ID
 	network *Network
-	*Poller
+	close   context.CancelFunc
+	poller  *Poller
 }
 
-func (p *hashTablePublisher) update() error {
+// Update ...
+func (p *HashTablePublisher) Update(v []byte) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	p.record.Value = v
+}
+
+// Close ...
+func (p *HashTablePublisher) Close() {
+	p.close()
+}
+
+func (p *HashTablePublisher) update() error {
 	p.record.Timestamp = time.Now().Unix()
-	if err := signHashTableRecord(p.record, p.key); err != nil {
-		return err
-	}
-	return nil
+	return signHashTableRecord(p.record, p.key)
 }
 
-func (p *hashTablePublisher) publish(t time.Time) {
+func (p *HashTablePublisher) publish(t time.Time) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
 	if err := p.update(); err != nil {
 		return
 	}
@@ -419,10 +426,18 @@ func (p *hashTablePublisher) publish(t time.Time) {
 			},
 		},
 	}
-	sendProto(p.network, p.target, HashTablePort, HashTablePort, msg)
+	if err := sendProto(p.network, p.target, HashTablePort, HashTablePort, msg); err != nil {
+		p.logger.Debug(
+			"error publishing hash table item",
+			zap.Error(err),
+		)
+	}
 }
 
-func (p *hashTablePublisher) unpublish() {
+func (p *HashTablePublisher) unpublish() {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
 	if err := p.update(); err != nil {
 		return
 	}
@@ -434,7 +449,12 @@ func (p *hashTablePublisher) unpublish() {
 			},
 		},
 	}
-	sendProto(p.network, p.target, HashTablePort, HashTablePort, msg)
+	if err := sendProto(p.network, p.target, HashTablePort, HashTablePort, msg); err != nil {
+		p.logger.Debug(
+			"error unpublishing hash table item",
+			zap.Error(err),
+		)
+	}
 }
 
 type hashTableRecordMarshaler struct {

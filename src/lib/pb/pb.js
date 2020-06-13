@@ -11700,6 +11700,7 @@ export const ChatServer = $root.ChatServer = (() => {
      * @interface IChatServer
      * @property {number|null} [id] ChatServer id
      * @property {Uint8Array|null} [networkKey] ChatServer networkKey
+     * @property {IKey|null} [key] ChatServer key
      * @property {IChatRoom|null} [chatRoom] ChatServer chatRoom
      */
 
@@ -11733,6 +11734,14 @@ export const ChatServer = $root.ChatServer = (() => {
      * @instance
      */
     ChatServer.prototype.networkKey = $util.newBuffer([]);
+
+    /**
+     * ChatServer key.
+     * @member {IKey|null|undefined} key
+     * @memberof ChatServer
+     * @instance
+     */
+    ChatServer.prototype.key = null;
 
     /**
      * ChatServer chatRoom.
@@ -11770,8 +11779,10 @@ export const ChatServer = $root.ChatServer = (() => {
             writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
         if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
             writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.networkKey);
+        if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+            $root.Key.encode(message.key, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
         if (message.chatRoom != null && Object.hasOwnProperty.call(message, "chatRoom"))
-            $root.ChatRoom.encode(message.chatRoom, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+            $root.ChatRoom.encode(message.chatRoom, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
         return writer;
     };
 
@@ -11813,6 +11824,9 @@ export const ChatServer = $root.ChatServer = (() => {
                 message.networkKey = reader.bytes();
                 break;
             case 3:
+                message.key = $root.Key.decode(reader, reader.uint32());
+                break;
+            case 4:
                 message.chatRoom = $root.ChatRoom.decode(reader, reader.uint32());
                 break;
             default:
@@ -11856,6 +11870,11 @@ export const ChatServer = $root.ChatServer = (() => {
         if (message.networkKey != null && message.hasOwnProperty("networkKey"))
             if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
                 return "networkKey: buffer expected";
+        if (message.key != null && message.hasOwnProperty("key")) {
+            let error = $root.Key.verify(message.key);
+            if (error)
+                return "key." + error;
+        }
         if (message.chatRoom != null && message.hasOwnProperty("chatRoom")) {
             let error = $root.ChatRoom.verify(message.chatRoom);
             if (error)
@@ -11890,6 +11909,11 @@ export const ChatServer = $root.ChatServer = (() => {
                 $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
             else if (object.networkKey.length)
                 message.networkKey = object.networkKey;
+        if (object.key != null) {
+            if (typeof object.key !== "object")
+                throw TypeError(".ChatServer.key: object expected");
+            message.key = $root.Key.fromObject(object.key);
+        }
         if (object.chatRoom != null) {
             if (typeof object.chatRoom !== "object")
                 throw TypeError(".ChatServer.chatRoom: object expected");
@@ -11924,6 +11948,7 @@ export const ChatServer = $root.ChatServer = (() => {
                 if (options.bytes !== Array)
                     object.networkKey = $util.newBuffer(object.networkKey);
             }
+            object.key = null;
             object.chatRoom = null;
         }
         if (message.id != null && message.hasOwnProperty("id"))
@@ -11933,6 +11958,8 @@ export const ChatServer = $root.ChatServer = (() => {
                 object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
         if (message.networkKey != null && message.hasOwnProperty("networkKey"))
             object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
+        if (message.key != null && message.hasOwnProperty("key"))
+            object.key = $root.Key.toObject(message.key, options);
         if (message.chatRoom != null && message.hasOwnProperty("chatRoom"))
             object.chatRoom = $root.ChatRoom.toObject(message.chatRoom, options);
         return object;
@@ -12376,7 +12403,7 @@ export const UpdateChatServerRequest = $root.UpdateChatServerRequest = (() => {
      * @interface IUpdateChatServerRequest
      * @property {number|null} [id] UpdateChatServerRequest id
      * @property {Uint8Array|null} [networkKey] UpdateChatServerRequest networkKey
-     * @property {IChatRoom|null} [chatRoom] UpdateChatServerRequest chatRoom
+     * @property {IChatRoom|null} [serverKey] UpdateChatServerRequest serverKey
      */
 
     /**
@@ -12411,12 +12438,12 @@ export const UpdateChatServerRequest = $root.UpdateChatServerRequest = (() => {
     UpdateChatServerRequest.prototype.networkKey = $util.newBuffer([]);
 
     /**
-     * UpdateChatServerRequest chatRoom.
-     * @member {IChatRoom|null|undefined} chatRoom
+     * UpdateChatServerRequest serverKey.
+     * @member {IChatRoom|null|undefined} serverKey
      * @memberof UpdateChatServerRequest
      * @instance
      */
-    UpdateChatServerRequest.prototype.chatRoom = null;
+    UpdateChatServerRequest.prototype.serverKey = null;
 
     /**
      * Creates a new UpdateChatServerRequest instance using the specified properties.
@@ -12446,8 +12473,8 @@ export const UpdateChatServerRequest = $root.UpdateChatServerRequest = (() => {
             writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
         if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
             writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.networkKey);
-        if (message.chatRoom != null && Object.hasOwnProperty.call(message, "chatRoom"))
-            $root.ChatRoom.encode(message.chatRoom, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+        if (message.serverKey != null && Object.hasOwnProperty.call(message, "serverKey"))
+            $root.ChatRoom.encode(message.serverKey, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
         return writer;
     };
 
@@ -12489,7 +12516,7 @@ export const UpdateChatServerRequest = $root.UpdateChatServerRequest = (() => {
                 message.networkKey = reader.bytes();
                 break;
             case 3:
-                message.chatRoom = $root.ChatRoom.decode(reader, reader.uint32());
+                message.serverKey = $root.ChatRoom.decode(reader, reader.uint32());
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -12532,10 +12559,10 @@ export const UpdateChatServerRequest = $root.UpdateChatServerRequest = (() => {
         if (message.networkKey != null && message.hasOwnProperty("networkKey"))
             if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
                 return "networkKey: buffer expected";
-        if (message.chatRoom != null && message.hasOwnProperty("chatRoom")) {
-            let error = $root.ChatRoom.verify(message.chatRoom);
+        if (message.serverKey != null && message.hasOwnProperty("serverKey")) {
+            let error = $root.ChatRoom.verify(message.serverKey);
             if (error)
-                return "chatRoom." + error;
+                return "serverKey." + error;
         }
         return null;
     };
@@ -12566,10 +12593,10 @@ export const UpdateChatServerRequest = $root.UpdateChatServerRequest = (() => {
                 $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
             else if (object.networkKey.length)
                 message.networkKey = object.networkKey;
-        if (object.chatRoom != null) {
-            if (typeof object.chatRoom !== "object")
-                throw TypeError(".UpdateChatServerRequest.chatRoom: object expected");
-            message.chatRoom = $root.ChatRoom.fromObject(object.chatRoom);
+        if (object.serverKey != null) {
+            if (typeof object.serverKey !== "object")
+                throw TypeError(".UpdateChatServerRequest.serverKey: object expected");
+            message.serverKey = $root.ChatRoom.fromObject(object.serverKey);
         }
         return message;
     };
@@ -12600,7 +12627,7 @@ export const UpdateChatServerRequest = $root.UpdateChatServerRequest = (() => {
                 if (options.bytes !== Array)
                     object.networkKey = $util.newBuffer(object.networkKey);
             }
-            object.chatRoom = null;
+            object.serverKey = null;
         }
         if (message.id != null && message.hasOwnProperty("id"))
             if (typeof message.id === "number")
@@ -12609,8 +12636,8 @@ export const UpdateChatServerRequest = $root.UpdateChatServerRequest = (() => {
                 object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
         if (message.networkKey != null && message.hasOwnProperty("networkKey"))
             object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
-        if (message.chatRoom != null && message.hasOwnProperty("chatRoom"))
-            object.chatRoom = $root.ChatRoom.toObject(message.chatRoom, options);
+        if (message.serverKey != null && message.hasOwnProperty("serverKey"))
+            object.serverKey = $root.ChatRoom.toObject(message.serverKey, options);
         return object;
     };
 
@@ -13942,26 +13969,24 @@ export const GetChatServersResponse = $root.GetChatServersResponse = (() => {
     return GetChatServersResponse;
 })();
 
-export const ChatClientOpenRequest = $root.ChatClientOpenRequest = (() => {
+export const OpenChatServerRequest = $root.OpenChatServerRequest = (() => {
 
     /**
-     * Properties of a ChatClientOpenRequest.
-     * @exports IChatClientOpenRequest
-     * @interface IChatClientOpenRequest
-     * @property {number|null} [networkId] ChatClientOpenRequest networkId
-     * @property {Uint8Array|null} [hostId] ChatClientOpenRequest hostId
-     * @property {number|null} [port] ChatClientOpenRequest port
+     * Properties of an OpenChatServerRequest.
+     * @exports IOpenChatServerRequest
+     * @interface IOpenChatServerRequest
+     * @property {IChatServer|null} [server] OpenChatServerRequest server
      */
 
     /**
-     * Constructs a new ChatClientOpenRequest.
-     * @exports ChatClientOpenRequest
-     * @classdesc Represents a ChatClientOpenRequest.
-     * @implements IChatClientOpenRequest
+     * Constructs a new OpenChatServerRequest.
+     * @exports OpenChatServerRequest
+     * @classdesc Represents an OpenChatServerRequest.
+     * @implements IOpenChatServerRequest
      * @constructor
-     * @param {IChatClientOpenRequest=} [properties] Properties to set
+     * @param {IOpenChatServerRequest=} [properties] Properties to set
      */
-    function ChatClientOpenRequest(properties) {
+    function OpenChatServerRequest(properties) {
         if (properties)
             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
@@ -13969,101 +13994,75 @@ export const ChatClientOpenRequest = $root.ChatClientOpenRequest = (() => {
     }
 
     /**
-     * ChatClientOpenRequest networkId.
-     * @member {number} networkId
-     * @memberof ChatClientOpenRequest
+     * OpenChatServerRequest server.
+     * @member {IChatServer|null|undefined} server
+     * @memberof OpenChatServerRequest
      * @instance
      */
-    ChatClientOpenRequest.prototype.networkId = 0;
+    OpenChatServerRequest.prototype.server = null;
 
     /**
-     * ChatClientOpenRequest hostId.
-     * @member {Uint8Array} hostId
-     * @memberof ChatClientOpenRequest
-     * @instance
-     */
-    ChatClientOpenRequest.prototype.hostId = $util.newBuffer([]);
-
-    /**
-     * ChatClientOpenRequest port.
-     * @member {number} port
-     * @memberof ChatClientOpenRequest
-     * @instance
-     */
-    ChatClientOpenRequest.prototype.port = 0;
-
-    /**
-     * Creates a new ChatClientOpenRequest instance using the specified properties.
+     * Creates a new OpenChatServerRequest instance using the specified properties.
      * @function create
-     * @memberof ChatClientOpenRequest
+     * @memberof OpenChatServerRequest
      * @static
-     * @param {IChatClientOpenRequest=} [properties] Properties to set
-     * @returns {ChatClientOpenRequest} ChatClientOpenRequest instance
+     * @param {IOpenChatServerRequest=} [properties] Properties to set
+     * @returns {OpenChatServerRequest} OpenChatServerRequest instance
      */
-    ChatClientOpenRequest.create = function create(properties) {
-        return new ChatClientOpenRequest(properties);
+    OpenChatServerRequest.create = function create(properties) {
+        return new OpenChatServerRequest(properties);
     };
 
     /**
-     * Encodes the specified ChatClientOpenRequest message. Does not implicitly {@link ChatClientOpenRequest.verify|verify} messages.
+     * Encodes the specified OpenChatServerRequest message. Does not implicitly {@link OpenChatServerRequest.verify|verify} messages.
      * @function encode
-     * @memberof ChatClientOpenRequest
+     * @memberof OpenChatServerRequest
      * @static
-     * @param {IChatClientOpenRequest} message ChatClientOpenRequest message or plain object to encode
+     * @param {IOpenChatServerRequest} message OpenChatServerRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    ChatClientOpenRequest.encode = function encode(message, writer) {
+    OpenChatServerRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.networkId != null && Object.hasOwnProperty.call(message, "networkId"))
-            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.networkId);
-        if (message.hostId != null && Object.hasOwnProperty.call(message, "hostId"))
-            writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.hostId);
-        if (message.port != null && Object.hasOwnProperty.call(message, "port"))
-            writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.port);
+        if (message.server != null && Object.hasOwnProperty.call(message, "server"))
+            $root.ChatServer.encode(message.server, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         return writer;
     };
 
     /**
-     * Encodes the specified ChatClientOpenRequest message, length delimited. Does not implicitly {@link ChatClientOpenRequest.verify|verify} messages.
+     * Encodes the specified OpenChatServerRequest message, length delimited. Does not implicitly {@link OpenChatServerRequest.verify|verify} messages.
      * @function encodeDelimited
-     * @memberof ChatClientOpenRequest
+     * @memberof OpenChatServerRequest
      * @static
-     * @param {IChatClientOpenRequest} message ChatClientOpenRequest message or plain object to encode
+     * @param {IOpenChatServerRequest} message OpenChatServerRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    ChatClientOpenRequest.encodeDelimited = function encodeDelimited(message, writer) {
+    OpenChatServerRequest.encodeDelimited = function encodeDelimited(message, writer) {
         return this.encode(message, writer).ldelim();
     };
 
     /**
-     * Decodes a ChatClientOpenRequest message from the specified reader or buffer.
+     * Decodes an OpenChatServerRequest message from the specified reader or buffer.
      * @function decode
-     * @memberof ChatClientOpenRequest
+     * @memberof OpenChatServerRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @param {number} [length] Message length if known beforehand
-     * @returns {ChatClientOpenRequest} ChatClientOpenRequest
+     * @returns {OpenChatServerRequest} OpenChatServerRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    ChatClientOpenRequest.decode = function decode(reader, length) {
+    OpenChatServerRequest.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatClientOpenRequest();
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.OpenChatServerRequest();
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.networkId = reader.uint32();
-                break;
-            case 2:
-                message.hostId = reader.bytes();
-                break;
-            case 3:
-                message.port = reader.uint32();
+                message.server = $root.ChatServer.decode(reader, reader.uint32());
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -14074,113 +14073,1334 @@ export const ChatClientOpenRequest = $root.ChatClientOpenRequest = (() => {
     };
 
     /**
-     * Decodes a ChatClientOpenRequest message from the specified reader or buffer, length delimited.
+     * Decodes an OpenChatServerRequest message from the specified reader or buffer, length delimited.
      * @function decodeDelimited
-     * @memberof ChatClientOpenRequest
+     * @memberof OpenChatServerRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {ChatClientOpenRequest} ChatClientOpenRequest
+     * @returns {OpenChatServerRequest} OpenChatServerRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    ChatClientOpenRequest.decodeDelimited = function decodeDelimited(reader) {
+    OpenChatServerRequest.decodeDelimited = function decodeDelimited(reader) {
         if (!(reader instanceof $Reader))
             reader = new $Reader(reader);
         return this.decode(reader, reader.uint32());
     };
 
     /**
-     * Verifies a ChatClientOpenRequest message.
+     * Verifies an OpenChatServerRequest message.
      * @function verify
-     * @memberof ChatClientOpenRequest
+     * @memberof OpenChatServerRequest
      * @static
      * @param {Object.<string,*>} message Plain object to verify
      * @returns {string|null} `null` if valid, otherwise the reason why it is not
      */
-    ChatClientOpenRequest.verify = function verify(message) {
+    OpenChatServerRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.networkId != null && message.hasOwnProperty("networkId"))
-            if (!$util.isInteger(message.networkId))
-                return "networkId: integer expected";
-        if (message.hostId != null && message.hasOwnProperty("hostId"))
-            if (!(message.hostId && typeof message.hostId.length === "number" || $util.isString(message.hostId)))
-                return "hostId: buffer expected";
-        if (message.port != null && message.hasOwnProperty("port"))
-            if (!$util.isInteger(message.port))
-                return "port: integer expected";
+        if (message.server != null && message.hasOwnProperty("server")) {
+            let error = $root.ChatServer.verify(message.server);
+            if (error)
+                return "server." + error;
+        }
         return null;
     };
 
     /**
-     * Creates a ChatClientOpenRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates an OpenChatServerRequest message from a plain object. Also converts values to their respective internal types.
      * @function fromObject
-     * @memberof ChatClientOpenRequest
+     * @memberof OpenChatServerRequest
      * @static
      * @param {Object.<string,*>} object Plain object
-     * @returns {ChatClientOpenRequest} ChatClientOpenRequest
+     * @returns {OpenChatServerRequest} OpenChatServerRequest
      */
-    ChatClientOpenRequest.fromObject = function fromObject(object) {
-        if (object instanceof $root.ChatClientOpenRequest)
+    OpenChatServerRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.OpenChatServerRequest)
             return object;
-        let message = new $root.ChatClientOpenRequest();
-        if (object.networkId != null)
-            message.networkId = object.networkId >>> 0;
-        if (object.hostId != null)
-            if (typeof object.hostId === "string")
-                $util.base64.decode(object.hostId, message.hostId = $util.newBuffer($util.base64.length(object.hostId)), 0);
-            else if (object.hostId.length)
-                message.hostId = object.hostId;
-        if (object.port != null)
-            message.port = object.port >>> 0;
+        let message = new $root.OpenChatServerRequest();
+        if (object.server != null) {
+            if (typeof object.server !== "object")
+                throw TypeError(".OpenChatServerRequest.server: object expected");
+            message.server = $root.ChatServer.fromObject(object.server);
+        }
         return message;
     };
 
     /**
-     * Creates a plain object from a ChatClientOpenRequest message. Also converts values to other types if specified.
+     * Creates a plain object from an OpenChatServerRequest message. Also converts values to other types if specified.
      * @function toObject
-     * @memberof ChatClientOpenRequest
+     * @memberof OpenChatServerRequest
      * @static
-     * @param {ChatClientOpenRequest} message ChatClientOpenRequest
+     * @param {OpenChatServerRequest} message OpenChatServerRequest
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    ChatClientOpenRequest.toObject = function toObject(message, options) {
+    OpenChatServerRequest.toObject = function toObject(message, options) {
         if (!options)
             options = {};
         let object = {};
-        if (options.defaults) {
-            object.networkId = 0;
-            if (options.bytes === String)
-                object.hostId = "";
-            else {
-                object.hostId = [];
-                if (options.bytes !== Array)
-                    object.hostId = $util.newBuffer(object.hostId);
-            }
-            object.port = 0;
-        }
-        if (message.networkId != null && message.hasOwnProperty("networkId"))
-            object.networkId = message.networkId;
-        if (message.hostId != null && message.hasOwnProperty("hostId"))
-            object.hostId = options.bytes === String ? $util.base64.encode(message.hostId, 0, message.hostId.length) : options.bytes === Array ? Array.prototype.slice.call(message.hostId) : message.hostId;
-        if (message.port != null && message.hasOwnProperty("port"))
-            object.port = message.port;
+        if (options.defaults)
+            object.server = null;
+        if (message.server != null && message.hasOwnProperty("server"))
+            object.server = $root.ChatServer.toObject(message.server, options);
         return object;
     };
 
     /**
-     * Converts this ChatClientOpenRequest to JSON.
+     * Converts this OpenChatServerRequest to JSON.
      * @function toJSON
-     * @memberof ChatClientOpenRequest
+     * @memberof OpenChatServerRequest
      * @instance
      * @returns {Object.<string,*>} JSON object
      */
-    ChatClientOpenRequest.prototype.toJSON = function toJSON() {
+    OpenChatServerRequest.prototype.toJSON = function toJSON() {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
 
-    return ChatClientOpenRequest;
+    return OpenChatServerRequest;
+})();
+
+export const ChatServerEvent = $root.ChatServerEvent = (() => {
+
+    /**
+     * Properties of a ChatServerEvent.
+     * @exports IChatServerEvent
+     * @interface IChatServerEvent
+     * @property {ChatServerEvent.IOpen|null} [open] ChatServerEvent open
+     * @property {ChatServerEvent.IClose|null} [close] ChatServerEvent close
+     */
+
+    /**
+     * Constructs a new ChatServerEvent.
+     * @exports ChatServerEvent
+     * @classdesc Represents a ChatServerEvent.
+     * @implements IChatServerEvent
+     * @constructor
+     * @param {IChatServerEvent=} [properties] Properties to set
+     */
+    function ChatServerEvent(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * ChatServerEvent open.
+     * @member {ChatServerEvent.IOpen|null|undefined} open
+     * @memberof ChatServerEvent
+     * @instance
+     */
+    ChatServerEvent.prototype.open = null;
+
+    /**
+     * ChatServerEvent close.
+     * @member {ChatServerEvent.IClose|null|undefined} close
+     * @memberof ChatServerEvent
+     * @instance
+     */
+    ChatServerEvent.prototype.close = null;
+
+    // OneOf field names bound to virtual getters and setters
+    let $oneOfFields;
+
+    /**
+     * ChatServerEvent body.
+     * @member {"open"|"close"|undefined} body
+     * @memberof ChatServerEvent
+     * @instance
+     */
+    Object.defineProperty(ChatServerEvent.prototype, "body", {
+        get: $util.oneOfGetter($oneOfFields = ["open", "close"]),
+        set: $util.oneOfSetter($oneOfFields)
+    });
+
+    /**
+     * Creates a new ChatServerEvent instance using the specified properties.
+     * @function create
+     * @memberof ChatServerEvent
+     * @static
+     * @param {IChatServerEvent=} [properties] Properties to set
+     * @returns {ChatServerEvent} ChatServerEvent instance
+     */
+    ChatServerEvent.create = function create(properties) {
+        return new ChatServerEvent(properties);
+    };
+
+    /**
+     * Encodes the specified ChatServerEvent message. Does not implicitly {@link ChatServerEvent.verify|verify} messages.
+     * @function encode
+     * @memberof ChatServerEvent
+     * @static
+     * @param {IChatServerEvent} message ChatServerEvent message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    ChatServerEvent.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.open != null && Object.hasOwnProperty.call(message, "open"))
+            $root.ChatServerEvent.Open.encode(message.open, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.close != null && Object.hasOwnProperty.call(message, "close"))
+            $root.ChatServerEvent.Close.encode(message.close, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified ChatServerEvent message, length delimited. Does not implicitly {@link ChatServerEvent.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof ChatServerEvent
+     * @static
+     * @param {IChatServerEvent} message ChatServerEvent message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    ChatServerEvent.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a ChatServerEvent message from the specified reader or buffer.
+     * @function decode
+     * @memberof ChatServerEvent
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {ChatServerEvent} ChatServerEvent
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    ChatServerEvent.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatServerEvent();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.open = $root.ChatServerEvent.Open.decode(reader, reader.uint32());
+                break;
+            case 2:
+                message.close = $root.ChatServerEvent.Close.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a ChatServerEvent message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof ChatServerEvent
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {ChatServerEvent} ChatServerEvent
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    ChatServerEvent.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a ChatServerEvent message.
+     * @function verify
+     * @memberof ChatServerEvent
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    ChatServerEvent.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        let properties = {};
+        if (message.open != null && message.hasOwnProperty("open")) {
+            properties.body = 1;
+            {
+                let error = $root.ChatServerEvent.Open.verify(message.open);
+                if (error)
+                    return "open." + error;
+            }
+        }
+        if (message.close != null && message.hasOwnProperty("close")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.ChatServerEvent.Close.verify(message.close);
+                if (error)
+                    return "close." + error;
+            }
+        }
+        return null;
+    };
+
+    /**
+     * Creates a ChatServerEvent message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof ChatServerEvent
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {ChatServerEvent} ChatServerEvent
+     */
+    ChatServerEvent.fromObject = function fromObject(object) {
+        if (object instanceof $root.ChatServerEvent)
+            return object;
+        let message = new $root.ChatServerEvent();
+        if (object.open != null) {
+            if (typeof object.open !== "object")
+                throw TypeError(".ChatServerEvent.open: object expected");
+            message.open = $root.ChatServerEvent.Open.fromObject(object.open);
+        }
+        if (object.close != null) {
+            if (typeof object.close !== "object")
+                throw TypeError(".ChatServerEvent.close: object expected");
+            message.close = $root.ChatServerEvent.Close.fromObject(object.close);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a ChatServerEvent message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof ChatServerEvent
+     * @static
+     * @param {ChatServerEvent} message ChatServerEvent
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    ChatServerEvent.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (message.open != null && message.hasOwnProperty("open")) {
+            object.open = $root.ChatServerEvent.Open.toObject(message.open, options);
+            if (options.oneofs)
+                object.body = "open";
+        }
+        if (message.close != null && message.hasOwnProperty("close")) {
+            object.close = $root.ChatServerEvent.Close.toObject(message.close, options);
+            if (options.oneofs)
+                object.body = "close";
+        }
+        return object;
+    };
+
+    /**
+     * Converts this ChatServerEvent to JSON.
+     * @function toJSON
+     * @memberof ChatServerEvent
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    ChatServerEvent.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    ChatServerEvent.Open = (function() {
+
+        /**
+         * Properties of an Open.
+         * @memberof ChatServerEvent
+         * @interface IOpen
+         * @property {number|null} [serverId] Open serverId
+         */
+
+        /**
+         * Constructs a new Open.
+         * @memberof ChatServerEvent
+         * @classdesc Represents an Open.
+         * @implements IOpen
+         * @constructor
+         * @param {ChatServerEvent.IOpen=} [properties] Properties to set
+         */
+        function Open(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Open serverId.
+         * @member {number} serverId
+         * @memberof ChatServerEvent.Open
+         * @instance
+         */
+        Open.prototype.serverId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * Creates a new Open instance using the specified properties.
+         * @function create
+         * @memberof ChatServerEvent.Open
+         * @static
+         * @param {ChatServerEvent.IOpen=} [properties] Properties to set
+         * @returns {ChatServerEvent.Open} Open instance
+         */
+        Open.create = function create(properties) {
+            return new Open(properties);
+        };
+
+        /**
+         * Encodes the specified Open message. Does not implicitly {@link ChatServerEvent.Open.verify|verify} messages.
+         * @function encode
+         * @memberof ChatServerEvent.Open
+         * @static
+         * @param {ChatServerEvent.IOpen} message Open message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Open.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.serverId != null && Object.hasOwnProperty.call(message, "serverId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.serverId);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Open message, length delimited. Does not implicitly {@link ChatServerEvent.Open.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof ChatServerEvent.Open
+         * @static
+         * @param {ChatServerEvent.IOpen} message Open message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Open.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes an Open message from the specified reader or buffer.
+         * @function decode
+         * @memberof ChatServerEvent.Open
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {ChatServerEvent.Open} Open
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Open.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatServerEvent.Open();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.serverId = reader.uint64();
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes an Open message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof ChatServerEvent.Open
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {ChatServerEvent.Open} Open
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Open.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies an Open message.
+         * @function verify
+         * @memberof ChatServerEvent.Open
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Open.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.serverId != null && message.hasOwnProperty("serverId"))
+                if (!$util.isInteger(message.serverId) && !(message.serverId && $util.isInteger(message.serverId.low) && $util.isInteger(message.serverId.high)))
+                    return "serverId: integer|Long expected";
+            return null;
+        };
+
+        /**
+         * Creates an Open message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof ChatServerEvent.Open
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {ChatServerEvent.Open} Open
+         */
+        Open.fromObject = function fromObject(object) {
+            if (object instanceof $root.ChatServerEvent.Open)
+                return object;
+            let message = new $root.ChatServerEvent.Open();
+            if (object.serverId != null)
+                if ($util.Long)
+                    (message.serverId = $util.Long.fromValue(object.serverId)).unsigned = true;
+                else if (typeof object.serverId === "string")
+                    message.serverId = parseInt(object.serverId, 10);
+                else if (typeof object.serverId === "number")
+                    message.serverId = object.serverId;
+                else if (typeof object.serverId === "object")
+                    message.serverId = new $util.LongBits(object.serverId.low >>> 0, object.serverId.high >>> 0).toNumber(true);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from an Open message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof ChatServerEvent.Open
+         * @static
+         * @param {ChatServerEvent.Open} message Open
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Open.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.serverId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.serverId = options.longs === String ? "0" : 0;
+            if (message.serverId != null && message.hasOwnProperty("serverId"))
+                if (typeof message.serverId === "number")
+                    object.serverId = options.longs === String ? String(message.serverId) : message.serverId;
+                else
+                    object.serverId = options.longs === String ? $util.Long.prototype.toString.call(message.serverId) : options.longs === Number ? new $util.LongBits(message.serverId.low >>> 0, message.serverId.high >>> 0).toNumber(true) : message.serverId;
+            return object;
+        };
+
+        /**
+         * Converts this Open to JSON.
+         * @function toJSON
+         * @memberof ChatServerEvent.Open
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Open.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Open;
+    })();
+
+    ChatServerEvent.Close = (function() {
+
+        /**
+         * Properties of a Close.
+         * @memberof ChatServerEvent
+         * @interface IClose
+         */
+
+        /**
+         * Constructs a new Close.
+         * @memberof ChatServerEvent
+         * @classdesc Represents a Close.
+         * @implements IClose
+         * @constructor
+         * @param {ChatServerEvent.IClose=} [properties] Properties to set
+         */
+        function Close(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Creates a new Close instance using the specified properties.
+         * @function create
+         * @memberof ChatServerEvent.Close
+         * @static
+         * @param {ChatServerEvent.IClose=} [properties] Properties to set
+         * @returns {ChatServerEvent.Close} Close instance
+         */
+        Close.create = function create(properties) {
+            return new Close(properties);
+        };
+
+        /**
+         * Encodes the specified Close message. Does not implicitly {@link ChatServerEvent.Close.verify|verify} messages.
+         * @function encode
+         * @memberof ChatServerEvent.Close
+         * @static
+         * @param {ChatServerEvent.IClose} message Close message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Close.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Close message, length delimited. Does not implicitly {@link ChatServerEvent.Close.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof ChatServerEvent.Close
+         * @static
+         * @param {ChatServerEvent.IClose} message Close message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Close.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Close message from the specified reader or buffer.
+         * @function decode
+         * @memberof ChatServerEvent.Close
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {ChatServerEvent.Close} Close
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Close.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatServerEvent.Close();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Close message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof ChatServerEvent.Close
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {ChatServerEvent.Close} Close
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Close.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Close message.
+         * @function verify
+         * @memberof ChatServerEvent.Close
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Close.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            return null;
+        };
+
+        /**
+         * Creates a Close message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof ChatServerEvent.Close
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {ChatServerEvent.Close} Close
+         */
+        Close.fromObject = function fromObject(object) {
+            if (object instanceof $root.ChatServerEvent.Close)
+                return object;
+            return new $root.ChatServerEvent.Close();
+        };
+
+        /**
+         * Creates a plain object from a Close message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof ChatServerEvent.Close
+         * @static
+         * @param {ChatServerEvent.Close} message Close
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Close.toObject = function toObject() {
+            return {};
+        };
+
+        /**
+         * Converts this Close to JSON.
+         * @function toJSON
+         * @memberof ChatServerEvent.Close
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Close.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Close;
+    })();
+
+    return ChatServerEvent;
+})();
+
+export const CallChatServerRequest = $root.CallChatServerRequest = (() => {
+
+    /**
+     * Properties of a CallChatServerRequest.
+     * @exports ICallChatServerRequest
+     * @interface ICallChatServerRequest
+     * @property {number|null} [serverId] CallChatServerRequest serverId
+     * @property {CallChatServerRequest.IClose|null} [close] CallChatServerRequest close
+     */
+
+    /**
+     * Constructs a new CallChatServerRequest.
+     * @exports CallChatServerRequest
+     * @classdesc Represents a CallChatServerRequest.
+     * @implements ICallChatServerRequest
+     * @constructor
+     * @param {ICallChatServerRequest=} [properties] Properties to set
+     */
+    function CallChatServerRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * CallChatServerRequest serverId.
+     * @member {number} serverId
+     * @memberof CallChatServerRequest
+     * @instance
+     */
+    CallChatServerRequest.prototype.serverId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * CallChatServerRequest close.
+     * @member {CallChatServerRequest.IClose|null|undefined} close
+     * @memberof CallChatServerRequest
+     * @instance
+     */
+    CallChatServerRequest.prototype.close = null;
+
+    // OneOf field names bound to virtual getters and setters
+    let $oneOfFields;
+
+    /**
+     * CallChatServerRequest body.
+     * @member {"close"|undefined} body
+     * @memberof CallChatServerRequest
+     * @instance
+     */
+    Object.defineProperty(CallChatServerRequest.prototype, "body", {
+        get: $util.oneOfGetter($oneOfFields = ["close"]),
+        set: $util.oneOfSetter($oneOfFields)
+    });
+
+    /**
+     * Creates a new CallChatServerRequest instance using the specified properties.
+     * @function create
+     * @memberof CallChatServerRequest
+     * @static
+     * @param {ICallChatServerRequest=} [properties] Properties to set
+     * @returns {CallChatServerRequest} CallChatServerRequest instance
+     */
+    CallChatServerRequest.create = function create(properties) {
+        return new CallChatServerRequest(properties);
+    };
+
+    /**
+     * Encodes the specified CallChatServerRequest message. Does not implicitly {@link CallChatServerRequest.verify|verify} messages.
+     * @function encode
+     * @memberof CallChatServerRequest
+     * @static
+     * @param {ICallChatServerRequest} message CallChatServerRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    CallChatServerRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.serverId != null && Object.hasOwnProperty.call(message, "serverId"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.serverId);
+        if (message.close != null && Object.hasOwnProperty.call(message, "close"))
+            $root.CallChatServerRequest.Close.encode(message.close, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified CallChatServerRequest message, length delimited. Does not implicitly {@link CallChatServerRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof CallChatServerRequest
+     * @static
+     * @param {ICallChatServerRequest} message CallChatServerRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    CallChatServerRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a CallChatServerRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof CallChatServerRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {CallChatServerRequest} CallChatServerRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    CallChatServerRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.CallChatServerRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.serverId = reader.uint64();
+                break;
+            case 2:
+                message.close = $root.CallChatServerRequest.Close.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a CallChatServerRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof CallChatServerRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {CallChatServerRequest} CallChatServerRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    CallChatServerRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a CallChatServerRequest message.
+     * @function verify
+     * @memberof CallChatServerRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    CallChatServerRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        let properties = {};
+        if (message.serverId != null && message.hasOwnProperty("serverId"))
+            if (!$util.isInteger(message.serverId) && !(message.serverId && $util.isInteger(message.serverId.low) && $util.isInteger(message.serverId.high)))
+                return "serverId: integer|Long expected";
+        if (message.close != null && message.hasOwnProperty("close")) {
+            properties.body = 1;
+            {
+                let error = $root.CallChatServerRequest.Close.verify(message.close);
+                if (error)
+                    return "close." + error;
+            }
+        }
+        return null;
+    };
+
+    /**
+     * Creates a CallChatServerRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof CallChatServerRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {CallChatServerRequest} CallChatServerRequest
+     */
+    CallChatServerRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.CallChatServerRequest)
+            return object;
+        let message = new $root.CallChatServerRequest();
+        if (object.serverId != null)
+            if ($util.Long)
+                (message.serverId = $util.Long.fromValue(object.serverId)).unsigned = true;
+            else if (typeof object.serverId === "string")
+                message.serverId = parseInt(object.serverId, 10);
+            else if (typeof object.serverId === "number")
+                message.serverId = object.serverId;
+            else if (typeof object.serverId === "object")
+                message.serverId = new $util.LongBits(object.serverId.low >>> 0, object.serverId.high >>> 0).toNumber(true);
+        if (object.close != null) {
+            if (typeof object.close !== "object")
+                throw TypeError(".CallChatServerRequest.close: object expected");
+            message.close = $root.CallChatServerRequest.Close.fromObject(object.close);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a CallChatServerRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof CallChatServerRequest
+     * @static
+     * @param {CallChatServerRequest} message CallChatServerRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    CallChatServerRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.serverId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.serverId = options.longs === String ? "0" : 0;
+        if (message.serverId != null && message.hasOwnProperty("serverId"))
+            if (typeof message.serverId === "number")
+                object.serverId = options.longs === String ? String(message.serverId) : message.serverId;
+            else
+                object.serverId = options.longs === String ? $util.Long.prototype.toString.call(message.serverId) : options.longs === Number ? new $util.LongBits(message.serverId.low >>> 0, message.serverId.high >>> 0).toNumber(true) : message.serverId;
+        if (message.close != null && message.hasOwnProperty("close")) {
+            object.close = $root.CallChatServerRequest.Close.toObject(message.close, options);
+            if (options.oneofs)
+                object.body = "close";
+        }
+        return object;
+    };
+
+    /**
+     * Converts this CallChatServerRequest to JSON.
+     * @function toJSON
+     * @memberof CallChatServerRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    CallChatServerRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    CallChatServerRequest.Close = (function() {
+
+        /**
+         * Properties of a Close.
+         * @memberof CallChatServerRequest
+         * @interface IClose
+         */
+
+        /**
+         * Constructs a new Close.
+         * @memberof CallChatServerRequest
+         * @classdesc Represents a Close.
+         * @implements IClose
+         * @constructor
+         * @param {CallChatServerRequest.IClose=} [properties] Properties to set
+         */
+        function Close(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Creates a new Close instance using the specified properties.
+         * @function create
+         * @memberof CallChatServerRequest.Close
+         * @static
+         * @param {CallChatServerRequest.IClose=} [properties] Properties to set
+         * @returns {CallChatServerRequest.Close} Close instance
+         */
+        Close.create = function create(properties) {
+            return new Close(properties);
+        };
+
+        /**
+         * Encodes the specified Close message. Does not implicitly {@link CallChatServerRequest.Close.verify|verify} messages.
+         * @function encode
+         * @memberof CallChatServerRequest.Close
+         * @static
+         * @param {CallChatServerRequest.IClose} message Close message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Close.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Close message, length delimited. Does not implicitly {@link CallChatServerRequest.Close.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof CallChatServerRequest.Close
+         * @static
+         * @param {CallChatServerRequest.IClose} message Close message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Close.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Close message from the specified reader or buffer.
+         * @function decode
+         * @memberof CallChatServerRequest.Close
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {CallChatServerRequest.Close} Close
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Close.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.CallChatServerRequest.Close();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Close message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof CallChatServerRequest.Close
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {CallChatServerRequest.Close} Close
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Close.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Close message.
+         * @function verify
+         * @memberof CallChatServerRequest.Close
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Close.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            return null;
+        };
+
+        /**
+         * Creates a Close message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof CallChatServerRequest.Close
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {CallChatServerRequest.Close} Close
+         */
+        Close.fromObject = function fromObject(object) {
+            if (object instanceof $root.CallChatServerRequest.Close)
+                return object;
+            return new $root.CallChatServerRequest.Close();
+        };
+
+        /**
+         * Creates a plain object from a Close message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof CallChatServerRequest.Close
+         * @static
+         * @param {CallChatServerRequest.Close} message Close
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Close.toObject = function toObject() {
+            return {};
+        };
+
+        /**
+         * Converts this Close to JSON.
+         * @function toJSON
+         * @memberof CallChatServerRequest.Close
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Close.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Close;
+    })();
+
+    return CallChatServerRequest;
+})();
+
+export const OpenChatClientRequest = $root.OpenChatClientRequest = (() => {
+
+    /**
+     * Properties of an OpenChatClientRequest.
+     * @exports IOpenChatClientRequest
+     * @interface IOpenChatClientRequest
+     * @property {Uint8Array|null} [networkKey] OpenChatClientRequest networkKey
+     * @property {Uint8Array|null} [serverKey] OpenChatClientRequest serverKey
+     */
+
+    /**
+     * Constructs a new OpenChatClientRequest.
+     * @exports OpenChatClientRequest
+     * @classdesc Represents an OpenChatClientRequest.
+     * @implements IOpenChatClientRequest
+     * @constructor
+     * @param {IOpenChatClientRequest=} [properties] Properties to set
+     */
+    function OpenChatClientRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * OpenChatClientRequest networkKey.
+     * @member {Uint8Array} networkKey
+     * @memberof OpenChatClientRequest
+     * @instance
+     */
+    OpenChatClientRequest.prototype.networkKey = $util.newBuffer([]);
+
+    /**
+     * OpenChatClientRequest serverKey.
+     * @member {Uint8Array} serverKey
+     * @memberof OpenChatClientRequest
+     * @instance
+     */
+    OpenChatClientRequest.prototype.serverKey = $util.newBuffer([]);
+
+    /**
+     * Creates a new OpenChatClientRequest instance using the specified properties.
+     * @function create
+     * @memberof OpenChatClientRequest
+     * @static
+     * @param {IOpenChatClientRequest=} [properties] Properties to set
+     * @returns {OpenChatClientRequest} OpenChatClientRequest instance
+     */
+    OpenChatClientRequest.create = function create(properties) {
+        return new OpenChatClientRequest(properties);
+    };
+
+    /**
+     * Encodes the specified OpenChatClientRequest message. Does not implicitly {@link OpenChatClientRequest.verify|verify} messages.
+     * @function encode
+     * @memberof OpenChatClientRequest
+     * @static
+     * @param {IOpenChatClientRequest} message OpenChatClientRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    OpenChatClientRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.networkKey);
+        if (message.serverKey != null && Object.hasOwnProperty.call(message, "serverKey"))
+            writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.serverKey);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified OpenChatClientRequest message, length delimited. Does not implicitly {@link OpenChatClientRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof OpenChatClientRequest
+     * @static
+     * @param {IOpenChatClientRequest} message OpenChatClientRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    OpenChatClientRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes an OpenChatClientRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof OpenChatClientRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {OpenChatClientRequest} OpenChatClientRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    OpenChatClientRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.OpenChatClientRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.networkKey = reader.bytes();
+                break;
+            case 2:
+                message.serverKey = reader.bytes();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes an OpenChatClientRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof OpenChatClientRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {OpenChatClientRequest} OpenChatClientRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    OpenChatClientRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies an OpenChatClientRequest message.
+     * @function verify
+     * @memberof OpenChatClientRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    OpenChatClientRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+            if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
+                return "networkKey: buffer expected";
+        if (message.serverKey != null && message.hasOwnProperty("serverKey"))
+            if (!(message.serverKey && typeof message.serverKey.length === "number" || $util.isString(message.serverKey)))
+                return "serverKey: buffer expected";
+        return null;
+    };
+
+    /**
+     * Creates an OpenChatClientRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof OpenChatClientRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {OpenChatClientRequest} OpenChatClientRequest
+     */
+    OpenChatClientRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.OpenChatClientRequest)
+            return object;
+        let message = new $root.OpenChatClientRequest();
+        if (object.networkKey != null)
+            if (typeof object.networkKey === "string")
+                $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
+            else if (object.networkKey.length)
+                message.networkKey = object.networkKey;
+        if (object.serverKey != null)
+            if (typeof object.serverKey === "string")
+                $util.base64.decode(object.serverKey, message.serverKey = $util.newBuffer($util.base64.length(object.serverKey)), 0);
+            else if (object.serverKey.length)
+                message.serverKey = object.serverKey;
+        return message;
+    };
+
+    /**
+     * Creates a plain object from an OpenChatClientRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof OpenChatClientRequest
+     * @static
+     * @param {OpenChatClientRequest} message OpenChatClientRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    OpenChatClientRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if (options.bytes === String)
+                object.networkKey = "";
+            else {
+                object.networkKey = [];
+                if (options.bytes !== Array)
+                    object.networkKey = $util.newBuffer(object.networkKey);
+            }
+            if (options.bytes === String)
+                object.serverKey = "";
+            else {
+                object.serverKey = [];
+                if (options.bytes !== Array)
+                    object.serverKey = $util.newBuffer(object.serverKey);
+            }
+        }
+        if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+            object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
+        if (message.serverKey != null && message.hasOwnProperty("serverKey"))
+            object.serverKey = options.bytes === String ? $util.base64.encode(message.serverKey, 0, message.serverKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.serverKey) : message.serverKey;
+        return object;
+    };
+
+    /**
+     * Converts this OpenChatClientRequest to JSON.
+     * @function toJSON
+     * @memberof OpenChatClientRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    OpenChatClientRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return OpenChatClientRequest;
 })();
 
 export const ChatClientEvent = $root.ChatClientEvent = (() => {
@@ -14192,7 +15412,6 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
      * @property {ChatClientEvent.IOpen|null} [open] ChatClientEvent open
      * @property {ChatClientEvent.IMessage|null} [message] ChatClientEvent message
      * @property {ChatClientEvent.IClose|null} [close] ChatClientEvent close
-     * @property {ChatClientEvent.IPadding|null} [padding] ChatClientEvent padding
      */
 
     /**
@@ -14234,25 +15453,17 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
      */
     ChatClientEvent.prototype.close = null;
 
-    /**
-     * ChatClientEvent padding.
-     * @member {ChatClientEvent.IPadding|null|undefined} padding
-     * @memberof ChatClientEvent
-     * @instance
-     */
-    ChatClientEvent.prototype.padding = null;
-
     // OneOf field names bound to virtual getters and setters
     let $oneOfFields;
 
     /**
      * ChatClientEvent body.
-     * @member {"open"|"message"|"close"|"padding"|undefined} body
+     * @member {"open"|"message"|"close"|undefined} body
      * @memberof ChatClientEvent
      * @instance
      */
     Object.defineProperty(ChatClientEvent.prototype, "body", {
-        get: $util.oneOfGetter($oneOfFields = ["open", "message", "close", "padding"]),
+        get: $util.oneOfGetter($oneOfFields = ["open", "message", "close"]),
         set: $util.oneOfSetter($oneOfFields)
     });
 
@@ -14286,8 +15497,6 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
             $root.ChatClientEvent.Message.encode(message.message, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
         if (message.close != null && Object.hasOwnProperty.call(message, "close"))
             $root.ChatClientEvent.Close.encode(message.close, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-        if (message.padding != null && Object.hasOwnProperty.call(message, "padding"))
-            $root.ChatClientEvent.Padding.encode(message.padding, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
         return writer;
     };
 
@@ -14330,9 +15539,6 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
                 break;
             case 3:
                 message.close = $root.ChatClientEvent.Close.decode(reader, reader.uint32());
-                break;
-            case 4:
-                message.padding = $root.ChatClientEvent.Padding.decode(reader, reader.uint32());
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -14398,16 +15604,6 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
                     return "close." + error;
             }
         }
-        if (message.padding != null && message.hasOwnProperty("padding")) {
-            if (properties.body === 1)
-                return "body: multiple values";
-            properties.body = 1;
-            {
-                let error = $root.ChatClientEvent.Padding.verify(message.padding);
-                if (error)
-                    return "padding." + error;
-            }
-        }
         return null;
     };
 
@@ -14437,11 +15633,6 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
             if (typeof object.close !== "object")
                 throw TypeError(".ChatClientEvent.close: object expected");
             message.close = $root.ChatClientEvent.Close.fromObject(object.close);
-        }
-        if (object.padding != null) {
-            if (typeof object.padding !== "object")
-                throw TypeError(".ChatClientEvent.padding: object expected");
-            message.padding = $root.ChatClientEvent.Padding.fromObject(object.padding);
         }
         return message;
     };
@@ -14474,11 +15665,6 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
             if (options.oneofs)
                 object.body = "close";
         }
-        if (message.padding != null && message.hasOwnProperty("padding")) {
-            object.padding = $root.ChatClientEvent.Padding.toObject(message.padding, options);
-            if (options.oneofs)
-                object.body = "padding";
-        }
         return object;
     };
 
@@ -14492,6 +15678,207 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
     ChatClientEvent.prototype.toJSON = function toJSON() {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
+
+    ChatClientEvent.Open = (function() {
+
+        /**
+         * Properties of an Open.
+         * @memberof ChatClientEvent
+         * @interface IOpen
+         * @property {number|null} [clientId] Open clientId
+         */
+
+        /**
+         * Constructs a new Open.
+         * @memberof ChatClientEvent
+         * @classdesc Represents an Open.
+         * @implements IOpen
+         * @constructor
+         * @param {ChatClientEvent.IOpen=} [properties] Properties to set
+         */
+        function Open(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Open clientId.
+         * @member {number} clientId
+         * @memberof ChatClientEvent.Open
+         * @instance
+         */
+        Open.prototype.clientId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * Creates a new Open instance using the specified properties.
+         * @function create
+         * @memberof ChatClientEvent.Open
+         * @static
+         * @param {ChatClientEvent.IOpen=} [properties] Properties to set
+         * @returns {ChatClientEvent.Open} Open instance
+         */
+        Open.create = function create(properties) {
+            return new Open(properties);
+        };
+
+        /**
+         * Encodes the specified Open message. Does not implicitly {@link ChatClientEvent.Open.verify|verify} messages.
+         * @function encode
+         * @memberof ChatClientEvent.Open
+         * @static
+         * @param {ChatClientEvent.IOpen} message Open message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Open.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.clientId != null && Object.hasOwnProperty.call(message, "clientId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.clientId);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Open message, length delimited. Does not implicitly {@link ChatClientEvent.Open.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof ChatClientEvent.Open
+         * @static
+         * @param {ChatClientEvent.IOpen} message Open message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Open.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes an Open message from the specified reader or buffer.
+         * @function decode
+         * @memberof ChatClientEvent.Open
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {ChatClientEvent.Open} Open
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Open.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatClientEvent.Open();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.clientId = reader.uint64();
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes an Open message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof ChatClientEvent.Open
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {ChatClientEvent.Open} Open
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Open.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies an Open message.
+         * @function verify
+         * @memberof ChatClientEvent.Open
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Open.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.clientId != null && message.hasOwnProperty("clientId"))
+                if (!$util.isInteger(message.clientId) && !(message.clientId && $util.isInteger(message.clientId.low) && $util.isInteger(message.clientId.high)))
+                    return "clientId: integer|Long expected";
+            return null;
+        };
+
+        /**
+         * Creates an Open message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof ChatClientEvent.Open
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {ChatClientEvent.Open} Open
+         */
+        Open.fromObject = function fromObject(object) {
+            if (object instanceof $root.ChatClientEvent.Open)
+                return object;
+            let message = new $root.ChatClientEvent.Open();
+            if (object.clientId != null)
+                if ($util.Long)
+                    (message.clientId = $util.Long.fromValue(object.clientId)).unsigned = true;
+                else if (typeof object.clientId === "string")
+                    message.clientId = parseInt(object.clientId, 10);
+                else if (typeof object.clientId === "number")
+                    message.clientId = object.clientId;
+                else if (typeof object.clientId === "object")
+                    message.clientId = new $util.LongBits(object.clientId.low >>> 0, object.clientId.high >>> 0).toNumber(true);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from an Open message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof ChatClientEvent.Open
+         * @static
+         * @param {ChatClientEvent.Open} message Open
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Open.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.clientId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.clientId = options.longs === String ? "0" : 0;
+            if (message.clientId != null && message.hasOwnProperty("clientId"))
+                if (typeof message.clientId === "number")
+                    object.clientId = options.longs === String ? String(message.clientId) : message.clientId;
+                else
+                    object.clientId = options.longs === String ? $util.Long.prototype.toString.call(message.clientId) : options.longs === Number ? new $util.LongBits(message.clientId.low >>> 0, message.clientId.high >>> 0).toNumber(true) : message.clientId;
+            return object;
+        };
+
+        /**
+         * Converts this Open to JSON.
+         * @function toJSON
+         * @memberof ChatClientEvent.Open
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Open.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Open;
+    })();
 
     ChatClientEvent.Message = (function() {
 
@@ -14753,389 +16140,6 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
         return Message;
     })();
 
-    ChatClientEvent.Padding = (function() {
-
-        /**
-         * Properties of a Padding.
-         * @memberof ChatClientEvent
-         * @interface IPadding
-         * @property {Uint8Array|null} [body] Padding body
-         */
-
-        /**
-         * Constructs a new Padding.
-         * @memberof ChatClientEvent
-         * @classdesc Represents a Padding.
-         * @implements IPadding
-         * @constructor
-         * @param {ChatClientEvent.IPadding=} [properties] Properties to set
-         */
-        function Padding(properties) {
-            if (properties)
-                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    if (properties[keys[i]] != null)
-                        this[keys[i]] = properties[keys[i]];
-        }
-
-        /**
-         * Padding body.
-         * @member {Uint8Array} body
-         * @memberof ChatClientEvent.Padding
-         * @instance
-         */
-        Padding.prototype.body = $util.newBuffer([]);
-
-        /**
-         * Creates a new Padding instance using the specified properties.
-         * @function create
-         * @memberof ChatClientEvent.Padding
-         * @static
-         * @param {ChatClientEvent.IPadding=} [properties] Properties to set
-         * @returns {ChatClientEvent.Padding} Padding instance
-         */
-        Padding.create = function create(properties) {
-            return new Padding(properties);
-        };
-
-        /**
-         * Encodes the specified Padding message. Does not implicitly {@link ChatClientEvent.Padding.verify|verify} messages.
-         * @function encode
-         * @memberof ChatClientEvent.Padding
-         * @static
-         * @param {ChatClientEvent.IPadding} message Padding message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        Padding.encode = function encode(message, writer) {
-            if (!writer)
-                writer = $Writer.create();
-            if (message.body != null && Object.hasOwnProperty.call(message, "body"))
-                writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.body);
-            return writer;
-        };
-
-        /**
-         * Encodes the specified Padding message, length delimited. Does not implicitly {@link ChatClientEvent.Padding.verify|verify} messages.
-         * @function encodeDelimited
-         * @memberof ChatClientEvent.Padding
-         * @static
-         * @param {ChatClientEvent.IPadding} message Padding message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        Padding.encodeDelimited = function encodeDelimited(message, writer) {
-            return this.encode(message, writer).ldelim();
-        };
-
-        /**
-         * Decodes a Padding message from the specified reader or buffer.
-         * @function decode
-         * @memberof ChatClientEvent.Padding
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @param {number} [length] Message length if known beforehand
-         * @returns {ChatClientEvent.Padding} Padding
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        Padding.decode = function decode(reader, length) {
-            if (!(reader instanceof $Reader))
-                reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatClientEvent.Padding();
-            while (reader.pos < end) {
-                let tag = reader.uint32();
-                switch (tag >>> 3) {
-                case 1:
-                    message.body = reader.bytes();
-                    break;
-                default:
-                    reader.skipType(tag & 7);
-                    break;
-                }
-            }
-            return message;
-        };
-
-        /**
-         * Decodes a Padding message from the specified reader or buffer, length delimited.
-         * @function decodeDelimited
-         * @memberof ChatClientEvent.Padding
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {ChatClientEvent.Padding} Padding
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        Padding.decodeDelimited = function decodeDelimited(reader) {
-            if (!(reader instanceof $Reader))
-                reader = new $Reader(reader);
-            return this.decode(reader, reader.uint32());
-        };
-
-        /**
-         * Verifies a Padding message.
-         * @function verify
-         * @memberof ChatClientEvent.Padding
-         * @static
-         * @param {Object.<string,*>} message Plain object to verify
-         * @returns {string|null} `null` if valid, otherwise the reason why it is not
-         */
-        Padding.verify = function verify(message) {
-            if (typeof message !== "object" || message === null)
-                return "object expected";
-            if (message.body != null && message.hasOwnProperty("body"))
-                if (!(message.body && typeof message.body.length === "number" || $util.isString(message.body)))
-                    return "body: buffer expected";
-            return null;
-        };
-
-        /**
-         * Creates a Padding message from a plain object. Also converts values to their respective internal types.
-         * @function fromObject
-         * @memberof ChatClientEvent.Padding
-         * @static
-         * @param {Object.<string,*>} object Plain object
-         * @returns {ChatClientEvent.Padding} Padding
-         */
-        Padding.fromObject = function fromObject(object) {
-            if (object instanceof $root.ChatClientEvent.Padding)
-                return object;
-            let message = new $root.ChatClientEvent.Padding();
-            if (object.body != null)
-                if (typeof object.body === "string")
-                    $util.base64.decode(object.body, message.body = $util.newBuffer($util.base64.length(object.body)), 0);
-                else if (object.body.length)
-                    message.body = object.body;
-            return message;
-        };
-
-        /**
-         * Creates a plain object from a Padding message. Also converts values to other types if specified.
-         * @function toObject
-         * @memberof ChatClientEvent.Padding
-         * @static
-         * @param {ChatClientEvent.Padding} message Padding
-         * @param {$protobuf.IConversionOptions} [options] Conversion options
-         * @returns {Object.<string,*>} Plain object
-         */
-        Padding.toObject = function toObject(message, options) {
-            if (!options)
-                options = {};
-            let object = {};
-            if (options.defaults)
-                if (options.bytes === String)
-                    object.body = "";
-                else {
-                    object.body = [];
-                    if (options.bytes !== Array)
-                        object.body = $util.newBuffer(object.body);
-                }
-            if (message.body != null && message.hasOwnProperty("body"))
-                object.body = options.bytes === String ? $util.base64.encode(message.body, 0, message.body.length) : options.bytes === Array ? Array.prototype.slice.call(message.body) : message.body;
-            return object;
-        };
-
-        /**
-         * Converts this Padding to JSON.
-         * @function toJSON
-         * @memberof ChatClientEvent.Padding
-         * @instance
-         * @returns {Object.<string,*>} JSON object
-         */
-        Padding.prototype.toJSON = function toJSON() {
-            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-        };
-
-        return Padding;
-    })();
-
-    ChatClientEvent.Open = (function() {
-
-        /**
-         * Properties of an Open.
-         * @memberof ChatClientEvent
-         * @interface IOpen
-         * @property {number|null} [clientId] Open clientId
-         */
-
-        /**
-         * Constructs a new Open.
-         * @memberof ChatClientEvent
-         * @classdesc Represents an Open.
-         * @implements IOpen
-         * @constructor
-         * @param {ChatClientEvent.IOpen=} [properties] Properties to set
-         */
-        function Open(properties) {
-            if (properties)
-                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    if (properties[keys[i]] != null)
-                        this[keys[i]] = properties[keys[i]];
-        }
-
-        /**
-         * Open clientId.
-         * @member {number} clientId
-         * @memberof ChatClientEvent.Open
-         * @instance
-         */
-        Open.prototype.clientId = 0;
-
-        /**
-         * Creates a new Open instance using the specified properties.
-         * @function create
-         * @memberof ChatClientEvent.Open
-         * @static
-         * @param {ChatClientEvent.IOpen=} [properties] Properties to set
-         * @returns {ChatClientEvent.Open} Open instance
-         */
-        Open.create = function create(properties) {
-            return new Open(properties);
-        };
-
-        /**
-         * Encodes the specified Open message. Does not implicitly {@link ChatClientEvent.Open.verify|verify} messages.
-         * @function encode
-         * @memberof ChatClientEvent.Open
-         * @static
-         * @param {ChatClientEvent.IOpen} message Open message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        Open.encode = function encode(message, writer) {
-            if (!writer)
-                writer = $Writer.create();
-            if (message.clientId != null && Object.hasOwnProperty.call(message, "clientId"))
-                writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.clientId);
-            return writer;
-        };
-
-        /**
-         * Encodes the specified Open message, length delimited. Does not implicitly {@link ChatClientEvent.Open.verify|verify} messages.
-         * @function encodeDelimited
-         * @memberof ChatClientEvent.Open
-         * @static
-         * @param {ChatClientEvent.IOpen} message Open message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        Open.encodeDelimited = function encodeDelimited(message, writer) {
-            return this.encode(message, writer).ldelim();
-        };
-
-        /**
-         * Decodes an Open message from the specified reader or buffer.
-         * @function decode
-         * @memberof ChatClientEvent.Open
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @param {number} [length] Message length if known beforehand
-         * @returns {ChatClientEvent.Open} Open
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        Open.decode = function decode(reader, length) {
-            if (!(reader instanceof $Reader))
-                reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatClientEvent.Open();
-            while (reader.pos < end) {
-                let tag = reader.uint32();
-                switch (tag >>> 3) {
-                case 1:
-                    message.clientId = reader.uint32();
-                    break;
-                default:
-                    reader.skipType(tag & 7);
-                    break;
-                }
-            }
-            return message;
-        };
-
-        /**
-         * Decodes an Open message from the specified reader or buffer, length delimited.
-         * @function decodeDelimited
-         * @memberof ChatClientEvent.Open
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {ChatClientEvent.Open} Open
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        Open.decodeDelimited = function decodeDelimited(reader) {
-            if (!(reader instanceof $Reader))
-                reader = new $Reader(reader);
-            return this.decode(reader, reader.uint32());
-        };
-
-        /**
-         * Verifies an Open message.
-         * @function verify
-         * @memberof ChatClientEvent.Open
-         * @static
-         * @param {Object.<string,*>} message Plain object to verify
-         * @returns {string|null} `null` if valid, otherwise the reason why it is not
-         */
-        Open.verify = function verify(message) {
-            if (typeof message !== "object" || message === null)
-                return "object expected";
-            if (message.clientId != null && message.hasOwnProperty("clientId"))
-                if (!$util.isInteger(message.clientId))
-                    return "clientId: integer expected";
-            return null;
-        };
-
-        /**
-         * Creates an Open message from a plain object. Also converts values to their respective internal types.
-         * @function fromObject
-         * @memberof ChatClientEvent.Open
-         * @static
-         * @param {Object.<string,*>} object Plain object
-         * @returns {ChatClientEvent.Open} Open
-         */
-        Open.fromObject = function fromObject(object) {
-            if (object instanceof $root.ChatClientEvent.Open)
-                return object;
-            let message = new $root.ChatClientEvent.Open();
-            if (object.clientId != null)
-                message.clientId = object.clientId >>> 0;
-            return message;
-        };
-
-        /**
-         * Creates a plain object from an Open message. Also converts values to other types if specified.
-         * @function toObject
-         * @memberof ChatClientEvent.Open
-         * @static
-         * @param {ChatClientEvent.Open} message Open
-         * @param {$protobuf.IConversionOptions} [options] Conversion options
-         * @returns {Object.<string,*>} Plain object
-         */
-        Open.toObject = function toObject(message, options) {
-            if (!options)
-                options = {};
-            let object = {};
-            if (options.defaults)
-                object.clientId = 0;
-            if (message.clientId != null && message.hasOwnProperty("clientId"))
-                object.clientId = message.clientId;
-            return object;
-        };
-
-        /**
-         * Converts this Open to JSON.
-         * @function toJSON
-         * @memberof ChatClientEvent.Open
-         * @instance
-         * @returns {Object.<string,*>} JSON object
-         */
-        Open.prototype.toJSON = function toJSON() {
-            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-        };
-
-        return Open;
-    })();
-
     ChatClientEvent.Close = (function() {
 
         /**
@@ -15299,27 +16303,26 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
     return ChatClientEvent;
 })();
 
-export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
+export const CallChatClientRequest = $root.CallChatClientRequest = (() => {
 
     /**
-     * Properties of a ChatClientCallRequest.
-     * @exports IChatClientCallRequest
-     * @interface IChatClientCallRequest
-     * @property {number|null} [clientId] ChatClientCallRequest clientId
-     * @property {ChatClientCallRequest.IMessage|null} [message] ChatClientCallRequest message
-     * @property {ChatClientCallRequest.IRunClient|null} [runClient] ChatClientCallRequest runClient
-     * @property {ChatClientCallRequest.IRunServer|null} [runServer] ChatClientCallRequest runServer
+     * Properties of a CallChatClientRequest.
+     * @exports ICallChatClientRequest
+     * @interface ICallChatClientRequest
+     * @property {number|null} [clientId] CallChatClientRequest clientId
+     * @property {CallChatClientRequest.IMessage|null} [message] CallChatClientRequest message
+     * @property {CallChatClientRequest.IClose|null} [close] CallChatClientRequest close
      */
 
     /**
-     * Constructs a new ChatClientCallRequest.
-     * @exports ChatClientCallRequest
-     * @classdesc Represents a ChatClientCallRequest.
-     * @implements IChatClientCallRequest
+     * Constructs a new CallChatClientRequest.
+     * @exports CallChatClientRequest
+     * @classdesc Represents a CallChatClientRequest.
+     * @implements ICallChatClientRequest
      * @constructor
-     * @param {IChatClientCallRequest=} [properties] Properties to set
+     * @param {ICallChatClientRequest=} [properties] Properties to set
      */
-    function ChatClientCallRequest(properties) {
+    function CallChatClientRequest(properties) {
         if (properties)
             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
@@ -15327,128 +16330,115 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
     }
 
     /**
-     * ChatClientCallRequest clientId.
+     * CallChatClientRequest clientId.
      * @member {number} clientId
-     * @memberof ChatClientCallRequest
+     * @memberof CallChatClientRequest
      * @instance
      */
-    ChatClientCallRequest.prototype.clientId = 0;
+    CallChatClientRequest.prototype.clientId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
-     * ChatClientCallRequest message.
-     * @member {ChatClientCallRequest.IMessage|null|undefined} message
-     * @memberof ChatClientCallRequest
+     * CallChatClientRequest message.
+     * @member {CallChatClientRequest.IMessage|null|undefined} message
+     * @memberof CallChatClientRequest
      * @instance
      */
-    ChatClientCallRequest.prototype.message = null;
+    CallChatClientRequest.prototype.message = null;
 
     /**
-     * ChatClientCallRequest runClient.
-     * @member {ChatClientCallRequest.IRunClient|null|undefined} runClient
-     * @memberof ChatClientCallRequest
+     * CallChatClientRequest close.
+     * @member {CallChatClientRequest.IClose|null|undefined} close
+     * @memberof CallChatClientRequest
      * @instance
      */
-    ChatClientCallRequest.prototype.runClient = null;
-
-    /**
-     * ChatClientCallRequest runServer.
-     * @member {ChatClientCallRequest.IRunServer|null|undefined} runServer
-     * @memberof ChatClientCallRequest
-     * @instance
-     */
-    ChatClientCallRequest.prototype.runServer = null;
+    CallChatClientRequest.prototype.close = null;
 
     // OneOf field names bound to virtual getters and setters
     let $oneOfFields;
 
     /**
-     * ChatClientCallRequest body.
-     * @member {"message"|"runClient"|"runServer"|undefined} body
-     * @memberof ChatClientCallRequest
+     * CallChatClientRequest body.
+     * @member {"message"|"close"|undefined} body
+     * @memberof CallChatClientRequest
      * @instance
      */
-    Object.defineProperty(ChatClientCallRequest.prototype, "body", {
-        get: $util.oneOfGetter($oneOfFields = ["message", "runClient", "runServer"]),
+    Object.defineProperty(CallChatClientRequest.prototype, "body", {
+        get: $util.oneOfGetter($oneOfFields = ["message", "close"]),
         set: $util.oneOfSetter($oneOfFields)
     });
 
     /**
-     * Creates a new ChatClientCallRequest instance using the specified properties.
+     * Creates a new CallChatClientRequest instance using the specified properties.
      * @function create
-     * @memberof ChatClientCallRequest
+     * @memberof CallChatClientRequest
      * @static
-     * @param {IChatClientCallRequest=} [properties] Properties to set
-     * @returns {ChatClientCallRequest} ChatClientCallRequest instance
+     * @param {ICallChatClientRequest=} [properties] Properties to set
+     * @returns {CallChatClientRequest} CallChatClientRequest instance
      */
-    ChatClientCallRequest.create = function create(properties) {
-        return new ChatClientCallRequest(properties);
+    CallChatClientRequest.create = function create(properties) {
+        return new CallChatClientRequest(properties);
     };
 
     /**
-     * Encodes the specified ChatClientCallRequest message. Does not implicitly {@link ChatClientCallRequest.verify|verify} messages.
+     * Encodes the specified CallChatClientRequest message. Does not implicitly {@link CallChatClientRequest.verify|verify} messages.
      * @function encode
-     * @memberof ChatClientCallRequest
+     * @memberof CallChatClientRequest
      * @static
-     * @param {IChatClientCallRequest} message ChatClientCallRequest message or plain object to encode
+     * @param {ICallChatClientRequest} message CallChatClientRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    ChatClientCallRequest.encode = function encode(message, writer) {
+    CallChatClientRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
         if (message.clientId != null && Object.hasOwnProperty.call(message, "clientId"))
-            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.clientId);
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.clientId);
         if (message.message != null && Object.hasOwnProperty.call(message, "message"))
-            $root.ChatClientCallRequest.Message.encode(message.message, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-        if (message.runClient != null && Object.hasOwnProperty.call(message, "runClient"))
-            $root.ChatClientCallRequest.RunClient.encode(message.runClient, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-        if (message.runServer != null && Object.hasOwnProperty.call(message, "runServer"))
-            $root.ChatClientCallRequest.RunServer.encode(message.runServer, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+            $root.CallChatClientRequest.Message.encode(message.message, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        if (message.close != null && Object.hasOwnProperty.call(message, "close"))
+            $root.CallChatClientRequest.Close.encode(message.close, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
         return writer;
     };
 
     /**
-     * Encodes the specified ChatClientCallRequest message, length delimited. Does not implicitly {@link ChatClientCallRequest.verify|verify} messages.
+     * Encodes the specified CallChatClientRequest message, length delimited. Does not implicitly {@link CallChatClientRequest.verify|verify} messages.
      * @function encodeDelimited
-     * @memberof ChatClientCallRequest
+     * @memberof CallChatClientRequest
      * @static
-     * @param {IChatClientCallRequest} message ChatClientCallRequest message or plain object to encode
+     * @param {ICallChatClientRequest} message CallChatClientRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    ChatClientCallRequest.encodeDelimited = function encodeDelimited(message, writer) {
+    CallChatClientRequest.encodeDelimited = function encodeDelimited(message, writer) {
         return this.encode(message, writer).ldelim();
     };
 
     /**
-     * Decodes a ChatClientCallRequest message from the specified reader or buffer.
+     * Decodes a CallChatClientRequest message from the specified reader or buffer.
      * @function decode
-     * @memberof ChatClientCallRequest
+     * @memberof CallChatClientRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @param {number} [length] Message length if known beforehand
-     * @returns {ChatClientCallRequest} ChatClientCallRequest
+     * @returns {CallChatClientRequest} CallChatClientRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    ChatClientCallRequest.decode = function decode(reader, length) {
+    CallChatClientRequest.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatClientCallRequest();
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.CallChatClientRequest();
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.clientId = reader.uint32();
+                message.clientId = reader.uint64();
                 break;
             case 2:
-                message.message = $root.ChatClientCallRequest.Message.decode(reader, reader.uint32());
+                message.message = $root.CallChatClientRequest.Message.decode(reader, reader.uint32());
                 break;
             case 3:
-                message.runClient = $root.ChatClientCallRequest.RunClient.decode(reader, reader.uint32());
-                break;
-            case 4:
-                message.runServer = $root.ChatClientCallRequest.RunServer.decode(reader, reader.uint32());
+                message.close = $root.CallChatClientRequest.Close.decode(reader, reader.uint32());
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -15459,150 +16449,144 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
     };
 
     /**
-     * Decodes a ChatClientCallRequest message from the specified reader or buffer, length delimited.
+     * Decodes a CallChatClientRequest message from the specified reader or buffer, length delimited.
      * @function decodeDelimited
-     * @memberof ChatClientCallRequest
+     * @memberof CallChatClientRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {ChatClientCallRequest} ChatClientCallRequest
+     * @returns {CallChatClientRequest} CallChatClientRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    ChatClientCallRequest.decodeDelimited = function decodeDelimited(reader) {
+    CallChatClientRequest.decodeDelimited = function decodeDelimited(reader) {
         if (!(reader instanceof $Reader))
             reader = new $Reader(reader);
         return this.decode(reader, reader.uint32());
     };
 
     /**
-     * Verifies a ChatClientCallRequest message.
+     * Verifies a CallChatClientRequest message.
      * @function verify
-     * @memberof ChatClientCallRequest
+     * @memberof CallChatClientRequest
      * @static
      * @param {Object.<string,*>} message Plain object to verify
      * @returns {string|null} `null` if valid, otherwise the reason why it is not
      */
-    ChatClientCallRequest.verify = function verify(message) {
+    CallChatClientRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
         let properties = {};
         if (message.clientId != null && message.hasOwnProperty("clientId"))
-            if (!$util.isInteger(message.clientId))
-                return "clientId: integer expected";
+            if (!$util.isInteger(message.clientId) && !(message.clientId && $util.isInteger(message.clientId.low) && $util.isInteger(message.clientId.high)))
+                return "clientId: integer|Long expected";
         if (message.message != null && message.hasOwnProperty("message")) {
             properties.body = 1;
             {
-                let error = $root.ChatClientCallRequest.Message.verify(message.message);
+                let error = $root.CallChatClientRequest.Message.verify(message.message);
                 if (error)
                     return "message." + error;
             }
         }
-        if (message.runClient != null && message.hasOwnProperty("runClient")) {
+        if (message.close != null && message.hasOwnProperty("close")) {
             if (properties.body === 1)
                 return "body: multiple values";
             properties.body = 1;
             {
-                let error = $root.ChatClientCallRequest.RunClient.verify(message.runClient);
+                let error = $root.CallChatClientRequest.Close.verify(message.close);
                 if (error)
-                    return "runClient." + error;
-            }
-        }
-        if (message.runServer != null && message.hasOwnProperty("runServer")) {
-            if (properties.body === 1)
-                return "body: multiple values";
-            properties.body = 1;
-            {
-                let error = $root.ChatClientCallRequest.RunServer.verify(message.runServer);
-                if (error)
-                    return "runServer." + error;
+                    return "close." + error;
             }
         }
         return null;
     };
 
     /**
-     * Creates a ChatClientCallRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a CallChatClientRequest message from a plain object. Also converts values to their respective internal types.
      * @function fromObject
-     * @memberof ChatClientCallRequest
+     * @memberof CallChatClientRequest
      * @static
      * @param {Object.<string,*>} object Plain object
-     * @returns {ChatClientCallRequest} ChatClientCallRequest
+     * @returns {CallChatClientRequest} CallChatClientRequest
      */
-    ChatClientCallRequest.fromObject = function fromObject(object) {
-        if (object instanceof $root.ChatClientCallRequest)
+    CallChatClientRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.CallChatClientRequest)
             return object;
-        let message = new $root.ChatClientCallRequest();
+        let message = new $root.CallChatClientRequest();
         if (object.clientId != null)
-            message.clientId = object.clientId >>> 0;
+            if ($util.Long)
+                (message.clientId = $util.Long.fromValue(object.clientId)).unsigned = true;
+            else if (typeof object.clientId === "string")
+                message.clientId = parseInt(object.clientId, 10);
+            else if (typeof object.clientId === "number")
+                message.clientId = object.clientId;
+            else if (typeof object.clientId === "object")
+                message.clientId = new $util.LongBits(object.clientId.low >>> 0, object.clientId.high >>> 0).toNumber(true);
         if (object.message != null) {
             if (typeof object.message !== "object")
-                throw TypeError(".ChatClientCallRequest.message: object expected");
-            message.message = $root.ChatClientCallRequest.Message.fromObject(object.message);
+                throw TypeError(".CallChatClientRequest.message: object expected");
+            message.message = $root.CallChatClientRequest.Message.fromObject(object.message);
         }
-        if (object.runClient != null) {
-            if (typeof object.runClient !== "object")
-                throw TypeError(".ChatClientCallRequest.runClient: object expected");
-            message.runClient = $root.ChatClientCallRequest.RunClient.fromObject(object.runClient);
-        }
-        if (object.runServer != null) {
-            if (typeof object.runServer !== "object")
-                throw TypeError(".ChatClientCallRequest.runServer: object expected");
-            message.runServer = $root.ChatClientCallRequest.RunServer.fromObject(object.runServer);
+        if (object.close != null) {
+            if (typeof object.close !== "object")
+                throw TypeError(".CallChatClientRequest.close: object expected");
+            message.close = $root.CallChatClientRequest.Close.fromObject(object.close);
         }
         return message;
     };
 
     /**
-     * Creates a plain object from a ChatClientCallRequest message. Also converts values to other types if specified.
+     * Creates a plain object from a CallChatClientRequest message. Also converts values to other types if specified.
      * @function toObject
-     * @memberof ChatClientCallRequest
+     * @memberof CallChatClientRequest
      * @static
-     * @param {ChatClientCallRequest} message ChatClientCallRequest
+     * @param {CallChatClientRequest} message CallChatClientRequest
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    ChatClientCallRequest.toObject = function toObject(message, options) {
+    CallChatClientRequest.toObject = function toObject(message, options) {
         if (!options)
             options = {};
         let object = {};
         if (options.defaults)
-            object.clientId = 0;
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.clientId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.clientId = options.longs === String ? "0" : 0;
         if (message.clientId != null && message.hasOwnProperty("clientId"))
-            object.clientId = message.clientId;
+            if (typeof message.clientId === "number")
+                object.clientId = options.longs === String ? String(message.clientId) : message.clientId;
+            else
+                object.clientId = options.longs === String ? $util.Long.prototype.toString.call(message.clientId) : options.longs === Number ? new $util.LongBits(message.clientId.low >>> 0, message.clientId.high >>> 0).toNumber(true) : message.clientId;
         if (message.message != null && message.hasOwnProperty("message")) {
-            object.message = $root.ChatClientCallRequest.Message.toObject(message.message, options);
+            object.message = $root.CallChatClientRequest.Message.toObject(message.message, options);
             if (options.oneofs)
                 object.body = "message";
         }
-        if (message.runClient != null && message.hasOwnProperty("runClient")) {
-            object.runClient = $root.ChatClientCallRequest.RunClient.toObject(message.runClient, options);
+        if (message.close != null && message.hasOwnProperty("close")) {
+            object.close = $root.CallChatClientRequest.Close.toObject(message.close, options);
             if (options.oneofs)
-                object.body = "runClient";
-        }
-        if (message.runServer != null && message.hasOwnProperty("runServer")) {
-            object.runServer = $root.ChatClientCallRequest.RunServer.toObject(message.runServer, options);
-            if (options.oneofs)
-                object.body = "runServer";
+                object.body = "close";
         }
         return object;
     };
 
     /**
-     * Converts this ChatClientCallRequest to JSON.
+     * Converts this CallChatClientRequest to JSON.
      * @function toJSON
-     * @memberof ChatClientCallRequest
+     * @memberof CallChatClientRequest
      * @instance
      * @returns {Object.<string,*>} JSON object
      */
-    ChatClientCallRequest.prototype.toJSON = function toJSON() {
+    CallChatClientRequest.prototype.toJSON = function toJSON() {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
 
-    ChatClientCallRequest.Message = (function() {
+    CallChatClientRequest.Message = (function() {
 
         /**
          * Properties of a Message.
-         * @memberof ChatClientCallRequest
+         * @memberof CallChatClientRequest
          * @interface IMessage
          * @property {number|null} [time] Message time
          * @property {string|null} [body] Message body
@@ -15610,11 +16594,11 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
 
         /**
          * Constructs a new Message.
-         * @memberof ChatClientCallRequest
+         * @memberof CallChatClientRequest
          * @classdesc Represents a Message.
          * @implements IMessage
          * @constructor
-         * @param {ChatClientCallRequest.IMessage=} [properties] Properties to set
+         * @param {CallChatClientRequest.IMessage=} [properties] Properties to set
          */
         function Message(properties) {
             if (properties)
@@ -15626,7 +16610,7 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         /**
          * Message time.
          * @member {number} time
-         * @memberof ChatClientCallRequest.Message
+         * @memberof CallChatClientRequest.Message
          * @instance
          */
         Message.prototype.time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
@@ -15634,7 +16618,7 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         /**
          * Message body.
          * @member {string} body
-         * @memberof ChatClientCallRequest.Message
+         * @memberof CallChatClientRequest.Message
          * @instance
          */
         Message.prototype.body = "";
@@ -15642,21 +16626,21 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         /**
          * Creates a new Message instance using the specified properties.
          * @function create
-         * @memberof ChatClientCallRequest.Message
+         * @memberof CallChatClientRequest.Message
          * @static
-         * @param {ChatClientCallRequest.IMessage=} [properties] Properties to set
-         * @returns {ChatClientCallRequest.Message} Message instance
+         * @param {CallChatClientRequest.IMessage=} [properties] Properties to set
+         * @returns {CallChatClientRequest.Message} Message instance
          */
         Message.create = function create(properties) {
             return new Message(properties);
         };
 
         /**
-         * Encodes the specified Message message. Does not implicitly {@link ChatClientCallRequest.Message.verify|verify} messages.
+         * Encodes the specified Message message. Does not implicitly {@link CallChatClientRequest.Message.verify|verify} messages.
          * @function encode
-         * @memberof ChatClientCallRequest.Message
+         * @memberof CallChatClientRequest.Message
          * @static
-         * @param {ChatClientCallRequest.IMessage} message Message message or plain object to encode
+         * @param {CallChatClientRequest.IMessage} message Message message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -15671,11 +16655,11 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         };
 
         /**
-         * Encodes the specified Message message, length delimited. Does not implicitly {@link ChatClientCallRequest.Message.verify|verify} messages.
+         * Encodes the specified Message message, length delimited. Does not implicitly {@link CallChatClientRequest.Message.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof ChatClientCallRequest.Message
+         * @memberof CallChatClientRequest.Message
          * @static
-         * @param {ChatClientCallRequest.IMessage} message Message message or plain object to encode
+         * @param {CallChatClientRequest.IMessage} message Message message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -15686,18 +16670,18 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         /**
          * Decodes a Message message from the specified reader or buffer.
          * @function decode
-         * @memberof ChatClientCallRequest.Message
+         * @memberof CallChatClientRequest.Message
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {ChatClientCallRequest.Message} Message
+         * @returns {CallChatClientRequest.Message} Message
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
         Message.decode = function decode(reader, length) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatClientCallRequest.Message();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.CallChatClientRequest.Message();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
@@ -15718,10 +16702,10 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         /**
          * Decodes a Message message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof ChatClientCallRequest.Message
+         * @memberof CallChatClientRequest.Message
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {ChatClientCallRequest.Message} Message
+         * @returns {CallChatClientRequest.Message} Message
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
@@ -15734,7 +16718,7 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         /**
          * Verifies a Message message.
          * @function verify
-         * @memberof ChatClientCallRequest.Message
+         * @memberof CallChatClientRequest.Message
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
@@ -15754,15 +16738,15 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         /**
          * Creates a Message message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof ChatClientCallRequest.Message
+         * @memberof CallChatClientRequest.Message
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {ChatClientCallRequest.Message} Message
+         * @returns {CallChatClientRequest.Message} Message
          */
         Message.fromObject = function fromObject(object) {
-            if (object instanceof $root.ChatClientCallRequest.Message)
+            if (object instanceof $root.CallChatClientRequest.Message)
                 return object;
-            let message = new $root.ChatClientCallRequest.Message();
+            let message = new $root.CallChatClientRequest.Message();
             if (object.time != null)
                 if ($util.Long)
                     (message.time = $util.Long.fromValue(object.time)).unsigned = false;
@@ -15780,9 +16764,9 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         /**
          * Creates a plain object from a Message message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof ChatClientCallRequest.Message
+         * @memberof CallChatClientRequest.Message
          * @static
-         * @param {ChatClientCallRequest.Message} message Message
+         * @param {CallChatClientRequest.Message} message Message
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
@@ -15811,7 +16795,7 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         /**
          * Converts this Message to JSON.
          * @function toJSON
-         * @memberof ChatClientCallRequest.Message
+         * @memberof CallChatClientRequest.Message
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
@@ -15822,23 +16806,23 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         return Message;
     })();
 
-    ChatClientCallRequest.RunServer = (function() {
+    CallChatClientRequest.Close = (function() {
 
         /**
-         * Properties of a RunServer.
-         * @memberof ChatClientCallRequest
-         * @interface IRunServer
+         * Properties of a Close.
+         * @memberof CallChatClientRequest
+         * @interface IClose
          */
 
         /**
-         * Constructs a new RunServer.
-         * @memberof ChatClientCallRequest
-         * @classdesc Represents a RunServer.
-         * @implements IRunServer
+         * Constructs a new Close.
+         * @memberof CallChatClientRequest
+         * @classdesc Represents a Close.
+         * @implements IClose
          * @constructor
-         * @param {ChatClientCallRequest.IRunServer=} [properties] Properties to set
+         * @param {CallChatClientRequest.IClose=} [properties] Properties to set
          */
-        function RunServer(properties) {
+        function Close(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -15846,60 +16830,60 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         }
 
         /**
-         * Creates a new RunServer instance using the specified properties.
+         * Creates a new Close instance using the specified properties.
          * @function create
-         * @memberof ChatClientCallRequest.RunServer
+         * @memberof CallChatClientRequest.Close
          * @static
-         * @param {ChatClientCallRequest.IRunServer=} [properties] Properties to set
-         * @returns {ChatClientCallRequest.RunServer} RunServer instance
+         * @param {CallChatClientRequest.IClose=} [properties] Properties to set
+         * @returns {CallChatClientRequest.Close} Close instance
          */
-        RunServer.create = function create(properties) {
-            return new RunServer(properties);
+        Close.create = function create(properties) {
+            return new Close(properties);
         };
 
         /**
-         * Encodes the specified RunServer message. Does not implicitly {@link ChatClientCallRequest.RunServer.verify|verify} messages.
+         * Encodes the specified Close message. Does not implicitly {@link CallChatClientRequest.Close.verify|verify} messages.
          * @function encode
-         * @memberof ChatClientCallRequest.RunServer
+         * @memberof CallChatClientRequest.Close
          * @static
-         * @param {ChatClientCallRequest.IRunServer} message RunServer message or plain object to encode
+         * @param {CallChatClientRequest.IClose} message Close message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        RunServer.encode = function encode(message, writer) {
+        Close.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
             return writer;
         };
 
         /**
-         * Encodes the specified RunServer message, length delimited. Does not implicitly {@link ChatClientCallRequest.RunServer.verify|verify} messages.
+         * Encodes the specified Close message, length delimited. Does not implicitly {@link CallChatClientRequest.Close.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof ChatClientCallRequest.RunServer
+         * @memberof CallChatClientRequest.Close
          * @static
-         * @param {ChatClientCallRequest.IRunServer} message RunServer message or plain object to encode
+         * @param {CallChatClientRequest.IClose} message Close message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        RunServer.encodeDelimited = function encodeDelimited(message, writer) {
+        Close.encodeDelimited = function encodeDelimited(message, writer) {
             return this.encode(message, writer).ldelim();
         };
 
         /**
-         * Decodes a RunServer message from the specified reader or buffer.
+         * Decodes a Close message from the specified reader or buffer.
          * @function decode
-         * @memberof ChatClientCallRequest.RunServer
+         * @memberof CallChatClientRequest.Close
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {ChatClientCallRequest.RunServer} RunServer
+         * @returns {CallChatClientRequest.Close} Close
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        RunServer.decode = function decode(reader, length) {
+        Close.decode = function decode(reader, length) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatClientCallRequest.RunServer();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.CallChatClientRequest.Close();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
@@ -15912,93 +16896,409 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         };
 
         /**
-         * Decodes a RunServer message from the specified reader or buffer, length delimited.
+         * Decodes a Close message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof ChatClientCallRequest.RunServer
+         * @memberof CallChatClientRequest.Close
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {ChatClientCallRequest.RunServer} RunServer
+         * @returns {CallChatClientRequest.Close} Close
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        RunServer.decodeDelimited = function decodeDelimited(reader) {
+        Close.decodeDelimited = function decodeDelimited(reader) {
             if (!(reader instanceof $Reader))
                 reader = new $Reader(reader);
             return this.decode(reader, reader.uint32());
         };
 
         /**
-         * Verifies a RunServer message.
+         * Verifies a Close message.
          * @function verify
-         * @memberof ChatClientCallRequest.RunServer
+         * @memberof CallChatClientRequest.Close
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
          */
-        RunServer.verify = function verify(message) {
+        Close.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             return null;
         };
 
         /**
-         * Creates a RunServer message from a plain object. Also converts values to their respective internal types.
+         * Creates a Close message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof ChatClientCallRequest.RunServer
+         * @memberof CallChatClientRequest.Close
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {ChatClientCallRequest.RunServer} RunServer
+         * @returns {CallChatClientRequest.Close} Close
          */
-        RunServer.fromObject = function fromObject(object) {
-            if (object instanceof $root.ChatClientCallRequest.RunServer)
+        Close.fromObject = function fromObject(object) {
+            if (object instanceof $root.CallChatClientRequest.Close)
                 return object;
-            return new $root.ChatClientCallRequest.RunServer();
+            return new $root.CallChatClientRequest.Close();
         };
 
         /**
-         * Creates a plain object from a RunServer message. Also converts values to other types if specified.
+         * Creates a plain object from a Close message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof ChatClientCallRequest.RunServer
+         * @memberof CallChatClientRequest.Close
          * @static
-         * @param {ChatClientCallRequest.RunServer} message RunServer
+         * @param {CallChatClientRequest.Close} message Close
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
-        RunServer.toObject = function toObject() {
+        Close.toObject = function toObject() {
             return {};
         };
 
         /**
-         * Converts this RunServer to JSON.
+         * Converts this Close to JSON.
          * @function toJSON
-         * @memberof ChatClientCallRequest.RunServer
+         * @memberof CallChatClientRequest.Close
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
-        RunServer.prototype.toJSON = function toJSON() {
+        Close.prototype.toJSON = function toJSON() {
             return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
         };
 
-        return RunServer;
+        return Close;
     })();
 
-    ChatClientCallRequest.RunClient = (function() {
+    return CallChatClientRequest;
+})();
+
+export const PubSubEvent = $root.PubSubEvent = (() => {
+
+    /**
+     * Properties of a PubSubEvent.
+     * @exports IPubSubEvent
+     * @interface IPubSubEvent
+     * @property {PubSubEvent.IPublish|null} [publish] PubSubEvent publish
+     * @property {PubSubEvent.IMessage|null} [message] PubSubEvent message
+     * @property {PubSubEvent.IClose|null} [close] PubSubEvent close
+     * @property {PubSubEvent.IPadding|null} [padding] PubSubEvent padding
+     */
+
+    /**
+     * Constructs a new PubSubEvent.
+     * @exports PubSubEvent
+     * @classdesc Represents a PubSubEvent.
+     * @implements IPubSubEvent
+     * @constructor
+     * @param {IPubSubEvent=} [properties] Properties to set
+     */
+    function PubSubEvent(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * PubSubEvent publish.
+     * @member {PubSubEvent.IPublish|null|undefined} publish
+     * @memberof PubSubEvent
+     * @instance
+     */
+    PubSubEvent.prototype.publish = null;
+
+    /**
+     * PubSubEvent message.
+     * @member {PubSubEvent.IMessage|null|undefined} message
+     * @memberof PubSubEvent
+     * @instance
+     */
+    PubSubEvent.prototype.message = null;
+
+    /**
+     * PubSubEvent close.
+     * @member {PubSubEvent.IClose|null|undefined} close
+     * @memberof PubSubEvent
+     * @instance
+     */
+    PubSubEvent.prototype.close = null;
+
+    /**
+     * PubSubEvent padding.
+     * @member {PubSubEvent.IPadding|null|undefined} padding
+     * @memberof PubSubEvent
+     * @instance
+     */
+    PubSubEvent.prototype.padding = null;
+
+    // OneOf field names bound to virtual getters and setters
+    let $oneOfFields;
+
+    /**
+     * PubSubEvent body.
+     * @member {"publish"|"message"|"close"|"padding"|undefined} body
+     * @memberof PubSubEvent
+     * @instance
+     */
+    Object.defineProperty(PubSubEvent.prototype, "body", {
+        get: $util.oneOfGetter($oneOfFields = ["publish", "message", "close", "padding"]),
+        set: $util.oneOfSetter($oneOfFields)
+    });
+
+    /**
+     * Creates a new PubSubEvent instance using the specified properties.
+     * @function create
+     * @memberof PubSubEvent
+     * @static
+     * @param {IPubSubEvent=} [properties] Properties to set
+     * @returns {PubSubEvent} PubSubEvent instance
+     */
+    PubSubEvent.create = function create(properties) {
+        return new PubSubEvent(properties);
+    };
+
+    /**
+     * Encodes the specified PubSubEvent message. Does not implicitly {@link PubSubEvent.verify|verify} messages.
+     * @function encode
+     * @memberof PubSubEvent
+     * @static
+     * @param {IPubSubEvent} message PubSubEvent message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    PubSubEvent.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.publish != null && Object.hasOwnProperty.call(message, "publish"))
+            $root.PubSubEvent.Publish.encode(message.publish, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.message != null && Object.hasOwnProperty.call(message, "message"))
+            $root.PubSubEvent.Message.encode(message.message, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        if (message.close != null && Object.hasOwnProperty.call(message, "close"))
+            $root.PubSubEvent.Close.encode(message.close, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+        if (message.padding != null && Object.hasOwnProperty.call(message, "padding"))
+            $root.PubSubEvent.Padding.encode(message.padding, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified PubSubEvent message, length delimited. Does not implicitly {@link PubSubEvent.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof PubSubEvent
+     * @static
+     * @param {IPubSubEvent} message PubSubEvent message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    PubSubEvent.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a PubSubEvent message from the specified reader or buffer.
+     * @function decode
+     * @memberof PubSubEvent
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {PubSubEvent} PubSubEvent
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    PubSubEvent.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.PubSubEvent();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.publish = $root.PubSubEvent.Publish.decode(reader, reader.uint32());
+                break;
+            case 2:
+                message.message = $root.PubSubEvent.Message.decode(reader, reader.uint32());
+                break;
+            case 3:
+                message.close = $root.PubSubEvent.Close.decode(reader, reader.uint32());
+                break;
+            case 4:
+                message.padding = $root.PubSubEvent.Padding.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a PubSubEvent message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof PubSubEvent
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {PubSubEvent} PubSubEvent
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    PubSubEvent.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a PubSubEvent message.
+     * @function verify
+     * @memberof PubSubEvent
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    PubSubEvent.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        let properties = {};
+        if (message.publish != null && message.hasOwnProperty("publish")) {
+            properties.body = 1;
+            {
+                let error = $root.PubSubEvent.Publish.verify(message.publish);
+                if (error)
+                    return "publish." + error;
+            }
+        }
+        if (message.message != null && message.hasOwnProperty("message")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.PubSubEvent.Message.verify(message.message);
+                if (error)
+                    return "message." + error;
+            }
+        }
+        if (message.close != null && message.hasOwnProperty("close")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.PubSubEvent.Close.verify(message.close);
+                if (error)
+                    return "close." + error;
+            }
+        }
+        if (message.padding != null && message.hasOwnProperty("padding")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.PubSubEvent.Padding.verify(message.padding);
+                if (error)
+                    return "padding." + error;
+            }
+        }
+        return null;
+    };
+
+    /**
+     * Creates a PubSubEvent message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof PubSubEvent
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {PubSubEvent} PubSubEvent
+     */
+    PubSubEvent.fromObject = function fromObject(object) {
+        if (object instanceof $root.PubSubEvent)
+            return object;
+        let message = new $root.PubSubEvent();
+        if (object.publish != null) {
+            if (typeof object.publish !== "object")
+                throw TypeError(".PubSubEvent.publish: object expected");
+            message.publish = $root.PubSubEvent.Publish.fromObject(object.publish);
+        }
+        if (object.message != null) {
+            if (typeof object.message !== "object")
+                throw TypeError(".PubSubEvent.message: object expected");
+            message.message = $root.PubSubEvent.Message.fromObject(object.message);
+        }
+        if (object.close != null) {
+            if (typeof object.close !== "object")
+                throw TypeError(".PubSubEvent.close: object expected");
+            message.close = $root.PubSubEvent.Close.fromObject(object.close);
+        }
+        if (object.padding != null) {
+            if (typeof object.padding !== "object")
+                throw TypeError(".PubSubEvent.padding: object expected");
+            message.padding = $root.PubSubEvent.Padding.fromObject(object.padding);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a PubSubEvent message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof PubSubEvent
+     * @static
+     * @param {PubSubEvent} message PubSubEvent
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    PubSubEvent.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (message.publish != null && message.hasOwnProperty("publish")) {
+            object.publish = $root.PubSubEvent.Publish.toObject(message.publish, options);
+            if (options.oneofs)
+                object.body = "publish";
+        }
+        if (message.message != null && message.hasOwnProperty("message")) {
+            object.message = $root.PubSubEvent.Message.toObject(message.message, options);
+            if (options.oneofs)
+                object.body = "message";
+        }
+        if (message.close != null && message.hasOwnProperty("close")) {
+            object.close = $root.PubSubEvent.Close.toObject(message.close, options);
+            if (options.oneofs)
+                object.body = "close";
+        }
+        if (message.padding != null && message.hasOwnProperty("padding")) {
+            object.padding = $root.PubSubEvent.Padding.toObject(message.padding, options);
+            if (options.oneofs)
+                object.body = "padding";
+        }
+        return object;
+    };
+
+    /**
+     * Converts this PubSubEvent to JSON.
+     * @function toJSON
+     * @memberof PubSubEvent
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    PubSubEvent.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    PubSubEvent.Publish = (function() {
 
         /**
-         * Properties of a RunClient.
-         * @memberof ChatClientCallRequest
-         * @interface IRunClient
+         * Properties of a Publish.
+         * @memberof PubSubEvent
+         * @interface IPublish
+         * @property {number|null} [time] Publish time
+         * @property {string|null} [key] Publish key
+         * @property {Uint8Array|null} [body] Publish body
          */
 
         /**
-         * Constructs a new RunClient.
-         * @memberof ChatClientCallRequest
-         * @classdesc Represents a RunClient.
-         * @implements IRunClient
+         * Constructs a new Publish.
+         * @memberof PubSubEvent
+         * @classdesc Represents a Publish.
+         * @implements IPublish
          * @constructor
-         * @param {ChatClientCallRequest.IRunClient=} [properties] Properties to set
+         * @param {PubSubEvent.IPublish=} [properties] Properties to set
          */
-        function RunClient(properties) {
+        function Publish(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -16006,60 +17306,603 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         }
 
         /**
-         * Creates a new RunClient instance using the specified properties.
-         * @function create
-         * @memberof ChatClientCallRequest.RunClient
-         * @static
-         * @param {ChatClientCallRequest.IRunClient=} [properties] Properties to set
-         * @returns {ChatClientCallRequest.RunClient} RunClient instance
+         * Publish time.
+         * @member {number} time
+         * @memberof PubSubEvent.Publish
+         * @instance
          */
-        RunClient.create = function create(properties) {
-            return new RunClient(properties);
+        Publish.prototype.time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+        /**
+         * Publish key.
+         * @member {string} key
+         * @memberof PubSubEvent.Publish
+         * @instance
+         */
+        Publish.prototype.key = "";
+
+        /**
+         * Publish body.
+         * @member {Uint8Array} body
+         * @memberof PubSubEvent.Publish
+         * @instance
+         */
+        Publish.prototype.body = $util.newBuffer([]);
+
+        /**
+         * Creates a new Publish instance using the specified properties.
+         * @function create
+         * @memberof PubSubEvent.Publish
+         * @static
+         * @param {PubSubEvent.IPublish=} [properties] Properties to set
+         * @returns {PubSubEvent.Publish} Publish instance
+         */
+        Publish.create = function create(properties) {
+            return new Publish(properties);
         };
 
         /**
-         * Encodes the specified RunClient message. Does not implicitly {@link ChatClientCallRequest.RunClient.verify|verify} messages.
+         * Encodes the specified Publish message. Does not implicitly {@link PubSubEvent.Publish.verify|verify} messages.
          * @function encode
-         * @memberof ChatClientCallRequest.RunClient
+         * @memberof PubSubEvent.Publish
          * @static
-         * @param {ChatClientCallRequest.IRunClient} message RunClient message or plain object to encode
+         * @param {PubSubEvent.IPublish} message Publish message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        RunClient.encode = function encode(message, writer) {
+        Publish.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.time != null && Object.hasOwnProperty.call(message, "time"))
+                writer.uint32(/* id 1, wireType 0 =*/8).int64(message.time);
+            if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                writer.uint32(/* id 2, wireType 2 =*/18).string(message.key);
+            if (message.body != null && Object.hasOwnProperty.call(message, "body"))
+                writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.body);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Publish message, length delimited. Does not implicitly {@link PubSubEvent.Publish.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof PubSubEvent.Publish
+         * @static
+         * @param {PubSubEvent.IPublish} message Publish message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Publish.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Publish message from the specified reader or buffer.
+         * @function decode
+         * @memberof PubSubEvent.Publish
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {PubSubEvent.Publish} Publish
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Publish.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.PubSubEvent.Publish();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.time = reader.int64();
+                    break;
+                case 2:
+                    message.key = reader.string();
+                    break;
+                case 3:
+                    message.body = reader.bytes();
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Publish message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof PubSubEvent.Publish
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {PubSubEvent.Publish} Publish
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Publish.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Publish message.
+         * @function verify
+         * @memberof PubSubEvent.Publish
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Publish.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.time != null && message.hasOwnProperty("time"))
+                if (!$util.isInteger(message.time) && !(message.time && $util.isInteger(message.time.low) && $util.isInteger(message.time.high)))
+                    return "time: integer|Long expected";
+            if (message.key != null && message.hasOwnProperty("key"))
+                if (!$util.isString(message.key))
+                    return "key: string expected";
+            if (message.body != null && message.hasOwnProperty("body"))
+                if (!(message.body && typeof message.body.length === "number" || $util.isString(message.body)))
+                    return "body: buffer expected";
+            return null;
+        };
+
+        /**
+         * Creates a Publish message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof PubSubEvent.Publish
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {PubSubEvent.Publish} Publish
+         */
+        Publish.fromObject = function fromObject(object) {
+            if (object instanceof $root.PubSubEvent.Publish)
+                return object;
+            let message = new $root.PubSubEvent.Publish();
+            if (object.time != null)
+                if ($util.Long)
+                    (message.time = $util.Long.fromValue(object.time)).unsigned = false;
+                else if (typeof object.time === "string")
+                    message.time = parseInt(object.time, 10);
+                else if (typeof object.time === "number")
+                    message.time = object.time;
+                else if (typeof object.time === "object")
+                    message.time = new $util.LongBits(object.time.low >>> 0, object.time.high >>> 0).toNumber();
+            if (object.key != null)
+                message.key = String(object.key);
+            if (object.body != null)
+                if (typeof object.body === "string")
+                    $util.base64.decode(object.body, message.body = $util.newBuffer($util.base64.length(object.body)), 0);
+                else if (object.body.length)
+                    message.body = object.body;
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a Publish message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof PubSubEvent.Publish
+         * @static
+         * @param {PubSubEvent.Publish} message Publish
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Publish.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, false);
+                    object.time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.time = options.longs === String ? "0" : 0;
+                object.key = "";
+                if (options.bytes === String)
+                    object.body = "";
+                else {
+                    object.body = [];
+                    if (options.bytes !== Array)
+                        object.body = $util.newBuffer(object.body);
+                }
+            }
+            if (message.time != null && message.hasOwnProperty("time"))
+                if (typeof message.time === "number")
+                    object.time = options.longs === String ? String(message.time) : message.time;
+                else
+                    object.time = options.longs === String ? $util.Long.prototype.toString.call(message.time) : options.longs === Number ? new $util.LongBits(message.time.low >>> 0, message.time.high >>> 0).toNumber() : message.time;
+            if (message.key != null && message.hasOwnProperty("key"))
+                object.key = message.key;
+            if (message.body != null && message.hasOwnProperty("body"))
+                object.body = options.bytes === String ? $util.base64.encode(message.body, 0, message.body.length) : options.bytes === Array ? Array.prototype.slice.call(message.body) : message.body;
+            return object;
+        };
+
+        /**
+         * Converts this Publish to JSON.
+         * @function toJSON
+         * @memberof PubSubEvent.Publish
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Publish.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Publish;
+    })();
+
+    PubSubEvent.Message = (function() {
+
+        /**
+         * Properties of a Message.
+         * @memberof PubSubEvent
+         * @interface IMessage
+         * @property {number|null} [serverTime] Message serverTime
+         * @property {number|null} [publishTime] Message publishTime
+         * @property {string|null} [key] Message key
+         * @property {Uint8Array|null} [body] Message body
+         */
+
+        /**
+         * Constructs a new Message.
+         * @memberof PubSubEvent
+         * @classdesc Represents a Message.
+         * @implements IMessage
+         * @constructor
+         * @param {PubSubEvent.IMessage=} [properties] Properties to set
+         */
+        function Message(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Message serverTime.
+         * @member {number} serverTime
+         * @memberof PubSubEvent.Message
+         * @instance
+         */
+        Message.prototype.serverTime = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+        /**
+         * Message publishTime.
+         * @member {number} publishTime
+         * @memberof PubSubEvent.Message
+         * @instance
+         */
+        Message.prototype.publishTime = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+        /**
+         * Message key.
+         * @member {string} key
+         * @memberof PubSubEvent.Message
+         * @instance
+         */
+        Message.prototype.key = "";
+
+        /**
+         * Message body.
+         * @member {Uint8Array} body
+         * @memberof PubSubEvent.Message
+         * @instance
+         */
+        Message.prototype.body = $util.newBuffer([]);
+
+        /**
+         * Creates a new Message instance using the specified properties.
+         * @function create
+         * @memberof PubSubEvent.Message
+         * @static
+         * @param {PubSubEvent.IMessage=} [properties] Properties to set
+         * @returns {PubSubEvent.Message} Message instance
+         */
+        Message.create = function create(properties) {
+            return new Message(properties);
+        };
+
+        /**
+         * Encodes the specified Message message. Does not implicitly {@link PubSubEvent.Message.verify|verify} messages.
+         * @function encode
+         * @memberof PubSubEvent.Message
+         * @static
+         * @param {PubSubEvent.IMessage} message Message message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Message.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.serverTime != null && Object.hasOwnProperty.call(message, "serverTime"))
+                writer.uint32(/* id 1, wireType 0 =*/8).int64(message.serverTime);
+            if (message.publishTime != null && Object.hasOwnProperty.call(message, "publishTime"))
+                writer.uint32(/* id 2, wireType 0 =*/16).int64(message.publishTime);
+            if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+                writer.uint32(/* id 3, wireType 2 =*/26).string(message.key);
+            if (message.body != null && Object.hasOwnProperty.call(message, "body"))
+                writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.body);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Message message, length delimited. Does not implicitly {@link PubSubEvent.Message.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof PubSubEvent.Message
+         * @static
+         * @param {PubSubEvent.IMessage} message Message message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Message.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Message message from the specified reader or buffer.
+         * @function decode
+         * @memberof PubSubEvent.Message
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {PubSubEvent.Message} Message
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Message.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.PubSubEvent.Message();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.serverTime = reader.int64();
+                    break;
+                case 2:
+                    message.publishTime = reader.int64();
+                    break;
+                case 3:
+                    message.key = reader.string();
+                    break;
+                case 4:
+                    message.body = reader.bytes();
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Message message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof PubSubEvent.Message
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {PubSubEvent.Message} Message
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Message.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Message message.
+         * @function verify
+         * @memberof PubSubEvent.Message
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Message.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.serverTime != null && message.hasOwnProperty("serverTime"))
+                if (!$util.isInteger(message.serverTime) && !(message.serverTime && $util.isInteger(message.serverTime.low) && $util.isInteger(message.serverTime.high)))
+                    return "serverTime: integer|Long expected";
+            if (message.publishTime != null && message.hasOwnProperty("publishTime"))
+                if (!$util.isInteger(message.publishTime) && !(message.publishTime && $util.isInteger(message.publishTime.low) && $util.isInteger(message.publishTime.high)))
+                    return "publishTime: integer|Long expected";
+            if (message.key != null && message.hasOwnProperty("key"))
+                if (!$util.isString(message.key))
+                    return "key: string expected";
+            if (message.body != null && message.hasOwnProperty("body"))
+                if (!(message.body && typeof message.body.length === "number" || $util.isString(message.body)))
+                    return "body: buffer expected";
+            return null;
+        };
+
+        /**
+         * Creates a Message message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof PubSubEvent.Message
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {PubSubEvent.Message} Message
+         */
+        Message.fromObject = function fromObject(object) {
+            if (object instanceof $root.PubSubEvent.Message)
+                return object;
+            let message = new $root.PubSubEvent.Message();
+            if (object.serverTime != null)
+                if ($util.Long)
+                    (message.serverTime = $util.Long.fromValue(object.serverTime)).unsigned = false;
+                else if (typeof object.serverTime === "string")
+                    message.serverTime = parseInt(object.serverTime, 10);
+                else if (typeof object.serverTime === "number")
+                    message.serverTime = object.serverTime;
+                else if (typeof object.serverTime === "object")
+                    message.serverTime = new $util.LongBits(object.serverTime.low >>> 0, object.serverTime.high >>> 0).toNumber();
+            if (object.publishTime != null)
+                if ($util.Long)
+                    (message.publishTime = $util.Long.fromValue(object.publishTime)).unsigned = false;
+                else if (typeof object.publishTime === "string")
+                    message.publishTime = parseInt(object.publishTime, 10);
+                else if (typeof object.publishTime === "number")
+                    message.publishTime = object.publishTime;
+                else if (typeof object.publishTime === "object")
+                    message.publishTime = new $util.LongBits(object.publishTime.low >>> 0, object.publishTime.high >>> 0).toNumber();
+            if (object.key != null)
+                message.key = String(object.key);
+            if (object.body != null)
+                if (typeof object.body === "string")
+                    $util.base64.decode(object.body, message.body = $util.newBuffer($util.base64.length(object.body)), 0);
+                else if (object.body.length)
+                    message.body = object.body;
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a Message message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof PubSubEvent.Message
+         * @static
+         * @param {PubSubEvent.Message} message Message
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Message.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, false);
+                    object.serverTime = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.serverTime = options.longs === String ? "0" : 0;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, false);
+                    object.publishTime = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.publishTime = options.longs === String ? "0" : 0;
+                object.key = "";
+                if (options.bytes === String)
+                    object.body = "";
+                else {
+                    object.body = [];
+                    if (options.bytes !== Array)
+                        object.body = $util.newBuffer(object.body);
+                }
+            }
+            if (message.serverTime != null && message.hasOwnProperty("serverTime"))
+                if (typeof message.serverTime === "number")
+                    object.serverTime = options.longs === String ? String(message.serverTime) : message.serverTime;
+                else
+                    object.serverTime = options.longs === String ? $util.Long.prototype.toString.call(message.serverTime) : options.longs === Number ? new $util.LongBits(message.serverTime.low >>> 0, message.serverTime.high >>> 0).toNumber() : message.serverTime;
+            if (message.publishTime != null && message.hasOwnProperty("publishTime"))
+                if (typeof message.publishTime === "number")
+                    object.publishTime = options.longs === String ? String(message.publishTime) : message.publishTime;
+                else
+                    object.publishTime = options.longs === String ? $util.Long.prototype.toString.call(message.publishTime) : options.longs === Number ? new $util.LongBits(message.publishTime.low >>> 0, message.publishTime.high >>> 0).toNumber() : message.publishTime;
+            if (message.key != null && message.hasOwnProperty("key"))
+                object.key = message.key;
+            if (message.body != null && message.hasOwnProperty("body"))
+                object.body = options.bytes === String ? $util.base64.encode(message.body, 0, message.body.length) : options.bytes === Array ? Array.prototype.slice.call(message.body) : message.body;
+            return object;
+        };
+
+        /**
+         * Converts this Message to JSON.
+         * @function toJSON
+         * @memberof PubSubEvent.Message
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Message.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Message;
+    })();
+
+    PubSubEvent.Close = (function() {
+
+        /**
+         * Properties of a Close.
+         * @memberof PubSubEvent
+         * @interface IClose
+         */
+
+        /**
+         * Constructs a new Close.
+         * @memberof PubSubEvent
+         * @classdesc Represents a Close.
+         * @implements IClose
+         * @constructor
+         * @param {PubSubEvent.IClose=} [properties] Properties to set
+         */
+        function Close(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Creates a new Close instance using the specified properties.
+         * @function create
+         * @memberof PubSubEvent.Close
+         * @static
+         * @param {PubSubEvent.IClose=} [properties] Properties to set
+         * @returns {PubSubEvent.Close} Close instance
+         */
+        Close.create = function create(properties) {
+            return new Close(properties);
+        };
+
+        /**
+         * Encodes the specified Close message. Does not implicitly {@link PubSubEvent.Close.verify|verify} messages.
+         * @function encode
+         * @memberof PubSubEvent.Close
+         * @static
+         * @param {PubSubEvent.IClose} message Close message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Close.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
             return writer;
         };
 
         /**
-         * Encodes the specified RunClient message, length delimited. Does not implicitly {@link ChatClientCallRequest.RunClient.verify|verify} messages.
+         * Encodes the specified Close message, length delimited. Does not implicitly {@link PubSubEvent.Close.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof ChatClientCallRequest.RunClient
+         * @memberof PubSubEvent.Close
          * @static
-         * @param {ChatClientCallRequest.IRunClient} message RunClient message or plain object to encode
+         * @param {PubSubEvent.IClose} message Close message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        RunClient.encodeDelimited = function encodeDelimited(message, writer) {
+        Close.encodeDelimited = function encodeDelimited(message, writer) {
             return this.encode(message, writer).ldelim();
         };
 
         /**
-         * Decodes a RunClient message from the specified reader or buffer.
+         * Decodes a Close message from the specified reader or buffer.
          * @function decode
-         * @memberof ChatClientCallRequest.RunClient
+         * @memberof PubSubEvent.Close
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {ChatClientCallRequest.RunClient} RunClient
+         * @returns {PubSubEvent.Close} Close
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        RunClient.decode = function decode(reader, length) {
+        Close.decode = function decode(reader, length) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatClientCallRequest.RunClient();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.PubSubEvent.Close();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
@@ -16072,77 +17915,273 @@ export const ChatClientCallRequest = $root.ChatClientCallRequest = (() => {
         };
 
         /**
-         * Decodes a RunClient message from the specified reader or buffer, length delimited.
+         * Decodes a Close message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof ChatClientCallRequest.RunClient
+         * @memberof PubSubEvent.Close
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {ChatClientCallRequest.RunClient} RunClient
+         * @returns {PubSubEvent.Close} Close
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        RunClient.decodeDelimited = function decodeDelimited(reader) {
+        Close.decodeDelimited = function decodeDelimited(reader) {
             if (!(reader instanceof $Reader))
                 reader = new $Reader(reader);
             return this.decode(reader, reader.uint32());
         };
 
         /**
-         * Verifies a RunClient message.
+         * Verifies a Close message.
          * @function verify
-         * @memberof ChatClientCallRequest.RunClient
+         * @memberof PubSubEvent.Close
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
          */
-        RunClient.verify = function verify(message) {
+        Close.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             return null;
         };
 
         /**
-         * Creates a RunClient message from a plain object. Also converts values to their respective internal types.
+         * Creates a Close message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof ChatClientCallRequest.RunClient
+         * @memberof PubSubEvent.Close
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {ChatClientCallRequest.RunClient} RunClient
+         * @returns {PubSubEvent.Close} Close
          */
-        RunClient.fromObject = function fromObject(object) {
-            if (object instanceof $root.ChatClientCallRequest.RunClient)
+        Close.fromObject = function fromObject(object) {
+            if (object instanceof $root.PubSubEvent.Close)
                 return object;
-            return new $root.ChatClientCallRequest.RunClient();
+            return new $root.PubSubEvent.Close();
         };
 
         /**
-         * Creates a plain object from a RunClient message. Also converts values to other types if specified.
+         * Creates a plain object from a Close message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof ChatClientCallRequest.RunClient
+         * @memberof PubSubEvent.Close
          * @static
-         * @param {ChatClientCallRequest.RunClient} message RunClient
+         * @param {PubSubEvent.Close} message Close
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
-        RunClient.toObject = function toObject() {
+        Close.toObject = function toObject() {
             return {};
         };
 
         /**
-         * Converts this RunClient to JSON.
+         * Converts this Close to JSON.
          * @function toJSON
-         * @memberof ChatClientCallRequest.RunClient
+         * @memberof PubSubEvent.Close
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
-        RunClient.prototype.toJSON = function toJSON() {
+        Close.prototype.toJSON = function toJSON() {
             return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
         };
 
-        return RunClient;
+        return Close;
     })();
 
-    return ChatClientCallRequest;
+    PubSubEvent.Padding = (function() {
+
+        /**
+         * Properties of a Padding.
+         * @memberof PubSubEvent
+         * @interface IPadding
+         * @property {Uint8Array|null} [body] Padding body
+         */
+
+        /**
+         * Constructs a new Padding.
+         * @memberof PubSubEvent
+         * @classdesc Represents a Padding.
+         * @implements IPadding
+         * @constructor
+         * @param {PubSubEvent.IPadding=} [properties] Properties to set
+         */
+        function Padding(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Padding body.
+         * @member {Uint8Array} body
+         * @memberof PubSubEvent.Padding
+         * @instance
+         */
+        Padding.prototype.body = $util.newBuffer([]);
+
+        /**
+         * Creates a new Padding instance using the specified properties.
+         * @function create
+         * @memberof PubSubEvent.Padding
+         * @static
+         * @param {PubSubEvent.IPadding=} [properties] Properties to set
+         * @returns {PubSubEvent.Padding} Padding instance
+         */
+        Padding.create = function create(properties) {
+            return new Padding(properties);
+        };
+
+        /**
+         * Encodes the specified Padding message. Does not implicitly {@link PubSubEvent.Padding.verify|verify} messages.
+         * @function encode
+         * @memberof PubSubEvent.Padding
+         * @static
+         * @param {PubSubEvent.IPadding} message Padding message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Padding.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.body != null && Object.hasOwnProperty.call(message, "body"))
+                writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.body);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Padding message, length delimited. Does not implicitly {@link PubSubEvent.Padding.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof PubSubEvent.Padding
+         * @static
+         * @param {PubSubEvent.IPadding} message Padding message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Padding.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Padding message from the specified reader or buffer.
+         * @function decode
+         * @memberof PubSubEvent.Padding
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {PubSubEvent.Padding} Padding
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Padding.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.PubSubEvent.Padding();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.body = reader.bytes();
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Padding message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof PubSubEvent.Padding
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {PubSubEvent.Padding} Padding
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Padding.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Padding message.
+         * @function verify
+         * @memberof PubSubEvent.Padding
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Padding.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.body != null && message.hasOwnProperty("body"))
+                if (!(message.body && typeof message.body.length === "number" || $util.isString(message.body)))
+                    return "body: buffer expected";
+            return null;
+        };
+
+        /**
+         * Creates a Padding message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof PubSubEvent.Padding
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {PubSubEvent.Padding} Padding
+         */
+        Padding.fromObject = function fromObject(object) {
+            if (object instanceof $root.PubSubEvent.Padding)
+                return object;
+            let message = new $root.PubSubEvent.Padding();
+            if (object.body != null)
+                if (typeof object.body === "string")
+                    $util.base64.decode(object.body, message.body = $util.newBuffer($util.base64.length(object.body)), 0);
+                else if (object.body.length)
+                    message.body = object.body;
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a Padding message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof PubSubEvent.Padding
+         * @static
+         * @param {PubSubEvent.Padding} message Padding
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Padding.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                if (options.bytes === String)
+                    object.body = "";
+                else {
+                    object.body = [];
+                    if (options.bytes !== Array)
+                        object.body = $util.newBuffer(object.body);
+                }
+            if (message.body != null && message.hasOwnProperty("body"))
+                object.body = options.bytes === String ? $util.base64.encode(message.body, 0, message.body.length) : options.bytes === Array ? Array.prototype.slice.call(message.body) : message.body;
+            return object;
+        };
+
+        /**
+         * Converts this Padding to JSON.
+         * @function toJSON
+         * @memberof PubSubEvent.Padding
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Padding.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Padding;
+    })();
+
+    return PubSubEvent;
 })();
 
 export const NetworkAddress = $root.NetworkAddress = (() => {

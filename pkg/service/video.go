@@ -9,7 +9,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
 	"github.com/MemeLabs/go-ppspp/pkg/encoding"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 )
 
 // NewVideoThing ...
@@ -26,7 +25,7 @@ func NewVideoThing() *VideoThing {
 }
 
 type videoPublisher struct {
-	p vpn.PeerIndexPublisher
+	// p vpn.PeerIndexPublisher
 	s SwarmNetwork
 }
 
@@ -64,8 +63,8 @@ func (t *VideoThing) PublishSwarm(svc NetworkServices) error {
 func (t *VideoThing) Stop() {
 	id := encoding.NewSwarmID(t.key.Public)
 	for _, p := range t.p {
-		p.p.Stop()
-		p.s.CloseSwarm(&id)
+		// p.p.Stop()
+		p.s.CloseSwarm(id)
 	}
 }
 

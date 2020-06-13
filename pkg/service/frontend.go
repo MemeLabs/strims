@@ -85,7 +85,7 @@ func (s *Frontend) DeleteProfile(ctx context.Context, r *pb.DeleteProfileRequest
 		return nil, err
 	}
 
-	if err := session.Store().Delete(); err != nil {
+	if err := session.ProfileStore().Delete(); err != nil {
 		return nil, err
 	}
 
@@ -138,7 +138,7 @@ func (s *Frontend) GetProfile(ctx context.Context, r *pb.GetProfileRequest) (*pb
 		return nil, ErrAuthenticationRequired
 	}
 
-	profile, err := session.Store().GetProfile()
+	profile, err := session.ProfileStore().GetProfile()
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,7 @@ func (s *Frontend) CreateNetwork(ctx context.Context, r *pb.CreateNetworkRequest
 		return nil, err
 	}
 
-	err = session.Store().InsertNetwork(network)
+	err = session.ProfileStore().InsertNetwork(network)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +201,7 @@ func (s *Frontend) DeleteNetwork(ctx context.Context, r *pb.DeleteNetworkRequest
 		return nil, ErrAuthenticationRequired
 	}
 
-	membership, err := session.Store().GetNetworkMembershipForNetwork(r.Id)
+	membership, err := session.ProfileStore().GetNetworkMembershipForNetwork(r.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +210,7 @@ func (s *Frontend) DeleteNetwork(ctx context.Context, r *pb.DeleteNetworkRequest
 		Id: membership.Id,
 	})
 
-	if err := session.Store().DeleteNetwork(r.Id); err != nil {
+	if err := session.ProfileStore().DeleteNetwork(r.Id); err != nil {
 		if err == dao.ErrRecordNotFound {
 			return nil, fmt.Errorf("could not delete network: %w", err)
 		}
@@ -226,7 +226,7 @@ func (s *Frontend) GetNetwork(ctx context.Context, r *pb.GetNetworkRequest) (*pb
 		return nil, ErrAuthenticationRequired
 	}
 
-	network, err := session.Store().GetNetwork(r.Id)
+	network, err := session.ProfileStore().GetNetwork(r.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +240,7 @@ func (s *Frontend) GetNetworks(ctx context.Context, r *pb.GetNetworksRequest) (*
 		return nil, ErrAuthenticationRequired
 	}
 
-	networks, err := session.Store().GetNetworks()
+	networks, err := session.ProfileStore().GetNetworks()
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +254,7 @@ func (s *Frontend) GetNetworkMemberships(ctx context.Context, r *pb.GetNetworkMe
 		return nil, ErrAuthenticationRequired
 	}
 
-	memberships, err := session.Store().GetNetworkMemberships()
+	memberships, err := session.ProfileStore().GetNetworkMemberships()
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +268,7 @@ func (s *Frontend) DeleteNetworkMembership(ctx context.Context, r *pb.DeleteNetw
 		return nil, ErrAuthenticationRequired
 	}
 
-	membership, err := session.Store().GetNetworkMembership(r.Id)
+	membership, err := session.ProfileStore().GetNetworkMembership(r.Id)
 	if err != nil {
 		if err == dao.ErrRecordNotFound {
 			return nil, fmt.Errorf("could not delete network membership: %w", err)
@@ -284,7 +284,7 @@ func (s *Frontend) DeleteNetworkMembership(ctx context.Context, r *pb.DeleteNetw
 		return nil, err
 	}
 
-	if err := session.Store().DeleteNetworkMembership(r.Id); err != nil {
+	if err := session.ProfileStore().DeleteNetworkMembership(r.Id); err != nil {
 		return nil, err
 	}
 	return &pb.DeleteNetworkMembershipResponse{}, nil
@@ -307,7 +307,7 @@ func (s *Frontend) CreateBootstrapClient(ctx context.Context, r *pb.CreateBootst
 		return nil, err
 	}
 
-	if err := session.Store().InsertBootstrapClient(client); err != nil {
+	if err := session.ProfileStore().InsertBootstrapClient(client); err != nil {
 		return nil, err
 	}
 
@@ -327,7 +327,7 @@ func (s *Frontend) DeleteBootstrapClient(ctx context.Context, r *pb.DeleteBootst
 		return nil, ErrAuthenticationRequired
 	}
 
-	if err := session.Store().DeleteBootstrapClient(r.Id); err != nil {
+	if err := session.ProfileStore().DeleteBootstrapClient(r.Id); err != nil {
 		return nil, err
 	}
 
@@ -346,7 +346,7 @@ func (s *Frontend) GetBootstrapClients(ctx context.Context, r *pb.GetBootstrapCl
 		return nil, ErrAuthenticationRequired
 	}
 
-	clients, err := session.Store().GetBootstrapClients()
+	clients, err := session.ProfileStore().GetBootstrapClients()
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +398,7 @@ func (s *Frontend) CreateChatServer(ctx context.Context, r *pb.CreateChatServerR
 		return nil, err
 	}
 
-	if err := session.Store().InsertChatServer(server); err != nil {
+	if err := session.ProfileStore().InsertChatServer(server); err != nil {
 		return nil, err
 	}
 
@@ -418,7 +418,7 @@ func (s *Frontend) DeleteChatServer(ctx context.Context, r *pb.DeleteChatServerR
 		return nil, ErrAuthenticationRequired
 	}
 
-	if err := session.Store().DeleteChatServer(r.Id); err != nil {
+	if err := session.ProfileStore().DeleteChatServer(r.Id); err != nil {
 		return nil, err
 	}
 
@@ -437,7 +437,7 @@ func (s *Frontend) GetChatServers(ctx context.Context, r *pb.GetChatServersReque
 		return nil, ErrAuthenticationRequired
 	}
 
-	servers, err := session.Store().GetChatServers()
+	servers, err := session.ProfileStore().GetChatServers()
 	if err != nil {
 		return nil, err
 	}
@@ -481,23 +481,23 @@ func (s *Frontend) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (*pb.Sta
 	if _, ok := session.Values.Load(vpnKey); !ok {
 		hostOptions := append([]vpn.HostOption{}, s.vpnOptions...)
 
-		profile, err := session.Store().GetProfile()
+		profile, err := session.ProfileStore().GetProfile()
 		if err != nil {
 			return nil, err
 		}
 
-		networkController := NewNetworksController(s.logger, session.Store())
+		networkController := NewNetworksController(s.logger, session.ProfileStore())
 		hostOptions = append(hostOptions, WithNetworkController(networkController))
 
 		bootstrapService := NewBootstrapService(
 			s.logger,
-			session.Store(),
+			session.ProfileStore(),
 			networkController,
 			BootstrapServiceOptions{},
 		)
 		hostOptions = append(hostOptions, WithBootstrapService(bootstrapService))
 
-		clients, err := session.Store().GetBootstrapClients()
+		clients, err := session.ProfileStore().GetBootstrapClients()
 		if err != nil {
 			return nil, err
 		}
@@ -669,64 +669,144 @@ func (s *Frontend) PProf(ctx context.Context, r *pb.PProfRequest) (*pb.PProfResp
 	return &pb.PProfResponse{Name: r.Name, Data: b.Bytes()}, nil
 }
 
-// OpenChatClient ...
-func (s *Frontend) OpenChatClient(ctx context.Context, r *pb.ChatClientOpenRequest) (<-chan *pb.ChatClientEvent, error) {
+// OpenChatServer ...
+func (s *Frontend) OpenChatServer(ctx context.Context, r *pb.OpenChatServerRequest) (<-chan *pb.ChatServerEvent, error) {
+	ctl, err := s.getNetworkController(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	ch := make(chan *pb.ChatServerEvent, 1)
+
+	// TODO: this should return an ErrNetworkNotFound...
+	svc, ok := ctl.NetworkServices(r.Server.NetworkKey)
+	if !ok {
+		return nil, errors.New("unknown network")
+	}
+
+	session := rpc.ContextSession(ctx)
+
+	server, err := NewChatServer(ctx, svc, r.Server.Key)
+	if err != nil {
+		return nil, err
+	}
+
+	id := session.Store(server)
+	ch <- &pb.ChatServerEvent{
+		Body: &pb.ChatServerEvent_Open_{
+			Open: &pb.ChatServerEvent_Open{
+				ServerId: id,
+			},
+		},
+	}
+
+	go func() {
+		for e := range server.Events() {
+			ch <- e
+		}
+		ch <- &pb.ChatServerEvent{
+			Body: &pb.ChatServerEvent_Close_{
+				Close: &pb.ChatServerEvent_Close{},
+			},
+		}
+
+		session.Delete(id)
+		close(ch)
+	}()
+
+	return ch, nil
+}
+
+// CallChatServer ...
+func (s *Frontend) CallChatServer(ctx context.Context, r *pb.CallChatServerRequest) error {
 	session := rpc.ContextSession(ctx)
 	if session.Anonymous() {
-		return nil, ErrAuthenticationRequired
+		return ErrAuthenticationRequired
+	}
+
+	serverIf, _ := session.Load(r.ServerId)
+	server, ok := serverIf.(*ChatServer)
+	if !ok {
+		return errors.New("server id does not exist")
+	}
+
+	switch r.Body.(type) {
+	case *pb.CallChatServerRequest_Close_:
+		server.Close()
+	}
+
+	return nil
+}
+
+// OpenChatClient ...
+func (s *Frontend) OpenChatClient(ctx context.Context, r *pb.OpenChatClientRequest) (<-chan *pb.ChatClientEvent, error) {
+	ctl, err := s.getNetworkController(ctx)
+	if err != nil {
+		return nil, err
 	}
 
 	ch := make(chan *pb.ChatClientEvent, 1)
 
-	// vpnDataIf, ok := session.Values.Load(vpnKey)
-	// if !ok {
-	// 	return nil, errors.New("vpnData does not exist")
-	// }
+	// TODO: this should return an ErrNetworkNotFound...
+	svc, ok := ctl.NetworkServices(r.NetworkKey)
+	if !ok {
+		return nil, errors.New("unknown network")
+	}
 
-	// TODO: pass in NetworkServices corresponding to host network
-	// c := NewChatThing(ch, vpnDataIf.(vpnData))
+	session := rpc.ContextSession(ctx)
 
-	// id := atomic.AddUint32(&idThing, 1)
-	// session.Values.Store(id, c)
+	client, err := NewChatClient(ctx, svc, r.ServerKey)
+	if err != nil {
+		return nil, err
+	}
 
-	// ch <- &pb.ChatClientEvent{
-	// 	Body: &pb.ChatClientEvent_Open_{
-	// 		Open: &pb.ChatClientEvent_Open{
-	// 			ClientId: id,
-	// 		},
-	// 	},
-	// }
+	id := session.Store(client)
+	ch <- &pb.ChatClientEvent{
+		Body: &pb.ChatClientEvent_Open_{
+			Open: &pb.ChatClientEvent_Open{
+				ClientId: id,
+			},
+		},
+	}
 
-	// go func() {
-	// 	for e := range c.events {
-	// 		ch <- e
-	// 	}
-	// }()
+	go func() {
+		for e := range client.Events() {
+			ch <- e
+		}
+		ch <- &pb.ChatClientEvent{
+			Body: &pb.ChatClientEvent_Close_{
+				Close: &pb.ChatClientEvent_Close{},
+			},
+		}
+
+		session.Delete(id)
+		close(ch)
+	}()
 
 	return ch, nil
 }
 
 // CallChatClient ...
-func (s *Frontend) CallChatClient(ctx context.Context, r *pb.ChatClientCallRequest) error {
-	// session := rpc.ContextSession(ctx)
-	// if session.Anonymous() {
-	// 	return ErrAuthenticationRequired
-	// }
+func (s *Frontend) CallChatClient(ctx context.Context, r *pb.CallChatClientRequest) error {
+	session := rpc.ContextSession(ctx)
+	if session.Anonymous() {
+		return ErrAuthenticationRequired
+	}
 
-	// clientIf, _ := session.Values.Load(r.ClientId)
-	// client, ok := clientIf.(*ChatThing)
-	// if !ok {
-	// 	return errors.New("client id does not exist")
-	// }
+	clientIf, _ := session.Load(r.ClientId)
+	client, ok := clientIf.(*ChatClient)
+	if !ok {
+		return errors.New("client id does not exist")
+	}
 
-	// switch b := r.Body.(type) {
-	// case *pb.ChatClientCallRequest_Message_:
-	// 	client.SendMessage(b.Message)
-	// case *pb.ChatClientCallRequest_RunClient_:
-	// 	client.RunClient()
-	// case *pb.ChatClientCallRequest_RunServer_:
-	// 	go client.RunServer()
-	// }
+	switch b := r.Body.(type) {
+	case *pb.CallChatClientRequest_Message_:
+		client.Send(&pb.ChatClientEvent_Message{
+			Body: b.Message.Body,
+		})
+	case *pb.CallChatClientRequest_Close_:
+		client.Close()
+	}
 
 	return nil
 }
@@ -858,7 +938,7 @@ func (s *Frontend) saveNetworkMembership(ctx context.Context, membership *pb.Net
 		return ErrAuthenticationRequired
 	}
 
-	old, err := session.Store().GetNetworkMembershipByNetworkKey(dao.GetRootCert(membership.Certificate).Key)
+	old, err := session.ProfileStore().GetNetworkMembershipByNetworkKey(dao.GetRootCert(membership.Certificate).Key)
 	if err != nil && err != dao.ErrRecordNotFound {
 		return err
 	}
@@ -867,12 +947,12 @@ func (s *Frontend) saveNetworkMembership(ctx context.Context, membership *pb.Net
 			return ErrAlreadyJoinedNetwork
 		}
 
-		if err := session.Store().DeleteNetworkMembership(old.Id); err != nil {
+		if err := session.ProfileStore().DeleteNetworkMembership(old.Id); err != nil {
 			return fmt.Errorf("could not delete old membership: %w", err)
 		}
 	}
 
-	return session.Store().InsertNetworkMembership(membership)
+	return session.ProfileStore().InsertNetworkMembership(membership)
 }
 
 func (s *Frontend) startNetwork(ctx context.Context, membership *pb.NetworkMembership, network *pb.Network) error {

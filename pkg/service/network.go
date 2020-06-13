@@ -2,6 +2,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"sync"
 
@@ -16,8 +17,7 @@ var nextServiceOptionID uint32
 
 // NetworkServices ...
 type NetworkServices struct {
-	ID           uint64
-	ProfileStore *dao.ProfileStore
+	Host         *vpn.Host
 	Network      *vpn.Network
 	HashTable    vpn.HashTable
 	PeerIndex    vpn.PeerIndex
@@ -51,8 +51,8 @@ func WithNetworkController(c *NetworksController) vpn.HostOption {
 	return func(h *vpn.Host) error {
 		c.host = h
 		c.networks = vpn.NewNetworks(h)
-		c.hashTableStore = vpn.NewHashTableStore(h.ID())
-		c.peerIndexStore = vpn.NewPeerIndexStore(h.ID())
+		c.hashTableStore = vpn.NewHashTableStore(context.Background(), c.logger, h.ID())
+		c.peerIndexStore = vpn.NewPeerIndexStore(context.Background(), c.logger, h.ID())
 		c.swarmController = newSwarmController(c.logger, h, c.networks)
 
 		if err := c.startProfileNetworks(); err != nil {
@@ -114,15 +114,16 @@ func (c *NetworksController) StartNetwork(cert *pb.Certificate) (*NetworkService
 		return nil, err
 	}
 
-	hashTable := vpn.NewHashTable(network, c.hashTableStore)
-	peerIndex := vpn.NewPeerIndex(network, c.peerIndexStore)
-	peerExchange := vpn.NewPeerExchange(network)
+	hashTable := vpn.NewHashTable(c.logger, network, c.hashTableStore)
+	peerIndex := vpn.NewPeerIndex(c.logger, network, c.peerIndexStore)
+	peerExchange := vpn.NewPeerExchange(c.logger, network)
 
 	network.SetHandler(vpn.HashTablePort, hashTable)
 	network.SetHandler(vpn.PeerIndexPort, peerIndex)
 	network.SetHandler(vpn.PeerExchangePort, peerExchange)
 
 	svc := &NetworkServices{
+		Host:         c.host,
 		Network:      network,
 		HashTable:    hashTable,
 		PeerIndex:    peerIndex,

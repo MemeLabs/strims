@@ -1,12 +1,13 @@
 /* eslint-disable no-console */
 
 import * as React from "react";
+
 import { MainLayout } from "../components/MainLayout";
 import { useClient, useLazyCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
 import { Decoder, Encoder } from "../lib/media";
-import { ChatClientCallRequest } from "../lib/pb";
+import { CallChatClientRequest, OpenChatClientRequest, OpenChatServerRequest } from "../lib/pb";
 
 const HomePage = () => {
   const [{ colorScheme }, { setColorScheme }] = useTheme();
@@ -90,7 +91,7 @@ const HomePage = () => {
     video.src = URL.createObjectURL(decoder.mediaSource);
     video.oncanplay = () => video.play();
 
-    let timeShifted = 0;
+    const timeShifted = 0;
 
     const clientEvents = client.openVideoClient();
     clientEvents.on("data", (v) => {
@@ -142,28 +143,31 @@ const HomePage = () => {
     // console.log("swarm published");
   };
 
-  const handleChatClientClick = () => {
-    const chatEvents = client.openChatClient();
+  const handleChatClientClick = async () => {
+    const servers = await client.getChatServers();
+    if (servers.chatServers.length === 0) {
+      return;
+    }
+
+    const server = servers.chatServers[0];
+    const chatEvents = client.openChatClient(
+      new OpenChatClientRequest({
+        networkKey: server.networkKey,
+        serverKey: server.key.public,
+      })
+    );
     chatEvents.on("data", async (v) => {
       switch (v.body) {
         case "open":
           console.log("chat client >>>", v.open.clientId);
-          client.callChatClient(
-            new ChatClientCallRequest({
-              clientId: v.open.clientId,
-              runClient: new ChatClientCallRequest.RunClient({
-                body: "test",
-              }),
-            })
-          );
 
           await new Promise((resolve) => setTimeout(resolve, 2000));
 
           setInterval(() => {
             client.callChatClient(
-              new ChatClientCallRequest({
+              new CallChatClientRequest({
                 clientId: v.open.clientId,
-                message: new ChatClientCallRequest.Message({
+                message: new CallChatClientRequest.Message({
                   time: Date.now(),
                   body: "test",
                 }),
@@ -191,21 +195,21 @@ const HomePage = () => {
     });
   };
 
-  const handleChatServerClick = () => {
-    const chatEvents = client.openChatClient();
+  const handleChatServerClick = async () => {
+    const servers = await client.getChatServers();
+    if (servers.chatServers.length === 0) {
+      return;
+    }
+
+    const server = servers.chatServers[0];
+    const chatEvents = client.openChatServer(new OpenChatServerRequest({ server }));
     chatEvents.on("data", (v) => {
       switch (v.body) {
         case "open":
-          console.log("chat client >>>", v.open.clientId);
-          client.callChatClient(
-            new ChatClientCallRequest({
-              clientId: v.open.clientId,
-              runServer: new ChatClientCallRequest.RunServer(),
-            })
-          );
+          console.log("chat server >>>", v.open.serverId);
           return;
         case "close":
-          console.log("chat client closed");
+          console.log("chat server closed");
           return;
         default:
           console.log(v);
