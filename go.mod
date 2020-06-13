@@ -22,12 +22,12 @@ require (
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/kr/pretty v0.2.0 // indirect
 	github.com/lucas-clemente/quic-go v0.16.1 // indirect
-	github.com/mailru/easyjson v0.7.1 // indirect
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/nareix/joy4 v0.0.0-20181022032202-3ddbc8f9d431
 	github.com/onsi/gomega v1.10.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99
+	github.com/pion/dtls v1.5.4
 	github.com/pion/webrtc/v2 v2.2.14
 	github.com/prometheus/client_golang v1.6.0
 	github.com/prometheus/common v0.10.0

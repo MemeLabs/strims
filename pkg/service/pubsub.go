@@ -9,15 +9,13 @@ import (
 	"math"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
 	"github.com/MemeLabs/go-ppspp/pkg/encoding"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/prefixstream"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"google.golang.org/protobuf/proto"
 )
-
-var pubSubChunkSize = 8
 
 // PubSubServerOptions ...
 type PubSubServerOptions struct {
@@ -26,7 +24,7 @@ type PubSubServerOptions struct {
 
 // NewPubSubServer ...
 func NewPubSubServer(ctx context.Context, svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubServer, error) {
-	sw, err := encoding.NewWriter(encoding.SwarmWriterOptions{
+	w, err := encoding.NewWriter(encoding.SwarmWriterOptions{
 		// SwarmOptions: encoding.NewDefaultSwarmOptions(),
 		SwarmOptions: encoding.SwarmOptions{
 			LiveWindow: 1 << 10, // 1MB
@@ -38,12 +36,7 @@ func NewPubSubServer(ctx context.Context, svc *NetworkServices, key *pb.Key, sal
 		return nil, err
 	}
 
-	cw, err := chunkstream.NewWriterSize(sw, pubSubChunkSize)
-	if err != nil {
-		return nil, err
-	}
-
-	svc.Swarms.OpenSwarm(sw.Swarm())
+	svc.Swarms.OpenSwarm(w.Swarm())
 
 	port, err := svc.Network.ReservePort()
 	if err != nil {
@@ -71,7 +64,7 @@ func NewPubSubServer(ctx context.Context, svc *NetworkServices, key *pb.Key, sal
 	s := &PubSubServer{
 		close:     cancel,
 		publishes: make(chan *pb.PubSubEvent_Publish),
-		cw:        cw,
+		w:         prefixstream.NewWriter(w),
 	}
 
 	err = svc.Network.SetHandler(port, s)
@@ -87,7 +80,7 @@ func NewPubSubServer(ctx context.Context, svc *NetworkServices, key *pb.Key, sal
 type PubSubServer struct {
 	close     context.CancelFunc
 	publishes chan *pb.PubSubEvent_Publish
-	cw        *chunkstream.Writer
+	w         *prefixstream.Writer
 }
 
 // Close ...
@@ -118,7 +111,7 @@ func (s *PubSubServer) Send(key string, body []byte) error {
 	_, err = s.send(&pb.PubSubEvent{
 		Body: &pb.PubSubEvent_Padding_{
 			Padding: &pb.PubSubEvent_Padding{
-				Body: make([]byte, n%1024),
+				Body: make([]byte, 1024-(n%1024)),
 			},
 		},
 	})
@@ -134,10 +127,8 @@ func (s *PubSubServer) send(e *pb.PubSubEvent) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	if _, err := s.cw.Write(b); err != nil {
-		return 0, err
-	}
-	if err := s.cw.Flush(); err != nil {
+
+	if _, err := s.w.Write(b); err != nil {
 		return 0, err
 	}
 	return len(b), nil
@@ -245,20 +236,12 @@ func (c *PubSubClient) Publish(key string, body []byte) error {
 }
 
 func readPubSubEvents(swarm *encoding.Swarm, messages chan *pb.PubSubEvent_Message) {
-	r := swarm.Reader()
-	cr, err := chunkstream.NewReaderSize(r, int64(r.Offset()), pubSubChunkSize)
-	if err != nil {
-		panic(err)
-	}
-
-	log.Println("offset", r.Offset())
-
+	r := prefixstream.NewReader(swarm.Reader())
 	b := bytes.NewBuffer(nil)
 	for {
 		b.Reset()
-		_, err := io.Copy(b, cr)
-		if err != nil {
-			panic(err)
+		if _, err := io.Copy(b, r); err != nil {
+			return
 		}
 
 		var msg pb.PubSubEvent

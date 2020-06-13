@@ -48,16 +48,16 @@ func (s *ChatServer) Events() <-chan *pb.ChatServerEvent {
 	return s.events
 }
 
-func transformChatMessages(ctx context.Context, sp *PubSubServer) {
+func transformChatMessages(ctx context.Context, ps *PubSubServer) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case p := <-sp.Publishes():
+		case p := <-ps.Publishes():
 			// TODO: chat output schema
 			// TODO: use strims chat parser?
 			// TODO: map source host id to nick... need to retain vpn.Message meatadata
-			sp.Send("", p.Body)
+			ps.Send("", p.Body)
 		}
 	}
 }
@@ -122,13 +122,13 @@ func readChatEvents(ctx context.Context, ps *PubSubClient, events chan *pb.ChatC
 		select {
 		case <-ctx.Done():
 			return
-		case psm, ok := <-ps.Messages():
+		case m, ok := <-ps.Messages():
 			if !ok {
 				return
 			}
 
 			e := &pb.ChatClientEvent{}
-			if err := proto.Unmarshal(psm.Body, e); err != nil {
+			if err := proto.Unmarshal(m.Body, e); err != nil {
 				continue
 			}
 			events <- e
