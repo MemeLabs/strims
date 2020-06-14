@@ -97,6 +97,9 @@ func SignCertificateRequest(
 
 	switch key.Type {
 	case pb.KeyType_KEY_TYPE_ED25519:
+		if len(key.Private) != ed25519.PrivateKeySize {
+			return nil, ErrInvalidKeyLength
+		}
 		cert.Signature = ed25519.Sign(key.Private, certBytes)
 	default:
 		return nil, ErrUnsupportedKeyType
