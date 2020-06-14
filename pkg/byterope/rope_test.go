@@ -3,8 +3,6 @@ package byterope
 import (
 	"bytes"
 	"testing"
-
-	"github.com/davecgh/go-spew/spew"
 )
 
 func check(t *testing.T, r []byte, want []byte) {
@@ -29,14 +27,15 @@ func TestCopy(t *testing.T) {
 	x := []byte("first chunk of file")
 	y := []byte("second chunk of file")
 	z := []byte("third chunk of file")
-	fullLen := len(x) + len(y) + len(z)
+	r := New(x, y, z)
+
+	fullLen := r.Len()
 	firstHalf := make([]byte, fullLen/2)
-	n := New(x, y, z).Copy(firstHalf)
-	spew.Dump(firstHalf)
+	n := New(firstHalf).Copy(r...)
 	if n != len(firstHalf) {
 		t.Errorf("got %d; want: %d", n, len(firstHalf))
 	}
-	check(t, firstHalf, []byte("first chunk of the file second chun"))
+	check(t, firstHalf, []byte("first chunk of filesecond chu"))
 }
 
 func BenchmarkSlice(b *testing.B) {
@@ -45,9 +44,9 @@ func BenchmarkSlice(b *testing.B) {
 	y := []byte("second chunk of file")
 	z := []byte("third chunk of file")
 
-	fullLen := len(x) + len(y) + len(z)
+	r := New(x, y, z)
 	for i := 0; i < b.N; i++ {
-		New(x, y, z).Slice(0, fullLen/2)
+		r.Slice(0, r.Len()/2)
 	}
 }
 func BenchmarkCopy(b *testing.B) {
@@ -56,9 +55,9 @@ func BenchmarkCopy(b *testing.B) {
 	y := []byte("second chunk of file")
 	z := []byte("third chunk of file")
 
-	fullLen := len(x) + len(y) + len(z)
-	firstHalf := make([]byte, fullLen/2)
+	r := New(x, y, z)
+	firstHalf := make([]byte, r.Len()/2)
 	for i := 0; i < b.N; i++ {
-		New(x, y, z).Copy(firstHalf)
+		New(firstHalf).Copy(r...)
 	}
 }
