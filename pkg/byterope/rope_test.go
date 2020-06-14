@@ -3,6 +3,8 @@ package byterope
 import (
 	"bytes"
 	"testing"
+
+	"github.com/davecgh/go-spew/spew"
 )
 
 func check(t *testing.T, r []byte, want []byte) {
@@ -18,43 +20,45 @@ func check(t *testing.T, r []byte, want []byte) {
 }
 
 func TestSlice(t *testing.T) {
-	check(t, New([]byte("autumnmajora")).Slice(4, 8)[0], []byte("mnma"))
+	r := New([]byte("autumn"), []byte("majora")).Slice(4, 8)
+	check(t, r[0], []byte("mn"))
+	check(t, r[1], []byte("ma"))
 }
 
 func TestCopy(t *testing.T) {
-	input := []byte("autumn")
-	r := New(input)
-
-	next := []byte("majora")
-	n := r.Copy(next)
-	if n != len(input) {
-		t.Errorf("Copy: got: %d; want: %d", n, len(input))
+	x := []byte("first chunk of file")
+	y := []byte("second chunk of file")
+	z := []byte("third chunk of file")
+	fullLen := len(x) + len(y) + len(z)
+	firstHalf := make([]byte, fullLen/2)
+	n := New(x, y, z).Copy(firstHalf)
+	spew.Dump(firstHalf)
+	if n != len(firstHalf) {
+		t.Errorf("got %d; want: %d", n, len(firstHalf))
 	}
-	check(t, r[0], next)
-
-	next = []byte("just wanted to be god")
-	n = r.Copy(next)
-	if n != len(input) {
-		t.Errorf("Copy: got: %d; want: %d", n, len(input))
-	}
-	check(t, r[0], next[:len(input)])
+	check(t, firstHalf, []byte("first chunk of the file second chun"))
 }
 
 func BenchmarkSlice(b *testing.B) {
 	b.ReportAllocs()
-	input := "majora tuna autumn"
+	x := []byte("first chunk of file")
+	y := []byte("second chunk of file")
+	z := []byte("third chunk of file")
+
+	fullLen := len(x) + len(y) + len(z)
 	for i := 0; i < b.N; i++ {
-		for x := 1; x < len(input); x++ {
-			New([]byte(input)).Slice(0, x)
-		}
+		New(x, y, z).Slice(0, fullLen/2)
 	}
 }
 func BenchmarkCopy(b *testing.B) {
 	b.ReportAllocs()
-	input := "majora tuna autumn"
+	x := []byte("first chunk of file")
+	y := []byte("second chunk of file")
+	z := []byte("third chunk of file")
+
+	fullLen := len(x) + len(y) + len(z)
+	firstHalf := make([]byte, fullLen/2)
 	for i := 0; i < b.N; i++ {
-		for x := 1; x < len(input); x++ {
-			New([]byte(input)).Copy([]byte(input)[:x])
-		}
+		New(x, y, z).Copy(firstHalf)
 	}
 }
