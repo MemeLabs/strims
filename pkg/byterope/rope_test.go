@@ -2,6 +2,7 @@ package byterope
 
 import (
 	"bytes"
+	"crypto/rand"
 	"testing"
 )
 
@@ -27,15 +28,44 @@ func TestCopy(t *testing.T) {
 	x := []byte("first chunk of file")
 	y := []byte("second chunk of file")
 	z := []byte("third chunk of file")
+
 	r := New(x, y, z)
 
-	fullLen := r.Len()
-	firstHalf := make([]byte, fullLen/2)
+	firstHalf := make([]byte, r.Len()/2)
 	n := New(firstHalf).Copy(r...)
 	if n != len(firstHalf) {
-		t.Errorf("got %d; want: %d", n, len(firstHalf))
 	}
 	check(t, firstHalf, []byte("first chunk of filesecond chu"))
+}
+
+func TestCopiesOfVaryingSize(t *testing.T) {
+	first := make([]byte, 20)
+	second := make([]byte, 30)
+	third := make([]byte, 50)
+
+	rand.Read(first)
+	rand.Read(second)
+	rand.Read(third)
+
+	fourth := make([]byte, 40)
+	fifth := make([]byte, 60)
+
+	fr := New(first, second, third)
+	sr := New(fourth, fifth)
+
+	if n := sr.Copy(fr...); n != fr.Len() {
+		t.Errorf("got %d; want: %d", n, fr.Len())
+	}
+
+	sixth := make([]byte, 25)
+	seventh := make([]byte, 25)
+	eighth := make([]byte, 25)
+	ninth := make([]byte, 25)
+
+	tr := New(sixth, seventh, eighth, ninth)
+	if n := tr.Copy(sr...); n != sr.Len() {
+		t.Errorf("got %d; want: %d", n, sr.Len())
+	}
 }
 
 func BenchmarkSlice(b *testing.B) {
