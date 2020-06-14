@@ -2,7 +2,6 @@ package byterope
 
 import (
 	"bytes"
-	"crypto/rand"
 	"testing"
 )
 
@@ -39,22 +38,26 @@ func TestCopy(t *testing.T) {
 }
 
 func TestCopiesOfVaryingSize(t *testing.T) {
+	data := make([]byte, 100)
+	for i := 0; i < len(data); i++ {
+		data[i] = byte(i)
+	}
+
 	first := make([]byte, 20)
 	second := make([]byte, 30)
 	third := make([]byte, 50)
 
-	rand.Read(first)
-	rand.Read(second)
-	rand.Read(third)
+	firstRope := New(first, second, third)
+	if n := firstRope.Copy(data); n != firstRope.Len() {
+		t.Errorf("got %d; want: %d", n, firstRope.Len())
+	}
 
 	fourth := make([]byte, 40)
 	fifth := make([]byte, 60)
 
-	fr := New(first, second, third)
-	sr := New(fourth, fifth)
-
-	if n := sr.Copy(fr...); n != fr.Len() {
-		t.Errorf("got %d; want: %d", n, fr.Len())
+	secRope := New(fourth, fifth)
+	if n := secRope.Copy(firstRope...); n != firstRope.Len() {
+		t.Errorf("got %d; want: %d", n, firstRope.Len())
 	}
 
 	sixth := make([]byte, 25)
@@ -62,10 +65,18 @@ func TestCopiesOfVaryingSize(t *testing.T) {
 	eighth := make([]byte, 25)
 	ninth := make([]byte, 25)
 
-	tr := New(sixth, seventh, eighth, ninth)
-	if n := tr.Copy(sr...); n != sr.Len() {
-		t.Errorf("got %d; want: %d", n, sr.Len())
+	thirdRope := New(sixth, seventh, eighth, ninth)
+	if n := thirdRope.Copy(secRope...); n != secRope.Len() {
+		t.Errorf("got %d; want: %d", n, secRope.Len())
 	}
+
+	tenth := make([]byte, 100)
+	fourthRope := New(tenth)
+	if n := fourthRope.Copy(thirdRope...); n != thirdRope.Len() {
+		t.Errorf("got %d; want: %d", n, thirdRope.Len())
+	}
+
+	check(t, fourthRope[0], data)
 }
 
 func BenchmarkSlice(b *testing.B) {
