@@ -44,7 +44,7 @@ var uriScheme = "magnet:"
 var urnPrefix = "urn:ppspp:"
 
 // URIOptions ...
-type URIOptions map[ProtocolOptionType]uint8
+type URIOptions map[ProtocolOptionType]int
 
 // NewURI ...
 func NewURI(id SwarmID, options URIOptions) *URI {
@@ -116,7 +116,7 @@ func ParseURI(s string) (u *URI, err error) {
 		if err != nil {
 			return nil, err
 		}
-		u.Options[opt.Type] = uint8(v)
+		u.Options[opt.Type] = int(v)
 	}
 
 	return

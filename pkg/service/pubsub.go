@@ -29,6 +29,7 @@ func NewPubSubServer(ctx context.Context, svc *NetworkServices, key *pb.Key, sal
 		// SwarmOptions: encoding.NewDefaultSwarmOptions(),
 		SwarmOptions: encoding.SwarmOptions{
 			LiveWindow: 1 << 10, // 1MB
+			ChunkSize:  128,
 		},
 		Key: key,
 	})
@@ -116,7 +117,7 @@ func (s *PubSubServer) Send(key string, body []byte) error {
 	_, err = s.send(&pb.PubSubEvent{
 		Body: &pb.PubSubEvent_Padding_{
 			Padding: &pb.PubSubEvent_Padding{
-				Body: make([]byte, 1024-(n%1024)),
+				Body: make([]byte, 128-(n%128)),
 			},
 		},
 	})
@@ -173,6 +174,7 @@ func NewPubSubClient(ctx context.Context, svc *NetworkServices, key, salt []byte
 		// encoding.NewDefaultSwarmOptions(),
 		encoding.SwarmOptions{
 			LiveWindow: 1 << 10, // 1MB
+			ChunkSize:  128,
 		},
 	)
 	if err != nil {

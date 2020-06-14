@@ -71,9 +71,6 @@ const (
 	EndMessage MessageType = 255
 )
 
-// ChunkSize ...
-const ChunkSize int = 1024
-
 // ProtocolOptionType ...
 type ProtocolOptionType uint8
 

@@ -43,7 +43,7 @@ func newChannel(o channelOptions) *channel {
 		id:                  id,
 		swarm:               o.Swarm,
 		peer:                o.Peer,
-		w:                   newDatagramWriter(o.Conn, o.Conn.MTU()),
+		w:                   newDatagramWriter(o.Conn, o.Conn.MTU(), o.Swarm.ChunkSize),
 		addedBins:           binmap.New(),
 		requestedBins:       binmap.New(),
 		availableBins:       binmap.New(),
@@ -183,7 +183,7 @@ func (c *channel) HandleAck(v Ack) {
 	c.Unlock()
 
 	c.peer.Lock()
-	c.peer.ledbat.AddDelaySample(v.DelaySample.Duration, ChunkSize)
+	c.peer.ledbat.AddDelaySample(v.DelaySample.Duration, c.swarm.ChunkSize)
 	c.peer.AddAckedChunk()
 	c.peer.Unlock()
 }
@@ -213,7 +213,7 @@ func (c *channel) HandleCancel(v Cancel) {
 	b := v.Address.Bin()
 	if !c.unackedBins.EmptyAt(b) {
 		// TODO: this isn't accurate if the bin was partially acked
-		c.peer.ledbat.AddDataLoss(int(b.BaseLeft())*ChunkSize, false)
+		c.peer.ledbat.AddDataLoss(int(b.BaseLeft())*c.swarm.ChunkSize, false)
 		c.unackedBins.Reset(b)
 	}
 	c.requestedBins.Reset(b)

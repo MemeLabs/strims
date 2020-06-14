@@ -4,19 +4,21 @@ import "io"
 
 // TODO: maybe escape analysis will work for generics...
 
-func newDatagramWriter(w io.Writer, size int) *datagramWriter {
+func newDatagramWriter(w io.Writer, size, chunkSize int) *datagramWriter {
 	return &datagramWriter{
-		w:    w,
-		size: size,
-		buf:  make([]byte, size),
+		w:         w,
+		chunkSize: chunkSize,
+		size:      size,
+		buf:       make([]byte, size),
 	}
 }
 
 type datagramWriter struct {
-	w    io.Writer
-	size int
-	buf  []byte
-	off  int
+	w         io.Writer
+	chunkSize int
+	size      int
+	buf       []byte
+	off       int
 }
 
 type flusher interface {
@@ -207,7 +209,7 @@ func (v datagramReader) readHandshake(b []byte) (int, error) {
 }
 
 func (v datagramReader) readData(b []byte) (int, error) {
-	var msg Data
+	msg := Data{chunkSize: v.channel.swarm.ChunkSize}
 	n, err := msg.Unmarshal(b)
 	if err != nil {
 		return 0, err

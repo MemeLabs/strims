@@ -14,30 +14,30 @@ const sentinelLen = len(sentinel)
 
 // NewWriter ...
 func NewWriter(w io.Writer) *Writer {
-	return &Writer{
-		w: w,
-	}
+	x := &Writer{w: w}
+	copy(x.h[:], sentinel[:])
+	return x
 }
 
 // Writer ...
 type Writer struct {
 	w io.Writer
-	b []byte
+	h [sentinelLen + binary.MaxVarintLen32]byte
 }
 
 // Write ...
 func (w *Writer) Write(p []byte) (int, error) {
-	n := len(p) + sentinelLen + binary.MaxVarintLen32
-	if len(w.b) < n {
-		w.b = make([]byte, n)
+	n := sentinelLen
+	n += binary.PutUvarint(w.h[n:], uint64(len(p)))
+
+	if _, err := w.w.Write(w.h[:n]); err != nil {
+		return 0, err
 	}
-	b := w.b[:n]
+	if _, err := w.w.Write(p); err != nil {
+		return 0, err
+	}
 
-	n = copy(b, sentinel[:])
-	n += binary.PutUvarint(b[n:], uint64(len(p)))
-	n += copy(b[n:], p)
-
-	return w.w.Write(b[:n])
+	return n + len(p), nil
 }
 
 // NewReader ...
@@ -59,11 +59,10 @@ func (r *Reader) Read(p []byte) (int, error) {
 		return 0, err
 	}
 
-	n := len(p)
-	if n > r.n {
-		n = r.n
+	if r.n < len(p) {
+		p = p[:r.n]
 	}
-	n, err := io.ReadFull(r.r, p[:n])
+	n, err := io.ReadFull(r.r, p)
 	if err != nil {
 		return 0, err
 	}

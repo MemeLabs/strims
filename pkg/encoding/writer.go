@@ -61,7 +61,7 @@ func NewWriter(o SwarmWriterOptions) (w *SwarmWriter, err error) {
 		return
 	}
 
-	bw := bufio.NewWriterSize(&swarmWriter{s: s}, ChunkSize)
+	bw := bufio.NewWriterSize(&swarmWriter{s: s}, s.ChunkSize)
 
 	w = &SwarmWriter{
 		s:  s,
@@ -108,8 +108,8 @@ type swarmWriter struct {
 
 // Write ...
 func (s *swarmWriter) Write(p []byte) (n int, err error) {
-	if len(p) > ChunkSize {
-		p = p[:ChunkSize]
+	if len(p) > s.s.ChunkSize {
+		p = p[:s.s.ChunkSize]
 	}
 
 	s.s.WriteChunk(s.bin, p)

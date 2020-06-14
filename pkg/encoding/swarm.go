@@ -8,17 +8,24 @@ import (
 
 // SwarmOptions ...
 type SwarmOptions struct {
-	// ChunkSize  int
+	ChunkSize  int
 	LiveWindow int
 }
 
-// NewDefaultSwarmOptions ...
-func NewDefaultSwarmOptions() SwarmOptions {
-	return SwarmOptions{
-		// ChunkSize:  1024,    // this isn't actually configurable...
-		// LiveWindow: 1 << 14, // 16MB
-		LiveWindow: 1 << 16, // 64MB
+func (o *SwarmOptions) applyDefaults() {
+	if o.ChunkSize == 0 {
+		o.ChunkSize = 1024
 	}
+
+	if o.LiveWindow == 0 {
+		o.LiveWindow = 1 << 16 // 64MB
+	}
+}
+
+// NewDefaultSwarmOptions ...
+func NewDefaultSwarmOptions() (s SwarmOptions) {
+	s.applyDefaults()
+	return
 }
 
 // NewDefaultSwarm ...
@@ -28,28 +35,37 @@ func NewDefaultSwarm(id SwarmID) (s *Swarm) {
 }
 
 // NewSwarm ...
-func NewSwarm(id SwarmID, o SwarmOptions) (s *Swarm, err error) {
-	s = &Swarm{
+func NewSwarm(id SwarmID, o SwarmOptions) (*Swarm, error) {
+	o.applyDefaults()
+
+	chunks, err := newChunkBuffer(o.LiveWindow, o.ChunkSize)
+	if err != nil {
+		return nil, err
+	}
+
+	return &Swarm{
 		ID: id,
 		URI: &URI{
-			ID:      id,
-			Options: URIOptions{},
+			ID: id,
+			Options: URIOptions{
+				ChunkSizeOption:         o.ChunkSize,
+				LiveDiscardWindowOption: o.LiveWindow,
+			},
 		},
-		// ChunkSize:     o.ChunkSize,
+		ChunkSize:     o.ChunkSize,
 		LiveWindow:    o.LiveWindow,
 		requestedBins: binmap.New(),
-	}
-	s.chunks, err = newChunkBuffer(o.LiveWindow)
-	return
+		chunks:        chunks,
+	}, nil
 }
 
 // Swarm ...
 type Swarm struct {
 	sync.Mutex
 
-	ID  SwarmID
-	URI *URI
-	// ChunkSize  int
+	ID         SwarmID
+	URI        *URI
+	ChunkSize  int
 	LiveWindow int
 
 	channelsLock    sync.Mutex

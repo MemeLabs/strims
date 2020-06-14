@@ -157,6 +157,8 @@ const HomePage = () => {
       })
     );
     chatEvents.on("data", async (v) => {
+      let n = 0;
+
       switch (v.body) {
         case "open":
           console.log("chat client >>>", v.open.clientId);
@@ -169,7 +171,7 @@ const HomePage = () => {
                 clientId: v.open.clientId,
                 message: new CallChatClientRequest.Message({
                   time: Date.now(),
-                  body: "test",
+                  body: `${n++}`,
                 }),
               })
             );
@@ -186,7 +188,9 @@ const HomePage = () => {
             "client>server:",
             v.message.serverTime - v.message.sentTime,
             "server>ui:",
-            Date.now() - v.message.serverTime
+            Date.now() - v.message.serverTime,
+            "value:",
+            v.message.body
           );
           return;
         default:
