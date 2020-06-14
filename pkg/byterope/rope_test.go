@@ -11,10 +11,6 @@ func check(t *testing.T, r []byte, want []byte) {
 	if !bytes.Equal(r, want) {
 		t.Errorf("got: %q; want: %q", r, want)
 	}
-
-	if len(r) != len(want) {
-		t.Errorf("Len: got %d; want: %d", len(r), len(want))
-	}
 }
 
 func TestSlice(t *testing.T) {
