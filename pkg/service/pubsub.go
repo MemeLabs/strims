@@ -7,6 +7,7 @@ import (
 	"io"
 	"log"
 	"math"
+	"sync"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/encoding"
@@ -62,9 +63,9 @@ func NewPubSubServer(ctx context.Context, svc *NetworkServices, key *pb.Key, sal
 	}
 
 	s := &PubSubServer{
-		close:     cancel,
-		publishes: make(chan *pb.PubSubEvent_Publish),
-		w:         prefixstream.NewWriter(w),
+		close:    cancel,
+		messages: make(chan *pb.PubSubEvent_Message),
+		w:        prefixstream.NewWriter(w),
 	}
 
 	err = svc.Network.SetHandler(port, s)
@@ -79,18 +80,22 @@ func NewPubSubServer(ctx context.Context, svc *NetworkServices, key *pb.Key, sal
 // PubSubServer ...
 type PubSubServer struct {
 	close     context.CancelFunc
-	publishes chan *pb.PubSubEvent_Publish
+	closeOnce sync.Once
+	messages  chan *pb.PubSubEvent_Message
 	w         *prefixstream.Writer
 }
 
 // Close ...
 func (s *PubSubServer) Close() {
-	s.close()
+	s.closeOnce.Do(func() {
+		s.close()
+		close(s.messages)
+	})
 }
 
-// Publishes ...
-func (s *PubSubServer) Publishes() <-chan *pb.PubSubEvent_Publish {
-	return s.publishes
+// Messages ...
+func (s *PubSubServer) Messages() <-chan *pb.PubSubEvent_Message {
+	return s.messages
 }
 
 // Send ...
@@ -98,9 +103,9 @@ func (s *PubSubServer) Send(key string, body []byte) error {
 	n, err := s.send(&pb.PubSubEvent{
 		Body: &pb.PubSubEvent_Message_{
 			Message: &pb.PubSubEvent_Message{
-				ServerTime: time.Now().Unix(),
-				Key:        key,
-				Body:       body,
+				Time: time.Now().Unix(),
+				Key:  key,
+				Body: body,
 			},
 		},
 	})
@@ -142,8 +147,8 @@ func (s *PubSubServer) HandleMessage(msg *vpn.Message) (forward bool, err error)
 	}
 
 	switch b := req.Body.(type) {
-	case *pb.PubSubEvent_Publish_:
-		s.publishes <- b.Publish
+	case *pb.PubSubEvent_Message_:
+		s.messages <- b.Message
 	default:
 		log.Printf("some other message type? %T", req.Body)
 	}
@@ -201,6 +206,7 @@ func NewPubSubClient(ctx context.Context, svc *NetworkServices, key, salt []byte
 // PubSubClient ...
 type PubSubClient struct {
 	close      context.CancelFunc
+	closeOnce  sync.Once
 	network    *vpn.Network
 	remoteAddr *hostAddr
 	port       uint16
@@ -209,7 +215,10 @@ type PubSubClient struct {
 
 // Close ...
 func (c *PubSubClient) Close() {
-	c.close()
+	c.closeOnce.Do(func() {
+		c.close()
+		close(c.messages)
+	})
 }
 
 // Messages ...
@@ -217,12 +226,12 @@ func (c *PubSubClient) Messages() <-chan *pb.PubSubEvent_Message {
 	return c.messages
 }
 
-// Publish ...
-func (c *PubSubClient) Publish(key string, body []byte) error {
+// Send ...
+func (c *PubSubClient) Send(key string, body []byte) error {
 	b, err := proto.Marshal(&pb.PubSubEvent{
-		Body: &pb.PubSubEvent_Publish_{
-			Publish: &pb.PubSubEvent_Publish{
-				Time: time.Now().UnixNano() / int64(time.Millisecond),
+		Body: &pb.PubSubEvent_Message_{
+			Message: &pb.PubSubEvent_Message{
+				Time: time.Now().UnixNano(),
 				Key:  key,
 				Body: body,
 			},
@@ -251,6 +260,7 @@ func readPubSubEvents(swarm *encoding.Swarm, messages chan *pb.PubSubEvent_Messa
 
 		switch b := msg.Body.(type) {
 		case *pb.PubSubEvent_Close_:
+			// TODO: this has to call c.Close()
 			close(messages)
 			return
 		case *pb.PubSubEvent_Message_:

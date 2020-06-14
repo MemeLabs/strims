@@ -178,16 +178,6 @@ message PeerIndexMessage {
 
 // ---
 
-message ChatMessage {
-  message MessageRequest {
-    string body = 1;
-  }
-
-  oneof body {
-    MessageRequest message = 1;
-  }
-}
-
 message ChatRoom {
   string name = 1;
 }
@@ -296,15 +286,8 @@ message CallChatClientRequest {
 }
 
 message PubSubEvent {
-  message Publish {
-    int64 time = 1;
-    string key = 2;
-    bytes body = 3;
-  }
-
   message Message {
-    int64 server_time = 1;
-    int64 publish_time = 2;
+    int64 time = 1;
     string key = 3;
     bytes body = 4;
   }
@@ -316,10 +299,9 @@ message PubSubEvent {
   }
 
   oneof body {
-    Publish publish = 1;
-    Message message = 2;
-    Close close = 3;
-    Padding padding = 4;
+    Message message = 1;
+    Close close = 2;
+    Padding padding = 3;
   }
 }
 

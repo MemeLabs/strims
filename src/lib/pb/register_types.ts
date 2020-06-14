@@ -46,7 +46,6 @@ registerType("BootstrapPeer", pb.BootstrapPeer);
 registerType("PublishNetworkToBootstrapPeerRequest", pb.PublishNetworkToBootstrapPeerRequest);
 registerType("PublishNetworkToBootstrapPeerResponse", pb.PublishNetworkToBootstrapPeerResponse);
 registerType("PeerIndexMessage", pb.PeerIndexMessage);
-registerType("ChatMessage", pb.ChatMessage);
 registerType("ChatRoom", pb.ChatRoom);
 registerType("ChatServer", pb.ChatServer);
 registerType("CreateChatServerRequest", pb.CreateChatServerRequest);

@@ -5041,192 +5041,6 @@ export namespace PeerIndexMessage {
     }
 }
 
-/** Properties of a ChatMessage. */
-export interface IChatMessage {
-
-    /** ChatMessage message */
-    message?: (ChatMessage.IMessageRequest|null);
-}
-
-/** Represents a ChatMessage. */
-export class ChatMessage implements IChatMessage {
-
-    /**
-     * Constructs a new ChatMessage.
-     * @param [properties] Properties to set
-     */
-    constructor(properties?: IChatMessage);
-
-    /** ChatMessage message. */
-    public message?: (ChatMessage.IMessageRequest|null);
-
-    /** ChatMessage body. */
-    public body?: "message";
-
-    /**
-     * Creates a new ChatMessage instance using the specified properties.
-     * @param [properties] Properties to set
-     * @returns ChatMessage instance
-     */
-    public static create(properties?: IChatMessage): ChatMessage;
-
-    /**
-     * Encodes the specified ChatMessage message. Does not implicitly {@link ChatMessage.verify|verify} messages.
-     * @param message ChatMessage message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encode(message: IChatMessage, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Encodes the specified ChatMessage message, length delimited. Does not implicitly {@link ChatMessage.verify|verify} messages.
-     * @param message ChatMessage message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encodeDelimited(message: IChatMessage, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Decodes a ChatMessage message from the specified reader or buffer.
-     * @param reader Reader or buffer to decode from
-     * @param [length] Message length if known beforehand
-     * @returns ChatMessage
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatMessage;
-
-    /**
-     * Decodes a ChatMessage message from the specified reader or buffer, length delimited.
-     * @param reader Reader or buffer to decode from
-     * @returns ChatMessage
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatMessage;
-
-    /**
-     * Verifies a ChatMessage message.
-     * @param message Plain object to verify
-     * @returns `null` if valid, otherwise the reason why it is not
-     */
-    public static verify(message: { [k: string]: any }): (string|null);
-
-    /**
-     * Creates a ChatMessage message from a plain object. Also converts values to their respective internal types.
-     * @param object Plain object
-     * @returns ChatMessage
-     */
-    public static fromObject(object: { [k: string]: any }): ChatMessage;
-
-    /**
-     * Creates a plain object from a ChatMessage message. Also converts values to other types if specified.
-     * @param message ChatMessage
-     * @param [options] Conversion options
-     * @returns Plain object
-     */
-    public static toObject(message: ChatMessage, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-    /**
-     * Converts this ChatMessage to JSON.
-     * @returns JSON object
-     */
-    public toJSON(): { [k: string]: any };
-}
-
-export namespace ChatMessage {
-
-    /** Properties of a MessageRequest. */
-    interface IMessageRequest {
-
-        /** MessageRequest body */
-        body?: (string|null);
-    }
-
-    /** Represents a MessageRequest. */
-    class MessageRequest implements IMessageRequest {
-
-        /**
-         * Constructs a new MessageRequest.
-         * @param [properties] Properties to set
-         */
-        constructor(properties?: ChatMessage.IMessageRequest);
-
-        /** MessageRequest body. */
-        public body: string;
-
-        /**
-         * Creates a new MessageRequest instance using the specified properties.
-         * @param [properties] Properties to set
-         * @returns MessageRequest instance
-         */
-        public static create(properties?: ChatMessage.IMessageRequest): ChatMessage.MessageRequest;
-
-        /**
-         * Encodes the specified MessageRequest message. Does not implicitly {@link ChatMessage.MessageRequest.verify|verify} messages.
-         * @param message MessageRequest message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encode(message: ChatMessage.IMessageRequest, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Encodes the specified MessageRequest message, length delimited. Does not implicitly {@link ChatMessage.MessageRequest.verify|verify} messages.
-         * @param message MessageRequest message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encodeDelimited(message: ChatMessage.IMessageRequest, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Decodes a MessageRequest message from the specified reader or buffer.
-         * @param reader Reader or buffer to decode from
-         * @param [length] Message length if known beforehand
-         * @returns MessageRequest
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatMessage.MessageRequest;
-
-        /**
-         * Decodes a MessageRequest message from the specified reader or buffer, length delimited.
-         * @param reader Reader or buffer to decode from
-         * @returns MessageRequest
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatMessage.MessageRequest;
-
-        /**
-         * Verifies a MessageRequest message.
-         * @param message Plain object to verify
-         * @returns `null` if valid, otherwise the reason why it is not
-         */
-        public static verify(message: { [k: string]: any }): (string|null);
-
-        /**
-         * Creates a MessageRequest message from a plain object. Also converts values to their respective internal types.
-         * @param object Plain object
-         * @returns MessageRequest
-         */
-        public static fromObject(object: { [k: string]: any }): ChatMessage.MessageRequest;
-
-        /**
-         * Creates a plain object from a MessageRequest message. Also converts values to other types if specified.
-         * @param message MessageRequest
-         * @param [options] Conversion options
-         * @returns Plain object
-         */
-        public static toObject(message: ChatMessage.MessageRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-        /**
-         * Converts this MessageRequest to JSON.
-         * @returns JSON object
-         */
-        public toJSON(): { [k: string]: any };
-    }
-}
-
 /** Properties of a ChatRoom. */
 export interface IChatRoom {
 
@@ -7654,9 +7468,6 @@ export namespace CallChatClientRequest {
 /** Properties of a PubSubEvent. */
 export interface IPubSubEvent {
 
-    /** PubSubEvent publish */
-    publish?: (PubSubEvent.IPublish|null);
-
     /** PubSubEvent message */
     message?: (PubSubEvent.IMessage|null);
 
@@ -7676,9 +7487,6 @@ export class PubSubEvent implements IPubSubEvent {
      */
     constructor(properties?: IPubSubEvent);
 
-    /** PubSubEvent publish. */
-    public publish?: (PubSubEvent.IPublish|null);
-
     /** PubSubEvent message. */
     public message?: (PubSubEvent.IMessage|null);
 
@@ -7689,7 +7497,7 @@ export class PubSubEvent implements IPubSubEvent {
     public padding?: (PubSubEvent.IPadding|null);
 
     /** PubSubEvent body. */
-    public body?: ("publish"|"message"|"close"|"padding");
+    public body?: ("message"|"close"|"padding");
 
     /**
      * Creates a new PubSubEvent instance using the specified properties.
@@ -7764,116 +7572,11 @@ export class PubSubEvent implements IPubSubEvent {
 
 export namespace PubSubEvent {
 
-    /** Properties of a Publish. */
-    interface IPublish {
-
-        /** Publish time */
-        time?: (number|null);
-
-        /** Publish key */
-        key?: (string|null);
-
-        /** Publish body */
-        body?: (Uint8Array|null);
-    }
-
-    /** Represents a Publish. */
-    class Publish implements IPublish {
-
-        /**
-         * Constructs a new Publish.
-         * @param [properties] Properties to set
-         */
-        constructor(properties?: PubSubEvent.IPublish);
-
-        /** Publish time. */
-        public time: number;
-
-        /** Publish key. */
-        public key: string;
-
-        /** Publish body. */
-        public body: Uint8Array;
-
-        /**
-         * Creates a new Publish instance using the specified properties.
-         * @param [properties] Properties to set
-         * @returns Publish instance
-         */
-        public static create(properties?: PubSubEvent.IPublish): PubSubEvent.Publish;
-
-        /**
-         * Encodes the specified Publish message. Does not implicitly {@link PubSubEvent.Publish.verify|verify} messages.
-         * @param message Publish message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encode(message: PubSubEvent.IPublish, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Encodes the specified Publish message, length delimited. Does not implicitly {@link PubSubEvent.Publish.verify|verify} messages.
-         * @param message Publish message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encodeDelimited(message: PubSubEvent.IPublish, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Decodes a Publish message from the specified reader or buffer.
-         * @param reader Reader or buffer to decode from
-         * @param [length] Message length if known beforehand
-         * @returns Publish
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): PubSubEvent.Publish;
-
-        /**
-         * Decodes a Publish message from the specified reader or buffer, length delimited.
-         * @param reader Reader or buffer to decode from
-         * @returns Publish
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): PubSubEvent.Publish;
-
-        /**
-         * Verifies a Publish message.
-         * @param message Plain object to verify
-         * @returns `null` if valid, otherwise the reason why it is not
-         */
-        public static verify(message: { [k: string]: any }): (string|null);
-
-        /**
-         * Creates a Publish message from a plain object. Also converts values to their respective internal types.
-         * @param object Plain object
-         * @returns Publish
-         */
-        public static fromObject(object: { [k: string]: any }): PubSubEvent.Publish;
-
-        /**
-         * Creates a plain object from a Publish message. Also converts values to other types if specified.
-         * @param message Publish
-         * @param [options] Conversion options
-         * @returns Plain object
-         */
-        public static toObject(message: PubSubEvent.Publish, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-        /**
-         * Converts this Publish to JSON.
-         * @returns JSON object
-         */
-        public toJSON(): { [k: string]: any };
-    }
-
     /** Properties of a Message. */
     interface IMessage {
 
-        /** Message serverTime */
-        serverTime?: (number|null);
-
-        /** Message publishTime */
-        publishTime?: (number|null);
+        /** Message time */
+        time?: (number|null);
 
         /** Message key */
         key?: (string|null);
@@ -7891,11 +7594,8 @@ export namespace PubSubEvent {
          */
         constructor(properties?: PubSubEvent.IMessage);
 
-        /** Message serverTime. */
-        public serverTime: number;
-
-        /** Message publishTime. */
-        public publishTime: number;
+        /** Message time. */
+        public time: number;
 
         /** Message key. */
         public key: string;

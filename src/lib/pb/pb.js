@@ -11107,404 +11107,6 @@ export const PeerIndexMessage = $root.PeerIndexMessage = (() => {
     return PeerIndexMessage;
 })();
 
-export const ChatMessage = $root.ChatMessage = (() => {
-
-    /**
-     * Properties of a ChatMessage.
-     * @exports IChatMessage
-     * @interface IChatMessage
-     * @property {ChatMessage.IMessageRequest|null} [message] ChatMessage message
-     */
-
-    /**
-     * Constructs a new ChatMessage.
-     * @exports ChatMessage
-     * @classdesc Represents a ChatMessage.
-     * @implements IChatMessage
-     * @constructor
-     * @param {IChatMessage=} [properties] Properties to set
-     */
-    function ChatMessage(properties) {
-        if (properties)
-            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                if (properties[keys[i]] != null)
-                    this[keys[i]] = properties[keys[i]];
-    }
-
-    /**
-     * ChatMessage message.
-     * @member {ChatMessage.IMessageRequest|null|undefined} message
-     * @memberof ChatMessage
-     * @instance
-     */
-    ChatMessage.prototype.message = null;
-
-    // OneOf field names bound to virtual getters and setters
-    let $oneOfFields;
-
-    /**
-     * ChatMessage body.
-     * @member {"message"|undefined} body
-     * @memberof ChatMessage
-     * @instance
-     */
-    Object.defineProperty(ChatMessage.prototype, "body", {
-        get: $util.oneOfGetter($oneOfFields = ["message"]),
-        set: $util.oneOfSetter($oneOfFields)
-    });
-
-    /**
-     * Creates a new ChatMessage instance using the specified properties.
-     * @function create
-     * @memberof ChatMessage
-     * @static
-     * @param {IChatMessage=} [properties] Properties to set
-     * @returns {ChatMessage} ChatMessage instance
-     */
-    ChatMessage.create = function create(properties) {
-        return new ChatMessage(properties);
-    };
-
-    /**
-     * Encodes the specified ChatMessage message. Does not implicitly {@link ChatMessage.verify|verify} messages.
-     * @function encode
-     * @memberof ChatMessage
-     * @static
-     * @param {IChatMessage} message ChatMessage message or plain object to encode
-     * @param {$protobuf.Writer} [writer] Writer to encode to
-     * @returns {$protobuf.Writer} Writer
-     */
-    ChatMessage.encode = function encode(message, writer) {
-        if (!writer)
-            writer = $Writer.create();
-        if (message.message != null && Object.hasOwnProperty.call(message, "message"))
-            $root.ChatMessage.MessageRequest.encode(message.message, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
-        return writer;
-    };
-
-    /**
-     * Encodes the specified ChatMessage message, length delimited. Does not implicitly {@link ChatMessage.verify|verify} messages.
-     * @function encodeDelimited
-     * @memberof ChatMessage
-     * @static
-     * @param {IChatMessage} message ChatMessage message or plain object to encode
-     * @param {$protobuf.Writer} [writer] Writer to encode to
-     * @returns {$protobuf.Writer} Writer
-     */
-    ChatMessage.encodeDelimited = function encodeDelimited(message, writer) {
-        return this.encode(message, writer).ldelim();
-    };
-
-    /**
-     * Decodes a ChatMessage message from the specified reader or buffer.
-     * @function decode
-     * @memberof ChatMessage
-     * @static
-     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @param {number} [length] Message length if known beforehand
-     * @returns {ChatMessage} ChatMessage
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    ChatMessage.decode = function decode(reader, length) {
-        if (!(reader instanceof $Reader))
-            reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatMessage();
-        while (reader.pos < end) {
-            let tag = reader.uint32();
-            switch (tag >>> 3) {
-            case 1:
-                message.message = $root.ChatMessage.MessageRequest.decode(reader, reader.uint32());
-                break;
-            default:
-                reader.skipType(tag & 7);
-                break;
-            }
-        }
-        return message;
-    };
-
-    /**
-     * Decodes a ChatMessage message from the specified reader or buffer, length delimited.
-     * @function decodeDelimited
-     * @memberof ChatMessage
-     * @static
-     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {ChatMessage} ChatMessage
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    ChatMessage.decodeDelimited = function decodeDelimited(reader) {
-        if (!(reader instanceof $Reader))
-            reader = new $Reader(reader);
-        return this.decode(reader, reader.uint32());
-    };
-
-    /**
-     * Verifies a ChatMessage message.
-     * @function verify
-     * @memberof ChatMessage
-     * @static
-     * @param {Object.<string,*>} message Plain object to verify
-     * @returns {string|null} `null` if valid, otherwise the reason why it is not
-     */
-    ChatMessage.verify = function verify(message) {
-        if (typeof message !== "object" || message === null)
-            return "object expected";
-        let properties = {};
-        if (message.message != null && message.hasOwnProperty("message")) {
-            properties.body = 1;
-            {
-                let error = $root.ChatMessage.MessageRequest.verify(message.message);
-                if (error)
-                    return "message." + error;
-            }
-        }
-        return null;
-    };
-
-    /**
-     * Creates a ChatMessage message from a plain object. Also converts values to their respective internal types.
-     * @function fromObject
-     * @memberof ChatMessage
-     * @static
-     * @param {Object.<string,*>} object Plain object
-     * @returns {ChatMessage} ChatMessage
-     */
-    ChatMessage.fromObject = function fromObject(object) {
-        if (object instanceof $root.ChatMessage)
-            return object;
-        let message = new $root.ChatMessage();
-        if (object.message != null) {
-            if (typeof object.message !== "object")
-                throw TypeError(".ChatMessage.message: object expected");
-            message.message = $root.ChatMessage.MessageRequest.fromObject(object.message);
-        }
-        return message;
-    };
-
-    /**
-     * Creates a plain object from a ChatMessage message. Also converts values to other types if specified.
-     * @function toObject
-     * @memberof ChatMessage
-     * @static
-     * @param {ChatMessage} message ChatMessage
-     * @param {$protobuf.IConversionOptions} [options] Conversion options
-     * @returns {Object.<string,*>} Plain object
-     */
-    ChatMessage.toObject = function toObject(message, options) {
-        if (!options)
-            options = {};
-        let object = {};
-        if (message.message != null && message.hasOwnProperty("message")) {
-            object.message = $root.ChatMessage.MessageRequest.toObject(message.message, options);
-            if (options.oneofs)
-                object.body = "message";
-        }
-        return object;
-    };
-
-    /**
-     * Converts this ChatMessage to JSON.
-     * @function toJSON
-     * @memberof ChatMessage
-     * @instance
-     * @returns {Object.<string,*>} JSON object
-     */
-    ChatMessage.prototype.toJSON = function toJSON() {
-        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-    };
-
-    ChatMessage.MessageRequest = (function() {
-
-        /**
-         * Properties of a MessageRequest.
-         * @memberof ChatMessage
-         * @interface IMessageRequest
-         * @property {string|null} [body] MessageRequest body
-         */
-
-        /**
-         * Constructs a new MessageRequest.
-         * @memberof ChatMessage
-         * @classdesc Represents a MessageRequest.
-         * @implements IMessageRequest
-         * @constructor
-         * @param {ChatMessage.IMessageRequest=} [properties] Properties to set
-         */
-        function MessageRequest(properties) {
-            if (properties)
-                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    if (properties[keys[i]] != null)
-                        this[keys[i]] = properties[keys[i]];
-        }
-
-        /**
-         * MessageRequest body.
-         * @member {string} body
-         * @memberof ChatMessage.MessageRequest
-         * @instance
-         */
-        MessageRequest.prototype.body = "";
-
-        /**
-         * Creates a new MessageRequest instance using the specified properties.
-         * @function create
-         * @memberof ChatMessage.MessageRequest
-         * @static
-         * @param {ChatMessage.IMessageRequest=} [properties] Properties to set
-         * @returns {ChatMessage.MessageRequest} MessageRequest instance
-         */
-        MessageRequest.create = function create(properties) {
-            return new MessageRequest(properties);
-        };
-
-        /**
-         * Encodes the specified MessageRequest message. Does not implicitly {@link ChatMessage.MessageRequest.verify|verify} messages.
-         * @function encode
-         * @memberof ChatMessage.MessageRequest
-         * @static
-         * @param {ChatMessage.IMessageRequest} message MessageRequest message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        MessageRequest.encode = function encode(message, writer) {
-            if (!writer)
-                writer = $Writer.create();
-            if (message.body != null && Object.hasOwnProperty.call(message, "body"))
-                writer.uint32(/* id 1, wireType 2 =*/10).string(message.body);
-            return writer;
-        };
-
-        /**
-         * Encodes the specified MessageRequest message, length delimited. Does not implicitly {@link ChatMessage.MessageRequest.verify|verify} messages.
-         * @function encodeDelimited
-         * @memberof ChatMessage.MessageRequest
-         * @static
-         * @param {ChatMessage.IMessageRequest} message MessageRequest message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        MessageRequest.encodeDelimited = function encodeDelimited(message, writer) {
-            return this.encode(message, writer).ldelim();
-        };
-
-        /**
-         * Decodes a MessageRequest message from the specified reader or buffer.
-         * @function decode
-         * @memberof ChatMessage.MessageRequest
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @param {number} [length] Message length if known beforehand
-         * @returns {ChatMessage.MessageRequest} MessageRequest
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        MessageRequest.decode = function decode(reader, length) {
-            if (!(reader instanceof $Reader))
-                reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ChatMessage.MessageRequest();
-            while (reader.pos < end) {
-                let tag = reader.uint32();
-                switch (tag >>> 3) {
-                case 1:
-                    message.body = reader.string();
-                    break;
-                default:
-                    reader.skipType(tag & 7);
-                    break;
-                }
-            }
-            return message;
-        };
-
-        /**
-         * Decodes a MessageRequest message from the specified reader or buffer, length delimited.
-         * @function decodeDelimited
-         * @memberof ChatMessage.MessageRequest
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {ChatMessage.MessageRequest} MessageRequest
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        MessageRequest.decodeDelimited = function decodeDelimited(reader) {
-            if (!(reader instanceof $Reader))
-                reader = new $Reader(reader);
-            return this.decode(reader, reader.uint32());
-        };
-
-        /**
-         * Verifies a MessageRequest message.
-         * @function verify
-         * @memberof ChatMessage.MessageRequest
-         * @static
-         * @param {Object.<string,*>} message Plain object to verify
-         * @returns {string|null} `null` if valid, otherwise the reason why it is not
-         */
-        MessageRequest.verify = function verify(message) {
-            if (typeof message !== "object" || message === null)
-                return "object expected";
-            if (message.body != null && message.hasOwnProperty("body"))
-                if (!$util.isString(message.body))
-                    return "body: string expected";
-            return null;
-        };
-
-        /**
-         * Creates a MessageRequest message from a plain object. Also converts values to their respective internal types.
-         * @function fromObject
-         * @memberof ChatMessage.MessageRequest
-         * @static
-         * @param {Object.<string,*>} object Plain object
-         * @returns {ChatMessage.MessageRequest} MessageRequest
-         */
-        MessageRequest.fromObject = function fromObject(object) {
-            if (object instanceof $root.ChatMessage.MessageRequest)
-                return object;
-            let message = new $root.ChatMessage.MessageRequest();
-            if (object.body != null)
-                message.body = String(object.body);
-            return message;
-        };
-
-        /**
-         * Creates a plain object from a MessageRequest message. Also converts values to other types if specified.
-         * @function toObject
-         * @memberof ChatMessage.MessageRequest
-         * @static
-         * @param {ChatMessage.MessageRequest} message MessageRequest
-         * @param {$protobuf.IConversionOptions} [options] Conversion options
-         * @returns {Object.<string,*>} Plain object
-         */
-        MessageRequest.toObject = function toObject(message, options) {
-            if (!options)
-                options = {};
-            let object = {};
-            if (options.defaults)
-                object.body = "";
-            if (message.body != null && message.hasOwnProperty("body"))
-                object.body = message.body;
-            return object;
-        };
-
-        /**
-         * Converts this MessageRequest to JSON.
-         * @function toJSON
-         * @memberof ChatMessage.MessageRequest
-         * @instance
-         * @returns {Object.<string,*>} JSON object
-         */
-        MessageRequest.prototype.toJSON = function toJSON() {
-            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-        };
-
-        return MessageRequest;
-    })();
-
-    return ChatMessage;
-})();
-
 export const ChatRoom = $root.ChatRoom = (() => {
 
     /**
@@ -16975,7 +16577,6 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
      * Properties of a PubSubEvent.
      * @exports IPubSubEvent
      * @interface IPubSubEvent
-     * @property {PubSubEvent.IPublish|null} [publish] PubSubEvent publish
      * @property {PubSubEvent.IMessage|null} [message] PubSubEvent message
      * @property {PubSubEvent.IClose|null} [close] PubSubEvent close
      * @property {PubSubEvent.IPadding|null} [padding] PubSubEvent padding
@@ -16995,14 +16596,6 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
-
-    /**
-     * PubSubEvent publish.
-     * @member {PubSubEvent.IPublish|null|undefined} publish
-     * @memberof PubSubEvent
-     * @instance
-     */
-    PubSubEvent.prototype.publish = null;
 
     /**
      * PubSubEvent message.
@@ -17033,12 +16626,12 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
 
     /**
      * PubSubEvent body.
-     * @member {"publish"|"message"|"close"|"padding"|undefined} body
+     * @member {"message"|"close"|"padding"|undefined} body
      * @memberof PubSubEvent
      * @instance
      */
     Object.defineProperty(PubSubEvent.prototype, "body", {
-        get: $util.oneOfGetter($oneOfFields = ["publish", "message", "close", "padding"]),
+        get: $util.oneOfGetter($oneOfFields = ["message", "close", "padding"]),
         set: $util.oneOfSetter($oneOfFields)
     });
 
@@ -17066,14 +16659,12 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
     PubSubEvent.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.publish != null && Object.hasOwnProperty.call(message, "publish"))
-            $root.PubSubEvent.Publish.encode(message.publish, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         if (message.message != null && Object.hasOwnProperty.call(message, "message"))
-            $root.PubSubEvent.Message.encode(message.message, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            $root.PubSubEvent.Message.encode(message.message, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         if (message.close != null && Object.hasOwnProperty.call(message, "close"))
-            $root.PubSubEvent.Close.encode(message.close, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+            $root.PubSubEvent.Close.encode(message.close, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
         if (message.padding != null && Object.hasOwnProperty.call(message, "padding"))
-            $root.PubSubEvent.Padding.encode(message.padding, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+            $root.PubSubEvent.Padding.encode(message.padding, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
         return writer;
     };
 
@@ -17109,15 +16700,12 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.publish = $root.PubSubEvent.Publish.decode(reader, reader.uint32());
-                break;
-            case 2:
                 message.message = $root.PubSubEvent.Message.decode(reader, reader.uint32());
                 break;
-            case 3:
+            case 2:
                 message.close = $root.PubSubEvent.Close.decode(reader, reader.uint32());
                 break;
-            case 4:
+            case 3:
                 message.padding = $root.PubSubEvent.Padding.decode(reader, reader.uint32());
                 break;
             default:
@@ -17156,17 +16744,7 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
         if (typeof message !== "object" || message === null)
             return "object expected";
         let properties = {};
-        if (message.publish != null && message.hasOwnProperty("publish")) {
-            properties.body = 1;
-            {
-                let error = $root.PubSubEvent.Publish.verify(message.publish);
-                if (error)
-                    return "publish." + error;
-            }
-        }
         if (message.message != null && message.hasOwnProperty("message")) {
-            if (properties.body === 1)
-                return "body: multiple values";
             properties.body = 1;
             {
                 let error = $root.PubSubEvent.Message.verify(message.message);
@@ -17209,11 +16787,6 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
         if (object instanceof $root.PubSubEvent)
             return object;
         let message = new $root.PubSubEvent();
-        if (object.publish != null) {
-            if (typeof object.publish !== "object")
-                throw TypeError(".PubSubEvent.publish: object expected");
-            message.publish = $root.PubSubEvent.Publish.fromObject(object.publish);
-        }
         if (object.message != null) {
             if (typeof object.message !== "object")
                 throw TypeError(".PubSubEvent.message: object expected");
@@ -17245,11 +16818,6 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
         if (!options)
             options = {};
         let object = {};
-        if (message.publish != null && message.hasOwnProperty("publish")) {
-            object.publish = $root.PubSubEvent.Publish.toObject(message.publish, options);
-            if (options.oneofs)
-                object.body = "publish";
-        }
         if (message.message != null && message.hasOwnProperty("message")) {
             object.message = $root.PubSubEvent.Message.toObject(message.message, options);
             if (options.oneofs)
@@ -17279,269 +16847,13 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
 
-    PubSubEvent.Publish = (function() {
-
-        /**
-         * Properties of a Publish.
-         * @memberof PubSubEvent
-         * @interface IPublish
-         * @property {number|null} [time] Publish time
-         * @property {string|null} [key] Publish key
-         * @property {Uint8Array|null} [body] Publish body
-         */
-
-        /**
-         * Constructs a new Publish.
-         * @memberof PubSubEvent
-         * @classdesc Represents a Publish.
-         * @implements IPublish
-         * @constructor
-         * @param {PubSubEvent.IPublish=} [properties] Properties to set
-         */
-        function Publish(properties) {
-            if (properties)
-                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    if (properties[keys[i]] != null)
-                        this[keys[i]] = properties[keys[i]];
-        }
-
-        /**
-         * Publish time.
-         * @member {number} time
-         * @memberof PubSubEvent.Publish
-         * @instance
-         */
-        Publish.prototype.time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
-
-        /**
-         * Publish key.
-         * @member {string} key
-         * @memberof PubSubEvent.Publish
-         * @instance
-         */
-        Publish.prototype.key = "";
-
-        /**
-         * Publish body.
-         * @member {Uint8Array} body
-         * @memberof PubSubEvent.Publish
-         * @instance
-         */
-        Publish.prototype.body = $util.newBuffer([]);
-
-        /**
-         * Creates a new Publish instance using the specified properties.
-         * @function create
-         * @memberof PubSubEvent.Publish
-         * @static
-         * @param {PubSubEvent.IPublish=} [properties] Properties to set
-         * @returns {PubSubEvent.Publish} Publish instance
-         */
-        Publish.create = function create(properties) {
-            return new Publish(properties);
-        };
-
-        /**
-         * Encodes the specified Publish message. Does not implicitly {@link PubSubEvent.Publish.verify|verify} messages.
-         * @function encode
-         * @memberof PubSubEvent.Publish
-         * @static
-         * @param {PubSubEvent.IPublish} message Publish message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        Publish.encode = function encode(message, writer) {
-            if (!writer)
-                writer = $Writer.create();
-            if (message.time != null && Object.hasOwnProperty.call(message, "time"))
-                writer.uint32(/* id 1, wireType 0 =*/8).int64(message.time);
-            if (message.key != null && Object.hasOwnProperty.call(message, "key"))
-                writer.uint32(/* id 2, wireType 2 =*/18).string(message.key);
-            if (message.body != null && Object.hasOwnProperty.call(message, "body"))
-                writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.body);
-            return writer;
-        };
-
-        /**
-         * Encodes the specified Publish message, length delimited. Does not implicitly {@link PubSubEvent.Publish.verify|verify} messages.
-         * @function encodeDelimited
-         * @memberof PubSubEvent.Publish
-         * @static
-         * @param {PubSubEvent.IPublish} message Publish message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        Publish.encodeDelimited = function encodeDelimited(message, writer) {
-            return this.encode(message, writer).ldelim();
-        };
-
-        /**
-         * Decodes a Publish message from the specified reader or buffer.
-         * @function decode
-         * @memberof PubSubEvent.Publish
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @param {number} [length] Message length if known beforehand
-         * @returns {PubSubEvent.Publish} Publish
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        Publish.decode = function decode(reader, length) {
-            if (!(reader instanceof $Reader))
-                reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.PubSubEvent.Publish();
-            while (reader.pos < end) {
-                let tag = reader.uint32();
-                switch (tag >>> 3) {
-                case 1:
-                    message.time = reader.int64();
-                    break;
-                case 2:
-                    message.key = reader.string();
-                    break;
-                case 3:
-                    message.body = reader.bytes();
-                    break;
-                default:
-                    reader.skipType(tag & 7);
-                    break;
-                }
-            }
-            return message;
-        };
-
-        /**
-         * Decodes a Publish message from the specified reader or buffer, length delimited.
-         * @function decodeDelimited
-         * @memberof PubSubEvent.Publish
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {PubSubEvent.Publish} Publish
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        Publish.decodeDelimited = function decodeDelimited(reader) {
-            if (!(reader instanceof $Reader))
-                reader = new $Reader(reader);
-            return this.decode(reader, reader.uint32());
-        };
-
-        /**
-         * Verifies a Publish message.
-         * @function verify
-         * @memberof PubSubEvent.Publish
-         * @static
-         * @param {Object.<string,*>} message Plain object to verify
-         * @returns {string|null} `null` if valid, otherwise the reason why it is not
-         */
-        Publish.verify = function verify(message) {
-            if (typeof message !== "object" || message === null)
-                return "object expected";
-            if (message.time != null && message.hasOwnProperty("time"))
-                if (!$util.isInteger(message.time) && !(message.time && $util.isInteger(message.time.low) && $util.isInteger(message.time.high)))
-                    return "time: integer|Long expected";
-            if (message.key != null && message.hasOwnProperty("key"))
-                if (!$util.isString(message.key))
-                    return "key: string expected";
-            if (message.body != null && message.hasOwnProperty("body"))
-                if (!(message.body && typeof message.body.length === "number" || $util.isString(message.body)))
-                    return "body: buffer expected";
-            return null;
-        };
-
-        /**
-         * Creates a Publish message from a plain object. Also converts values to their respective internal types.
-         * @function fromObject
-         * @memberof PubSubEvent.Publish
-         * @static
-         * @param {Object.<string,*>} object Plain object
-         * @returns {PubSubEvent.Publish} Publish
-         */
-        Publish.fromObject = function fromObject(object) {
-            if (object instanceof $root.PubSubEvent.Publish)
-                return object;
-            let message = new $root.PubSubEvent.Publish();
-            if (object.time != null)
-                if ($util.Long)
-                    (message.time = $util.Long.fromValue(object.time)).unsigned = false;
-                else if (typeof object.time === "string")
-                    message.time = parseInt(object.time, 10);
-                else if (typeof object.time === "number")
-                    message.time = object.time;
-                else if (typeof object.time === "object")
-                    message.time = new $util.LongBits(object.time.low >>> 0, object.time.high >>> 0).toNumber();
-            if (object.key != null)
-                message.key = String(object.key);
-            if (object.body != null)
-                if (typeof object.body === "string")
-                    $util.base64.decode(object.body, message.body = $util.newBuffer($util.base64.length(object.body)), 0);
-                else if (object.body.length)
-                    message.body = object.body;
-            return message;
-        };
-
-        /**
-         * Creates a plain object from a Publish message. Also converts values to other types if specified.
-         * @function toObject
-         * @memberof PubSubEvent.Publish
-         * @static
-         * @param {PubSubEvent.Publish} message Publish
-         * @param {$protobuf.IConversionOptions} [options] Conversion options
-         * @returns {Object.<string,*>} Plain object
-         */
-        Publish.toObject = function toObject(message, options) {
-            if (!options)
-                options = {};
-            let object = {};
-            if (options.defaults) {
-                if ($util.Long) {
-                    let long = new $util.Long(0, 0, false);
-                    object.time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                } else
-                    object.time = options.longs === String ? "0" : 0;
-                object.key = "";
-                if (options.bytes === String)
-                    object.body = "";
-                else {
-                    object.body = [];
-                    if (options.bytes !== Array)
-                        object.body = $util.newBuffer(object.body);
-                }
-            }
-            if (message.time != null && message.hasOwnProperty("time"))
-                if (typeof message.time === "number")
-                    object.time = options.longs === String ? String(message.time) : message.time;
-                else
-                    object.time = options.longs === String ? $util.Long.prototype.toString.call(message.time) : options.longs === Number ? new $util.LongBits(message.time.low >>> 0, message.time.high >>> 0).toNumber() : message.time;
-            if (message.key != null && message.hasOwnProperty("key"))
-                object.key = message.key;
-            if (message.body != null && message.hasOwnProperty("body"))
-                object.body = options.bytes === String ? $util.base64.encode(message.body, 0, message.body.length) : options.bytes === Array ? Array.prototype.slice.call(message.body) : message.body;
-            return object;
-        };
-
-        /**
-         * Converts this Publish to JSON.
-         * @function toJSON
-         * @memberof PubSubEvent.Publish
-         * @instance
-         * @returns {Object.<string,*>} JSON object
-         */
-        Publish.prototype.toJSON = function toJSON() {
-            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-        };
-
-        return Publish;
-    })();
-
     PubSubEvent.Message = (function() {
 
         /**
          * Properties of a Message.
          * @memberof PubSubEvent
          * @interface IMessage
-         * @property {number|null} [serverTime] Message serverTime
-         * @property {number|null} [publishTime] Message publishTime
+         * @property {number|null} [time] Message time
          * @property {string|null} [key] Message key
          * @property {Uint8Array|null} [body] Message body
          */
@@ -17562,20 +16874,12 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
         }
 
         /**
-         * Message serverTime.
-         * @member {number} serverTime
+         * Message time.
+         * @member {number} time
          * @memberof PubSubEvent.Message
          * @instance
          */
-        Message.prototype.serverTime = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
-
-        /**
-         * Message publishTime.
-         * @member {number} publishTime
-         * @memberof PubSubEvent.Message
-         * @instance
-         */
-        Message.prototype.publishTime = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+        Message.prototype.time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
         /**
          * Message key.
@@ -17617,10 +16921,8 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
         Message.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.serverTime != null && Object.hasOwnProperty.call(message, "serverTime"))
-                writer.uint32(/* id 1, wireType 0 =*/8).int64(message.serverTime);
-            if (message.publishTime != null && Object.hasOwnProperty.call(message, "publishTime"))
-                writer.uint32(/* id 2, wireType 0 =*/16).int64(message.publishTime);
+            if (message.time != null && Object.hasOwnProperty.call(message, "time"))
+                writer.uint32(/* id 1, wireType 0 =*/8).int64(message.time);
             if (message.key != null && Object.hasOwnProperty.call(message, "key"))
                 writer.uint32(/* id 3, wireType 2 =*/26).string(message.key);
             if (message.body != null && Object.hasOwnProperty.call(message, "body"))
@@ -17660,10 +16962,7 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
                 case 1:
-                    message.serverTime = reader.int64();
-                    break;
-                case 2:
-                    message.publishTime = reader.int64();
+                    message.time = reader.int64();
                     break;
                 case 3:
                     message.key = reader.string();
@@ -17706,12 +17005,9 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
         Message.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.serverTime != null && message.hasOwnProperty("serverTime"))
-                if (!$util.isInteger(message.serverTime) && !(message.serverTime && $util.isInteger(message.serverTime.low) && $util.isInteger(message.serverTime.high)))
-                    return "serverTime: integer|Long expected";
-            if (message.publishTime != null && message.hasOwnProperty("publishTime"))
-                if (!$util.isInteger(message.publishTime) && !(message.publishTime && $util.isInteger(message.publishTime.low) && $util.isInteger(message.publishTime.high)))
-                    return "publishTime: integer|Long expected";
+            if (message.time != null && message.hasOwnProperty("time"))
+                if (!$util.isInteger(message.time) && !(message.time && $util.isInteger(message.time.low) && $util.isInteger(message.time.high)))
+                    return "time: integer|Long expected";
             if (message.key != null && message.hasOwnProperty("key"))
                 if (!$util.isString(message.key))
                     return "key: string expected";
@@ -17733,24 +17029,15 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
             if (object instanceof $root.PubSubEvent.Message)
                 return object;
             let message = new $root.PubSubEvent.Message();
-            if (object.serverTime != null)
+            if (object.time != null)
                 if ($util.Long)
-                    (message.serverTime = $util.Long.fromValue(object.serverTime)).unsigned = false;
-                else if (typeof object.serverTime === "string")
-                    message.serverTime = parseInt(object.serverTime, 10);
-                else if (typeof object.serverTime === "number")
-                    message.serverTime = object.serverTime;
-                else if (typeof object.serverTime === "object")
-                    message.serverTime = new $util.LongBits(object.serverTime.low >>> 0, object.serverTime.high >>> 0).toNumber();
-            if (object.publishTime != null)
-                if ($util.Long)
-                    (message.publishTime = $util.Long.fromValue(object.publishTime)).unsigned = false;
-                else if (typeof object.publishTime === "string")
-                    message.publishTime = parseInt(object.publishTime, 10);
-                else if (typeof object.publishTime === "number")
-                    message.publishTime = object.publishTime;
-                else if (typeof object.publishTime === "object")
-                    message.publishTime = new $util.LongBits(object.publishTime.low >>> 0, object.publishTime.high >>> 0).toNumber();
+                    (message.time = $util.Long.fromValue(object.time)).unsigned = false;
+                else if (typeof object.time === "string")
+                    message.time = parseInt(object.time, 10);
+                else if (typeof object.time === "number")
+                    message.time = object.time;
+                else if (typeof object.time === "object")
+                    message.time = new $util.LongBits(object.time.low >>> 0, object.time.high >>> 0).toNumber();
             if (object.key != null)
                 message.key = String(object.key);
             if (object.body != null)
@@ -17777,14 +17064,9 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
             if (options.defaults) {
                 if ($util.Long) {
                     let long = new $util.Long(0, 0, false);
-                    object.serverTime = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                    object.time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
-                    object.serverTime = options.longs === String ? "0" : 0;
-                if ($util.Long) {
-                    let long = new $util.Long(0, 0, false);
-                    object.publishTime = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                } else
-                    object.publishTime = options.longs === String ? "0" : 0;
+                    object.time = options.longs === String ? "0" : 0;
                 object.key = "";
                 if (options.bytes === String)
                     object.body = "";
@@ -17794,16 +17076,11 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
                         object.body = $util.newBuffer(object.body);
                 }
             }
-            if (message.serverTime != null && message.hasOwnProperty("serverTime"))
-                if (typeof message.serverTime === "number")
-                    object.serverTime = options.longs === String ? String(message.serverTime) : message.serverTime;
+            if (message.time != null && message.hasOwnProperty("time"))
+                if (typeof message.time === "number")
+                    object.time = options.longs === String ? String(message.time) : message.time;
                 else
-                    object.serverTime = options.longs === String ? $util.Long.prototype.toString.call(message.serverTime) : options.longs === Number ? new $util.LongBits(message.serverTime.low >>> 0, message.serverTime.high >>> 0).toNumber() : message.serverTime;
-            if (message.publishTime != null && message.hasOwnProperty("publishTime"))
-                if (typeof message.publishTime === "number")
-                    object.publishTime = options.longs === String ? String(message.publishTime) : message.publishTime;
-                else
-                    object.publishTime = options.longs === String ? $util.Long.prototype.toString.call(message.publishTime) : options.longs === Number ? new $util.LongBits(message.publishTime.low >>> 0, message.publishTime.high >>> 0).toNumber() : message.publishTime;
+                    object.time = options.longs === String ? $util.Long.prototype.toString.call(message.time) : options.longs === Number ? new $util.LongBits(message.time.low >>> 0, message.time.high >>> 0).toNumber() : message.time;
             if (message.key != null && message.hasOwnProperty("key"))
                 object.key = message.key;
             if (message.body != null && message.hasOwnProperty("body"))

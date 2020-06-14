@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"sync"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"google.golang.org/protobuf/proto"
@@ -11,36 +13,34 @@ var chatSalt = []byte("chat")
 
 // NewChatServer ...
 func NewChatServer(ctx context.Context, svc *NetworkServices, key *pb.Key) (*ChatServer, error) {
-	ctx, cancel := context.WithCancel(ctx)
-
 	ps, err := NewPubSubServer(ctx, svc, key, chatSalt)
 	if err != nil {
-		cancel()
 		return nil, err
 	}
 
-	events := make(chan *pb.ChatServerEvent)
-	go func() {
-		transformChatMessages(ctx, ps)
-		cancel()
-		close(events)
-	}()
+	s := &ChatServer{
+		ps:     ps,
+		events: make(chan *pb.ChatServerEvent),
+	}
 
-	return &ChatServer{
-		close:  cancel,
-		events: events,
-	}, nil
+	go s.transformChatMessages(ctx, ps)
+
+	return s, nil
 }
 
 // ChatServer ...
 type ChatServer struct {
-	close  context.CancelFunc
-	events chan *pb.ChatServerEvent
+	closeOnce sync.Once
+	ps        *PubSubServer
+	events    chan *pb.ChatServerEvent
 }
 
 // Close ...
 func (s *ChatServer) Close() {
-	s.close()
+	s.closeOnce.Do(func() {
+		s.ps.Close()
+		close(s.events)
+	})
 }
 
 // Events ...
@@ -48,68 +48,80 @@ func (s *ChatServer) Events() <-chan *pb.ChatServerEvent {
 	return s.events
 }
 
-func transformChatMessages(ctx context.Context, ps *PubSubServer) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case p := <-ps.Publishes():
-			// TODO: chat output schema
-			// TODO: use strims chat parser?
-			// TODO: map source host id to nick... need to retain vpn.Message meatadata
-			ps.Send("", p.Body)
+func (s *ChatServer) transformChatMessages(ctx context.Context, ps *PubSubServer) {
+	for p := range ps.Messages() {
+		// TODO: chat output schema
+		// TODO: use strims chat parser?
+		// TODO: map source host id to nick... need to retain vpn.Message meatadata
+
+		var e pb.ChatClientEvent
+		if err := proto.Unmarshal(p.Body, &e); err != nil {
+			continue
 		}
+
+		switch b := e.Body.(type) {
+		case *pb.ChatClientEvent_Message_:
+			b.Message.ServerTime = time.Now().UnixNano() / int64(time.Millisecond)
+		}
+
+		b, err := proto.Marshal(&e)
+		if err != nil {
+			continue
+		}
+
+		ps.Send("", b)
 	}
+
+	s.Close()
 }
 
 // NewChatClient ...
 func NewChatClient(ctx context.Context, svc *NetworkServices, key []byte) (*ChatClient, error) {
-	ctx, cancel := context.WithCancel(ctx)
-
 	ps, err := NewPubSubClient(ctx, svc, key, chatSalt)
 	if err != nil {
-		cancel()
 		return nil, err
 	}
 
-	events := make(chan *pb.ChatClientEvent)
-	go func() {
-		readChatEvents(ctx, ps, events)
-		cancel()
-		close(events)
-	}()
-
-	return &ChatClient{
-		close:  cancel,
+	c := &ChatClient{
 		ps:     ps,
-		events: events,
-	}, nil
+		events: make(chan *pb.ChatClientEvent),
+	}
+
+	go c.readChatEvents(ctx, ps)
+
+	return c, nil
 }
 
 // ChatClient ...
 type ChatClient struct {
-	close  context.CancelFunc
-	ps     *PubSubClient
-	events chan *pb.ChatClientEvent
+	closeOnce sync.Once
+	ps        *PubSubClient
+	events    chan *pb.ChatClientEvent
 }
 
 // Close ...
 func (c *ChatClient) Close() {
-	c.close()
+	c.closeOnce.Do(func() {
+		c.ps.Close()
+		close(c.events)
+	})
 }
 
 // Send ...
 func (c *ChatClient) Send(msg *pb.ChatClientEvent_Message) error {
 	b, err := proto.Marshal(&pb.ChatClientEvent{
 		Body: &pb.ChatClientEvent_Message_{
-			Message: msg,
+			Message: &pb.ChatClientEvent_Message{
+				SentTime: time.Now().UnixNano() / int64(time.Millisecond),
+				Body:     msg.Body,
+			},
 		},
 	})
 	if err != nil {
 		return err
 	}
 
-	return c.ps.Publish("", b)
+	return c.ps.Send("", b)
 }
 
 // Events ...
@@ -117,21 +129,14 @@ func (c *ChatClient) Events() <-chan *pb.ChatClientEvent {
 	return c.events
 }
 
-func readChatEvents(ctx context.Context, ps *PubSubClient, events chan *pb.ChatClientEvent) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case m, ok := <-ps.Messages():
-			if !ok {
-				return
-			}
-
-			e := &pb.ChatClientEvent{}
-			if err := proto.Unmarshal(m.Body, e); err != nil {
-				continue
-			}
-			events <- e
+func (c *ChatClient) readChatEvents(ctx context.Context, ps *PubSubClient) {
+	for m := range ps.Messages() {
+		e := &pb.ChatClientEvent{}
+		if err := proto.Unmarshal(m.Body, e); err != nil {
+			continue
 		}
+		c.events <- e
 	}
+
+	c.Close()
 }
