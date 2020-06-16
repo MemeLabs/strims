@@ -122,11 +122,14 @@ export default class Client extends RPCHost {
   public pprof(v: pb.IPProfRequest = new pb.PProfRequest()): Promise<pb.PProfResponse> {
     return this.expectOne(this.call("pProf", new pb.PProfRequest(v)));
   }
-  public openChatClient(v: pb.IChatClientOpenRequest = new pb.ChatClientOpenRequest()): GenericReadable<pb.ChatClientEvent> {
-    return this.expectMany(this.call("openChatClient", new pb.ChatClientOpenRequest(v)));
+  public openChatServer(v: pb.IOpenChatServerRequest = new pb.OpenChatServerRequest()): GenericReadable<pb.ChatServerEvent> {
+    return this.expectMany(this.call("openChatServer", new pb.OpenChatServerRequest(v)));
   }
-  public callChatClient(v: pb.IChatClientCallRequest = new pb.ChatClientCallRequest()) {
-    this.call("callChatClient", new pb.ChatClientCallRequest(v));
+  public openChatClient(v: pb.IOpenChatClientRequest = new pb.OpenChatClientRequest()): GenericReadable<pb.ChatClientEvent> {
+    return this.expectMany(this.call("openChatClient", new pb.OpenChatClientRequest(v)));
+  }
+  public callChatClient(v: pb.ICallChatClientRequest = new pb.CallChatClientRequest()) {
+    this.call("callChatClient", new pb.CallChatClientRequest(v));
   }
   public openVideoClient(v: pb.IVideoClientOpenRequest = new pb.VideoClientOpenRequest()): GenericReadable<pb.VideoClientEvent> {
     return this.expectMany(this.call("openVideoClient", new pb.VideoClientOpenRequest(v)));

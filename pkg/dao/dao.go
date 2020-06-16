@@ -184,9 +184,15 @@ func NewChatServer(networkKey []byte, chatRoom *pb.ChatRoom) (*pb.ChatServer, er
 		return nil, err
 	}
 
+	key, err := GenerateKey()
+	if err != nil {
+		return nil, err
+	}
+
 	network := &pb.ChatServer{
 		Id:         id,
 		NetworkKey: networkKey,
+		Key:        key,
 		ChatRoom:   chatRoom,
 	}
 	return network, nil

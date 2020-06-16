@@ -5041,192 +5041,6 @@ export namespace PeerIndexMessage {
     }
 }
 
-/** Properties of a ChatMessage. */
-export interface IChatMessage {
-
-    /** ChatMessage message */
-    message?: (ChatMessage.IMessageRequest|null);
-}
-
-/** Represents a ChatMessage. */
-export class ChatMessage implements IChatMessage {
-
-    /**
-     * Constructs a new ChatMessage.
-     * @param [properties] Properties to set
-     */
-    constructor(properties?: IChatMessage);
-
-    /** ChatMessage message. */
-    public message?: (ChatMessage.IMessageRequest|null);
-
-    /** ChatMessage body. */
-    public body?: "message";
-
-    /**
-     * Creates a new ChatMessage instance using the specified properties.
-     * @param [properties] Properties to set
-     * @returns ChatMessage instance
-     */
-    public static create(properties?: IChatMessage): ChatMessage;
-
-    /**
-     * Encodes the specified ChatMessage message. Does not implicitly {@link ChatMessage.verify|verify} messages.
-     * @param message ChatMessage message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encode(message: IChatMessage, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Encodes the specified ChatMessage message, length delimited. Does not implicitly {@link ChatMessage.verify|verify} messages.
-     * @param message ChatMessage message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encodeDelimited(message: IChatMessage, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Decodes a ChatMessage message from the specified reader or buffer.
-     * @param reader Reader or buffer to decode from
-     * @param [length] Message length if known beforehand
-     * @returns ChatMessage
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatMessage;
-
-    /**
-     * Decodes a ChatMessage message from the specified reader or buffer, length delimited.
-     * @param reader Reader or buffer to decode from
-     * @returns ChatMessage
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatMessage;
-
-    /**
-     * Verifies a ChatMessage message.
-     * @param message Plain object to verify
-     * @returns `null` if valid, otherwise the reason why it is not
-     */
-    public static verify(message: { [k: string]: any }): (string|null);
-
-    /**
-     * Creates a ChatMessage message from a plain object. Also converts values to their respective internal types.
-     * @param object Plain object
-     * @returns ChatMessage
-     */
-    public static fromObject(object: { [k: string]: any }): ChatMessage;
-
-    /**
-     * Creates a plain object from a ChatMessage message. Also converts values to other types if specified.
-     * @param message ChatMessage
-     * @param [options] Conversion options
-     * @returns Plain object
-     */
-    public static toObject(message: ChatMessage, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-    /**
-     * Converts this ChatMessage to JSON.
-     * @returns JSON object
-     */
-    public toJSON(): { [k: string]: any };
-}
-
-export namespace ChatMessage {
-
-    /** Properties of a MessageRequest. */
-    interface IMessageRequest {
-
-        /** MessageRequest body */
-        body?: (string|null);
-    }
-
-    /** Represents a MessageRequest. */
-    class MessageRequest implements IMessageRequest {
-
-        /**
-         * Constructs a new MessageRequest.
-         * @param [properties] Properties to set
-         */
-        constructor(properties?: ChatMessage.IMessageRequest);
-
-        /** MessageRequest body. */
-        public body: string;
-
-        /**
-         * Creates a new MessageRequest instance using the specified properties.
-         * @param [properties] Properties to set
-         * @returns MessageRequest instance
-         */
-        public static create(properties?: ChatMessage.IMessageRequest): ChatMessage.MessageRequest;
-
-        /**
-         * Encodes the specified MessageRequest message. Does not implicitly {@link ChatMessage.MessageRequest.verify|verify} messages.
-         * @param message MessageRequest message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encode(message: ChatMessage.IMessageRequest, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Encodes the specified MessageRequest message, length delimited. Does not implicitly {@link ChatMessage.MessageRequest.verify|verify} messages.
-         * @param message MessageRequest message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encodeDelimited(message: ChatMessage.IMessageRequest, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Decodes a MessageRequest message from the specified reader or buffer.
-         * @param reader Reader or buffer to decode from
-         * @param [length] Message length if known beforehand
-         * @returns MessageRequest
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatMessage.MessageRequest;
-
-        /**
-         * Decodes a MessageRequest message from the specified reader or buffer, length delimited.
-         * @param reader Reader or buffer to decode from
-         * @returns MessageRequest
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatMessage.MessageRequest;
-
-        /**
-         * Verifies a MessageRequest message.
-         * @param message Plain object to verify
-         * @returns `null` if valid, otherwise the reason why it is not
-         */
-        public static verify(message: { [k: string]: any }): (string|null);
-
-        /**
-         * Creates a MessageRequest message from a plain object. Also converts values to their respective internal types.
-         * @param object Plain object
-         * @returns MessageRequest
-         */
-        public static fromObject(object: { [k: string]: any }): ChatMessage.MessageRequest;
-
-        /**
-         * Creates a plain object from a MessageRequest message. Also converts values to other types if specified.
-         * @param message MessageRequest
-         * @param [options] Conversion options
-         * @returns Plain object
-         */
-        public static toObject(message: ChatMessage.MessageRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-        /**
-         * Converts this MessageRequest to JSON.
-         * @returns JSON object
-         */
-        public toJSON(): { [k: string]: any };
-    }
-}
-
 /** Properties of a ChatRoom. */
 export interface IChatRoom {
 
@@ -5326,6 +5140,9 @@ export interface IChatServer {
     /** ChatServer networkKey */
     networkKey?: (Uint8Array|null);
 
+    /** ChatServer key */
+    key?: (IKey|null);
+
     /** ChatServer chatRoom */
     chatRoom?: (IChatRoom|null);
 }
@@ -5344,6 +5161,9 @@ export class ChatServer implements IChatServer {
 
     /** ChatServer networkKey. */
     public networkKey: Uint8Array;
+
+    /** ChatServer key. */
+    public key?: (IKey|null);
 
     /** ChatServer chatRoom. */
     public chatRoom?: (IChatRoom|null);
@@ -5614,8 +5434,8 @@ export interface IUpdateChatServerRequest {
     /** UpdateChatServerRequest networkKey */
     networkKey?: (Uint8Array|null);
 
-    /** UpdateChatServerRequest chatRoom */
-    chatRoom?: (IChatRoom|null);
+    /** UpdateChatServerRequest serverKey */
+    serverKey?: (IChatRoom|null);
 }
 
 /** Represents an UpdateChatServerRequest. */
@@ -5633,8 +5453,8 @@ export class UpdateChatServerRequest implements IUpdateChatServerRequest {
     /** UpdateChatServerRequest networkKey. */
     public networkKey: Uint8Array;
 
-    /** UpdateChatServerRequest chatRoom. */
-    public chatRoom?: (IChatRoom|null);
+    /** UpdateChatServerRequest serverKey. */
+    public serverKey?: (IChatRoom|null);
 
     /**
      * Creates a new UpdateChatServerRequest instance using the specified properties.
@@ -6325,103 +6145,649 @@ export class GetChatServersResponse implements IGetChatServersResponse {
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a ChatClientOpenRequest. */
-export interface IChatClientOpenRequest {
+/** Properties of an OpenChatServerRequest. */
+export interface IOpenChatServerRequest {
 
-    /** ChatClientOpenRequest networkId */
-    networkId?: (number|null);
-
-    /** ChatClientOpenRequest hostId */
-    hostId?: (Uint8Array|null);
-
-    /** ChatClientOpenRequest port */
-    port?: (number|null);
+    /** OpenChatServerRequest server */
+    server?: (IChatServer|null);
 }
 
-/** Represents a ChatClientOpenRequest. */
-export class ChatClientOpenRequest implements IChatClientOpenRequest {
+/** Represents an OpenChatServerRequest. */
+export class OpenChatServerRequest implements IOpenChatServerRequest {
 
     /**
-     * Constructs a new ChatClientOpenRequest.
+     * Constructs a new OpenChatServerRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IChatClientOpenRequest);
+    constructor(properties?: IOpenChatServerRequest);
 
-    /** ChatClientOpenRequest networkId. */
-    public networkId: number;
-
-    /** ChatClientOpenRequest hostId. */
-    public hostId: Uint8Array;
-
-    /** ChatClientOpenRequest port. */
-    public port: number;
+    /** OpenChatServerRequest server. */
+    public server?: (IChatServer|null);
 
     /**
-     * Creates a new ChatClientOpenRequest instance using the specified properties.
+     * Creates a new OpenChatServerRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns ChatClientOpenRequest instance
+     * @returns OpenChatServerRequest instance
      */
-    public static create(properties?: IChatClientOpenRequest): ChatClientOpenRequest;
+    public static create(properties?: IOpenChatServerRequest): OpenChatServerRequest;
 
     /**
-     * Encodes the specified ChatClientOpenRequest message. Does not implicitly {@link ChatClientOpenRequest.verify|verify} messages.
-     * @param message ChatClientOpenRequest message or plain object to encode
+     * Encodes the specified OpenChatServerRequest message. Does not implicitly {@link OpenChatServerRequest.verify|verify} messages.
+     * @param message OpenChatServerRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IChatClientOpenRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IOpenChatServerRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified ChatClientOpenRequest message, length delimited. Does not implicitly {@link ChatClientOpenRequest.verify|verify} messages.
-     * @param message ChatClientOpenRequest message or plain object to encode
+     * Encodes the specified OpenChatServerRequest message, length delimited. Does not implicitly {@link OpenChatServerRequest.verify|verify} messages.
+     * @param message OpenChatServerRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IChatClientOpenRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IOpenChatServerRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a ChatClientOpenRequest message from the specified reader or buffer.
+     * Decodes an OpenChatServerRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns ChatClientOpenRequest
+     * @returns OpenChatServerRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatClientOpenRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): OpenChatServerRequest;
 
     /**
-     * Decodes a ChatClientOpenRequest message from the specified reader or buffer, length delimited.
+     * Decodes an OpenChatServerRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns ChatClientOpenRequest
+     * @returns OpenChatServerRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatClientOpenRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): OpenChatServerRequest;
 
     /**
-     * Verifies a ChatClientOpenRequest message.
+     * Verifies an OpenChatServerRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a ChatClientOpenRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates an OpenChatServerRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns ChatClientOpenRequest
+     * @returns OpenChatServerRequest
      */
-    public static fromObject(object: { [k: string]: any }): ChatClientOpenRequest;
+    public static fromObject(object: { [k: string]: any }): OpenChatServerRequest;
 
     /**
-     * Creates a plain object from a ChatClientOpenRequest message. Also converts values to other types if specified.
-     * @param message ChatClientOpenRequest
+     * Creates a plain object from an OpenChatServerRequest message. Also converts values to other types if specified.
+     * @param message OpenChatServerRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: ChatClientOpenRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: OpenChatServerRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this ChatClientOpenRequest to JSON.
+     * Converts this OpenChatServerRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a ChatServerEvent. */
+export interface IChatServerEvent {
+
+    /** ChatServerEvent open */
+    open?: (ChatServerEvent.IOpen|null);
+
+    /** ChatServerEvent close */
+    close?: (ChatServerEvent.IClose|null);
+}
+
+/** Represents a ChatServerEvent. */
+export class ChatServerEvent implements IChatServerEvent {
+
+    /**
+     * Constructs a new ChatServerEvent.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IChatServerEvent);
+
+    /** ChatServerEvent open. */
+    public open?: (ChatServerEvent.IOpen|null);
+
+    /** ChatServerEvent close. */
+    public close?: (ChatServerEvent.IClose|null);
+
+    /** ChatServerEvent body. */
+    public body?: ("open"|"close");
+
+    /**
+     * Creates a new ChatServerEvent instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns ChatServerEvent instance
+     */
+    public static create(properties?: IChatServerEvent): ChatServerEvent;
+
+    /**
+     * Encodes the specified ChatServerEvent message. Does not implicitly {@link ChatServerEvent.verify|verify} messages.
+     * @param message ChatServerEvent message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IChatServerEvent, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified ChatServerEvent message, length delimited. Does not implicitly {@link ChatServerEvent.verify|verify} messages.
+     * @param message ChatServerEvent message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IChatServerEvent, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a ChatServerEvent message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns ChatServerEvent
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatServerEvent;
+
+    /**
+     * Decodes a ChatServerEvent message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns ChatServerEvent
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatServerEvent;
+
+    /**
+     * Verifies a ChatServerEvent message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a ChatServerEvent message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns ChatServerEvent
+     */
+    public static fromObject(object: { [k: string]: any }): ChatServerEvent;
+
+    /**
+     * Creates a plain object from a ChatServerEvent message. Also converts values to other types if specified.
+     * @param message ChatServerEvent
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: ChatServerEvent, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this ChatServerEvent to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+export namespace ChatServerEvent {
+
+    /** Properties of an Open. */
+    interface IOpen {
+
+        /** Open serverId */
+        serverId?: (number|null);
+    }
+
+    /** Represents an Open. */
+    class Open implements IOpen {
+
+        /**
+         * Constructs a new Open.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: ChatServerEvent.IOpen);
+
+        /** Open serverId. */
+        public serverId: number;
+
+        /**
+         * Creates a new Open instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Open instance
+         */
+        public static create(properties?: ChatServerEvent.IOpen): ChatServerEvent.Open;
+
+        /**
+         * Encodes the specified Open message. Does not implicitly {@link ChatServerEvent.Open.verify|verify} messages.
+         * @param message Open message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: ChatServerEvent.IOpen, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Open message, length delimited. Does not implicitly {@link ChatServerEvent.Open.verify|verify} messages.
+         * @param message Open message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: ChatServerEvent.IOpen, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes an Open message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Open
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatServerEvent.Open;
+
+        /**
+         * Decodes an Open message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Open
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatServerEvent.Open;
+
+        /**
+         * Verifies an Open message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates an Open message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Open
+         */
+        public static fromObject(object: { [k: string]: any }): ChatServerEvent.Open;
+
+        /**
+         * Creates a plain object from an Open message. Also converts values to other types if specified.
+         * @param message Open
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: ChatServerEvent.Open, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Open to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a Close. */
+    interface IClose {
+    }
+
+    /** Represents a Close. */
+    class Close implements IClose {
+
+        /**
+         * Constructs a new Close.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: ChatServerEvent.IClose);
+
+        /**
+         * Creates a new Close instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Close instance
+         */
+        public static create(properties?: ChatServerEvent.IClose): ChatServerEvent.Close;
+
+        /**
+         * Encodes the specified Close message. Does not implicitly {@link ChatServerEvent.Close.verify|verify} messages.
+         * @param message Close message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: ChatServerEvent.IClose, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Close message, length delimited. Does not implicitly {@link ChatServerEvent.Close.verify|verify} messages.
+         * @param message Close message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: ChatServerEvent.IClose, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a Close message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Close
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatServerEvent.Close;
+
+        /**
+         * Decodes a Close message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Close
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatServerEvent.Close;
+
+        /**
+         * Verifies a Close message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a Close message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Close
+         */
+        public static fromObject(object: { [k: string]: any }): ChatServerEvent.Close;
+
+        /**
+         * Creates a plain object from a Close message. Also converts values to other types if specified.
+         * @param message Close
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: ChatServerEvent.Close, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Close to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+}
+
+/** Properties of a CallChatServerRequest. */
+export interface ICallChatServerRequest {
+
+    /** CallChatServerRequest serverId */
+    serverId?: (number|null);
+
+    /** CallChatServerRequest close */
+    close?: (CallChatServerRequest.IClose|null);
+}
+
+/** Represents a CallChatServerRequest. */
+export class CallChatServerRequest implements ICallChatServerRequest {
+
+    /**
+     * Constructs a new CallChatServerRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ICallChatServerRequest);
+
+    /** CallChatServerRequest serverId. */
+    public serverId: number;
+
+    /** CallChatServerRequest close. */
+    public close?: (CallChatServerRequest.IClose|null);
+
+    /** CallChatServerRequest body. */
+    public body?: "close";
+
+    /**
+     * Creates a new CallChatServerRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns CallChatServerRequest instance
+     */
+    public static create(properties?: ICallChatServerRequest): CallChatServerRequest;
+
+    /**
+     * Encodes the specified CallChatServerRequest message. Does not implicitly {@link CallChatServerRequest.verify|verify} messages.
+     * @param message CallChatServerRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ICallChatServerRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified CallChatServerRequest message, length delimited. Does not implicitly {@link CallChatServerRequest.verify|verify} messages.
+     * @param message CallChatServerRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ICallChatServerRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a CallChatServerRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns CallChatServerRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CallChatServerRequest;
+
+    /**
+     * Decodes a CallChatServerRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns CallChatServerRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CallChatServerRequest;
+
+    /**
+     * Verifies a CallChatServerRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a CallChatServerRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns CallChatServerRequest
+     */
+    public static fromObject(object: { [k: string]: any }): CallChatServerRequest;
+
+    /**
+     * Creates a plain object from a CallChatServerRequest message. Also converts values to other types if specified.
+     * @param message CallChatServerRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: CallChatServerRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this CallChatServerRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+export namespace CallChatServerRequest {
+
+    /** Properties of a Close. */
+    interface IClose {
+    }
+
+    /** Represents a Close. */
+    class Close implements IClose {
+
+        /**
+         * Constructs a new Close.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: CallChatServerRequest.IClose);
+
+        /**
+         * Creates a new Close instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Close instance
+         */
+        public static create(properties?: CallChatServerRequest.IClose): CallChatServerRequest.Close;
+
+        /**
+         * Encodes the specified Close message. Does not implicitly {@link CallChatServerRequest.Close.verify|verify} messages.
+         * @param message Close message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: CallChatServerRequest.IClose, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Close message, length delimited. Does not implicitly {@link CallChatServerRequest.Close.verify|verify} messages.
+         * @param message Close message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: CallChatServerRequest.IClose, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a Close message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Close
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CallChatServerRequest.Close;
+
+        /**
+         * Decodes a Close message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Close
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CallChatServerRequest.Close;
+
+        /**
+         * Verifies a Close message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a Close message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Close
+         */
+        public static fromObject(object: { [k: string]: any }): CallChatServerRequest.Close;
+
+        /**
+         * Creates a plain object from a Close message. Also converts values to other types if specified.
+         * @param message Close
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: CallChatServerRequest.Close, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Close to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+}
+
+/** Properties of an OpenChatClientRequest. */
+export interface IOpenChatClientRequest {
+
+    /** OpenChatClientRequest networkKey */
+    networkKey?: (Uint8Array|null);
+
+    /** OpenChatClientRequest serverKey */
+    serverKey?: (Uint8Array|null);
+}
+
+/** Represents an OpenChatClientRequest. */
+export class OpenChatClientRequest implements IOpenChatClientRequest {
+
+    /**
+     * Constructs a new OpenChatClientRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IOpenChatClientRequest);
+
+    /** OpenChatClientRequest networkKey. */
+    public networkKey: Uint8Array;
+
+    /** OpenChatClientRequest serverKey. */
+    public serverKey: Uint8Array;
+
+    /**
+     * Creates a new OpenChatClientRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns OpenChatClientRequest instance
+     */
+    public static create(properties?: IOpenChatClientRequest): OpenChatClientRequest;
+
+    /**
+     * Encodes the specified OpenChatClientRequest message. Does not implicitly {@link OpenChatClientRequest.verify|verify} messages.
+     * @param message OpenChatClientRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IOpenChatClientRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified OpenChatClientRequest message, length delimited. Does not implicitly {@link OpenChatClientRequest.verify|verify} messages.
+     * @param message OpenChatClientRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IOpenChatClientRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes an OpenChatClientRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns OpenChatClientRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): OpenChatClientRequest;
+
+    /**
+     * Decodes an OpenChatClientRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns OpenChatClientRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): OpenChatClientRequest;
+
+    /**
+     * Verifies an OpenChatClientRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates an OpenChatClientRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns OpenChatClientRequest
+     */
+    public static fromObject(object: { [k: string]: any }): OpenChatClientRequest;
+
+    /**
+     * Creates a plain object from an OpenChatClientRequest message. Also converts values to other types if specified.
+     * @param message OpenChatClientRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: OpenChatClientRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this OpenChatClientRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -6438,9 +6804,6 @@ export interface IChatClientEvent {
 
     /** ChatClientEvent close */
     close?: (ChatClientEvent.IClose|null);
-
-    /** ChatClientEvent padding */
-    padding?: (ChatClientEvent.IPadding|null);
 }
 
 /** Represents a ChatClientEvent. */
@@ -6461,11 +6824,8 @@ export class ChatClientEvent implements IChatClientEvent {
     /** ChatClientEvent close. */
     public close?: (ChatClientEvent.IClose|null);
 
-    /** ChatClientEvent padding. */
-    public padding?: (ChatClientEvent.IPadding|null);
-
     /** ChatClientEvent body. */
-    public body?: ("open"|"message"|"close"|"padding");
+    public body?: ("open"|"message"|"close");
 
     /**
      * Creates a new ChatClientEvent instance using the specified properties.
@@ -6539,6 +6899,96 @@ export class ChatClientEvent implements IChatClientEvent {
 }
 
 export namespace ChatClientEvent {
+
+    /** Properties of an Open. */
+    interface IOpen {
+
+        /** Open clientId */
+        clientId?: (number|null);
+    }
+
+    /** Represents an Open. */
+    class Open implements IOpen {
+
+        /**
+         * Constructs a new Open.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: ChatClientEvent.IOpen);
+
+        /** Open clientId. */
+        public clientId: number;
+
+        /**
+         * Creates a new Open instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Open instance
+         */
+        public static create(properties?: ChatClientEvent.IOpen): ChatClientEvent.Open;
+
+        /**
+         * Encodes the specified Open message. Does not implicitly {@link ChatClientEvent.Open.verify|verify} messages.
+         * @param message Open message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: ChatClientEvent.IOpen, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Open message, length delimited. Does not implicitly {@link ChatClientEvent.Open.verify|verify} messages.
+         * @param message Open message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: ChatClientEvent.IOpen, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes an Open message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Open
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatClientEvent.Open;
+
+        /**
+         * Decodes an Open message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Open
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatClientEvent.Open;
+
+        /**
+         * Verifies an Open message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates an Open message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Open
+         */
+        public static fromObject(object: { [k: string]: any }): ChatClientEvent.Open;
+
+        /**
+         * Creates a plain object from an Open message. Also converts values to other types if specified.
+         * @param message Open
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: ChatClientEvent.Open, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Open to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
 
     /** Properties of a Message. */
     interface IMessage {
@@ -6642,186 +7092,6 @@ export namespace ChatClientEvent {
         public toJSON(): { [k: string]: any };
     }
 
-    /** Properties of a Padding. */
-    interface IPadding {
-
-        /** Padding body */
-        body?: (Uint8Array|null);
-    }
-
-    /** Represents a Padding. */
-    class Padding implements IPadding {
-
-        /**
-         * Constructs a new Padding.
-         * @param [properties] Properties to set
-         */
-        constructor(properties?: ChatClientEvent.IPadding);
-
-        /** Padding body. */
-        public body: Uint8Array;
-
-        /**
-         * Creates a new Padding instance using the specified properties.
-         * @param [properties] Properties to set
-         * @returns Padding instance
-         */
-        public static create(properties?: ChatClientEvent.IPadding): ChatClientEvent.Padding;
-
-        /**
-         * Encodes the specified Padding message. Does not implicitly {@link ChatClientEvent.Padding.verify|verify} messages.
-         * @param message Padding message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encode(message: ChatClientEvent.IPadding, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Encodes the specified Padding message, length delimited. Does not implicitly {@link ChatClientEvent.Padding.verify|verify} messages.
-         * @param message Padding message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encodeDelimited(message: ChatClientEvent.IPadding, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Decodes a Padding message from the specified reader or buffer.
-         * @param reader Reader or buffer to decode from
-         * @param [length] Message length if known beforehand
-         * @returns Padding
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatClientEvent.Padding;
-
-        /**
-         * Decodes a Padding message from the specified reader or buffer, length delimited.
-         * @param reader Reader or buffer to decode from
-         * @returns Padding
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatClientEvent.Padding;
-
-        /**
-         * Verifies a Padding message.
-         * @param message Plain object to verify
-         * @returns `null` if valid, otherwise the reason why it is not
-         */
-        public static verify(message: { [k: string]: any }): (string|null);
-
-        /**
-         * Creates a Padding message from a plain object. Also converts values to their respective internal types.
-         * @param object Plain object
-         * @returns Padding
-         */
-        public static fromObject(object: { [k: string]: any }): ChatClientEvent.Padding;
-
-        /**
-         * Creates a plain object from a Padding message. Also converts values to other types if specified.
-         * @param message Padding
-         * @param [options] Conversion options
-         * @returns Plain object
-         */
-        public static toObject(message: ChatClientEvent.Padding, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-        /**
-         * Converts this Padding to JSON.
-         * @returns JSON object
-         */
-        public toJSON(): { [k: string]: any };
-    }
-
-    /** Properties of an Open. */
-    interface IOpen {
-
-        /** Open clientId */
-        clientId?: (number|null);
-    }
-
-    /** Represents an Open. */
-    class Open implements IOpen {
-
-        /**
-         * Constructs a new Open.
-         * @param [properties] Properties to set
-         */
-        constructor(properties?: ChatClientEvent.IOpen);
-
-        /** Open clientId. */
-        public clientId: number;
-
-        /**
-         * Creates a new Open instance using the specified properties.
-         * @param [properties] Properties to set
-         * @returns Open instance
-         */
-        public static create(properties?: ChatClientEvent.IOpen): ChatClientEvent.Open;
-
-        /**
-         * Encodes the specified Open message. Does not implicitly {@link ChatClientEvent.Open.verify|verify} messages.
-         * @param message Open message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encode(message: ChatClientEvent.IOpen, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Encodes the specified Open message, length delimited. Does not implicitly {@link ChatClientEvent.Open.verify|verify} messages.
-         * @param message Open message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encodeDelimited(message: ChatClientEvent.IOpen, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Decodes an Open message from the specified reader or buffer.
-         * @param reader Reader or buffer to decode from
-         * @param [length] Message length if known beforehand
-         * @returns Open
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatClientEvent.Open;
-
-        /**
-         * Decodes an Open message from the specified reader or buffer, length delimited.
-         * @param reader Reader or buffer to decode from
-         * @returns Open
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatClientEvent.Open;
-
-        /**
-         * Verifies an Open message.
-         * @param message Plain object to verify
-         * @returns `null` if valid, otherwise the reason why it is not
-         */
-        public static verify(message: { [k: string]: any }): (string|null);
-
-        /**
-         * Creates an Open message from a plain object. Also converts values to their respective internal types.
-         * @param object Plain object
-         * @returns Open
-         */
-        public static fromObject(object: { [k: string]: any }): ChatClientEvent.Open;
-
-        /**
-         * Creates a plain object from an Open message. Also converts values to other types if specified.
-         * @param message Open
-         * @param [options] Conversion options
-         * @returns Plain object
-         */
-        public static toObject(message: ChatClientEvent.Open, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-        /**
-         * Converts this Open to JSON.
-         * @returns JSON object
-         */
-        public toJSON(): { [k: string]: any };
-    }
-
     /** Properties of a Close. */
     interface IClose {
     }
@@ -6907,118 +7177,112 @@ export namespace ChatClientEvent {
     }
 }
 
-/** Properties of a ChatClientCallRequest. */
-export interface IChatClientCallRequest {
+/** Properties of a CallChatClientRequest. */
+export interface ICallChatClientRequest {
 
-    /** ChatClientCallRequest clientId */
+    /** CallChatClientRequest clientId */
     clientId?: (number|null);
 
-    /** ChatClientCallRequest message */
-    message?: (ChatClientCallRequest.IMessage|null);
+    /** CallChatClientRequest message */
+    message?: (CallChatClientRequest.IMessage|null);
 
-    /** ChatClientCallRequest runClient */
-    runClient?: (ChatClientCallRequest.IRunClient|null);
-
-    /** ChatClientCallRequest runServer */
-    runServer?: (ChatClientCallRequest.IRunServer|null);
+    /** CallChatClientRequest close */
+    close?: (CallChatClientRequest.IClose|null);
 }
 
-/** Represents a ChatClientCallRequest. */
-export class ChatClientCallRequest implements IChatClientCallRequest {
+/** Represents a CallChatClientRequest. */
+export class CallChatClientRequest implements ICallChatClientRequest {
 
     /**
-     * Constructs a new ChatClientCallRequest.
+     * Constructs a new CallChatClientRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IChatClientCallRequest);
+    constructor(properties?: ICallChatClientRequest);
 
-    /** ChatClientCallRequest clientId. */
+    /** CallChatClientRequest clientId. */
     public clientId: number;
 
-    /** ChatClientCallRequest message. */
-    public message?: (ChatClientCallRequest.IMessage|null);
+    /** CallChatClientRequest message. */
+    public message?: (CallChatClientRequest.IMessage|null);
 
-    /** ChatClientCallRequest runClient. */
-    public runClient?: (ChatClientCallRequest.IRunClient|null);
+    /** CallChatClientRequest close. */
+    public close?: (CallChatClientRequest.IClose|null);
 
-    /** ChatClientCallRequest runServer. */
-    public runServer?: (ChatClientCallRequest.IRunServer|null);
-
-    /** ChatClientCallRequest body. */
-    public body?: ("message"|"runClient"|"runServer");
+    /** CallChatClientRequest body. */
+    public body?: ("message"|"close");
 
     /**
-     * Creates a new ChatClientCallRequest instance using the specified properties.
+     * Creates a new CallChatClientRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns ChatClientCallRequest instance
+     * @returns CallChatClientRequest instance
      */
-    public static create(properties?: IChatClientCallRequest): ChatClientCallRequest;
+    public static create(properties?: ICallChatClientRequest): CallChatClientRequest;
 
     /**
-     * Encodes the specified ChatClientCallRequest message. Does not implicitly {@link ChatClientCallRequest.verify|verify} messages.
-     * @param message ChatClientCallRequest message or plain object to encode
+     * Encodes the specified CallChatClientRequest message. Does not implicitly {@link CallChatClientRequest.verify|verify} messages.
+     * @param message CallChatClientRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IChatClientCallRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: ICallChatClientRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified ChatClientCallRequest message, length delimited. Does not implicitly {@link ChatClientCallRequest.verify|verify} messages.
-     * @param message ChatClientCallRequest message or plain object to encode
+     * Encodes the specified CallChatClientRequest message, length delimited. Does not implicitly {@link CallChatClientRequest.verify|verify} messages.
+     * @param message CallChatClientRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IChatClientCallRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: ICallChatClientRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a ChatClientCallRequest message from the specified reader or buffer.
+     * Decodes a CallChatClientRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns ChatClientCallRequest
+     * @returns CallChatClientRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatClientCallRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CallChatClientRequest;
 
     /**
-     * Decodes a ChatClientCallRequest message from the specified reader or buffer, length delimited.
+     * Decodes a CallChatClientRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns ChatClientCallRequest
+     * @returns CallChatClientRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatClientCallRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CallChatClientRequest;
 
     /**
-     * Verifies a ChatClientCallRequest message.
+     * Verifies a CallChatClientRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a ChatClientCallRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a CallChatClientRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns ChatClientCallRequest
+     * @returns CallChatClientRequest
      */
-    public static fromObject(object: { [k: string]: any }): ChatClientCallRequest;
+    public static fromObject(object: { [k: string]: any }): CallChatClientRequest;
 
     /**
-     * Creates a plain object from a ChatClientCallRequest message. Also converts values to other types if specified.
-     * @param message ChatClientCallRequest
+     * Creates a plain object from a CallChatClientRequest message. Also converts values to other types if specified.
+     * @param message CallChatClientRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: ChatClientCallRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: CallChatClientRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this ChatClientCallRequest to JSON.
+     * Converts this CallChatClientRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-export namespace ChatClientCallRequest {
+export namespace CallChatClientRequest {
 
     /** Properties of a Message. */
     interface IMessage {
@@ -7037,7 +7301,7 @@ export namespace ChatClientCallRequest {
          * Constructs a new Message.
          * @param [properties] Properties to set
          */
-        constructor(properties?: ChatClientCallRequest.IMessage);
+        constructor(properties?: CallChatClientRequest.IMessage);
 
         /** Message time. */
         public time: number;
@@ -7050,23 +7314,23 @@ export namespace ChatClientCallRequest {
          * @param [properties] Properties to set
          * @returns Message instance
          */
-        public static create(properties?: ChatClientCallRequest.IMessage): ChatClientCallRequest.Message;
+        public static create(properties?: CallChatClientRequest.IMessage): CallChatClientRequest.Message;
 
         /**
-         * Encodes the specified Message message. Does not implicitly {@link ChatClientCallRequest.Message.verify|verify} messages.
+         * Encodes the specified Message message. Does not implicitly {@link CallChatClientRequest.Message.verify|verify} messages.
          * @param message Message message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encode(message: ChatClientCallRequest.IMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encode(message: CallChatClientRequest.IMessage, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Encodes the specified Message message, length delimited. Does not implicitly {@link ChatClientCallRequest.Message.verify|verify} messages.
+         * Encodes the specified Message message, length delimited. Does not implicitly {@link CallChatClientRequest.Message.verify|verify} messages.
          * @param message Message message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encodeDelimited(message: ChatClientCallRequest.IMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encodeDelimited(message: CallChatClientRequest.IMessage, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
          * Decodes a Message message from the specified reader or buffer.
@@ -7076,7 +7340,7 @@ export namespace ChatClientCallRequest {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatClientCallRequest.Message;
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CallChatClientRequest.Message;
 
         /**
          * Decodes a Message message from the specified reader or buffer, length delimited.
@@ -7085,7 +7349,7 @@ export namespace ChatClientCallRequest {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatClientCallRequest.Message;
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CallChatClientRequest.Message;
 
         /**
          * Verifies a Message message.
@@ -7099,7 +7363,7 @@ export namespace ChatClientCallRequest {
          * @param object Plain object
          * @returns Message
          */
-        public static fromObject(object: { [k: string]: any }): ChatClientCallRequest.Message;
+        public static fromObject(object: { [k: string]: any }): CallChatClientRequest.Message;
 
         /**
          * Creates a plain object from a Message message. Also converts values to other types if specified.
@@ -7107,7 +7371,7 @@ export namespace ChatClientCallRequest {
          * @param [options] Conversion options
          * @returns Plain object
          */
-        public static toObject(message: ChatClientCallRequest.Message, options?: $protobuf.IConversionOptions): { [k: string]: any };
+        public static toObject(message: CallChatClientRequest.Message, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
         /**
          * Converts this Message to JSON.
@@ -7116,169 +7380,469 @@ export namespace ChatClientCallRequest {
         public toJSON(): { [k: string]: any };
     }
 
-    /** Properties of a RunServer. */
-    interface IRunServer {
+    /** Properties of a Close. */
+    interface IClose {
     }
 
-    /** Represents a RunServer. */
-    class RunServer implements IRunServer {
+    /** Represents a Close. */
+    class Close implements IClose {
 
         /**
-         * Constructs a new RunServer.
+         * Constructs a new Close.
          * @param [properties] Properties to set
          */
-        constructor(properties?: ChatClientCallRequest.IRunServer);
+        constructor(properties?: CallChatClientRequest.IClose);
 
         /**
-         * Creates a new RunServer instance using the specified properties.
+         * Creates a new Close instance using the specified properties.
          * @param [properties] Properties to set
-         * @returns RunServer instance
+         * @returns Close instance
          */
-        public static create(properties?: ChatClientCallRequest.IRunServer): ChatClientCallRequest.RunServer;
+        public static create(properties?: CallChatClientRequest.IClose): CallChatClientRequest.Close;
 
         /**
-         * Encodes the specified RunServer message. Does not implicitly {@link ChatClientCallRequest.RunServer.verify|verify} messages.
-         * @param message RunServer message or plain object to encode
+         * Encodes the specified Close message. Does not implicitly {@link CallChatClientRequest.Close.verify|verify} messages.
+         * @param message Close message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encode(message: ChatClientCallRequest.IRunServer, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encode(message: CallChatClientRequest.IClose, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Encodes the specified RunServer message, length delimited. Does not implicitly {@link ChatClientCallRequest.RunServer.verify|verify} messages.
-         * @param message RunServer message or plain object to encode
+         * Encodes the specified Close message, length delimited. Does not implicitly {@link CallChatClientRequest.Close.verify|verify} messages.
+         * @param message Close message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encodeDelimited(message: ChatClientCallRequest.IRunServer, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encodeDelimited(message: CallChatClientRequest.IClose, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Decodes a RunServer message from the specified reader or buffer.
+         * Decodes a Close message from the specified reader or buffer.
          * @param reader Reader or buffer to decode from
          * @param [length] Message length if known beforehand
-         * @returns RunServer
+         * @returns Close
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatClientCallRequest.RunServer;
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CallChatClientRequest.Close;
 
         /**
-         * Decodes a RunServer message from the specified reader or buffer, length delimited.
+         * Decodes a Close message from the specified reader or buffer, length delimited.
          * @param reader Reader or buffer to decode from
-         * @returns RunServer
+         * @returns Close
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatClientCallRequest.RunServer;
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CallChatClientRequest.Close;
 
         /**
-         * Verifies a RunServer message.
+         * Verifies a Close message.
          * @param message Plain object to verify
          * @returns `null` if valid, otherwise the reason why it is not
          */
         public static verify(message: { [k: string]: any }): (string|null);
 
         /**
-         * Creates a RunServer message from a plain object. Also converts values to their respective internal types.
+         * Creates a Close message from a plain object. Also converts values to their respective internal types.
          * @param object Plain object
-         * @returns RunServer
+         * @returns Close
          */
-        public static fromObject(object: { [k: string]: any }): ChatClientCallRequest.RunServer;
+        public static fromObject(object: { [k: string]: any }): CallChatClientRequest.Close;
 
         /**
-         * Creates a plain object from a RunServer message. Also converts values to other types if specified.
-         * @param message RunServer
+         * Creates a plain object from a Close message. Also converts values to other types if specified.
+         * @param message Close
          * @param [options] Conversion options
          * @returns Plain object
          */
-        public static toObject(message: ChatClientCallRequest.RunServer, options?: $protobuf.IConversionOptions): { [k: string]: any };
+        public static toObject(message: CallChatClientRequest.Close, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
         /**
-         * Converts this RunServer to JSON.
+         * Converts this Close to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+}
+
+/** Properties of a PubSubEvent. */
+export interface IPubSubEvent {
+
+    /** PubSubEvent message */
+    message?: (PubSubEvent.IMessage|null);
+
+    /** PubSubEvent close */
+    close?: (PubSubEvent.IClose|null);
+
+    /** PubSubEvent padding */
+    padding?: (PubSubEvent.IPadding|null);
+}
+
+/** Represents a PubSubEvent. */
+export class PubSubEvent implements IPubSubEvent {
+
+    /**
+     * Constructs a new PubSubEvent.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IPubSubEvent);
+
+    /** PubSubEvent message. */
+    public message?: (PubSubEvent.IMessage|null);
+
+    /** PubSubEvent close. */
+    public close?: (PubSubEvent.IClose|null);
+
+    /** PubSubEvent padding. */
+    public padding?: (PubSubEvent.IPadding|null);
+
+    /** PubSubEvent body. */
+    public body?: ("message"|"close"|"padding");
+
+    /**
+     * Creates a new PubSubEvent instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns PubSubEvent instance
+     */
+    public static create(properties?: IPubSubEvent): PubSubEvent;
+
+    /**
+     * Encodes the specified PubSubEvent message. Does not implicitly {@link PubSubEvent.verify|verify} messages.
+     * @param message PubSubEvent message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IPubSubEvent, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified PubSubEvent message, length delimited. Does not implicitly {@link PubSubEvent.verify|verify} messages.
+     * @param message PubSubEvent message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IPubSubEvent, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a PubSubEvent message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns PubSubEvent
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): PubSubEvent;
+
+    /**
+     * Decodes a PubSubEvent message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns PubSubEvent
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): PubSubEvent;
+
+    /**
+     * Verifies a PubSubEvent message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a PubSubEvent message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns PubSubEvent
+     */
+    public static fromObject(object: { [k: string]: any }): PubSubEvent;
+
+    /**
+     * Creates a plain object from a PubSubEvent message. Also converts values to other types if specified.
+     * @param message PubSubEvent
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: PubSubEvent, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this PubSubEvent to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+export namespace PubSubEvent {
+
+    /** Properties of a Message. */
+    interface IMessage {
+
+        /** Message time */
+        time?: (number|null);
+
+        /** Message key */
+        key?: (string|null);
+
+        /** Message body */
+        body?: (Uint8Array|null);
+    }
+
+    /** Represents a Message. */
+    class Message implements IMessage {
+
+        /**
+         * Constructs a new Message.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: PubSubEvent.IMessage);
+
+        /** Message time. */
+        public time: number;
+
+        /** Message key. */
+        public key: string;
+
+        /** Message body. */
+        public body: Uint8Array;
+
+        /**
+         * Creates a new Message instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Message instance
+         */
+        public static create(properties?: PubSubEvent.IMessage): PubSubEvent.Message;
+
+        /**
+         * Encodes the specified Message message. Does not implicitly {@link PubSubEvent.Message.verify|verify} messages.
+         * @param message Message message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: PubSubEvent.IMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Message message, length delimited. Does not implicitly {@link PubSubEvent.Message.verify|verify} messages.
+         * @param message Message message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: PubSubEvent.IMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a Message message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Message
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): PubSubEvent.Message;
+
+        /**
+         * Decodes a Message message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Message
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): PubSubEvent.Message;
+
+        /**
+         * Verifies a Message message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a Message message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Message
+         */
+        public static fromObject(object: { [k: string]: any }): PubSubEvent.Message;
+
+        /**
+         * Creates a plain object from a Message message. Also converts values to other types if specified.
+         * @param message Message
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: PubSubEvent.Message, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Message to JSON.
          * @returns JSON object
          */
         public toJSON(): { [k: string]: any };
     }
 
-    /** Properties of a RunClient. */
-    interface IRunClient {
+    /** Properties of a Close. */
+    interface IClose {
     }
 
-    /** Represents a RunClient. */
-    class RunClient implements IRunClient {
+    /** Represents a Close. */
+    class Close implements IClose {
 
         /**
-         * Constructs a new RunClient.
+         * Constructs a new Close.
          * @param [properties] Properties to set
          */
-        constructor(properties?: ChatClientCallRequest.IRunClient);
+        constructor(properties?: PubSubEvent.IClose);
 
         /**
-         * Creates a new RunClient instance using the specified properties.
+         * Creates a new Close instance using the specified properties.
          * @param [properties] Properties to set
-         * @returns RunClient instance
+         * @returns Close instance
          */
-        public static create(properties?: ChatClientCallRequest.IRunClient): ChatClientCallRequest.RunClient;
+        public static create(properties?: PubSubEvent.IClose): PubSubEvent.Close;
 
         /**
-         * Encodes the specified RunClient message. Does not implicitly {@link ChatClientCallRequest.RunClient.verify|verify} messages.
-         * @param message RunClient message or plain object to encode
+         * Encodes the specified Close message. Does not implicitly {@link PubSubEvent.Close.verify|verify} messages.
+         * @param message Close message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encode(message: ChatClientCallRequest.IRunClient, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encode(message: PubSubEvent.IClose, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Encodes the specified RunClient message, length delimited. Does not implicitly {@link ChatClientCallRequest.RunClient.verify|verify} messages.
-         * @param message RunClient message or plain object to encode
+         * Encodes the specified Close message, length delimited. Does not implicitly {@link PubSubEvent.Close.verify|verify} messages.
+         * @param message Close message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encodeDelimited(message: ChatClientCallRequest.IRunClient, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encodeDelimited(message: PubSubEvent.IClose, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Decodes a RunClient message from the specified reader or buffer.
+         * Decodes a Close message from the specified reader or buffer.
          * @param reader Reader or buffer to decode from
          * @param [length] Message length if known beforehand
-         * @returns RunClient
+         * @returns Close
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ChatClientCallRequest.RunClient;
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): PubSubEvent.Close;
 
         /**
-         * Decodes a RunClient message from the specified reader or buffer, length delimited.
+         * Decodes a Close message from the specified reader or buffer, length delimited.
          * @param reader Reader or buffer to decode from
-         * @returns RunClient
+         * @returns Close
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ChatClientCallRequest.RunClient;
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): PubSubEvent.Close;
 
         /**
-         * Verifies a RunClient message.
+         * Verifies a Close message.
          * @param message Plain object to verify
          * @returns `null` if valid, otherwise the reason why it is not
          */
         public static verify(message: { [k: string]: any }): (string|null);
 
         /**
-         * Creates a RunClient message from a plain object. Also converts values to their respective internal types.
+         * Creates a Close message from a plain object. Also converts values to their respective internal types.
          * @param object Plain object
-         * @returns RunClient
+         * @returns Close
          */
-        public static fromObject(object: { [k: string]: any }): ChatClientCallRequest.RunClient;
+        public static fromObject(object: { [k: string]: any }): PubSubEvent.Close;
 
         /**
-         * Creates a plain object from a RunClient message. Also converts values to other types if specified.
-         * @param message RunClient
+         * Creates a plain object from a Close message. Also converts values to other types if specified.
+         * @param message Close
          * @param [options] Conversion options
          * @returns Plain object
          */
-        public static toObject(message: ChatClientCallRequest.RunClient, options?: $protobuf.IConversionOptions): { [k: string]: any };
+        public static toObject(message: PubSubEvent.Close, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
         /**
-         * Converts this RunClient to JSON.
+         * Converts this Close to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a Padding. */
+    interface IPadding {
+
+        /** Padding body */
+        body?: (Uint8Array|null);
+    }
+
+    /** Represents a Padding. */
+    class Padding implements IPadding {
+
+        /**
+         * Constructs a new Padding.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: PubSubEvent.IPadding);
+
+        /** Padding body. */
+        public body: Uint8Array;
+
+        /**
+         * Creates a new Padding instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Padding instance
+         */
+        public static create(properties?: PubSubEvent.IPadding): PubSubEvent.Padding;
+
+        /**
+         * Encodes the specified Padding message. Does not implicitly {@link PubSubEvent.Padding.verify|verify} messages.
+         * @param message Padding message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: PubSubEvent.IPadding, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Padding message, length delimited. Does not implicitly {@link PubSubEvent.Padding.verify|verify} messages.
+         * @param message Padding message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: PubSubEvent.IPadding, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a Padding message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Padding
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): PubSubEvent.Padding;
+
+        /**
+         * Decodes a Padding message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Padding
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): PubSubEvent.Padding;
+
+        /**
+         * Verifies a Padding message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a Padding message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Padding
+         */
+        public static fromObject(object: { [k: string]: any }): PubSubEvent.Padding;
+
+        /**
+         * Creates a plain object from a Padding message. Also converts values to other types if specified.
+         * @param message Padding
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: PubSubEvent.Padding, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Padding to JSON.
          * @returns JSON object
          */
         public toJSON(): { [k: string]: any };

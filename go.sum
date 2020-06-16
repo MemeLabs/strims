@@ -181,6 +181,8 @@ github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99 h1:KcEvVBAvyHkUdFAygK
 github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99/go.mod h1:HUpKUBZnpzkdx0kD/+Yfuft+uD3zHGtXF/XJB14TUr4=
 github.com/pion/datachannel v1.4.17 h1:8CChK5VrJoGrwKCysoTscoWvshCAFpUkgY11Tqgz5hE=
 github.com/pion/datachannel v1.4.17/go.mod h1:+vPQfypU9vSsyPXogYj1hBThWQ6MNXEQoQAzxoPvjYM=
+github.com/pion/dtls v1.5.4 h1:q8pXFMF7T+EAVO4auQU/ds+5yh5yOK6NiTN/4NQ0dB0=
+github.com/pion/dtls v1.5.4/go.mod h1:eVHevf4AM8R9+Pxa29q4aiI2iIbfMWOW1WgEcSCGpHU=
 github.com/pion/dtls/v2 v2.0.0 h1:Fk+MBhLZ/U1bImzAhmzwbO/pP2rKhtTw8iA934H3ybE=
 github.com/pion/dtls/v2 v2.0.0/go.mod h1:VkY5VL2wtsQQOG60xQ4lkV5pdn0wwBBTzCfRJqXhp3A=
 github.com/pion/ice v0.7.15 h1:s1In+gnuyVq7WKWGVQL+1p+OcrMsbfL+VfSe2isH8Ag=

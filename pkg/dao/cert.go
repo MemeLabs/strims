@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"google.golang.org/protobuf/proto"
 )
 
 const defaultCertTTL = time.Hour * 24 * 365 * 2 // ~two years
@@ -30,16 +29,14 @@ func NewCertificateRequest(key *pb.Key, keyUsage pb.KeyUsage) (*pb.CertificateRe
 		KeyUsage: uint32(keyUsage),
 	}
 
-	b, err := proto.Marshal(csr)
-	if err != nil {
-		return nil, err
-	}
+	reqBytes := serializeCertificateRequest(csr)
+
 	switch key.Type {
 	case pb.KeyType_KEY_TYPE_ED25519:
 		if len(key.Private) != ed25519.PrivateKeySize {
 			return nil, ErrInvalidKeyLength
 		}
-		csr.Signature = ed25519.Sign(key.Private, b)
+		csr.Signature = ed25519.Sign(key.Private, reqBytes)
 	default:
 		return nil, ErrUnsupportedKeyType
 	}
@@ -48,19 +45,14 @@ func NewCertificateRequest(key *pb.Key, keyUsage pb.KeyUsage) (*pb.CertificateRe
 
 // VerifyCertificateRequest ...
 func VerifyCertificateRequest(csr *pb.CertificateRequest, usage pb.KeyUsage) error {
-	temp := proto.Clone(csr).(*pb.CertificateRequest)
-	temp.Signature = nil
-	reqBytes, err := proto.Marshal(temp)
-	if err != nil {
-		return err
-	}
-
 	if csr.KeyUsage&^uint32(usage) != 0 {
 		return ErrUnsupportedKeyUsage
 	}
 
+	reqBytes := serializeCertificateRequest(csr)
+
 	var validSig bool
-	switch temp.KeyType {
+	switch csr.KeyType {
 	case pb.KeyType_KEY_TYPE_ED25519:
 		if len(csr.Key) != ed25519.PublicKeySize {
 			return ErrInvalidKeyLength
@@ -171,7 +163,7 @@ func CertIsExpired(cert *pb.Certificate) bool {
 
 // serializeCertificate returns a stable byte representation of a certificate
 func serializeCertificate(cert *pb.Certificate) []byte {
-	b := make([]byte, 192+len(cert.Key)+len(cert.SerialNumber))
+	b := make([]byte, 24+len(cert.Key)+len(cert.SerialNumber))
 
 	n := copy(b, cert.Key)
 	binary.BigEndian.PutUint32(b[n:], uint32(cert.KeyType))
@@ -183,6 +175,19 @@ func serializeCertificate(cert *pb.Certificate) []byte {
 	binary.BigEndian.PutUint64(b[n:], cert.NotAfter)
 	n += 8
 	n += copy(b[n:], cert.SerialNumber)
+
+	return b
+}
+
+// serializeCertificateRequest returns a stable byte representation of a certificate request
+func serializeCertificateRequest(csr *pb.CertificateRequest) []byte {
+	b := make([]byte, 8+len(csr.Key))
+
+	n := copy(b, csr.Key)
+	binary.BigEndian.PutUint32(b[n:], uint32(csr.KeyType))
+	n += 4
+	binary.BigEndian.PutUint32(b[n:], csr.KeyUsage)
+	n += 4
 
 	return b
 }

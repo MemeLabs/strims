@@ -11,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/MemeLabs/go-ppspp/pkg/bytereader"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
@@ -55,7 +56,7 @@ func readCall(r io.Reader) (*pb.Call, error) {
 	b := readBuffers.Get().([]byte)
 	defer readBuffers.Put(b)
 
-	l, err := binary.ReadUvarint(NewByteReader(r))
+	l, err := binary.ReadUvarint(bytereader.New(r))
 	if err != nil {
 		return nil, err
 	}
@@ -80,21 +81,6 @@ var readBuffers = sync.Pool{
 	New: func() interface{} {
 		return make([]byte, 1024)
 	},
-}
-
-// NewByteReader ...
-func NewByteReader(r io.Reader) io.ByteReader {
-	return byteReader{Reader: r}
-}
-
-type byteReader struct {
-	io.Reader
-}
-
-func (r byteReader) ReadByte() (byte, error) {
-	var b [1]byte
-	_, err := r.Read(b[:])
-	return b[0], err
 }
 
 func recoverError(v interface{}) error {

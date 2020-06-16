@@ -2,20 +2,23 @@ import * as React from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import Select from "react-select";
+
 import { InputError, InputLabel, TextInput } from "../components/Form";
 import { MainLayout } from "../components/MainLayout";
 import { useCall, useLazyCall } from "../contexts/Api";
 import * as pb from "../lib/pb";
 
 const ChatServerForm = ({ onCreate }: { onCreate: (res: pb.CreateChatServerResponse) => void }) => {
-  const [{ value, error, loading }, createChatServer] = useLazyCall("createChatServer", { onComplete: onCreate });
+  const [{ value, error, loading }, createChatServer] = useLazyCall("createChatServer", {
+    onComplete: onCreate,
+  });
   const [networkMembershipsRes] = useCall("getNetworkMemberships");
 
   const { register, handleSubmit, control, errors } = useForm({
     mode: "onBlur",
   });
 
-  const onSubmit = (data) =>
+  const onSubmit = (data) => {
     createChatServer(
       new pb.CreateChatServerRequest({
         networkKey: data.networkKey.value,
@@ -24,6 +27,7 @@ const ChatServerForm = ({ onCreate }: { onCreate: (res: pb.CreateChatServerRespo
         },
       })
     );
+  };
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
@@ -50,10 +54,8 @@ const ChatServerForm = ({ onCreate }: { onCreate: (res: pb.CreateChatServerRespo
             value: n.caCertificate.key,
             label: n.name,
           }))}
-          onChange={([selected]) => ({ value: selected })}
           name="networkKey"
           control={control}
-          value={{}}
           rules={{
             required: {
               value: true,
@@ -72,7 +74,13 @@ const ChatServerForm = ({ onCreate }: { onCreate: (res: pb.CreateChatServerRespo
   );
 };
 
-const ChatServerTable = ({ servers, onDelete }: { servers: pb.IChatServer[]; onDelete: () => void }) => {
+const ChatServerTable = ({
+  servers,
+  onDelete,
+}: {
+  servers: pb.IChatServer[];
+  onDelete: () => void;
+}) => {
   const [, deleteChatServer] = useLazyCall("deleteChatServer", { onComplete: onDelete });
 
   if (!servers) {
@@ -85,7 +93,9 @@ const ChatServerTable = ({ servers, onDelete }: { servers: pb.IChatServer[]; onD
     return (
       <div className="thing_list__item" key={server.id}>
         <span>{server.chatRoom.name}</span>
-        <button onClick={handleDelete}>delete</button>
+        <button className="input input_button" onClick={handleDelete}>
+          delete
+        </button>
         <pre>{JSON.stringify(server, null, 2)}</pre>
       </div>
     );
@@ -115,7 +125,10 @@ const ChatServersPage = () => {
           <ChatServerForm onCreate={() => getChatServers()} />
           <h1>Chat Servers</h1>
           <p>Manage your chat servers</p>
-          <ChatServerTable servers={serversRes.value?.chatServers} onDelete={() => getChatServers()} />
+          <ChatServerTable
+            servers={serversRes.value?.chatServers}
+            onDelete={() => getChatServers()}
+          />
         </main>
       </div>
     </MainLayout>

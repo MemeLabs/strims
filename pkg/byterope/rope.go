@@ -1,14 +1,15 @@
+// Package byterope allows slicing and copying of byte slices with minimum allocations
 package byterope
 
 // Rope data structure for byte slices
 type Rope [][]byte
 
-// New ...
+// New creates a new Rope structure
 func New(v ...[]byte) Rope {
 	return Rope(v)
 }
 
-// Slice ...
+// Slice loops over a Rope, constructing a new rope with the bytes in between the range
 func (r Rope) Slice(low, high int) (next Rope) {
 	var n int
 	for i := 0; i < len(r); i++ {
@@ -34,7 +35,7 @@ func (r Rope) Slice(low, high int) (next Rope) {
 	return
 }
 
-// Copy ...
+// Copy copies bytes from the source slice into the Rope structure
 func (r Rope) Copy(src ...[]byte) (n int) {
 	var i, in int
 	for _, b := range src {
@@ -57,6 +58,7 @@ func (r Rope) Copy(src ...[]byte) (n int) {
 	return
 }
 
+// Len returns the length of the Rope=
 func (r Rope) Len() (n int) {
 	for _, b := range r {
 		n += len(b)

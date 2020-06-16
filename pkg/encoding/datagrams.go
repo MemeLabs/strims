@@ -142,16 +142,6 @@ func (v *Address) ByteLen() int {
 	return 8
 }
 
-// DataLen ...
-func (v *Address) DataLen() uint64 {
-	return uint64(v.Bin().BaseLength()) * uint64(ChunkSize)
-}
-
-// DataOffset ...
-func (v *Address) DataOffset() uint64 {
-	return uint64(v.Bin().BaseOffset()) * uint64(ChunkSize)
-}
-
 // Bin ...
 func (v *Address) Bin() binmap.Bin {
 	return binmap.Bin(*v)
@@ -369,14 +359,16 @@ func (v *Handshake) ByteLen() (l int) {
 
 // Data ...
 type Data struct {
+	chunkSize int
 	Address   Address
 	Timestamp Timestamp
 	Data      Buffer
 }
 
 // NewData ...
-func NewData(b binmap.Bin, d []byte) *Data {
+func NewData(chunkSize int, b binmap.Bin, d []byte) *Data {
 	return &Data{
+		chunkSize: chunkSize,
 		Address:   Address(b),
 		Timestamp: Timestamp{time.Now()},
 		Data:      Buffer(d),
@@ -402,7 +394,7 @@ func (v *Data) Unmarshal(b []byte) (size int, err error) {
 	}
 	size += n
 
-	n = int(v.Address.DataLen())
+	n = int(v.Address.Bin().BaseLength()) * v.chunkSize
 	if size+n > len(b) {
 		n = len(b) - size
 	}

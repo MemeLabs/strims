@@ -206,7 +206,7 @@ func (s *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 
 		for i := c.sentBinHistory.IterateUntil(timeout); i.Next(); {
 			if c.unackedBins.FilledAt(i.Bin()) {
-				c.peer.ledbat.AddDataLoss(ChunkSize, false)
+				c.peer.ledbat.AddDataLoss(c.swarm.ChunkSize, false)
 				c.unackedBins.Reset(i.Bin())
 			}
 		}
@@ -291,7 +291,7 @@ func (s *Scheduler) sendPeerData(p *Peer, t time.Time) {
 					Data:      Buffer(b),
 				})
 
-				p.ledbat.AddSent(ChunkSize)
+				p.ledbat.AddSent(c.swarm.ChunkSize)
 				p.AddSentChunk()
 				c.unackedBins.Set(rb)
 				c.sentBinHistory.Push(rb, t)

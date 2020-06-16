@@ -140,7 +140,7 @@ func (s *swarmSwarm) TryCloseChannel(p *swarmPeer) {
 // SwarmNetwork ...
 type SwarmNetwork interface {
 	OpenSwarm(swarm *encoding.Swarm)
-	CloseSwarm(id *encoding.SwarmID)
+	CloseSwarm(id encoding.SwarmID)
 }
 
 func newSwarmNetwork(logger *zap.Logger, n *vpn.Network, s *sync.Map) *swarmNetwork {
@@ -217,7 +217,7 @@ func (t *swarmNetwork) sendOpen(s *swarmSwarm, p *swarmPeer) error {
 	})
 }
 
-func (t *swarmNetwork) CloseSwarm(id *encoding.SwarmID) {
+func (t *swarmNetwork) CloseSwarm(id encoding.SwarmID) {
 	msg := &pb.SwarmThingMessage{
 		Body: &pb.SwarmThingMessage_Close_{
 			Close: &pb.SwarmThingMessage_Close{

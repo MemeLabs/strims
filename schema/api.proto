@@ -178,16 +178,6 @@ message PeerIndexMessage {
 
 // ---
 
-message ChatMessage {
-  message MessageRequest {
-    string body = 1;
-  }
-
-  oneof body {
-    MessageRequest message = 1;
-  }
-}
-
 message ChatRoom {
   string name = 1;
 }
@@ -195,7 +185,8 @@ message ChatRoom {
 message ChatServer {
   uint64 id  = 1;
   bytes network_key = 2;
-  ChatRoom chat_room = 3;
+  Key key = 3;
+  ChatRoom chat_room = 4;
 }
 
 message CreateChatServerRequest {
@@ -208,7 +199,7 @@ message CreateChatServerResponse {
 message UpdateChatServerRequest {
   uint64 id = 1;
   bytes network_key = 2;
-  ChatRoom chat_room = 3;
+  ChatRoom server_key = 3;
 }
 message UpdateChatServerResponse {
   ChatServer chat_server = 1;
@@ -228,25 +219,46 @@ message GetChatServersResponse {
   repeated ChatServer chat_servers = 1;
 }
 
-message ChatClientOpenRequest {
-  uint32 network_id = 1;
-  bytes host_id = 2;
-  uint32 port = 3;
+message OpenChatServerRequest {
+  ChatServer server = 1;
+}
+
+message ChatServerEvent {
+  message Open {
+    uint64 server_id = 1;
+  }
+
+  message Close {}
+
+  oneof body {
+    Open open = 1;
+    Close close = 2;
+  }
+}
+
+message CallChatServerRequest {
+  message Close {}
+
+  uint64 server_id = 1;
+  oneof body {
+    Close close = 2;
+  }
+}
+
+message OpenChatClientRequest {
+  bytes network_key = 1;
+  bytes server_key = 2;
 }
 
 message ChatClientEvent {
+  message Open {
+    uint64 client_id = 1;
+  }
+
   message Message {
     int64 sent_time = 1;
     int64 server_time = 2;
     string body = 3;
-  }
-
-  message Padding {
-    bytes body = 1;
-  }
-
-  message Open {
-    uint32 client_id = 1;
   }
 
   message Close {}
@@ -255,25 +267,41 @@ message ChatClientEvent {
     Open open = 1;
     Message message = 2;
     Close close = 3;
-    Padding padding = 4;
   }
 }
 
-message ChatClientCallRequest {
+message CallChatClientRequest {
   message Message {
     int64 time = 1;
     string body = 2;
   }
 
-  message RunServer {}
+  message Close {}
 
-  message RunClient {}
-
-  uint32 client_id = 1;
+  uint64 client_id = 1;
   oneof body {
     Message message = 2;
-    RunClient run_client = 3;
-    RunServer run_server = 4;
+    Close close = 3;
+  }
+}
+
+message PubSubEvent {
+  message Message {
+    int64 time = 1;
+    string key = 3;
+    bytes body = 4;
+  }
+
+  message Close {}
+
+  message Padding {
+    bytes body = 1;
+  }
+
+  oneof body {
+    Message message = 1;
+    Close close = 2;
+    Padding padding = 3;
   }
 }
 

@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
@@ -58,6 +59,7 @@ type Session struct {
 	profile *pb.Profile
 	store   *dao.ProfileStore
 	// TODO: private...
+	nextID uint64
 	Values sync.Map
 }
 
@@ -86,8 +88,8 @@ func (s *Session) Anonymous() bool {
 	return s.profile.Id == 0
 }
 
-// Store ...
-func (s *Session) Store() *dao.ProfileStore {
+// ProfileStore ...
+func (s *Session) ProfileStore() *dao.ProfileStore {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	return s.store
@@ -116,4 +118,21 @@ func (s *Session) ID() string {
 	id := strconv.FormatUint(s.profile.Id, 36)
 	storageKey := base64.RawURLEncoding.EncodeToString(s.store.Key().Key())
 	return id + "." + storageKey
+}
+
+// Store ...
+func (s *Session) Store(v interface{}) uint64 {
+	id := atomic.AddUint64(&s.nextID, 1)
+	s.Values.Store(id, v)
+	return id
+}
+
+// Load ...
+func (s *Session) Load(id uint64) (interface{}, bool) {
+	return s.Values.Load(id)
+}
+
+// Delete ...
+func (s *Session) Delete(id uint64) {
+	s.Values.Delete(id)
 }

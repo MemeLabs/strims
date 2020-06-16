@@ -221,8 +221,9 @@ func (m *mediator) SendICECandidate(candidate []byte) error {
 }
 
 // NewPeerExchange ...
-func NewPeerExchange(network *Network) *PeerExchange {
+func NewPeerExchange(logger *zap.Logger, network *Network) *PeerExchange {
 	return &PeerExchange{
+		logger:    logger,
 		network:   network,
 		mediators: map[kademlia.ID]*mediator{},
 	}
@@ -230,6 +231,7 @@ func NewPeerExchange(network *Network) *PeerExchange {
 
 // PeerExchange ...
 type PeerExchange struct {
+	logger        *zap.Logger
 	network       *Network
 	mediatorsLock sync.Mutex
 	mediators     map[kademlia.ID]*mediator
