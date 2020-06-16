@@ -51,5 +51,4 @@ func TestGetProfile(t *testing.T) {
 	assert.NoError(t, err, "failed to get profile")
 	assert.Equal(t, profile.GetName(), "jbpratt")
 	assert.NotNil(t, profile.GetKey())
-	assert.NotNil(t, profile.GetSecret())
 }

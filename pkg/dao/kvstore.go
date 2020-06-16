@@ -78,7 +78,7 @@ func (t KVTx) Get(key string) (value []byte, err error) {
 func (t KVTx) ScanPrefix(prefix string) (values [][]byte, err error) {
 
 	for key, v := range t.b {
-		if strings.HasPrefix(prefix, key) {
+		if strings.HasPrefix(key, prefix) {
 			values = append(values, append([]byte{}, v...))
 		}
 	}
