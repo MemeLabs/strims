@@ -13,15 +13,15 @@ func prefixChatServerKey(id uint64) string {
 }
 
 // InsertChatServer ...
-func InsertChatServer(s Store, v *pb.ChatServer) error {
-	return s.Update(func(tx Tx) (err error) {
+func InsertChatServer(s RWStore, v *pb.ChatServer) error {
+	return s.Update(func(tx RWTx) (err error) {
 		return tx.Put(prefixChatServerKey(v.Id), v)
 	})
 }
 
 // DeleteChatServer ...
-func DeleteChatServer(s Store, id uint64) error {
-	return s.Update(func(tx Tx) (err error) {
+func DeleteChatServer(s RWStore, id uint64) error {
+	return s.Update(func(tx RWTx) (err error) {
 		return tx.Delete(prefixChatServerKey(id))
 	})
 }

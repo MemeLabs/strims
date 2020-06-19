@@ -60,7 +60,7 @@ func (m *Mutex) Lock(ctx context.Context) error {
 }
 
 func (m *Mutex) tryLock(t time.Time) error {
-	return m.store.Update(func(tx Tx) error {
+	return m.store.Update(func(tx RWTx) error {
 		now := t.UnixNano()
 
 		mu := &pb.Mutex{}
@@ -82,7 +82,7 @@ func (m *Mutex) tryLock(t time.Time) error {
 
 // Release ...
 func (m *Mutex) Release() error {
-	return m.store.Update(func(tx Tx) error {
+	return m.store.Update(func(tx RWTx) error {
 		mu := &pb.Mutex{}
 		err := tx.Get(m.key, mu)
 		if err != nil {

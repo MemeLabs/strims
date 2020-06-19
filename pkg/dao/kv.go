@@ -29,15 +29,27 @@ type BlobTx interface {
 // Store ...
 type Store interface {
 	View(fn func(tx Tx) error) error
-	Update(fn func(tx Tx) error) error
+}
+
+// RWStore ...
+type RWStore interface {
+	Store
+	Update(fn func(tx RWTx) error) error
 }
 
 // Tx ..
 type Tx interface {
 	Store
-	Put(key string, m proto.Message) error
 	Get(key string, m proto.Message) error
+	ScanPrefix(prefix string, messages interface{}) error
+}
+
+// RWTx ...
+type RWTx interface {
+	RWStore
 	Delete(key string) error
+	Get(key string, m proto.Message) error
+	Put(key string, m proto.Message) error
 	ScanPrefix(prefix string, messages interface{}) error
 }
 

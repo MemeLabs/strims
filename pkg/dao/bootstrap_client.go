@@ -13,15 +13,15 @@ func prefixBootstrapClientKey(id uint64) string {
 }
 
 // InsertBootstrapClient ...
-func InsertBootstrapClient(s Store, v *pb.BootstrapClient) error {
-	return s.Update(func(tx Tx) (err error) {
+func InsertBootstrapClient(s RWStore, v *pb.BootstrapClient) error {
+	return s.Update(func(tx RWTx) (err error) {
 		return tx.Put(prefixBootstrapClientKey(v.Id), v)
 	})
 }
 
 // DeleteBootstrapClient ...
-func DeleteBootstrapClient(s Store, id uint64) error {
-	return s.Update(func(tx Tx) (err error) {
+func DeleteBootstrapClient(s RWStore, id uint64) error {
+	return s.Update(func(tx RWTx) (err error) {
 		return tx.Delete(prefixBootstrapClientKey(id))
 	})
 }

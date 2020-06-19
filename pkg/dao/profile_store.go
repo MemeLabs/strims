@@ -66,7 +66,7 @@ func (s *ProfileStore) View(fn func(tx Tx) error) error {
 }
 
 // Update ...
-func (s *ProfileStore) Update(fn func(tx Tx) error) error {
+func (s *ProfileStore) Update(fn func(tx RWTx) error) error {
 	return s.store.Update(s.name, func(tx BlobTx) error {
 		return fn(&profileStoreTx{
 			tx: tx,
@@ -85,7 +85,7 @@ func (t *profileStoreTx) View(fn func(tx Tx) error) error {
 	return fn(t)
 }
 
-func (t *profileStoreTx) Update(fn func(tx Tx) error) error {
+func (t *profileStoreTx) Update(fn func(tx RWTx) error) error {
 	if t.readOnly {
 		return errors.New("cannot create read/write transaction from read only transaction")
 	}

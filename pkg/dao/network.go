@@ -13,15 +13,15 @@ func prefixNetworkKey(id uint64) string {
 }
 
 // InsertNetwork ...
-func InsertNetwork(s Store, v *pb.Network) error {
-	return s.Update(func(tx Tx) (err error) {
+func InsertNetwork(s RWStore, v *pb.Network) error {
+	return s.Update(func(tx RWTx) (err error) {
 		return tx.Put(prefixNetworkKey(v.Id), v)
 	})
 }
 
 // DeleteNetwork ...
-func DeleteNetwork(s Store, id uint64) error {
-	return s.Update(func(tx Tx) (err error) {
+func DeleteNetwork(s RWStore, id uint64) error {
+	return s.Update(func(tx RWTx) (err error) {
 		return tx.Delete(prefixNetworkKey(id))
 	})
 }

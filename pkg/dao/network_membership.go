@@ -16,15 +16,15 @@ func prefixNetworkMembershipKey(id uint64) string {
 }
 
 // InsertNetworkMembership ...
-func InsertNetworkMembership(s Store, v *pb.NetworkMembership) error {
-	return s.Update(func(tx Tx) (err error) {
+func InsertNetworkMembership(s RWStore, v *pb.NetworkMembership) error {
+	return s.Update(func(tx RWTx) (err error) {
 		return tx.Put(prefixNetworkMembershipKey(v.Id), v)
 	})
 }
 
 // DeleteNetworkMembership ...
-func DeleteNetworkMembership(s Store, id uint64) error {
-	return s.Update(func(tx Tx) (err error) {
+func DeleteNetworkMembership(s RWStore, id uint64) error {
+	return s.Update(func(tx RWTx) (err error) {
 		return tx.Delete(prefixNetworkMembershipKey(id))
 	})
 }

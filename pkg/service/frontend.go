@@ -177,12 +177,13 @@ func (s *Frontend) CreateNetwork(ctx context.Context, r *pb.CreateNetworkRequest
 		return nil, err
 	}
 
-	// TODO: insert network and network membership in transaction
-	err = dao.InsertNetwork(session.ProfileStore(), network)
-	if err != nil {
-		return nil, err
-	}
-	err = s.saveNetworkMembership(ctx, membership)
+	err = session.ProfileStore().Update(func(tx dao.RWTx) error {
+		if err := dao.InsertNetwork(tx, network); err != nil {
+			return err
+		}
+
+		return dao.InsertNetworkMembership(tx, membership)
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -202,21 +203,30 @@ func (s *Frontend) DeleteNetwork(ctx context.Context, r *pb.DeleteNetworkRequest
 		return nil, ErrAuthenticationRequired
 	}
 
-	membership, err := dao.GetNetworkMembershipForNetwork(session.ProfileStore(), r.Id)
+	err := session.ProfileStore().Update(func(tx dao.RWTx) error {
+		membership, err := dao.GetNetworkMembershipForNetwork(tx, r.Id)
+		if err != nil && err != dao.ErrRecordNotFound {
+			return err
+		}
+
+		if membership != nil {
+			if err := dao.DeleteNetworkMembership(tx, membership.Id); err != nil {
+				return err
+			}
+		}
+
+		if err := dao.DeleteNetwork(tx, r.Id); err != nil {
+			if err == dao.ErrRecordNotFound {
+				return fmt.Errorf("could not delete network: %w", err)
+			}
+			return err
+		}
+		return nil
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	s.DeleteNetworkMembership(ctx, &pb.DeleteNetworkMembershipRequest{
-		Id: membership.Id,
-	})
-
-	if err := dao.DeleteNetwork(session.ProfileStore(), r.Id); err != nil {
-		if err == dao.ErrRecordNotFound {
-			return nil, fmt.Errorf("could not delete network: %w", err)
-		}
-		return nil, err
-	}
 	return &pb.DeleteNetworkResponse{}, nil
 }
 
