@@ -112,7 +112,7 @@ func ParseURI(s string) (u *URI, err error) {
 		if !ok {
 			continue
 		}
-		v, err := strconv.ParseUint(vs[0], 10, 8)
+		v, err := strconv.ParseUint(vs[0], 10, 31)
 		if err != nil {
 			return nil, err
 		}

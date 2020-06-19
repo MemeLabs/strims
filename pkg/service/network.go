@@ -3,7 +3,6 @@ package service
 import (
 	"bytes"
 	"context"
-	"errors"
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
@@ -23,6 +22,7 @@ type NetworkServices struct {
 	PeerIndex    vpn.PeerIndex
 	PeerExchange *vpn.PeerExchange
 	Swarms       SwarmNetwork
+	Directory    Directory
 }
 
 // NewNetworksController ...
@@ -75,25 +75,25 @@ func (n pbNetworks) Find(key []byte) *pb.Network {
 }
 
 func (c *NetworksController) startProfileNetworks() error {
-	memberships, err := c.store.GetNetworkMemberships()
+	memberships, err := dao.GetNetworkMemberships(c.store)
 	if err != nil {
 		return err
 	}
-	networks, err := c.store.GetNetworks()
+	networks, err := dao.GetNetworks(c.store)
 	if err != nil {
 		return err
 	}
 
 	for _, m := range memberships {
-		_, err := c.StartNetwork(m.Certificate)
+		network := pbNetworks(networks).Find(dao.GetRootCert(m.Certificate).Key)
+		if network == nil {
+			_, err = c.StartNetwork(m.Certificate, WithMemberServices())
+		} else {
+			_, err = c.StartNetwork(m.Certificate, WithOwnerServices(network))
+		}
 		if err != nil {
 			c.logger.Error("failed to start network", zap.Error(err))
 			continue
-		}
-
-		options := pbNetworks(networks).Find(dao.GetRootCert(m.Certificate).Key)
-		if options != nil {
-			c.StartNetworkAuthorityServices(m.Certificate, options)
 		}
 	}
 
@@ -108,7 +108,7 @@ func (c *NetworksController) NetworkServices(key []byte) (*NetworkServices, bool
 }
 
 // StartNetwork ...
-func (c *NetworksController) StartNetwork(cert *pb.Certificate) (*NetworkServices, error) {
+func (c *NetworksController) StartNetwork(cert *pb.Certificate, opts ...NetworkOption) (*NetworkServices, error) {
 	network, err := c.networks.AddNetwork(cert)
 	if err != nil {
 		return nil, err
@@ -130,6 +130,13 @@ func (c *NetworksController) StartNetwork(cert *pb.Certificate) (*NetworkService
 		PeerExchange: peerExchange,
 		Swarms:       c.swarmController.AddNetwork(network),
 	}
+
+	for _, opt := range opts {
+		if err := opt(svc); err != nil {
+			return nil, err
+		}
+	}
+
 	c.networkServicesLock.Lock()
 	c.networkServices.Insert(dao.GetRootCert(cert).Key, svc)
 	c.networkServicesLock.Unlock()
@@ -137,25 +144,33 @@ func (c *NetworksController) StartNetwork(cert *pb.Certificate) (*NetworkService
 	return svc, nil
 }
 
-// StartNetworkAuthorityServices ...
-func (c *NetworksController) StartNetworkAuthorityServices(cert *pb.Certificate, options *pb.Network) error {
-	c.networkServicesLock.Lock()
-	svc, ok := c.networkServices.Get(dao.GetRootCert(cert).Key)
-	c.networkServicesLock.Unlock()
-	if !ok {
-		return errors.New("unknown network")
+// NetworkOption ...
+type NetworkOption func(svc *NetworkServices) error
+
+// WithOwnerServices ...
+func WithOwnerServices(network *pb.Network) NetworkOption {
+	return func(svc *NetworkServices) error {
+		directory, err := NewDirectoryServer(context.Background(), svc, network.Key)
+		if err != nil {
+			return err
+		}
+		svc.Directory = directory
+
+		return nil
 	}
+}
 
-	_ = svc
+// WithMemberServices ...
+func WithMemberServices() NetworkOption {
+	return func(svc *NetworkServices) error {
+		directory, err := NewDirectoryClient(context.Background(), svc, svc.Network.CAKey())
+		if err != nil {
+			return err
+		}
+		svc.Directory = directory
 
-	// TODO: some sort of replication?
-	// hot standby?
-
-	// d := NewDirectoryService(svc, options)
-	// go d.Run()
-	// svc.Network.SetHandler(vpn.DirectoryPort, d)
-
-	return nil
+		return nil
+	}
 }
 
 // StopNetwork ...
@@ -183,27 +198,27 @@ type networkServicesMap struct {
 }
 
 func (m *networkServicesMap) Insert(k []byte, v *NetworkServices) {
-	m.m.InsertNoReplace(networkServicesMapEntry{k, v})
+	m.m.InsertNoReplace(networkServicesMapItem{k, v})
 }
 
 func (m *networkServicesMap) Delete(k []byte) {
-	m.m.Delete(networkServicesMapEntry{k, nil})
+	m.m.Delete(networkServicesMapItem{k, nil})
 }
 
 func (m *networkServicesMap) Get(k []byte) (*NetworkServices, bool) {
-	if it := m.m.Get(networkServicesMapEntry{k, nil}); it != nil {
-		return it.(networkServicesMapEntry).v, true
+	if it := m.m.Get(networkServicesMapItem{k, nil}); it != nil {
+		return it.(networkServicesMapItem).v, true
 	}
 	return nil, false
 }
 
-type networkServicesMapEntry struct {
+type networkServicesMapItem struct {
 	k []byte
 	v *NetworkServices
 }
 
-func (t networkServicesMapEntry) Less(oi llrb.Item) bool {
-	if o, ok := oi.(networkServicesMapEntry); ok {
+func (t networkServicesMapItem) Less(oi llrb.Item) bool {
+	if o, ok := oi.(networkServicesMapItem); ok {
 		return bytes.Compare(t.k, o.k) == -1
 	}
 	return !oi.Less(t)

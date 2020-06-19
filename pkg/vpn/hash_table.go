@@ -259,6 +259,12 @@ func (p *HashTableStore) Insert(hashTableID uint32, r *pb.HashTableMessage_Recor
 
 	prev, ok := p.records.Get(item).(*hashTableItem)
 	if !ok {
+		p.logger.Debug(
+			"inserting hash table item",
+			logutil.ByteHex("key", r.Key),
+			logutil.ByteHex("salt", r.Salt),
+		)
+
 		p.records.ReplaceOrInsert(item)
 		p.discardQueue.Push(item)
 
@@ -268,14 +274,16 @@ func (p *HashTableStore) Insert(hashTableID uint32, r *pb.HashTableMessage_Recor
 		return nil
 	}
 
-	if prev.Record().Timestamp < r.Timestamp {
-		p.logger.Debug(
-			"inserting hash table item",
-			logutil.ByteHex("key", r.Key),
-			logutil.ByteHex("salt", r.Salt),
-		)
-		prev.SetRecord(r)
+	if prev.Record().Timestamp > r.Timestamp {
+		return errors.New("new record older than existing message")
 	}
+
+	p.logger.Debug(
+		"updating hash table item",
+		logutil.ByteHex("key", r.Key),
+		logutil.ByteHex("salt", r.Salt),
+	)
+	prev.SetRecord(r)
 
 	return nil
 }

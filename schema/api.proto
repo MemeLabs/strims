@@ -132,14 +132,6 @@ message PublishNetworkToBootstrapPeerRequest {
 }
 message PublishNetworkToBootstrapPeerResponse {}
 
-// message ServiceAdvertisement {
-//   bytes host_id = 1;
-//   uint32 port = 2;
-//   bytes key = 3;
-//   string name = 4;
-//   string mime_type = 5;
-// }
-
 message PeerIndexMessage {
   message Record {
     bytes hash = 1;
@@ -282,6 +274,87 @@ message CallChatClientRequest {
   oneof body {
     Message message = 2;
     Close close = 3;
+  }
+}
+
+message TestMutexRequest {}
+message TestMutexResponse {}
+
+message Mutex {
+  int64 eol = 1;
+  bytes token = 2;
+}
+
+message DirectoryListing {
+  uint64 id = 1;
+  string mime_type = 2;
+  string title = 3;
+  string description = 4;
+  repeated string tags = 5;
+  bytes extra = 6;
+  bytes key = 7;
+}
+
+message DirectoryServerEvent {
+  message Publish {
+    DirectoryListing listing = 1;
+  }
+
+  message Unpublish {
+    uint64 listing_id = 1;
+  }
+
+  message ViewerChange {
+    uint64 listing_id = 1;
+    uint32 count = 2;
+  }
+
+  oneof body {
+    Publish publish = 1;
+    Unpublish unpublish = 2;
+    ViewerChange open = 3;
+  }
+}
+
+message CallDirectoryServerRequest {
+  message RemoveListing {
+    uint64 listing_id = 1;
+  }
+
+  bytes network_key = 1;
+  oneof body {
+    RemoveListing listing = 2;
+  }
+}
+
+message OpenDirectoryClientRequest {
+  bytes network_key = 1;
+  bytes server_key = 2;
+}
+
+message DirectoryClientEvent {
+  message Publish {
+    DirectoryListing listing = 1;
+    bytes signature = 2;
+  }
+
+  message Unpublish {
+    bytes key = 1;
+  }
+
+  message Join {
+    uint64 listing_id = 1;
+  }
+
+  message Part {
+    uint64 listing_id = 1;
+  }
+
+  oneof body {
+    Publish publish = 1;
+    Unpublish unpublish = 2;
+    Join join = 3;
+    Part part = 4;
   }
 }
 

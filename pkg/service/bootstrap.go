@@ -166,7 +166,7 @@ func (s *bootstrapServicePeer) handlePublish(r *pb.BootstrapServiceMessage_Publi
 	if err != nil {
 		return err
 	}
-	err = s.store.InsertNetworkMembership(membership)
+	err = dao.InsertNetworkMembership(s.store, membership)
 	if err != nil {
 		return err
 	}
@@ -226,32 +226,32 @@ type bootstrapServicePeerMap struct {
 
 func (m *bootstrapServicePeerMap) Each(f func(b *bootstrapServicePeer) bool) {
 	m.m.AscendGreaterOrEqual(llrb.Inf(-1), func(i llrb.Item) bool {
-		return f(i.(bootstrapServicePeerMapEntry).v)
+		return f(i.(bootstrapServicePeerMapItem).v)
 	})
 }
 
 func (m *bootstrapServicePeerMap) Insert(k []byte, v *bootstrapServicePeer) {
-	m.m.InsertNoReplace(bootstrapServicePeerMapEntry{k, v})
+	m.m.InsertNoReplace(bootstrapServicePeerMapItem{k, v})
 }
 
 func (m *bootstrapServicePeerMap) Delete(k []byte) {
-	m.m.Delete(bootstrapServicePeerMapEntry{k, nil})
+	m.m.Delete(bootstrapServicePeerMapItem{k, nil})
 }
 
 func (m *bootstrapServicePeerMap) Get(k []byte) (*bootstrapServicePeer, bool) {
-	if it := m.m.Get(bootstrapServicePeerMapEntry{k, nil}); it != nil {
-		return it.(bootstrapServicePeerMapEntry).v, true
+	if it := m.m.Get(bootstrapServicePeerMapItem{k, nil}); it != nil {
+		return it.(bootstrapServicePeerMapItem).v, true
 	}
 	return nil, false
 }
 
-type bootstrapServicePeerMapEntry struct {
+type bootstrapServicePeerMapItem struct {
 	k []byte
 	v *bootstrapServicePeer
 }
 
-func (t bootstrapServicePeerMapEntry) Less(oi llrb.Item) bool {
-	if o, ok := oi.(bootstrapServicePeerMapEntry); ok {
+func (t bootstrapServicePeerMapItem) Less(oi llrb.Item) bool {
+	if o, ok := oi.(bootstrapServicePeerMapItem); ok {
 		return bytes.Compare(t.k, o.k) == -1
 	}
 	return !oi.Less(t)

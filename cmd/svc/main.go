@@ -26,7 +26,7 @@ func main() {
 		panic(err)
 	}
 
-	profile, err := profileStore.GetProfile()
+	profile, err := dao.GetProfile(profileStore)
 	if err != nil {
 		panic(err)
 	}
@@ -79,7 +79,7 @@ func initProfileStore() (*dao.ProfileStore, error) {
 		panic(err)
 	}
 
-	profiles, err := ds.GetProfiles()
+	profiles, err := dao.GetProfileSummaries(ds)
 	if err != nil {
 		return nil, err
 	}
@@ -88,10 +88,10 @@ func initProfileStore() (*dao.ProfileStore, error) {
 	pw := "test"
 
 	if len(profiles) == 0 {
-		_, profileStore, err := ds.CreateProfile(name, pw)
+		_, profileStore, err := dao.CreateProfile(ds, name, pw)
 		return profileStore, err
 	}
 
-	_, profileStore, err := ds.LoadProfile(profiles[0].Id, pw)
+	_, profileStore, err := dao.LoadProfile(ds, profiles[0].Id, pw)
 	return profileStore, err
 }

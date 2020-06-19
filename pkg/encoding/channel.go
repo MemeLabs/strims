@@ -213,7 +213,7 @@ func (c *channel) HandleCancel(v Cancel) {
 	b := v.Address.Bin()
 	if !c.unackedBins.EmptyAt(b) {
 		// TODO: this isn't accurate if the bin was partially acked
-		c.peer.ledbat.AddDataLoss(int(b.BaseLeft())*c.swarm.ChunkSize, false)
+		c.peer.ledbat.AddDataLoss(int(b.BaseLength())*c.swarm.ChunkSize, false)
 		c.unackedBins.Reset(b)
 	}
 	c.requestedBins.Reset(b)

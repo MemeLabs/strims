@@ -47,7 +47,7 @@ func TestGetProfile(t *testing.T) {
 	pfStore, err := createProfileStore(t)
 	assert.NoError(t, err, "failed to setup profile store")
 
-	profile, err := pfStore.GetProfile()
+	profile, err := GetProfile(pfStore)
 	assert.NoError(t, err, "failed to get profile")
 	assert.Equal(t, profile.GetName(), "jbpratt")
 	assert.NotNil(t, profile.GetKey())

@@ -1,14 +1,14 @@
 package dao
 
 import (
-	"bytes"
-	"fmt"
+	"errors"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"google.golang.org/protobuf/proto"
 )
 
 // NewProfileStore ...
-func NewProfileStore(profileID uint64, store Store, key *StorageKey) *ProfileStore {
+func NewProfileStore(profileID uint64, store BlobStore, key *StorageKey) *ProfileStore {
 	return &ProfileStore{
 		store: store,
 		key:   key,
@@ -18,7 +18,7 @@ func NewProfileStore(profileID uint64, store Store, key *StorageKey) *ProfileSto
 
 // ProfileStore ...
 type ProfileStore struct {
-	store Store
+	store BlobStore
 	key   *StorageKey
 	name  string
 }
@@ -28,7 +28,7 @@ func (s *ProfileStore) Init(profile *pb.Profile) error {
 	if err := s.store.CreateStoreIfNotExists(s.name); err != nil {
 		return err
 	}
-	return s.store.Update(s.name, func(tx Tx) error {
+	return s.store.Update(s.name, func(tx BlobTx) error {
 		b, err := MarshalStorageKey(s.key)
 		if err != nil {
 			return err
@@ -54,194 +54,56 @@ func (s *ProfileStore) Key() *StorageKey {
 	return s.key
 }
 
-// GetProfile ...
-func (s *ProfileStore) GetProfile() (*pb.Profile, error) {
-	v := &pb.Profile{}
-	err := s.store.View(s.name, func(tx Tx) (err error) {
-		return get(tx, s.key, "profile", v)
+// View ...
+func (s *ProfileStore) View(fn func(tx Tx) error) error {
+	return s.store.View(s.name, func(tx BlobTx) error {
+		return fn(&profileStoreTx{
+			tx:       tx,
+			sk:       s.key,
+			readOnly: true,
+		})
 	})
-	if err != nil {
-		return nil, err
+}
+
+// Update ...
+func (s *ProfileStore) Update(fn func(tx Tx) error) error {
+	return s.store.Update(s.name, func(tx BlobTx) error {
+		return fn(&profileStoreTx{
+			tx: tx,
+			sk: s.key,
+		})
+	})
+}
+
+type profileStoreTx struct {
+	tx       BlobTx
+	sk       *StorageKey
+	readOnly bool
+}
+
+func (t *profileStoreTx) View(fn func(tx Tx) error) error {
+	return fn(t)
+}
+
+func (t *profileStoreTx) Update(fn func(tx Tx) error) error {
+	if t.readOnly {
+		return errors.New("cannot create read/write transaction from read only transaction")
 	}
-	return v, nil
+	return fn(t)
 }
 
-// InsertNetwork ...
-func (s *ProfileStore) InsertNetwork(v *pb.Network) error {
-	return s.store.Update(s.name, func(tx Tx) (err error) {
-		return put(tx, s.key, prefixNetworkKey(v.Id), v)
-	})
+func (t *profileStoreTx) Put(key string, m proto.Message) error {
+	return put(t.tx, t.sk, key, m)
 }
 
-// DeleteNetwork ...
-func (s *ProfileStore) DeleteNetwork(id uint64) error {
-	return s.store.Update(s.name, func(tx Tx) (err error) {
-		return tx.Delete(prefixNetworkKey(id))
-	})
+func (t *profileStoreTx) Get(key string, m proto.Message) error {
+	return get(t.tx, t.sk, key, m)
 }
 
-// GetNetwork ...
-func (s *ProfileStore) GetNetwork(id uint64) (*pb.Network, error) {
-	v := &pb.Network{}
-	err := s.store.View(s.name, func(tx Tx) (err error) {
-		return get(tx, s.key, prefixNetworkKey(id), v)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return v, nil
+func (t *profileStoreTx) Delete(key string) error {
+	return t.tx.Delete(key)
 }
 
-// GetNetworks ...
-func (s *ProfileStore) GetNetworks() ([]*pb.Network, error) {
-	vs := []*pb.Network{}
-	err := s.store.View(s.name, func(tx Tx) (err error) {
-		return scanPrefix(tx, s.key, networkPrefix, &vs)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vs, nil
-}
-
-// InsertNetworkMembership ...
-func (s *ProfileStore) InsertNetworkMembership(v *pb.NetworkMembership) error {
-	return s.store.Update(s.name, func(tx Tx) (err error) {
-		return put(tx, s.key, prefixNetworkMembershipKey(v.Id), v)
-	})
-}
-
-// DeleteNetworkMembership ...
-func (s *ProfileStore) DeleteNetworkMembership(id uint64) error {
-	return s.store.Update(s.name, func(tx Tx) (err error) {
-		return tx.Delete(prefixNetworkMembershipKey(id))
-	})
-}
-
-// GetNetworkMembership ...
-func (s *ProfileStore) GetNetworkMembership(id uint64) (*pb.NetworkMembership, error) {
-	v := &pb.NetworkMembership{}
-	err := s.store.View(s.name, func(tx Tx) (err error) {
-		return get(tx, s.key, prefixNetworkMembershipKey(id), v)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return v, nil
-}
-
-// GetNetworkMemberships ...
-func (s *ProfileStore) GetNetworkMemberships() ([]*pb.NetworkMembership, error) {
-	vs := []*pb.NetworkMembership{}
-	err := s.store.View(s.name, func(tx Tx) (err error) {
-		return scanPrefix(tx, s.key, networkMembershipPrefix, &vs)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vs, nil
-}
-
-// GetNetworkMembershipByNetworkKey returns the membership belonging to the given network
-func (s *ProfileStore) GetNetworkMembershipByNetworkKey(k []byte) (*pb.NetworkMembership, error) {
-	memberships, err := s.GetNetworkMemberships()
-	if err != nil {
-		return nil, err
-	}
-
-	for _, im := range memberships {
-		if bytes.Equal(GetRootCert(im.Certificate).Key, k) {
-			return im, nil
-		}
-	}
-	return nil, ErrRecordNotFound
-}
-
-// GetNetworkMembershipForNetwork returns the membership belonging to the given network
-func (s *ProfileStore) GetNetworkMembershipForNetwork(netID uint64) (*pb.NetworkMembership, error) {
-	network, err := s.GetNetwork(netID)
-	if err != nil {
-		if err == ErrRecordNotFound {
-			return nil, fmt.Errorf("could not find network: %w", err)
-		}
-		return nil, err
-	}
-
-	return s.GetNetworkMembershipByNetworkKey(network.Certificate.Key)
-}
-
-// InsertBootstrapClient ...
-func (s *ProfileStore) InsertBootstrapClient(v *pb.BootstrapClient) error {
-	return s.store.Update(s.name, func(tx Tx) (err error) {
-		return put(tx, s.key, prefixBootstrapClientKey(v.Id), v)
-	})
-}
-
-// DeleteBootstrapClient ...
-func (s *ProfileStore) DeleteBootstrapClient(id uint64) error {
-	return s.store.Update(s.name, func(tx Tx) (err error) {
-		return tx.Delete(prefixBootstrapClientKey(id))
-	})
-}
-
-// GetBootstrapClient ...
-func (s *ProfileStore) GetBootstrapClient(id uint64) (*pb.BootstrapClient, error) {
-	v := &pb.BootstrapClient{}
-	err := s.store.View(s.name, func(tx Tx) (err error) {
-		return get(tx, s.key, prefixBootstrapClientKey(id), v)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return v, nil
-}
-
-// GetBootstrapClients ...
-func (s *ProfileStore) GetBootstrapClients() ([]*pb.BootstrapClient, error) {
-	vs := []*pb.BootstrapClient{}
-	err := s.store.View(s.name, func(tx Tx) (err error) {
-		return scanPrefix(tx, s.key, bootstrapClientPrefix, &vs)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vs, nil
-}
-
-// InsertChatServer ...
-func (s *ProfileStore) InsertChatServer(v *pb.ChatServer) error {
-	return s.store.Update(s.name, func(tx Tx) (err error) {
-		return put(tx, s.key, prefixChatServerKey(v.Id), v)
-	})
-}
-
-// DeleteChatServer ...
-func (s *ProfileStore) DeleteChatServer(id uint64) error {
-	return s.store.Update(s.name, func(tx Tx) (err error) {
-		return tx.Delete(prefixChatServerKey(id))
-	})
-}
-
-// GetChatServer ...
-func (s *ProfileStore) GetChatServer(id uint64) (*pb.ChatServer, error) {
-	v := &pb.ChatServer{}
-	err := s.store.View(s.name, func(tx Tx) (err error) {
-		return get(tx, s.key, prefixChatServerKey(id), v)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return v, nil
-}
-
-// GetChatServers ...
-func (s *ProfileStore) GetChatServers() ([]*pb.ChatServer, error) {
-	vs := []*pb.ChatServer{}
-	err := s.store.View(s.name, func(tx Tx) (err error) {
-		return scanPrefix(tx, s.key, chatServerPrefix, &vs)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return vs, nil
+func (t *profileStoreTx) ScanPrefix(prefix string, messages interface{}) error {
+	return scanPrefix(t.tx, t.sk, prefix, messages)
 }

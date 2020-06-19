@@ -8,6 +8,7 @@ import (
 	"log"
 	"math"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/encoding"
@@ -17,6 +18,9 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"google.golang.org/protobuf/proto"
 )
+
+const syncAddrRetryIvl = 5 * time.Second
+const syncAddrRefreshIvl = 10 * time.Minute
 
 // PubSubServerOptions ...
 type PubSubServerOptions struct {
@@ -159,11 +163,6 @@ func (s *PubSubServer) HandleMessage(msg *vpn.Message) (forward bool, err error)
 
 // NewPubSubClient ...
 func NewPubSubClient(ctx context.Context, svc *NetworkServices, key, salt []byte) (*PubSubClient, error) {
-	addr, err := getHostAddr(ctx, svc, key, salt)
-	if err != nil {
-		return nil, err
-	}
-
 	port, err := svc.Network.ReservePort()
 	if err != nil {
 		return nil, err
@@ -196,23 +195,52 @@ func NewPubSubClient(ctx context.Context, svc *NetworkServices, key, salt []byte
 
 	newSwarmPeerManager(ctx, svc, getPeersGetter(ctx, svc, key, salt))
 
-	return &PubSubClient{
-		close:      cancel,
-		network:    svc.Network,
-		remoteAddr: addr,
-		port:       port,
-		messages:   messages,
-	}, nil
+	c := &PubSubClient{
+		ctx:       ctx,
+		close:     cancel,
+		network:   svc.Network,
+		addrReady: make(chan struct{}),
+		port:      port,
+		messages:  messages,
+	}
+
+	go c.syncAddr(svc, key, salt)
+
+	return c, nil
 }
 
 // PubSubClient ...
 type PubSubClient struct {
-	close      context.CancelFunc
-	closeOnce  sync.Once
-	network    *vpn.Network
-	remoteAddr *hostAddr
-	port       uint16
-	messages   chan *pb.PubSubEvent_Message
+	ctx       context.Context
+	close     context.CancelFunc
+	closeOnce sync.Once
+	network   *vpn.Network
+	addrReady chan struct{}
+	addr      atomic.Value
+	port      uint16
+	messages  chan *pb.PubSubEvent_Message
+}
+
+func (c *PubSubClient) syncAddr(svc *NetworkServices, key, salt []byte) {
+	var nextTick time.Duration
+	var closeOnce sync.Once
+	for {
+		select {
+		case <-time.After(nextTick):
+			addr, err := getHostAddr(c.ctx, svc, key, salt)
+			if err != nil {
+				nextTick = syncAddrRetryIvl
+				continue
+			}
+
+			c.addr.Store(addr)
+			closeOnce.Do(func() { close(c.addrReady) })
+
+			nextTick = syncAddrRefreshIvl
+		case <-c.ctx.Done():
+			return
+		}
+	}
 }
 
 // Close ...
@@ -230,6 +258,14 @@ func (c *PubSubClient) Messages() <-chan *pb.PubSubEvent_Message {
 
 // Send ...
 func (c *PubSubClient) Send(key string, body []byte) error {
+	select {
+	case <-c.addrReady:
+	case <-c.ctx.Done():
+	}
+	if c.ctx.Err() != nil {
+		return c.ctx.Err()
+	}
+
 	b, err := proto.Marshal(&pb.PubSubEvent{
 		Body: &pb.PubSubEvent_Message_{
 			Message: &pb.PubSubEvent_Message{
@@ -243,7 +279,8 @@ func (c *PubSubClient) Send(key string, body []byte) error {
 		return err
 	}
 
-	return c.network.Send(c.remoteAddr.HostID, c.remoteAddr.Port, c.port, b)
+	addr := c.addr.Load().(*hostAddr)
+	return c.network.Send(addr.HostID, addr.Port, c.port, b)
 }
 
 func readPubSubEvents(swarm *encoding.Swarm, messages chan *pb.PubSubEvent_Message) {

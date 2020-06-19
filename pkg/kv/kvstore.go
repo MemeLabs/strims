@@ -39,7 +39,7 @@ func (s *KVStore) DeleteStore(table string) error {
 }
 
 // View ...
-func (s *KVStore) View(table string, fn func(tx dao.Tx) error) error {
+func (s *KVStore) View(table string, fn func(tx dao.BlobTx) error) error {
 	return s.db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(table))
 		if b == nil {
@@ -50,7 +50,7 @@ func (s *KVStore) View(table string, fn func(tx dao.Tx) error) error {
 }
 
 // Update ...
-func (s *KVStore) Update(table string, fn func(tx dao.Tx) error) error {
+func (s *KVStore) Update(table string, fn func(tx dao.BlobTx) error) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(table))
 		if b == nil {

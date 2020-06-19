@@ -26,7 +26,7 @@ func TestCreateProfile(t *testing.T) {
 	mdStore := createMetadataStore(t)
 
 	name := "jbpratt"
-	profile, profileStore, err := mdStore.CreateProfile(name, "autumnmajora")
+	profile, profileStore, err := CreateProfile(mdStore, name, "autumnmajora")
 	assert.NoError(t, err, "failed to create profile")
 	assert.NotNil(t, profile)
 	assert.NotNil(t, profileStore)
@@ -38,10 +38,10 @@ func TestCreateProfileUsernameTaken(t *testing.T) {
 	mdStore := createMetadataStore(t)
 
 	name := "jbpratt"
-	_, _, err := mdStore.CreateProfile(name, "autumnmajora")
+	_, _, err := CreateProfile(mdStore, name, "autumnmajora")
 	assert.NoError(t, err, "failed to create profile")
 
-	_, _, err = mdStore.CreateProfile(name, "autumnmajora")
+	_, _, err = CreateProfile(mdStore, name, "autumnmajora")
 	assert.EqualError(t, err, ErrProfileNameNotAvailable.Error())
 }
 
@@ -49,23 +49,23 @@ func TestDeleteProfile(t *testing.T) {
 	mdStore := createMetadataStore(t)
 
 	name := "jbpratt"
-	profile, _, err := mdStore.CreateProfile(name, "autumnmajora")
+	profile, _, err := CreateProfile(mdStore, name, "autumnmajora")
 	assert.NoError(t, err, "failed to create profile")
 
-	assert.NoError(t, mdStore.DeleteProfile(profile), "failed to delete profile")
+	assert.NoError(t, DeleteProfile(mdStore, profile), "failed to delete profile")
 }
 
-func TestGetProfiles(t *testing.T) {
+func TestGetProfileSummaries(t *testing.T) {
 	mdStore := createMetadataStore(t)
 
-	_, _, err := mdStore.CreateProfile("jbpratt", "autumnmajora")
+	_, _, err := CreateProfile(mdStore, "jbpratt", "autumnmajora")
 	assert.NoError(t, err, "failed to create profile")
-	_, _, err = mdStore.CreateProfile("autumn", "jbprattmajora")
+	_, _, err = CreateProfile(mdStore, "autumn", "jbprattmajora")
 	assert.NoError(t, err, "failed to create profile")
-	_, _, err = mdStore.CreateProfile("majora", "jbprattautumn")
+	_, _, err = CreateProfile(mdStore, "majora", "jbprattautumn")
 	assert.NoError(t, err, "failed to create profile")
 
-	summaries, err := mdStore.GetProfiles()
+	summaries, err := GetProfileSummaries(mdStore)
 	assert.NoError(t, err, "failed to get profile summaries")
 
 	assert.Equal(t, 3, len(summaries))

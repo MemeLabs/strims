@@ -30,7 +30,7 @@ var (
 
 // Options ...
 type Options struct {
-	Store      dao.Store
+	Store      dao.BlobStore
 	Logger     *zap.Logger
 	VPNOptions []vpn.HostOption
 }
@@ -53,14 +53,14 @@ func New(options Options) (*Frontend, error) {
 // Frontend ...
 type Frontend struct {
 	logger     *zap.Logger
-	store      dao.Store
+	store      dao.BlobStore
 	metadata   *dao.MetadataStore
 	vpnOptions []vpn.HostOption
 }
 
 // CreateProfile ...
 func (s *Frontend) CreateProfile(ctx context.Context, r *pb.CreateProfileRequest) (*pb.CreateProfileResponse, error) {
-	profile, store, err := s.metadata.CreateProfile(r.Name, r.Password)
+	profile, store, err := dao.CreateProfile(s.metadata, r.Name, r.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -81,7 +81,7 @@ func (s *Frontend) DeleteProfile(ctx context.Context, r *pb.DeleteProfileRequest
 		return nil, ErrAuthenticationRequired
 	}
 
-	if err := s.metadata.DeleteProfile(session.Profile()); err != nil {
+	if err := dao.DeleteProfile(s.metadata, session.Profile()); err != nil {
 		return nil, err
 	}
 
@@ -96,7 +96,7 @@ func (s *Frontend) DeleteProfile(ctx context.Context, r *pb.DeleteProfileRequest
 
 // LoadProfile ...
 func (s *Frontend) LoadProfile(ctx context.Context, r *pb.LoadProfileRequest) (*pb.LoadProfileResponse, error) {
-	profile, store, err := s.metadata.LoadProfile(r.Id, r.Password)
+	profile, store, err := dao.LoadProfile(s.metadata, r.Id, r.Password)
 	if err != nil {
 		return nil, err
 	}
@@ -117,7 +117,7 @@ func (s *Frontend) LoadSession(ctx context.Context, r *pb.LoadSessionRequest) (*
 		return nil, err
 	}
 
-	profile, store, err := s.metadata.LoadSession(id, storageKey)
+	profile, store, err := dao.LoadProfileFromSession(s.metadata, id, storageKey)
 	if err != nil {
 		return nil, err
 	}
@@ -138,7 +138,7 @@ func (s *Frontend) GetProfile(ctx context.Context, r *pb.GetProfileRequest) (*pb
 		return nil, ErrAuthenticationRequired
 	}
 
-	profile, err := session.ProfileStore().GetProfile()
+	profile, err := dao.GetProfile(session.ProfileStore())
 	if err != nil {
 		return nil, err
 	}
@@ -148,7 +148,7 @@ func (s *Frontend) GetProfile(ctx context.Context, r *pb.GetProfileRequest) (*pb
 
 // GetProfiles ...
 func (s *Frontend) GetProfiles(ctx context.Context, r *pb.GetProfilesRequest) (*pb.GetProfilesResponse, error) {
-	profiles, err := s.metadata.GetProfiles()
+	profiles, err := dao.GetProfileSummaries(s.metadata)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +177,8 @@ func (s *Frontend) CreateNetwork(ctx context.Context, r *pb.CreateNetworkRequest
 		return nil, err
 	}
 
-	err = session.ProfileStore().InsertNetwork(network)
+	// TODO: insert network and network membership in transaction
+	err = dao.InsertNetwork(session.ProfileStore(), network)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +202,7 @@ func (s *Frontend) DeleteNetwork(ctx context.Context, r *pb.DeleteNetworkRequest
 		return nil, ErrAuthenticationRequired
 	}
 
-	membership, err := session.ProfileStore().GetNetworkMembershipForNetwork(r.Id)
+	membership, err := dao.GetNetworkMembershipForNetwork(session.ProfileStore(), r.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -210,7 +211,7 @@ func (s *Frontend) DeleteNetwork(ctx context.Context, r *pb.DeleteNetworkRequest
 		Id: membership.Id,
 	})
 
-	if err := session.ProfileStore().DeleteNetwork(r.Id); err != nil {
+	if err := dao.DeleteNetwork(session.ProfileStore(), r.Id); err != nil {
 		if err == dao.ErrRecordNotFound {
 			return nil, fmt.Errorf("could not delete network: %w", err)
 		}
@@ -226,7 +227,7 @@ func (s *Frontend) GetNetwork(ctx context.Context, r *pb.GetNetworkRequest) (*pb
 		return nil, ErrAuthenticationRequired
 	}
 
-	network, err := session.ProfileStore().GetNetwork(r.Id)
+	network, err := dao.GetNetwork(session.ProfileStore(), r.Id)
 	if err != nil {
 		return nil, err
 	}
@@ -240,7 +241,7 @@ func (s *Frontend) GetNetworks(ctx context.Context, r *pb.GetNetworksRequest) (*
 		return nil, ErrAuthenticationRequired
 	}
 
-	networks, err := session.ProfileStore().GetNetworks()
+	networks, err := dao.GetNetworks(session.ProfileStore())
 	if err != nil {
 		return nil, err
 	}
@@ -254,7 +255,7 @@ func (s *Frontend) GetNetworkMemberships(ctx context.Context, r *pb.GetNetworkMe
 		return nil, ErrAuthenticationRequired
 	}
 
-	memberships, err := session.ProfileStore().GetNetworkMemberships()
+	memberships, err := dao.GetNetworkMemberships(session.ProfileStore())
 	if err != nil {
 		return nil, err
 	}
@@ -268,7 +269,7 @@ func (s *Frontend) DeleteNetworkMembership(ctx context.Context, r *pb.DeleteNetw
 		return nil, ErrAuthenticationRequired
 	}
 
-	membership, err := session.ProfileStore().GetNetworkMembership(r.Id)
+	membership, err := dao.GetNetworkMembership(session.ProfileStore(), r.Id)
 	if err != nil {
 		if err == dao.ErrRecordNotFound {
 			return nil, fmt.Errorf("could not delete network membership: %w", err)
@@ -284,7 +285,7 @@ func (s *Frontend) DeleteNetworkMembership(ctx context.Context, r *pb.DeleteNetw
 		return nil, err
 	}
 
-	if err := session.ProfileStore().DeleteNetworkMembership(r.Id); err != nil {
+	if err := dao.DeleteNetworkMembership(session.ProfileStore(), r.Id); err != nil {
 		return nil, err
 	}
 	return &pb.DeleteNetworkMembershipResponse{}, nil
@@ -307,7 +308,7 @@ func (s *Frontend) CreateBootstrapClient(ctx context.Context, r *pb.CreateBootst
 		return nil, err
 	}
 
-	if err := session.ProfileStore().InsertBootstrapClient(client); err != nil {
+	if err := dao.InsertBootstrapClient(session.ProfileStore(), client); err != nil {
 		return nil, err
 	}
 
@@ -327,7 +328,7 @@ func (s *Frontend) DeleteBootstrapClient(ctx context.Context, r *pb.DeleteBootst
 		return nil, ErrAuthenticationRequired
 	}
 
-	if err := session.ProfileStore().DeleteBootstrapClient(r.Id); err != nil {
+	if err := dao.DeleteBootstrapClient(session.ProfileStore(), r.Id); err != nil {
 		return nil, err
 	}
 
@@ -346,7 +347,7 @@ func (s *Frontend) GetBootstrapClients(ctx context.Context, r *pb.GetBootstrapCl
 		return nil, ErrAuthenticationRequired
 	}
 
-	clients, err := session.ProfileStore().GetBootstrapClients()
+	clients, err := dao.GetBootstrapClients(session.ProfileStore())
 	if err != nil {
 		return nil, err
 	}
@@ -398,7 +399,7 @@ func (s *Frontend) CreateChatServer(ctx context.Context, r *pb.CreateChatServerR
 		return nil, err
 	}
 
-	if err := session.ProfileStore().InsertChatServer(server); err != nil {
+	if err := dao.InsertChatServer(session.ProfileStore(), server); err != nil {
 		return nil, err
 	}
 
@@ -418,7 +419,7 @@ func (s *Frontend) DeleteChatServer(ctx context.Context, r *pb.DeleteChatServerR
 		return nil, ErrAuthenticationRequired
 	}
 
-	if err := session.ProfileStore().DeleteChatServer(r.Id); err != nil {
+	if err := dao.DeleteChatServer(session.ProfileStore(), r.Id); err != nil {
 		return nil, err
 	}
 
@@ -437,7 +438,7 @@ func (s *Frontend) GetChatServers(ctx context.Context, r *pb.GetChatServersReque
 		return nil, ErrAuthenticationRequired
 	}
 
-	servers, err := session.ProfileStore().GetChatServers()
+	servers, err := dao.GetChatServers(session.ProfileStore())
 	if err != nil {
 		return nil, err
 	}
@@ -481,7 +482,7 @@ func (s *Frontend) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (*pb.Sta
 	if _, ok := session.Values.Load(vpnKey); !ok {
 		hostOptions := append([]vpn.HostOption{}, s.vpnOptions...)
 
-		profile, err := session.ProfileStore().GetProfile()
+		profile, err := dao.GetProfile(session.ProfileStore())
 		if err != nil {
 			return nil, err
 		}
@@ -497,7 +498,7 @@ func (s *Frontend) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (*pb.Sta
 		)
 		hostOptions = append(hostOptions, WithBootstrapService(bootstrapService))
 
-		clients, err := session.ProfileStore().GetBootstrapClients()
+		clients, err := dao.GetBootstrapClients(session.ProfileStore())
 		if err != nil {
 			return nil, err
 		}
@@ -930,6 +931,24 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 	}, nil
 }
 
+// TestMutex ...
+func (s *Frontend) TestMutex(ctx context.Context, r *pb.TestMutexRequest) (*pb.TestMutexResponse, error) {
+	session := rpc.ContextSession(ctx)
+	if session.Anonymous() {
+		return nil, ErrAuthenticationRequired
+	}
+
+	mu := dao.NewMutex(session.ProfileStore(), []byte("test"))
+
+	go func() {
+		mu.Lock(context.Background())
+		s.logger.Debug("lock acquired")
+		mu.Release()
+	}()
+
+	return &pb.TestMutexResponse{}, nil
+}
+
 // saveNetworkMembership saves a network membership.
 // it returns an error if the user is already has a valid membership for that network
 func (s *Frontend) saveNetworkMembership(ctx context.Context, membership *pb.NetworkMembership) error {
@@ -938,7 +957,7 @@ func (s *Frontend) saveNetworkMembership(ctx context.Context, membership *pb.Net
 		return ErrAuthenticationRequired
 	}
 
-	old, err := session.ProfileStore().GetNetworkMembershipByNetworkKey(dao.GetRootCert(membership.Certificate).Key)
+	old, err := dao.GetNetworkMembershipByNetworkKey(session.ProfileStore(), dao.GetRootCert(membership.Certificate).Key)
 	if err != nil && err != dao.ErrRecordNotFound {
 		return err
 	}
@@ -947,12 +966,12 @@ func (s *Frontend) saveNetworkMembership(ctx context.Context, membership *pb.Net
 			return ErrAlreadyJoinedNetwork
 		}
 
-		if err := session.ProfileStore().DeleteNetworkMembership(old.Id); err != nil {
+		if err := dao.DeleteNetworkMembership(session.ProfileStore(), old.Id); err != nil {
 			return fmt.Errorf("could not delete old membership: %w", err)
 		}
 	}
 
-	return session.ProfileStore().InsertNetworkMembership(membership)
+	return dao.InsertNetworkMembership(session.ProfileStore(), membership)
 }
 
 func (s *Frontend) startNetwork(ctx context.Context, membership *pb.NetworkMembership, network *pb.Network) error {
@@ -962,15 +981,12 @@ func (s *Frontend) startNetwork(ctx context.Context, membership *pb.NetworkMembe
 	}
 
 	// TODO: restart/update network with new cert?
-	if _, err := controller.StartNetwork(membership.Certificate); err != nil {
-		return err
-	}
-
 	if network == nil {
-		return nil
+		_, err = controller.StartNetwork(membership.Certificate)
+	} else {
+		_, err = controller.StartNetwork(membership.Certificate, WithOwnerServices(network))
 	}
-
-	return controller.StartNetworkAuthorityServices(membership.Certificate, network)
+	return err
 }
 
 // loads the NetworksController fron the session store

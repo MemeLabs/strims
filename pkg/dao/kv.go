@@ -10,23 +10,38 @@ import (
 // ErrRecordNotFound ...
 var ErrRecordNotFound = errors.New("record not found")
 
-// Store ...
-type Store interface {
+// BlobStore ...
+type BlobStore interface {
 	CreateStoreIfNotExists(table string) error
 	DeleteStore(table string) error
-	View(table string, fn func(tx Tx) error) error
-	Update(table string, fn func(tx Tx) error) error
+	View(table string, fn func(tx BlobTx) error) error
+	Update(table string, fn func(tx BlobTx) error) error
 }
 
-// Tx ...
-type Tx interface {
+// BlobTx ...
+type BlobTx interface {
 	Put(key string, value []byte) error
 	Get(key string) ([]byte, error)
 	Delete(key string) error
 	ScanPrefix(prefix string) ([][]byte, error)
 }
 
-func put(tx Tx, sk *StorageKey, key string, m proto.Message) error {
+// Store ...
+type Store interface {
+	View(fn func(tx Tx) error) error
+	Update(fn func(tx Tx) error) error
+}
+
+// Tx ..
+type Tx interface {
+	Store
+	Put(key string, m proto.Message) error
+	Get(key string, m proto.Message) error
+	Delete(key string) error
+	ScanPrefix(prefix string, messages interface{}) error
+}
+
+func put(tx BlobTx, sk *StorageKey, key string, m proto.Message) error {
 	b, err := proto.Marshal(m)
 	if err != nil {
 		return err
@@ -38,7 +53,7 @@ func put(tx Tx, sk *StorageKey, key string, m proto.Message) error {
 	return tx.Put(key, b)
 }
 
-func get(tx Tx, sk *StorageKey, key string, m proto.Message) error {
+func get(tx BlobTx, sk *StorageKey, key string, m proto.Message) error {
 	b, err := tx.Get(key)
 	if err != nil {
 		return err
@@ -55,7 +70,7 @@ var protoMessageType = reflect.TypeOf(protoMessage)
 
 // read from the tx values from keys matching prefix and append them to the
 // *[]*proto.Message
-func scanPrefix(tx Tx, sk *StorageKey, prefix string, messages interface{}) error {
+func scanPrefix(tx BlobTx, sk *StorageKey, prefix string, messages interface{}) error {
 	bs, err := tx.ScanPrefix(prefix)
 	if err != nil {
 		return err
@@ -96,7 +111,7 @@ func appendUnmarshalled(messages interface{}, bufs ...[]byte) (interface{}, erro
 	return mv.Interface(), nil
 }
 
-func exists(tx Tx, key string) (bool, error) {
+func exists(tx BlobTx, key string) (bool, error) {
 	_, err := tx.Get(key)
 	if err == ErrRecordNotFound {
 		return false, nil

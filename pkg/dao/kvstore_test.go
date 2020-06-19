@@ -31,7 +31,7 @@ func (s *KVStore) DeleteStore(table string) error {
 }
 
 // View ...
-func (s *KVStore) View(table string, fn func(tx Tx) error) error {
+func (s *KVStore) View(table string, fn func(tx BlobTx) error) error {
 	b, ok := s.store[table]
 	if !ok {
 		return fmt.Errorf("bucket not found %s", table)
@@ -40,7 +40,7 @@ func (s *KVStore) View(table string, fn func(tx Tx) error) error {
 }
 
 // Update ...
-func (s *KVStore) Update(table string, fn func(tx Tx) error) error {
+func (s *KVStore) Update(table string, fn func(tx BlobTx) error) error {
 	b, ok := s.store[table]
 	if !ok {
 		return fmt.Errorf("bucket not found %s", table)

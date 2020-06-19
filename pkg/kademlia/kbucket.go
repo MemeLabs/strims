@@ -145,7 +145,7 @@ func (k *KBucket) idBucket(id ID) int {
 // 	h.Reset()
 // 	for _, b := range k.b {
 // 		for _, bn := range b {
-// 			h.HeapPush(nodeHeapEntry{bn, bn.ID().XOr(id)})
+// 			h.HeapPush(nodeHeapItem{bn, bn.ID().XOr(id)})
 // 		}
 // 	}
 
@@ -217,7 +217,7 @@ type Filter struct {
 
 // Push ...
 func (s *Filter) Push(n Interface) {
-	s.heap.HeapPush(nodeHeapEntry{n, n.ID().XOr(s.id)})
+	s.heap.HeapPush(nodeHeapItem{n, n.ID().XOr(s.id)})
 }
 
 // Pop ...
@@ -240,18 +240,18 @@ var nodeHeapPool = sync.Pool{
 	},
 }
 
-type nodeHeapEntry struct {
+type nodeHeapItem struct {
 	Interface
 	d ID
 }
 
-type nodeHeap []nodeHeapEntry
+type nodeHeap []nodeHeapItem
 
 func (h *nodeHeap) Reset() {
 	*h = (*h)[:0]
 }
 
-func (h *nodeHeap) HeapPush(e nodeHeapEntry) {
+func (h *nodeHeap) HeapPush(e nodeHeapItem) {
 	i := len(*h)
 	*h = append(*h, e)
 
@@ -261,12 +261,12 @@ func (h *nodeHeap) HeapPush(e nodeHeapEntry) {
 	heap.Fix(h, i)
 }
 
-func (h *nodeHeap) HeapPop() (nodeHeapEntry, bool) {
+func (h *nodeHeap) HeapPop() (nodeHeapItem, bool) {
 	v := h.Pop()
 	if v == nil {
-		return nodeHeapEntry{}, false
+		return nodeHeapItem{}, false
 	}
-	return v.(nodeHeapEntry), true
+	return v.(nodeHeapItem), true
 }
 
 func (h nodeHeap) Len() int           { return len(h) }
@@ -274,7 +274,7 @@ func (h nodeHeap) Less(i, j int) bool { return h[j].d.Less(h[i].d) }
 func (h nodeHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
 
 func (h *nodeHeap) Push(v interface{}) {
-	*h = append(*h, v.(nodeHeapEntry))
+	*h = append(*h, v.(nodeHeapItem))
 }
 
 func (h *nodeHeap) Pop() interface{} {
