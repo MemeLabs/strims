@@ -139,8 +139,8 @@ func TestSignCertificateRequest(t *testing.T) {
 				assert.EqualError(t, err, tc.err.Error())
 			} else {
 				assert.NoError(t, err)
+				assert.NotNil(t, cert.GetKey())
 			}
-			assert.NotNil(t, cert.GetKey())
 		})
 	}
 }
