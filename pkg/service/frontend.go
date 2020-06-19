@@ -697,7 +697,7 @@ func (s *Frontend) OpenChatServer(ctx context.Context, r *pb.OpenChatServerReque
 
 	session := rpc.ContextSession(ctx)
 
-	server, err := NewChatServer(ctx, svc, r.Server.Key)
+	server, err := NewChatServer(svc, r.Server.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -766,7 +766,7 @@ func (s *Frontend) OpenChatClient(ctx context.Context, r *pb.OpenChatClientReque
 
 	session := rpc.ContextSession(ctx)
 
-	client, err := NewChatClient(ctx, svc, r.ServerKey)
+	client, err := NewChatClient(svc, r.ServerKey)
 	if err != nil {
 		return nil, err
 	}
@@ -992,9 +992,10 @@ func (s *Frontend) startNetwork(ctx context.Context, membership *pb.NetworkMembe
 
 	// TODO: restart/update network with new cert?
 	if network == nil {
-		_, err = controller.StartNetwork(membership.Certificate)
+		_, err = controller.StartNetwork(membership.Certificate, WithMemberServices(s.logger))
 	} else {
-		_, err = controller.StartNetwork(membership.Certificate, WithOwnerServices(network))
+		store := rpc.ContextSession(ctx).ProfileStore()
+		_, err = controller.StartNetwork(membership.Certificate, WithOwnerServices(s.logger, store, network))
 	}
 	return err
 }

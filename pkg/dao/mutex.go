@@ -6,13 +6,15 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"math/rand"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
+
+// ErrLockBusy ...
+var ErrLockBusy = errors.New("failed to update busy lock")
 
 const mutexTTL = 30 * time.Second
 const mutexRefreshInterval = 20 * time.Second
@@ -34,27 +36,46 @@ func NewMutex(store *ProfileStore, key []byte) *Mutex {
 // Mutex ...
 type Mutex struct {
 	store *ProfileStore
-	table string
 	key   string
 	token []byte
 }
 
 // Lock ...
 func (m *Mutex) Lock(ctx context.Context) error {
+	ch := make(chan error)
+
+	go m.notifyLock(ctx, ch)
+
+	return <-ch
+}
+
+func (m *Mutex) notifyLock(ctx context.Context, ch chan error) {
+	var held bool
 	var nextTick time.Duration
+
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			if held {
+				m.Release()
+			} else {
+				ch <- ctx.Err()
+			}
+			return
+
 		case t := <-time.After(nextTick):
 			if err := m.tryLock(t); err != nil {
-				log.Println("lock err", err)
 				fuzz := mutexRecheckMaxInterval - mutexRecheckMinInterval
 				nextTick = mutexRecheckMinInterval + fuzz*time.Duration(rand.Int31())/time.Duration(math.MaxInt32)
-			} else {
-				log.Println("lock acquired")
-				nextTick = mutexRefreshInterval
+				continue
 			}
+
+			if !held {
+				held = true
+				ch <- nil
+			}
+
+			nextTick = mutexRefreshInterval
 		}
 	}
 }
@@ -70,7 +91,7 @@ func (m *Mutex) tryLock(t time.Time) error {
 		}
 
 		if mu != nil && mu.Eol > now && !bytes.Equal(mu.Token, m.token) {
-			return errors.New("held by someone else")
+			return ErrLockBusy
 		}
 
 		return tx.Put(m.key, &pb.Mutex{
@@ -90,7 +111,7 @@ func (m *Mutex) Release() error {
 		}
 
 		if !bytes.Equal(mu.Token, m.token) {
-			return errors.New("held by someone else")
+			return ErrLockBusy
 		}
 
 		return tx.Delete(m.key)

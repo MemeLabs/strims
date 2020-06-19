@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
@@ -87,9 +88,9 @@ func (c *NetworksController) startProfileNetworks() error {
 	for _, m := range memberships {
 		network := pbNetworks(networks).Find(dao.GetRootCert(m.Certificate).Key)
 		if network == nil {
-			_, err = c.StartNetwork(m.Certificate, WithMemberServices())
+			_, err = c.StartNetwork(m.Certificate, WithMemberServices(c.logger))
 		} else {
-			_, err = c.StartNetwork(m.Certificate, WithOwnerServices(network))
+			_, err = c.StartNetwork(m.Certificate, WithOwnerServices(c.logger, c.store, network))
 		}
 		if err != nil {
 			c.logger.Error("failed to start network", zap.Error(err))
@@ -148,9 +149,11 @@ func (c *NetworksController) StartNetwork(cert *pb.Certificate, opts ...NetworkO
 type NetworkOption func(svc *NetworkServices) error
 
 // WithOwnerServices ...
-func WithOwnerServices(network *pb.Network) NetworkOption {
+func WithOwnerServices(logger *zap.Logger, store *dao.ProfileStore, network *pb.Network) NetworkOption {
 	return func(svc *NetworkServices) error {
-		directory, err := NewDirectoryServer(context.Background(), svc, network.Key)
+		lock := dao.NewMutex(store, []byte(fmt.Sprintf("network:%d", network.Id)))
+
+		directory, err := NewDirectoryServer(logger, lock, svc, network.Key)
 		if err != nil {
 			return err
 		}
@@ -161,9 +164,9 @@ func WithOwnerServices(network *pb.Network) NetworkOption {
 }
 
 // WithMemberServices ...
-func WithMemberServices() NetworkOption {
+func WithMemberServices(logger *zap.Logger) NetworkOption {
 	return func(svc *NetworkServices) error {
-		directory, err := NewDirectoryClient(context.Background(), svc, svc.Network.CAKey())
+		directory, err := NewDirectoryClient(logger, svc, svc.Network.CAKey())
 		if err != nil {
 			return err
 		}

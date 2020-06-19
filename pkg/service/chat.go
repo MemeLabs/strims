@@ -1,7 +1,6 @@
 package service
 
 import (
-	"context"
 	"sync"
 	"time"
 
@@ -12,8 +11,8 @@ import (
 var chatSalt = []byte("chat")
 
 // NewChatServer ...
-func NewChatServer(ctx context.Context, svc *NetworkServices, key *pb.Key) (*ChatServer, error) {
-	ps, err := NewPubSubServer(ctx, svc, key, chatSalt)
+func NewChatServer(svc *NetworkServices, key *pb.Key) (*ChatServer, error) {
+	ps, err := NewPubSubServer(svc, key, chatSalt)
 	if err != nil {
 		return nil, err
 	}
@@ -23,7 +22,7 @@ func NewChatServer(ctx context.Context, svc *NetworkServices, key *pb.Key) (*Cha
 		events: make(chan *pb.ChatServerEvent),
 	}
 
-	go s.transformChatMessages(ctx, ps)
+	go s.transformChatMessages(ps)
 
 	return s, nil
 }
@@ -48,7 +47,7 @@ func (s *ChatServer) Events() <-chan *pb.ChatServerEvent {
 	return s.events
 }
 
-func (s *ChatServer) transformChatMessages(ctx context.Context, ps *PubSubServer) {
+func (s *ChatServer) transformChatMessages(ps *PubSubServer) {
 	for p := range ps.Messages() {
 		// TODO: chat output schema
 		// TODO: use strims chat parser?
@@ -76,8 +75,8 @@ func (s *ChatServer) transformChatMessages(ctx context.Context, ps *PubSubServer
 }
 
 // NewChatClient ...
-func NewChatClient(ctx context.Context, svc *NetworkServices, key []byte) (*ChatClient, error) {
-	ps, err := NewPubSubClient(ctx, svc, key, chatSalt)
+func NewChatClient(svc *NetworkServices, key []byte) (*ChatClient, error) {
+	ps, err := NewPubSubClient(svc, key, chatSalt)
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +86,7 @@ func NewChatClient(ctx context.Context, svc *NetworkServices, key []byte) (*Chat
 		events: make(chan *pb.ChatClientEvent),
 	}
 
-	go c.readChatEvents(ctx, ps)
+	go c.readChatEvents(ps)
 
 	return c, nil
 }
@@ -129,7 +128,7 @@ func (c *ChatClient) Events() <-chan *pb.ChatClientEvent {
 	return c.events
 }
 
-func (c *ChatClient) readChatEvents(ctx context.Context, ps *PubSubClient) {
+func (c *ChatClient) readChatEvents(ps *PubSubClient) {
 	for m := range ps.Messages() {
 		e := &pb.ChatClientEvent{}
 		if err := proto.Unmarshal(m.Body, e); err != nil {

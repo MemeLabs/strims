@@ -28,7 +28,7 @@ type PubSubServerOptions struct {
 }
 
 // NewPubSubServer ...
-func NewPubSubServer(ctx context.Context, svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubServer, error) {
+func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubServer, error) {
 	w, err := encoding.NewWriter(encoding.SwarmWriterOptions{
 		// SwarmOptions: encoding.NewDefaultSwarmOptions(),
 		SwarmOptions: encoding.SwarmOptions{
@@ -49,7 +49,7 @@ func NewPubSubServer(ctx context.Context, svc *NetworkServices, key *pb.Key, sal
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 
 	// TODO: add ecdh key
 	b, err := proto.Marshal(&pb.NetworkAddress{
@@ -162,7 +162,7 @@ func (s *PubSubServer) HandleMessage(msg *vpn.Message) (forward bool, err error)
 }
 
 // NewPubSubClient ...
-func NewPubSubClient(ctx context.Context, svc *NetworkServices, key, salt []byte) (*PubSubClient, error) {
+func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, error) {
 	port, err := svc.Network.ReservePort()
 	if err != nil {
 		return nil, err
@@ -184,7 +184,7 @@ func NewPubSubClient(ctx context.Context, svc *NetworkServices, key, salt []byte
 	messages := make(chan *pb.PubSubEvent_Message)
 	go readPubSubEvents(swarm, messages)
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 
 	err = svc.PeerIndex.Publish(ctx, key, salt, 0)
 	if err != nil {
