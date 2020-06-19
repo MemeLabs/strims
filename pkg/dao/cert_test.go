@@ -29,49 +29,67 @@ type testcase struct {
 	err  error
 }
 
-// i don't exactly like this after writing it, though i want to
-// cover all of these areas without managing to repeat myself to much
 func buildTestCases(t *testing.T) (map[string]testcase, error) {
 	t.Helper()
 	key := generateED25519Key(t)
-	successCsr, err := NewCertificateRequest(key, 0)
+
+	successCsr, err := NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN)
 	if err != nil {
 		return nil, err
 	}
 
-	invalidLenCsr, err := NewCertificateRequest(key, 0)
+	invalidLenCsr, err := NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN)
 	if err != nil {
 		return nil, err
 	}
 	invalidLenCsr.Key = key.Public[:len(key.Public)-5]
 
-	invalidTypeCsr, err := NewCertificateRequest(key, 0)
+	invalidTypeCsr, err := NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN)
 	if err != nil {
 		return nil, err
 	}
 	invalidTypeCsr.KeyType = pb.KeyType_KEY_TYPE_X25519
 
+	successCert, err := SignCertificateRequest(successCsr, defaultCertTTL, key)
+	if err != nil {
+		return nil, err
+	}
+
+	invalidLenCert, err := SignCertificateRequest(successCsr, defaultCertTTL, key)
+	if err != nil {
+		return nil, err
+	}
+	invalidLenCert.Key = key.Private[:len(key.Private)-5]
+
+	invalidTypeCert, err := SignCertificateRequest(successCsr, defaultCertTTL, key)
+	if err != nil {
+		return nil, err
+	}
+	invalidTypeCert.KeyType = pb.KeyType_KEY_TYPE_X25519
+
 	tcs := map[string]testcase{
 		"success": {
-			req: successCsr,
-			key: key,
-			err: nil,
+			req:  successCsr,
+			key:  key,
+			cert: successCert,
+			err:  nil,
 		},
 		"invalid key length": {
-			req: invalidLenCsr,
-			key: &pb.Key{Type: key.Type, Private: key.Private[:len(key.Private)-5], Public: key.Public},
-			err: ErrInvalidKeyLength,
+			req:  invalidLenCsr,
+			key:  &pb.Key{Type: key.Type, Private: key.Private[:len(key.Private)-5], Public: key.Public},
+			cert: invalidLenCert,
+			err:  ErrInvalidKeyLength,
 		},
 		"invalid key type (x25519)": {
-			req: invalidTypeCsr,
-			key: &pb.Key{Type: pb.KeyType_KEY_TYPE_X25519, Private: key.Private, Public: key.Public},
-			err: ErrUnsupportedKeyType,
+			req:  invalidTypeCsr,
+			key:  &pb.Key{Type: pb.KeyType_KEY_TYPE_X25519, Private: key.Private, Public: key.Public},
+			cert: invalidTypeCert,
+			err:  ErrUnsupportedKeyType,
 		},
 	}
 	return tcs, nil
 }
 
-// Doesn't seem needed as the test cases require this but its here
 func TestNewCertificateRequest(t *testing.T) {
 	tcs, err := buildTestCases(t)
 	if err != nil {
@@ -98,7 +116,7 @@ func TestVerifyCertificateRequest(t *testing.T) {
 
 	for scenario, tc := range tcs {
 		t.Run(scenario, func(t *testing.T) {
-			err := VerifyCertificateRequest(tc.req, 0)
+			err := VerifyCertificateRequest(tc.req, pb.KeyUsage_KEY_USAGE_SIGN)
 			if tc.err != nil {
 				assert.EqualError(t, err, tc.err.Error())
 			} else {
@@ -116,19 +134,17 @@ func TestSignCertificateRequest(t *testing.T) {
 
 	for scenario, tc := range tcs {
 		t.Run(scenario, func(t *testing.T) {
-			_, err := SignCertificateRequest(tc.req, defaultCertTTL, tc.key)
+			cert, err := SignCertificateRequest(tc.req, defaultCertTTL, tc.key)
 			if tc.err != nil {
 				assert.EqualError(t, err, tc.err.Error())
 			} else {
 				assert.NoError(t, err)
 			}
-
-			// TODO: inspect the cert
+			assert.NotNil(t, cert.GetKey())
 		})
 	}
 }
 
-/*
 func TestVerifyCertificate(t *testing.T) {
 	tcs, err := buildTestCases(t)
 	if err != nil {
@@ -137,10 +153,12 @@ func TestVerifyCertificate(t *testing.T) {
 
 	for scenario, tc := range tcs {
 		t.Run(scenario, func(t *testing.T) {
-			if err := VerifyCertificate(tc.cert); err != nil {
+			err := VerifyCertificate(tc.cert)
+			if tc.err != nil {
 				assert.EqualError(t, err, tc.err.Error())
+			} else {
+				assert.NoError(t, err)
 			}
 		})
 	}
 }
-*/
