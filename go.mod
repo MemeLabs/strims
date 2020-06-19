@@ -27,11 +27,11 @@ require (
 	github.com/onsi/gomega v1.10.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99
-	github.com/pion/dtls v1.5.4
 	github.com/pion/webrtc/v2 v2.2.14
 	github.com/prometheus/client_golang v1.6.0
 	github.com/prometheus/common v0.10.0
 	github.com/stretchr/testify v1.6.1
+	github.com/tj/assert v0.0.3
 	go.etcd.io/bbolt v1.3.4
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20200604202706-70a84ac30bf9
