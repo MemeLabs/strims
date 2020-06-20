@@ -6,8 +6,6 @@ import (
 	"github.com/tj/assert"
 )
 
-// TODO: test LoadSession
-
 func createMetadataStore(t *testing.T) *MetadataStore {
 	t.Helper()
 
