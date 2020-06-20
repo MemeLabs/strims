@@ -6,8 +6,6 @@ import (
 	"github.com/tj/assert"
 )
 
-// TODO: test for ErrUnsupportedKDFType
-
 func createStorageKey(t *testing.T, password string) *StorageKey {
 	t.Helper()
 

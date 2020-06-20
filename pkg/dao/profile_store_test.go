@@ -40,7 +40,8 @@ func TestDeleteProfileStore(t *testing.T) {
 	pfStore, err := createProfileStore(t)
 	assert.NoError(t, err, "failed to setup profile store")
 	assert.NoError(t, pfStore.Delete(), "failed to delete profile store")
-	// TODO: check that it is deleted
+	_, err = GetProfile(pfStore)
+	assert.Error(t, err, "bucket not found: %s", pfStore.name)
 }
 
 func TestGetProfile(t *testing.T) {
