@@ -13,7 +13,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/event"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
@@ -24,13 +23,21 @@ import (
 
 const reservedPortCount uint16 = 1000
 
-// default service ports
+// default network service ports
 const (
 	HashTablePort uint16 = iota + 10
 	PeerIndexPort
 	PeerExchangePort
 	DirectoryPort
 	SwarmServicePort
+)
+
+// peer link ports
+const (
+	NetworkInitPort uint16 = iota
+	NetworkBrokerPort
+	BootstrapPort
+	SwarmPort
 )
 
 var (
@@ -58,6 +65,9 @@ var (
 
 // HostOption ...
 type HostOption func(h *Host) error
+
+// PeerHandler ...
+type PeerHandler func(p *Peer)
 
 // NewHost ...
 func NewHost(logger *zap.Logger, key *pb.Key, options ...HostOption) (*Host, error) {
@@ -95,13 +105,14 @@ func NewHost(logger *zap.Logger, key *pb.Key, options ...HostOption) (*Host, err
 
 // Host ...
 type Host struct {
-	logger        *zap.Logger
-	discriminator uint16
-	id            kademlia.ID
-	key           *pb.Key
-	interfaces    []Interface
-	peerObservers event.Observable
-	peers         sync.Map
+	logger           *zap.Logger
+	discriminator    uint16
+	id               kademlia.ID
+	key              *pb.Key
+	interfaces       []Interface
+	peerHandlersLock sync.Mutex
+	peerHandlers     []PeerHandler
+	peers            sync.Map
 
 	// TODO: find a better place for this...
 	networkBroker NetworkBroker
@@ -160,7 +171,7 @@ func (h *Host) AddLink(c Link) {
 			zap.Int("mtu", c.MTU()),
 		)
 
-		h.peerObservers.Emit(p)
+		h.handlePeer(p)
 		h.peers.Store(p, struct{}{})
 
 		p.run()
@@ -169,9 +180,20 @@ func (h *Host) AddLink(c Link) {
 	}()
 }
 
-// NotifyPeer ...
-func (h *Host) NotifyPeer(ch chan *Peer) {
-	h.peerObservers.Notify(ch)
+// AddPeerHandler ...
+func (h *Host) AddPeerHandler(fn PeerHandler) {
+	h.peerHandlersLock.Lock()
+	defer h.peerHandlersLock.Unlock()
+	h.peerHandlers = append(h.peerHandlers, fn)
+}
+
+func (h *Host) handlePeer(p *Peer) {
+	h.peerHandlersLock.Lock()
+	defer h.peerHandlersLock.Unlock()
+
+	for _, fn := range h.peerHandlers {
+		fn(p)
+	}
 }
 
 func (h *Host) dialer(scheme string) Interface {

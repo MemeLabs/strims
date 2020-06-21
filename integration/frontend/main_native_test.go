@@ -1,4 +1,4 @@
-// +build native
+// +build !web
 
 package frontend
 

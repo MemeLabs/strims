@@ -13,19 +13,24 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/wasmio"
+	"go.uber.org/zap"
 )
 
 var errPeeerIDNotFound = errors.New("peer id not found")
 
 // NewBrokerService ...
-func NewBrokerService() *BrokerService {
+func NewBrokerService(logger *zap.Logger) *BrokerService {
 	return &BrokerService{
-		networkBroker: &networkBroker{},
+		logger: logger,
+		networkBroker: &networkBroker{
+			logger: logger,
+		},
 	}
 }
 
 // BrokerService ...
 type BrokerService struct {
+	logger        *zap.Logger
 	peers         sync.Map
 	nextPeerID    uint64
 	networkBroker *networkBroker
@@ -141,16 +146,18 @@ type brokerServicePeer struct {
 }
 
 // NewBrokerClient ....
-func NewBrokerClient(bus *wasmio.Bus) NetworkBroker {
+func NewBrokerClient(logger *zap.Logger, bus *wasmio.Bus) NetworkBroker {
 	client := rpc.NewClient(bus, bus)
 
 	return &BrokerClient{
+		logger: logger,
 		client: client,
 	}
 }
 
 // BrokerClient ...
 type BrokerClient struct {
+	logger *zap.Logger
 	client *rpc.Client
 }
 

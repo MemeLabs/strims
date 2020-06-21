@@ -2,8 +2,12 @@ package driver
 
 import "github.com/MemeLabs/go-ppspp/pkg/rpc"
 
+type ClientOptions struct {
+	VPNServerAddr string
+}
+
 // Driver ...
 type Driver interface {
-	Client() *rpc.Client
+	Client(*ClientOptions) *rpc.Client
 	Close()
 }

@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/integration/driver"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/stretchr/testify/assert"
 )
@@ -46,7 +47,7 @@ func TestCreateProfile(t *testing.T) {
 		},
 	}
 
-	client := td.Client()
+	client := td.Client(&driver.ClientOptions{})
 	for scenario, tc := range tcs {
 		t.Run(scenario, func(t *testing.T) {
 			assert := assert.New(t)

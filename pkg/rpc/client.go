@@ -59,24 +59,24 @@ func (c *Client) Done() <-chan struct{} {
 
 // Call ...
 func (c *Client) Call(ctx context.Context, method string, req proto.Message) error {
-	_, err := call(ctx, c.conn, method, req)
-	return err
+	return call(ctx, c.conn, method, req)
 }
 
 // CallUnary ...
 func (c *Client) CallUnary(ctx context.Context, method string, req, res proto.Message) error {
-	l, err := call(ctx, c.conn, method, req)
-	if err != nil {
+	r := newCallbackReceiver(c.conn)
+	if err := call(ctx, c.conn, method, req, r.CallOption()); err != nil {
 		return err
 	}
-	return expectOne(ctx, c.conn, l, res)
+	return r.ReceiveUnary(ctx, res)
 }
 
 // CallStreaming ...
 func (c *Client) CallStreaming(ctx context.Context, method string, req proto.Message, ch interface{}) error {
-	l, err := call(ctx, c.conn, method, req)
-	if err != nil {
+	r := newCallbackReceiver(c.conn)
+	if err := call(ctx, c.conn, method, req, r.CallOption()); err != nil {
 		return err
 	}
-	return expectMany(ctx, c.conn, l, ch)
+	go r.ReceiveStream(ctx, ch)
+	return nil
 }

@@ -20,9 +20,9 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
-const hashTableSetInterval = 10 * time.Second
-const hashTableDiscardInterval = time.Second
-const hashTableMaxRecordAge = 30 * time.Second
+const hashTableSetInterval = 10 * time.Minute
+const hashTableDiscardInterval = time.Minute
+const hashTableMaxRecordAge = 30 * time.Minute
 const hashTableMaxSize = 5120
 
 var nextHashTableID uint32

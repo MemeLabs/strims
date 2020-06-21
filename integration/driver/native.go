@@ -36,7 +36,7 @@ type nativeDriverClient struct {
 	client *rpc.Client
 }
 
-func (d *nativeDriver) Client() *rpc.Client {
+func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 	file := tempFile()
 	store, err := kv.NewKVStore(file)
 	if err != nil {
@@ -47,9 +47,9 @@ func (d *nativeDriver) Client() *rpc.Client {
 		Store:  store,
 		Logger: d.logger,
 		VPNOptions: []vpn.HostOption{
-			vpn.WithNetworkBroker(vpn.NewNetworkBroker()),
-			vpn.WithInterface(vpn.NewWSInterface(d.logger, "0.0.0.0:8082")),
-			vpn.WithInterface(vpn.NewWebRTCInterface(&vpn.WebRTCDialer{})),
+			vpn.WithNetworkBroker(vpn.NewNetworkBroker(d.logger)),
+			vpn.WithInterface(vpn.NewWSInterface(d.logger, o.VPNServerAddr)),
+			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(d.logger))),
 		},
 	})
 	if err != nil {

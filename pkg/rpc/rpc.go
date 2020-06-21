@@ -110,13 +110,13 @@ func withParentID(id uint64) CallOption {
 }
 
 // call invoke a remote procedure
-func call(ctx context.Context, c *conn, method string, v proto.Message, opts ...CallOption) (*pb.Call, error) {
+func call(ctx context.Context, c *conn, method string, v proto.Message, opts ...CallOption) error {
 	ab := callBuffers.Get().(*proto.Buffer)
 	defer callBuffers.Put(ab)
 	ab.Reset()
 
 	if err := ab.Marshal(v); err != nil {
-		return nil, err
+		return err
 	}
 
 	m := &pb.Call{
@@ -138,66 +138,74 @@ func call(ctx context.Context, c *conn, method string, v proto.Message, opts ...
 
 	b.EncodeVarint(uint64(proto.Size(m)))
 	if err := b.Marshal(m); err != nil {
-		return nil, err
+		return err
 	}
 
 	if _, err := c.w.Write(b.Bytes()); err != nil {
-		return nil, err
+		return err
 	}
 
-	return m, nil
+	return nil
 }
 
-// expectOne blocks until the call returns and decodes the response into v
-func expectOne(ctx context.Context, c *conn, m *pb.Call, v proto.Message) error {
-	ch := make(chan *pb.Call, 1)
-	c.callbacks.Store(m.Id, ch)
-	defer c.callbacks.Delete(m.Id)
+func newCallbackReceiver(c *conn) *callbackReceiver {
+	return &callbackReceiver{
+		conn: c,
+		res:  make(chan *pb.Call, 1),
+	}
+}
+
+type callbackReceiver struct {
+	conn *conn
+	res  chan *pb.Call
+	call *pb.Call
+}
+
+func (r *callbackReceiver) CallOption() CallOption {
+	return func(c *pb.Call) {
+		r.call = c
+		r.conn.callbacks.Store(c.Id, r.res)
+	}
+}
+
+func (r *callbackReceiver) ReceiveUnary(ctx context.Context, v proto.Message) error {
+	defer r.conn.callbacks.Delete(r.call.Id)
 
 	select {
 	case <-ctx.Done():
-		call(context.Background(), c, cancelMethod, &pb.Cancel{}, withParentID(m.Id))
+		call(context.Background(), r.conn, cancelMethod, &pb.Cancel{}, withParentID(r.call.Id))
 		return ctx.Err()
-	case res := <-ch:
+	case res := <-r.res:
 		return unmarshalAny(res.Argument, v)
 	}
 }
 
 var typeOfProtoMessage = reflect.TypeOf((*proto.Message)(nil)).Elem()
 
-// expectMany passes callback values to ch. ch should be a chan of some type
-// that implements proto.Message.
-func expectMany(ctx context.Context, c *conn, m *pb.Call, ch interface{}) error {
+func (r *callbackReceiver) ReceiveStream(ctx context.Context, ch interface{}) {
 	chv := reflect.ValueOf(ch)
 	if chv.Kind() != reflect.Chan || !chv.Type().Elem().Implements(typeOfProtoMessage) {
 		panic("ch must be a chan of a type that implements proto.Message")
 	}
 
-	cch := make(chan *pb.Call, 1)
-	c.callbacks.Store(m.Id, cch)
-
-	go func() {
-		defer func() {
-			c.callbacks.Delete(m.Id)
-			chv.Close()
-		}()
-
-		for {
-			select {
-			case <-ctx.Done():
-				call(context.Background(), c, cancelMethod, &pb.Cancel{}, withParentID(m.Id))
-				return
-			case res := <-cch:
-				v := reflect.New(chv.Type().Elem().Elem())
-				if err := unmarshalAny(res.Argument, v.Interface().(proto.Message)); err != nil {
-					return
-				}
-				chv.Send(v)
-			}
-		}
+	defer func() {
+		r.conn.callbacks.Delete(r.call.Id)
+		chv.Close()
 	}()
 
-	return nil
+	for {
+		select {
+		case <-ctx.Done():
+			call(context.Background(), r.conn, cancelMethod, &pb.Cancel{}, withParentID(r.call.Id))
+			return
+		case res := <-r.res:
+			v := reflect.New(chv.Type().Elem().Elem())
+			if err := unmarshalAny(res.Argument, v.Interface().(proto.Message)); err != nil {
+				return
+			}
+			chv.Send(v)
+		}
+	}
 }
 
 var typeOfError = reflect.TypeOf(&pb.Error{})

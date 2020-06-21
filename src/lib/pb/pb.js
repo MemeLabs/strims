@@ -23882,6 +23882,7 @@ export const StartVPNRequest = $root.StartVPNRequest = (() => {
      * Properties of a StartVPNRequest.
      * @exports IStartVPNRequest
      * @interface IStartVPNRequest
+     * @property {boolean|null} [enableBootstrapPublishing] StartVPNRequest enableBootstrapPublishing
      */
 
     /**
@@ -23898,6 +23899,14 @@ export const StartVPNRequest = $root.StartVPNRequest = (() => {
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
+
+    /**
+     * StartVPNRequest enableBootstrapPublishing.
+     * @member {boolean} enableBootstrapPublishing
+     * @memberof StartVPNRequest
+     * @instance
+     */
+    StartVPNRequest.prototype.enableBootstrapPublishing = false;
 
     /**
      * Creates a new StartVPNRequest instance using the specified properties.
@@ -23923,6 +23932,8 @@ export const StartVPNRequest = $root.StartVPNRequest = (() => {
     StartVPNRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
+        if (message.enableBootstrapPublishing != null && Object.hasOwnProperty.call(message, "enableBootstrapPublishing"))
+            writer.uint32(/* id 1, wireType 0 =*/8).bool(message.enableBootstrapPublishing);
         return writer;
     };
 
@@ -23957,6 +23968,9 @@ export const StartVPNRequest = $root.StartVPNRequest = (() => {
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
+            case 1:
+                message.enableBootstrapPublishing = reader.bool();
+                break;
             default:
                 reader.skipType(tag & 7);
                 break;
@@ -23992,6 +24006,9 @@ export const StartVPNRequest = $root.StartVPNRequest = (() => {
     StartVPNRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
+        if (message.enableBootstrapPublishing != null && message.hasOwnProperty("enableBootstrapPublishing"))
+            if (typeof message.enableBootstrapPublishing !== "boolean")
+                return "enableBootstrapPublishing: boolean expected";
         return null;
     };
 
@@ -24006,7 +24023,10 @@ export const StartVPNRequest = $root.StartVPNRequest = (() => {
     StartVPNRequest.fromObject = function fromObject(object) {
         if (object instanceof $root.StartVPNRequest)
             return object;
-        return new $root.StartVPNRequest();
+        let message = new $root.StartVPNRequest();
+        if (object.enableBootstrapPublishing != null)
+            message.enableBootstrapPublishing = Boolean(object.enableBootstrapPublishing);
+        return message;
     };
 
     /**
@@ -24018,8 +24038,15 @@ export const StartVPNRequest = $root.StartVPNRequest = (() => {
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    StartVPNRequest.toObject = function toObject() {
-        return {};
+    StartVPNRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.enableBootstrapPublishing = false;
+        if (message.enableBootstrapPublishing != null && message.hasOwnProperty("enableBootstrapPublishing"))
+            object.enableBootstrapPublishing = message.enableBootstrapPublishing;
+        return object;
     };
 
     /**

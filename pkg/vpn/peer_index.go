@@ -21,9 +21,9 @@ import (
 )
 
 const peerIndexSearchResponseSize = 5
-const peerIndexPublishInterval = 10 * time.Second
-const peerIndexDiscardInterval = time.Second
-const peerIndexMaxRecordAge = 30 * time.Second
+const peerIndexPublishInterval = 10 * time.Minute
+const peerIndexDiscardInterval = time.Minute
+const peerIndexMaxRecordAge = 30 * time.Minute
 const peerIndexMaxSize = 5120
 
 var nextPeerIndexID uint32

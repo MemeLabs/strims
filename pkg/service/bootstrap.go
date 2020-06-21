@@ -7,14 +7,14 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
 
-const bootstrapServicePort = 3
-
+// BootstrapServiceOptions ...
 type BootstrapServiceOptions struct {
 	EnablePublishing bool
 }
@@ -45,33 +45,32 @@ type BootstrapService struct {
 }
 
 func (c *BootstrapService) handleHost(h *vpn.Host) error {
-	go func() {
-		ch := make(chan *vpn.Peer)
-		h.NotifyPeer(ch)
-		for peer := range ch {
-			go c.handlePeer(peer)
-		}
-	}()
+	h.AddPeerHandler(c.handlePeer)
 
 	return nil
 }
 
 func (c *BootstrapService) handlePeer(peer *vpn.Peer) {
+	c.logger.Debug("creating boostrap service peer", logutil.ByteHex("peer", peer.Certificate.Key))
 	p := newBootstrapServicePeer(c.logger, c.store, c.networksController, peer)
-	if c.enablePublishing {
-		if err := p.EnablePublishing(); err != nil {
-			c.logger.Info("error sending thing", zap.Error(err))
+
+	go func() {
+		if c.enablePublishing {
+			if err := p.EnablePublishing(); err != nil {
+				c.logger.Info("error sending thing", zap.Error(err))
+			}
 		}
-	}
-	c.peersLock.Lock()
-	c.peers.Insert(peer.Certificate.Key, p)
-	c.peersLock.Unlock()
 
-	<-peer.Done()
+		c.peersLock.Lock()
+		c.peers.Insert(peer.Certificate.Key, p)
+		c.peersLock.Unlock()
 
-	c.peersLock.Lock()
-	c.peers.Delete(peer.Certificate.Key)
-	c.peersLock.Unlock()
+		<-peer.Done()
+
+		c.peersLock.Lock()
+		c.peers.Delete(peer.Certificate.Key)
+		c.peersLock.Unlock()
+	}()
 }
 
 // HandleFrame ...
@@ -116,15 +115,16 @@ func newBootstrapServicePeer(
 	s := &bootstrapServicePeer{
 		logger:             logger,
 		vpnPeer:            peer,
-		ch:                 vpn.NewFrameReadWriter(peer.Link, bootstrapServicePort, peer.Link.MTU()),
+		ch:                 vpn.NewFrameReadWriter(peer.Link, vpn.BootstrapPort, peer.Link.MTU()),
 		store:              store,
 		networksController: networksController,
 	}
 
+	peer.SetHandler(vpn.BootstrapPort, s.ch.HandleFrame)
 	go func() {
-		peer.SetHandler(bootstrapServicePort, s.ch.HandleFrame)
-		s.doMemes()
-		s.vpnPeer.RemoveHandler(bootstrapServicePort)
+		s.readMessages()
+
+		peer.RemoveHandler(vpn.BootstrapPort)
 	}()
 
 	return s
@@ -140,7 +140,7 @@ type bootstrapServicePeer struct {
 	enablePublishing   bool
 }
 
-func (s *bootstrapServicePeer) doMemes() {
+func (s *bootstrapServicePeer) readMessages() {
 	var msg pb.BootstrapServiceMessage
 	for {
 		if err := vpn.ReadProtoStream(s.ch, &msg); err != nil {
@@ -148,12 +148,10 @@ func (s *bootstrapServicePeer) doMemes() {
 			break
 		}
 
-		s.logger.Info("bootstrap peer thing got message")
-
 		switch b := msg.Body.(type) {
 		case *pb.BootstrapServiceMessage_BrokerOffer_:
 			_ = b
-			s.logger.Info("offer received")
+			s.logger.Info("bootstrap offer received", logutil.ByteHex("peer", s.vpnPeer.Certificate.Key))
 			s.enablePublishing = true
 		case *pb.BootstrapServiceMessage_PublishRequest_:
 			s.handlePublish(b.PublishRequest)
@@ -171,7 +169,7 @@ func (s *bootstrapServicePeer) handlePublish(r *pb.BootstrapServiceMessage_Publi
 		return err
 	}
 
-	_, err = s.networksController.StartNetwork(r.Certificate)
+	_, err = s.networksController.StartNetwork(r.Certificate, WithMemberServices(s.logger))
 	if err != nil {
 		return err
 	}

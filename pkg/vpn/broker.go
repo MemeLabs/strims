@@ -4,12 +4,12 @@ import (
 	"crypto/rand"
 	"errors"
 	"io"
-	"math"
 	"sync"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/mpc"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"go.uber.org/zap"
 )
 
 // NetworkBroker ...
@@ -17,7 +17,7 @@ type NetworkBroker interface {
 	BrokerPeer(c ReadWriteFlusher) (NetworkBrokerPeer, error)
 }
 
-// TODO: close
+// NetworkBrokerPeer ...
 type NetworkBrokerPeer interface {
 	Init(discriminator uint16, keys [][]byte) error
 	InitRequired() <-chan struct{}
@@ -34,23 +34,29 @@ func WithNetworkBroker(b NetworkBroker) HostOption {
 }
 
 // NewNetworkBroker ...
-func NewNetworkBroker() NetworkBroker {
-	return &networkBroker{}
+func NewNetworkBroker(logger *zap.Logger) NetworkBroker {
+	return &networkBroker{
+		logger: logger,
+	}
 }
 
 // networkBroker ...
-type networkBroker struct{}
+type networkBroker struct {
+	logger *zap.Logger
+}
 
 // BrokerPeer ...
 func (h *networkBroker) BrokerPeer(c ReadWriteFlusher) (NetworkBrokerPeer, error) {
-	return newNetworkBrokerPeer(c), nil
+	return newNetworkBrokerPeer(h.logger, c), nil
 }
 
-func newNetworkBrokerPeer(c ReadWriteFlusher) *networkBrokerPeer {
+func newNetworkBrokerPeer(logger *zap.Logger, c ReadWriteFlusher) *networkBrokerPeer {
 	p := &networkBrokerPeer{
+		logger:       logger,
 		c:            c,
 		localParams:  make(chan networkBrokerLocalParams, 1),
 		initRequired: make(chan struct{}, 1),
+		initDone:     make(chan error, 1),
 		keys:         make(chan [][]byte, 1),
 	}
 
@@ -65,17 +71,38 @@ type networkBrokerLocalParams struct {
 }
 
 type networkBrokerPeer struct {
+	logger       *zap.Logger
 	c            ReadWriteFlusher
 	localParams  chan networkBrokerLocalParams
+	initLock     sync.Mutex
 	initRequired chan struct{}
+	initDone     chan error
 	keys         chan [][]byte
 	closeOnce    sync.Once
 }
 
-// TODO: debounce renegotiation
 func (p *networkBrokerPeer) Init(discriminator uint16, keys [][]byte) error {
-	p.localParams <- networkBrokerLocalParams{discriminator, keys}
-	return p.sendInit(discriminator, keys)
+	go func() {
+		p.initLock.Lock()
+		defer p.initLock.Unlock()
+
+		p.logger.Debug("starting network negotiation", zap.Int("keys", len(keys)))
+
+		p.localParams <- networkBrokerLocalParams{discriminator, keys}
+
+		if err := p.sendInit(discriminator, keys); err != nil {
+			p.logger.Error("sending negotiation init failed", zap.Error(err))
+			return
+		}
+
+		if err := <-p.initDone; err != nil {
+			p.logger.Error("network negotiation failed", zap.Error(err))
+			return
+		}
+
+		p.logger.Debug("finished network negotiation")
+	}()
+	return nil
 }
 
 func (p *networkBrokerPeer) InitRequired() <-chan struct{} {
@@ -90,6 +117,7 @@ func (p *networkBrokerPeer) Close() {
 	p.closeOnce.Do(func() {
 		close(p.localParams)
 		close(p.initRequired)
+		close(p.initDone)
 		close(p.keys)
 	})
 }
@@ -110,7 +138,10 @@ func (p *networkBrokerPeer) readInits() (err error) {
 			err = errors.New("unexpected network handshake type")
 		}
 
+		p.initDone <- err
+
 		if err != nil {
+			p.logger.Error("error reading broker inits", zap.Error(err))
 			return err
 		}
 	}
@@ -162,12 +193,8 @@ func (p *networkBrokerPeer) handleInit(init *pb.NetworkHandshake_Init) error {
 		return err
 	}
 
-	if init.Discriminator > uint32(math.MaxUint16) {
-		return errors.New("discriminator out of range")
-	}
-
 	// communication cost for the PSZ sender scales better than the receiver.
-	if int(init.KeyCount) < len(keys) || uint16(init.Discriminator) > discriminator {
+	if int(init.KeyCount) < len(keys) || (int(init.KeyCount) == len(keys) && uint16(init.Discriminator) > discriminator) {
 		return p.exchangeKeysAsSender(keys)
 	}
 
@@ -177,7 +204,7 @@ func (p *networkBrokerPeer) handleInit(init *pb.NetworkHandshake_Init) error {
 	}
 
 	p.keys <- keys
-	return nil
+	return err
 }
 
 func (p *networkBrokerPeer) exchangeKeysAsSender(keys [][]byte) error {

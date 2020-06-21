@@ -10683,6 +10683,9 @@ export namespace VideoClientCallRequest {
 
 /** Properties of a StartVPNRequest. */
 export interface IStartVPNRequest {
+
+    /** StartVPNRequest enableBootstrapPublishing */
+    enableBootstrapPublishing?: (boolean|null);
 }
 
 /** Represents a StartVPNRequest. */
@@ -10693,6 +10696,9 @@ export class StartVPNRequest implements IStartVPNRequest {
      * @param [properties] Properties to set
      */
     constructor(properties?: IStartVPNRequest);
+
+    /** StartVPNRequest enableBootstrapPublishing. */
+    public enableBootstrapPublishing: boolean;
 
     /**
      * Creates a new StartVPNRequest instance using the specified properties.

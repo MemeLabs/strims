@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"encoding/binary"
+	"fmt"
 	"io"
 	"math"
 
@@ -21,10 +22,11 @@ func sendProto(network *Network, id kademlia.ID, port, srcPort uint16, msg proto
 	return network.Send(id, port, srcPort, b)
 }
 
+// ReadProtoStream ...
 func ReadProtoStream(r io.Reader, m proto.Message) error {
 	var t [2]byte
 	if _, err := io.ReadFull(r, t[:]); err != nil {
-		return err
+		return fmt.Errorf("header read failed: %w", err)
 	}
 	n := binary.BigEndian.Uint16(t[:])
 
@@ -32,11 +34,15 @@ func ReadProtoStream(r io.Reader, m proto.Message) error {
 	defer freeFrameBuffer(b)
 
 	if _, err := io.ReadFull(r, b[:n]); err != nil {
-		return err
+		return fmt.Errorf("data read failed: %w", err)
 	}
-	return proto.Unmarshal(b[:n], m)
+	if err := proto.Unmarshal(b[:n], m); err != nil {
+		return fmt.Errorf("proto unmarshal failed: %w", err)
+	}
+	return nil
 }
 
+// WriteProtoStream ...
 func WriteProtoStream(w io.Writer, m proto.Message) error {
 	mn := proto.Size(m)
 	n := mn + 2
@@ -50,11 +56,13 @@ func WriteProtoStream(w io.Writer, m proto.Message) error {
 	binary.BigEndian.PutUint16(b, uint16(mn))
 	_, err := proto.MarshalOptions{}.MarshalAppend(b[2:2], m)
 	if err != nil {
-		return err
+		return fmt.Errorf("proto marshal failed: %w", err)
 	}
 
-	_, err = w.Write(b)
-	return err
+	if _, err = w.Write(b); err != nil {
+		return fmt.Errorf("data write failed: %w", err)
+	}
+	return nil
 }
 
 // func readProtoFrame(r io.Reader, m proto.Message) error {

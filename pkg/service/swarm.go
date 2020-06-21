@@ -38,8 +38,8 @@ func (s *swarmPeerSwarmItem) Ports() (uint16, uint16, bool) {
 }
 
 func newSwarmPeer(peer *vpn.Peer) *swarmPeer {
-	rw := vpn.NewFrameReadWriter(peer.Link, 2, peer.Link.MTU())
-	peer.SetHandler(2, rw.HandleFrame)
+	rw := vpn.NewFrameReadWriter(peer.Link, vpn.SwarmPort, peer.Link.MTU())
+	peer.SetHandler(vpn.SwarmPort, rw.HandleFrame)
 
 	return &swarmPeer{
 		peer:       peer,
@@ -255,7 +255,7 @@ type swarmController struct {
 
 func (t *swarmController) do(h *vpn.Host, n *vpn.Networks) {
 	peers := make(chan *vpn.Peer, 16)
-	h.NotifyPeer(peers)
+	h.AddPeerHandler(func(p *vpn.Peer) { peers <- p })
 
 	peerNetworks := make(chan vpn.PeerNetwork, 16)
 	n.NotifyPeerNetwork(peerNetworks)

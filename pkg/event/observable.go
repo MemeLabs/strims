@@ -23,14 +23,7 @@ func (o *Observable) StopNotifying(ch interface{}) {
 // Emit ...
 func (o *Observable) Emit(v interface{}) {
 	o.observers.Range(func(_ interface{}, chi interface{}) bool {
-		reflect.Select([]reflect.SelectCase{
-			{
-				Dir:  reflect.SelectSend,
-				Chan: reflect.ValueOf(chi),
-				Send: reflect.ValueOf(v),
-			},
-			{Dir: reflect.SelectDefault},
-		})
+		reflect.ValueOf(chi).Send(reflect.ValueOf(v))
 		return true
 	})
 }

@@ -435,7 +435,9 @@ message VideoClientCallRequest {
 
 // ---
 
-message StartVPNRequest {}
+message StartVPNRequest {
+  bool enable_bootstrap_publishing = 1;
+}
 message StartVPNResponse {}
 message StopVPNRequest {}
 message StopVPNResponse {}

@@ -85,7 +85,7 @@ func (s *Session) Init(profile *pb.Profile, store *dao.ProfileStore) {
 func (s *Session) Anonymous() bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	return s.profile.Id == 0
+	return s.profile == nil || s.profile.Id == 0
 }
 
 // ProfileStore ...

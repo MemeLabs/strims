@@ -5,6 +5,7 @@ import (
 	"crypto/cipher"
 	"crypto/rand"
 	"errors"
+	"fmt"
 	"math"
 	"sync"
 	"time"
@@ -46,12 +47,12 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key) (*Peer, error) {
 		validDuration,
 	)
 	if err != nil {
-		panic(err)
+		return nil, fmt.Errorf("generating init cert failed: %w", err)
 	}
 
 	key, pub, err := ecdh.X25519().GenerateKey(rand.Reader)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("generating cipher key failed: %w", err)
 	}
 
 	pubBytes := pub.([32]byte)
@@ -62,13 +63,13 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key) (*Peer, error) {
 	}
 	cipherCert, err := dao.SignCertificateRequest(cipherCSR, validDuration, hostKey)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("signing cipher cert failed: %w", err)
 	}
 	cipherCert.ParentOneof = &pb.Certificate_Parent{Parent: signingCert}
 
 	var iv [16]byte
 	if _, err := rand.Read(iv[:]); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading peer iv failed: %w", err)
 	}
 
 	err = WriteProtoStream(link, &pb.PeerInit{
@@ -77,27 +78,27 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key) (*Peer, error) {
 		Iv:              iv[:],
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("writing peer init failed: %w", err)
 	}
 
 	var init pb.PeerInit
 	if err = ReadProtoStream(link, &init); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("reading peer init failed: %w", err)
 	}
 
 	if err := dao.VerifyCertificate(init.Certificate); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("peer cert verification failed: %w", err)
 	}
 	if init.Certificate.GetParent() == nil {
 		return nil, errors.New("invalid peer certificate")
 	}
 
 	if err := ecdh.X25519().Check(init.Certificate.Key); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("peer cipher key check failed: %w", err)
 	}
 	block, err := aes.NewCipher(ecdh.X25519().ComputeSecret(key, init.Certificate.Key))
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("shared secret generation failed: %w", err)
 	}
 
 	_ = block

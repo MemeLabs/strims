@@ -33,7 +33,7 @@ func NewNetworks(host *Host) *Networks {
 		recentMessageIDs: recentMessageIDs,
 	}
 
-	go n.handlePeers()
+	host.AddPeerHandler(n.handlePeer)
 
 	return n
 }
@@ -48,12 +48,8 @@ type Networks struct {
 	recentMessageIDs     *lru.Cache
 }
 
-func (h *Networks) handlePeers() {
-	ch := make(chan *Peer, 16)
-	h.host.NotifyPeer(ch)
-	for p := range ch {
-		newNetworkBootstrap(h.host.logger, h, p)
-	}
+func (h *Networks) handlePeer(p *Peer) {
+	newNetworkBootstrap(h.host.logger, h, p)
 }
 
 // NotifyNetwork ...
@@ -162,10 +158,28 @@ func newNetworkBootstrap(logger *zap.Logger, n *Networks, peer *Peer) *networkBo
 		handshakes: make(chan *pb.NetworkHandshake),
 	}
 
+	ch := NewFrameReadWriter(peer.Link, NetworkInitPort, peer.Link.MTU())
+	peer.SetHandler(NetworkInitPort, ch.HandleFrame)
+
 	go func() {
-		if err := b.doBootstrap(); err != nil {
+		if err := b.readHandshakes(ch); err != nil {
+			logger.Error("failed to read handshake", zap.Error(err))
+		}
+		peer.Close()
+	}()
+
+	bch := NewFrameReadWriter(peer.Link, NetworkBrokerPort, peer.Link.MTU())
+	peer.SetHandler(NetworkBrokerPort, bch.HandleFrame)
+
+	go func() {
+		if err := b.negotiateNetworks(ch, bch); err != nil {
 			logger.Error("failed to bootstrap peer networks", zap.Error(err))
 		}
+
+		peer.RemoveHandler(NetworkInitPort)
+		peer.RemoveHandler(NetworkBrokerPort)
+
+		b.removeNetworkLinks()
 	}()
 
 	return b
@@ -179,22 +193,10 @@ type networkBootstrap struct {
 	handshakes chan *pb.NetworkHandshake
 }
 
-func (h *networkBootstrap) doBootstrap() (err error) {
-	defer h.removeLinks()
-
-	ch := NewFrameReadWriter(h.peer.Link, 0, h.peer.Link.MTU())
-	h.peer.SetHandler(0, ch.HandleFrame)
-	defer h.peer.RemoveHandler(0)
-	defer ch.Close()
-
+func (h *networkBootstrap) negotiateNetworks(ch, bch *FrameReadWriter) (err error) {
 	networks := make(chan *Network, 1)
 	h.networks.NotifyNetwork(networks)
 	defer h.networks.StopNotifyingNetwork(networks)
-
-	bch := NewFrameReadWriter(h.peer.Link, 1, h.peer.Link.MTU())
-	h.peer.SetHandler(1, bch.HandleFrame)
-	defer h.peer.RemoveHandler(1)
-	defer bch.Close()
 
 	broker, err := h.networks.host.networkBroker.BrokerPeer(bch)
 	if err != nil {
@@ -206,19 +208,12 @@ func (h *networkBootstrap) doBootstrap() (err error) {
 		return err
 	}
 
-	go func() {
-		if err := h.readHandshakes(ch); err != nil {
-			h.logger.Error("failed to read handshake", zap.Error(err))
-			h.peer.Close()
-		}
-	}()
-
 	for {
 		select {
 		case keys := <-broker.Keys():
-			err = h.negotiateNetworksAsSender(ch, keys)
+			err = h.exchangeBindingsAsSender(ch, keys)
 		case handshake := <-h.handshakes:
-			err = h.negotiateNetworksAsReceiver(ch, handshake)
+			err = h.exchangeBindingsAsReceiver(ch, handshake)
 		case <-networks:
 			err = h.initBroker(broker)
 		case <-broker.InitRequired():
@@ -232,7 +227,7 @@ func (h *networkBootstrap) doBootstrap() (err error) {
 	}
 }
 
-func (h *networkBootstrap) removeLinks() {
+func (h *networkBootstrap) removeNetworkLinks() {
 	for n, l := range h.links {
 		h.networks.host.logger.Debug(
 			"removing peer from network",
@@ -258,7 +253,7 @@ func (h *networkBootstrap) initBroker(b NetworkBrokerPeer) error {
 	return b.Init(h.networks.host.discriminator, h.networks.NetworkKeys())
 }
 
-func (h *networkBootstrap) negotiateNetworksAsSender(ch *FrameReadWriter, keys [][]byte) error {
+func (h *networkBootstrap) exchangeBindingsAsSender(ch *FrameReadWriter, keys [][]byte) error {
 	networkBindings, err := h.sendNetworkBindings(ch, keys)
 	if err != nil {
 		return err
@@ -271,7 +266,7 @@ func (h *networkBootstrap) negotiateNetworksAsSender(ch *FrameReadWriter, keys [
 	return h.handleNetworkBindings(peerNetworkBindings.Discriminator, networkBindings, peerNetworkBindings.NetworkBindings)
 }
 
-func (h *networkBootstrap) negotiateNetworksAsReceiver(ch *FrameReadWriter, handshake *pb.NetworkHandshake) error {
+func (h *networkBootstrap) exchangeBindingsAsReceiver(ch *FrameReadWriter, handshake *pb.NetworkHandshake) error {
 	peerNetworkBindings := handshake.GetNetworkBindings()
 	keys, err := h.verifyNetworkBindings(peerNetworkBindings)
 	if err != nil {
@@ -355,7 +350,6 @@ func NewNetwork(host *Host, certificate *pb.Certificate, recentMessageIDs *lru.C
 }
 
 func (h *networkBootstrap) handleNetworkBindings(discriminator uint32, networkBindings, peerNetworkBindings []*pb.NetworkHandshake_NetworkBinding) error {
-
 	if discriminator > uint32(math.MaxUint16) {
 		return errors.New("discriminator out of range")
 	}
@@ -543,7 +537,7 @@ func (n *Network) handleMessage(m *Message) error {
 	}
 
 	if m.Hops() >= maxMessageHops {
-		n.host.logger.Debug("dropping message eafter too many hops")
+		n.host.logger.Debug("dropping message after too many hops")
 		return nil
 	}
 
@@ -616,8 +610,5 @@ type PeerNetwork struct {
 }
 
 func certificateParentKey(c *pb.Certificate) []byte {
-	if c.GetParent() == nil {
-		return nil
-	}
-	return c.GetParent().GetKey()
+	return dao.GetRootCert(c).GetKey()
 }

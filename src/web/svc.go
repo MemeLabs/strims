@@ -94,7 +94,7 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 		Store:  wasmio.NewKVStore(bridge),
 		Logger: logger,
 		VPNOptions: []vpn.HostOption{
-			vpn.WithNetworkBroker(vpn.NewBrokerClient(wasmio.NewWorkerProxy(bridge, "broker"))),
+			vpn.WithNetworkBroker(vpn.NewBrokerClient(logger, wasmio.NewWorkerProxy(bridge, "broker"))),
 			vpn.WithInterface(vpn.NewWSInterface(logger, bridge)),
 			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger, bridge))),
 		},
@@ -106,7 +106,8 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 }
 
 func initBroker(bridge js.Value, bus *wasmio.Bus) {
-	rpc.NewHost(vpn.NewBrokerService()).Handle(context.Background(), bus, bus)
+	logger := newLogger(bridge)
+	rpc.NewHost(vpn.NewBrokerService(logger)).Handle(context.Background(), bus, bus)
 }
 
 func unmarshalSessionID(id string) (uint64, *dao.StorageKey, error) {

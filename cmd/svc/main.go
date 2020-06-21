@@ -50,9 +50,9 @@ func main() {
 	_, err = vpn.NewHost(
 		logger,
 		profile.Key,
-		vpn.WithNetworkBroker(vpn.NewNetworkBroker()),
+		vpn.WithNetworkBroker(vpn.NewNetworkBroker(logger)),
 		vpn.WithInterface(vpn.NewWSInterface(logger, "0.0.0.0:8082")),
-		vpn.WithInterface(vpn.NewWebRTCInterface(&vpn.WebRTCDialer{})),
+		vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger))),
 		service.WithNetworkController(networkController),
 		service.WithBootstrapService(bootstrapService),
 	)

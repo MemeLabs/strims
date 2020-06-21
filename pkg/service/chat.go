@@ -5,19 +5,21 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
 var chatSalt = []byte("chat")
 
 // NewChatServer ...
-func NewChatServer(svc *NetworkServices, key *pb.Key) (*ChatServer, error) {
+func NewChatServer(logger *zap.Logger, svc *NetworkServices, key *pb.Key) (*ChatServer, error) {
 	ps, err := NewPubSubServer(svc, key, chatSalt)
 	if err != nil {
 		return nil, err
 	}
 
 	s := &ChatServer{
+		logger: logger,
 		ps:     ps,
 		events: make(chan *pb.ChatServerEvent),
 	}
@@ -29,6 +31,7 @@ func NewChatServer(svc *NetworkServices, key *pb.Key) (*ChatServer, error) {
 
 // ChatServer ...
 type ChatServer struct {
+	logger    *zap.Logger
 	closeOnce sync.Once
 	ps        *PubSubServer
 	events    chan *pb.ChatServerEvent
@@ -60,6 +63,7 @@ func (s *ChatServer) transformChatMessages(ps *PubSubServer) {
 
 		switch b := e.Body.(type) {
 		case *pb.ChatClientEvent_Message_:
+			s.logger.Debug("chat message received", zap.String("message", b.Message.Body))
 			b.Message.ServerTime = time.Now().UnixNano() / int64(time.Millisecond)
 		}
 
@@ -75,13 +79,14 @@ func (s *ChatServer) transformChatMessages(ps *PubSubServer) {
 }
 
 // NewChatClient ...
-func NewChatClient(svc *NetworkServices, key []byte) (*ChatClient, error) {
+func NewChatClient(logger *zap.Logger, svc *NetworkServices, key []byte) (*ChatClient, error) {
 	ps, err := NewPubSubClient(svc, key, chatSalt)
 	if err != nil {
 		return nil, err
 	}
 
 	c := &ChatClient{
+		logger: logger,
 		ps:     ps,
 		events: make(chan *pb.ChatClientEvent),
 	}
@@ -93,6 +98,7 @@ func NewChatClient(svc *NetworkServices, key []byte) (*ChatClient, error) {
 
 // ChatClient ...
 type ChatClient struct {
+	logger    *zap.Logger
 	closeOnce sync.Once
 	ps        *PubSubClient
 	events    chan *pb.ChatClientEvent

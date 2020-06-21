@@ -3,18 +3,26 @@
 package vpn
 
 import (
+	"bufio"
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
-	"math/rand"
 	"time"
 
 	"github.com/pion/webrtc/v2"
+	"go.uber.org/zap"
 )
 
+func NewWebRTCDialer(logger *zap.Logger) *WebRTCDialer {
+	return &WebRTCDialer{
+		logger: logger,
+	}
+}
+
 // WebRTCDialer ...
-type WebRTCDialer struct{}
+type WebRTCDialer struct {
+	logger *zap.Logger
+}
 
 // Dial ...
 func (d WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
@@ -52,14 +60,15 @@ func (d WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
 
 func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (Link, error) {
 	pc.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
-		log.Println("connection state changed to", s.String())
+		d.logger.Debug("connection state changed", zap.String("state", s.String()))
 		if s == webrtc.ICEConnectionStateClosed {
 			// a.handleClose()
+			pc.Close()
 		}
 	})
 
 	// TODO: close this if there's an error gathering ice candidates
-	candidates := make(chan *webrtc.ICECandidate, 32)
+	candidates := make(chan *webrtc.ICECandidate, 64)
 	pc.OnICECandidate(func(candidate *webrtc.ICECandidate) {
 		candidates <- candidate
 		if candidate == nil {
@@ -67,13 +76,11 @@ func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (L
 		}
 	})
 
-	try := rand.Int()
-
 	dcReady := make(chan *webrtc.DataChannel, 1)
 	pc.OnDataChannel(func(dc *webrtc.DataChannel) {
-		log.Println("got dc from peer --------------------------", try)
+		d.logger.Debug("DataChannel received")
 		dc.OnOpen(func() {
-			log.Println("dc onopen fired --------------------------------", try)
+			d.logger.Debug("DataChannel opened")
 			dcReady <- dc
 		})
 	})
@@ -108,19 +115,18 @@ func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (L
 			return nil, err
 		}
 	} else {
-		log.Println("creating dc --------------------------------", try)
 		dc, err := pc.CreateDataChannel("data", nil)
 		if err != nil {
 			return nil, err
 		}
-		// dc.OnError(func(err error) {
-		// 	log.Println("there was an error", err, try)
-		// })
+		dc.OnError(func(err error) {
+			d.logger.Debug("DataChannel error", zap.Error(err))
+		})
 		dc.OnClose(func() {
-			log.Println("that shit was closed", try)
+			d.logger.Debug("DataChannel closed")
 		})
 		dc.OnOpen(func() {
-			log.Println("dc onopen fired --------------------------------", try)
+			d.logger.Debug("DataChannel opened")
 			dcReady <- dc
 		})
 
@@ -159,12 +165,12 @@ func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (L
 			if candidate != nil {
 				b, err = json.Marshal(candidate.ToJSON())
 				if err != nil {
-					log.Println(err)
+					d.logger.Debug("candidate json marshal failed", zap.Error(err))
 					continue
 				}
 			}
 			if err := m.SendICECandidate(b); err != nil {
-				log.Println(err)
+				d.logger.Debug("sending ice candidate failed", zap.Error(err))
 			}
 		}
 	}()
@@ -173,11 +179,11 @@ func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (L
 		for b := range m.GetICECandidates() {
 			var c webrtc.ICECandidateInit
 			if err := json.Unmarshal(b, &c); err != nil {
-				log.Println(err)
+				d.logger.Debug("getting ice candidate failed", zap.Error(err))
 				continue
 			}
 			if err := pc.AddICECandidate(c); err != nil {
-				log.Println(err)
+				d.logger.Debug("adding ice candidate failed", zap.Error(err))
 			}
 		}
 	}()
@@ -188,14 +194,22 @@ func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (L
 		if err != nil {
 			return nil, err
 		}
-		return dcLink{rwc}, nil
+		return newDCLink(rwc), nil
 	case <-time.After(time.Second * 10):
-		return nil, fmt.Errorf("data channel receive timeout %d", try)
+		return nil, fmt.Errorf("data channel receive timeout")
+	}
+}
+
+func newDCLink(rwc io.ReadWriteCloser) *dcLink {
+	return &dcLink{
+		Reader:      bufio.NewReaderSize(rwc, 16*1024),
+		WriteCloser: rwc,
 	}
 }
 
 type dcLink struct {
-	io.ReadWriteCloser
+	io.Reader
+	io.WriteCloser
 }
 
 func (l dcLink) MTU() int {

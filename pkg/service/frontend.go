@@ -504,7 +504,9 @@ func (s *Frontend) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (*pb.Sta
 			s.logger,
 			session.ProfileStore(),
 			networkController,
-			BootstrapServiceOptions{},
+			BootstrapServiceOptions{
+				EnablePublishing: r.EnableBootstrapPublishing,
+			},
 		)
 		hostOptions = append(hostOptions, WithBootstrapService(bootstrapService))
 
@@ -697,7 +699,7 @@ func (s *Frontend) OpenChatServer(ctx context.Context, r *pb.OpenChatServerReque
 
 	session := rpc.ContextSession(ctx)
 
-	server, err := NewChatServer(svc, r.Server.Key)
+	server, err := NewChatServer(s.logger, svc, r.Server.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -766,7 +768,7 @@ func (s *Frontend) OpenChatClient(ctx context.Context, r *pb.OpenChatClientReque
 
 	session := rpc.ContextSession(ctx)
 
-	client, err := NewChatClient(svc, r.ServerKey)
+	client, err := NewChatClient(s.logger, svc, r.ServerKey)
 	if err != nil {
 		return nil, err
 	}

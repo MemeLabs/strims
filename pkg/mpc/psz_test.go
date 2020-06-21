@@ -11,29 +11,25 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/mpc/mpctest"
 )
 
-func testPSZ(vlen, ilen int) error {
+func testPSZ(alen, blen, ilen int) error {
 	seed := []byte{1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16}
 
-	aset := make([][]byte, vlen)
-	bset := make([][]byte, vlen)
+	aset := make([][]byte, alen)
+	bset := make([][]byte, blen)
 	expected := make([][]byte, ilen)
 	{
 		rng, err := newRNG(seed)
 		if err != nil {
 			panic(err)
 		}
-		for i := 0; i < vlen; i++ {
+		for i := 0; i < alen; i++ {
 			aset[i] = make([]byte, 16)
 			rng.Read(aset[i])
+		}
+		for i := 0; i < blen; i++ {
 			bset[i] = make([]byte, 16)
 			rng.Read(bset[i])
 		}
-
-		// for i := 0; i < 10000; i++ {
-		// 	b := make([]byte, 16)
-		// 	rng.Read(b)
-		// 	aset = append(aset, b)
-		// }
 
 		log.Printf("sending %d, receiving %d", len(aset), len(bset))
 
@@ -135,14 +131,16 @@ func (s bytesSlice) Swap(i, j int) {
 
 func TestPSZ(t *testing.T) {
 	cases := []struct {
-		vlen, ilen int
+		alen, blen, ilen int
 	}{
-		{15, 15},
-		{100, 10},
-		{1000, 250},
+		{0, 0, 0},
+		{1, 0, 0},
+		{15, 15, 15},
+		{100, 100, 10},
+		{1000, 1000, 250},
 	}
 	for _, c := range cases {
-		if err := testPSZ(c.vlen, c.ilen); err != nil {
+		if err := testPSZ(c.alen, c.blen, c.ilen); err != nil {
 			t.Error(err)
 			t.FailNow()
 		}

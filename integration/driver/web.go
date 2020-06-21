@@ -69,7 +69,7 @@ type webDriverClient struct {
 }
 
 // TODO: allow creating multiple clients
-func (d *webDriver) Client() *rpc.Client {
+func (d *webDriver) Client(o *ClientOptions) *rpc.Client {
 	chrome, err := newChromeContainer()
 	if err != nil {
 		log.Fatal(err)

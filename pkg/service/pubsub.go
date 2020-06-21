@@ -293,7 +293,7 @@ func readPubSubEvents(swarm *encoding.Swarm, messages chan *pb.PubSubEvent_Messa
 		}
 
 		var msg pb.PubSubEvent
-		if proto.Unmarshal(b.Bytes(), &msg) != nil {
+		if err := proto.Unmarshal(b.Bytes(), &msg); err != nil {
 			continue
 		}
 

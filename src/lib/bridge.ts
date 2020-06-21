@@ -357,7 +357,7 @@ export class WorkerBridge {
     ws.binaryType = "arraybuffer";
     ws.onopen = () => proxy.onopen();
     ws.onclose = () => proxy.onclose();
-    ws.onerror = (e: ErrorEvent) => proxy.onerror(String(e.message));
+    ws.onerror = (e: ErrorEvent) => proxy.onerror(String(e.message || "unknown websocket error"));
     ws.onmessage = ({ data }) => proxy.ondata(new Uint8Array(data), data.byteLength, Date.now());
 
     return {
