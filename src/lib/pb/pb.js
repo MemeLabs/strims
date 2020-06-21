@@ -21495,7 +21495,7 @@ export const VideoServerOpenResponse = $root.VideoServerOpenResponse = (() => {
      * @memberof VideoServerOpenResponse
      * @instance
      */
-    VideoServerOpenResponse.prototype.id = 0;
+    VideoServerOpenResponse.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
      * Creates a new VideoServerOpenResponse instance using the specified properties.
@@ -21522,7 +21522,7 @@ export const VideoServerOpenResponse = $root.VideoServerOpenResponse = (() => {
         if (!writer)
             writer = $Writer.create();
         if (message.id != null && Object.hasOwnProperty.call(message, "id"))
-            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.id);
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
         return writer;
     };
 
@@ -21558,7 +21558,7 @@ export const VideoServerOpenResponse = $root.VideoServerOpenResponse = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.id = reader.uint32();
+                message.id = reader.uint64();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -21596,8 +21596,8 @@ export const VideoServerOpenResponse = $root.VideoServerOpenResponse = (() => {
         if (typeof message !== "object" || message === null)
             return "object expected";
         if (message.id != null && message.hasOwnProperty("id"))
-            if (!$util.isInteger(message.id))
-                return "id: integer expected";
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
         return null;
     };
 
@@ -21614,7 +21614,14 @@ export const VideoServerOpenResponse = $root.VideoServerOpenResponse = (() => {
             return object;
         let message = new $root.VideoServerOpenResponse();
         if (object.id != null)
-            message.id = object.id >>> 0;
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
         return message;
     };
 
@@ -21632,9 +21639,16 @@ export const VideoServerOpenResponse = $root.VideoServerOpenResponse = (() => {
             options = {};
         let object = {};
         if (options.defaults)
-            object.id = 0;
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
         if (message.id != null && message.hasOwnProperty("id"))
-            object.id = message.id;
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
         return object;
     };
 
@@ -21684,7 +21698,7 @@ export const VideoServerWriteRequest = $root.VideoServerWriteRequest = (() => {
      * @memberof VideoServerWriteRequest
      * @instance
      */
-    VideoServerWriteRequest.prototype.id = 0;
+    VideoServerWriteRequest.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
      * VideoServerWriteRequest data.
@@ -21727,7 +21741,7 @@ export const VideoServerWriteRequest = $root.VideoServerWriteRequest = (() => {
         if (!writer)
             writer = $Writer.create();
         if (message.id != null && Object.hasOwnProperty.call(message, "id"))
-            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.id);
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
         if (message.data != null && Object.hasOwnProperty.call(message, "data"))
             writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.data);
         if (message.flush != null && Object.hasOwnProperty.call(message, "flush"))
@@ -21767,7 +21781,7 @@ export const VideoServerWriteRequest = $root.VideoServerWriteRequest = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.id = reader.uint32();
+                message.id = reader.uint64();
                 break;
             case 2:
                 message.data = reader.bytes();
@@ -21811,8 +21825,8 @@ export const VideoServerWriteRequest = $root.VideoServerWriteRequest = (() => {
         if (typeof message !== "object" || message === null)
             return "object expected";
         if (message.id != null && message.hasOwnProperty("id"))
-            if (!$util.isInteger(message.id))
-                return "id: integer expected";
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
         if (message.data != null && message.hasOwnProperty("data"))
             if (!(message.data && typeof message.data.length === "number" || $util.isString(message.data)))
                 return "data: buffer expected";
@@ -21835,7 +21849,14 @@ export const VideoServerWriteRequest = $root.VideoServerWriteRequest = (() => {
             return object;
         let message = new $root.VideoServerWriteRequest();
         if (object.id != null)
-            message.id = object.id >>> 0;
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
         if (object.data != null)
             if (typeof object.data === "string")
                 $util.base64.decode(object.data, message.data = $util.newBuffer($util.base64.length(object.data)), 0);
@@ -21860,7 +21881,11 @@ export const VideoServerWriteRequest = $root.VideoServerWriteRequest = (() => {
             options = {};
         let object = {};
         if (options.defaults) {
-            object.id = 0;
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
             if (options.bytes === String)
                 object.data = "";
             else {
@@ -21871,7 +21896,10 @@ export const VideoServerWriteRequest = $root.VideoServerWriteRequest = (() => {
             object.flush = false;
         }
         if (message.id != null && message.hasOwnProperty("id"))
-            object.id = message.id;
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
         if (message.data != null && message.hasOwnProperty("data"))
             object.data = options.bytes === String ? $util.base64.encode(message.data, 0, message.data.length) : options.bytes === Array ? Array.prototype.slice.call(message.data) : message.data;
         if (message.flush != null && message.hasOwnProperty("flush"))
@@ -22738,7 +22766,7 @@ export const VideoClientEvent = $root.VideoClientEvent = (() => {
          * @memberof VideoClientEvent.Open
          * @instance
          */
-        Open.prototype.id = 0;
+        Open.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * Creates a new Open instance using the specified properties.
@@ -22765,7 +22793,7 @@ export const VideoClientEvent = $root.VideoClientEvent = (() => {
             if (!writer)
                 writer = $Writer.create();
             if (message.id != null && Object.hasOwnProperty.call(message, "id"))
-                writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.id);
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
             return writer;
         };
 
@@ -22801,7 +22829,7 @@ export const VideoClientEvent = $root.VideoClientEvent = (() => {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
                 case 1:
-                    message.id = reader.uint32();
+                    message.id = reader.uint64();
                     break;
                 default:
                     reader.skipType(tag & 7);
@@ -22839,8 +22867,8 @@ export const VideoClientEvent = $root.VideoClientEvent = (() => {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             if (message.id != null && message.hasOwnProperty("id"))
-                if (!$util.isInteger(message.id))
-                    return "id: integer expected";
+                if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                    return "id: integer|Long expected";
             return null;
         };
 
@@ -22857,7 +22885,14 @@ export const VideoClientEvent = $root.VideoClientEvent = (() => {
                 return object;
             let message = new $root.VideoClientEvent.Open();
             if (object.id != null)
-                message.id = object.id >>> 0;
+                if ($util.Long)
+                    (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+                else if (typeof object.id === "string")
+                    message.id = parseInt(object.id, 10);
+                else if (typeof object.id === "number")
+                    message.id = object.id;
+                else if (typeof object.id === "object")
+                    message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
             return message;
         };
 
@@ -22875,9 +22910,16 @@ export const VideoClientEvent = $root.VideoClientEvent = (() => {
                 options = {};
             let object = {};
             if (options.defaults)
-                object.id = 0;
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.id = options.longs === String ? "0" : 0;
             if (message.id != null && message.hasOwnProperty("id"))
-                object.id = message.id;
+                if (typeof message.id === "number")
+                    object.id = options.longs === String ? String(message.id) : message.id;
+                else
+                    object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
             return object;
         };
 
@@ -26894,7 +26936,7 @@ export const StartSwarmResponse = $root.StartSwarmResponse = (() => {
      * @memberof StartSwarmResponse
      * @instance
      */
-    StartSwarmResponse.prototype.id = 0;
+    StartSwarmResponse.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
      * Creates a new StartSwarmResponse instance using the specified properties.
@@ -26921,7 +26963,7 @@ export const StartSwarmResponse = $root.StartSwarmResponse = (() => {
         if (!writer)
             writer = $Writer.create();
         if (message.id != null && Object.hasOwnProperty.call(message, "id"))
-            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.id);
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
         return writer;
     };
 
@@ -26957,7 +26999,7 @@ export const StartSwarmResponse = $root.StartSwarmResponse = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.id = reader.uint32();
+                message.id = reader.uint64();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -26995,8 +27037,8 @@ export const StartSwarmResponse = $root.StartSwarmResponse = (() => {
         if (typeof message !== "object" || message === null)
             return "object expected";
         if (message.id != null && message.hasOwnProperty("id"))
-            if (!$util.isInteger(message.id))
-                return "id: integer expected";
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
         return null;
     };
 
@@ -27013,7 +27055,14 @@ export const StartSwarmResponse = $root.StartSwarmResponse = (() => {
             return object;
         let message = new $root.StartSwarmResponse();
         if (object.id != null)
-            message.id = object.id >>> 0;
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
         return message;
     };
 
@@ -27031,9 +27080,16 @@ export const StartSwarmResponse = $root.StartSwarmResponse = (() => {
             options = {};
         let object = {};
         if (options.defaults)
-            object.id = 0;
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
         if (message.id != null && message.hasOwnProperty("id"))
-            object.id = message.id;
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
         return object;
     };
 
@@ -27082,7 +27138,7 @@ export const WriteToSwarmRequest = $root.WriteToSwarmRequest = (() => {
      * @memberof WriteToSwarmRequest
      * @instance
      */
-    WriteToSwarmRequest.prototype.id = 0;
+    WriteToSwarmRequest.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
      * WriteToSwarmRequest data.
@@ -27117,7 +27173,7 @@ export const WriteToSwarmRequest = $root.WriteToSwarmRequest = (() => {
         if (!writer)
             writer = $Writer.create();
         if (message.id != null && Object.hasOwnProperty.call(message, "id"))
-            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.id);
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
         if (message.data != null && Object.hasOwnProperty.call(message, "data"))
             writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.data);
         return writer;
@@ -27155,7 +27211,7 @@ export const WriteToSwarmRequest = $root.WriteToSwarmRequest = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.id = reader.uint32();
+                message.id = reader.uint64();
                 break;
             case 2:
                 message.data = reader.bytes();
@@ -27196,8 +27252,8 @@ export const WriteToSwarmRequest = $root.WriteToSwarmRequest = (() => {
         if (typeof message !== "object" || message === null)
             return "object expected";
         if (message.id != null && message.hasOwnProperty("id"))
-            if (!$util.isInteger(message.id))
-                return "id: integer expected";
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
         if (message.data != null && message.hasOwnProperty("data"))
             if (!(message.data && typeof message.data.length === "number" || $util.isString(message.data)))
                 return "data: buffer expected";
@@ -27217,7 +27273,14 @@ export const WriteToSwarmRequest = $root.WriteToSwarmRequest = (() => {
             return object;
         let message = new $root.WriteToSwarmRequest();
         if (object.id != null)
-            message.id = object.id >>> 0;
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
         if (object.data != null)
             if (typeof object.data === "string")
                 $util.base64.decode(object.data, message.data = $util.newBuffer($util.base64.length(object.data)), 0);
@@ -27240,7 +27303,11 @@ export const WriteToSwarmRequest = $root.WriteToSwarmRequest = (() => {
             options = {};
         let object = {};
         if (options.defaults) {
-            object.id = 0;
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
             if (options.bytes === String)
                 object.data = "";
             else {
@@ -27250,7 +27317,10 @@ export const WriteToSwarmRequest = $root.WriteToSwarmRequest = (() => {
             }
         }
         if (message.id != null && message.hasOwnProperty("id"))
-            object.id = message.id;
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
         if (message.data != null && message.hasOwnProperty("data"))
             object.data = options.bytes === String ? $util.base64.encode(message.data, 0, message.data.length) : options.bytes === Array ? Array.prototype.slice.call(message.data) : message.data;
         return object;
@@ -27487,7 +27557,7 @@ export const StopSwarmRequest = $root.StopSwarmRequest = (() => {
      * @memberof StopSwarmRequest
      * @instance
      */
-    StopSwarmRequest.prototype.id = 0;
+    StopSwarmRequest.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
      * Creates a new StopSwarmRequest instance using the specified properties.
@@ -27514,7 +27584,7 @@ export const StopSwarmRequest = $root.StopSwarmRequest = (() => {
         if (!writer)
             writer = $Writer.create();
         if (message.id != null && Object.hasOwnProperty.call(message, "id"))
-            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.id);
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
         return writer;
     };
 
@@ -27550,7 +27620,7 @@ export const StopSwarmRequest = $root.StopSwarmRequest = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.id = reader.uint32();
+                message.id = reader.uint64();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -27588,8 +27658,8 @@ export const StopSwarmRequest = $root.StopSwarmRequest = (() => {
         if (typeof message !== "object" || message === null)
             return "object expected";
         if (message.id != null && message.hasOwnProperty("id"))
-            if (!$util.isInteger(message.id))
-                return "id: integer expected";
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
         return null;
     };
 
@@ -27606,7 +27676,14 @@ export const StopSwarmRequest = $root.StopSwarmRequest = (() => {
             return object;
         let message = new $root.StopSwarmRequest();
         if (object.id != null)
-            message.id = object.id >>> 0;
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
         return message;
     };
 
@@ -27624,9 +27701,16 @@ export const StopSwarmRequest = $root.StopSwarmRequest = (() => {
             options = {};
         let object = {};
         if (options.defaults)
-            object.id = 0;
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
         if (message.id != null && message.hasOwnProperty("id"))
-            object.id = message.id;
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
         return object;
     };
 
@@ -27811,6 +27895,7 @@ export const PublishSwarmRequest = $root.PublishSwarmRequest = (() => {
      * @exports IPublishSwarmRequest
      * @interface IPublishSwarmRequest
      * @property {number|null} [id] PublishSwarmRequest id
+     * @property {Uint8Array|null} [networkKey] PublishSwarmRequest networkKey
      */
 
     /**
@@ -27834,7 +27919,15 @@ export const PublishSwarmRequest = $root.PublishSwarmRequest = (() => {
      * @memberof PublishSwarmRequest
      * @instance
      */
-    PublishSwarmRequest.prototype.id = 0;
+    PublishSwarmRequest.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * PublishSwarmRequest networkKey.
+     * @member {Uint8Array} networkKey
+     * @memberof PublishSwarmRequest
+     * @instance
+     */
+    PublishSwarmRequest.prototype.networkKey = $util.newBuffer([]);
 
     /**
      * Creates a new PublishSwarmRequest instance using the specified properties.
@@ -27861,7 +27954,9 @@ export const PublishSwarmRequest = $root.PublishSwarmRequest = (() => {
         if (!writer)
             writer = $Writer.create();
         if (message.id != null && Object.hasOwnProperty.call(message, "id"))
-            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.id);
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
+            writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.networkKey);
         return writer;
     };
 
@@ -27897,7 +27992,10 @@ export const PublishSwarmRequest = $root.PublishSwarmRequest = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.id = reader.uint32();
+                message.id = reader.uint64();
+                break;
+            case 2:
+                message.networkKey = reader.bytes();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -27935,8 +28033,11 @@ export const PublishSwarmRequest = $root.PublishSwarmRequest = (() => {
         if (typeof message !== "object" || message === null)
             return "object expected";
         if (message.id != null && message.hasOwnProperty("id"))
-            if (!$util.isInteger(message.id))
-                return "id: integer expected";
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+            if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
+                return "networkKey: buffer expected";
         return null;
     };
 
@@ -27953,7 +28054,19 @@ export const PublishSwarmRequest = $root.PublishSwarmRequest = (() => {
             return object;
         let message = new $root.PublishSwarmRequest();
         if (object.id != null)
-            message.id = object.id >>> 0;
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        if (object.networkKey != null)
+            if (typeof object.networkKey === "string")
+                $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
+            else if (object.networkKey.length)
+                message.networkKey = object.networkKey;
         return message;
     };
 
@@ -27970,10 +28083,27 @@ export const PublishSwarmRequest = $root.PublishSwarmRequest = (() => {
         if (!options)
             options = {};
         let object = {};
-        if (options.defaults)
-            object.id = 0;
+        if (options.defaults) {
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+            if (options.bytes === String)
+                object.networkKey = "";
+            else {
+                object.networkKey = [];
+                if (options.bytes !== Array)
+                    object.networkKey = $util.newBuffer(object.networkKey);
+            }
+        }
         if (message.id != null && message.hasOwnProperty("id"))
-            object.id = message.id;
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+            object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
         return object;
     };
 

@@ -12672,6 +12672,9 @@ export interface IPublishSwarmRequest {
 
     /** PublishSwarmRequest id */
     id?: (number|null);
+
+    /** PublishSwarmRequest networkKey */
+    networkKey?: (Uint8Array|null);
 }
 
 /** Represents a PublishSwarmRequest. */
@@ -12685,6 +12688,9 @@ export class PublishSwarmRequest implements IPublishSwarmRequest {
 
     /** PublishSwarmRequest id. */
     public id: number;
+
+    /** PublishSwarmRequest networkKey. */
+    public networkKey: Uint8Array;
 
     /**
      * Creates a new PublishSwarmRequest instance using the specified properties.

@@ -385,11 +385,11 @@ message NetworkAddress {
 
 message VideoServerOpenRequest {}
 message VideoServerOpenResponse {
-  uint32 id = 1;
+  uint64 id = 1;
 }
 
 message VideoServerWriteRequest {
-  uint32 id = 1;
+  uint64 id = 1;
   bytes data = 2;
   bool flush = 3;
 }
@@ -404,7 +404,7 @@ message VideoClientEvent {
   }
 
   message Open {
-    uint32 id = 1;
+    uint64 id = 1;
   }
 
   message Close {}
@@ -468,21 +468,22 @@ message MonitorSwarmsRequest {}
 
 message StartSwarmRequest {}
 message StartSwarmResponse {
-  uint32 id = 1;
+  uint64 id = 1;
 }
 message WriteToSwarmRequest {
-  uint32 id = 1;
+  uint64 id = 1;
   bytes data = 2;
 }
 message WriteToSwarmResponse {
   string error = 1;
 }
 message StopSwarmRequest {
-  uint32 id = 1;
+  uint64 id = 1;
 }
 message StopSwarmResponse {}
 message PublishSwarmRequest {
-  uint32 id = 1;
+  uint64 id = 1;
+  bytes network_key = 2;
 }
 message PublishSwarmResponse {}
 

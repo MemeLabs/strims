@@ -2,95 +2,127 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log"
+	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
 	"github.com/MemeLabs/go-ppspp/pkg/encoding"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
-// NewVideoThing ...
-func NewVideoThing() *VideoThing {
+func testKey() *pb.Key {
 	key := &pb.Key{}
 	err := json.Unmarshal([]byte(`{"type":1,"private":"xIbkrrbgy24ps/HizaIsik1X0oAO2CSq9bAFDHa5QtfS4l/CTqSzU7BlqiQa1cOeQR94FZCN0RJuqoYgirV+Mg==","public":"0uJfwk6ks1OwZaokGtXDnkEfeBWQjdESbqqGIIq1fjI="}`), &key)
 	if err != nil {
 		panic(err)
 	}
+	return key
+}
 
-	return &VideoThing{
-		key: key,
+var videoSalt = []byte("video")
+
+// SwarmPublisher ...
+type SwarmPublisher interface {
+	PublishSwarm(svc *NetworkServices) error
+}
+
+// NewVideoServer ...
+func NewVideoServer() (*VideoServer, error) {
+	key := testKey()
+
+	w, err := encoding.NewWriter(encoding.SwarmWriterOptions{
+		// SwarmOptions: encoding.NewDefaultSwarmOptions(),
+		SwarmOptions: encoding.SwarmOptions{
+			LiveWindow: 1 << 15, // 32mb
+		},
+		Key: key,
+	})
+	if err != nil {
+		log.Println("error creating writer", err)
+		return nil, err
 	}
+
+	cw, err := chunkstream.NewWriterSize(w, chunkstream.MaxSize)
+	if err != nil {
+		return nil, err
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	return &VideoServer{
+		VideoSwarm: VideoSwarm{
+			ctx:   ctx,
+			close: cancel,
+			key:   key.Public,
+			s:     w.Swarm(),
+		},
+		w: cw,
+	}, nil
 }
 
-type videoPublisher struct {
-	// p vpn.PeerIndexPublisher
-	s SwarmNetwork
+// VideoServer ...
+type VideoServer struct {
+	VideoSwarm
+	w *chunkstream.Writer
 }
 
-// VideoThing ...
-type VideoThing struct {
-	p   []videoPublisher
-	key *pb.Key
-	s   *encoding.Swarm
-	w   *chunkstream.Writer
-}
-
-// PublishSwarm ...
-func (t *VideoThing) PublishSwarm(svc NetworkServices) error {
-	// peers, err := getPeersGetter(svc, t.key, []byte("video"))()
-	// if err != nil {
-	// 	return err
-	// }
-
-	// for _, peer := range peers {
-	// 	svc.PeerExchange.Connect(peer.HostID)
-	// }
-
-	// p, err := svc.PeerIndex.Publish(t.key.Public, []byte("video"), 0)
-	// if err != nil {
-	// 	return err
-	// }
-
-	// svc.Swarms.OpenSwarm(t.s)
-
-	// t.p = append(t.p, videoPublisher{p, svc.Swarms})
+// Write ...
+func (t *VideoServer) Write(b []byte) error {
+	if _, err := t.w.Write(b); err != nil {
+		return err
+	}
 	return nil
 }
 
-// Stop ...
-func (t *VideoThing) Stop() {
-	id := encoding.NewSwarmID(t.key.Public)
-	for _, p := range t.p {
-		// p.p.Stop()
-		p.s.CloseSwarm(id)
-	}
+// Flush ...
+func (t *VideoServer) Flush() error {
+	return t.w.Flush()
 }
 
-// RunClient ...
-func (t *VideoThing) RunClient(ch chan *pb.VideoClientEvent) error {
+// NewVideoClient ...
+func NewVideoClient() (*VideoClient, error) {
+	key := testKey()
+
 	s, err := encoding.NewSwarm(
-		encoding.NewSwarmID(t.key.Public),
+		encoding.NewSwarmID(key.Public),
 		// encoding.NewDefaultSwarmOptions(),
 		encoding.SwarmOptions{
-			LiveWindow: 1 << 14, // 8MB
+			LiveWindow: 1 << 15, // 32mb
 		},
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	t.s = s
+	ctx, cancel := context.WithCancel(context.Background())
 
-	// time.Sleep(2 * time.Second)
-	r := t.s.Reader()
+	return &VideoClient{
+		VideoSwarm: VideoSwarm{
+			ctx:   ctx,
+			close: cancel,
+			key:   key.Public,
+			s:     s,
+		},
+	}, nil
+}
+
+// VideoClient ...
+type VideoClient struct {
+	VideoSwarm
+}
+
+// SendEvents ...
+func (c *VideoClient) SendEvents(ch chan *pb.VideoClientEvent) {
+	r := c.s.Reader()
+	log.Println("got swarm reader", r.Offset())
 	cr, err := chunkstream.NewReaderSize(r, int64(r.Offset()), chunkstream.MaxSize)
 	if err != nil {
 		panic(err)
 	}
-
-	log.Println("offset", r.Offset())
+	log.Println("opened chunkstream reader")
 
 	// TODO: hack - discard first fragment
 	{
@@ -100,6 +132,8 @@ func (t *VideoThing) RunClient(ch chan *pb.VideoClientEvent) error {
 		}
 		b.Reset()
 	}
+
+	log.Println("finished discarding chunk fragment")
 
 	var seq int
 	var bufs [32][32 * 1024]byte
@@ -132,64 +166,37 @@ func (t *VideoThing) RunClient(ch chan *pb.VideoClientEvent) error {
 			},
 		}
 	}
-
-	// var seq int
-	// var bufs [3]bytes.Buffer
-	// for {
-	// 	b := &bufs[seq%len(bufs)]
-	// 	b.Reset()
-	// 	seq++
-
-	// 	if _, err := io.Copy(b, cr); err != nil {
-	// 		panic(err)
-	// 	}
-
-	// 	// log.Println("read bytes", b.Len(), spew.Sdump(b.Bytes()))
-
-	// 	ch <- &pb.VideoClientEvent{
-	// 		Body: &pb.VideoClientEvent_Data_{
-	// 			Data: &pb.VideoClientEvent_Data{
-	// 				Data:  b.Bytes(),
-	// 				Flush: true,
-	// 			},
-	// 		},
-	// 	}
-	// }
 }
 
-// RunServer ...
-func (t *VideoThing) RunServer() error {
-	w, err := encoding.NewWriter(encoding.SwarmWriterOptions{
-		// SwarmOptions: encoding.NewDefaultSwarmOptions(),
-		SwarmOptions: encoding.SwarmOptions{
-			LiveWindow: 1 << 14, // 8MB
-		},
-		Key: t.key,
-	})
-	if err != nil {
-		log.Println("error creating writer", err)
+// VideoSwarm ...
+type VideoSwarm struct {
+	ctx       context.Context
+	close     context.CancelFunc
+	closeOnce sync.Once
+	key       []byte
+	s         *encoding.Swarm
+	svc       []*NetworkServices
+}
+
+// PublishSwarm ...
+func (t *VideoSwarm) PublishSwarm(svc *NetworkServices) error {
+	svc.Swarms.OpenSwarm(t.s)
+
+	newSwarmPeerManager(t.ctx, svc, getPeersGetter(t.ctx, svc, t.key, videoSalt))
+
+	if err := svc.PeerIndex.Publish(t.ctx, t.key, videoSalt, 0); err != nil {
 		return err
 	}
 
-	cw, err := chunkstream.NewWriterSize(w, chunkstream.MaxSize)
-	if err != nil {
-		panic(err)
-	}
+	t.svc = append(t.svc, svc)
 
-	t.s = w.Swarm()
-	t.w = cw
 	return nil
 }
 
-// Write ...
-func (t *VideoThing) Write(b []byte) error {
-	if _, err := t.w.Write(b); err != nil {
-		return err
+// Stop ...
+func (t *VideoSwarm) Stop() {
+	t.close()
+	for _, svc := range t.svc {
+		svc.Swarms.CloseSwarm(t.s.ID)
 	}
-	return nil
-}
-
-// Flush ...
-func (t *VideoThing) Flush() error {
-	return t.w.Flush()
 }

@@ -545,48 +545,51 @@ func (s *Frontend) StopVPN(ctx context.Context, r *pb.StopVPNRequest) (*pb.StopV
 
 // OpenVideoClient ...
 func (s *Frontend) OpenVideoClient(ctx context.Context, r *pb.VideoClientOpenRequest) (<-chan *pb.VideoClientEvent, error) {
-	// session := rpc.ContextSession(ctx)
-	// if session.Anonymous() {
-	// 	return nil, ErrAuthenticationRequired
-	// }
+	session := rpc.ContextSession(ctx)
+	if session.Anonymous() {
+		return nil, ErrAuthenticationRequired
+	}
 
-	// s.logger.Debug("start swarm...")
+	s.logger.Debug("start swarm...")
 
-	// v := NewVideoThing()
+	v, err := NewVideoClient()
+	if err != nil {
+		return nil, err
+	}
+
+	id := session.Store(v)
 
 	ch := make(chan *pb.VideoClientEvent, 1)
-	// go v.RunClient(ch)
 
-	// id := atomic.AddUint32(&idThing, 1)
-	// session.Values.Store(id, v)
+	ch <- &pb.VideoClientEvent{
+		Body: &pb.VideoClientEvent_Open_{
+			Open: &pb.VideoClientEvent_Open{
+				Id: id,
+			},
+		},
+	}
 
-	// ch <- &pb.VideoClientEvent{
-	// 	Body: &pb.VideoClientEvent_Open_{
-	// 		Open: &pb.VideoClientEvent_Open{
-	// 			Id: id,
-	// 		},
-	// 	},
-	// }
+	go v.SendEvents(ch)
 
 	return ch, nil
 }
 
 // OpenVideoServer ...
 func (s *Frontend) OpenVideoServer(ctx context.Context, r *pb.VideoServerOpenRequest) (*pb.VideoServerOpenResponse, error) {
-	// session := rpc.ContextSession(ctx)
-	// if session.Anonymous() {
-	// 	return nil, ErrAuthenticationRequired
-	// }
+	session := rpc.ContextSession(ctx)
+	if session.Anonymous() {
+		return nil, ErrAuthenticationRequired
+	}
 
-	// s.logger.Debug("start swarm...")
+	s.logger.Debug("start swarm...")
 
-	// v := NewVideoThing()
-	// v.RunServer()
+	v, err := NewVideoServer()
+	if err != nil {
+		return nil, err
+	}
 
-	// id := atomic.AddUint32(&idThing, 1)
-	// session.Values.Store(id, v)
+	id := session.Store(v)
 
-	var id uint32
 	return &pb.VideoServerOpenResponse{Id: id}, nil
 }
 
@@ -598,7 +601,7 @@ func (s *Frontend) WriteToVideoServer(ctx context.Context, r *pb.VideoServerWrit
 	}
 
 	tif, _ := session.Values.Load(r.Id)
-	t, ok := tif.(*VideoThing)
+	t, ok := tif.(*VideoServer)
 	if !ok {
 		return nil, errors.New("client id does not exist")
 	}
@@ -622,23 +625,26 @@ func (s *Frontend) PublishSwarm(ctx context.Context, r *pb.PublishSwarmRequest) 
 		return nil, ErrAuthenticationRequired
 	}
 
-	tif, _ := session.Values.Load(r.Id)
-	t, ok := tif.(*VideoThing)
+	ctl, err := s.getNetworkController(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: this should return an ErrNetworkNotFound...
+	svc, ok := ctl.NetworkServices(r.NetworkKey)
+	if !ok {
+		return nil, errors.New("unknown network")
+	}
+
+	tif, _ := session.Load(r.Id)
+	t, ok := tif.(SwarmPublisher)
 	if !ok {
 		return nil, errors.New("client id does not exist")
 	}
 
-	vpnDataIf, ok := session.Values.Load(vpnKey)
-	if !ok {
-		return nil, errors.New("vpnData does not exist")
+	if err := t.PublishSwarm(svc); err != nil {
+		return nil, err
 	}
-
-	_ = vpnDataIf
-	_ = t
-
-	// if err := t.PublishSwarm(vpnDataIf.(vpnData).controller.ServiceOptions(1)); err != nil {
-	// 	return nil, err
-	// }
 
 	return &pb.PublishSwarmResponse{}, nil
 }

@@ -81,7 +81,23 @@ const HomePage = () => {
     encoder.ondata = (data) => client.writeToVideoServer({ id, data });
     encoder.onend = (data) => client.writeToVideoServer({ id, data, flush: true });
 
-    client.publishSwarm({ id });
+    publishSwarm(id);
+  };
+
+  const publishSwarm = async (id: number) => {
+    const memeberships = await client.getNetworkMemberships();
+
+    memeberships.networkMemberships.forEach((m) => {
+      let rootCert = m.certificate;
+      while (rootCert.parent) {
+        rootCert = rootCert.parent;
+      }
+
+      client.publishSwarm({
+        id,
+        networkKey: rootCert.key,
+      });
+    });
   };
 
   const handleViewBroadcastClick = () => {
@@ -97,7 +113,7 @@ const HomePage = () => {
     clientEvents.on("data", (v) => {
       switch (v.body) {
         case "open":
-          client.publishSwarm({ id: v.open.id });
+          publishSwarm(v.open.id);
           break;
         case "data":
           // console.log("read", v.data.data);

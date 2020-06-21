@@ -61,8 +61,7 @@ func (d WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
 func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (Link, error) {
 	pc.OnICEConnectionStateChange(func(s webrtc.ICEConnectionState) {
 		d.logger.Debug("connection state changed", zap.String("state", s.String()))
-		if s == webrtc.ICEConnectionStateClosed {
-			// a.handleClose()
+		if s == webrtc.ICEConnectionStateDisconnected {
 			pc.Close()
 		}
 	})
