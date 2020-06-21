@@ -7,9 +7,9 @@ export const InputLabel = ({
   required,
   text,
 }: {
-  children: any,
-  required: boolean,
-  text: string,
+  children: any;
+  required: boolean;
+  text: string;
 }) => {
   const labelClass = clsx({
     "input_label": true,
@@ -24,7 +24,7 @@ export const InputLabel = ({
   );
 };
 
-export const InputError = ({ error }: {error: any}) => {
+export const InputError = ({ error }: { error: any }) => {
   if (!error) {
     return null;
   }
@@ -55,15 +55,15 @@ export const TextInput = ({
   disabled,
   defaultValue,
 }: {
-  error?: any,
-  inputRef: React.Ref<HTMLInputElement>,
-  label: string,
-  name: string,
-  placeholder: string,
-  required?: boolean,
-  type?: "text" | "password",
-  disabled?: boolean,
-  defaultValue?: string,
+  error?: any;
+  inputRef: React.Ref<HTMLInputElement>;
+  label: string;
+  name: string;
+  placeholder: string;
+  required?: boolean;
+  type?: "text" | "password";
+  disabled?: boolean;
+  defaultValue?: string;
 }) => {
   return (
     <InputLabel required={required} text={label}>

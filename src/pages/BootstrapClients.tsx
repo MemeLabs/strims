@@ -1,12 +1,17 @@
 import * as React from "react";
 import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
+
 import { InputError, TextInput } from "../components/Form";
 import { MainLayout } from "../components/MainLayout";
 import { useCall, useLazyCall } from "../contexts/Api";
 import * as pb from "../lib/pb";
 
-const BootstrapClientForm = ({ onCreate }: { onCreate: (res: pb.CreateBootstrapClientResponse) => void }) => {
+const BootstrapClientForm = ({
+  onCreate,
+}: {
+  onCreate: (res: pb.CreateBootstrapClientResponse) => void;
+}) => {
   const [{ value, error, loading }, createBootstrapClient] = useLazyCall("createBootstrapClient", {
     onComplete: onCreate,
   });

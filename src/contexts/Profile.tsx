@@ -1,11 +1,12 @@
 import * as React from "react";
+
 import * as pb from "../lib/pb";
 import { useLazyCall } from "./Api";
 
 interface State {
-  loading: boolean,
-  profile: pb.IProfile | null,
-  error: Error | null,
+  loading: boolean;
+  profile: pb.IProfile | null;
+  error: Error | null;
 }
 
 const initialState: State = {
@@ -14,15 +15,17 @@ const initialState: State = {
   error: null,
 };
 
-const ProfileContext = React.createContext<[State, React.Dispatch<React.SetStateAction<State>>]>(null);
+const ProfileContext = React.createContext<[State, React.Dispatch<React.SetStateAction<State>>]>(
+  null
+);
 
 interface LoginResponse {
-  profile?: pb.IProfile|null
-  sessionId?: string|null;
+  profile?: pb.IProfile | null;
+  sessionId?: string | null;
 }
 
 export const useProfile = () => {
-  const [ state, setState ] = React.useContext(ProfileContext);
+  const [state, setState] = React.useContext(ProfileContext);
 
   const onComplete = ({ profile, sessionId }: LoginResponse) => {
     sessionStorage.setItem("sessionId", sessionId);
@@ -34,15 +37,16 @@ export const useProfile = () => {
     }));
   };
 
-  const onError = (error: Error) => setState((prev) => ({
-    ...prev,
-    loading: false,
-    profile: null,
-    error,
-  }));
+  const onError = (error: Error) =>
+    setState((prev) => ({
+      ...prev,
+      loading: false,
+      profile: null,
+      error,
+    }));
 
-  const [ , createProfile ] = useLazyCall("createProfile", { onComplete, onError });
-  const [ , loadProfile ] = useLazyCall("loadProfile", { onComplete, onError });
+  const [, createProfile] = useLazyCall("createProfile", { onComplete, onError });
+  const [, loadProfile] = useLazyCall("loadProfile", { onComplete, onError });
 
   const clearProfile = () => {
     sessionStorage.removeItem("sessionId");
@@ -52,10 +56,11 @@ export const useProfile = () => {
     }));
   };
 
-  const clearError = () => setState((prev) => ({
-    ...prev,
-    error: null,
-  }));
+  const clearError = () =>
+    setState((prev) => ({
+      ...prev,
+      error: null,
+    }));
 
   const actions = {
     createProfile,
@@ -63,19 +68,20 @@ export const useProfile = () => {
     clearProfile,
     clearError,
   };
-  return [ state, actions ] as [State, typeof actions];
+  return [state, actions] as [State, typeof actions];
 };
 
 export const Provider = ({ children }: any) => {
-  const [ state, setState ] = React.useState(initialState);
+  const [state, setState] = React.useState(initialState);
 
-  const handleDone = (profile?: pb.IProfile) => setState((prev) => ({
-    ...prev,
-    loading: false,
-    profile,
-  }));
+  const handleDone = (profile?: pb.IProfile) =>
+    setState((prev) => ({
+      ...prev,
+      loading: false,
+      profile,
+    }));
 
-  const [ , loadSession ] = useLazyCall("loadSession", {
+  const [, loadSession] = useLazyCall("loadSession", {
     onComplete: ({ profile }) => handleDone(profile),
     onError: () => handleDone(),
   });
@@ -89,11 +95,7 @@ export const Provider = ({ children }: any) => {
     }
   }, []);
 
-  return (
-    <ProfileContext.Provider value={[ state, setState ]}>
-      {children}
-    </ProfileContext.Provider>
-  );
+  return <ProfileContext.Provider value={[state, setState]}>{children}</ProfileContext.Provider>;
 };
 
 Provider.displayName = "Profile.Provider";

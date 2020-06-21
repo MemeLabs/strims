@@ -1,5 +1,5 @@
-import {useState} from 'react';
-import {useDebounce} from 'react-use';
+import { useState } from "react";
+import { useDebounce } from "react-use";
 
 const useIdleTimout = (timeout = 3000, initialState = true) => {
   const [idle, setIdle] = useState(initialState);

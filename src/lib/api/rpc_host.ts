@@ -1,5 +1,7 @@
-import protobuf from "protobufjs/minimal";
 import { PassThrough, Readable, Writable } from "stream";
+
+import protobuf from "protobufjs/minimal";
+
 import * as pb from "../pb";
 import { anyValueType, typeName } from "../pb/registry";
 import { Readable as GenericReadable } from "./stream";
@@ -25,7 +27,7 @@ export class RPCHost {
   }
 
   protected call(method: string, v: any, parentId: number = 0): pb.Call {
-    const ctor = v.constructor as any;
+    const ctor = v.constructor;
     const call = new pb.Call({
       id: ++this.callId,
       parentId,

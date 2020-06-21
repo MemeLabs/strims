@@ -1,5 +1,5 @@
-
 import * as React from "react";
+
 import Client from "../lib/api/client";
 
 export const ClientContext = React.createContext<Client>(null);
@@ -13,10 +13,10 @@ type ResultType<T extends AnyFunction> = ReturnType<T> extends Promise<infer U> 
 type ClientMethodName = FunctionPropertyNames<Client>;
 
 export interface Options<T extends ClientMethodName> {
-  skip?: boolean,
-  args?: Parameters<Client[T]>,
-  onComplete?: (data: ResultType<Client[T]>) => void,
-  onError?: (error: Error) => void,
+  skip?: boolean;
+  args?: Parameters<Client[T]>;
+  onComplete?: (data: ResultType<Client[T]>) => void;
+  onError?: (error: Error) => void;
 }
 
 const defaultOptions = {
@@ -29,23 +29,23 @@ export const useCall = <T extends ClientMethodName>(methodName: T, options: Opti
   type Arguments = Parameters<Client[T]>;
   type Result = ResultType<Client[T]>;
   interface State {
-    value?: Result,
-    error?: Error,
-    loading: boolean,
-    called: boolean,
+    value?: Result;
+    error?: Error;
+    loading: boolean;
+    called: boolean;
   }
 
   options = { ...defaultOptions, ...options };
 
   const client = React.useContext(ClientContext);
-  const [ state, setState ] = React.useState<State>({
+  const [state, setState] = React.useState<State>({
     loading: !options.skip,
     called: !options.skip,
   });
 
   let mounted = true;
   React.useEffect(() => {
-    return () => mounted = false;
+    return () => (mounted = false);
   }, []);
 
   const handleError = (error: Error) => {
@@ -80,6 +80,7 @@ export const useCall = <T extends ClientMethodName>(methodName: T, options: Opti
   };
 
   const call = (...args: Arguments) => {
+    /* eslint-disable prefer-spread */
     const value = client[methodName].apply(client, args);
     if (value instanceof Promise) {
       setState((prev) => ({
@@ -87,9 +88,7 @@ export const useCall = <T extends ClientMethodName>(methodName: T, options: Opti
         loading: true,
         called: true,
       }));
-      value
-        .then(handleComplete)
-        .catch(handleError);
+      value.then(handleComplete).catch(handleError);
     } else {
       handleComplete(value);
     }
@@ -99,11 +98,14 @@ export const useCall = <T extends ClientMethodName>(methodName: T, options: Opti
     if (!options.skip) {
       call.apply(this, options.args || []);
     }
-  }, [ options.skip ]);
+  }, [options.skip]);
 
-  return [ state, call ] as [State, (...arg: Arguments) => void];
+  return [state, call] as [State, (...arg: Arguments) => void];
 };
 
-export const useLazyCall = <T extends ClientMethodName>(methodName: T, options: Options<T> = {}) => {
+export const useLazyCall = <T extends ClientMethodName>(
+  methodName: T,
+  options: Options<T> = {}
+) => {
   return useCall(methodName, { ...options, skip: true });
 };

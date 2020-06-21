@@ -1,27 +1,24 @@
 import * as React from "react";
+
 import useSwarmMediaSource from "../hooks/useSwarmMediaSource";
 import useVideo from "../hooks/useVideo";
 
 interface Meme {
-  reader?: any
-  mimeType?: any
-  useMediaSource?: any
+  reader?: any;
+  mimeType?: any;
+  useMediaSource?: any;
 }
 
-const SwarmPlayer = ({
-  reader,
-  mimeType,
-  useMediaSource = useSwarmMediaSource,
-}: Meme) => {
-  const [ videoState, videoProps, videoControls ] = useVideo();
-  const [ mediaSource, truncateMediaSource ] = useMediaSource(reader, { mimeType });
+const SwarmPlayer = ({ reader, mimeType, useMediaSource = useSwarmMediaSource }: Meme) => {
+  const [videoState, videoProps, videoControls] = useVideo();
+  const [mediaSource, truncateMediaSource] = useMediaSource(reader, { mimeType });
 
   React.useEffect(() => {
     videoControls.setSrc(URL.createObjectURL(mediaSource));
     videoControls.play();
-  }, [ videoProps.ref, mediaSource ]);
+  }, [videoProps.ref, mediaSource]);
 
-  React.useEffect(() => truncateMediaSource(60), [ videoState.bufferEnd ]);
+  React.useEffect(() => truncateMediaSource(60), [videoState.bufferEnd]);
 
   return (
     <video

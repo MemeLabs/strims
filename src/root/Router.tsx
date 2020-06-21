@@ -1,5 +1,6 @@
 import * as React from "react";
 import { Route, Switch } from "react-router-dom";
+
 import { PrivateRoute } from "../components/PrivateRoute";
 import BootstrapClientsPage from "../pages/BootstrapClients";
 import ChatServersPage from "../pages/ChatServers";

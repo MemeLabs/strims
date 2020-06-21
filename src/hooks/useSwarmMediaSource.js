@@ -1,12 +1,15 @@
-import muxjs from 'mux.js';
-import {Buffer} from 'buffer';
-import useReady from './useReady';
-import useMediaSource from './useMediaSource';
+import { Buffer } from "buffer";
 
-const useSwarmMediaSource = (reader, {
-  mimeType = 'video/mp4; codecs="mp4a.40.5,avc1.64001F"',
-} = {}) => {
-  const [mediaSource, {appendBuffer, prune}] = useMediaSource({
+import muxjs from "mux.js";
+
+import useMediaSource from "./useMediaSource";
+import useReady from "./useReady";
+
+const useSwarmMediaSource = (
+  reader,
+  { mimeType = 'video/mp4; codecs="mp4a.40.5,avc1.64001F"' } = {}
+) => {
+  const [mediaSource, { appendBuffer, prune }] = useMediaSource({
     mimeType,
   });
 
@@ -14,8 +17,8 @@ const useSwarmMediaSource = (reader, {
     const transmuxer = new muxjs.mp4.Transmuxer();
 
     let initSet = false;
-    transmuxer.on('data', event => {
-      if (event.type === 'combined') {
+    transmuxer.on("data", (event) => {
+      if (event.type === "combined") {
         const buf = initSet
           ? event.data
           : Buffer.concat([Buffer.from(event.initSegment), Buffer.from(event.data)]);
@@ -23,7 +26,7 @@ const useSwarmMediaSource = (reader, {
 
         appendBuffer(buf);
       } else {
-        console.warn('unhandled event', event.type);
+        console.warn("unhandled event", event.type);
       }
     });
 

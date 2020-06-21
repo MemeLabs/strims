@@ -1,5 +1,6 @@
-import {useRef, useState} from 'react';
-import useReady from './useReady';
+import { useRef, useState } from "react";
+
+import useReady from "./useReady";
 
 export const VideoReadyState = {
   // No information is available about the media resource.
@@ -96,7 +97,7 @@ const useVideo = () => {
 
   const onTimeUpdate = () => {
     const video = ref.current;
-    const {buffered, seekable} = video;
+    const { buffered, seekable } = video;
 
     if (buffered.length === 0 || seekable.length === 0) {
       return;
@@ -120,7 +121,7 @@ const useVideo = () => {
       try {
         await ref.current.play();
       } catch (e) {
-        console.warn('error playing video', e);
+        console.warn("error playing video", e);
       }
     }
   };
@@ -134,7 +135,7 @@ const useVideo = () => {
     ref.current.volume = savedVolume || 0.5;
   };
 
-  const setVolume = volume => {
+  const setVolume = (volume) => {
     if (ref.current) {
       const clampedVolume = Math.max(0, Math.min(1, volume));
       unsafelySetVolume(clampedVolume);
@@ -142,7 +143,7 @@ const useVideo = () => {
     }
   };
 
-  const setCurrentTime = time => {
+  const setCurrentTime = (time) => {
     if (!ref.current) {
       return;
     }
@@ -151,8 +152,9 @@ const useVideo = () => {
     unsafelySetCurrentTime(time);
   };
 
-  const supportPiP = document.pictureInPictureEnabled && (ref.current && !ref.current.disablePictureInPicture);
-  const pip = ref.current ===document.pictureInPictureElement;
+  const supportPiP =
+    document.pictureInPictureEnabled && ref.current && !ref.current.disablePictureInPicture;
+  const pip = ref.current === document.pictureInPictureElement;
 
   const togglePiP = async () => {
     try {
@@ -162,12 +164,12 @@ const useVideo = () => {
         await ref.current.requestPictureInPicture();
       }
     } catch (e) {
-      console.warn('error opening pip', e);
+      console.warn("error opening pip", e);
     }
   };
 
   const src = ref.current && ref.current.src;
-  const setSrc = src => (ref.current && src) && (ref.current.src = src);
+  const setSrc = (src) => ref.current && src && (ref.current.src = src);
 
   return [
     {

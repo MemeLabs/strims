@@ -1,6 +1,7 @@
 import * as React from "react";
 import { useForm } from "react-hook-form";
 import { Link, Redirect } from "react-router-dom";
+
 import { InputError, TextInput } from "../components/Form";
 import LandingPageLayout from "../components/LandingPageLayout";
 import { useCall } from "../contexts/Api";
@@ -26,7 +27,9 @@ const SignUpPage = () => {
   return (
     <LandingPageLayout>
       <form onSubmit={handleSubmit(onSubmit)}>
-        {getProfilesRes.error && <InputError error={getProfilesRes.error.message || "Error loading profiles"} />}
+        {getProfilesRes.error && (
+          <InputError error={getProfilesRes.error.message || "Error loading profiles"} />
+        )}
         {error && <InputError error={error.message || "Error creating profile"} />}
         <TextInput
           error={errors.name}

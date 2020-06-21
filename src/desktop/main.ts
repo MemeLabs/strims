@@ -1,5 +1,6 @@
-import { app, BrowserWindow } from "electron";
 import * as path from "path";
+
+import { BrowserWindow, app } from "electron";
 
 let mainWindow: Electron.BrowserWindow;
 
@@ -27,7 +28,7 @@ const createWindow = () => {
     // when you should delete the corresponding element.
     mainWindow = null;
   });
-}
+};
 
 // This method will be called when Electron has finished
 // initialization and is ready to create browser windows.

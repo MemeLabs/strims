@@ -3,6 +3,7 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { FiUser, FiUserPlus } from "react-icons/fi";
 import { Link, Redirect, useLocation } from "react-router-dom";
+
 import { InputError, TextInput } from "../components/Form";
 import LandingPageLayout from "../components/LandingPageLayout";
 import { useCall } from "../contexts/Api";
@@ -35,7 +36,11 @@ const LoginPage = () => {
       <LandingPageLayout>
         <div className="login_profile_list">
           {getProfilesRes.value?.profiles.map((summary) => (
-            <div className="login_profile_list__item" key={summary.id} onClick={() => setSelectedProfile(summary)}>
+            <div
+              className="login_profile_list__item"
+              key={summary.id}
+              onClick={() => setSelectedProfile(summary)}
+            >
               <FiUser className="login_profile_list__icon" />
               <span className="login_profile_list__text">{summary.name}</span>
             </div>
@@ -58,7 +63,9 @@ const LoginPage = () => {
   return (
     <LandingPageLayout>
       <form onSubmit={handleSubmit(onSubmit)}>
-        {getProfilesRes.error && <InputError error={getProfilesRes.error.message || "Error loading profiles"} />}
+        {getProfilesRes.error && (
+          <InputError error={getProfilesRes.error.message || "Error loading profiles"} />
+        )}
         {error && <InputError error={error.message || "Error logging in"} />}
         <TextInput
           error={errors.name && "Name is required"}
