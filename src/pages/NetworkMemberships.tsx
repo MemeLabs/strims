@@ -34,7 +34,7 @@ const JoinForm = ({
             message: "invite is required",
           },
           pattern: {
-            value: /^[a-zA-Z0-9+\/]+={0,2}$/,
+            value: /^[a-zA-Z0-9+/]+={0,2}$/,
             message: "invalid invite string",
           },
         })}

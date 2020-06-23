@@ -158,7 +158,7 @@ func (h *Host) AddLink(c Link) {
 		linksActive.Inc()
 		defer linksActive.Dec()
 
-		p, err := newPeer(h.logger, instrumentLink(c), h.key)
+		p, err := newPeer(h.logger, instrumentLink(c), h.key, h.id)
 		if err != nil {
 			h.logger.Error("peer init error", zap.Error(err))
 			return

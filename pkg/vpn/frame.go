@@ -4,46 +4,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
-	"math/bits"
-	"sync"
+
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 )
 
 var errBufferTooSmall = errors.New("buffer too small")
-
-const frameBufferPoolCount = 8
-
-var frameBufferPools = [frameBufferPoolCount]*sync.Pool{}
-
-func newFrameBufferPool(size int) *sync.Pool {
-	return &sync.Pool{
-		New: func() interface{} {
-			return make([]byte, size)
-		},
-	}
-}
-
-func init() {
-	for i := 0; i < frameBufferPoolCount; i++ {
-		frameBufferPools[i] = newFrameBufferPool(1<<(16-i) - 1)
-	}
-}
-
-func frameBuffer(size uint16) (b []byte) {
-	if i := bits.LeadingZeros16(size); i < frameBufferPoolCount {
-		b = frameBufferPools[i].Get().([]byte)
-	} else {
-		b = frameBufferPools[frameBufferPoolCount-1].Get().([]byte)
-	}
-	return b[:size]
-}
-
-func freeFrameBuffer(b []byte) {
-	if i := bits.LeadingZeros16(uint16(cap(b))); i < frameBufferPoolCount {
-		frameBufferPools[i].Put(b)
-	} else {
-		frameBufferPools[frameBufferPoolCount-1].Put(b)
-	}
-}
 
 const frameHeaderLen = 4
 
@@ -91,10 +56,10 @@ type Frame struct {
 
 // WriteTo ...
 func (f Frame) WriteTo(w io.Writer) (int64, error) {
-	b := frameBuffer(frameHeaderLen + f.Header.Length)
+	b := pool.Get(frameHeaderLen + f.Header.Length)
 	n := f.Marshal(b)
 	_, err := w.Write(b[:n])
-	freeFrameBuffer(b)
+	pool.Put(b)
 	return int64(n), err
 }
 
@@ -110,7 +75,7 @@ func (f *Frame) ReadFrom(r io.Reader) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	f.Body = frameBuffer(f.Header.Length)[:f.Header.Length]
+	f.Body = pool.Get(f.Header.Length)
 	bn, err := io.ReadFull(r, f.Body)
 	return hn + int64(bn), err
 }
@@ -125,7 +90,7 @@ func (f *Frame) Unmarshal(b []byte) int {
 
 // Free ...
 func (f *Frame) Free() {
-	freeFrameBuffer(f.Body)
+	pool.Put(f.Body)
 	f.Body = nil
 }
 

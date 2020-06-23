@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 )
 
 const messageHeaderLen = 28
@@ -191,8 +192,8 @@ func (m *Message) Unmarshal(b []byte) (n int, err error) {
 
 // WriteTo ...
 func (m Message) WriteTo(w io.Writer, host *Host) (int64, error) {
-	b := frameBuffer(uint16(m.Size()))
-	defer freeFrameBuffer(b)
+	b := pool.Get(uint16(m.Size()))
+	defer pool.Put(b)
 
 	n, err := m.Marshal(b, host)
 	if err != nil {
@@ -209,7 +210,7 @@ func (m Message) WriteTo(w io.Writer, host *Host) (int64, error) {
 // 	if err != nil {
 // 		return 0, err
 // 	}
-// 	f.Body = frameBuffer(f.Header.Length)[:f.Header.Length]
+// 	f.Body = bufferPool.Get(f.Header.Length)[:f.Header.Length]
 // 	bn, err := io.ReadFull(r, f.Body)
 // 	return hn + int64(bn), err
 // }

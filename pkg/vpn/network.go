@@ -13,6 +13,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	lru "github.com/hashicorp/golang-lru"
 	"go.uber.org/zap"
 )
@@ -21,14 +22,27 @@ const recentMessageIDHistoryLength = 10000
 const maxMessageHops = 5
 const maxMessageReplicas = 5
 
+// errors ...
+var (
+	ErrDuplicateNetworkKey      = errors.New("duplicate network key")
+	ErrNetworkNotFound          = errors.New("network not found")
+	ErrPeerClosed               = errors.New("peer closed")
+	ErrNetworkBindingsEmpty     = errors.New("network bindings empty")
+	ErrDiscriminatorBounds      = errors.New("discriminator out of range")
+	ErrNetworkOwnerMismatch     = errors.New("init and network certificate key mismatch")
+	ErrNetworkAuthorityMismatch = errors.New("network ca mismatch")
+	ErrNetworkIDBounds          = errors.New("network id out of range")
+)
+
 // NewNetworks ...
-func NewNetworks(host *Host) *Networks {
+func NewNetworks(logger *zap.Logger, host *Host) *Networks {
 	recentMessageIDs, err := lru.New(recentMessageIDHistoryLength)
 	if err != nil {
 		panic(err)
 	}
 
 	n := &Networks{
+		logger:           logger,
 		host:             host,
 		recentMessageIDs: recentMessageIDs,
 	}
@@ -40,6 +54,7 @@ func NewNetworks(host *Host) *Networks {
 
 // Networks ...
 type Networks struct {
+	logger               *zap.Logger
 	host                 *Host
 	networksLock         sync.Mutex
 	networks             []*Network
@@ -49,7 +64,7 @@ type Networks struct {
 }
 
 func (h *Networks) handlePeer(p *Peer) {
-	newNetworkBootstrap(h.host.logger, h, p)
+	newNetworkBootstrap(h.logger, h, p)
 }
 
 // NotifyNetwork ...
@@ -69,7 +84,7 @@ func (h *Networks) NotifyPeerNetwork(ch chan PeerNetwork) {
 
 // AddNetwork ...
 func (h *Networks) AddNetwork(cert *pb.Certificate) (*Network, error) {
-	n := NewNetwork(h.host, cert, h.recentMessageIDs)
+	n := NewNetwork(h.logger, h.host, cert, h.recentMessageIDs)
 
 	h.networksLock.Lock()
 	defer h.networksLock.Unlock()
@@ -77,7 +92,7 @@ func (h *Networks) AddNetwork(cert *pb.Certificate) (*Network, error) {
 	end := len(h.networks)
 	i, ok := h.findIndexByKey(n.CAKey())
 	if ok {
-		return nil, errors.New("duplicate network key")
+		return nil, ErrDuplicateNetworkKey
 	}
 
 	h.networks = append(h.networks, n)
@@ -98,7 +113,7 @@ func (h *Networks) RemoveNetwork(n *Network) error {
 
 	i, ok := h.findIndexByKey(n.CAKey())
 	if !ok || h.networks[i] != n {
-		return errors.New("network not found")
+		return ErrNetworkNotFound
 	}
 
 	copy(h.networks[i:], h.networks[i+1:])
@@ -219,7 +234,7 @@ func (h *networkBootstrap) negotiateNetworks(ch, bch *FrameReadWriter) (err erro
 		case <-broker.InitRequired():
 			err = h.initBroker(broker)
 		case <-h.peer.Done():
-			err = errors.New("peer closed")
+			err = ErrPeerClosed
 		}
 		if err != nil {
 			return err
@@ -229,7 +244,7 @@ func (h *networkBootstrap) negotiateNetworks(ch, bch *FrameReadWriter) (err erro
 
 func (h *networkBootstrap) removeNetworkLinks() {
 	for n, l := range h.links {
-		h.networks.host.logger.Debug(
+		h.logger.Debug(
 			"removing peer from network",
 			logutil.ByteHex("peer", l.hostID.Bytes(nil)),
 			logutil.ByteHex("network", certificateParentKey(n.certificate)),
@@ -285,7 +300,7 @@ func (h *networkBootstrap) sendNetworkBindings(ch *FrameReadWriter, keys [][]byt
 	for _, key := range keys {
 		n, ok := h.networks.FindByKey(key)
 		if !ok {
-			return nil, errors.New("network key not found")
+			return nil, ErrNetworkNotFound
 		}
 		if _, ok := h.links[n]; ok {
 			continue
@@ -323,7 +338,7 @@ func (h *networkBootstrap) sendNetworkBindings(ch *FrameReadWriter, keys [][]byt
 
 func (h *networkBootstrap) verifyNetworkBindings(bindings *pb.NetworkHandshake_NetworkBindings) ([][]byte, error) {
 	if bindings == nil {
-		return nil, errors.New("network bindings empty")
+		return nil, ErrNetworkBindingsEmpty
 	}
 
 	keys := make([][]byte, len(bindings.NetworkBindings))
@@ -337,8 +352,9 @@ func (h *networkBootstrap) verifyNetworkBindings(bindings *pb.NetworkHandshake_N
 }
 
 // NewNetwork ...
-func NewNetwork(host *Host, certificate *pb.Certificate, recentMessageIDs *lru.Cache) *Network {
+func NewNetwork(logger *zap.Logger, host *Host, certificate *pb.Certificate, recentMessageIDs *lru.Cache) *Network {
 	return &Network{
+		logger:           logger,
 		host:             host,
 		certificate:      certificate,
 		recentMessageIDs: recentMessageIDs,
@@ -351,7 +367,7 @@ func NewNetwork(host *Host, certificate *pb.Certificate, recentMessageIDs *lru.C
 
 func (h *networkBootstrap) handleNetworkBindings(discriminator uint32, networkBindings, peerNetworkBindings []*pb.NetworkHandshake_NetworkBinding) error {
 	if discriminator > uint32(math.MaxUint16) {
-		return errors.New("discriminator out of range")
+		return ErrDiscriminatorBounds
 	}
 
 	hostID, err := NewHostID(h.peer.Certificate.Key, uint16(discriminator))
@@ -363,21 +379,21 @@ func (h *networkBootstrap) handleNetworkBindings(discriminator uint32, networkBi
 		b := networkBindings[i]
 
 		if !bytes.Equal(h.peer.Certificate.Key, pb.Certificate.Key) {
-			return errors.New("init and network certificate key mismatch")
+			return ErrNetworkOwnerMismatch
 		}
 		if !bytes.Equal(certificateParentKey(b.Certificate), certificateParentKey(pb.Certificate)) {
-			return errors.New("network ca mismatch")
+			return ErrNetworkAuthorityMismatch
 		}
 		if pb.Port > uint32(math.MaxUint16) {
-			return errors.New("network id out of range")
+			return ErrNetworkIDBounds
 		}
 
 		n, ok := h.networks.FindByKey(certificateParentKey(pb.Certificate))
 		if !ok {
-			return errors.New("network key not found")
+			return ErrNetworkNotFound
 		}
 
-		h.networks.host.logger.Debug(
+		h.logger.Debug(
 			"adding peer to network",
 			logutil.ByteHex("peer", hostID.Bytes(nil)),
 			logutil.ByteHex("network", certificateParentKey(pb.Certificate)),
@@ -404,6 +420,7 @@ func (h *networkBootstrap) handleNetworkBindings(discriminator uint32, networkBi
 
 // Network ...
 type Network struct {
+	logger           *zap.Logger
 	host             *Host
 	seq              uint64
 	certificate      *pb.Certificate
@@ -493,7 +510,7 @@ func (n *Network) RemoveLink(link *networkLink) {
 func (n *Network) HandleFrame(f Frame) {
 	var m Message
 	if _, err := m.Unmarshal(f.Body); err != nil {
-		n.host.logger.Debug("failed to read frame", zap.Error(err))
+		n.logger.Debug("failed to read frame", zap.Error(err))
 		return
 	}
 
@@ -532,12 +549,12 @@ func (n *Network) handleMessage(m *Message) error {
 	}
 
 	if m.Trailers.Contains(n.host.ID()) {
-		n.host.logger.Debug("dropping message we've already forwarded")
+		n.logger.Debug("dropping message we've already forwarded")
 		return nil
 	}
 
 	if m.Hops() >= maxMessageHops {
-		n.host.logger.Debug("dropping message after too many hops")
+		n.logger.Debug("dropping message after too many hops")
 		return nil
 	}
 
@@ -553,8 +570,8 @@ func (n *Network) callHandler(m *Message) (bool, error) {
 
 // sendMessage ...
 func (n *Network) sendMessage(m *Message) error {
-	b := frameBuffer(uint16(m.Size()))
-	defer freeFrameBuffer(b)
+	b := pool.Get(uint16(m.Size()))
+	defer pool.Put(b)
 	if _, err := m.Marshal(b, n.host); err != nil {
 		return err
 	}
@@ -571,7 +588,7 @@ func (n *Network) sendMessage(m *Message) error {
 		}
 
 		if _, err := l.WriteFrame(b); err != nil {
-			n.host.logger.Debug("failed to write frame", zap.Error(err))
+			n.logger.Debug("failed to write frame", zap.Error(err))
 		}
 
 		if m.Header.DstID.Equals(l.ID()) {

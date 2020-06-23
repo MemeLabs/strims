@@ -191,7 +191,7 @@ export class Decoder {
     const end = buffered.end(buffered.length - 1);
     // console.log({ start, end });
 
-    if (end - start < 10) {
+    if (end - start <= 10) {
       this.sourceBufferTasks.runNext();
       return;
     }

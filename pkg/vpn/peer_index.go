@@ -15,6 +15,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -246,7 +247,7 @@ func (p *peerIndexItem) ID() kademlia.ID {
 	return p.hostID
 }
 
-// Deadline implements discardQueueItem
+// Deadline implements timeoutQueueItem
 func (p *peerIndexItem) Deadline() time.Time {
 	return time.Unix(p.Record().Timestamp, 0).Add(peerIndexMaxRecordAge)
 }
@@ -257,10 +258,10 @@ func NewPeerIndexStore(ctx context.Context, logger *zap.Logger, hostID kademlia.
 		logger:       logger,
 		hostID:       hostID,
 		records:      llrb.New(),
-		discardQueue: newDiscardQueue(ctx, peerIndexDiscardInterval, peerIndexMaxRecordAge),
+		discardQueue: newTimeoutQueue(ctx, peerIndexDiscardInterval, peerIndexMaxRecordAge),
 	}
 
-	p.Poller = NewPoller(ctx, peerIndexDiscardInterval, p.tick, nil)
+	p.ticker = TickerFunc(ctx, peerIndexDiscardInterval, p.tick)
 
 	return p
 }
@@ -271,8 +272,8 @@ type PeerIndexStore struct {
 	hostID       kademlia.ID
 	lock         sync.Mutex
 	records      *llrb.LLRB
-	discardQueue *discardQueue
-	*Poller
+	discardQueue *timeoutQueue
+	ticker       *Ticker
 }
 
 func (p *PeerIndexStore) tick(t time.Time) {
@@ -430,7 +431,7 @@ func newPeerIndexPublisher(ctx context.Context, logger *zap.Logger, network *Net
 		network: network,
 	}
 
-	p.poller = NewPoller(ctx, peerIndexPublishInterval, p.publish, p.unpublish)
+	p.ticker = TickerFuncWithCleanup(ctx, peerIndexPublishInterval, p.publish, p.unpublish)
 
 	return p, nil
 }
@@ -440,7 +441,7 @@ type peerIndexPublisher struct {
 	record  *pb.PeerIndexMessage_Record
 	target  kademlia.ID
 	network *Network
-	poller  *Poller
+	ticker  *Ticker
 }
 
 func (p *peerIndexPublisher) update() error {
@@ -516,8 +517,8 @@ func signPeerIndexRecord(r *pb.PeerIndexMessage_Record, key *pb.Key) error {
 	}
 
 	m := peerIndexMarshaler{r}
-	b := frameBuffer(uint16(m.Size()))
-	defer freeFrameBuffer(b)
+	b := pool.Get(uint16(m.Size()))
+	defer pool.Put(b)
 	m.Marshal(b)
 
 	r.Signature = ed25519.Sign(ed25519.PrivateKey(key.Private), b)
@@ -526,8 +527,8 @@ func signPeerIndexRecord(r *pb.PeerIndexMessage_Record, key *pb.Key) error {
 
 func verifyPeerIndexRecord(r *pb.PeerIndexMessage_Record) bool {
 	m := peerIndexMarshaler{r}
-	b := frameBuffer(uint16(m.Size()))
-	defer freeFrameBuffer(b)
+	b := pool.Get(uint16(m.Size()))
+	defer pool.Put(b)
 	m.Marshal(b)
 
 	if len(r.Key) != ed25519.PublicKeySize {

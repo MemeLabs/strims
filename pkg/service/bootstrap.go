@@ -1,12 +1,12 @@
 package service
 
 import (
-	"bytes"
 	"errors"
 	"sync"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -22,37 +22,36 @@ type BootstrapServiceOptions struct {
 // NewBootstrapService ...
 func NewBootstrapService(
 	logger *zap.Logger,
+	host *vpn.Host,
 	store *dao.ProfileStore,
-	networksController *NetworksController,
+	networkController *NetworkController,
 	opt BootstrapServiceOptions,
 ) *BootstrapService {
-	return &BootstrapService{
-		logger:             logger,
-		store:              store,
-		networksController: networksController,
-		enablePublishing:   opt.EnablePublishing,
+	s := &BootstrapService{
+		logger:            logger,
+		store:             store,
+		networkController: networkController,
+		enablePublishing:  opt.EnablePublishing,
 	}
+
+	host.AddPeerHandler(s.handlePeer)
+
+	return s
 }
 
 // BootstrapService ...
 type BootstrapService struct {
-	logger             *zap.Logger
-	store              *dao.ProfileStore
-	networksController *NetworksController
-	peersLock          sync.Mutex
-	peers              bootstrapServicePeerMap
-	enablePublishing   bool
-}
-
-func (c *BootstrapService) handleHost(h *vpn.Host) error {
-	h.AddPeerHandler(c.handlePeer)
-
-	return nil
+	logger            *zap.Logger
+	store             *dao.ProfileStore
+	networkController *NetworkController
+	peersLock         sync.Mutex
+	peers             bootstrapServicePeerMap
+	enablePublishing  bool
 }
 
 func (c *BootstrapService) handlePeer(peer *vpn.Peer) {
 	c.logger.Debug("creating boostrap service peer", logutil.ByteHex("peer", peer.Certificate.Key))
-	p := newBootstrapServicePeer(c.logger, c.store, c.networksController, peer)
+	p := newBootstrapServicePeer(c.logger, c.store, c.networkController, peer)
 
 	go func() {
 		if c.enablePublishing {
@@ -62,13 +61,13 @@ func (c *BootstrapService) handlePeer(peer *vpn.Peer) {
 		}
 
 		c.peersLock.Lock()
-		c.peers.Insert(peer.Certificate.Key, p)
+		c.peers.Insert(peer.HostID(), p)
 		c.peersLock.Unlock()
 
 		<-peer.Done()
 
 		c.peersLock.Lock()
-		c.peers.Delete(peer.Certificate.Key)
+		c.peers.Delete(peer.HostID())
 		c.peersLock.Unlock()
 	}()
 }
@@ -78,27 +77,27 @@ func (c *BootstrapService) HandleFrame(p *vpn.Peer, f vpn.Frame) error {
 	return nil
 }
 
-// GetPeerKeys ...
-func (c *BootstrapService) GetPeerKeys() [][]byte {
+// GetPeerHostIDs ...
+func (c *BootstrapService) GetPeerHostIDs() []kademlia.ID {
 	c.peersLock.Lock()
 	defer c.peersLock.Unlock()
 
-	keys := [][]byte{}
+	ids := []kademlia.ID{}
 	c.peers.Each(func(p *bootstrapServicePeer) bool {
 		if p.enablePublishing {
-			keys = append(keys, p.vpnPeer.Certificate.Key)
+			ids = append(ids, p.vpnPeer.HostID())
 		}
 		return true
 	})
-	return keys
+	return ids
 }
 
 // PublishNetwork ...
-func (c *BootstrapService) PublishNetwork(peerKey []byte, network *pb.Network) error {
+func (c *BootstrapService) PublishNetwork(hostID kademlia.ID, network *pb.Network) error {
 	c.peersLock.Lock()
 	defer c.peersLock.Unlock()
 
-	p, ok := c.peers.Get(peerKey)
+	p, ok := c.peers.Get(hostID)
 	if !ok {
 		return errors.New("peer not found")
 	}
@@ -109,15 +108,15 @@ func (c *BootstrapService) PublishNetwork(peerKey []byte, network *pb.Network) e
 func newBootstrapServicePeer(
 	logger *zap.Logger,
 	store *dao.ProfileStore,
-	networksController *NetworksController,
+	networkController *NetworkController,
 	peer *vpn.Peer,
 ) *bootstrapServicePeer {
 	s := &bootstrapServicePeer{
-		logger:             logger,
-		vpnPeer:            peer,
-		ch:                 vpn.NewFrameReadWriter(peer.Link, vpn.BootstrapPort, peer.Link.MTU()),
-		store:              store,
-		networksController: networksController,
+		logger:            logger,
+		vpnPeer:           peer,
+		ch:                vpn.NewFrameReadWriter(peer.Link, vpn.BootstrapPort, peer.Link.MTU()),
+		store:             store,
+		networkController: networkController,
 	}
 
 	peer.SetHandler(vpn.BootstrapPort, s.ch.HandleFrame)
@@ -132,12 +131,12 @@ func newBootstrapServicePeer(
 
 // bootstrapServicePeer ...
 type bootstrapServicePeer struct {
-	logger             *zap.Logger
-	vpnPeer            *vpn.Peer
-	ch                 *vpn.FrameReadWriter
-	store              *dao.ProfileStore
-	networksController *NetworksController
-	enablePublishing   bool
+	logger            *zap.Logger
+	vpnPeer           *vpn.Peer
+	ch                *vpn.FrameReadWriter
+	store             *dao.ProfileStore
+	networkController *NetworkController
+	enablePublishing  bool
 }
 
 func (s *bootstrapServicePeer) readMessages() {
@@ -169,7 +168,7 @@ func (s *bootstrapServicePeer) handlePublish(r *pb.BootstrapServiceMessage_Publi
 		return err
 	}
 
-	_, err = s.networksController.StartNetwork(r.Certificate, WithMemberServices(s.logger))
+	_, err = s.networkController.StartNetwork(r.Certificate, WithMemberServices(s.logger))
 	if err != nil {
 		return err
 	}
@@ -228,15 +227,15 @@ func (m *bootstrapServicePeerMap) Each(f func(b *bootstrapServicePeer) bool) {
 	})
 }
 
-func (m *bootstrapServicePeerMap) Insert(k []byte, v *bootstrapServicePeer) {
+func (m *bootstrapServicePeerMap) Insert(k kademlia.ID, v *bootstrapServicePeer) {
 	m.m.InsertNoReplace(bootstrapServicePeerMapItem{k, v})
 }
 
-func (m *bootstrapServicePeerMap) Delete(k []byte) {
+func (m *bootstrapServicePeerMap) Delete(k kademlia.ID) {
 	m.m.Delete(bootstrapServicePeerMapItem{k, nil})
 }
 
-func (m *bootstrapServicePeerMap) Get(k []byte) (*bootstrapServicePeer, bool) {
+func (m *bootstrapServicePeerMap) Get(k kademlia.ID) (*bootstrapServicePeer, bool) {
 	if it := m.m.Get(bootstrapServicePeerMapItem{k, nil}); it != nil {
 		return it.(bootstrapServicePeerMapItem).v, true
 	}
@@ -244,31 +243,29 @@ func (m *bootstrapServicePeerMap) Get(k []byte) (*bootstrapServicePeer, bool) {
 }
 
 type bootstrapServicePeerMapItem struct {
-	k []byte
+	k kademlia.ID
 	v *bootstrapServicePeer
 }
 
 func (t bootstrapServicePeerMapItem) Less(oi llrb.Item) bool {
 	if o, ok := oi.(bootstrapServicePeerMapItem); ok {
-		return bytes.Compare(t.k, o.k) == -1
+		return t.k.Less(o.k)
 	}
 	return !oi.Less(t)
 }
 
-// WithBootstrapService ...
-func WithBootstrapService(s *BootstrapService) vpn.HostOption {
-	return s.handleHost
-}
-
-// WithBootstrapClients ...
-func WithBootstrapClients(clients []*pb.BootstrapClient) vpn.HostOption {
-	return func(host *vpn.Host) error {
-		for _, o := range clients {
-			switch o := o.ClientOptions.(type) {
-			case *pb.BootstrapClient_WebsocketOptions:
-				go host.Dial(vpn.WebSocketAddr(o.WebsocketOptions.Url))
-			}
-		}
-		return nil
+// StartBootstrapClients ...
+func StartBootstrapClients(host *vpn.Host, store *dao.ProfileStore) error {
+	clients, err := dao.GetBootstrapClients(store)
+	if err != nil {
+		return err
 	}
+
+	for _, o := range clients {
+		switch o := o.ClientOptions.(type) {
+		case *pb.BootstrapClient_WebsocketOptions:
+			go host.Dial(vpn.WebSocketAddr(o.WebsocketOptions.Url))
+		}
+	}
+	return nil
 }

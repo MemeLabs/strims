@@ -8987,7 +8987,7 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
      * Properties of a BootstrapPeer.
      * @exports IBootstrapPeer
      * @interface IBootstrapPeer
-     * @property {Uint8Array|null} [key] BootstrapPeer key
+     * @property {Uint8Array|null} [hostId] BootstrapPeer hostId
      * @property {string|null} [label] BootstrapPeer label
      */
 
@@ -9007,12 +9007,12 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
     }
 
     /**
-     * BootstrapPeer key.
-     * @member {Uint8Array} key
+     * BootstrapPeer hostId.
+     * @member {Uint8Array} hostId
      * @memberof BootstrapPeer
      * @instance
      */
-    BootstrapPeer.prototype.key = $util.newBuffer([]);
+    BootstrapPeer.prototype.hostId = $util.newBuffer([]);
 
     /**
      * BootstrapPeer label.
@@ -9046,8 +9046,8 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
     BootstrapPeer.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.key != null && Object.hasOwnProperty.call(message, "key"))
-            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
+        if (message.hostId != null && Object.hasOwnProperty.call(message, "hostId"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.hostId);
         if (message.label != null && Object.hasOwnProperty.call(message, "label"))
             writer.uint32(/* id 2, wireType 2 =*/18).string(message.label);
         return writer;
@@ -9085,7 +9085,7 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.key = reader.bytes();
+                message.hostId = reader.bytes();
                 break;
             case 2:
                 message.label = reader.string();
@@ -9125,9 +9125,9 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
     BootstrapPeer.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.key != null && message.hasOwnProperty("key"))
-            if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
-                return "key: buffer expected";
+        if (message.hostId != null && message.hasOwnProperty("hostId"))
+            if (!(message.hostId && typeof message.hostId.length === "number" || $util.isString(message.hostId)))
+                return "hostId: buffer expected";
         if (message.label != null && message.hasOwnProperty("label"))
             if (!$util.isString(message.label))
                 return "label: string expected";
@@ -9146,11 +9146,11 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
         if (object instanceof $root.BootstrapPeer)
             return object;
         let message = new $root.BootstrapPeer();
-        if (object.key != null)
-            if (typeof object.key === "string")
-                $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
-            else if (object.key.length)
-                message.key = object.key;
+        if (object.hostId != null)
+            if (typeof object.hostId === "string")
+                $util.base64.decode(object.hostId, message.hostId = $util.newBuffer($util.base64.length(object.hostId)), 0);
+            else if (object.hostId.length)
+                message.hostId = object.hostId;
         if (object.label != null)
             message.label = String(object.label);
         return message;
@@ -9171,16 +9171,16 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
         let object = {};
         if (options.defaults) {
             if (options.bytes === String)
-                object.key = "";
+                object.hostId = "";
             else {
-                object.key = [];
+                object.hostId = [];
                 if (options.bytes !== Array)
-                    object.key = $util.newBuffer(object.key);
+                    object.hostId = $util.newBuffer(object.hostId);
             }
             object.label = "";
         }
-        if (message.key != null && message.hasOwnProperty("key"))
-            object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
+        if (message.hostId != null && message.hasOwnProperty("hostId"))
+            object.hostId = options.bytes === String ? $util.base64.encode(message.hostId, 0, message.hostId.length) : options.bytes === Array ? Array.prototype.slice.call(message.hostId) : message.hostId;
         if (message.label != null && message.hasOwnProperty("label"))
             object.label = message.label;
         return object;
@@ -9206,7 +9206,7 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
      * Properties of a PublishNetworkToBootstrapPeerRequest.
      * @exports IPublishNetworkToBootstrapPeerRequest
      * @interface IPublishNetworkToBootstrapPeerRequest
-     * @property {Uint8Array|null} [key] PublishNetworkToBootstrapPeerRequest key
+     * @property {Uint8Array|null} [hostId] PublishNetworkToBootstrapPeerRequest hostId
      * @property {INetwork|null} [network] PublishNetworkToBootstrapPeerRequest network
      */
 
@@ -9226,12 +9226,12 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
     }
 
     /**
-     * PublishNetworkToBootstrapPeerRequest key.
-     * @member {Uint8Array} key
+     * PublishNetworkToBootstrapPeerRequest hostId.
+     * @member {Uint8Array} hostId
      * @memberof PublishNetworkToBootstrapPeerRequest
      * @instance
      */
-    PublishNetworkToBootstrapPeerRequest.prototype.key = $util.newBuffer([]);
+    PublishNetworkToBootstrapPeerRequest.prototype.hostId = $util.newBuffer([]);
 
     /**
      * PublishNetworkToBootstrapPeerRequest network.
@@ -9265,8 +9265,8 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
     PublishNetworkToBootstrapPeerRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.key != null && Object.hasOwnProperty.call(message, "key"))
-            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
+        if (message.hostId != null && Object.hasOwnProperty.call(message, "hostId"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.hostId);
         if (message.network != null && Object.hasOwnProperty.call(message, "network"))
             $root.Network.encode(message.network, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
         return writer;
@@ -9304,7 +9304,7 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.key = reader.bytes();
+                message.hostId = reader.bytes();
                 break;
             case 2:
                 message.network = $root.Network.decode(reader, reader.uint32());
@@ -9344,9 +9344,9 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
     PublishNetworkToBootstrapPeerRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.key != null && message.hasOwnProperty("key"))
-            if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
-                return "key: buffer expected";
+        if (message.hostId != null && message.hasOwnProperty("hostId"))
+            if (!(message.hostId && typeof message.hostId.length === "number" || $util.isString(message.hostId)))
+                return "hostId: buffer expected";
         if (message.network != null && message.hasOwnProperty("network")) {
             let error = $root.Network.verify(message.network);
             if (error)
@@ -9367,11 +9367,11 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
         if (object instanceof $root.PublishNetworkToBootstrapPeerRequest)
             return object;
         let message = new $root.PublishNetworkToBootstrapPeerRequest();
-        if (object.key != null)
-            if (typeof object.key === "string")
-                $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
-            else if (object.key.length)
-                message.key = object.key;
+        if (object.hostId != null)
+            if (typeof object.hostId === "string")
+                $util.base64.decode(object.hostId, message.hostId = $util.newBuffer($util.base64.length(object.hostId)), 0);
+            else if (object.hostId.length)
+                message.hostId = object.hostId;
         if (object.network != null) {
             if (typeof object.network !== "object")
                 throw TypeError(".PublishNetworkToBootstrapPeerRequest.network: object expected");
@@ -9395,16 +9395,16 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
         let object = {};
         if (options.defaults) {
             if (options.bytes === String)
-                object.key = "";
+                object.hostId = "";
             else {
-                object.key = [];
+                object.hostId = [];
                 if (options.bytes !== Array)
-                    object.key = $util.newBuffer(object.key);
+                    object.hostId = $util.newBuffer(object.hostId);
             }
             object.network = null;
         }
-        if (message.key != null && message.hasOwnProperty("key"))
-            object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
+        if (message.hostId != null && message.hasOwnProperty("hostId"))
+            object.hostId = options.bytes === String ? $util.base64.encode(message.hostId, 0, message.hostId.length) : options.bytes === Array ? Array.prototype.slice.call(message.hostId) : message.hostId;
         if (message.network != null && message.hasOwnProperty("network"))
             object.network = $root.Network.toObject(message.network, options);
         return object;
@@ -32885,6 +32885,7 @@ export const PeerInit = $root.PeerInit = (() => {
      * @property {number|null} [protocolVersion] PeerInit protocolVersion
      * @property {ICertificate|null} [certificate] PeerInit certificate
      * @property {Uint8Array|null} [iv] PeerInit iv
+     * @property {Uint8Array|null} [hostId] PeerInit hostId
      */
 
     /**
@@ -32927,6 +32928,14 @@ export const PeerInit = $root.PeerInit = (() => {
     PeerInit.prototype.iv = $util.newBuffer([]);
 
     /**
+     * PeerInit hostId.
+     * @member {Uint8Array} hostId
+     * @memberof PeerInit
+     * @instance
+     */
+    PeerInit.prototype.hostId = $util.newBuffer([]);
+
+    /**
      * Creates a new PeerInit instance using the specified properties.
      * @function create
      * @memberof PeerInit
@@ -32956,6 +32965,8 @@ export const PeerInit = $root.PeerInit = (() => {
             $root.Certificate.encode(message.certificate, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
         if (message.iv != null && Object.hasOwnProperty.call(message, "iv"))
             writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.iv);
+        if (message.hostId != null && Object.hasOwnProperty.call(message, "hostId"))
+            writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.hostId);
         return writer;
     };
 
@@ -32998,6 +33009,9 @@ export const PeerInit = $root.PeerInit = (() => {
                 break;
             case 3:
                 message.iv = reader.bytes();
+                break;
+            case 4:
+                message.hostId = reader.bytes();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -33045,6 +33059,9 @@ export const PeerInit = $root.PeerInit = (() => {
         if (message.iv != null && message.hasOwnProperty("iv"))
             if (!(message.iv && typeof message.iv.length === "number" || $util.isString(message.iv)))
                 return "iv: buffer expected";
+        if (message.hostId != null && message.hasOwnProperty("hostId"))
+            if (!(message.hostId && typeof message.hostId.length === "number" || $util.isString(message.hostId)))
+                return "hostId: buffer expected";
         return null;
     };
 
@@ -33072,6 +33089,11 @@ export const PeerInit = $root.PeerInit = (() => {
                 $util.base64.decode(object.iv, message.iv = $util.newBuffer($util.base64.length(object.iv)), 0);
             else if (object.iv.length)
                 message.iv = object.iv;
+        if (object.hostId != null)
+            if (typeof object.hostId === "string")
+                $util.base64.decode(object.hostId, message.hostId = $util.newBuffer($util.base64.length(object.hostId)), 0);
+            else if (object.hostId.length)
+                message.hostId = object.hostId;
         return message;
     };
 
@@ -33098,6 +33120,13 @@ export const PeerInit = $root.PeerInit = (() => {
                 if (options.bytes !== Array)
                     object.iv = $util.newBuffer(object.iv);
             }
+            if (options.bytes === String)
+                object.hostId = "";
+            else {
+                object.hostId = [];
+                if (options.bytes !== Array)
+                    object.hostId = $util.newBuffer(object.hostId);
+            }
         }
         if (message.protocolVersion != null && message.hasOwnProperty("protocolVersion"))
             object.protocolVersion = message.protocolVersion;
@@ -33105,6 +33134,8 @@ export const PeerInit = $root.PeerInit = (() => {
             object.certificate = $root.Certificate.toObject(message.certificate, options);
         if (message.iv != null && message.hasOwnProperty("iv"))
             object.iv = options.bytes === String ? $util.base64.encode(message.iv, 0, message.iv.length) : options.bytes === Array ? Array.prototype.slice.call(message.iv) : message.iv;
+        if (message.hostId != null && message.hasOwnProperty("hostId"))
+            object.hostId = options.bytes === String ? $util.base64.encode(message.hostId, 0, message.hostId.length) : options.bytes === Array ? Array.prototype.slice.call(message.hostId) : message.hostId;
         return object;
     };
 

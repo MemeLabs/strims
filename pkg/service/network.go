@@ -26,16 +26,29 @@ type NetworkServices struct {
 	Directory    Directory
 }
 
-// NewNetworksController ...
-func NewNetworksController(logger *zap.Logger, store *dao.ProfileStore) *NetworksController {
-	return &NetworksController{
-		logger: logger,
-		store:  store,
+// NewNetworkController ...
+func NewNetworkController(logger *zap.Logger, host *vpn.Host, store *dao.ProfileStore) (*NetworkController, error) {
+	networks := vpn.NewNetworks(logger, host)
+
+	c := &NetworkController{
+		logger:          logger,
+		store:           store,
+		host:            host,
+		networks:        networks,
+		hashTableStore:  vpn.NewHashTableStore(context.Background(), logger, host.ID()),
+		peerIndexStore:  vpn.NewPeerIndexStore(context.Background(), logger, host.ID()),
+		swarmController: newSwarmController(logger, host, networks),
 	}
+
+	if err := c.startProfileNetworks(); err != nil {
+		return nil, err
+	}
+
+	return c, nil
 }
 
-// NetworksController ...
-type NetworksController struct {
+// NetworkController ...
+type NetworkController struct {
 	logger              *zap.Logger
 	store               *dao.ProfileStore
 	networkServicesLock sync.Mutex
@@ -45,23 +58,6 @@ type NetworksController struct {
 	hashTableStore      *vpn.HashTableStore
 	peerIndexStore      *vpn.PeerIndexStore
 	swarmController     *swarmController
-}
-
-// WithNetworkController ...
-func WithNetworkController(c *NetworksController) vpn.HostOption {
-	return func(h *vpn.Host) error {
-		c.host = h
-		c.networks = vpn.NewNetworks(h)
-		c.hashTableStore = vpn.NewHashTableStore(context.Background(), c.logger, h.ID())
-		c.peerIndexStore = vpn.NewPeerIndexStore(context.Background(), c.logger, h.ID())
-		c.swarmController = newSwarmController(c.logger, h, c.networks)
-
-		if err := c.startProfileNetworks(); err != nil {
-			panic(err)
-		}
-
-		return nil
-	}
 }
 
 type pbNetworks []*pb.Network
@@ -75,7 +71,7 @@ func (n pbNetworks) Find(key []byte) *pb.Network {
 	return nil
 }
 
-func (c *NetworksController) startProfileNetworks() error {
+func (c *NetworkController) startProfileNetworks() error {
 	memberships, err := dao.GetNetworkMemberships(c.store)
 	if err != nil {
 		return err
@@ -102,14 +98,14 @@ func (c *NetworksController) startProfileNetworks() error {
 }
 
 // NetworkServices ...
-func (c *NetworksController) NetworkServices(key []byte) (*NetworkServices, bool) {
+func (c *NetworkController) NetworkServices(key []byte) (*NetworkServices, bool) {
 	c.networkServicesLock.Lock()
 	defer c.networkServicesLock.Unlock()
 	return c.networkServices.Get(key)
 }
 
 // StartNetwork ...
-func (c *NetworksController) StartNetwork(cert *pb.Certificate, opts ...NetworkOption) (*NetworkServices, error) {
+func (c *NetworkController) StartNetwork(cert *pb.Certificate, opts ...NetworkOption) (*NetworkServices, error) {
 	network, err := c.networks.AddNetwork(cert)
 	if err != nil {
 		return nil, err
@@ -177,7 +173,7 @@ func WithMemberServices(logger *zap.Logger) NetworkOption {
 }
 
 // StopNetwork ...
-func (c *NetworksController) StopNetwork(cert *pb.Certificate) error {
+func (c *NetworkController) StopNetwork(cert *pb.Certificate) error {
 	c.networkServicesLock.Lock()
 	svc, ok := c.networkServices.Get(dao.GetRootCert(cert).Key)
 	c.networkServicesLock.Unlock()
@@ -186,14 +182,6 @@ func (c *NetworksController) StopNetwork(cert *pb.Certificate) error {
 	}
 
 	return c.networks.RemoveNetwork(svc.Network)
-}
-
-// NetworkController ...
-type NetworkController struct {
-	host    *vpn.Host
-	network *vpn.Network
-	// store   *store
-	pex *vpn.PeerExchange
 }
 
 type networkServicesMap struct {

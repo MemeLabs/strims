@@ -15,6 +15,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -208,7 +209,7 @@ func (p *hashTableItem) Less(oi llrb.Item) bool {
 	return ok && p.key.Less(o.key)
 }
 
-// Deadline implements discardQueueItem
+// Deadline implements timeoutQueueItem
 func (p *hashTableItem) Deadline() time.Time {
 	return time.Unix(p.Record().Timestamp, 0).Add(hashTableMaxRecordAge)
 }
@@ -219,10 +220,10 @@ func NewHashTableStore(ctx context.Context, logger *zap.Logger, hostID kademlia.
 		logger:       logger,
 		hostID:       hostID,
 		records:      llrb.New(),
-		discardQueue: newDiscardQueue(ctx, hashTableDiscardInterval, hashTableMaxRecordAge),
+		discardQueue: newTimeoutQueue(ctx, hashTableDiscardInterval, hashTableMaxRecordAge),
 	}
 
-	p.poller = NewPoller(ctx, hashTableDiscardInterval, p.tick, nil)
+	p.ticker = TickerFunc(ctx, hashTableDiscardInterval, p.tick)
 
 	return p
 }
@@ -233,8 +234,8 @@ type HashTableStore struct {
 	hostID       kademlia.ID
 	lock         sync.Mutex
 	records      *llrb.LLRB
-	discardQueue *discardQueue
-	poller       *Poller
+	discardQueue *timeoutQueue
+	ticker       *Ticker
 }
 
 func (p *HashTableStore) tick(t time.Time) {
@@ -385,7 +386,7 @@ func newHashTablePublisher(ctx context.Context, logger *zap.Logger, network *Net
 		close:   cancel,
 	}
 
-	p.poller = NewPoller(ctx, hashTableSetInterval, p.publish, p.unpublish)
+	p.ticker = TickerFuncWithCleanup(ctx, hashTableSetInterval, p.publish, p.unpublish)
 
 	return p, nil
 }
@@ -399,7 +400,7 @@ type HashTablePublisher struct {
 	target  kademlia.ID
 	network *Network
 	close   context.CancelFunc
-	poller  *Poller
+	ticker  *Ticker
 }
 
 // Update ...
@@ -488,8 +489,8 @@ func signHashTableRecord(r *pb.HashTableMessage_Record, key *pb.Key) error {
 	}
 
 	m := hashTableRecordMarshaler{r}
-	b := frameBuffer(uint16(m.Size()))
-	defer freeFrameBuffer(b)
+	b := pool.Get(uint16(m.Size()))
+	defer pool.Put(b)
 	m.Marshal(b)
 
 	r.Signature = ed25519.Sign(ed25519.PrivateKey(key.Private), b)
@@ -498,8 +499,8 @@ func signHashTableRecord(r *pb.HashTableMessage_Record, key *pb.Key) error {
 
 func verifyHashTableRecord(r *pb.HashTableMessage_Record) bool {
 	m := hashTableRecordMarshaler{r}
-	b := frameBuffer(uint16(m.Size()))
-	defer freeFrameBuffer(b)
+	b := pool.Get(uint16(m.Size()))
+	defer pool.Put(b)
 	m.Marshal(b)
 
 	if len(r.Key) != ed25519.PublicKeySize {

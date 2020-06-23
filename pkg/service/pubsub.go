@@ -315,7 +315,7 @@ func newSwarmPeerManager(ctx context.Context, svc *NetworkServices, sf PeerSearc
 		sf:  sf,
 	}
 
-	m.poller = vpn.NewPoller(ctx, 5*time.Minute, m.update, nil)
+	m.ticker = vpn.TickerFunc(ctx, 5*time.Minute, m.update)
 
 	return m
 }
@@ -324,7 +324,7 @@ type swarmPeerManager struct {
 	ctx    context.Context
 	svc    *NetworkServices
 	sf     PeerSearchFunc
-	poller *vpn.Poller
+	ticker *vpn.Ticker
 }
 
 func (m *swarmPeerManager) update(_ time.Time) {

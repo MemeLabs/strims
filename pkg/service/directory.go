@@ -287,7 +287,7 @@ func NewDirectoryClient(logger *zap.Logger, svc *NetworkServices, key []byte) (*
 		return nil, err
 	}
 
-	logger.Info("starting directory client", logutil.ByteHex("network", svc.Network.CAKey()))
+	logger.Debug("starting directory client", logutil.ByteHex("network", svc.Network.CAKey()))
 
 	c := &DirectoryClient{
 		logger: logger,

@@ -122,12 +122,12 @@ message GetBootstrapPeersResponse {
 }
 
 message BootstrapPeer {
-  bytes key = 1;
+  bytes host_id = 1;
   string label = 2;
 }
 
 message PublishNetworkToBootstrapPeerRequest {
-  bytes key = 1;
+  bytes host_id = 1;
   Network network = 2;
 }
 message PublishNetworkToBootstrapPeerResponse {}
@@ -602,6 +602,7 @@ message PeerInit {
   uint32 protocol_version = 1;
   Certificate certificate = 2;
   bytes iv = 3;
+  bytes host_id = 4;
 }
 
 message NetworkHandshake {

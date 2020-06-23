@@ -178,27 +178,27 @@ func (m *mediator) GetICECandidates() <-chan []byte {
 }
 
 func (m *mediator) SendOffer(offer []byte) error {
-	b, _ := proto.Marshal(&pb.PeerExchangeMessage{
+	msg := &pb.PeerExchangeMessage{
 		Body: &pb.PeerExchangeMessage_Offer_{
 			Offer: &pb.PeerExchangeMessage_Offer{
 				MediationId: m.mediationID,
 				Data:        offer,
 			},
 		},
-	})
-	return m.network.Send(m.id, PeerExchangePort, PeerExchangePort, b)
+	}
+	return sendProto(m.network, m.id, PeerExchangePort, PeerExchangePort, msg)
 }
 
 func (m *mediator) SendAnswer(answer []byte) error {
-	b, _ := proto.Marshal(&pb.PeerExchangeMessage{
+	msg := &pb.PeerExchangeMessage{
 		Body: &pb.PeerExchangeMessage_Answer_{
 			Answer: &pb.PeerExchangeMessage_Answer{
 				MediationId: m.mediationID,
 				Data:        answer,
 			},
 		},
-	})
-	return m.network.Send(m.id, PeerExchangePort, PeerExchangePort, b)
+	}
+	return sendProto(m.network, m.id, PeerExchangePort, PeerExchangePort, msg)
 }
 
 func (m *mediator) SendICECandidate(candidate []byte) error {
@@ -208,7 +208,7 @@ func (m *mediator) SendICECandidate(candidate []byte) error {
 		return err
 	}
 
-	b, _ := proto.Marshal(&pb.PeerExchangeMessage{
+	msg := &pb.PeerExchangeMessage{
 		Body: &pb.PeerExchangeMessage_IceCandidate_{
 			IceCandidate: &pb.PeerExchangeMessage_IceCandidate{
 				MediationId: m.mediationID,
@@ -216,8 +216,8 @@ func (m *mediator) SendICECandidate(candidate []byte) error {
 				Data:        candidate,
 			},
 		},
-	})
-	return m.network.Send(m.id, PeerExchangePort, PeerExchangePort, b)
+	}
+	return sendProto(m.network, m.id, PeerExchangePort, PeerExchangePort, msg)
 }
 
 // NewPeerExchange ...
@@ -239,7 +239,7 @@ type PeerExchange struct {
 
 // HandleMessage ...
 func (s *PeerExchange) HandleMessage(msg *Message) (bool, error) {
-	if !msg.Header.DstID.Equals(s.network.host.ID()) {
+	if !msg.Header.DstID.Equals(s.network.host.ID()) || msg.Hops() == 0 {
 		return true, nil
 	}
 
@@ -277,7 +277,7 @@ func (s *PeerExchange) Connect(hostID kademlia.ID) error {
 
 	go func() {
 		if err := s.dial(newMediator(hostID, s.network)); err != nil {
-			s.network.host.logger.Debug(
+			s.logger.Debug(
 				"dial failed requesting callback",
 				logutil.ByteHex("host", hostID.Bytes(nil)),
 				zap.Error(err),
@@ -290,12 +290,12 @@ func (s *PeerExchange) Connect(hostID kademlia.ID) error {
 }
 
 func (s *PeerExchange) sendCallbackRequest(hostID kademlia.ID) error {
-	b, _ := proto.Marshal(&pb.PeerExchangeMessage{
+	msg := &pb.PeerExchangeMessage{
 		Body: &pb.PeerExchangeMessage_CallbackRequest_{
 			CallbackRequest: &pb.PeerExchangeMessage_CallbackRequest{},
 		},
-	})
-	return s.network.Send(hostID, PeerExchangePort, PeerExchangePort, b)
+	}
+	return sendProto(s.network, hostID, PeerExchangePort, PeerExchangePort, msg)
 }
 
 func (s *PeerExchange) handleCallbackRequest(m *pb.PeerExchangeMessage_CallbackRequest, msg *Message) error {
@@ -304,7 +304,7 @@ func (s *PeerExchange) handleCallbackRequest(m *pb.PeerExchangeMessage_CallbackR
 }
 
 func (s *PeerExchange) handleOffer(m *pb.PeerExchangeMessage_Offer, msg *Message) error {
-	s.network.host.logger.Debug(
+	s.logger.Debug(
 		"handling offer",
 		logutil.ByteHex("host", msg.FromHostID().Bytes(nil)),
 	)
@@ -317,22 +317,25 @@ func (s *PeerExchange) dial(t *mediator) error {
 		return errors.New("duplicate connection attempt")
 	}
 
-	s.network.host.logger.Debug(
+	s.logger.Debug(
 		"creating connection",
 		logutil.ByteHex("host", t.id.Bytes(nil)),
 	)
 
+	s.mediatorsLock.Lock()
 	s.mediators[t.id] = t
-	defer func() {
-		s.mediatorsLock.Lock()
-		defer s.mediatorsLock.Unlock()
-
-		t.close()
-		delete(s.mediators, t.id)
-	}()
+	s.mediatorsLock.Unlock()
 
 	errs := make(chan error, 1)
-	go func() { errs <- s.network.host.Dial(t) }()
+	go func() {
+		errs <- s.network.host.Dial(t)
+
+		s.mediatorsLock.Lock()
+		delete(s.mediators, t.id)
+		s.mediatorsLock.Unlock()
+	}()
+
+	defer t.close()
 
 	select {
 	case err := <-errs:

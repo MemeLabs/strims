@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/aead/ecdh"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -37,7 +39,7 @@ var (
 	})
 )
 
-func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key) (*Peer, error) {
+func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key, hostID kademlia.ID) (*Peer, error) {
 	// TODO: use io timeout?
 	validDuration := time.Second * 10
 
@@ -76,6 +78,7 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key) (*Peer, error) {
 		ProtocolVersion: 1,
 		Certificate:     cipherCert,
 		Iv:              iv[:],
+		HostId:          hostID.Bytes(nil),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("writing peer init failed: %w", err)
@@ -84,6 +87,11 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key) (*Peer, error) {
 	var init pb.PeerInit
 	if err = ReadProtoStream(link, &init); err != nil {
 		return nil, fmt.Errorf("reading peer init failed: %w", err)
+	}
+
+	peerHostID, err := kademlia.UnmarshalID(init.HostId)
+	if err != nil {
+		return nil, fmt.Errorf("peer host id malformed: %w", err)
 	}
 
 	if err := dao.VerifyCertificate(init.Certificate); err != nil {
@@ -112,6 +120,7 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key) (*Peer, error) {
 		logger:       logger,
 		Link:         link,
 		Certificate:  init.Certificate.GetParent(),
+		hostID:       peerHostID,
 		handlers:     map[uint16]FrameHandler{},
 		reservations: map[uint16]struct{}{},
 		done:         make(chan struct{}),
@@ -124,6 +133,7 @@ type Peer struct {
 	logger           *zap.Logger
 	Link             Link
 	Certificate      *pb.Certificate
+	hostID           kademlia.ID
 	handlersLock     sync.Mutex
 	handlers         map[uint16]FrameHandler
 	reservationsLock sync.Mutex
@@ -170,6 +180,11 @@ func (p *Peer) Close() {
 // Done ...
 func (p *Peer) Done() <-chan struct{} {
 	return p.done
+}
+
+// HostID ...
+func (p *Peer) HostID() kademlia.ID {
+	return p.hostID
 }
 
 // SetHandler ...
@@ -248,8 +263,8 @@ func (c *cipherLink) Read(p []byte) (int, error) {
 }
 
 func (c *cipherLink) Write(p []byte) (int, error) {
-	b := frameBuffer(uint16(len(p)))
-	defer freeFrameBuffer(b)
+	b := pool.Get(uint16(len(p)))
+	defer pool.Put(b)
 
 	c.writeLock.Lock()
 	defer c.writeLock.Unlock()

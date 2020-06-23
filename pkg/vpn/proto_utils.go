@@ -7,12 +7,13 @@ import (
 	"math"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"google.golang.org/protobuf/proto"
 )
 
 func sendProto(network *Network, id kademlia.ID, port, srcPort uint16, msg proto.Message) error {
-	b := frameBuffer(uint16(proto.Size(msg)))
-	defer freeFrameBuffer(b)
+	b := pool.Get(uint16(proto.Size(msg)))
+	defer pool.Put(b)
 
 	b, err := proto.MarshalOptions{}.MarshalAppend(b[:0], msg)
 	if err != nil {
@@ -30,8 +31,8 @@ func ReadProtoStream(r io.Reader, m proto.Message) error {
 	}
 	n := binary.BigEndian.Uint16(t[:])
 
-	b := frameBuffer(n)
-	defer freeFrameBuffer(b)
+	b := pool.Get(n)
+	defer pool.Put(b)
 
 	if _, err := io.ReadFull(r, b[:n]); err != nil {
 		return fmt.Errorf("data read failed: %w", err)
@@ -50,8 +51,8 @@ func WriteProtoStream(w io.Writer, m proto.Message) error {
 		return errBufferTooSmall
 	}
 
-	b := frameBuffer(uint16(n))
-	defer freeFrameBuffer(b)
+	b := pool.Get(uint16(n))
+	defer pool.Put(b)
 
 	binary.BigEndian.PutUint16(b, uint16(mn))
 	_, err := proto.MarshalOptions{}.MarshalAppend(b[2:2], m)
@@ -76,8 +77,8 @@ func WriteProtoStream(w io.Writer, m proto.Message) error {
 // }
 
 // func writeProtoFrame(w io.Writer, port uint16, m proto.Message) error {
-// 	b := frameBuffer(math.MaxUint16)
-// 	defer freeFrameBuffer(b)
+// 	b := bufferPool.Get(math.MaxUint16)
+// 	defer bufferPool.Put(b)
 
 // 	b, err := proto.MarshalOptions{}.MarshalAppend(b[:0], m)
 // 	if err != nil {

@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -373,10 +374,10 @@ func (s *Frontend) GetBootstrapPeers(ctx context.Context, r *pb.GetBootstrapPeer
 	}
 
 	peers := []*pb.BootstrapPeer{}
-	for _, k := range svc.GetPeerKeys() {
+	for _, id := range svc.GetPeerHostIDs() {
 		peers = append(peers, &pb.BootstrapPeer{
-			Key:   k,
-			Label: hex.EncodeToString(k),
+			HostId: id.Bytes(nil),
+			Label:  hex.EncodeToString(id.Bytes(nil)),
 		})
 	}
 
@@ -390,7 +391,12 @@ func (s *Frontend) PublishNetworkToBootstrapPeer(ctx context.Context, r *pb.Publ
 		return nil, err
 	}
 
-	if err := svc.PublishNetwork(r.Key, r.Network); err != nil {
+	id, err := kademlia.UnmarshalID(r.HostId)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := svc.PublishNetwork(id, r.Network); err != nil {
 		return nil, err
 	}
 
@@ -477,7 +483,7 @@ var vpnKey = vpnKeyType{}
 
 type vpnData struct {
 	host             *vpn.Host
-	controller       *NetworksController
+	controller       *NetworkController
 	bootstrapService *BootstrapService
 }
 
@@ -490,36 +496,34 @@ func (s *Frontend) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (*pb.Sta
 
 	// TODO: locking...
 	if _, ok := session.Values.Load(vpnKey); !ok {
-		hostOptions := append([]vpn.HostOption{}, s.vpnOptions...)
-
 		profile, err := dao.GetProfile(session.ProfileStore())
 		if err != nil {
 			return nil, err
 		}
 
-		networkController := NewNetworksController(s.logger, session.ProfileStore())
-		hostOptions = append(hostOptions, WithNetworkController(networkController))
+		host, err := vpn.NewHost(s.logger, profile.Key, s.vpnOptions...)
+		if err != nil {
+			return nil, err
+		}
+
+		if err := StartBootstrapClients(host, session.ProfileStore()); err != nil {
+			return nil, err
+		}
+
+		networkController, err := NewNetworkController(s.logger, host, session.ProfileStore())
+		if err != nil {
+			return nil, err
+		}
 
 		bootstrapService := NewBootstrapService(
 			s.logger,
+			host,
 			session.ProfileStore(),
 			networkController,
 			BootstrapServiceOptions{
 				EnablePublishing: r.EnableBootstrapPublishing,
 			},
 		)
-		hostOptions = append(hostOptions, WithBootstrapService(bootstrapService))
-
-		clients, err := dao.GetBootstrapClients(session.ProfileStore())
-		if err != nil {
-			return nil, err
-		}
-		hostOptions = append(hostOptions, WithBootstrapClients(clients))
-
-		host, err := vpn.NewHost(s.logger, profile.Key, hostOptions...)
-		if err != nil {
-			return nil, err
-		}
 
 		session.Values.Store(vpnKey, vpnData{host, networkController, bootstrapService})
 	}
@@ -1008,9 +1012,9 @@ func (s *Frontend) startNetwork(ctx context.Context, membership *pb.NetworkMembe
 	return err
 }
 
-// loads the NetworksController fron the session store
+// loads the NetworkController fron the session store
 // TODO: move to (s *Session) getNetworkController ?
-func (s *Frontend) getNetworkController(ctx context.Context) (*NetworksController, error) {
+func (s *Frontend) getNetworkController(ctx context.Context) (*NetworkController, error) {
 	session := rpc.ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired

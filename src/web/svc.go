@@ -5,18 +5,14 @@ package main
 import (
 	"context"
 	"crypto/rand"
-	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"log"
 	mrand "math/rand"
 	"runtime"
-	"strconv"
-	"strings"
 	"syscall/js"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/gobridge"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
@@ -43,10 +39,6 @@ func seedMathRand() {
 		panic(err)
 	}
 	mrand.Seed(int64(binary.LittleEndian.Uint64(t[:])))
-}
-
-func consoleLog(args ...interface{}) {
-	js.Global().Get("console").Call("log", args...)
 }
 
 func main() {
@@ -90,6 +82,7 @@ func newLogger(bridge js.Value) *zap.Logger {
 
 func initDefault(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
+
 	svc, err := service.New(service.Options{
 		Store:  wasmio.NewKVStore(bridge),
 		Logger: logger,
@@ -102,30 +95,12 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 	if err != nil {
 		log.Fatalf("error creating service: %s", err)
 	}
+
 	rpc.NewHost(svc).Handle(context.Background(), bus, bus)
 }
 
 func initBroker(bridge js.Value, bus *wasmio.Bus) {
-	logger := newLogger(bridge)
-	rpc.NewHost(vpn.NewBrokerService(logger)).Handle(context.Background(), bus, bus)
-}
+	svc := vpn.NewBrokerService(newLogger(bridge))
 
-func unmarshalSessionID(id string) (uint64, *dao.StorageKey, error) {
-	i := strings.IndexRune(id, '.')
-	if i == -1 {
-		return 0, nil, errors.New("fak")
-	}
-
-	profileID, err := strconv.ParseUint(id[:i], 36, 64)
-	if err != nil {
-		return 0, nil, err
-	}
-
-	kb, err := base64.RawURLEncoding.DecodeString(id[i+1:])
-	if err != nil {
-		return 0, nil, err
-	}
-	storageKey := dao.NewStorageKeyFromBytes(kb)
-
-	return profileID, storageKey, nil
+	rpc.NewHost(svc).Handle(context.Background(), bus, bus)
 }

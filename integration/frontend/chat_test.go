@@ -107,7 +107,7 @@ func TestChat(t *testing.T) {
 	}
 
 	publishReq := &pb.PublishNetworkToBootstrapPeerRequest{
-		Key:     bootstrapPeersRes.Peers[0].Key,
+		HostId:  bootstrapPeersRes.Peers[0].HostId,
 		Network: createNetworkRes.Network,
 	}
 	if err := b.client.CallUnary(ctx, "publishNetworkToBootstrapPeer", publishReq, &pb.PublishNetworkToBootstrapPeerResponse{}); err != nil {

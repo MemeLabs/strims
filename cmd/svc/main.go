@@ -36,10 +36,25 @@ func main() {
 		panic(err)
 	}
 
-	networkController := service.NewNetworksController(logger, profileStore)
+	host, err := vpn.NewHost(
+		logger,
+		profile.Key,
+		vpn.WithNetworkBroker(vpn.NewNetworkBroker(logger)),
+		vpn.WithInterface(vpn.NewWSInterface(logger, "0.0.0.0:8082")),
+		vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger))),
+	)
+	if err != nil {
+		panic(err)
+	}
+
+	networkController, err := service.NewNetworkController(logger, host, profileStore)
+	if err != nil {
+		panic(err)
+	}
 
 	bootstrapService := service.NewBootstrapService(
 		logger,
+		host,
 		profileStore,
 		networkController,
 		service.BootstrapServiceOptions{
@@ -47,22 +62,9 @@ func main() {
 		},
 	)
 
-	_, err = vpn.NewHost(
-		logger,
-		profile.Key,
-		vpn.WithNetworkBroker(vpn.NewNetworkBroker(logger)),
-		vpn.WithInterface(vpn.NewWSInterface(logger, "0.0.0.0:8082")),
-		vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger))),
-		service.WithNetworkController(networkController),
-		service.WithBootstrapService(bootstrapService),
-	)
-	if err != nil {
-		panic(err)
-	}
+	_ = bootstrapService
 
 	select {}
-
-	return
 }
 
 func initProfileStore() (*dao.ProfileStore, error) {

@@ -4162,8 +4162,8 @@ export class GetBootstrapPeersResponse implements IGetBootstrapPeersResponse {
 /** Properties of a BootstrapPeer. */
 export interface IBootstrapPeer {
 
-    /** BootstrapPeer key */
-    key?: (Uint8Array|null);
+    /** BootstrapPeer hostId */
+    hostId?: (Uint8Array|null);
 
     /** BootstrapPeer label */
     label?: (string|null);
@@ -4178,8 +4178,8 @@ export class BootstrapPeer implements IBootstrapPeer {
      */
     constructor(properties?: IBootstrapPeer);
 
-    /** BootstrapPeer key. */
-    public key: Uint8Array;
+    /** BootstrapPeer hostId. */
+    public hostId: Uint8Array;
 
     /** BootstrapPeer label. */
     public label: string;
@@ -4258,8 +4258,8 @@ export class BootstrapPeer implements IBootstrapPeer {
 /** Properties of a PublishNetworkToBootstrapPeerRequest. */
 export interface IPublishNetworkToBootstrapPeerRequest {
 
-    /** PublishNetworkToBootstrapPeerRequest key */
-    key?: (Uint8Array|null);
+    /** PublishNetworkToBootstrapPeerRequest hostId */
+    hostId?: (Uint8Array|null);
 
     /** PublishNetworkToBootstrapPeerRequest network */
     network?: (INetwork|null);
@@ -4274,8 +4274,8 @@ export class PublishNetworkToBootstrapPeerRequest implements IPublishNetworkToBo
      */
     constructor(properties?: IPublishNetworkToBootstrapPeerRequest);
 
-    /** PublishNetworkToBootstrapPeerRequest key. */
-    public key: Uint8Array;
+    /** PublishNetworkToBootstrapPeerRequest hostId. */
+    public hostId: Uint8Array;
 
     /** PublishNetworkToBootstrapPeerRequest network. */
     public network?: (INetwork|null);
@@ -14694,6 +14694,9 @@ export interface IPeerInit {
 
     /** PeerInit iv */
     iv?: (Uint8Array|null);
+
+    /** PeerInit hostId */
+    hostId?: (Uint8Array|null);
 }
 
 /** Represents a PeerInit. */
@@ -14713,6 +14716,9 @@ export class PeerInit implements IPeerInit {
 
     /** PeerInit iv. */
     public iv: Uint8Array;
+
+    /** PeerInit hostId. */
+    public hostId: Uint8Array;
 
     /**
      * Creates a new PeerInit instance using the specified properties.

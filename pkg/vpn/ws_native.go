@@ -122,7 +122,7 @@ func (f *wsInterface) Listen(h *Host) error {
 	f.server = srv
 	f.serverLock.Unlock()
 
-	f.logger.Info("starting websocket server", zap.String("address", f.ServerAddress))
+	f.logger.Debug("starting websocket server", zap.String("address", f.ServerAddress))
 	return srv.ListenAndServe()
 }
 
