@@ -105,7 +105,7 @@ func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
 		s.logger.Debug(
 			"opening swarm channel",
 			logutil.ByteHex("peer", p.peer.Certificate.Key),
-			logutil.ByteHex("swarm", s.swarm.ID.Binary()),
+			zap.Stringer("swarm", s.swarm.ID),
 			zap.Uint16("localPort", localPort),
 			zap.Uint16("remotePort", remotePort),
 		)
@@ -126,7 +126,7 @@ func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
 		s.logger.Debug(
 			"closed swarm channel",
 			logutil.ByteHex("peer", p.peer.Certificate.Key),
-			logutil.ByteHex("swarm", s.swarm.ID.Binary()),
+			zap.Stringer("swarm", s.swarm.ID),
 			zap.Uint16("localPort", localPort),
 			zap.Uint16("remotePort", remotePort),
 		)
@@ -178,6 +178,12 @@ func (t *swarmNetwork) addPeer(p *swarmPeer) {
 }
 
 func (t *swarmNetwork) OpenSwarm(swarm *encoding.Swarm) {
+	t.logger.Debug(
+		"opening swarm",
+		zap.Stringer("swarm", swarm.ID),
+		logutil.ByteHex("network", t.network.CAKey()),
+	)
+
 	si, ok := t.activeSwarms.Load(swarm.ID.String())
 	if !ok {
 		si, _ = t.activeSwarms.LoadOrStore(swarm.ID.String(), newSwarmSwarm(t.logger, swarm))
@@ -203,7 +209,7 @@ func (t *swarmNetwork) sendOpen(s *swarmSwarm, p *swarmPeer) error {
 	t.logger.Debug(
 		"announcing swarm to peer",
 		logutil.ByteHex("peer", p.peer.Certificate.Key),
-		zap.String("swarm", s.swarm.ID.String()),
+		zap.Stringer("swarm", s.swarm.ID),
 		zap.Uint16("port", port),
 	)
 
@@ -218,6 +224,12 @@ func (t *swarmNetwork) sendOpen(s *swarmSwarm, p *swarmPeer) error {
 }
 
 func (t *swarmNetwork) CloseSwarm(id encoding.SwarmID) {
+	t.logger.Debug(
+		"closing swarm",
+		zap.Stringer("swarm", id),
+		logutil.ByteHex("network", t.network.CAKey()),
+	)
+
 	msg := &pb.SwarmThingMessage{
 		Body: &pb.SwarmThingMessage_Close_{
 			Close: &pb.SwarmThingMessage_Close{
@@ -227,11 +239,13 @@ func (t *swarmNetwork) CloseSwarm(id encoding.SwarmID) {
 	}
 
 	t.peers.Range(func(_, value interface{}) bool {
-		rw := value.(*vpn.FrameReadWriter)
+		rw := value.(*swarmPeer).rw
 		vpn.WriteProtoStream(rw, msg)
 		rw.Flush()
 		return true
 	})
+
+	t.activeSwarms.Delete(id.String())
 }
 
 func newSwarmController(logger *zap.Logger, h *vpn.Host, n *vpn.Networks) *swarmController {

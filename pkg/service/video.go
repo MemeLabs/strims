@@ -188,6 +188,15 @@ func (t *VideoSwarm) PublishSwarm(svc *NetworkServices) error {
 		return err
 	}
 
+	listing := &pb.DirectoryListing{
+		MimeType: "video/webm",
+		Title:    "test",
+		Key:      t.key,
+	}
+	if err := svc.Directory.Publish(listing); err != nil {
+		return err
+	}
+
 	t.svc = append(t.svc, svc)
 
 	return nil

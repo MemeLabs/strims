@@ -7866,6 +7866,9 @@ export interface IDirectoryServerEvent {
 
     /** DirectoryServerEvent open */
     open?: (DirectoryServerEvent.IViewerChange|null);
+
+    /** DirectoryServerEvent ping */
+    ping?: (DirectoryServerEvent.IPing|null);
 }
 
 /** Represents a DirectoryServerEvent. */
@@ -7886,8 +7889,11 @@ export class DirectoryServerEvent implements IDirectoryServerEvent {
     /** DirectoryServerEvent open. */
     public open?: (DirectoryServerEvent.IViewerChange|null);
 
+    /** DirectoryServerEvent ping. */
+    public ping?: (DirectoryServerEvent.IPing|null);
+
     /** DirectoryServerEvent body. */
-    public body?: ("publish"|"unpublish"|"open");
+    public body?: ("publish"|"unpublish"|"open"|"ping");
 
     /**
      * Creates a new DirectoryServerEvent instance using the specified properties.
@@ -8233,6 +8239,96 @@ export namespace DirectoryServerEvent {
 
         /**
          * Converts this ViewerChange to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a Ping. */
+    interface IPing {
+
+        /** Ping time */
+        time?: (number|null);
+    }
+
+    /** Represents a Ping. */
+    class Ping implements IPing {
+
+        /**
+         * Constructs a new Ping.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: DirectoryServerEvent.IPing);
+
+        /** Ping time. */
+        public time: number;
+
+        /**
+         * Creates a new Ping instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Ping instance
+         */
+        public static create(properties?: DirectoryServerEvent.IPing): DirectoryServerEvent.Ping;
+
+        /**
+         * Encodes the specified Ping message. Does not implicitly {@link DirectoryServerEvent.Ping.verify|verify} messages.
+         * @param message Ping message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: DirectoryServerEvent.IPing, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Ping message, length delimited. Does not implicitly {@link DirectoryServerEvent.Ping.verify|verify} messages.
+         * @param message Ping message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: DirectoryServerEvent.IPing, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a Ping message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Ping
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryServerEvent.Ping;
+
+        /**
+         * Decodes a Ping message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Ping
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryServerEvent.Ping;
+
+        /**
+         * Verifies a Ping message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a Ping message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Ping
+         */
+        public static fromObject(object: { [k: string]: any }): DirectoryServerEvent.Ping;
+
+        /**
+         * Creates a plain object from a Ping message. Also converts values to other types if specified.
+         * @param message Ping
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: DirectoryServerEvent.Ping, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Ping to JSON.
          * @returns JSON object
          */
         public toJSON(): { [k: string]: any };
@@ -9385,6 +9481,396 @@ export namespace PubSubEvent {
 
         /**
          * Converts this Padding to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+}
+
+/** Properties of a NetworkEvent. */
+export interface INetworkEvent {
+
+    /** NetworkEvent networkOpen */
+    networkOpen?: (NetworkEvent.INetworkOpen|null);
+
+    /** NetworkEvent networkClose */
+    networkClose?: (NetworkEvent.INetworkClose|null);
+
+    /** NetworkEvent directoryEvent */
+    directoryEvent?: (NetworkEvent.IDirectoryEvent|null);
+}
+
+/** Represents a NetworkEvent. */
+export class NetworkEvent implements INetworkEvent {
+
+    /**
+     * Constructs a new NetworkEvent.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: INetworkEvent);
+
+    /** NetworkEvent networkOpen. */
+    public networkOpen?: (NetworkEvent.INetworkOpen|null);
+
+    /** NetworkEvent networkClose. */
+    public networkClose?: (NetworkEvent.INetworkClose|null);
+
+    /** NetworkEvent directoryEvent. */
+    public directoryEvent?: (NetworkEvent.IDirectoryEvent|null);
+
+    /** NetworkEvent body. */
+    public body?: ("networkOpen"|"networkClose"|"directoryEvent");
+
+    /**
+     * Creates a new NetworkEvent instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns NetworkEvent instance
+     */
+    public static create(properties?: INetworkEvent): NetworkEvent;
+
+    /**
+     * Encodes the specified NetworkEvent message. Does not implicitly {@link NetworkEvent.verify|verify} messages.
+     * @param message NetworkEvent message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: INetworkEvent, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified NetworkEvent message, length delimited. Does not implicitly {@link NetworkEvent.verify|verify} messages.
+     * @param message NetworkEvent message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: INetworkEvent, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a NetworkEvent message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns NetworkEvent
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkEvent;
+
+    /**
+     * Decodes a NetworkEvent message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns NetworkEvent
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkEvent;
+
+    /**
+     * Verifies a NetworkEvent message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a NetworkEvent message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns NetworkEvent
+     */
+    public static fromObject(object: { [k: string]: any }): NetworkEvent;
+
+    /**
+     * Creates a plain object from a NetworkEvent message. Also converts values to other types if specified.
+     * @param message NetworkEvent
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: NetworkEvent, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this NetworkEvent to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+export namespace NetworkEvent {
+
+    /** Properties of a NetworkOpen. */
+    interface INetworkOpen {
+
+        /** NetworkOpen networkId */
+        networkId?: (number|null);
+
+        /** NetworkOpen networkKey */
+        networkKey?: (Uint8Array|null);
+    }
+
+    /** Represents a NetworkOpen. */
+    class NetworkOpen implements INetworkOpen {
+
+        /**
+         * Constructs a new NetworkOpen.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: NetworkEvent.INetworkOpen);
+
+        /** NetworkOpen networkId. */
+        public networkId: number;
+
+        /** NetworkOpen networkKey. */
+        public networkKey: Uint8Array;
+
+        /**
+         * Creates a new NetworkOpen instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns NetworkOpen instance
+         */
+        public static create(properties?: NetworkEvent.INetworkOpen): NetworkEvent.NetworkOpen;
+
+        /**
+         * Encodes the specified NetworkOpen message. Does not implicitly {@link NetworkEvent.NetworkOpen.verify|verify} messages.
+         * @param message NetworkOpen message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: NetworkEvent.INetworkOpen, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified NetworkOpen message, length delimited. Does not implicitly {@link NetworkEvent.NetworkOpen.verify|verify} messages.
+         * @param message NetworkOpen message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: NetworkEvent.INetworkOpen, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a NetworkOpen message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns NetworkOpen
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkEvent.NetworkOpen;
+
+        /**
+         * Decodes a NetworkOpen message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns NetworkOpen
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkEvent.NetworkOpen;
+
+        /**
+         * Verifies a NetworkOpen message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a NetworkOpen message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns NetworkOpen
+         */
+        public static fromObject(object: { [k: string]: any }): NetworkEvent.NetworkOpen;
+
+        /**
+         * Creates a plain object from a NetworkOpen message. Also converts values to other types if specified.
+         * @param message NetworkOpen
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: NetworkEvent.NetworkOpen, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this NetworkOpen to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a NetworkClose. */
+    interface INetworkClose {
+
+        /** NetworkClose networkId */
+        networkId?: (number|null);
+    }
+
+    /** Represents a NetworkClose. */
+    class NetworkClose implements INetworkClose {
+
+        /**
+         * Constructs a new NetworkClose.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: NetworkEvent.INetworkClose);
+
+        /** NetworkClose networkId. */
+        public networkId: number;
+
+        /**
+         * Creates a new NetworkClose instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns NetworkClose instance
+         */
+        public static create(properties?: NetworkEvent.INetworkClose): NetworkEvent.NetworkClose;
+
+        /**
+         * Encodes the specified NetworkClose message. Does not implicitly {@link NetworkEvent.NetworkClose.verify|verify} messages.
+         * @param message NetworkClose message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: NetworkEvent.INetworkClose, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified NetworkClose message, length delimited. Does not implicitly {@link NetworkEvent.NetworkClose.verify|verify} messages.
+         * @param message NetworkClose message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: NetworkEvent.INetworkClose, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a NetworkClose message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns NetworkClose
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkEvent.NetworkClose;
+
+        /**
+         * Decodes a NetworkClose message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns NetworkClose
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkEvent.NetworkClose;
+
+        /**
+         * Verifies a NetworkClose message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a NetworkClose message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns NetworkClose
+         */
+        public static fromObject(object: { [k: string]: any }): NetworkEvent.NetworkClose;
+
+        /**
+         * Creates a plain object from a NetworkClose message. Also converts values to other types if specified.
+         * @param message NetworkClose
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: NetworkEvent.NetworkClose, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this NetworkClose to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a DirectoryEvent. */
+    interface IDirectoryEvent {
+
+        /** DirectoryEvent networkId */
+        networkId?: (number|null);
+
+        /** DirectoryEvent event */
+        event?: (IDirectoryServerEvent|null);
+    }
+
+    /** Represents a DirectoryEvent. */
+    class DirectoryEvent implements IDirectoryEvent {
+
+        /**
+         * Constructs a new DirectoryEvent.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: NetworkEvent.IDirectoryEvent);
+
+        /** DirectoryEvent networkId. */
+        public networkId: number;
+
+        /** DirectoryEvent event. */
+        public event?: (IDirectoryServerEvent|null);
+
+        /**
+         * Creates a new DirectoryEvent instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns DirectoryEvent instance
+         */
+        public static create(properties?: NetworkEvent.IDirectoryEvent): NetworkEvent.DirectoryEvent;
+
+        /**
+         * Encodes the specified DirectoryEvent message. Does not implicitly {@link NetworkEvent.DirectoryEvent.verify|verify} messages.
+         * @param message DirectoryEvent message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: NetworkEvent.IDirectoryEvent, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified DirectoryEvent message, length delimited. Does not implicitly {@link NetworkEvent.DirectoryEvent.verify|verify} messages.
+         * @param message DirectoryEvent message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: NetworkEvent.IDirectoryEvent, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a DirectoryEvent message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns DirectoryEvent
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkEvent.DirectoryEvent;
+
+        /**
+         * Decodes a DirectoryEvent message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns DirectoryEvent
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkEvent.DirectoryEvent;
+
+        /**
+         * Verifies a DirectoryEvent message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a DirectoryEvent message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns DirectoryEvent
+         */
+        public static fromObject(object: { [k: string]: any }): NetworkEvent.DirectoryEvent;
+
+        /**
+         * Creates a plain object from a DirectoryEvent message. Also converts values to other types if specified.
+         * @param message DirectoryEvent
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: NetworkEvent.DirectoryEvent, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this DirectoryEvent to JSON.
          * @returns JSON object
          */
         public toJSON(): { [k: string]: any };

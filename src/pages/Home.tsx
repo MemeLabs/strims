@@ -142,7 +142,12 @@ const HomePage = () => {
 
   const handleTestClick = async () => {
     console.log("starting vpn");
-    await client.startVPN();
+    const networkEvents = client.startVPN();
+
+    networkEvents.on("data", (e) => {
+      console.log(e);
+    });
+
     console.log("vpn started");
 
     console.log("waiting for networks...");

@@ -79,6 +79,7 @@ type mediator struct {
 	id                    kademlia.ID
 	network               *Network
 	init                  bool
+	closeErr              error
 	closeOnce             sync.Once
 	done                  chan struct{}
 	nextICESendIndex      uint64
@@ -117,8 +118,11 @@ func (m *mediator) SetAnswer(remoteMediationID uint64, answer []byte) error {
 	return nil
 }
 
-func (m *mediator) close() {
-	m.closeOnce.Do(func() { close(m.done) })
+func (m *mediator) close(err error) {
+	m.closeOnce.Do(func() {
+		m.closeErr = err
+		close(m.done)
+	})
 }
 
 func (m *mediator) addICECandidate(index uint64, candidate []byte) (bool, error) {
@@ -157,7 +161,7 @@ func (m *mediator) getRemoteDescription() ([]byte, error) {
 	case <-m.remoteDescriptionDone:
 		return m.remoteDescription, nil
 	case <-m.done:
-		return nil, errors.New("mediator closed")
+		return nil, fmt.Errorf("mediator closed: %w", m.closeErr)
 	}
 }
 
@@ -268,6 +272,11 @@ func (s *PeerExchange) HandleMessage(msg *Message) (bool, error) {
 
 // Connect create mediator to negotiate connection with peer
 func (s *PeerExchange) Connect(hostID kademlia.ID) error {
+	// TODO: handle races
+	if _, ok := s.network.host.GetPeer(hostID); ok {
+		return nil
+	}
+
 	s.mediatorsLock.Lock()
 	defer s.mediatorsLock.Unlock()
 
@@ -335,16 +344,16 @@ func (s *PeerExchange) dial(t *mediator) error {
 		s.mediatorsLock.Unlock()
 	}()
 
-	defer t.close()
-
+	var err error
 	select {
-	case err := <-errs:
-		return err
+	case err = <-errs:
 	case <-time.After(20 * time.Second):
-		return errors.New("timeout")
+		err = errors.New("timeout")
 	case <-t.done:
-		return nil
 	}
+
+	t.close(err)
+	return err
 }
 
 func (s *PeerExchange) handleAnswer(m *pb.PeerExchangeMessage_Answer, msg *Message) error {

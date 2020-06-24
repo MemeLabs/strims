@@ -17502,6 +17502,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
      * @property {DirectoryServerEvent.IPublish|null} [publish] DirectoryServerEvent publish
      * @property {DirectoryServerEvent.IUnpublish|null} [unpublish] DirectoryServerEvent unpublish
      * @property {DirectoryServerEvent.IViewerChange|null} [open] DirectoryServerEvent open
+     * @property {DirectoryServerEvent.IPing|null} [ping] DirectoryServerEvent ping
      */
 
     /**
@@ -17543,17 +17544,25 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
      */
     DirectoryServerEvent.prototype.open = null;
 
+    /**
+     * DirectoryServerEvent ping.
+     * @member {DirectoryServerEvent.IPing|null|undefined} ping
+     * @memberof DirectoryServerEvent
+     * @instance
+     */
+    DirectoryServerEvent.prototype.ping = null;
+
     // OneOf field names bound to virtual getters and setters
     let $oneOfFields;
 
     /**
      * DirectoryServerEvent body.
-     * @member {"publish"|"unpublish"|"open"|undefined} body
+     * @member {"publish"|"unpublish"|"open"|"ping"|undefined} body
      * @memberof DirectoryServerEvent
      * @instance
      */
     Object.defineProperty(DirectoryServerEvent.prototype, "body", {
-        get: $util.oneOfGetter($oneOfFields = ["publish", "unpublish", "open"]),
+        get: $util.oneOfGetter($oneOfFields = ["publish", "unpublish", "open", "ping"]),
         set: $util.oneOfSetter($oneOfFields)
     });
 
@@ -17587,6 +17596,8 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
             $root.DirectoryServerEvent.Unpublish.encode(message.unpublish, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
         if (message.open != null && Object.hasOwnProperty.call(message, "open"))
             $root.DirectoryServerEvent.ViewerChange.encode(message.open, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+        if (message.ping != null && Object.hasOwnProperty.call(message, "ping"))
+            $root.DirectoryServerEvent.Ping.encode(message.ping, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
         return writer;
     };
 
@@ -17629,6 +17640,9 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
                 break;
             case 3:
                 message.open = $root.DirectoryServerEvent.ViewerChange.decode(reader, reader.uint32());
+                break;
+            case 4:
+                message.ping = $root.DirectoryServerEvent.Ping.decode(reader, reader.uint32());
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -17694,6 +17708,16 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
                     return "open." + error;
             }
         }
+        if (message.ping != null && message.hasOwnProperty("ping")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.DirectoryServerEvent.Ping.verify(message.ping);
+                if (error)
+                    return "ping." + error;
+            }
+        }
         return null;
     };
 
@@ -17723,6 +17747,11 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
             if (typeof object.open !== "object")
                 throw TypeError(".DirectoryServerEvent.open: object expected");
             message.open = $root.DirectoryServerEvent.ViewerChange.fromObject(object.open);
+        }
+        if (object.ping != null) {
+            if (typeof object.ping !== "object")
+                throw TypeError(".DirectoryServerEvent.ping: object expected");
+            message.ping = $root.DirectoryServerEvent.Ping.fromObject(object.ping);
         }
         return message;
     };
@@ -17754,6 +17783,11 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
             object.open = $root.DirectoryServerEvent.ViewerChange.toObject(message.open, options);
             if (options.oneofs)
                 object.body = "open";
+        }
+        if (message.ping != null && message.hasOwnProperty("ping")) {
+            object.ping = $root.DirectoryServerEvent.Ping.toObject(message.ping, options);
+            if (options.oneofs)
+                object.body = "ping";
         }
         return object;
     };
@@ -18384,6 +18418,207 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         };
 
         return ViewerChange;
+    })();
+
+    DirectoryServerEvent.Ping = (function() {
+
+        /**
+         * Properties of a Ping.
+         * @memberof DirectoryServerEvent
+         * @interface IPing
+         * @property {number|null} [time] Ping time
+         */
+
+        /**
+         * Constructs a new Ping.
+         * @memberof DirectoryServerEvent
+         * @classdesc Represents a Ping.
+         * @implements IPing
+         * @constructor
+         * @param {DirectoryServerEvent.IPing=} [properties] Properties to set
+         */
+        function Ping(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Ping time.
+         * @member {number} time
+         * @memberof DirectoryServerEvent.Ping
+         * @instance
+         */
+        Ping.prototype.time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+        /**
+         * Creates a new Ping instance using the specified properties.
+         * @function create
+         * @memberof DirectoryServerEvent.Ping
+         * @static
+         * @param {DirectoryServerEvent.IPing=} [properties] Properties to set
+         * @returns {DirectoryServerEvent.Ping} Ping instance
+         */
+        Ping.create = function create(properties) {
+            return new Ping(properties);
+        };
+
+        /**
+         * Encodes the specified Ping message. Does not implicitly {@link DirectoryServerEvent.Ping.verify|verify} messages.
+         * @function encode
+         * @memberof DirectoryServerEvent.Ping
+         * @static
+         * @param {DirectoryServerEvent.IPing} message Ping message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Ping.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.time != null && Object.hasOwnProperty.call(message, "time"))
+                writer.uint32(/* id 1, wireType 0 =*/8).int64(message.time);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Ping message, length delimited. Does not implicitly {@link DirectoryServerEvent.Ping.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof DirectoryServerEvent.Ping
+         * @static
+         * @param {DirectoryServerEvent.IPing} message Ping message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Ping.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Ping message from the specified reader or buffer.
+         * @function decode
+         * @memberof DirectoryServerEvent.Ping
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {DirectoryServerEvent.Ping} Ping
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Ping.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryServerEvent.Ping();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.time = reader.int64();
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Ping message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof DirectoryServerEvent.Ping
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {DirectoryServerEvent.Ping} Ping
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Ping.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Ping message.
+         * @function verify
+         * @memberof DirectoryServerEvent.Ping
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Ping.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.time != null && message.hasOwnProperty("time"))
+                if (!$util.isInteger(message.time) && !(message.time && $util.isInteger(message.time.low) && $util.isInteger(message.time.high)))
+                    return "time: integer|Long expected";
+            return null;
+        };
+
+        /**
+         * Creates a Ping message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof DirectoryServerEvent.Ping
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {DirectoryServerEvent.Ping} Ping
+         */
+        Ping.fromObject = function fromObject(object) {
+            if (object instanceof $root.DirectoryServerEvent.Ping)
+                return object;
+            let message = new $root.DirectoryServerEvent.Ping();
+            if (object.time != null)
+                if ($util.Long)
+                    (message.time = $util.Long.fromValue(object.time)).unsigned = false;
+                else if (typeof object.time === "string")
+                    message.time = parseInt(object.time, 10);
+                else if (typeof object.time === "number")
+                    message.time = object.time;
+                else if (typeof object.time === "object")
+                    message.time = new $util.LongBits(object.time.low >>> 0, object.time.high >>> 0).toNumber();
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a Ping message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof DirectoryServerEvent.Ping
+         * @static
+         * @param {DirectoryServerEvent.Ping} message Ping
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Ping.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, false);
+                    object.time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.time = options.longs === String ? "0" : 0;
+            if (message.time != null && message.hasOwnProperty("time"))
+                if (typeof message.time === "number")
+                    object.time = options.longs === String ? String(message.time) : message.time;
+                else
+                    object.time = options.longs === String ? $util.Long.prototype.toString.call(message.time) : options.longs === Number ? new $util.LongBits(message.time.low >>> 0, message.time.high >>> 0).toNumber() : message.time;
+            return object;
+        };
+
+        /**
+         * Converts this Ping to JSON.
+         * @function toJSON
+         * @memberof DirectoryServerEvent.Ping
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Ping.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Ping;
     })();
 
     return DirectoryServerEvent;
@@ -21084,6 +21319,948 @@ export const PubSubEvent = $root.PubSubEvent = (() => {
     })();
 
     return PubSubEvent;
+})();
+
+export const NetworkEvent = $root.NetworkEvent = (() => {
+
+    /**
+     * Properties of a NetworkEvent.
+     * @exports INetworkEvent
+     * @interface INetworkEvent
+     * @property {NetworkEvent.INetworkOpen|null} [networkOpen] NetworkEvent networkOpen
+     * @property {NetworkEvent.INetworkClose|null} [networkClose] NetworkEvent networkClose
+     * @property {NetworkEvent.IDirectoryEvent|null} [directoryEvent] NetworkEvent directoryEvent
+     */
+
+    /**
+     * Constructs a new NetworkEvent.
+     * @exports NetworkEvent
+     * @classdesc Represents a NetworkEvent.
+     * @implements INetworkEvent
+     * @constructor
+     * @param {INetworkEvent=} [properties] Properties to set
+     */
+    function NetworkEvent(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * NetworkEvent networkOpen.
+     * @member {NetworkEvent.INetworkOpen|null|undefined} networkOpen
+     * @memberof NetworkEvent
+     * @instance
+     */
+    NetworkEvent.prototype.networkOpen = null;
+
+    /**
+     * NetworkEvent networkClose.
+     * @member {NetworkEvent.INetworkClose|null|undefined} networkClose
+     * @memberof NetworkEvent
+     * @instance
+     */
+    NetworkEvent.prototype.networkClose = null;
+
+    /**
+     * NetworkEvent directoryEvent.
+     * @member {NetworkEvent.IDirectoryEvent|null|undefined} directoryEvent
+     * @memberof NetworkEvent
+     * @instance
+     */
+    NetworkEvent.prototype.directoryEvent = null;
+
+    // OneOf field names bound to virtual getters and setters
+    let $oneOfFields;
+
+    /**
+     * NetworkEvent body.
+     * @member {"networkOpen"|"networkClose"|"directoryEvent"|undefined} body
+     * @memberof NetworkEvent
+     * @instance
+     */
+    Object.defineProperty(NetworkEvent.prototype, "body", {
+        get: $util.oneOfGetter($oneOfFields = ["networkOpen", "networkClose", "directoryEvent"]),
+        set: $util.oneOfSetter($oneOfFields)
+    });
+
+    /**
+     * Creates a new NetworkEvent instance using the specified properties.
+     * @function create
+     * @memberof NetworkEvent
+     * @static
+     * @param {INetworkEvent=} [properties] Properties to set
+     * @returns {NetworkEvent} NetworkEvent instance
+     */
+    NetworkEvent.create = function create(properties) {
+        return new NetworkEvent(properties);
+    };
+
+    /**
+     * Encodes the specified NetworkEvent message. Does not implicitly {@link NetworkEvent.verify|verify} messages.
+     * @function encode
+     * @memberof NetworkEvent
+     * @static
+     * @param {INetworkEvent} message NetworkEvent message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkEvent.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.networkOpen != null && Object.hasOwnProperty.call(message, "networkOpen"))
+            $root.NetworkEvent.NetworkOpen.encode(message.networkOpen, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.networkClose != null && Object.hasOwnProperty.call(message, "networkClose"))
+            $root.NetworkEvent.NetworkClose.encode(message.networkClose, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        if (message.directoryEvent != null && Object.hasOwnProperty.call(message, "directoryEvent"))
+            $root.NetworkEvent.DirectoryEvent.encode(message.directoryEvent, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified NetworkEvent message, length delimited. Does not implicitly {@link NetworkEvent.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof NetworkEvent
+     * @static
+     * @param {INetworkEvent} message NetworkEvent message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkEvent.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a NetworkEvent message from the specified reader or buffer.
+     * @function decode
+     * @memberof NetworkEvent
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {NetworkEvent} NetworkEvent
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkEvent.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkEvent();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.networkOpen = $root.NetworkEvent.NetworkOpen.decode(reader, reader.uint32());
+                break;
+            case 2:
+                message.networkClose = $root.NetworkEvent.NetworkClose.decode(reader, reader.uint32());
+                break;
+            case 3:
+                message.directoryEvent = $root.NetworkEvent.DirectoryEvent.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a NetworkEvent message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof NetworkEvent
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {NetworkEvent} NetworkEvent
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkEvent.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a NetworkEvent message.
+     * @function verify
+     * @memberof NetworkEvent
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    NetworkEvent.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        let properties = {};
+        if (message.networkOpen != null && message.hasOwnProperty("networkOpen")) {
+            properties.body = 1;
+            {
+                let error = $root.NetworkEvent.NetworkOpen.verify(message.networkOpen);
+                if (error)
+                    return "networkOpen." + error;
+            }
+        }
+        if (message.networkClose != null && message.hasOwnProperty("networkClose")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.NetworkEvent.NetworkClose.verify(message.networkClose);
+                if (error)
+                    return "networkClose." + error;
+            }
+        }
+        if (message.directoryEvent != null && message.hasOwnProperty("directoryEvent")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.NetworkEvent.DirectoryEvent.verify(message.directoryEvent);
+                if (error)
+                    return "directoryEvent." + error;
+            }
+        }
+        return null;
+    };
+
+    /**
+     * Creates a NetworkEvent message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof NetworkEvent
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {NetworkEvent} NetworkEvent
+     */
+    NetworkEvent.fromObject = function fromObject(object) {
+        if (object instanceof $root.NetworkEvent)
+            return object;
+        let message = new $root.NetworkEvent();
+        if (object.networkOpen != null) {
+            if (typeof object.networkOpen !== "object")
+                throw TypeError(".NetworkEvent.networkOpen: object expected");
+            message.networkOpen = $root.NetworkEvent.NetworkOpen.fromObject(object.networkOpen);
+        }
+        if (object.networkClose != null) {
+            if (typeof object.networkClose !== "object")
+                throw TypeError(".NetworkEvent.networkClose: object expected");
+            message.networkClose = $root.NetworkEvent.NetworkClose.fromObject(object.networkClose);
+        }
+        if (object.directoryEvent != null) {
+            if (typeof object.directoryEvent !== "object")
+                throw TypeError(".NetworkEvent.directoryEvent: object expected");
+            message.directoryEvent = $root.NetworkEvent.DirectoryEvent.fromObject(object.directoryEvent);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a NetworkEvent message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof NetworkEvent
+     * @static
+     * @param {NetworkEvent} message NetworkEvent
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    NetworkEvent.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (message.networkOpen != null && message.hasOwnProperty("networkOpen")) {
+            object.networkOpen = $root.NetworkEvent.NetworkOpen.toObject(message.networkOpen, options);
+            if (options.oneofs)
+                object.body = "networkOpen";
+        }
+        if (message.networkClose != null && message.hasOwnProperty("networkClose")) {
+            object.networkClose = $root.NetworkEvent.NetworkClose.toObject(message.networkClose, options);
+            if (options.oneofs)
+                object.body = "networkClose";
+        }
+        if (message.directoryEvent != null && message.hasOwnProperty("directoryEvent")) {
+            object.directoryEvent = $root.NetworkEvent.DirectoryEvent.toObject(message.directoryEvent, options);
+            if (options.oneofs)
+                object.body = "directoryEvent";
+        }
+        return object;
+    };
+
+    /**
+     * Converts this NetworkEvent to JSON.
+     * @function toJSON
+     * @memberof NetworkEvent
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    NetworkEvent.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    NetworkEvent.NetworkOpen = (function() {
+
+        /**
+         * Properties of a NetworkOpen.
+         * @memberof NetworkEvent
+         * @interface INetworkOpen
+         * @property {number|null} [networkId] NetworkOpen networkId
+         * @property {Uint8Array|null} [networkKey] NetworkOpen networkKey
+         */
+
+        /**
+         * Constructs a new NetworkOpen.
+         * @memberof NetworkEvent
+         * @classdesc Represents a NetworkOpen.
+         * @implements INetworkOpen
+         * @constructor
+         * @param {NetworkEvent.INetworkOpen=} [properties] Properties to set
+         */
+        function NetworkOpen(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * NetworkOpen networkId.
+         * @member {number} networkId
+         * @memberof NetworkEvent.NetworkOpen
+         * @instance
+         */
+        NetworkOpen.prototype.networkId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * NetworkOpen networkKey.
+         * @member {Uint8Array} networkKey
+         * @memberof NetworkEvent.NetworkOpen
+         * @instance
+         */
+        NetworkOpen.prototype.networkKey = $util.newBuffer([]);
+
+        /**
+         * Creates a new NetworkOpen instance using the specified properties.
+         * @function create
+         * @memberof NetworkEvent.NetworkOpen
+         * @static
+         * @param {NetworkEvent.INetworkOpen=} [properties] Properties to set
+         * @returns {NetworkEvent.NetworkOpen} NetworkOpen instance
+         */
+        NetworkOpen.create = function create(properties) {
+            return new NetworkOpen(properties);
+        };
+
+        /**
+         * Encodes the specified NetworkOpen message. Does not implicitly {@link NetworkEvent.NetworkOpen.verify|verify} messages.
+         * @function encode
+         * @memberof NetworkEvent.NetworkOpen
+         * @static
+         * @param {NetworkEvent.INetworkOpen} message NetworkOpen message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        NetworkOpen.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.networkId != null && Object.hasOwnProperty.call(message, "networkId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.networkId);
+            if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
+                writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.networkKey);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified NetworkOpen message, length delimited. Does not implicitly {@link NetworkEvent.NetworkOpen.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof NetworkEvent.NetworkOpen
+         * @static
+         * @param {NetworkEvent.INetworkOpen} message NetworkOpen message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        NetworkOpen.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a NetworkOpen message from the specified reader or buffer.
+         * @function decode
+         * @memberof NetworkEvent.NetworkOpen
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {NetworkEvent.NetworkOpen} NetworkOpen
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        NetworkOpen.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkEvent.NetworkOpen();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.networkId = reader.uint64();
+                    break;
+                case 2:
+                    message.networkKey = reader.bytes();
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a NetworkOpen message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof NetworkEvent.NetworkOpen
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {NetworkEvent.NetworkOpen} NetworkOpen
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        NetworkOpen.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a NetworkOpen message.
+         * @function verify
+         * @memberof NetworkEvent.NetworkOpen
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        NetworkOpen.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.networkId != null && message.hasOwnProperty("networkId"))
+                if (!$util.isInteger(message.networkId) && !(message.networkId && $util.isInteger(message.networkId.low) && $util.isInteger(message.networkId.high)))
+                    return "networkId: integer|Long expected";
+            if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+                if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
+                    return "networkKey: buffer expected";
+            return null;
+        };
+
+        /**
+         * Creates a NetworkOpen message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof NetworkEvent.NetworkOpen
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {NetworkEvent.NetworkOpen} NetworkOpen
+         */
+        NetworkOpen.fromObject = function fromObject(object) {
+            if (object instanceof $root.NetworkEvent.NetworkOpen)
+                return object;
+            let message = new $root.NetworkEvent.NetworkOpen();
+            if (object.networkId != null)
+                if ($util.Long)
+                    (message.networkId = $util.Long.fromValue(object.networkId)).unsigned = true;
+                else if (typeof object.networkId === "string")
+                    message.networkId = parseInt(object.networkId, 10);
+                else if (typeof object.networkId === "number")
+                    message.networkId = object.networkId;
+                else if (typeof object.networkId === "object")
+                    message.networkId = new $util.LongBits(object.networkId.low >>> 0, object.networkId.high >>> 0).toNumber(true);
+            if (object.networkKey != null)
+                if (typeof object.networkKey === "string")
+                    $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
+                else if (object.networkKey.length)
+                    message.networkKey = object.networkKey;
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a NetworkOpen message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof NetworkEvent.NetworkOpen
+         * @static
+         * @param {NetworkEvent.NetworkOpen} message NetworkOpen
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        NetworkOpen.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.networkId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.networkId = options.longs === String ? "0" : 0;
+                if (options.bytes === String)
+                    object.networkKey = "";
+                else {
+                    object.networkKey = [];
+                    if (options.bytes !== Array)
+                        object.networkKey = $util.newBuffer(object.networkKey);
+                }
+            }
+            if (message.networkId != null && message.hasOwnProperty("networkId"))
+                if (typeof message.networkId === "number")
+                    object.networkId = options.longs === String ? String(message.networkId) : message.networkId;
+                else
+                    object.networkId = options.longs === String ? $util.Long.prototype.toString.call(message.networkId) : options.longs === Number ? new $util.LongBits(message.networkId.low >>> 0, message.networkId.high >>> 0).toNumber(true) : message.networkId;
+            if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+                object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
+            return object;
+        };
+
+        /**
+         * Converts this NetworkOpen to JSON.
+         * @function toJSON
+         * @memberof NetworkEvent.NetworkOpen
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        NetworkOpen.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return NetworkOpen;
+    })();
+
+    NetworkEvent.NetworkClose = (function() {
+
+        /**
+         * Properties of a NetworkClose.
+         * @memberof NetworkEvent
+         * @interface INetworkClose
+         * @property {number|null} [networkId] NetworkClose networkId
+         */
+
+        /**
+         * Constructs a new NetworkClose.
+         * @memberof NetworkEvent
+         * @classdesc Represents a NetworkClose.
+         * @implements INetworkClose
+         * @constructor
+         * @param {NetworkEvent.INetworkClose=} [properties] Properties to set
+         */
+        function NetworkClose(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * NetworkClose networkId.
+         * @member {number} networkId
+         * @memberof NetworkEvent.NetworkClose
+         * @instance
+         */
+        NetworkClose.prototype.networkId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * Creates a new NetworkClose instance using the specified properties.
+         * @function create
+         * @memberof NetworkEvent.NetworkClose
+         * @static
+         * @param {NetworkEvent.INetworkClose=} [properties] Properties to set
+         * @returns {NetworkEvent.NetworkClose} NetworkClose instance
+         */
+        NetworkClose.create = function create(properties) {
+            return new NetworkClose(properties);
+        };
+
+        /**
+         * Encodes the specified NetworkClose message. Does not implicitly {@link NetworkEvent.NetworkClose.verify|verify} messages.
+         * @function encode
+         * @memberof NetworkEvent.NetworkClose
+         * @static
+         * @param {NetworkEvent.INetworkClose} message NetworkClose message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        NetworkClose.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.networkId != null && Object.hasOwnProperty.call(message, "networkId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.networkId);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified NetworkClose message, length delimited. Does not implicitly {@link NetworkEvent.NetworkClose.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof NetworkEvent.NetworkClose
+         * @static
+         * @param {NetworkEvent.INetworkClose} message NetworkClose message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        NetworkClose.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a NetworkClose message from the specified reader or buffer.
+         * @function decode
+         * @memberof NetworkEvent.NetworkClose
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {NetworkEvent.NetworkClose} NetworkClose
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        NetworkClose.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkEvent.NetworkClose();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.networkId = reader.uint64();
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a NetworkClose message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof NetworkEvent.NetworkClose
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {NetworkEvent.NetworkClose} NetworkClose
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        NetworkClose.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a NetworkClose message.
+         * @function verify
+         * @memberof NetworkEvent.NetworkClose
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        NetworkClose.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.networkId != null && message.hasOwnProperty("networkId"))
+                if (!$util.isInteger(message.networkId) && !(message.networkId && $util.isInteger(message.networkId.low) && $util.isInteger(message.networkId.high)))
+                    return "networkId: integer|Long expected";
+            return null;
+        };
+
+        /**
+         * Creates a NetworkClose message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof NetworkEvent.NetworkClose
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {NetworkEvent.NetworkClose} NetworkClose
+         */
+        NetworkClose.fromObject = function fromObject(object) {
+            if (object instanceof $root.NetworkEvent.NetworkClose)
+                return object;
+            let message = new $root.NetworkEvent.NetworkClose();
+            if (object.networkId != null)
+                if ($util.Long)
+                    (message.networkId = $util.Long.fromValue(object.networkId)).unsigned = true;
+                else if (typeof object.networkId === "string")
+                    message.networkId = parseInt(object.networkId, 10);
+                else if (typeof object.networkId === "number")
+                    message.networkId = object.networkId;
+                else if (typeof object.networkId === "object")
+                    message.networkId = new $util.LongBits(object.networkId.low >>> 0, object.networkId.high >>> 0).toNumber(true);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a NetworkClose message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof NetworkEvent.NetworkClose
+         * @static
+         * @param {NetworkEvent.NetworkClose} message NetworkClose
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        NetworkClose.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.networkId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.networkId = options.longs === String ? "0" : 0;
+            if (message.networkId != null && message.hasOwnProperty("networkId"))
+                if (typeof message.networkId === "number")
+                    object.networkId = options.longs === String ? String(message.networkId) : message.networkId;
+                else
+                    object.networkId = options.longs === String ? $util.Long.prototype.toString.call(message.networkId) : options.longs === Number ? new $util.LongBits(message.networkId.low >>> 0, message.networkId.high >>> 0).toNumber(true) : message.networkId;
+            return object;
+        };
+
+        /**
+         * Converts this NetworkClose to JSON.
+         * @function toJSON
+         * @memberof NetworkEvent.NetworkClose
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        NetworkClose.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return NetworkClose;
+    })();
+
+    NetworkEvent.DirectoryEvent = (function() {
+
+        /**
+         * Properties of a DirectoryEvent.
+         * @memberof NetworkEvent
+         * @interface IDirectoryEvent
+         * @property {number|null} [networkId] DirectoryEvent networkId
+         * @property {IDirectoryServerEvent|null} [event] DirectoryEvent event
+         */
+
+        /**
+         * Constructs a new DirectoryEvent.
+         * @memberof NetworkEvent
+         * @classdesc Represents a DirectoryEvent.
+         * @implements IDirectoryEvent
+         * @constructor
+         * @param {NetworkEvent.IDirectoryEvent=} [properties] Properties to set
+         */
+        function DirectoryEvent(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * DirectoryEvent networkId.
+         * @member {number} networkId
+         * @memberof NetworkEvent.DirectoryEvent
+         * @instance
+         */
+        DirectoryEvent.prototype.networkId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * DirectoryEvent event.
+         * @member {IDirectoryServerEvent|null|undefined} event
+         * @memberof NetworkEvent.DirectoryEvent
+         * @instance
+         */
+        DirectoryEvent.prototype.event = null;
+
+        /**
+         * Creates a new DirectoryEvent instance using the specified properties.
+         * @function create
+         * @memberof NetworkEvent.DirectoryEvent
+         * @static
+         * @param {NetworkEvent.IDirectoryEvent=} [properties] Properties to set
+         * @returns {NetworkEvent.DirectoryEvent} DirectoryEvent instance
+         */
+        DirectoryEvent.create = function create(properties) {
+            return new DirectoryEvent(properties);
+        };
+
+        /**
+         * Encodes the specified DirectoryEvent message. Does not implicitly {@link NetworkEvent.DirectoryEvent.verify|verify} messages.
+         * @function encode
+         * @memberof NetworkEvent.DirectoryEvent
+         * @static
+         * @param {NetworkEvent.IDirectoryEvent} message DirectoryEvent message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        DirectoryEvent.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.networkId != null && Object.hasOwnProperty.call(message, "networkId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.networkId);
+            if (message.event != null && Object.hasOwnProperty.call(message, "event"))
+                $root.DirectoryServerEvent.encode(message.event, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified DirectoryEvent message, length delimited. Does not implicitly {@link NetworkEvent.DirectoryEvent.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof NetworkEvent.DirectoryEvent
+         * @static
+         * @param {NetworkEvent.IDirectoryEvent} message DirectoryEvent message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        DirectoryEvent.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a DirectoryEvent message from the specified reader or buffer.
+         * @function decode
+         * @memberof NetworkEvent.DirectoryEvent
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {NetworkEvent.DirectoryEvent} DirectoryEvent
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        DirectoryEvent.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkEvent.DirectoryEvent();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.networkId = reader.uint64();
+                    break;
+                case 2:
+                    message.event = $root.DirectoryServerEvent.decode(reader, reader.uint32());
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a DirectoryEvent message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof NetworkEvent.DirectoryEvent
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {NetworkEvent.DirectoryEvent} DirectoryEvent
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        DirectoryEvent.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a DirectoryEvent message.
+         * @function verify
+         * @memberof NetworkEvent.DirectoryEvent
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        DirectoryEvent.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.networkId != null && message.hasOwnProperty("networkId"))
+                if (!$util.isInteger(message.networkId) && !(message.networkId && $util.isInteger(message.networkId.low) && $util.isInteger(message.networkId.high)))
+                    return "networkId: integer|Long expected";
+            if (message.event != null && message.hasOwnProperty("event")) {
+                let error = $root.DirectoryServerEvent.verify(message.event);
+                if (error)
+                    return "event." + error;
+            }
+            return null;
+        };
+
+        /**
+         * Creates a DirectoryEvent message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof NetworkEvent.DirectoryEvent
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {NetworkEvent.DirectoryEvent} DirectoryEvent
+         */
+        DirectoryEvent.fromObject = function fromObject(object) {
+            if (object instanceof $root.NetworkEvent.DirectoryEvent)
+                return object;
+            let message = new $root.NetworkEvent.DirectoryEvent();
+            if (object.networkId != null)
+                if ($util.Long)
+                    (message.networkId = $util.Long.fromValue(object.networkId)).unsigned = true;
+                else if (typeof object.networkId === "string")
+                    message.networkId = parseInt(object.networkId, 10);
+                else if (typeof object.networkId === "number")
+                    message.networkId = object.networkId;
+                else if (typeof object.networkId === "object")
+                    message.networkId = new $util.LongBits(object.networkId.low >>> 0, object.networkId.high >>> 0).toNumber(true);
+            if (object.event != null) {
+                if (typeof object.event !== "object")
+                    throw TypeError(".NetworkEvent.DirectoryEvent.event: object expected");
+                message.event = $root.DirectoryServerEvent.fromObject(object.event);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a DirectoryEvent message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof NetworkEvent.DirectoryEvent
+         * @static
+         * @param {NetworkEvent.DirectoryEvent} message DirectoryEvent
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        DirectoryEvent.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.networkId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.networkId = options.longs === String ? "0" : 0;
+                object.event = null;
+            }
+            if (message.networkId != null && message.hasOwnProperty("networkId"))
+                if (typeof message.networkId === "number")
+                    object.networkId = options.longs === String ? String(message.networkId) : message.networkId;
+                else
+                    object.networkId = options.longs === String ? $util.Long.prototype.toString.call(message.networkId) : options.longs === Number ? new $util.LongBits(message.networkId.low >>> 0, message.networkId.high >>> 0).toNumber(true) : message.networkId;
+            if (message.event != null && message.hasOwnProperty("event"))
+                object.event = $root.DirectoryServerEvent.toObject(message.event, options);
+            return object;
+        };
+
+        /**
+         * Converts this DirectoryEvent to JSON.
+         * @function toJSON
+         * @memberof NetworkEvent.DirectoryEvent
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        DirectoryEvent.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return DirectoryEvent;
+    })();
+
+    return NetworkEvent;
 })();
 
 export const NetworkAddress = $root.NetworkAddress = (() => {

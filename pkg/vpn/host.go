@@ -16,6 +16,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/petar/GoLLRB/llrb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
@@ -112,7 +113,8 @@ type Host struct {
 	interfaces       []Interface
 	peerHandlersLock sync.Mutex
 	peerHandlers     []PeerHandler
-	peers            sync.Map
+	peersLock        sync.Mutex
+	peers            peerMap
 
 	// TODO: find a better place for this...
 	networkBroker NetworkBroker
@@ -126,8 +128,10 @@ func (h *Host) Close() {
 		}
 	}
 
-	h.peers.Range(func(pi, _ interface{}) bool {
-		pi.(*Peer).Close()
+	h.peersLock.Lock()
+	defer h.peersLock.Unlock()
+	h.peers.Each(func(p *Peer) bool {
+		p.Close()
 		return true
 	})
 }
@@ -172,11 +176,16 @@ func (h *Host) AddLink(c Link) {
 		)
 
 		h.handlePeer(p)
-		h.peers.Store(p, struct{}{})
+
+		h.peersLock.Lock()
+		h.peers.Insert(p.HostID(), p)
+		h.peersLock.Unlock()
 
 		p.run()
 
-		h.peers.Delete(p)
+		h.peersLock.Lock()
+		h.peers.Delete(p.HostID())
+		h.peersLock.Unlock()
 	}()
 }
 
@@ -185,6 +194,13 @@ func (h *Host) AddPeerHandler(fn PeerHandler) {
 	h.peerHandlersLock.Lock()
 	defer h.peerHandlersLock.Unlock()
 	h.peerHandlers = append(h.peerHandlers, fn)
+}
+
+// GetPeer ...
+func (h *Host) GetPeer(hostID kademlia.ID) (*Peer, bool) {
+	h.peersLock.Lock()
+	defer h.peersLock.Unlock()
+	return h.peers.Get(hostID)
 }
 
 func (h *Host) handlePeer(p *Peer) {
@@ -236,6 +252,43 @@ func NewHostID(key []byte, hid uint16) (kademlia.ID, error) {
 	copy(t[:18], key)
 	binary.BigEndian.PutUint16(t[18:], hid)
 	return kademlia.UnmarshalID(t[:])
+}
+
+type peerMap struct {
+	m llrb.LLRB
+}
+
+func (m *peerMap) Insert(k kademlia.ID, v *Peer) {
+	m.m.InsertNoReplace(peerMapItem{k, v})
+}
+
+func (m *peerMap) Delete(k kademlia.ID) {
+	m.m.Delete(peerMapItem{k, nil})
+}
+
+func (m *peerMap) Get(k kademlia.ID) (*Peer, bool) {
+	if it := m.m.Get(peerMapItem{k, nil}); it != nil {
+		return it.(peerMapItem).v, true
+	}
+	return nil, false
+}
+
+func (m *peerMap) Each(f func(b *Peer) bool) {
+	m.m.AscendGreaterOrEqual(llrb.Inf(-1), func(i llrb.Item) bool {
+		return f(i.(peerMapItem).v)
+	})
+}
+
+type peerMapItem struct {
+	k kademlia.ID
+	v *Peer
+}
+
+func (t peerMapItem) Less(oi llrb.Item) bool {
+	if o, ok := oi.(peerMapItem); ok {
+		return t.k.Less(o.k)
+	}
+	return !oi.Less(t)
 }
 
 // Listener ...

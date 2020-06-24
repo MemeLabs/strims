@@ -14,6 +14,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/encoding"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/prefixstream"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"google.golang.org/protobuf/proto"
@@ -38,7 +39,6 @@ func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubSer
 		Key: key,
 	})
 	if err != nil {
-		log.Println("error creating writer", err)
 		return nil, err
 	}
 
@@ -50,6 +50,8 @@ func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubSer
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
+
+	newSwarmPeerManager(ctx, svc, getPeersGetter(ctx, svc, key.Public, salt))
 
 	// TODO: add ecdh key
 	b, err := proto.Marshal(&pb.NetworkAddress{
@@ -70,6 +72,8 @@ func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubSer
 	s := &PubSubServer{
 		close:    cancel,
 		messages: make(chan *pb.PubSubEvent_Message),
+		swarm:    w.Swarm(),
+		svc:      svc,
 		w:        prefixstream.NewWriter(w),
 	}
 
@@ -87,6 +91,8 @@ type PubSubServer struct {
 	close     context.CancelFunc
 	closeOnce sync.Once
 	messages  chan *pb.PubSubEvent_Message
+	swarm     *encoding.Swarm
+	svc       *NetworkServices
 	w         *prefixstream.Writer
 }
 
@@ -95,6 +101,7 @@ func (s *PubSubServer) Close() {
 	s.closeOnce.Do(func() {
 		s.close()
 		close(s.messages)
+		s.svc.Swarms.CloseSwarm(s.swarm.ID)
 	})
 }
 
@@ -133,7 +140,10 @@ func (s *PubSubServer) Send(key string, body []byte) error {
 }
 
 func (s *PubSubServer) send(e *pb.PubSubEvent) (int, error) {
-	b, err := proto.Marshal(e)
+	b := pool.Get(uint16(proto.Size(e)))
+	defer pool.Put(b)
+
+	b, err := proto.MarshalOptions{}.MarshalAppend(b[:0], e)
 	if err != nil {
 		return 0, err
 	}
@@ -198,7 +208,8 @@ func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, err
 	c := &PubSubClient{
 		ctx:       ctx,
 		close:     cancel,
-		network:   svc.Network,
+		svc:       svc,
+		swarm:     swarm,
 		addrReady: make(chan struct{}),
 		port:      port,
 		messages:  messages,
@@ -214,7 +225,8 @@ type PubSubClient struct {
 	ctx       context.Context
 	close     context.CancelFunc
 	closeOnce sync.Once
-	network   *vpn.Network
+	svc       *NetworkServices
+	swarm     *encoding.Swarm
 	addrReady chan struct{}
 	addr      atomic.Value
 	port      uint16
@@ -248,6 +260,7 @@ func (c *PubSubClient) Close() {
 	c.closeOnce.Do(func() {
 		c.close()
 		close(c.messages)
+		c.svc.Swarms.CloseSwarm(c.swarm.ID)
 	})
 }
 
@@ -280,7 +293,7 @@ func (c *PubSubClient) Send(key string, body []byte) error {
 	}
 
 	addr := c.addr.Load().(*hostAddr)
-	return c.network.Send(addr.HostID, addr.Port, c.port, b)
+	return c.svc.Network.Send(addr.HostID, addr.Port, c.port, b)
 }
 
 func readPubSubEvents(swarm *encoding.Swarm, messages chan *pb.PubSubEvent_Message) {

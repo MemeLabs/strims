@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"reflect"
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
@@ -38,6 +39,7 @@ func NewNetworkController(logger *zap.Logger, host *vpn.Host, store *dao.Profile
 		hashTableStore:  vpn.NewHashTableStore(context.Background(), logger, host.ID()),
 		peerIndexStore:  vpn.NewPeerIndexStore(context.Background(), logger, host.ID()),
 		swarmController: newSwarmController(logger, host, networks),
+		eventEmitter:    newNetworkEventEmitter(),
 	}
 
 	if err := c.startProfileNetworks(); err != nil {
@@ -58,6 +60,7 @@ type NetworkController struct {
 	hashTableStore      *vpn.HashTableStore
 	peerIndexStore      *vpn.PeerIndexStore
 	swarmController     *swarmController
+	eventEmitter        *networkEventEmitter
 }
 
 type pbNetworks []*pb.Network
@@ -138,6 +141,8 @@ func (c *NetworkController) StartNetwork(cert *pb.Certificate, opts ...NetworkOp
 	c.networkServices.Insert(dao.GetRootCert(cert).Key, svc)
 	c.networkServicesLock.Unlock()
 
+	c.eventEmitter.EmitOpen(svc)
+
 	return svc, nil
 }
 
@@ -174,14 +179,116 @@ func WithMemberServices(logger *zap.Logger) NetworkOption {
 
 // StopNetwork ...
 func (c *NetworkController) StopNetwork(cert *pb.Certificate) error {
+	key := dao.GetRootCert(cert).Key
+
 	c.networkServicesLock.Lock()
-	svc, ok := c.networkServices.Get(dao.GetRootCert(cert).Key)
-	c.networkServicesLock.Unlock()
+	defer c.networkServicesLock.Unlock()
+	svc, ok := c.networkServices.Get(key)
 	if !ok {
 		return nil
 	}
+	c.networkServices.Delete(key)
 
 	return c.networks.RemoveNetwork(svc.Network)
+}
+
+// Events ...
+func (c *NetworkController) Events() <-chan *pb.NetworkEvent {
+	return c.eventEmitter.events
+}
+
+func newNetworkEventEmitter() *networkEventEmitter {
+	e := &networkEventEmitter{
+		services: make(chan *NetworkServices),
+		events:   make(chan *pb.NetworkEvent, 1024),
+		nextID:   1,
+	}
+
+	go e.pump()
+
+	return e
+}
+
+type networkEventEmitter struct {
+	services chan *NetworkServices
+	events   chan *pb.NetworkEvent
+	cases    []reflect.SelectCase
+	ids      []uint64
+	nextID   uint64
+}
+
+func (e *networkEventEmitter) pump() {
+	e.cases = append(e.cases, reflect.SelectCase{
+		Dir:  reflect.SelectRecv,
+		Chan: reflect.ValueOf(e.services),
+	})
+	e.ids = append(e.ids, 0)
+
+	for {
+		i, v, ok := reflect.Select(e.cases)
+
+		if i == 0 {
+			e.handleOpen(v.Interface().(*NetworkServices))
+			continue
+		}
+
+		if !ok {
+			e.handleClose(i)
+			continue
+		}
+
+		e.handleDirectoryEvent(i, v.Interface().(*pb.DirectoryServerEvent))
+	}
+}
+
+func (e *networkEventEmitter) handleOpen(svc *NetworkServices) {
+	e.events <- &pb.NetworkEvent{
+		Body: &pb.NetworkEvent_NetworkOpen_{
+			NetworkOpen: &pb.NetworkEvent_NetworkOpen{
+				NetworkId:  e.nextID,
+				NetworkKey: svc.Network.CAKey(),
+			},
+		},
+	}
+
+	e.cases = append(e.cases, reflect.SelectCase{
+		Dir:  reflect.SelectRecv,
+		Chan: reflect.ValueOf(svc.Directory.Events()),
+	})
+
+	e.ids = append(e.ids, e.nextID)
+	e.nextID++
+}
+
+func (e *networkEventEmitter) handleClose(i int) {
+	e.events <- &pb.NetworkEvent{
+		Body: &pb.NetworkEvent_NetworkClose_{
+			NetworkClose: &pb.NetworkEvent_NetworkClose{
+				NetworkId: e.ids[i],
+			},
+		},
+	}
+
+	copy(e.cases[i:], e.cases[i+1:])
+	e.cases = e.cases[:len(e.cases)-1]
+
+	copy(e.ids[i:], e.ids[i+1:])
+	e.ids = e.ids[:len(e.ids)-1]
+}
+
+func (e *networkEventEmitter) handleDirectoryEvent(i int, event *pb.DirectoryServerEvent) {
+	e.events <- &pb.NetworkEvent{
+		Body: &pb.NetworkEvent_DirectoryEvent_{
+			DirectoryEvent: &pb.NetworkEvent_DirectoryEvent{
+				NetworkId: e.ids[i],
+				Event:     event,
+			},
+		},
+	}
+}
+
+func (e *networkEventEmitter) EmitOpen(svc *NetworkServices) {
+	e.services <- svc
 }
 
 type networkServicesMap struct {

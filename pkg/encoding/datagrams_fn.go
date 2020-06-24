@@ -1,6 +1,8 @@
 package encoding
 
-import "io"
+import (
+	"io"
+)
 
 // TODO: maybe escape analysis will work for generics...
 

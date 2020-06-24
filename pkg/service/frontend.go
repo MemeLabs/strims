@@ -488,47 +488,49 @@ type vpnData struct {
 }
 
 // StartVPN ...
-func (s *Frontend) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (*pb.StartVPNResponse, error) {
+func (s *Frontend) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (<-chan *pb.NetworkEvent, error) {
 	session := rpc.ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
 
 	// TODO: locking...
-	if _, ok := session.Values.Load(vpnKey); !ok {
-		profile, err := dao.GetProfile(session.ProfileStore())
-		if err != nil {
-			return nil, err
-		}
-
-		host, err := vpn.NewHost(s.logger, profile.Key, s.vpnOptions...)
-		if err != nil {
-			return nil, err
-		}
-
-		if err := StartBootstrapClients(host, session.ProfileStore()); err != nil {
-			return nil, err
-		}
-
-		networkController, err := NewNetworkController(s.logger, host, session.ProfileStore())
-		if err != nil {
-			return nil, err
-		}
-
-		bootstrapService := NewBootstrapService(
-			s.logger,
-			host,
-			session.ProfileStore(),
-			networkController,
-			BootstrapServiceOptions{
-				EnablePublishing: r.EnableBootstrapPublishing,
-			},
-		)
-
-		session.Values.Store(vpnKey, vpnData{host, networkController, bootstrapService})
+	if _, ok := session.Values.Load(vpnKey); ok {
+		return nil, errors.New("vpn already running")
 	}
 
-	return &pb.StartVPNResponse{}, nil
+	profile, err := dao.GetProfile(session.ProfileStore())
+	if err != nil {
+		return nil, err
+	}
+
+	host, err := vpn.NewHost(s.logger, profile.Key, s.vpnOptions...)
+	if err != nil {
+		return nil, err
+	}
+
+	if err := StartBootstrapClients(host, session.ProfileStore()); err != nil {
+		return nil, err
+	}
+
+	networkController, err := NewNetworkController(s.logger, host, session.ProfileStore())
+	if err != nil {
+		return nil, err
+	}
+
+	bootstrapService := NewBootstrapService(
+		s.logger,
+		host,
+		session.ProfileStore(),
+		networkController,
+		BootstrapServiceOptions{
+			EnablePublishing: r.EnableBootstrapPublishing,
+		},
+	)
+
+	session.Values.Store(vpnKey, vpnData{host, networkController, bootstrapService})
+
+	return networkController.Events(), nil
 }
 
 // StopVPN ...

@@ -309,10 +309,15 @@ message DirectoryServerEvent {
     uint32 count = 2;
   }
 
+  message Ping {
+    int64 time = 1;
+  }
+
   oneof body {
     Publish publish = 1;
     Unpublish unpublish = 2;
     ViewerChange open = 3;
+    Ping ping = 4;
   }
 }
 
@@ -375,6 +380,28 @@ message PubSubEvent {
     Message message = 1;
     Close close = 2;
     Padding padding = 3;
+  }
+}
+
+message NetworkEvent {
+  message NetworkOpen {
+    uint64 network_id = 1;
+    bytes network_key = 2;
+  }
+
+  message NetworkClose {
+    uint64 network_id = 1;
+  }
+
+  message DirectoryEvent {
+    uint64 network_id = 1;
+    DirectoryServerEvent event = 2;
+  }
+
+  oneof body {
+    NetworkOpen network_open = 1;
+    NetworkClose network_close = 2;
+    DirectoryEvent directory_event = 3;
   }
 }
 

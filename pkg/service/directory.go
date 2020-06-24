@@ -4,15 +4,18 @@ import (
 	"bytes"
 	"context"
 	"sync"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/petar/GoLLRB/llrb"
-	"github.com/sony/sonyflake"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
+
+const directoryPingInterval = 5 * time.Minute
 
 var directorySalt = []byte("directory")
 
@@ -23,6 +26,7 @@ type Directory interface {
 	Unpublish(key []byte) error
 	Join(listingID uint64) error
 	Part(listingID uint64) error
+	Events() <-chan *pb.DirectoryServerEvent
 }
 
 // NewDirectoryServer ...
@@ -39,9 +43,11 @@ func NewDirectoryServer(logger *zap.Logger, lock *dao.Mutex, svc *NetworkService
 		close:     cancel,
 		logger:    logger,
 		directory: client,
+		events:    make(chan *pb.DirectoryServerEvent),
 	}
 
 	go s.upgrade(ctx, svc, key)
+	go s.pumpEvents()
 
 	return s, nil
 }
@@ -53,6 +59,7 @@ type DirectoryServer struct {
 	logger        *zap.Logger
 	directoryLock sync.RWMutex
 	directory     Directory
+	events        chan *pb.DirectoryServerEvent
 }
 
 func (s *DirectoryServer) upgrade(ctx context.Context, svc *NetworkServices, key *pb.Key) {
@@ -76,6 +83,13 @@ func (s *DirectoryServer) upgrade(ctx context.Context, svc *NetworkServices, key
 	}
 
 	s.directory = server
+	go s.pumpEvents()
+}
+
+func (s *DirectoryServer) pumpEvents() {
+	for event := range s.directory.Events() {
+		s.events <- event
+	}
 }
 
 // Close ...
@@ -116,6 +130,11 @@ func (s *DirectoryServer) Part(listingID uint64) error {
 	return s.directory.Part(listingID)
 }
 
+// Events ...
+func (s *DirectoryServer) Events() <-chan *pb.DirectoryServerEvent {
+	return s.events
+}
+
 func newDirectoryServer(logger *zap.Logger, svc *NetworkServices, key *pb.Key) (*directoryServer, error) {
 	ps, err := NewPubSubServer(svc, key, directorySalt)
 	if err != nil {
@@ -123,10 +142,9 @@ func newDirectoryServer(logger *zap.Logger, svc *NetworkServices, key *pb.Key) (
 	}
 
 	s := &directoryServer{
-		logger:    logger,
-		ps:        ps,
-		events:    make(chan *pb.DirectoryClientEvent),
-		snowflake: sonyflake.NewSonyflake(sonyflake.Settings{}),
+		logger: logger,
+		ps:     ps,
+		events: make(chan *pb.DirectoryServerEvent),
 	}
 
 	go s.transformDirectoryMessages(ps)
@@ -138,10 +156,10 @@ type directoryServer struct {
 	logger       *zap.Logger
 	closeOnce    sync.Once
 	ps           *PubSubServer
-	events       chan *pb.DirectoryClientEvent
+	events       chan *pb.DirectoryServerEvent
 	listingsLock sync.Mutex
 	listings     directoryListingMap
-	snowflake    *sonyflake.Sonyflake
+	nextID       uint64
 }
 
 // Close ...
@@ -153,30 +171,41 @@ func (s *directoryServer) Close() {
 }
 
 // Events ...
-func (s *directoryServer) Events() <-chan *pb.DirectoryClientEvent {
+func (s *directoryServer) Events() <-chan *pb.DirectoryServerEvent {
 	return s.events
 }
 
-func (s *directoryServer) transformDirectoryMessages(ps *PubSubServer) {
-	for p := range ps.Messages() {
-		var e pb.DirectoryClientEvent
-		if err := proto.Unmarshal(p.Body, &e); err != nil {
-			continue
-		}
+func (s *directoryServer) send(event *pb.DirectoryServerEvent) error {
+	s.events <- event
+	return sendProto(s.ps, event)
+}
 
-		switch b := e.Body.(type) {
-		case *pb.DirectoryClientEvent_Publish_:
-			if verifyPublish(b.Publish) {
-				s.Publish(b.Publish.Listing)
+func (s *directoryServer) transformDirectoryMessages(ps *PubSubServer) {
+	ticker := time.NewTicker(directoryPingInterval)
+	for {
+		select {
+		case t := <-ticker.C:
+			s.ping(t)
+		case p := <-ps.Messages():
+			var e pb.DirectoryClientEvent
+			if err := proto.Unmarshal(p.Body, &e); err != nil {
+				continue
 			}
-		case *pb.DirectoryClientEvent_Unpublish_:
-			if verifyUnpublish(b.Unpublish) {
-				s.Unpublish(b.Unpublish.Key)
+
+			switch b := e.Body.(type) {
+			case *pb.DirectoryClientEvent_Publish_:
+				if verifyPublish(b.Publish) {
+					s.Publish(b.Publish.Listing)
+				}
+			case *pb.DirectoryClientEvent_Unpublish_:
+				if verifyUnpublish(b.Unpublish) {
+					s.Unpublish(b.Unpublish.Key)
+				}
+			case *pb.DirectoryClientEvent_Join_:
+				s.Join(b.Join.ListingId)
+			case *pb.DirectoryClientEvent_Part_:
+				s.Part(b.Part.ListingId)
 			}
-		case *pb.DirectoryClientEvent_Join_:
-			s.Join(b.Join.ListingId)
-		case *pb.DirectoryClientEvent_Part_:
-			s.Part(b.Part.ListingId)
 		}
 	}
 }
@@ -187,6 +216,16 @@ func verifyPublish(publish *pb.DirectoryClientEvent_Publish) bool {
 
 func verifyUnpublish(publish *pb.DirectoryClientEvent_Unpublish) bool {
 	return true
+}
+
+func (s *directoryServer) ping(t time.Time) error {
+	return s.send(&pb.DirectoryServerEvent{
+		Body: &pb.DirectoryServerEvent_Ping_{
+			Ping: &pb.DirectoryServerEvent_Ping{
+				Time: t.Unix(),
+			},
+		},
+	})
 }
 
 // Publish ...
@@ -200,16 +239,13 @@ func (s *directoryServer) Publish(listing *pb.DirectoryListing) error {
 	if ok {
 		listing.Id = old.Id
 	} else {
-		id, err := s.snowflake.NextID()
-		if err != nil {
-			return err
-		}
-		listing.Id = id
+		s.nextID++
+		listing.Id = s.nextID
 	}
 
 	s.listings.Insert(listing.Key, listing)
 
-	return sendProto(s.ps, &pb.DirectoryServerEvent{
+	return s.send(&pb.DirectoryServerEvent{
 		Body: &pb.DirectoryServerEvent_Publish_{
 			Publish: &pb.DirectoryServerEvent_Publish{
 				Listing: listing,
@@ -230,7 +266,7 @@ func (s *directoryServer) Unpublish(key []byte) error {
 		return nil
 	}
 
-	return sendProto(s.ps, &pb.DirectoryServerEvent{
+	return s.send(&pb.DirectoryServerEvent{
 		Body: &pb.DirectoryServerEvent_Unpublish_{
 			Unpublish: &pb.DirectoryServerEvent_Unpublish{
 				ListingId: listing.Id,
@@ -292,7 +328,7 @@ func NewDirectoryClient(logger *zap.Logger, svc *NetworkServices, key []byte) (*
 	c := &DirectoryClient{
 		logger: logger,
 		ps:     ps,
-		events: make(chan *pb.DirectoryClientEvent),
+		events: make(chan *pb.DirectoryServerEvent),
 	}
 
 	go c.readDirectoryEvents(ps)
@@ -305,7 +341,7 @@ type DirectoryClient struct {
 	logger    *zap.Logger
 	closeOnce sync.Once
 	ps        *PubSubClient
-	events    chan *pb.DirectoryClientEvent
+	events    chan *pb.DirectoryServerEvent
 }
 
 // Close ...
@@ -361,13 +397,13 @@ func (c *DirectoryClient) Part(listingID uint64) error {
 }
 
 // Events ...
-func (c *DirectoryClient) Events() <-chan *pb.DirectoryClientEvent {
+func (c *DirectoryClient) Events() <-chan *pb.DirectoryServerEvent {
 	return c.events
 }
 
 func (c *DirectoryClient) readDirectoryEvents(ps *PubSubClient) {
 	for m := range ps.Messages() {
-		e := &pb.DirectoryClientEvent{}
+		e := &pb.DirectoryServerEvent{}
 		if err := proto.Unmarshal(m.Body, e); err != nil {
 			continue
 		}
@@ -380,7 +416,10 @@ type pubSub interface {
 }
 
 func sendProto(ps pubSub, m proto.Message) error {
-	b, err := proto.Marshal(m)
+	b := pool.Get(uint16(proto.Size(m)))
+	defer pool.Put(b)
+
+	b, err := proto.MarshalOptions{}.MarshalAppend(b[:0], m)
 	if err != nil {
 		return err
 	}

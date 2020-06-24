@@ -3,4 +3,5 @@ dist
 *.out
 *.test
 *.g_*
+*.t_*
 *.wasm

@@ -73,6 +73,7 @@ registerType("CallDirectoryServerRequest", pb.CallDirectoryServerRequest);
 registerType("OpenDirectoryClientRequest", pb.OpenDirectoryClientRequest);
 registerType("DirectoryClientEvent", pb.DirectoryClientEvent);
 registerType("PubSubEvent", pb.PubSubEvent);
+registerType("NetworkEvent", pb.NetworkEvent);
 registerType("NetworkAddress", pb.NetworkAddress);
 registerType("VideoServerOpenRequest", pb.VideoServerOpenRequest);
 registerType("VideoServerOpenResponse", pb.VideoServerOpenResponse);

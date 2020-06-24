@@ -221,12 +221,6 @@ type bootstrapServicePeerMap struct {
 	m llrb.LLRB
 }
 
-func (m *bootstrapServicePeerMap) Each(f func(b *bootstrapServicePeer) bool) {
-	m.m.AscendGreaterOrEqual(llrb.Inf(-1), func(i llrb.Item) bool {
-		return f(i.(bootstrapServicePeerMapItem).v)
-	})
-}
-
 func (m *bootstrapServicePeerMap) Insert(k kademlia.ID, v *bootstrapServicePeer) {
 	m.m.InsertNoReplace(bootstrapServicePeerMapItem{k, v})
 }
@@ -240,6 +234,12 @@ func (m *bootstrapServicePeerMap) Get(k kademlia.ID) (*bootstrapServicePeer, boo
 		return it.(bootstrapServicePeerMapItem).v, true
 	}
 	return nil, false
+}
+
+func (m *bootstrapServicePeerMap) Each(f func(b *bootstrapServicePeer) bool) {
+	m.m.AscendGreaterOrEqual(llrb.Inf(-1), func(i llrb.Item) bool {
+		return f(i.(bootstrapServicePeerMapItem).v)
+	})
 }
 
 type bootstrapServicePeerMapItem struct {

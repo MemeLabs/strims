@@ -82,8 +82,8 @@ export default class Client extends RPCHost {
     return this.expectOne(this.call("getChatServers", new pb.GetChatServersRequest(v)));
   }
 
-  public startVPN(v: pb.IStartVPNRequest = new pb.StartVPNRequest()): Promise<pb.StartVPNResponse> {
-    return this.expectOne(this.call("startVPN", new pb.StartVPNRequest(v)));
+  public startVPN(v: pb.IStartVPNRequest = new pb.StartVPNRequest()): GenericReadable<pb.NetworkEvent> {
+    return this.expectMany(this.call("startVPN", new pb.StartVPNRequest(v)));
   }
   public stopVPN(v: pb.IStopVPNRequest = new pb.StopVPNRequest()): Promise<pb.StopVPNResponse> {
     return this.expectOne(this.call("stopVPN", new pb.StopVPNRequest(v)));
