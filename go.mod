@@ -24,6 +24,7 @@ require (
 	github.com/lucas-clemente/quic-go v0.16.1 // indirect
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
 	github.com/nareix/joy4 v0.0.0-20181022032202-3ddbc8f9d431
+	github.com/nareix/joy5 v0.0.0-20200409150540-6c2a804a2816
 	github.com/onsi/gomega v1.10.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99
