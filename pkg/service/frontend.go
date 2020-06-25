@@ -612,7 +612,7 @@ func (s *Frontend) WriteToVideoServer(ctx context.Context, r *pb.VideoServerWrit
 		return nil, errors.New("client id does not exist")
 	}
 
-	if err := t.Write(r.Data); err != nil {
+	if _, err := t.Write(r.Data); err != nil {
 		return nil, err
 	}
 	if r.Flush {

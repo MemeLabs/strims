@@ -6,7 +6,8 @@ import { MainLayout } from "../components/MainLayout";
 import { useClient, useLazyCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
-import { Decoder, Encoder } from "../lib/media";
+import * as mpegts from "../lib/media/mpegts";
+import * as webm from "../lib/media/webm";
 import { CallChatClientRequest, OpenChatClientRequest, OpenChatServerRequest } from "../lib/pb";
 
 const HomePage = () => {
@@ -50,7 +51,7 @@ const HomePage = () => {
       }) as Promise<MediaStream>,
     ]);
 
-    const encoder = new Encoder(mediaStream);
+    const encoder = new webm.Encoder(mediaStream);
 
     if (true) {
       broadcastEncoder(encoder, id, mediaStream);
@@ -59,8 +60,8 @@ const HomePage = () => {
     }
   };
 
-  const debugEncoder = (encoder: Encoder) => {
-    const decoder = new Decoder();
+  const debugEncoder = (encoder: webm.Encoder) => {
+    const decoder = new webm.Decoder();
 
     encoder.ondata = (b) => {
       decoder.write(b);
@@ -75,7 +76,7 @@ const HomePage = () => {
     videoRef.current.src = URL.createObjectURL(decoder.mediaSource);
   };
 
-  const broadcastEncoder = (encoder: Encoder, id: number, mediaStream: MediaStream) => {
+  const broadcastEncoder = (encoder: webm.Encoder, id: number, mediaStream: MediaStream) => {
     videoRef.current.srcObject = mediaStream;
 
     encoder.ondata = (data) => client.writeToVideoServer({ id, data });
@@ -100,7 +101,9 @@ const HomePage = () => {
     });
   };
 
-  const handleViewBroadcastClick = () => {
+  type Decoder = webm.Decoder | mpegts.Decoder;
+
+  const handleViewBroadcastClick = (Decoder: Decoder) => {
     const decoder = new Decoder();
 
     const video = videoRef.current;
@@ -269,8 +272,17 @@ const HomePage = () => {
             <button className="input input_button" onClick={handleStartBroadcastClick}>
               start broadcast
             </button>
-            <button className="input input_button" onClick={handleViewBroadcastClick}>
+            <button
+              className="input input_button"
+              onClick={() => handleViewBroadcastClick(webm.Decoder)}
+            >
               view broadcast
+            </button>
+            <button
+              className="input input_button"
+              onClick={() => handleViewBroadcastClick(mpegts.Decoder)}
+            >
+              view rtmp broadcast
             </button>
             <button className="input input_button" onClick={() => pprof({ name: "allocs" })}>
               allocs profile

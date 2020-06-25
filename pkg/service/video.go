@@ -70,11 +70,8 @@ type VideoServer struct {
 }
 
 // Write ...
-func (t *VideoServer) Write(b []byte) error {
-	if _, err := t.w.Write(b); err != nil {
-		return err
-	}
-	return nil
+func (t *VideoServer) Write(b []byte) (int, error) {
+	return t.w.Write(b)
 }
 
 // Flush ...

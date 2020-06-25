@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"log"
+	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -9,8 +11,10 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/nareix/joy5/format/rtmp"
 	"go.uber.org/zap"
 )
 
@@ -64,7 +68,43 @@ func main() {
 
 	_ = bootstrapService
 
+	test(profileStore, networkController)
+
 	select {}
+}
+
+func test(profileStore *dao.ProfileStore, ctl *service.NetworkController) {
+	x := rtmpingress.Transcoder{}
+	rtmp := rtmpingress.Server{
+		Addr: "0.0.0.0:1935",
+		HandleStream: func(a *rtmpingress.StreamAddr, c *rtmp.Conn, nc net.Conn) {
+			log.Println("handling stream...")
+
+			v, err := service.NewVideoServer()
+			if err != nil {
+				panic(err)
+			}
+
+			go x.Transcode(a.URI, a.Key, "source", v)
+
+			memberships, err := dao.GetNetworkMemberships(profileStore)
+			if err != nil {
+				panic(err)
+			}
+
+			for _, membership := range memberships {
+				svc, ok := ctl.NetworkServices(dao.GetRootCert(membership.Certificate).Key)
+				if !ok {
+					panic(errors.New("unknown network"))
+				}
+
+				if err := v.PublishSwarm(svc); err != nil {
+					panic(err)
+				}
+			}
+		},
+	}
+	go rtmp.Listen()
 }
 
 func initProfileStore() (*dao.ProfileStore, error) {
