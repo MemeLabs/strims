@@ -159,7 +159,6 @@ func buildArgs(srcURI, addr, key, variant string) []string {
 		"-hls_time", "2",
 		"-hls_segment_filename", fmt.Sprintf("http://%s/%s/%s/%%d.ts", addr, key, variant),
 		"-hls_flags", "+program_date_time+append_list+omit_endlist",
-		"-http_persistent", "1",
 		"-method", "POST",
 		"-f", "hls", fmt.Sprintf("http://%s/%s/%s/index.m3u8", addr, key, variant),
 	)

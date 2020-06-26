@@ -70,8 +70,9 @@ const PublishNetworkModal = ({
   });
 
   const onSubmit = (data) => {
+    console.log(data);
     client.publishNetworkToBootstrapPeer({
-      key: data.peer.value,
+      hostId: data.peer.value,
       network: network,
     });
     onClose();
@@ -92,7 +93,7 @@ const PublishNetworkModal = ({
               className="input_select"
               placeholder="Select peer"
               options={bootstrapPeersRes.value?.peers.map((p) => ({
-                value: p.key,
+                value: p.hostId,
                 label: p.label,
               }))}
               name="peer"

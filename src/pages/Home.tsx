@@ -35,7 +35,7 @@ const HomePage = () => {
     addDownload(`${pprofData.value.name}.profile`, pprofData.value.data);
   }, [pprofData.value]);
 
-  const handleStartVPNClick = async () => await client.startVPN();
+  const handleStartVPNClick = () => client.startVPN();
   const handleStopVPNClick = async () => await client.stopVPN();
 
   const handleColorToggle = () => setColorScheme(colorScheme === "dark" ? "light" : "dark");
@@ -101,11 +101,7 @@ const HomePage = () => {
     });
   };
 
-  type Decoder = webm.Decoder | mpegts.Decoder;
-
-  const handleViewBroadcastClick = (Decoder: Decoder) => {
-    const decoder = new Decoder();
-
+  const handleViewBroadcastClick = (decoder: webm.Decoder | mpegts.Decoder) => {
     const video = videoRef.current;
     video.src = URL.createObjectURL(decoder.mediaSource);
     video.oncanplay = () => video.play();
@@ -274,13 +270,13 @@ const HomePage = () => {
             </button>
             <button
               className="input input_button"
-              onClick={() => handleViewBroadcastClick(webm.Decoder)}
+              onClick={() => handleViewBroadcastClick(new webm.Decoder())}
             >
               view broadcast
             </button>
             <button
               className="input input_button"
-              onClick={() => handleViewBroadcastClick(mpegts.Decoder)}
+              onClick={() => handleViewBroadcastClick(new mpegts.Decoder())}
             >
               view rtmp broadcast
             </button>
