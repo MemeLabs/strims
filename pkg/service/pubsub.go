@@ -30,7 +30,7 @@ type PubSubServerOptions struct {
 
 // NewPubSubServer ...
 func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubServer, error) {
-	w, err := encoding.NewWriter(encoding.SwarmWriterOptions{
+	w, err := encoding.NewWriter(encoding.WriterOptions{
 		// SwarmOptions: encoding.NewDefaultSwarmOptions(),
 		SwarmOptions: encoding.SwarmOptions{
 			LiveWindow: 1 << 10, // 1MB
@@ -101,7 +101,7 @@ func (s *PubSubServer) Close() {
 	s.closeOnce.Do(func() {
 		s.close()
 		close(s.messages)
-		s.svc.Swarms.CloseSwarm(s.swarm.ID)
+		s.svc.Swarms.CloseSwarm(s.swarm.ID())
 	})
 }
 
@@ -198,7 +198,7 @@ func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, err
 
 	err = svc.PeerIndex.Publish(ctx, key, salt, 0)
 	if err != nil {
-		svc.Swarms.CloseSwarm(swarm.ID)
+		svc.Swarms.CloseSwarm(swarm.ID())
 		cancel()
 		return nil, err
 	}
@@ -260,7 +260,7 @@ func (c *PubSubClient) Close() {
 	c.closeOnce.Do(func() {
 		c.close()
 		close(c.messages)
-		c.svc.Swarms.CloseSwarm(c.swarm.ID)
+		c.svc.Swarms.CloseSwarm(c.swarm.ID())
 	})
 }
 

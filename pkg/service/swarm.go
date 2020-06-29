@@ -96,7 +96,7 @@ type swarmSwarm struct {
 
 // TODO: prevent duplicate channels...
 func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
-	localPort, remotePort, ok := p.SwarmPorts(s.swarm.ID)
+	localPort, remotePort, ok := p.SwarmPorts(s.swarm.ID())
 	if !ok {
 		return
 	}
@@ -105,28 +105,38 @@ func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
 		s.logger.Debug(
 			"opening swarm channel",
 			logutil.ByteHex("peer", p.peer.Certificate.Key),
-			zap.Stringer("swarm", s.swarm.ID),
+			zap.Stringer("swarm", s.swarm.ID()),
 			zap.Uint16("localPort", localPort),
 			zap.Uint16("remotePort", remotePort),
 		)
 
 		w := vpn.NewFrameWriter(p.peer.Link, remotePort, p.peer.Link.MTU())
-		ch := s.swarm.ReadChannel(p.swarmPeer, w)
+		ch, err := encoding.OpenChannel(p.swarmPeer, s.swarm, w)
+		if err != nil {
+			return
+		}
+
 		p.peer.SetHandler(localPort, func(p *vpn.Peer, f vpn.Frame) error {
-			_, err := ch.Write(f.Body)
+			_, err := ch.HandleMessage(f.Body)
 			if err != nil {
 				ch.Close()
 			}
 			return err
 		})
 
-		<-ch.Done()
+		select {
+		case <-p.peer.Done():
+		case <-ch.Done():
+		}
+
+		ch.Close()
+		encoding.CloseChannel(p.swarmPeer, s.swarm)
 		p.peer.RemoveHandler(localPort)
 
 		s.logger.Debug(
 			"closed swarm channel",
 			logutil.ByteHex("peer", p.peer.Certificate.Key),
-			zap.Stringer("swarm", s.swarm.ID),
+			zap.Stringer("swarm", s.swarm.ID()),
 			zap.Uint16("localPort", localPort),
 			zap.Uint16("remotePort", remotePort),
 		)
@@ -180,16 +190,16 @@ func (t *swarmNetwork) addPeer(p *swarmPeer) {
 func (t *swarmNetwork) OpenSwarm(swarm *encoding.Swarm) {
 	t.logger.Debug(
 		"opening swarm",
-		zap.Stringer("swarm", swarm.ID),
+		zap.Stringer("swarm", swarm.ID()),
 		logutil.ByteHex("network", t.network.CAKey()),
 	)
 
-	si, ok := t.activeSwarms.Load(swarm.ID.String())
+	si, ok := t.activeSwarms.Load(swarm.ID().String())
 	if !ok {
-		si, _ = t.activeSwarms.LoadOrStore(swarm.ID.String(), newSwarmSwarm(t.logger, swarm))
+		si, _ = t.activeSwarms.LoadOrStore(swarm.ID().String(), newSwarmSwarm(t.logger, swarm))
 	}
 	s := si.(*swarmSwarm)
-	t.swarms.Store(swarm.ID.String(), s)
+	t.swarms.Store(swarm.ID().String(), s)
 
 	t.peers.Range(func(_, pi interface{}) bool {
 		t.sendOpen(s, pi.(*swarmPeer))
@@ -203,20 +213,20 @@ func (t *swarmNetwork) sendOpen(s *swarmSwarm, p *swarmPeer) error {
 	if err != nil {
 		return err
 	}
-	p.SetLocalSwarmPort(s.swarm.ID, port)
+	p.SetLocalSwarmPort(s.swarm.ID(), port)
 	s.TryOpenChannel(p)
 
 	t.logger.Debug(
 		"announcing swarm to peer",
 		logutil.ByteHex("peer", p.peer.Certificate.Key),
-		zap.Stringer("swarm", s.swarm.ID),
+		zap.Stringer("swarm", s.swarm.ID()),
 		zap.Uint16("port", port),
 	)
 
 	return vpn.WriteProtoStream(p.rw, &pb.SwarmThingMessage{
 		Body: &pb.SwarmThingMessage_Open_{
 			Open: &pb.SwarmThingMessage_Open{
-				SwarmId: s.swarm.ID.Binary(),
+				SwarmId: s.swarm.ID().Binary(),
 				Port:    uint32(port),
 			},
 		},

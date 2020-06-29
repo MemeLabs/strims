@@ -1,12 +1,14 @@
 package encoding
 
 import (
+	"errors"
 	"strconv"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/encoding/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/encoding/store"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -15,262 +17,416 @@ import (
 var channelMessageCount = promauto.NewCounterVec(prometheus.CounterOpts{
 	Name: "strims_ppspp_message_count",
 	Help: "The total number of ppspp messages read per channel",
-}, []string{"channel_id", "type"})
+}, []string{"channel_id", "direction", "type"})
+
+var (
+	errNoVersionOption         = errors.New("handshake missing VersionOption")
+	errNoMinimumVersionOption  = errors.New("handshake missing MinimumVersionOption")
+	errNoLiveWindowOption      = errors.New("handshake missing LiveWindowOption")
+	errNoChunkSizeOption       = errors.New("handshake missing ChunkSizeOption")
+	errNoSwarmIdentifierOption = errors.New("handshake missing SwarmIdentifierOption")
+
+	errIncompatibleVersionOption         = errors.New("incompatible VersionOption")
+	errIncompatibleMinimumVersionOption  = errors.New("incompatible MinimumVersionOption")
+	errIncompatibleChunkSizeOption       = errors.New("incompatible ChunkSizeOption")
+	errIncompatibleSwarmIdentifierOption = errors.New("incompatible SwarmIdentifierOption")
+)
+
+var nextChannelID uint64
 
 // Channel ...
 // TODO: do we still need this?
 type Channel interface {
-	Write(b []byte) (int, error)
-	Close()
-	Done() <-chan struct{}
+	HandleMessage(b []byte) (int, error)
 }
 
-// channelOptions ...
-type channelOptions struct {
-	ID    uint32
-	Swarm *Swarm
-	Peer  *Peer
-	Conn  ReadWriteFlusher
+// OpenChannel ...
+func OpenChannel(p *Peer, s *Swarm, conn ReadWriteFlusher) (*ChannelReader, error) {
+	c := newChannel()
+	cw := newChannelWriter(c, conn)
+	cr := newChannelReader(c, p, s)
+
+	if _, err := cw.WriteHandshake(newHandshake(s)); err != nil {
+		return nil, err
+	}
+	if err := cw.Flush(); err != nil {
+		return nil, err
+	}
+
+	p.addChannel(s, cw)
+	s.addChannel(p, c)
+
+	return cr, nil
 }
 
-var nextChannelID uint32
+// CloseChannel ...
+func CloseChannel(p *Peer, s *Swarm) {
+	p.removeChannel(s)
+	s.removeChannel(p)
+}
 
 // newchannel ...
-func newChannel(o channelOptions) *channel {
-	id := atomic.AddUint32(&nextChannelID, 1)
-
+func newChannel() *channel {
 	return &channel{
-		id:                  id,
-		swarm:               o.Swarm,
-		peer:                o.Peer,
-		w:                   newDatagramWriter(o.Conn, o.Conn.MTU(), o.Swarm.ChunkSize),
+		id:                  atomic.AddUint64(&nextChannelID, 1),
 		addedBins:           binmap.New(),
 		requestedBins:       binmap.New(),
 		availableBins:       binmap.New(),
 		unackedBins:         binmap.New(),
 		sentBinHistory:      newBinHistory(32),
 		requestedBinHistory: newBinHistory(32),
-		acks:                []Ack{},
-		done:                make(chan struct{}),
-		metrics:             newChannelMetrics(id),
+		close:               make(chan struct{}),
 	}
 }
 
 // channel ...
 type channel struct {
 	sync.Mutex
-
-	id       uint32
-	remoteID uint32
-	swarm    *Swarm
-	peer     *Peer
-	conn     ReadWriteFlusher
-	w        *datagramWriter
-
-	handshakeSent bool
-	choked        bool
-
+	id                  uint64
+	liveWindow          int
+	choked              bool
 	addedBins           *binmap.Map // bins to send HAVEs for
 	requestedBins       *binmap.Map // bins to send DATA for
 	availableBins       *binmap.Map // bins the peer claims to have
 	unackedBins         *binmap.Map // sent bins that have not been acked
 	sentBinHistory      *binHistory // recently sent bins
 	requestedBinHistory *binHistory // bins recently requested from the peer
-	acks                []Ack
-	peerRequest         bool
-	peerRequestTime     time.Time
-	sentPeerRequestTime time.Time
-
-	closeOnce sync.Once
-	done      chan struct{}
-
-	metrics channelMetrics
+	acks                []codec.Ack
+	pong                *codec.Pong
+	closeOnce           sync.Once
+	close               chan struct{}
 }
 
-func (c *channel) Swarm() *Swarm {
-	return c.swarm
+func (c *channel) setLiveWindow(v int) {
+	c.Lock()
+	c.liveWindow = v
+	c.Unlock()
 }
 
-func (c *channel) Peer() *Peer {
-	return c.peer
+func (c *channel) setChoked(v bool) {
+	c.Lock()
+	c.choked = true
+	c.Unlock()
 }
 
-func (c *channel) Write(b []byte) (n int, err error) {
-	n, err = datagramReader{c}.Read(b)
-
-	c.w.Flush()
-
-	return
+func (c *channel) setAddedBins(m *binmap.Map) {
+	c.Lock()
+	c.addedBins = m
+	c.Unlock()
 }
 
-func (c *channel) Close() {
-	c.closeOnce.Do(func() {
-		close(c.done)
-		c.metrics.Delete()
-	})
+func (c *channel) addRequestedBin(b binmap.Bin) {
+	c.Lock()
+	c.requestedBins.Set(b)
+	c.Unlock()
 }
 
-func (c *channel) Done() <-chan struct{} {
-	return c.done
+func (c *channel) addAvailableBin(b binmap.Bin) {
+	c.Lock()
+	c.availableBins.Set(b)
+	c.Unlock()
 }
 
-// OfferHandshake ...
-func (c *channel) OfferHandshake() {
-	c.handshakeSent = true
-
-	swarmID := SwarmIdentifierProtocolOption(c.swarm.ID.Binary())
-	c.w.Write(&Handshake{
-		ChannelID: c.id,
-		Options: []ProtocolOption{
-			&VersionProtocolOption{Value: 2},
-			&MinimumVersionProtocolOption{Value: 2},
-			&swarmID,
-		},
-	})
-	c.w.Flush()
-}
-
-func (c *channel) HandleHandshake(v Handshake) {
-	c.metrics.HandshakeCount.Inc()
-
+func (c *channel) addAckedBin(b binmap.Bin) bool {
 	c.Lock()
 	defer c.Unlock()
 
-	c.swarm.Lock()
-	defer c.swarm.Unlock()
-
-	b := c.swarm.chunks.bins.FindFilled()
-	for {
-		b = c.swarm.chunks.bins.Cover(b)
-		c.w.Write(&Have{Address(b)})
-
-		b = c.swarm.chunks.bins.FindFilledAfter(b.BaseRight() + 2)
-		if b.IsNone() {
-			break
-		}
-	}
-}
-
-func (c *channel) HandleData(v Data) {
-	c.metrics.DataCount.Inc()
-
-	c.Lock()
-	c.acks = append(c.acks, Ack{
-		Address:     v.Address,
-		DelaySample: DelaySample{iotime.Load().Sub(v.Timestamp.Time)},
-	})
-	c.Unlock()
-
-	c.swarm.WriteChunk(v.Address.Bin(), v.Data)
-
-	c.peer.Lock()
-	c.peer.AddReceivedChunk()
-	c.peer.Unlock()
-}
-
-func (c *channel) HandleAck(v Ack) {
-	c.metrics.AckCount.Inc()
-
-	b := v.Address.Bin()
-
-	c.Lock()
 	if !c.unackedBins.FilledAt(b) {
-		c.Unlock()
-		return
+		return false
 	}
+
 	c.availableBins.Set(b)
 	c.unackedBins.Reset(b)
+
+	return true
+}
+
+func (c *channel) enqueueAck(a codec.Ack) {
+	c.Lock()
+	c.acks = append(c.acks, a)
 	c.Unlock()
-
-	c.peer.Lock()
-	c.peer.ledbat.AddDelaySample(v.DelaySample.Duration, c.swarm.ChunkSize)
-	c.peer.AddAckedChunk()
-	c.peer.Unlock()
 }
 
-func (c *channel) HandleHave(v Have) {
-	c.metrics.HaveCount.Inc()
-
+// TODO: count filled bins in b
+func (c *channel) addCancelledBins(b binmap.Bin) int {
 	c.Lock()
 	defer c.Unlock()
-	c.availableBins.Set(v.Bin())
-}
 
-func (c *channel) HandleRequest(v Request) {
-	c.metrics.RequestCount.Inc()
+	var n uint64
 
-	c.Lock()
-	defer c.Unlock()
-	c.requestedBins.Set(v.Bin())
-}
-
-func (c *channel) HandleCancel(v Cancel) {
-	c.metrics.CancelCount.Inc()
-
-	c.peer.Lock()
-	c.Lock()
-
-	b := v.Address.Bin()
 	if !c.unackedBins.EmptyAt(b) {
-		// TODO: this isn't accurate if the bin was partially acked
-		c.peer.ledbat.AddDataLoss(int(b.BaseLength())*c.swarm.ChunkSize, false)
+		n += b.BaseLength()
 		c.unackedBins.Reset(b)
 	}
 	c.requestedBins.Reset(b)
 
+	return int(n)
+}
+
+func (c *channel) enqueuePong(p *codec.Pong) {
+	c.Lock()
+	c.pong = p
 	c.Unlock()
-	c.peer.Unlock()
 }
 
-func (c *channel) HandleChoke(v Choke) {
-	c.metrics.ChokeCount.Inc()
-
+func (c *channel) dequeuePong() *codec.Pong {
 	c.Lock()
-	defer c.Unlock()
-	c.choked = true
+	p := c.pong
+	c.pong = nil
+	c.Unlock()
+
+	return p
 }
 
-func (c *channel) HandleUnchoke(v Unchoke) {
-	c.metrics.UnchokeCount.Inc()
-
+func (c *channel) Consume(sc store.Chunk) {
 	c.Lock()
-	defer c.Unlock()
-	c.choked = false
+	c.addedBins.Set(sc.Bin)
+	c.Unlock()
 }
 
-func (c *channel) HandlePing(v Ping) {
+func (c *channel) Close() {
+	c.closeOnce.Do(func() {
+		close(c.close)
+	})
+}
+
+func (c *channel) Done() <-chan struct{} {
+	return c.close
+}
+
+func newHandshake(swarm *Swarm) codec.Handshake {
+	return codec.Handshake{
+		Options: []codec.ProtocolOption{
+			&codec.VersionProtocolOption{Value: 2},
+			&codec.MinimumVersionProtocolOption{Value: 2},
+			&codec.LiveWindowProtocolOption{Value: uint32(swarm.liveWindow())},
+			&codec.ChunkSizeProtocolOption{Value: uint32(swarm.chunkSize())},
+			codec.NewSwarmIdentifierProtocolOption(swarm.ID()),
+		},
+	}
+}
+
+func newChannelWriter(channel *channel, conn ReadWriteFlusher) *channelWriter {
+	return &channelWriter{
+		channel: channel,
+		w:       codec.NewWriter(conn, conn.MTU()),
+		metrics: newChannelMetrics(channel, "out"),
+	}
+}
+
+type channelWriter struct {
+	*channel
+	w       codec.Writer
+	metrics channelMetrics
+}
+
+func (c *channelWriter) Flush() error {
+	return c.w.Flush()
+}
+
+func (c *channelWriter) WriteHandshake(m codec.Handshake) (int, error) {
+	c.metrics.HandshakeCount.Inc()
+	return c.w.WriteHandshake(m)
+}
+
+func (c *channelWriter) WriteAck(m codec.Ack) (int, error) {
+	c.metrics.AckCount.Inc()
+	return c.w.WriteAck(m)
+}
+
+func (c *channelWriter) WriteHave(m codec.Have) (int, error) {
+	c.metrics.HaveCount.Inc()
+	return c.w.WriteHave(m)
+}
+
+func (c *channelWriter) WriteData(m codec.Data) (int, error) {
+	c.metrics.DataCount.Inc()
+	return c.w.WriteData(m)
+}
+
+func (c *channelWriter) WriteRequest(m codec.Request) (int, error) {
+	c.metrics.RequestCount.Inc()
+	return c.w.WriteRequest(m)
+}
+
+func (c *channelWriter) WritePing(m codec.Ping) (int, error) {
 	c.metrics.PingCount.Inc()
-
-	c.w.Write(&Pong{v.Nonce})
+	return c.w.WritePing(m)
 }
 
-func (c *channel) HandlePong(v Pong) {
+func (c *channelWriter) WritePong(m codec.Pong) (int, error) {
 	c.metrics.PongCount.Inc()
-
-	c.peer.Lock()
-	c.peer.AddRTTSample(0, binmap.Bin(v.Nonce.Value))
-	c.peer.Unlock()
+	return c.w.WritePong(m)
 }
 
-func newChannelMetrics(id uint32) channelMetrics {
-	label := strconv.FormatUint(uint64(id), 10)
+func (c *channelWriter) WriteCancel(m codec.Cancel) (int, error) {
+	c.metrics.CancelCount.Inc()
+	return c.w.WriteCancel(m)
+}
+
+func newChannelReader(channel *channel, peer *Peer, swarm *Swarm) *ChannelReader {
+	return &ChannelReader{
+		channel: channel,
+		r: codec.Reader{
+			ChunkSize: swarm.chunkSize(),
+			Handler: &channelMessageHandler{
+				swarm:   swarm,
+				peer:    peer,
+				channel: channel,
+				metrics: newChannelMetrics(channel, "in"),
+			},
+		},
+	}
+}
+
+// ChannelReader ...
+type ChannelReader struct {
+	*channel
+	r codec.Reader
+}
+
+// HandleMessage ...
+func (c *ChannelReader) HandleMessage(b []byte) (int, error) {
+	n, err := c.r.Read(b)
+	if err != nil {
+		return 0, err
+	}
+
+	return n, nil
+}
+
+type channelMessageHandler struct {
+	swarm   *Swarm
+	peer    *Peer
+	channel *channel
+	metrics channelMetrics
+}
+
+func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
+	c.metrics.HandshakeCount.Inc()
+
+	if version, ok := v.Options.Find(codec.VersionOption); ok {
+		if version.(*codec.VersionProtocolOption).Value < MinimumProtocolVersion {
+			return errIncompatibleVersionOption
+		}
+	} else {
+		return errNoVersionOption
+	}
+
+	if minimumVersion, ok := v.Options.Find(codec.MinimumVersionOption); ok {
+		if minimumVersion.(*codec.MinimumVersionProtocolOption).Value > ProtocolVersion {
+			return errIncompatibleMinimumVersionOption
+		}
+	} else {
+		return errNoMinimumVersionOption
+	}
+
+	if liveWindow, ok := v.Options.Find(codec.LiveWindowOption); ok {
+		c.channel.setLiveWindow(int(liveWindow.(*codec.LiveWindowProtocolOption).Value))
+	} else {
+		return errNoLiveWindowOption
+	}
+
+	if chunkSize, ok := v.Options.Find(codec.ChunkSizeOption); ok {
+		if chunkSize.(*codec.ChunkSizeProtocolOption).Value != uint32(c.swarm.chunkSize()) {
+			return errIncompatibleChunkSizeOption
+		}
+	} else {
+		return errNoChunkSizeOption
+	}
+
+	if swarmID, ok := v.Options.Find(codec.SwarmIdentifierOption); ok {
+		if !c.swarm.ID().Equals(NewSwarmID(*swarmID.(*codec.SwarmIdentifierProtocolOption))) {
+			return errIncompatibleSwarmIdentifierOption
+		}
+	} else {
+		return errNoSwarmIdentifierOption
+	}
+
+	c.channel.setAddedBins(c.swarm.loadedBins())
+
+	return nil
+}
+
+func (c *channelMessageHandler) HandleData(v codec.Data) {
+	c.metrics.DataCount.Inc()
+
+	c.channel.enqueueAck(codec.Ack{
+		Address:     v.Address,
+		DelaySample: codec.DelaySample{iotime.Load().Sub(v.Timestamp.Time)},
+	})
+
+	c.swarm.pubSub.Publish(store.Chunk{v.Address.Bin(), v.Data})
+
+	c.peer.addReceivedChunk()
+}
+
+func (c *channelMessageHandler) HandleAck(v codec.Ack) {
+	c.metrics.AckCount.Inc()
+
+	if c.channel.addAckedBin(v.Address.Bin()) {
+		c.peer.addDelaySample(v.DelaySample.Duration, c.swarm.chunkSize())
+	}
+}
+
+func (c *channelMessageHandler) HandleHave(v codec.Have) {
+	c.metrics.HaveCount.Inc()
+	c.channel.addAvailableBin(v.Bin())
+}
+
+func (c *channelMessageHandler) HandleRequest(v codec.Request) {
+	c.metrics.RequestCount.Inc()
+	c.channel.addRequestedBin(v.Bin())
+}
+
+func (c *channelMessageHandler) HandleCancel(v codec.Cancel) {
+	c.metrics.CancelCount.Inc()
+
+	n := c.channel.addCancelledBins(v.Address.Bin())
+	c.peer.addDataLoss(n * c.swarm.chunkSize())
+}
+
+func (c *channelMessageHandler) HandleChoke(v codec.Choke) {
+	c.metrics.ChokeCount.Inc()
+	c.channel.setChoked(true)
+}
+
+func (c *channelMessageHandler) HandleUnchoke(v codec.Unchoke) {
+	c.metrics.UnchokeCount.Inc()
+	c.channel.setChoked(false)
+}
+
+func (c *channelMessageHandler) HandlePing(v codec.Ping) {
+	c.metrics.PingCount.Inc()
+	c.channel.enqueuePong(&codec.Pong{v.Nonce})
+}
+
+func (c *channelMessageHandler) HandlePong(v codec.Pong) {
+	c.metrics.PongCount.Inc()
+	c.peer.addRTTSample(0, binmap.Bin(v.Nonce.Value))
+}
+
+func newChannelMetrics(channel *channel, direction string) channelMetrics {
+	id := strconv.FormatUint(channel.id, 10)
 	return channelMetrics{
-		id:             label,
-		HandshakeCount: channelMessageCount.WithLabelValues(label, "handshake"),
-		DataCount:      channelMessageCount.WithLabelValues(label, "data"),
-		AckCount:       channelMessageCount.WithLabelValues(label, "ack"),
-		HaveCount:      channelMessageCount.WithLabelValues(label, "have"),
-		RequestCount:   channelMessageCount.WithLabelValues(label, "request"),
-		CancelCount:    channelMessageCount.WithLabelValues(label, "cancel"),
-		ChokeCount:     channelMessageCount.WithLabelValues(label, "choke"),
-		UnchokeCount:   channelMessageCount.WithLabelValues(label, "unchoke"),
-		PingCount:      channelMessageCount.WithLabelValues(label, "ping"),
-		PongCount:      channelMessageCount.WithLabelValues(label, "pong"),
+		id:             id,
+		direction:      direction,
+		HandshakeCount: channelMessageCount.WithLabelValues(id, direction, "handshake"),
+		DataCount:      channelMessageCount.WithLabelValues(id, direction, "data"),
+		AckCount:       channelMessageCount.WithLabelValues(id, direction, "ack"),
+		HaveCount:      channelMessageCount.WithLabelValues(id, direction, "have"),
+		RequestCount:   channelMessageCount.WithLabelValues(id, direction, "request"),
+		CancelCount:    channelMessageCount.WithLabelValues(id, direction, "cancel"),
+		ChokeCount:     channelMessageCount.WithLabelValues(id, direction, "choke"),
+		UnchokeCount:   channelMessageCount.WithLabelValues(id, direction, "unchoke"),
+		PingCount:      channelMessageCount.WithLabelValues(id, direction, "ping"),
+		PongCount:      channelMessageCount.WithLabelValues(id, direction, "pong"),
 	}
 }
 
 type channelMetrics struct {
 	id             string
+	direction      string
 	HandshakeCount prometheus.Counter
 	DataCount      prometheus.Counter
 	AckCount       prometheus.Counter
@@ -284,31 +440,14 @@ type channelMetrics struct {
 }
 
 func (m *channelMetrics) Delete() {
-	channelMessageCount.DeleteLabelValues(m.id, "handshake")
-	channelMessageCount.DeleteLabelValues(m.id, "data")
-	channelMessageCount.DeleteLabelValues(m.id, "ack")
-	channelMessageCount.DeleteLabelValues(m.id, "have")
-	channelMessageCount.DeleteLabelValues(m.id, "request")
-	channelMessageCount.DeleteLabelValues(m.id, "cancel")
-	channelMessageCount.DeleteLabelValues(m.id, "choke")
-	channelMessageCount.DeleteLabelValues(m.id, "unchoke")
-	channelMessageCount.DeleteLabelValues(m.id, "ping")
-	channelMessageCount.DeleteLabelValues(m.id, "pong")
-}
-
-type channels []*channel
-
-func (c *channels) Insert(v *channel) {
-	*c = append(*c, v)
-}
-
-func (c *channels) Remove(v *channel) {
-	old := *c
-	for i, iv := range old {
-		if iv == v {
-
-			copy(old[i:], old[i+1:])
-			*c = old[:len(old)-1]
-		}
-	}
+	channelMessageCount.DeleteLabelValues(m.id, m.direction, "handshake")
+	channelMessageCount.DeleteLabelValues(m.id, m.direction, "data")
+	channelMessageCount.DeleteLabelValues(m.id, m.direction, "ack")
+	channelMessageCount.DeleteLabelValues(m.id, m.direction, "have")
+	channelMessageCount.DeleteLabelValues(m.id, m.direction, "request")
+	channelMessageCount.DeleteLabelValues(m.id, m.direction, "cancel")
+	channelMessageCount.DeleteLabelValues(m.id, m.direction, "choke")
+	channelMessageCount.DeleteLabelValues(m.id, m.direction, "unchoke")
+	channelMessageCount.DeleteLabelValues(m.id, m.direction, "ping")
+	channelMessageCount.DeleteLabelValues(m.id, m.direction, "pong")
 }

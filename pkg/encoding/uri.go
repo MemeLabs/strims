@@ -5,6 +5,8 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/MemeLabs/go-ppspp/pkg/encoding/codec"
 )
 
 // TODO: implement this with content integrity...
@@ -15,27 +17,27 @@ var (
 )
 
 var protocolOptions = []struct {
-	Type ProtocolOptionType
+	Type codec.ProtocolOptionType
 	Key  string
 }{
 	{
-		ContentIntegrityProtectionMethodOption,
+		codec.ContentIntegrityProtectionMethodOption,
 		"x.im",
 	},
 	{
-		MerkleHashTreeFunctionOption,
+		codec.MerkleHashTreeFunctionOption,
 		"x.hf",
 	},
 	{
-		LiveSignatureAlgorithmOption,
+		codec.LiveSignatureAlgorithmOption,
 		"x.sa",
 	},
 	{
-		ChunkAddressingMethodOption,
+		codec.ChunkAddressingMethodOption,
 		"x.am",
 	},
 	{
-		ChunkSizeOption,
+		codec.ChunkSizeOption,
 		"x.cs",
 	},
 }
@@ -44,7 +46,7 @@ var uriScheme = "magnet:"
 var urnPrefix = "urn:ppspp:"
 
 // URIOptions ...
-type URIOptions map[ProtocolOptionType]int
+type URIOptions map[codec.ProtocolOptionType]int
 
 // NewURI ...
 func NewURI(id SwarmID, options URIOptions) *URI {

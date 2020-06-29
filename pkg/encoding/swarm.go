@@ -4,6 +4,8 @@ import (
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/encoding/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/encoding/store"
 )
 
 // SwarmOptions ...
@@ -12,20 +14,22 @@ type SwarmOptions struct {
 	LiveWindow int
 }
 
-func (o *SwarmOptions) applyDefaults() {
-	if o.ChunkSize == 0 {
-		o.ChunkSize = 1024
+func (o *SwarmOptions) assign(u SwarmOptions) {
+	if u.ChunkSize != 0 {
+		o.ChunkSize = u.ChunkSize
 	}
 
-	if o.LiveWindow == 0 {
-		o.LiveWindow = 1 << 16 // 64MB
+	if u.LiveWindow != 0 {
+		o.LiveWindow = u.LiveWindow
 	}
 }
 
 // NewDefaultSwarmOptions ...
-func NewDefaultSwarmOptions() (s SwarmOptions) {
-	s.applyDefaults()
-	return
+func NewDefaultSwarmOptions() SwarmOptions {
+	return SwarmOptions{
+		ChunkSize:  1024,
+		LiveWindow: 1 << 16,
+	}
 }
 
 // NewDefaultSwarm ...
@@ -35,116 +39,117 @@ func NewDefaultSwarm(id SwarmID) (s *Swarm) {
 }
 
 // NewSwarm ...
-func NewSwarm(id SwarmID, o SwarmOptions) (*Swarm, error) {
-	o.applyDefaults()
+func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
+	o := NewDefaultSwarmOptions()
+	o.assign(opt)
 
-	chunks, err := newChunkBuffer(o.LiveWindow, o.ChunkSize)
+	buf, err := store.NewBuffer(o.LiveWindow, o.ChunkSize)
 	if err != nil {
 		return nil, err
 	}
 
+	requestedBins := &loadingBins{
+		bins: binmap.New(),
+	}
+
+	pubSub := &store.PubSub{}
+	pubSub.Subscribe(buf)
+	pubSub.Subscribe(requestedBins)
+
 	return &Swarm{
-		ID: id,
-		URI: &URI{
-			ID: id,
-			Options: URIOptions{
-				ChunkSizeOption:         o.ChunkSize,
-				LiveDiscardWindowOption: o.LiveWindow,
-			},
-		},
-		ChunkSize:     o.ChunkSize,
-		LiveWindow:    o.LiveWindow,
-		requestedBins: binmap.New(),
-		chunks:        chunks,
+		id:            id,
+		options:       o,
+		channels:      map[*Peer]*channel{},
+		store:         buf,
+		pubSub:        pubSub,
+		requestedBins: requestedBins,
 	}, nil
+}
+
+type loadingBins struct {
+	sync.Mutex
+	bins *binmap.Map
+}
+
+func (b *loadingBins) Consume(c store.Chunk) {
+	b.Lock()
+	defer b.Unlock()
+	b.bins.Set(c.Bin)
 }
 
 // Swarm ...
 type Swarm struct {
-	sync.Mutex
-
-	ID         SwarmID
-	URI        *URI
-	ChunkSize  int
-	LiveWindow int
-
-	channelsLock    sync.Mutex
-	channels        channels
-	chunks          *chunkBuffer
-	firstRequestBin binmap.Bin
-	requestedBins   *binmap.Map
+	id            SwarmID
+	options       SwarmOptions
+	channelsLock  sync.Mutex
+	channels      map[*Peer]*channel
+	store         *store.Buffer
+	pubSub        *store.PubSub
+	requestedBins *loadingBins // bins we have or have requested
 }
 
-// if chunks and requestedBins locked swarms wouldn't need a lock...?
+// ID ...
+func (s *Swarm) ID() SwarmID {
+	return s.id
+}
 
-// WriteChunk ...
-func (s *Swarm) WriteChunk(b binmap.Bin, d []byte) {
-	// TODO: this violates the convention where callers hold locks while using
-	// swarms/channels/peers because otherwise we violate the lock order by
-	// taking swarm's before channel's... find somewhere else to update channels.
-	// maybe an injector like the js version... probably a writer in gospeak
-
-	s.Lock()
-	s.chunks.Set(b, d)
-
-	// TODO: prevents server from requesting loaded bins... rename
-	s.requestedBins.Set(b)
-	s.Unlock()
-
-	s.channelsLock.Lock()
-	for _, c := range s.channels {
-		c.Lock()
-		c.addedBins.Set(b)
-		c.Unlock()
+// URI ...
+func (s *Swarm) URI() *URI {
+	return &URI{
+		ID: s.ID(),
+		Options: URIOptions{
+			codec.ChunkSizeOption: s.chunkSize(),
+		},
 	}
-	s.channelsLock.Unlock()
 }
 
-// ReadChannel ...
-func (s *Swarm) ReadChannel(p *Peer, l ReadWriteFlusher) Channel {
-	ch := newChannel(channelOptions{
-		Swarm: s,
-		Peer:  p,
-		Conn:  l,
-	})
+func (s *Swarm) chunkSize() int {
+	return s.options.ChunkSize
+}
 
-	p.Lock()
-	p.channels.Insert(ch)
-	p.Unlock()
+func (s *Swarm) liveWindow() int {
+	return s.options.LiveWindow
+}
 
+func (s *Swarm) loadedBins() *binmap.Map {
+	return s.store.Bins()
+}
+
+func (s *Swarm) addChannel(p *Peer, c *channel) {
 	s.channelsLock.Lock()
-	s.channels.Insert(ch)
-	s.channelsLock.Unlock()
+	defer s.channelsLock.Unlock()
 
-	ch.Lock()
-	ch.OfferHandshake()
-	ch.Unlock()
+	s.pubSub.Subscribe(c)
+	s.channels[p] = c
+}
 
-	go func() {
-		<-ch.Done()
+func (s *Swarm) removeChannel(p *Peer) {
+	s.channelsLock.Lock()
+	defer s.channelsLock.Unlock()
 
-		p.Lock()
-		p.channels.Remove(ch)
-		p.Unlock()
-
-		s.channelsLock.Lock()
-		s.channels.Remove(ch)
-		s.channelsLock.Unlock()
-	}()
-
-	return ch
+	if c, ok := s.channels[p]; ok {
+		s.pubSub.Unsubscribe(c)
+		delete(s.channels, p)
+	}
 }
 
 // Reader ...
-func (s *Swarm) Reader() *ChunkBufferReader {
-	return s.chunks.Reader()
+func (s *Swarm) Reader() *store.Reader {
+	return s.store.Reader()
 }
 
-// Leave ...
-func (s *Swarm) Leave() error {
-	// * choke channels
+// Close ...
+func (s *Swarm) Close() error {
 	// * make sure we've sent at least 1 of every bin...?
-	// * close channels
 	// * graceful shutdown deadline
+
+	s.channelsLock.Lock()
+	defer s.channelsLock.Unlock()
+
+	for p, c := range s.channels {
+		p.removeChannel(s)
+		c.Close()
+	}
+
 	return nil
 }

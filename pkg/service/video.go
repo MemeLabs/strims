@@ -33,7 +33,7 @@ type SwarmPublisher interface {
 func NewVideoServer() (*VideoServer, error) {
 	key := testKey()
 
-	w, err := encoding.NewWriter(encoding.SwarmWriterOptions{
+	w, err := encoding.NewWriter(encoding.WriterOptions{
 		// SwarmOptions: encoding.NewDefaultSwarmOptions(),
 		SwarmOptions: encoding.SwarmOptions{
 			LiveWindow: 1 << 15, // 32mb
@@ -203,6 +203,6 @@ func (t *VideoSwarm) PublishSwarm(svc *NetworkServices) error {
 func (t *VideoSwarm) Stop() {
 	t.close()
 	for _, svc := range t.svc {
-		svc.Swarms.CloseSwarm(t.s.ID)
+		svc.Swarms.CloseSwarm(t.s.ID())
 	}
 }

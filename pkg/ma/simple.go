@@ -24,8 +24,7 @@ type Simple struct {
 	w  []simpleMeanSample
 }
 
-func (s *Simple) advance() {
-	t := time.Now()
+func (s *Simple) advance(t time.Time) {
 	for t.Sub(s.t) > s.d {
 		s.t = s.t.Add(s.d)
 
@@ -47,7 +46,12 @@ func (s *Simple) advance() {
 
 // Add ...
 func (s *Simple) Add(v uint64) {
-	s.advance()
+	s.AddWithTime(v, time.Now())
+}
+
+// AddWithTime ...
+func (s *Simple) AddWithTime(v uint64, t time.Time) {
+	s.advance(t)
 
 	s.w[s.i].v += v
 	s.w[s.i].n++
@@ -62,7 +66,7 @@ func (s *Simple) Value() uint64 {
 
 // Interval ...
 func (s *Simple) Interval() time.Duration {
-	s.advance()
+	s.advance(time.Now())
 
 	if s.v == 0 {
 		return 0
@@ -72,7 +76,7 @@ func (s *Simple) Interval() time.Duration {
 
 // SampleInterval ...
 func (s *Simple) SampleInterval() time.Duration {
-	s.advance()
+	s.advance(time.Now())
 
 	if s.n == 0 {
 		return 0

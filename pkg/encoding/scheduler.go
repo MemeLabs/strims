@@ -6,7 +6,9 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/encoding/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"go.uber.org/zap"
 )
 
@@ -47,62 +49,56 @@ func NewScheduler(ctx context.Context, logger *zap.Logger) (s *Scheduler) {
 // Scheduler ...
 type Scheduler struct {
 	logger *zap.Logger
-	// host  *Host
-	close sync.Map
+	close  sync.Map
 }
 
 const (
 	defaultWriteInterval = 200 * time.Millisecond
 	maxWriteInterval     = time.Second
 	minWriteInterval     = 50 * time.Millisecond
-	rescheduleInterval   = 200 * time.Millisecond
+	rescheduleInterval   = 250 * time.Millisecond
 )
 
 // AddPeer ...
-func (s *Scheduler) AddPeer(ctx context.Context, peer *Peer) {
+func (r *Scheduler) AddPeer(ctx context.Context, peer *Peer) {
 	ctx, close := context.WithCancel(ctx)
-	s.close.Store(peer, close)
+	r.close.Store(peer, close)
 
 	go func() {
 		rescheduleTicker := time.NewTicker(rescheduleInterval)
-		debugTicker := time.NewTicker(2 * time.Second)
 
-		// TODO: cgo hack until tickers are fixed? https://github.com/golang/go/issues/27707
 		writeInterval := defaultWriteInterval
 		writeTicker := time.NewTicker(writeInterval)
 
 		for {
 			select {
 			case t := <-writeTicker.C:
-				s.runPeer(peer, iotime.FromTime(t))
+				r.runPeer(peer, iotime.FromTime(t))
 			case <-ctx.Done():
 				return
 			case <-rescheduleTicker.C:
-				newWriteInterval := s.peerWriteInterval(peer)
-				// log.Println("newWriteInterval", unsafe.Pointer(peer), newWriteInterval)
+				newWriteInterval := r.peerWriteInterval(peer)
 				if writeInterval != newWriteInterval {
-					s.logger.Debug("updating write interval", zap.Duration("duration", newWriteInterval))
+					r.logger.Debug("updating write interval", zap.Duration("duration", newWriteInterval))
 					writeTicker.Stop()
 					writeTicker = time.NewTicker(newWriteInterval)
 					writeInterval = newWriteInterval
 				}
-			case <-debugTicker.C:
-				s.printPeerDebugLog(peer)
 			}
 		}
 	}()
 }
 
 // RemovePeer ...
-func (s *Scheduler) RemovePeer(peer *Peer) {
-	close, ok := s.close.Load(peer)
+func (r *Scheduler) RemovePeer(peer *Peer) {
+	close, ok := r.close.Load(peer)
 	if ok {
 		close.(context.CancelFunc)()
-		s.close.Delete(peer)
+		r.close.Delete(peer)
 	}
 }
 
-func (s *Scheduler) peerWriteInterval(peer *Peer) (i time.Duration) {
+func (r *Scheduler) peerWriteInterval(peer *Peer) (i time.Duration) {
 	peer.Lock()
 	// writeInterval := peer.ledbat.RTTMean() / time.DuRration(peer.ledbat.CWND() )
 	i = peer.ledbat.RTTMean()
@@ -116,71 +112,15 @@ func (s *Scheduler) peerWriteInterval(peer *Peer) (i time.Duration) {
 	return
 }
 
-func (s *Scheduler) printPeerDebugLog(peer *Peer) {
-	return
-
-	// peer.Lock()
-	// // spew.Dump(peer)
-	// if peer.ledbat.Debug() {
-	// 	// if peer.requestedChunkCount > 0 {
-	// 	channels := []string{}
-	// 	for _, c := range peer.channels {
-	// 		c.Lock()
-	// 		c.swarm.Lock()
-
-	// 		// channels = append(channels, spew.Sdump([]interface{}{
-	// 		// 	"id", c.id,
-	// 		// 	// "swarm", c.swarm,
-	// 		// 	// "peer",  c.peer,
-	// 		// 	// "conn",      c.conn,
-	// 		// 	// "addedBins", c.addedBins,
-	// 		// 	// "requestedBins", c.requestedBins,
-	// 		// 	// "availableBins",       c.availableBins,
-	// 		// 	// "unackedBins",         c.unackedBins,
-	// 		// 	// "rttSampleBin",        c.rttSampleBin,
-	// 		// 	"sentBinHistory.ring", c.sentBinHistory.ring,
-	// 		// 	"requestedBinHistory.ring", c.requestedBinHistory.ring,
-	// 		// }))
-
-	// 		c.swarm.Unlock()
-	// 		c.Unlock()
-	// 	}
-
-	// 	log.Println(
-	// 		// "peer", unsafe.Pointer(peer),
-	// 		"\nrequested", peer.requestedChunkCount,
-	// 		"\nreceived", peer.receivedChunkCount,
-	// 		"\ncancelled", peer.cancelledChunkCount,
-	// 		"\nsent", peer.sentChunkCount,
-	// 		"\nacked", peer.ackedChunkCount,
-	// 		"\nnewly acked", peer.NewlyAckedCount(),
-	// 		"\nlost", peer.sentChunkCount-peer.ackedChunkCount,
-	// 		"\nOutstandingChunks", peer.OutstandingChunks(),
-	// 		"\nChunkIntervalMean", peer.ChunkIntervalMean(),
-	// 		"\nledbat.CWND()", peer.ledbat.CWND(),
-	// 		"\nledbat.CTO()", peer.ledbat.CTO(),
-	// 		"\nledbat.RTTMean()", peer.ledbat.RTTMean(),
-	// 		"\nledbat.FlightSize()", peer.ledbat.FlightSize(),
-	// 		"\ncwnd count", peer.ledbat.CWND()/ChunkSize,
-	// 		"\nflight count", peer.ledbat.FlightSize()/ChunkSize,
-	// 		// "loss", 1-float64(peer.receivedChunkCount)/float64(peer.requestedChunkCount),
-	// 		// "ledbat", spew.Sdump(peer.ledbat),
-	// 		// "peer", spew.Sdump(peer),
-	// 		"\nchannels", channels,
-	// 		"\n---",
-	// 	)
-	// }
-	// peer.Unlock()
-}
-
-func (s *Scheduler) runPeer(p *Peer, t time.Time) {
+func (r *Scheduler) runPeer(p *Peer, t time.Time) {
 	p.Lock()
 	defer p.Unlock()
 
-	s.sendPeerTimeouts(p, t)
-	// s.sendPeerExchange(p, w)
-	s.sendPeerData(p, t)
-	s.sendPeerPing(p, t)
+	r.sendPongs(p, t)
+	r.sendPeerTimeouts(p, t)
+	// r.sendPeerExchange(p, w)
+	r.sendPeerData(p, t)
+	r.sendPeerPing(p, t)
 
 	// if err := w.Flush(); err != nil {
 	// 	log.Println(err)
@@ -194,44 +134,42 @@ func (s *Scheduler) runPeer(p *Peer, t time.Time) {
 	}
 }
 
-func (s *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
+func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 	// TODO: separate read and write timeouts
 	// TODO: mediate cancel/retry floods from increased latency
 	// timeout := time.Now().Add(-p.ledbat.CTO() * 2)
 	timeout := t.Add(-2 * time.Second)
 
-	for _, c := range p.channels {
+	for s, c := range p.channels {
 		c.Lock()
-		c.swarm.Lock()
 
 		for i := c.sentBinHistory.IterateUntil(timeout); i.Next(); {
 			if c.unackedBins.FilledAt(i.Bin()) {
-				c.peer.ledbat.AddDataLoss(c.swarm.ChunkSize, false)
+				p.ledbat.AddDataLoss(s.chunkSize(), false)
 				c.unackedBins.Reset(i.Bin())
 			}
 		}
 
 		for i := c.requestedBinHistory.IterateUntil(timeout); i.Next(); {
-			if !c.swarm.chunks.bins.FilledAt(i.Bin()) {
+			if !s.store.FilledAt(i.Bin()) {
 				for b := i.Bin().BaseLeft(); b <= i.Bin().BaseRight(); b += 2 {
-					if c.swarm.chunks.bins.EmptyAt(b) {
-						c.swarm.requestedBins.Reset(b)
-						c.peer.AddCancelledChunk()
+					if s.store.EmptyAt(b) {
+						s.requestedBins.bins.Reset(b)
+						p.AddCancelledChunk()
 					}
 				}
 
-				c.w.WriteCancel(Cancel{Address(i.Bin())})
+				c.WriteCancel(codec.Cancel{codec.Address(i.Bin())})
 			}
 		}
 
-		c.swarm.Unlock()
 		c.Unlock()
 	}
 }
 
-func (s *Scheduler) sendPeerData(p *Peer, t time.Time) {
-	requesteCapacity := s.peerRequestCapacity(p)
-	for _, c := range p.channels {
+func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
+	requesteCapacity := r.peerRequestCapacity(p)
+	for s, c := range p.channels {
 		c.Lock()
 
 		if c.choked {
@@ -239,14 +177,13 @@ func (s *Scheduler) sendPeerData(p *Peer, t time.Time) {
 			continue
 		}
 
-		c.swarm.Lock()
-		// TODO: avoid holding swarm lock during io...
-
 		// TODO: compress ACKs like HAVEs... min(delay sample)
 		for _, a := range c.acks {
-			c.w.WriteAck(a)
+			c.WriteAck(a)
 		}
 		c.acks = c.acks[:0]
+
+		// TODO: avoid holding swarm lock during io...
 
 		// TODO: move to channel and execute under addedBinsLock
 		// TODO: move insert added bins to channel to resolve Swarm WriteChunk lock inconsistency
@@ -255,25 +192,27 @@ func (s *Scheduler) sendPeerData(p *Peer, t time.Time) {
 			if b.IsNone() {
 				break
 			}
-			b = c.swarm.chunks.bins.Cover(b)
+			b = s.store.Cover(b)
 			if b.IsAll() {
 				break
 			}
 			c.addedBins.Reset(b)
 
-			c.w.WriteHave(Have{Address(b)})
+			c.WriteHave(codec.Have{codec.Address(b)})
 		}
 
-		requestBins, n := s.requestBins(requesteCapacity, c)
+		requestBins, n := r.requestBins(requesteCapacity, s, c.channel)
 		requesteCapacity -= n
 
 		for _, b := range requestBins {
-			c.w.WriteRequest(Request{Address(b)})
+			c.WriteRequest(codec.Request{codec.Address(b)})
 			p.AddRequestedChunks(b.BaseLength())
 			c.requestedBinHistory.Push(b, t)
 		}
 
-		// TODO: rlock c.swarm.chunks here
+		b := pool.Get(uint16(s.chunkSize()))
+
+		// TODO: rlock s.chunks here
 		for p.ledbat.FlightSize() < p.ledbat.CWND() {
 			rb := c.requestedBins.FindFilled()
 			if rb.IsNone() {
@@ -282,36 +221,40 @@ func (s *Scheduler) sendPeerData(p *Peer, t time.Time) {
 			rb = rb.BaseLeft()
 			c.requestedBins.Reset(rb)
 
-			b, ok := c.swarm.chunks.Find(rb)
-			if ok {
+			if ok := s.store.ReadBin(rb, b); ok {
 				// TODO: avoid writing data until after this?
-				c.w.WriteData(Data{
-					Address:   Address(rb),
-					Timestamp: Timestamp{t},
-					Data:      Buffer(b),
+				c.WriteData(codec.Data{
+					Address:   codec.Address(rb),
+					Timestamp: codec.Timestamp{t},
+					Data:      codec.Buffer(b),
 				})
 
-				p.ledbat.AddSent(c.swarm.ChunkSize)
+				p.ledbat.AddSent(s.chunkSize())
 				p.AddSentChunk()
 				c.unackedBins.Set(rb)
 				c.sentBinHistory.Push(rb, t)
 			}
 		}
 
-		c.swarm.Unlock()
+		pool.Put(b)
+
 		c.Unlock()
 	}
 }
 
-func (s *Scheduler) sendPeerPing(p *Peer, t time.Time) {
+func (r *Scheduler) sendPongs(p *Peer, t time.Time) {
 	for _, c := range p.channels {
-		c.Lock()
-
-		if nonce, ok := p.TrackPingRTT(t); ok {
-			c.w.WritePing(Ping{Nonce{nonce}})
+		if p := c.dequeuePong(); p != nil {
+			c.WritePong(*p)
 		}
+	}
+}
 
-		c.Unlock()
+func (r *Scheduler) sendPeerPing(p *Peer, t time.Time) {
+	for _, c := range p.channels {
+		if nonce, ok := p.TrackPingRTT(t); ok {
+			c.WritePing(codec.Ping{codec.Nonce{nonce}})
+		}
 	}
 
 	// // only send pings opportunistically with other messages
@@ -322,7 +265,7 @@ func (s *Scheduler) sendPeerPing(p *Peer, t time.Time) {
 	// }
 }
 
-func (s *Scheduler) peerRequestCapacity(p *Peer) int {
+func (r *Scheduler) peerRequestCapacity(p *Peer) int {
 	p.ledbat.DigestDelaySamples()
 
 	planForDuration := p.ledbat.RTTMean()
@@ -347,36 +290,49 @@ func (s *Scheduler) peerRequestCapacity(p *Peer) int {
 	}
 
 	// if !p.ledbat.Debug() {
-	// 	log.Println(
-	// 		"\np.ledbat.RTTMean()", p.ledbat.RTTMean(),
-	// 		"\nminWriteInterval", minWriteInterval,
-	// 		"\np.ChunkIntervalMean()", p.ChunkIntervalMean(),
-	// 		"\nplanForDuration", planForDuration,
-	// 		"\np.OutstandingChunks()", p.OutstandingChunks(),
-	// 		"\ncapacity", capacity,
-	// 	)
+	// log.Println(
+	// 	"\np.ledbat.RTTMean()", p.ledbat.RTTMean(),
+	// 	"\nminWriteInterval", minWriteInterval,
+	// 	"\np.ChunkIntervalMean()", p.ChunkIntervalMean(),
+	// 	"\nplanForDuration", planForDuration,
+	// 	"\np.OutstandingChunks()", p.OutstandingChunks(),
+	// 	"\ncapacity", capacity,
+	// )
 	// }
 
 	return capacity
 }
 
-// TODO: select more bins than we need...
-// TODO: chunk picker interface
-func (s *Scheduler) requestBins(count int, c *channel) (bins []binmap.Bin, n int) {
-	// TODO: lock c.swarm.requestedBins here
-
-	if c.swarm.requestedBins.Empty() {
-		return s.requestFirstBins(count, c)
+func (r *Scheduler) requestBins(count int, s *Swarm, c *channel) (bins []binmap.Bin, n int) {
+	if s.requestedBins.bins.Empty() {
+		return (&FirstChunkSelector{}).SelectBins(count, s, c)
 	}
+	return (&SequentialChunkSelector{}).SelectBins(count, s, c)
+}
+
+// ChunkSelector ...
+type ChunkSelector interface {
+	SelectBins(count int, s *Swarm, c *channel) ([]binmap.Bin, int)
+}
+
+// SequentialChunkSelector ...
+type SequentialChunkSelector struct{}
+
+// SelectBins ...
+func (r *SequentialChunkSelector) SelectBins(count int, s *Swarm, c *channel) (bins []binmap.Bin, n int) {
+	// TODO: lock s.requestedBins here
+
+	s.requestedBins.Lock()
+	defer s.requestedBins.Unlock()
 
 	var rc = uint64(count)
 	var ab, bb binmap.Bin
 Done:
 	for rc > 0 {
-		if c.swarm.requestedBins.Filled() {
-			ab = c.swarm.requestedBins.RootBin().BaseRight() + 2
+		if s.requestedBins.bins.Filled() {
+			ab = s.requestedBins.bins.RootBin().BaseRight() + 2
 		} else {
-			ab = c.swarm.requestedBins.FindEmptyAfter(ab)
+			ab = s.requestedBins.bins.FindEmptyAfter(ab)
 		}
 
 		if !c.availableBins.RootBin().Contains(ab) {
@@ -388,7 +344,7 @@ Done:
 			break Done
 		}
 
-		ab = c.swarm.requestedBins.Cover(ab)
+		ab = s.requestedBins.bins.Cover(ab)
 		bb = c.availableBins.Cover(bb)
 
 		if ab.Contains(bb) {
@@ -406,7 +362,7 @@ Done:
 		// TODO: limit contiguous chunk lengths to improve source diversity?
 
 		bins = append(bins, ab)
-		c.swarm.requestedBins.Set(ab)
+		s.requestedBins.bins.Set(ab)
 
 		ab = ab.BaseRight() + 2
 	}
@@ -415,13 +371,20 @@ Done:
 	return
 }
 
-func (s *Scheduler) requestFirstBins(count int, c *channel) (bins []binmap.Bin, n int) {
+// FirstChunkSelector ...
+type FirstChunkSelector struct{}
+
+// SelectBins ...
+func (r *FirstChunkSelector) SelectBins(count int, s *Swarm, c *channel) (bins []binmap.Bin, n int) {
 	// TODO: select some range of bins near the tail of the peer's available
 	// set... maybe try to pick the start of the last chunkstream segment?
 
 	if c.availableBins.Empty() {
 		return
 	}
+
+	s.requestedBins.Lock()
+	defer s.requestedBins.Unlock()
 
 	// find the last available bin from this peer
 	var ab binmap.Bin
@@ -442,15 +405,15 @@ func (s *Scheduler) requestFirstBins(count int, c *channel) (bins []binmap.Bin, 
 	}
 
 	bins = append(bins, ab)
-	c.swarm.requestedBins.Set(ab)
+	s.requestedBins.bins.Set(ab)
 
 	// TODO: hax...
-	c.swarm.chunks.next = ab + 2
+	s.store.SetNext(ab + 2)
 
 	// fill from 0 to ab so the first empty bin is ab + 2
 	for ab > 0 {
-		ab = c.swarm.requestedBins.Cover(ab - 2)
-		c.swarm.requestedBins.Set(ab)
+		ab = s.requestedBins.bins.Cover(ab - 2)
+		s.requestedBins.bins.Set(ab)
 		ab = ab.BaseLeft()
 	}
 	return

@@ -13,6 +13,8 @@ import (
 	"github.com/gorilla/mux"
 )
 
+const transcoderAddr = "localhost:0"
+
 // Transcoder ...
 type Transcoder struct {
 	lock    sync.Mutex
@@ -26,7 +28,7 @@ func (h *Transcoder) listen() (err error) {
 	router.HandleFunc("/{key}/{variant}/index.m3u8", postHandleFunc(h.handlePlaylist))
 	router.HandleFunc("/{key}/{variant}/{segment:[0-9]+}.ts", postHandleFunc(h.handleSegment))
 
-	h.lis, err = net.Listen("tcp", ":0")
+	h.lis, err = net.Listen("tcp", transcoderAddr)
 	if err != nil {
 		return err
 	}
@@ -46,19 +48,24 @@ func (h *Transcoder) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 
 func (h *Transcoder) handleSegment(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
-	wi, ok := h.writers.Load(transcoderKey{params["key"], params["variant"]})
+	twi, ok := h.writers.Load(transcoderKey{params["key"], params["variant"]})
 	if !ok {
 		http.NotFound(w, r)
 		return
 	}
 
+	tw := twi.(*transcoderWriter)
+
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+
 	defer r.Body.Close()
-	if _, err := io.Copy(wi.(WriteFlushCloser), r.Body); err != nil {
+	if _, err := io.Copy(tw.w, r.Body); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
 
-	if err := wi.(WriteFlushCloser).Flush(); err != nil {
+	if err := tw.w.Flush(); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}
@@ -96,7 +103,7 @@ func (h *Transcoder) Transcode(srcURI, key, variant string, w WriteFlushCloser) 
 	h.lock.Unlock()
 
 	k := transcoderKey{key, variant}
-	h.writers.Store(k, w)
+	h.writers.Store(k, &transcoderWriter{w: w})
 
 	cmd := exec.Command(bin, buildArgs(srcURI, h.lis.Addr().String(), key, variant)...)
 	defer h.close(k, cmd)
@@ -110,6 +117,11 @@ func (h *Transcoder) Transcode(srcURI, key, variant string, w WriteFlushCloser) 
 
 type transcoderKey struct {
 	key, variant string
+}
+
+type transcoderWriter struct {
+	mu sync.Mutex
+	w  WriteFlushCloser
 }
 
 // WriteFlushCloser ...
@@ -155,8 +167,8 @@ func buildArgs(srcURI, addr, key, variant string) []string {
 	args := []string{"-i", srcURI}
 	args = append(args, transcodingVariants[variant]...)
 	args = append(args,
-		"-hls_init_time", "2",
-		"-hls_time", "2",
+		"-hls_init_time", "1",
+		"-hls_time", "1",
 		"-hls_segment_filename", fmt.Sprintf("http://%s/%s/%s/%%d.ts", addr, key, variant),
 		"-hls_flags", "+program_date_time+append_list+omit_endlist",
 		"-method", "POST",

@@ -1,4 +1,4 @@
-package encoding
+package codec
 
 import (
 	"encoding/binary"
@@ -6,91 +6,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 )
-
-// MemeRequest ...
-type MemeRequest struct {
-	Datagram
-	Messages Messages
-	Conn     vpn.Link
-}
-
-// MemeHandler ...
-type MemeHandler func(w *DatagramWriter, r *MemeRequest)
-
-// NewDatagramWriter ...
-func NewDatagramWriter(c vpn.Link) *DatagramWriter {
-	return &DatagramWriter{
-		Conn: c,
-		buf:  make([]byte, c.MTU()),
-	}
-}
-
-// DatagramWriter ...
-type DatagramWriter struct {
-	Conn  vpn.Link
-	buf   []byte
-	len   int
-	cid   uint32
-	dirty bool
-}
-
-// BeginFrame ...
-func (w *DatagramWriter) BeginFrame(channelID uint32) {
-	if w.cid == channelID {
-		return
-	}
-
-	if w.dirty {
-		w.Write(&End{})
-	}
-
-	w.cid = channelID
-	w.dirty = false
-}
-
-// Write ...
-func (w *DatagramWriter) Write(messages ...Message) {
-	m := Messages(messages)
-
-	expected := w.len + m.ByteLen()
-	if !w.dirty {
-		// datagram header length
-		expected += 4
-	}
-
-	if expected >= w.Conn.MTU() {
-		w.Flush()
-	}
-
-	if !w.dirty {
-		w.dirty = true
-
-		d := Datagram{ChannelID: w.cid}
-		w.len += d.Marshal(w.buf[w.len:])
-	}
-
-	w.len += m.Marshal(w.buf[w.len:])
-}
-
-// Flush ...
-func (w *DatagramWriter) Flush() (err error) {
-	if !w.dirty {
-		return
-	}
-	_, err = w.Conn.Write(w.buf[:w.len])
-
-	w.len = 0
-	w.dirty = false
-
-	return
-}
-
-// Dirty ...
-func (w *DatagramWriter) Dirty() bool {
-	return w.dirty
-}
 
 // errors ...
 var (
@@ -98,20 +14,20 @@ var (
 	ErrUnsupportedProtocolOption = errors.New("unsupported protocol option")
 )
 
-// Reader ...
-type Reader interface {
+// Decoder ...
+type Decoder interface {
 	Unmarshal(b []byte) (int, error)
 }
 
-// Writer ...
-type Writer interface {
+// Encoder ...
+type Encoder interface {
 	Marshal(b []byte) int
 }
 
 // Message ...
 type Message interface {
-	Reader
-	Writer
+	Decoder
+	Encoder
 	Type() MessageType
 	ByteLen() int
 }
@@ -168,8 +84,8 @@ func (v Buffer) ByteLen() int {
 
 // ProtocolOption ...
 type ProtocolOption interface {
-	Reader
-	Writer
+	Decoder
+	Encoder
 	Type() ProtocolOptionType
 	ByteLen() int
 }
@@ -241,9 +157,64 @@ func (v *MinimumVersionProtocolOption) ByteLen() int {
 	return 1
 }
 
+// LiveWindowProtocolOption ...
+type LiveWindowProtocolOption struct {
+	Value uint32
+}
+
+// Unmarshal ...
+func (v *LiveWindowProtocolOption) Unmarshal(b []byte) (int, error) {
+	v.Value = binary.BigEndian.Uint32(b)
+	return 4, nil
+}
+
+// Marshal ...
+func (v *LiveWindowProtocolOption) Marshal(b []byte) int {
+	binary.BigEndian.PutUint32(b, v.Value)
+	return 4
+}
+
+// Type ...
+func (v *LiveWindowProtocolOption) Type() ProtocolOptionType {
+	return LiveWindowOption
+}
+
+// ByteLen ...
+func (v *LiveWindowProtocolOption) ByteLen() int {
+	return 4
+}
+
+// ChunkSizeProtocolOption ...
+type ChunkSizeProtocolOption struct {
+	Value uint32
+}
+
+// Unmarshal ...
+func (v *ChunkSizeProtocolOption) Unmarshal(b []byte) (int, error) {
+	v.Value = binary.BigEndian.Uint32(b)
+	return 4, nil
+}
+
+// Marshal ...
+func (v *ChunkSizeProtocolOption) Marshal(b []byte) int {
+	binary.BigEndian.PutUint32(b, v.Value)
+	return 4
+}
+
+// Type ...
+func (v *ChunkSizeProtocolOption) Type() ProtocolOptionType {
+	return ChunkSizeOption
+}
+
+// ByteLen ...
+func (v *ChunkSizeProtocolOption) ByteLen() int {
+	return 4
+}
+
 // NewSwarmIdentifierProtocolOption ...
-func NewSwarmIdentifierProtocolOption() *SwarmIdentifierProtocolOption {
-	return &SwarmIdentifierProtocolOption{}
+func NewSwarmIdentifierProtocolOption(id []byte) *SwarmIdentifierProtocolOption {
+	o := SwarmIdentifierProtocolOption(id)
+	return &o
 }
 
 // SwarmIdentifierProtocolOption ...
@@ -311,6 +282,10 @@ func (v *Handshake) Unmarshal(b []byte) (size int, err error) {
 			option = &MinimumVersionProtocolOption{}
 		case SwarmIdentifierOption:
 			option = &SwarmIdentifierProtocolOption{}
+		case LiveWindowOption:
+			option = &LiveWindowProtocolOption{}
+		case ChunkSizeOption:
+			option = &ChunkSizeProtocolOption{}
 		case EndOption:
 			return
 		default:
@@ -643,111 +618,4 @@ type End struct {
 // Type ...
 func (v *End) Type() MessageType {
 	return EndMessage
-}
-
-// Messages ...
-type Messages []Message
-
-// Unmarshal ...
-func (v *Messages) Unmarshal(b []byte) (n int, err error) {
-	for {
-		if n >= len(b) {
-			return
-		}
-
-		var msg Message
-		mt := MessageType(b[n])
-		n++
-
-		switch mt {
-		case HandshakeMessage:
-			msg = &Handshake{}
-		case DataMessage:
-			msg = &Data{}
-		case AckMessage:
-			msg = &Ack{}
-		case HaveMessage:
-			msg = &Have{}
-		case RequestMessage:
-			msg = &Request{}
-		case CancelMessage:
-			msg = &Cancel{}
-		case ChokeMessage:
-			msg = &Choke{}
-		case UnchokeMessage:
-			msg = &Unchoke{}
-		case PingMessage:
-			msg = &Ping{}
-		case PongMessage:
-			msg = &Pong{}
-		case EndMessage:
-			return
-		default:
-			return n, ErrUnsupportedMessageType
-		}
-
-		mn, err := msg.Unmarshal(b[n:])
-		if err != nil {
-			return n, err
-		}
-		n += mn
-		*v = append(*v, msg)
-	}
-}
-
-// Marshal ...
-func (v *Messages) Marshal(b []byte) (size int) {
-	for _, m := range *v {
-		b[0] = byte(m.Type())
-		size++
-		b = b[1:]
-
-		n := m.Marshal(b)
-
-		size += n
-		b = b[n:]
-	}
-
-	return
-}
-
-// ByteLen ...
-func (v *Messages) ByteLen() (l int) {
-	for _, m := range *v {
-		l += m.ByteLen() + 1
-	}
-	return
-}
-
-// Datagram ...
-type Datagram struct {
-	ChannelID uint32
-	Messages  Messages
-}
-
-// Unmarshal ...
-func (v *Datagram) Unmarshal(b []byte) (size int, err error) {
-	v.ChannelID = binary.BigEndian.Uint32(b)
-	size += 4
-
-	n, err := v.Messages.Unmarshal(b[size:])
-	size += n
-
-	return
-}
-
-// Marshal ...
-func (v *Datagram) Marshal(b []byte) (size int) {
-	binary.BigEndian.PutUint32(b, v.ChannelID)
-	size += 4
-
-	n := v.Messages.Marshal(b[size:])
-	size += n
-
-	return
-}
-
-// ByteLen ...
-func (v *Datagram) ByteLen() int {
-	return 4 + v.Messages.ByteLen()
 }

@@ -33,8 +33,6 @@ const minPingInterval = time.Second * 10
 type Peer struct {
 	sync.Mutex
 
-	// id                  int64
-	channels            channels
 	lastActive          int64
 	ledbat              *ledbat.Controller
 	chunkIntervalMean   ma.Simple
@@ -48,6 +46,7 @@ type Peer struct {
 	rttSampleChannel    uint32
 	rttSampleBin        binmap.Bin
 	rttSampleTime       time.Time
+	channels            map[*Swarm]*channelWriter
 }
 
 // NewPeer ...
@@ -57,7 +56,33 @@ func NewPeer() *Peer {
 		ledbat:            ledbat.New(),
 		chunkIntervalMean: ma.NewSimple(500, 10*time.Millisecond),
 		rttSampleBin:      binmap.None,
+		channels:          map[*Swarm]*channelWriter{},
 	}
+}
+
+func (p *Peer) addChannel(s *Swarm, c *channelWriter) {
+	p.Lock()
+	p.channels[s] = c
+	p.Unlock()
+}
+
+func (p *Peer) removeChannel(s *Swarm) {
+	p.Lock()
+	delete(p.channels, s)
+	p.Unlock()
+}
+
+func (p *Peer) addDelaySample(sample time.Duration, chunkSize int) {
+	p.Lock()
+	p.ledbat.AddDelaySample(sample, chunkSize)
+	p.ackedChunkCount++
+	p.Unlock()
+}
+
+func (p *Peer) addDataLoss(size int) {
+	p.Lock()
+	p.ledbat.AddDataLoss(size, false)
+	p.Unlock()
 }
 
 // UpdateLastActive ...
@@ -80,11 +105,6 @@ func (p *Peer) AddRequestedChunks(n uint64) {
 	p.requestedChunkCount += n
 }
 
-// AddAckedChunk ...
-func (p *Peer) AddAckedChunk() {
-	p.ackedChunkCount++
-}
-
 // NewlyAckedCount ...
 func (p *Peer) NewlyAckedCount() uint64 {
 	c := p.prevAckedChunkCount
@@ -103,10 +123,11 @@ func (p *Peer) AddCancelledChunk() {
 	p.cancelledChunkCount++
 }
 
-// AddReceivedChunk ...
-func (p *Peer) AddReceivedChunk() {
+func (p *Peer) addReceivedChunk() {
+	p.Lock()
 	p.receivedChunkCount++
-	p.chunkIntervalMean.Add(1)
+	p.chunkIntervalMean.AddWithTime(1, iotime.Load())
+	p.Unlock()
 }
 
 // TrackBinRTT ...
@@ -132,12 +153,13 @@ func (p *Peer) TrackPingRTT(t time.Time) (nonce uint64, ok bool) {
 	return
 }
 
-// AddRTTSample ...
-func (p *Peer) AddRTTSample(cid uint32, b binmap.Bin) {
+func (p *Peer) addRTTSample(cid uint32, b binmap.Bin) {
+	p.Lock()
 	if p.rttSampleChannel == cid && p.rttSampleBin.Contains(b) {
 		p.ledbat.AddRTTSample(iotime.Load().Sub(p.rttSampleTime))
 		p.rttSampleBin = binmap.None
 	}
+	p.Unlock()
 }
 
 // ChunkIntervalMean ...
@@ -148,6 +170,11 @@ func (p *Peer) ChunkIntervalMean() time.Duration {
 // Close ...
 func (p *Peer) Close() {
 	// TODO: send empty handshake (ppspp goodbye)
+
+	for s, c := range p.channels {
+		s.removeChannel(p)
+		c.Close()
+	}
 }
 
 func jsonDump(i interface{}) {
