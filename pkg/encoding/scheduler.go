@@ -2,6 +2,8 @@ package encoding
 
 import (
 	"context"
+	"math"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -9,6 +11,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/encoding/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 )
 
@@ -154,7 +158,7 @@ func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 			if !s.store.FilledAt(i.Bin()) {
 				for b := i.Bin().BaseLeft(); b <= i.Bin().BaseRight(); b += 2 {
 					if s.store.EmptyAt(b) {
-						s.requestedBins.bins.Reset(b)
+						s.bins.Loading.Reset(b)
 						p.AddCancelledChunk()
 					}
 				}
@@ -230,7 +234,6 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 				})
 
 				p.ledbat.AddSent(s.chunkSize())
-				p.AddSentChunk()
 				c.unackedBins.Set(rb)
 				c.sentBinHistory.Push(rb, t)
 			}
@@ -252,17 +255,12 @@ func (r *Scheduler) sendPongs(p *Peer, t time.Time) {
 
 func (r *Scheduler) sendPeerPing(p *Peer, t time.Time) {
 	for _, c := range p.channels {
-		if nonce, ok := p.TrackPingRTT(t); ok {
-			c.WritePing(codec.Ping{codec.Nonce{nonce}})
+		if c.Dirty() {
+			if nonce, ok := p.TrackPingRTT(c.id, t); ok {
+				c.WritePing(codec.Ping{codec.Nonce{nonce}})
+			}
 		}
 	}
-
-	// // only send pings opportunistically with other messages
-	// if w.Dirty() {
-	// 	if nonce, ok := p.TrackPingRTT(); ok {
-	// 		w.Write(&Ping{Nonce{nonce}})
-	// 	}
-	// }
 }
 
 func (r *Scheduler) peerRequestCapacity(p *Peer) int {
@@ -303,49 +301,117 @@ func (r *Scheduler) peerRequestCapacity(p *Peer) int {
 	return capacity
 }
 
-func (r *Scheduler) requestBins(count int, s *Swarm, c *channel) (bins []binmap.Bin, n int) {
-	if s.requestedBins.bins.Empty() {
-		return (&FirstChunkSelector{}).SelectBins(count, s, c)
+func (r *Scheduler) requestBins(count int, s *Swarm, c *channel) ([]binmap.Bin, int) {
+	s.bins.Lock()
+	defer s.bins.Unlock()
+
+	if s.bins.Loading.Empty() {
+		bins, n := (&FirstChunkSelector{}).SelectBins(count, s.bins.Available, s.bins.Loading, c.availableBins)
+		if len(bins) != 0 {
+			s.store.SetOffset(bins[0].BaseLeft() + 2)
+		}
+		return bins, n
 	}
-	return (&SequentialChunkSelector{}).SelectBins(count, s, c)
+	return (&SequentialChunkSelector{}).SelectBins(count, s.bins.Available, s.bins.Loading, c.availableBins)
 }
 
 // ChunkSelector ...
 type ChunkSelector interface {
-	SelectBins(count int, s *Swarm, c *channel) ([]binmap.Bin, int)
+	SelectBins(count int, seen, requested, available *binmap.Map) ([]binmap.Bin, int)
+}
+
+// TestChunkSelector ...
+type TestChunkSelector struct{}
+
+var newAvailableBinCount = promauto.NewHistogram(prometheus.HistogramOpts{
+	Name:    "strims_ppspp_scheduler_new_available_bins",
+	Help:    "The number of new bins available to chunk selector",
+	Buckets: []float64{0, 1, 2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048, 4096, math.Inf(1)},
+})
+
+// SelectBins ...
+func (r *TestChunkSelector) SelectBins(count int, seen, requested, available *binmap.Map) (bins []binmap.Bin, n int) {
+	start := requested.FindEmpty().BaseLeft()
+	if start.IsNone() {
+		start = requested.RootBin().BaseRight() + 2
+	}
+
+	start = available.FindFilledAfter(start)
+	if start.IsNone() {
+		return
+	}
+
+	end := seen.FindLastFilled().BaseRight()
+	if start >= end {
+		newAvailableBinCount.Observe(0)
+		return
+	}
+	newAvailableBinCount.Observe(float64(end-start) / 2)
+
+	var rc = uint64(count)
+
+	pmax := 1.0
+	var d float64
+	bn := float64(end-start) / 2
+	if bn > 8 {
+		d = pmax / bn
+	}
+
+	binm := binmap.New()
+	aend := available.FindLastFilled().BaseRight()
+	for rc > 0 {
+		found := 0
+		for b, p := start, pmax; b < aend; b += 2 {
+			if !requested.FilledAt(b) && available.FilledAt(b) {
+				found++
+				if rand.Float64() < p {
+					requested.Set(b)
+					binm.Set(b)
+					rc--
+				}
+				p -= d
+			}
+		}
+		if found == 0 {
+			break
+		}
+	}
+
+	for b := binm.FindFilled(); !b.IsNone(); b = binm.FindFilledAfter(b.BaseRight() + 2) {
+
+		bins = append(bins, b)
+	}
+
+	n = count - int(rc)
+	return
 }
 
 // SequentialChunkSelector ...
 type SequentialChunkSelector struct{}
 
 // SelectBins ...
-func (r *SequentialChunkSelector) SelectBins(count int, s *Swarm, c *channel) (bins []binmap.Bin, n int) {
-	// TODO: lock s.requestedBins here
-
-	s.requestedBins.Lock()
-	defer s.requestedBins.Unlock()
-
+func (r *SequentialChunkSelector) SelectBins(count int, seen, requested, available *binmap.Map) (bins []binmap.Bin, n int) {
 	var rc = uint64(count)
 	var ab, bb binmap.Bin
-Done:
+
 	for rc > 0 {
-		if s.requestedBins.bins.Filled() {
-			ab = s.requestedBins.bins.RootBin().BaseRight() + 2
+		if requested.Filled() {
+			ab = requested.RootBin().BaseRight() + 2
 		} else {
-			ab = s.requestedBins.bins.FindEmptyAfter(ab)
+			ab = requested.FindEmptyAfter(ab)
 		}
 
-		if !c.availableBins.RootBin().Contains(ab) {
-			break Done
+		if !available.RootBin().Contains(ab) {
+			break
 		}
 
-		bb = c.availableBins.FindFilledAfter(ab)
+		bb = available.FindFilledAfter(ab)
 		if bb.IsNone() {
-			break Done
+			break
 		}
 
-		ab = s.requestedBins.bins.Cover(ab)
-		bb = c.availableBins.Cover(bb)
+		ab = requested.Cover(ab)
+		bb = available.Cover(bb)
 
 		if ab.Contains(bb) {
 			ab = bb
@@ -359,10 +425,8 @@ Done:
 		}
 		rc -= ab.BaseLength()
 
-		// TODO: limit contiguous chunk lengths to improve source diversity?
-
 		bins = append(bins, ab)
-		s.requestedBins.bins.Set(ab)
+		requested.Set(ab)
 
 		ab = ab.BaseRight() + 2
 	}
@@ -375,46 +439,23 @@ Done:
 type FirstChunkSelector struct{}
 
 // SelectBins ...
-func (r *FirstChunkSelector) SelectBins(count int, s *Swarm, c *channel) (bins []binmap.Bin, n int) {
+func (r *FirstChunkSelector) SelectBins(count int, seen, requested, available *binmap.Map) (bins []binmap.Bin, n int) {
 	// TODO: select some range of bins near the tail of the peer's available
 	// set... maybe try to pick the start of the last chunkstream segment?
 
-	if c.availableBins.Empty() {
+	end := seen.FindLastFilled()
+	if end.IsNone() {
 		return
 	}
 
-	s.requestedBins.Lock()
-	defer s.requestedBins.Unlock()
+	bins = append(bins, end)
+	requested.Set(end)
 
-	// find the last available bin from this peer
-	var ab binmap.Bin
-	nab := ab
-	for {
-		nab = c.availableBins.FindFilledAfter(nab)
-		if nab.IsNone() || nab.IsAll() || !c.availableBins.RootBin().Contains(nab) {
-			break
-		}
-		ab = nab.BaseRight()
-
-		nab = c.availableBins.Cover(nab).BaseRight()
-		if nab.IsNone() || nab.IsAll() || !c.availableBins.RootBin().Contains(nab) {
-			break
-		}
-		ab = nab
-		nab += 2
-	}
-
-	bins = append(bins, ab)
-	s.requestedBins.bins.Set(ab)
-
-	// TODO: hax...
-	s.store.SetNext(ab + 2)
-
-	// fill from 0 to ab so the first empty bin is ab + 2
-	for ab > 0 {
-		ab = s.requestedBins.bins.Cover(ab - 2)
-		s.requestedBins.bins.Set(ab)
-		ab = ab.BaseLeft()
+	// fill from 0 to end so the first empty bin is end + 2
+	for end > 0 {
+		end = requested.Cover(end - 2)
+		requested.Set(end)
+		end = end.BaseLeft()
 	}
 	return
 }

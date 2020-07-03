@@ -48,44 +48,55 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 		return nil, err
 	}
 
-	requestedBins := &loadingBins{
-		bins: binmap.New(),
+	bins := &swarmBins{
+		Loading:   binmap.New(),
+		Available: binmap.New(),
 	}
 
-	pubSub := &store.PubSub{}
-	pubSub.Subscribe(buf)
-	pubSub.Subscribe(requestedBins)
-
 	return &Swarm{
-		id:            id,
-		options:       o,
-		channels:      map[*Peer]*channel{},
-		store:         buf,
-		pubSub:        pubSub,
-		requestedBins: requestedBins,
+		id:       id,
+		options:  o,
+		channels: map[*Peer]*channel{},
+		store:    buf,
+		pubSub:   store.NewPubSub(buf, bins),
+		bins:     bins,
 	}, nil
 }
 
-type loadingBins struct {
+type swarmBins struct {
 	sync.Mutex
-	bins *binmap.Map
+	Loading   *binmap.Map // bins we have or have requested
+	Available *binmap.Map // bins at least one peer has
 }
 
-func (b *loadingBins) Consume(c store.Chunk) {
-	b.Lock()
-	defer b.Unlock()
-	b.bins.Set(c.Bin)
+func (s *swarmBins) AddLoading(b binmap.Bin) {
+	s.Lock()
+	defer s.Unlock()
+	s.Loading.Set(b)
+}
+
+func (s *swarmBins) AddAvailable(b binmap.Bin) {
+	s.Lock()
+	defer s.Unlock()
+	s.Available.Set(b)
+}
+
+func (s *swarmBins) Consume(c store.Chunk) {
+	s.Lock()
+	defer s.Unlock()
+	s.Loading.Set(c.Bin)
+	// s.Available.Set(c.Bin)
 }
 
 // Swarm ...
 type Swarm struct {
-	id            SwarmID
-	options       SwarmOptions
-	channelsLock  sync.Mutex
-	channels      map[*Peer]*channel
-	store         *store.Buffer
-	pubSub        *store.PubSub
-	requestedBins *loadingBins // bins we have or have requested
+	id           SwarmID
+	options      SwarmOptions
+	channelsLock sync.Mutex
+	channels     map[*Peer]*channel
+	store        *store.Buffer
+	pubSub       *store.PubSub
+	bins         *swarmBins
 }
 
 // ID ...
@@ -134,8 +145,8 @@ func (s *Swarm) removeChannel(p *Peer) {
 }
 
 // Reader ...
-func (s *Swarm) Reader() *store.Reader {
-	return s.store.Reader()
+func (s *Swarm) Reader() *store.Buffer {
+	return s.store
 }
 
 // Close ...

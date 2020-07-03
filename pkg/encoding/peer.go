@@ -1,12 +1,8 @@
 package encoding
 
 import (
-	"encoding/json"
-	"fmt"
 	"io"
 	"math/rand"
-	"path"
-	"runtime"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,12 +34,9 @@ type Peer struct {
 	chunkIntervalMean   ma.Simple
 	lastChunkTime       time.Time
 	requestedChunkCount uint64
-	sentChunkCount      uint64
-	ackedChunkCount     uint64
-	prevAckedChunkCount uint64
 	receivedChunkCount  uint64
 	cancelledChunkCount uint64
-	rttSampleChannel    uint32
+	rttSampleChannel    uint64
 	rttSampleBin        binmap.Bin
 	rttSampleTime       time.Time
 	channels            map[*Swarm]*channelWriter
@@ -75,7 +68,6 @@ func (p *Peer) removeChannel(s *Swarm) {
 func (p *Peer) addDelaySample(sample time.Duration, chunkSize int) {
 	p.Lock()
 	p.ledbat.AddDelaySample(sample, chunkSize)
-	p.ackedChunkCount++
 	p.Unlock()
 }
 
@@ -105,19 +97,6 @@ func (p *Peer) AddRequestedChunks(n uint64) {
 	p.requestedChunkCount += n
 }
 
-// NewlyAckedCount ...
-func (p *Peer) NewlyAckedCount() uint64 {
-	c := p.prevAckedChunkCount
-	p.prevAckedChunkCount = p.ackedChunkCount
-	return p.ackedChunkCount - c
-}
-
-// AddSentChunk ...
-func (p *Peer) AddSentChunk() {
-	p.ledbat.StartDebugging()
-	p.sentChunkCount++
-}
-
 // AddCancelledChunk ...
 func (p *Peer) AddCancelledChunk() {
 	p.cancelledChunkCount++
@@ -130,30 +109,20 @@ func (p *Peer) addReceivedChunk() {
 	p.Unlock()
 }
 
-// TrackBinRTT ...
-// func (p *Peer) TrackBinRTT(cid uint32, b binmap.Bin) (ok bool) {
-// 	if ok = p.rttSampleBin.IsNone(); ok {
-// 		p.rttSampleChannel = cid
-// 		p.rttSampleBin = b
-// 		p.rttSampleTime = time.Now()
-// 	}
-// 	return
-// }
-
 // TrackPingRTT ...
-func (p *Peer) TrackPingRTT(t time.Time) (nonce uint64, ok bool) {
+func (p *Peer) TrackPingRTT(cid uint64, t time.Time) (nonce uint64, ok bool) {
 	if ok = t.Sub(p.rttSampleTime) > minPingInterval; ok {
 		// with even nonces Contains(nonce) is an equality check
 		nonce = uint64(rand.Int63()) << 1
 
-		p.rttSampleChannel = 0
+		p.rttSampleChannel = cid
 		p.rttSampleBin = binmap.Bin(nonce)
 		p.rttSampleTime = t
 	}
 	return
 }
 
-func (p *Peer) addRTTSample(cid uint32, b binmap.Bin) {
+func (p *Peer) addRTTSample(cid uint64, b binmap.Bin) {
 	p.Lock()
 	if p.rttSampleChannel == cid && p.rttSampleBin.Contains(b) {
 		p.ledbat.AddRTTSample(iotime.Load().Sub(p.rttSampleTime))
@@ -175,18 +144,4 @@ func (p *Peer) Close() {
 		s.removeChannel(p)
 		c.Close()
 	}
-}
-
-func jsonDump(i interface{}) {
-	_, file, line, _ := runtime.Caller(1)
-	b, err := json.MarshalIndent(i, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf(
-		"%s %s:%d: %s\n",
-		time.Now().Format("2006/01/02 15:04:05.000000"),
-		path.Base(file),
-		line, string(b),
-	)
 }

@@ -37,6 +37,7 @@ func NewVideoServer() (*VideoServer, error) {
 		// SwarmOptions: encoding.NewDefaultSwarmOptions(),
 		SwarmOptions: encoding.SwarmOptions{
 			LiveWindow: 1 << 15, // 32mb
+			// LiveWindow: 1 << 16, // 64mb
 		},
 		Key: key,
 	})
@@ -88,6 +89,7 @@ func NewVideoClient() (*VideoClient, error) {
 		// encoding.NewDefaultSwarmOptions(),
 		encoding.SwarmOptions{
 			LiveWindow: 1 << 15, // 32mb
+			// LiveWindow: 1 << 16, // 64mb
 		},
 	)
 	if err != nil {
@@ -133,7 +135,7 @@ func (c *VideoClient) SendEvents(ch chan *pb.VideoClientEvent) {
 	log.Println("finished discarding chunk fragment")
 
 	var seq int
-	var bufs [32][32 * 1024]byte
+	var bufs [128][32 * 1024]byte
 	for {
 		b := &bufs[seq%len(bufs)]
 		seq++

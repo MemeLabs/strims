@@ -167,6 +167,6 @@ export class Decoder {
       return;
     }
 
-    this.sourceBuffer.remove(start, end - 10);
+    this.sourceBuffer.remove(0, end - 10);
   }
 }

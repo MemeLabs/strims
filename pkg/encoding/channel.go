@@ -73,8 +73,8 @@ func newChannel() *channel {
 		requestedBins:       binmap.New(),
 		availableBins:       binmap.New(),
 		unackedBins:         binmap.New(),
-		sentBinHistory:      newBinHistory(32),
-		requestedBinHistory: newBinHistory(32),
+		sentBinHistory:      newBinTimeoutQueue(32),
+		requestedBinHistory: newBinTimeoutQueue(32),
 		close:               make(chan struct{}),
 	}
 }
@@ -85,12 +85,12 @@ type channel struct {
 	id                  uint64
 	liveWindow          int
 	choked              bool
-	addedBins           *binmap.Map // bins to send HAVEs for
-	requestedBins       *binmap.Map // bins to send DATA for
-	availableBins       *binmap.Map // bins the peer claims to have
-	unackedBins         *binmap.Map // sent bins that have not been acked
-	sentBinHistory      *binHistory // recently sent bins
-	requestedBinHistory *binHistory // bins recently requested from the peer
+	addedBins           *binmap.Map      // bins to send HAVEs for
+	requestedBins       *binmap.Map      // bins to send DATA for
+	availableBins       *binmap.Map      // bins the peer claims to have
+	unackedBins         *binmap.Map      // sent bins that have not been acked
+	sentBinHistory      *binTimeoutQueue // recently sent bins
+	requestedBinHistory *binTimeoutQueue // bins recently requested from the peer
 	acks                []codec.Ack
 	pong                *codec.Pong
 	closeOnce           sync.Once
@@ -218,49 +218,63 @@ type channelWriter struct {
 	*channel
 	w       codec.Writer
 	metrics channelMetrics
+	dirty   bool
 }
 
 func (c *channelWriter) Flush() error {
+	c.dirty = false
 	return c.w.Flush()
+}
+
+func (c *channelWriter) Dirty() bool {
+	return c.dirty
 }
 
 func (c *channelWriter) WriteHandshake(m codec.Handshake) (int, error) {
 	c.metrics.HandshakeCount.Inc()
+	c.dirty = true
 	return c.w.WriteHandshake(m)
 }
 
 func (c *channelWriter) WriteAck(m codec.Ack) (int, error) {
 	c.metrics.AckCount.Inc()
+	c.dirty = true
 	return c.w.WriteAck(m)
 }
 
 func (c *channelWriter) WriteHave(m codec.Have) (int, error) {
 	c.metrics.HaveCount.Inc()
+	c.dirty = true
 	return c.w.WriteHave(m)
 }
 
 func (c *channelWriter) WriteData(m codec.Data) (int, error) {
 	c.metrics.DataCount.Inc()
+	c.dirty = true
 	return c.w.WriteData(m)
 }
 
 func (c *channelWriter) WriteRequest(m codec.Request) (int, error) {
 	c.metrics.RequestCount.Inc()
+	c.dirty = true
 	return c.w.WriteRequest(m)
 }
 
 func (c *channelWriter) WritePing(m codec.Ping) (int, error) {
 	c.metrics.PingCount.Inc()
+	c.dirty = true
 	return c.w.WritePing(m)
 }
 
 func (c *channelWriter) WritePong(m codec.Pong) (int, error) {
 	c.metrics.PongCount.Inc()
+	c.dirty = true
 	return c.w.WritePong(m)
 }
 
 func (c *channelWriter) WriteCancel(m codec.Cancel) (int, error) {
 	c.metrics.CancelCount.Inc()
+	c.dirty = true
 	return c.w.WriteCancel(m)
 }
 
@@ -296,7 +310,11 @@ func (c *ChannelReader) HandleMessage(b []byte) (int, error) {
 }
 
 type channelMessageHandler struct {
-	swarm   *Swarm
+	swarm *Swarm
+	// * ID()
+	// * chunkSize()
+	// * loadedBins()
+	// * pubSub
 	peer    *Peer
 	channel *channel
 	metrics channelMetrics
@@ -366,12 +384,14 @@ func (c *channelMessageHandler) HandleAck(v codec.Ack) {
 
 	if c.channel.addAckedBin(v.Address.Bin()) {
 		c.peer.addDelaySample(v.DelaySample.Duration, c.swarm.chunkSize())
+		c.swarm.bins.AddAvailable(v.Address.Bin())
 	}
 }
 
 func (c *channelMessageHandler) HandleHave(v codec.Have) {
 	c.metrics.HaveCount.Inc()
 	c.channel.addAvailableBin(v.Bin())
+	c.swarm.bins.AddAvailable(v.Bin())
 }
 
 func (c *channelMessageHandler) HandleRequest(v codec.Request) {
@@ -403,7 +423,7 @@ func (c *channelMessageHandler) HandlePing(v codec.Ping) {
 
 func (c *channelMessageHandler) HandlePong(v codec.Pong) {
 	c.metrics.PongCount.Inc()
-	c.peer.addRTTSample(0, binmap.Bin(v.Nonce.Value))
+	c.peer.addRTTSample(c.channel.id, binmap.Bin(v.Nonce.Value))
 }
 
 func newChannelMetrics(channel *channel, direction string) channelMetrics {

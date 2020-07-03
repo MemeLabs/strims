@@ -7,51 +7,51 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/queue"
 )
 
-// binHistoryEntry ...
-type binHistoryEntry struct {
+// binTimeoutQueueItem ...
+type binTimeoutQueueItem struct {
 	Time time.Time
 	Bin  binmap.Bin
 }
 
-type binHistory struct {
+type binTimeoutQueue struct {
 	ring   queue.Ring
-	values []binHistoryEntry
+	values []binTimeoutQueueItem
 }
 
-func newBinHistory(size uint64) (r *binHistory) {
-	r = &binHistory{}
+func newBinTimeoutQueue(size uint64) (r *binTimeoutQueue) {
+	r = &binTimeoutQueue{}
 	r.resize(size)
 	return
 }
 
-func (s *binHistory) grow() {
+func (s *binTimeoutQueue) grow() {
 	s.resize(s.ring.Size() * 2)
 }
 
-func (s *binHistory) resize(size uint64) {
+func (s *binTimeoutQueue) resize(size uint64) {
 	v := s.values
-	s.values = make([]binHistoryEntry, size)
+	s.values = make([]binTimeoutQueueItem, size)
 
 	oldTail, ok := s.ring.Tail()
 	s.ring.Resize(size)
 	newTail, _ := s.ring.Tail()
 
 	if ok {
-		copyBinHistories(
-			[][]binHistoryEntry{s.values[newTail:], s.values[:newTail]},
-			[][]binHistoryEntry{v[oldTail:], v[:oldTail]},
+		copyBinTimeoutQueue(
+			[][]binTimeoutQueueItem{s.values[newTail:], s.values[:newTail]},
+			[][]binTimeoutQueueItem{v[oldTail:], v[:oldTail]},
 		)
 	}
 }
 
-func (s *binHistory) Push(b binmap.Bin, t time.Time) {
+func (s *binTimeoutQueue) Push(b binmap.Bin, t time.Time) {
 	i, ok := s.ring.Push()
 	if !ok {
 		s.grow()
 		i, _ = s.ring.Push()
 	}
 
-	s.values[i] = binHistoryEntry{
+	s.values[i] = binTimeoutQueueItem{
 		Time: t,
 		Bin:  b,
 	}
@@ -59,7 +59,7 @@ func (s *binHistory) Push(b binmap.Bin, t time.Time) {
 }
 
 // Peek ...
-func (s *binHistory) Peek() (r *binHistoryEntry, ok bool) {
+func (s *binTimeoutQueue) Peek() (r *binTimeoutQueueItem, ok bool) {
 	i, ok := s.ring.Tail()
 	if ok {
 		r = &s.values[i]
@@ -68,14 +68,14 @@ func (s *binHistory) Peek() (r *binHistoryEntry, ok bool) {
 }
 
 // Pop ...
-func (s *binHistory) Pop() (r *binHistoryEntry, ok bool) {
+func (s *binTimeoutQueue) Pop() (r *binTimeoutQueueItem, ok bool) {
 	if i, ok := s.ring.Pop(); ok {
 		r = &s.values[i]
 	}
 	return
 }
 
-func (s *binHistory) IterateUntil(t time.Time) binHistoryIterator {
+func (s *binTimeoutQueue) IterateUntil(t time.Time) binHistoryIterator {
 	return binHistoryIterator{
 		t: t,
 		h: s,
@@ -84,8 +84,8 @@ func (s *binHistory) IterateUntil(t time.Time) binHistoryIterator {
 
 type binHistoryIterator struct {
 	t time.Time
-	h *binHistory
-	e *binHistoryEntry
+	h *binTimeoutQueue
+	e *binTimeoutQueueItem
 }
 
 // Next ...
@@ -102,7 +102,7 @@ func (s *binHistoryIterator) Bin() binmap.Bin {
 	return s.e.Bin
 }
 
-func copyBinHistories(dst [][]binHistoryEntry, src [][]binHistoryEntry) (n int) {
+func copyBinTimeoutQueue(dst [][]binTimeoutQueueItem, src [][]binTimeoutQueueItem) (n int) {
 	var i, in int
 	for _, b := range src {
 		var bn int

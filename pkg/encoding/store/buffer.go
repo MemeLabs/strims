@@ -21,7 +21,10 @@ func NewBuffer(size, chunkSize int) (c *Buffer, err error) {
 		head:      binmap.Bin(size * 2),
 		bins:      binmap.New(),
 		buf:       make([]byte, size*chunkSize),
-		cond:      sync.Cond{L: &sync.Mutex{}},
+		next:      binmap.None,
+		prev:      binmap.None,
+		ready:     make(chan struct{}),
+		readable:  make(chan struct{}, 1),
 	}, nil
 }
 
@@ -33,107 +36,98 @@ type Buffer struct {
 	head      binmap.Bin
 	bins      *binmap.Map
 	buf       []byte
-	cond      sync.Cond
+	lock      sync.Mutex
+	ready     chan struct{}
+	readable  chan struct{}
 	next      binmap.Bin
-	debug     bool
+	prev      binmap.Bin
+	off       uint64
 }
 
 // Consume ...
 func (s *Buffer) Consume(c Chunk) {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
+	s.Set(c.Bin, c.Data)
+}
 
-	n := copy(s.buf[s.index(c.Bin):], c.Data)
+// Set ...
+func (s *Buffer) Set(b binmap.Bin, d []byte) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
-	if n < len(c.Data) {
-		copy(s.buf, c.Data[n:])
-	}
+	copy(s.buf[s.index(b):], d)
 
-	h := c.Bin.BaseRight() + 2
+	h := b.BaseRight() + 2
 	if s.head < h {
 		s.head = h
 	}
 
-	s.bins.Set(c.Bin)
-	if c.Bin == s.next {
-		next := s.bins.FindEmptyAfter(s.next)
-		if next.IsNone() {
-			next = s.next + 2
-		}
-		s.next = next
-
-		s.cond.Broadcast()
+	s.bins.Set(b)
+	if !b.Contains(s.next) {
+		return
 	}
-}
 
-// Slice ...
-func (s *Buffer) Slice(b binmap.Bin) (d byterope.Rope, ok bool) {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
-
-	if s.contains(b) {
-		l := int(binByte(b.BaseLeft()-s.tail(), s.chunkSize))
-		h := int(binByte(b.BaseRight()-s.tail(), s.chunkSize) + s.chunkSize)
-		i := s.index(s.tail())
-		return byterope.New(s.buf[i:], s.buf[:i]).Slice(l, h), true
+	next := s.bins.FindEmptyAfter(s.next)
+	if next.IsNone() {
+		next = s.bins.RootBin().BaseRight() + 2
 	}
-	return
-}
+	s.next = next
 
-// Find ...
-func (s *Buffer) Find(b binmap.Bin) (data []byte, ok bool) {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
-
-	if b.Base() && s.contains(b) {
-		i := s.index(b)
-		return s.buf[i : i+int(s.chunkSize)], true
+	select {
+	case s.readable <- struct{}{}:
+	default:
 	}
-	return
 }
 
 // ReadBin ...
 func (s *Buffer) ReadBin(b binmap.Bin, p []byte) bool {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
-	if b.Base() && s.contains(b) {
+	if s.contains(b) {
 		i := s.index(b)
-		copy(p, s.buf[i:i+int(s.chunkSize)])
+		copy(p, s.buf[i:i+int(b.BaseLength()*s.chunkSize)])
 		return true
 	}
 	return false
 }
 
-func (s *Buffer) SetNext(b binmap.Bin) {
-	s.next = b
+// SetOffset ...
+func (s *Buffer) SetOffset(b binmap.Bin) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	s.next = b.BaseLeft()
+	s.prev = s.next
+	s.off = binByte(s.next, s.chunkSize)
+
+	close(s.ready)
 }
 
 // FilledAt ...
 func (s *Buffer) FilledAt(b binmap.Bin) bool {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	return s.bins.FilledAt(b)
 }
 
 // EmptyAt ...
 func (s *Buffer) EmptyAt(b binmap.Bin) bool {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	return s.bins.EmptyAt(b)
 }
 
 // Cover ...
 func (s *Buffer) Cover(b binmap.Bin) binmap.Bin {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	return s.bins.Cover(b)
 }
 
 // Bins ...
 func (s *Buffer) Bins() *binmap.Map {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	return s.bins.Clone()
 }
 
@@ -149,16 +143,37 @@ func (s *Buffer) contains(b binmap.Bin) bool {
 	return s.tail() <= b.BaseLeft() && b.BaseRight() < s.head && s.bins.FilledAt(b)
 }
 
-// Reader ...
-func (s *Buffer) Reader() *Reader {
-	s.cond.L.Lock()
-	defer s.cond.L.Unlock()
-	s.cond.Wait()
+// Offset ...
+func (s *Buffer) Offset() uint64 {
+	<-s.ready
+	return s.off
+}
 
-	return &Reader{
-		chunkSize: s.chunkSize,
-		prev:      s.next - 2,
-		off:       binByte(s.next-2, s.chunkSize),
-		b:         s,
+// Read ...
+func (s *Buffer) Read(p []byte) (int, error) {
+	s.lock.Lock()
+	if s.next == s.prev {
+		s.lock.Unlock()
+		<-s.readable
+		s.lock.Lock()
 	}
+	defer s.lock.Unlock()
+
+	l := int(s.off - binByte(s.tail(), s.chunkSize))
+	h := int(binByte(s.next-s.tail(), s.chunkSize))
+	i := s.index(s.tail())
+	n := byterope.New(p).Copy(byterope.New(s.buf[i:], s.buf[:i]).Slice(l, h)...)
+
+	s.off += uint64(n)
+	s.prev = byteBin(s.off, s.chunkSize)
+
+	return n, nil
+}
+
+func binByte(b binmap.Bin, chunkSize uint64) uint64 {
+	return uint64(b/2) * chunkSize
+}
+
+func byteBin(b, chunkSize uint64) binmap.Bin {
+	return binmap.Bin(b*2) / binmap.Bin(chunkSize)
 }

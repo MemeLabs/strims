@@ -6,6 +6,15 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
 
+// NewPubSub ...
+func NewPubSub(subs ...Subscriber) *PubSub {
+	p := &PubSub{}
+	for _, s := range subs {
+		p.Subscribe(s)
+	}
+	return p
+}
+
 // PubSub ...
 type PubSub struct {
 	lock sync.Mutex
@@ -24,7 +33,7 @@ func (p *PubSub) Unsubscribe(s Subscriber) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	for i := range p.subs {
+	for i := 0; i < len(p.subs); i++ {
 		if p.subs[i] == s {
 			copy(p.subs[i:], p.subs[i+1:])
 			p.subs = p.subs[:len(p.subs)-1]

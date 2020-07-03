@@ -821,11 +821,12 @@ func (m *Map) FindFilled() Bin {
 }
 
 // FindFilledAfter ...
-func (m *Map) FindFilledAfter(b Bin) Bin {
+func (m *Map) FindFilledAfter(target Bin) Bin {
+	b := target
 	if m.FilledAt(b) {
 		return b
 	}
-	if !b.Contains(m.rootBin) {
+	if !m.rootBin.Contains(b) {
 		return None
 	}
 
@@ -840,15 +841,34 @@ func (m *Map) FindFilledAfter(b Bin) Bin {
 	}
 
 	for {
-		if !m.EmptyAt(b.Left()) {
+		if !m.EmptyAt(b.Left()) && b.Left() > target {
 			b = b.Left()
 		} else if !m.EmptyAt(b.Right()) {
 			b = b.Right()
+		} else {
+			return None
 		}
 		if b.Base() {
 			return b
 		}
 	}
+}
+
+// FindLastFilled ...
+func (m *Map) FindLastFilled() Bin {
+	if m.Empty() {
+		return None
+	}
+
+	b := m.rootBin
+	for b.Layer() != 0 {
+		if m.EmptyAt(b.Right()) {
+			b = b.Left()
+		} else {
+			b = b.Right()
+		}
+	}
+	return b
 }
 
 type traceHistory struct {
