@@ -24,11 +24,10 @@ func TestChat(t *testing.T) {
 	type state struct {
 		client  *rpc.Client
 		profile pb.CreateProfileResponse
-		vpn     pb.StartVPNResponse
 	}
 
 	a := &state{client: d.Client(&driver.ClientOptions{
-		VPNServerAddr: "0.0.0.0:8083",
+		VPNServerAddr: "0.0.0.0:8084",
 	})}
 	b := &state{client: td.Client(&driver.ClientOptions{})}
 	c := &state{client: td.Client(&driver.ClientOptions{})}
@@ -47,7 +46,7 @@ func TestChat(t *testing.T) {
 	vpn := &pb.StartVPNRequest{
 		EnableBootstrapPublishing: true,
 	}
-	if err := a.client.CallUnary(ctx, "startVPN", vpn, &a.vpn); err != nil {
+	if err := a.client.CallStreaming(ctx, "startVPN", vpn, make(chan *pb.NetworkEvent)); err != nil {
 		log.Fatal(err)
 	}
 
@@ -65,7 +64,7 @@ func TestChat(t *testing.T) {
 		bootstrapClient := &pb.CreateBootstrapClientRequest{
 			ClientOptions: &pb.CreateBootstrapClientRequest_WebsocketOptions{
 				WebsocketOptions: &pb.BootstrapClientWebSocketOptions{
-					Url: "ws://localhost:8083/test-bootstrap",
+					Url: "ws://localhost:8084/test-bootstrap",
 				},
 			},
 		}
@@ -73,7 +72,7 @@ func TestChat(t *testing.T) {
 			return err
 		}
 
-		if err := s.client.CallUnary(ctx, "startVPN", &pb.StartVPNRequest{}, &s.vpn); err != nil {
+		if err := s.client.CallStreaming(ctx, "startVPN", &pb.StartVPNRequest{}, make(chan *pb.NetworkEvent)); err != nil {
 			return err
 		}
 

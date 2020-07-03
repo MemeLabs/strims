@@ -10,7 +10,6 @@ func TestWriter(t *testing.T) {
 	chunkSize := 1024
 
 	p := &testPublisher{}
-
 	w := NewWriter(p, chunkSize)
 
 	w.Write(make([]byte, chunkSize*3))

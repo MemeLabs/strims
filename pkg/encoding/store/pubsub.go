@@ -8,11 +8,7 @@ import (
 
 // NewPubSub ...
 func NewPubSub(subs ...Subscriber) *PubSub {
-	p := &PubSub{}
-	for _, s := range subs {
-		p.Subscribe(s)
-	}
-	return p
+	return &PubSub{subs: subs}
 }
 
 // PubSub ...

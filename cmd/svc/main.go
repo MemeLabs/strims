@@ -2,6 +2,7 @@ package main
 
 import (
 	"errors"
+	"flag"
 	"log"
 	"net"
 	"net/http"
@@ -18,7 +19,10 @@ import (
 	"go.uber.org/zap"
 )
 
+var addr = flag.String("addr", "0.0.0.0:8082", "bootstrap server listen address")
+
 func main() {
+	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lmicroseconds)
 
 	go func() {
@@ -44,7 +48,7 @@ func main() {
 		logger,
 		profile.Key,
 		vpn.WithNetworkBroker(vpn.NewNetworkBroker(logger)),
-		vpn.WithInterface(vpn.NewWSInterface(logger, "0.0.0.0:8082")),
+		vpn.WithInterface(vpn.NewWSInterface(logger, *addr)),
 		vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger))),
 	)
 	if err != nil {

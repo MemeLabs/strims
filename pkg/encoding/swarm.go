@@ -49,7 +49,7 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 	}
 
 	bins := &swarmBins{
-		Loading:   binmap.New(),
+		Requested: binmap.New(),
 		Available: binmap.New(),
 	}
 
@@ -65,14 +65,8 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 
 type swarmBins struct {
 	sync.Mutex
-	Loading   *binmap.Map // bins we have or have requested
+	Requested *binmap.Map // bins we have or have requested
 	Available *binmap.Map // bins at least one peer has
-}
-
-func (s *swarmBins) AddLoading(b binmap.Bin) {
-	s.Lock()
-	defer s.Unlock()
-	s.Loading.Set(b)
 }
 
 func (s *swarmBins) AddAvailable(b binmap.Bin) {
@@ -84,8 +78,7 @@ func (s *swarmBins) AddAvailable(b binmap.Bin) {
 func (s *swarmBins) Consume(c store.Chunk) {
 	s.Lock()
 	defer s.Unlock()
-	s.Loading.Set(c.Bin)
-	// s.Available.Set(c.Bin)
+	s.Requested.Set(c.Bin)
 }
 
 // Swarm ...

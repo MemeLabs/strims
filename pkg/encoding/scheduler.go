@@ -158,7 +158,7 @@ func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 			if !s.store.FilledAt(i.Bin()) {
 				for b := i.Bin().BaseLeft(); b <= i.Bin().BaseRight(); b += 2 {
 					if s.store.EmptyAt(b) {
-						s.bins.Loading.Reset(b)
+						s.bins.Requested.Reset(b)
 						p.AddCancelledChunk()
 					}
 				}
@@ -305,14 +305,14 @@ func (r *Scheduler) requestBins(count int, s *Swarm, c *channel) ([]binmap.Bin, 
 	s.bins.Lock()
 	defer s.bins.Unlock()
 
-	if s.bins.Loading.Empty() {
-		bins, n := (&FirstChunkSelector{}).SelectBins(count, s.bins.Available, s.bins.Loading, c.availableBins)
+	if s.bins.Requested.Empty() {
+		bins, n := (&FirstChunkSelector{}).SelectBins(count, s.bins.Available, s.bins.Requested, c.availableBins)
 		if len(bins) != 0 {
 			s.store.SetOffset(bins[0].BaseLeft() + 2)
 		}
 		return bins, n
 	}
-	return (&SequentialChunkSelector{}).SelectBins(count, s.bins.Available, s.bins.Loading, c.availableBins)
+	return (&SequentialChunkSelector{}).SelectBins(count, s.bins.Available, s.bins.Requested, c.availableBins)
 }
 
 // ChunkSelector ...

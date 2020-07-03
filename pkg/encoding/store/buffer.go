@@ -37,6 +37,7 @@ type Buffer struct {
 	bins      *binmap.Map
 	buf       []byte
 	lock      sync.Mutex
+	readyOnce sync.Once
 	ready     chan struct{}
 	readable  chan struct{}
 	next      binmap.Bin
@@ -100,7 +101,7 @@ func (s *Buffer) SetOffset(b binmap.Bin) {
 	s.prev = s.next
 	s.off = binByte(s.next, s.chunkSize)
 
-	close(s.ready)
+	s.readyOnce.Do(func() { close(s.ready) })
 }
 
 // FilledAt ...
