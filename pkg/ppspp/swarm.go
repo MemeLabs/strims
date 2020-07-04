@@ -1,11 +1,11 @@
-package encoding
+package ppspp
 
 import (
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/encoding/codec"
-	"github.com/MemeLabs/go-ppspp/pkg/encoding/store"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 )
 
 // SwarmOptions ...

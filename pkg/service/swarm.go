@@ -5,9 +5,9 @@ import (
 	"context"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/pkg/encoding"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -43,7 +43,7 @@ func newSwarmPeer(peer *vpn.Peer) *swarmPeer {
 
 	return &swarmPeer{
 		peer:       peer,
-		swarmPeer:  encoding.NewPeer(),
+		swarmPeer:  ppspp.NewPeer(),
 		rw:         rw,
 		swarmPorts: map[string]*swarmPeerSwarmItem{},
 	}
@@ -51,13 +51,13 @@ func newSwarmPeer(peer *vpn.Peer) *swarmPeer {
 
 type swarmPeer struct {
 	peer           *vpn.Peer
-	swarmPeer      *encoding.Peer
+	swarmPeer      *ppspp.Peer
 	rw             *vpn.FrameReadWriter
 	swarmPortsLock sync.Mutex
 	swarmPorts     map[string]*swarmPeerSwarmItem
 }
 
-func (p *swarmPeer) findOrInsertSwarm(id encoding.SwarmID) *swarmPeerSwarmItem {
+func (p *swarmPeer) findOrInsertSwarm(id ppspp.SwarmID) *swarmPeerSwarmItem {
 	p.swarmPortsLock.Lock()
 	defer p.swarmPortsLock.Unlock()
 
@@ -70,19 +70,19 @@ func (p *swarmPeer) findOrInsertSwarm(id encoding.SwarmID) *swarmPeerSwarmItem {
 	return item
 }
 
-func (p *swarmPeer) SetLocalSwarmPort(id encoding.SwarmID, port uint16) {
+func (p *swarmPeer) SetLocalSwarmPort(id ppspp.SwarmID, port uint16) {
 	p.findOrInsertSwarm(id).SetLocalPort(port)
 }
 
-func (p *swarmPeer) SetRemoteSwarmPort(id encoding.SwarmID, port uint16) {
+func (p *swarmPeer) SetRemoteSwarmPort(id ppspp.SwarmID, port uint16) {
 	p.findOrInsertSwarm(id).SetRemotePort(port)
 }
 
-func (p *swarmPeer) SwarmPorts(id encoding.SwarmID) (uint16, uint16, bool) {
+func (p *swarmPeer) SwarmPorts(id ppspp.SwarmID) (uint16, uint16, bool) {
 	return p.findOrInsertSwarm(id).Ports()
 }
 
-func newSwarmSwarm(logger *zap.Logger, swarm *encoding.Swarm) *swarmSwarm {
+func newSwarmSwarm(logger *zap.Logger, swarm *ppspp.Swarm) *swarmSwarm {
 	return &swarmSwarm{
 		logger: logger,
 		swarm:  swarm,
@@ -91,7 +91,7 @@ func newSwarmSwarm(logger *zap.Logger, swarm *encoding.Swarm) *swarmSwarm {
 
 type swarmSwarm struct {
 	logger *zap.Logger
-	swarm  *encoding.Swarm
+	swarm  *ppspp.Swarm
 }
 
 // TODO: prevent duplicate channels...
@@ -111,7 +111,7 @@ func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
 		)
 
 		w := vpn.NewFrameWriter(p.peer.Link, remotePort, p.peer.Link.MTU())
-		ch, err := encoding.OpenChannel(p.swarmPeer, s.swarm, w)
+		ch, err := ppspp.OpenChannel(p.swarmPeer, s.swarm, w)
 		if err != nil {
 			return
 		}
@@ -130,7 +130,7 @@ func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
 		}
 
 		ch.Close()
-		encoding.CloseChannel(p.swarmPeer, s.swarm)
+		ppspp.CloseChannel(p.swarmPeer, s.swarm)
 		p.peer.RemoveHandler(localPort)
 
 		s.logger.Debug(
@@ -149,8 +149,8 @@ func (s *swarmSwarm) TryCloseChannel(p *swarmPeer) {
 
 // SwarmNetwork ...
 type SwarmNetwork interface {
-	OpenSwarm(swarm *encoding.Swarm)
-	CloseSwarm(id encoding.SwarmID)
+	OpenSwarm(swarm *ppspp.Swarm)
+	CloseSwarm(id ppspp.SwarmID)
 }
 
 func newSwarmNetwork(logger *zap.Logger, n *vpn.Network, s *sync.Map) *swarmNetwork {
@@ -187,7 +187,7 @@ func (t *swarmNetwork) addPeer(p *swarmPeer) {
 	p.rw.Flush()
 }
 
-func (t *swarmNetwork) OpenSwarm(swarm *encoding.Swarm) {
+func (t *swarmNetwork) OpenSwarm(swarm *ppspp.Swarm) {
 	t.logger.Debug(
 		"opening swarm",
 		zap.Stringer("swarm", swarm.ID()),
@@ -233,7 +233,7 @@ func (t *swarmNetwork) sendOpen(s *swarmSwarm, p *swarmPeer) error {
 	})
 }
 
-func (t *swarmNetwork) CloseSwarm(id encoding.SwarmID) {
+func (t *swarmNetwork) CloseSwarm(id ppspp.SwarmID) {
 	t.logger.Debug(
 		"closing swarm",
 		zap.Stringer("swarm", id),
@@ -261,7 +261,7 @@ func (t *swarmNetwork) CloseSwarm(id encoding.SwarmID) {
 func newSwarmController(logger *zap.Logger, h *vpn.Host, n *vpn.Networks) *swarmController {
 	t := &swarmController{
 		logger:    logger,
-		scheduler: encoding.NewScheduler(context.TODO(), logger),
+		scheduler: ppspp.NewScheduler(context.TODO(), logger),
 	}
 
 	go t.do(h, n)
@@ -274,7 +274,7 @@ type swarmController struct {
 	peers        sync.Map
 	networks     sync.Map
 	activeSwarms sync.Map
-	scheduler    *encoding.Scheduler
+	scheduler    *ppspp.Scheduler
 }
 
 func (t *swarmController) do(h *vpn.Host, n *vpn.Networks) {
@@ -321,14 +321,14 @@ func (t *swarmController) handlePeer(peer *vpn.Peer) {
 
 			switch b := msg.Body.(type) {
 			case *pb.SwarmThingMessage_Open_:
-				id := encoding.NewSwarmID(b.Open.SwarmId)
+				id := ppspp.NewSwarmID(b.Open.SwarmId)
 				p.SetRemoteSwarmPort(id, uint16(b.Open.Port))
 
 				if si, ok := t.activeSwarms.Load(id.String()); ok {
 					si.(*swarmSwarm).TryOpenChannel(p)
 				}
 			case *pb.SwarmThingMessage_Close_:
-				id := encoding.NewSwarmID(b.Close.SwarmId)
+				id := ppspp.NewSwarmID(b.Close.SwarmId)
 				p.SetRemoteSwarmPort(id, 0)
 
 				if si, ok := t.activeSwarms.Load(id.String()); ok {

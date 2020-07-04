@@ -1,4 +1,4 @@
-package encoding
+package ppspp
 
 import (
 	"io"
@@ -16,8 +16,8 @@ import (
 // TODO: this shouldn't be part of the public interface
 // TODO: locking madness...
 
-// ReadWriteFlusher ...
-type ReadWriteFlusher interface {
+// WriteFlushCloser ...
+type WriteFlushCloser interface {
 	io.WriteCloser
 	MTU() int
 	Flush() error

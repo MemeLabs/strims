@@ -11,10 +11,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/encoding"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/prefixstream"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"google.golang.org/protobuf/proto"
@@ -30,9 +30,9 @@ type PubSubServerOptions struct {
 
 // NewPubSubServer ...
 func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubServer, error) {
-	w, err := encoding.NewWriter(encoding.WriterOptions{
-		// SwarmOptions: encoding.NewDefaultSwarmOptions(),
-		SwarmOptions: encoding.SwarmOptions{
+	w, err := ppspp.NewWriter(ppspp.WriterOptions{
+		// SwarmOptions: ppspp.NewDefaultSwarmOptions(),
+		SwarmOptions: ppspp.SwarmOptions{
 			LiveWindow: 1 << 10, // 1MB
 			ChunkSize:  128,
 		},
@@ -91,7 +91,7 @@ type PubSubServer struct {
 	close     context.CancelFunc
 	closeOnce sync.Once
 	messages  chan *pb.PubSubEvent_Message
-	swarm     *encoding.Swarm
+	swarm     *ppspp.Swarm
 	svc       *NetworkServices
 	w         *prefixstream.Writer
 }
@@ -178,10 +178,10 @@ func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, err
 		return nil, err
 	}
 
-	swarm, err := encoding.NewSwarm(
-		encoding.NewSwarmID(key),
-		// encoding.NewDefaultSwarmOptions(),
-		encoding.SwarmOptions{
+	swarm, err := ppspp.NewSwarm(
+		ppspp.NewSwarmID(key),
+		// ppspp.NewDefaultSwarmOptions(),
+		ppspp.SwarmOptions{
 			LiveWindow: 1 << 10, // 1MB
 			ChunkSize:  128,
 		},
@@ -226,7 +226,7 @@ type PubSubClient struct {
 	close     context.CancelFunc
 	closeOnce sync.Once
 	svc       *NetworkServices
-	swarm     *encoding.Swarm
+	swarm     *ppspp.Swarm
 	addrReady chan struct{}
 	addr      atomic.Value
 	port      uint16
@@ -296,7 +296,7 @@ func (c *PubSubClient) Send(key string, body []byte) error {
 	return c.svc.Network.Send(addr.HostID, addr.Port, c.port, b)
 }
 
-func readPubSubEvents(swarm *encoding.Swarm, messages chan *pb.PubSubEvent_Message) {
+func readPubSubEvents(swarm *ppspp.Swarm, messages chan *pb.PubSubEvent_Message) {
 	r := prefixstream.NewReader(swarm.Reader())
 	b := bytes.NewBuffer(nil)
 	for {
@@ -388,7 +388,9 @@ func getPeersGetter(ctx context.Context, svc *NetworkServices, key, salt []byte)
 	// TODO: peer set feature?
 	// TDOO: find peers swarm interface function thing...
 	return func() ([]*vpn.PeerIndexHost, error) {
-		ctx, _ := context.WithTimeout(ctx, getPeersGetterTimeout)
+		ctx, cancel := context.WithTimeout(ctx, getPeersGetterTimeout)
+		defer cancel()
+
 		peers := newPeerSet()
 		if err := peers.LoadFrom(ctx, svc.PeerIndex, key, salt); err != nil {
 			return nil, err
@@ -401,7 +403,9 @@ func getPeersGetter(ctx context.Context, svc *NetworkServices, key, salt []byte)
 const latestHashValuesTimeout = 5 * time.Second
 
 func latestHashValue(ctx context.Context, svc *NetworkServices, key, salt []byte) ([]byte, error) {
-	ctx, _ = context.WithTimeout(ctx, latestHashValuesTimeout)
+	ctx, cancel := context.WithTimeout(ctx, latestHashValuesTimeout)
+	defer cancel()
+
 	values, err := svc.HashTable.Get(ctx, key, salt)
 	if err != nil {
 		return nil, err

@@ -1,8 +1,8 @@
-package encoding
+package ppspp
 
 import (
-	"github.com/MemeLabs/go-ppspp/pkg/encoding/store"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 )
 
 // WriterOptions ...

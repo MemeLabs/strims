@@ -41,7 +41,7 @@ func TestWriter(t *testing.T) {
 	}{
 		{0, []byte{0, 0}},
 		{32, []byte{0, 0}},
-		{64, []byte{0x80, 0x0b}},
+		{64, []byte{0x80, 0x11}},
 	}
 	for _, h := range headers {
 		oh := o[h.index : h.index+2]

@@ -1,4 +1,4 @@
-package encoding
+package ppspp
 
 import (
 	"context"
@@ -8,9 +8,9 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/encoding/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
@@ -163,7 +163,7 @@ func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 					}
 				}
 
-				c.WriteCancel(codec.Cancel{codec.Address(i.Bin())})
+				c.WriteCancel(codec.Cancel{Address: codec.Address(i.Bin())})
 			}
 		}
 
@@ -202,14 +202,14 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 			}
 			c.addedBins.Reset(b)
 
-			c.WriteHave(codec.Have{codec.Address(b)})
+			c.WriteHave(codec.Have{Address: codec.Address(b)})
 		}
 
 		requestBins, n := r.requestBins(requesteCapacity, s, c.channel)
 		requesteCapacity -= n
 
 		for _, b := range requestBins {
-			c.WriteRequest(codec.Request{codec.Address(b)})
+			c.WriteRequest(codec.Request{Address: codec.Address(b)})
 			p.AddRequestedChunks(b.BaseLength())
 			c.requestedBinHistory.Push(b, t)
 		}
@@ -229,7 +229,7 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 				// TODO: avoid writing data until after this?
 				c.WriteData(codec.Data{
 					Address:   codec.Address(rb),
-					Timestamp: codec.Timestamp{t},
+					Timestamp: codec.Timestamp{Time: t},
 					Data:      codec.Buffer(b),
 				})
 
@@ -257,7 +257,7 @@ func (r *Scheduler) sendPeerPing(p *Peer, t time.Time) {
 	for _, c := range p.channels {
 		if c.Dirty() {
 			if nonce, ok := p.TrackPingRTT(c.id, t); ok {
-				c.WritePing(codec.Ping{codec.Nonce{nonce}})
+				c.WritePing(codec.Ping{Nonce: codec.Nonce{Value: nonce}})
 			}
 		}
 	}

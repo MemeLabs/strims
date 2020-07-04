@@ -1,4 +1,4 @@
-package encoding
+package ppspp
 
 // protocol ooptions
 const (

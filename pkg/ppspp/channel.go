@@ -1,4 +1,4 @@
-package encoding
+package ppspp
 
 import (
 	"errors"
@@ -7,9 +7,9 @@ import (
 	"sync/atomic"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/encoding/codec"
-	"github.com/MemeLabs/go-ppspp/pkg/encoding/store"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 )
@@ -41,7 +41,7 @@ type Channel interface {
 }
 
 // OpenChannel ...
-func OpenChannel(p *Peer, s *Swarm, conn ReadWriteFlusher) (*ChannelReader, error) {
+func OpenChannel(p *Peer, s *Swarm, conn WriteFlushCloser) (*ChannelReader, error) {
 	c := newChannel()
 	cw := newChannelWriter(c, conn)
 	cr := newChannelReader(c, p, s)
@@ -206,7 +206,7 @@ func newHandshake(swarm *Swarm) codec.Handshake {
 	}
 }
 
-func newChannelWriter(channel *channel, conn ReadWriteFlusher) *channelWriter {
+func newChannelWriter(channel *channel, conn WriteFlushCloser) *channelWriter {
 	return &channelWriter{
 		channel: channel,
 		w:       codec.NewWriter(conn, conn.MTU()),
@@ -295,8 +295,8 @@ func newChannelReader(channel *channel, peer *Peer, swarm *Swarm) *ChannelReader
 
 // ChannelReader ...
 type ChannelReader struct {
-	*channel
-	r codec.Reader
+	channel *channel
+	r       codec.Reader
 }
 
 // HandleMessage ...
@@ -307,6 +307,16 @@ func (c *ChannelReader) HandleMessage(b []byte) (int, error) {
 	}
 
 	return n, nil
+}
+
+// Close ...
+func (c *ChannelReader) Close() {
+	c.channel.Close()
+}
+
+// Done ...
+func (c *ChannelReader) Done() <-chan struct{} {
+	return c.channel.Done()
 }
 
 type channelMessageHandler struct {
@@ -370,11 +380,16 @@ func (c *channelMessageHandler) HandleData(v codec.Data) {
 	c.metrics.DataCount.Inc()
 
 	c.channel.enqueueAck(codec.Ack{
-		Address:     v.Address,
-		DelaySample: codec.DelaySample{iotime.Load().Sub(v.Timestamp.Time)},
+		Address: v.Address,
+		DelaySample: codec.DelaySample{
+			Duration: iotime.Load().Sub(v.Timestamp.Time),
+		},
 	})
 
-	c.swarm.pubSub.Publish(store.Chunk{v.Address.Bin(), v.Data})
+	c.swarm.pubSub.Publish(store.Chunk{
+		Bin:  v.Address.Bin(),
+		Data: v.Data,
+	})
 
 	c.peer.addReceivedChunk()
 }
@@ -418,7 +433,7 @@ func (c *channelMessageHandler) HandleUnchoke(v codec.Unchoke) {
 
 func (c *channelMessageHandler) HandlePing(v codec.Ping) {
 	c.metrics.PingCount.Inc()
-	c.channel.enqueuePong(&codec.Pong{v.Nonce})
+	c.channel.enqueuePong(&codec.Pong{Nonce: v.Nonce})
 }
 
 func (c *channelMessageHandler) HandlePong(v codec.Pong) {

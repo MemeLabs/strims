@@ -9,8 +9,8 @@ import (
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
-	"github.com/MemeLabs/go-ppspp/pkg/encoding"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 )
 
 func testKey() *pb.Key {
@@ -33,9 +33,9 @@ type SwarmPublisher interface {
 func NewVideoServer() (*VideoServer, error) {
 	key := testKey()
 
-	w, err := encoding.NewWriter(encoding.WriterOptions{
-		// SwarmOptions: encoding.NewDefaultSwarmOptions(),
-		SwarmOptions: encoding.SwarmOptions{
+	w, err := ppspp.NewWriter(ppspp.WriterOptions{
+		// SwarmOptions: ppspp.NewDefaultSwarmOptions(),
+		SwarmOptions: ppspp.SwarmOptions{
 			LiveWindow: 1 << 15, // 32mb
 			// LiveWindow: 1 << 16, // 64mb
 		},
@@ -84,10 +84,10 @@ func (t *VideoServer) Flush() error {
 func NewVideoClient() (*VideoClient, error) {
 	key := testKey()
 
-	s, err := encoding.NewSwarm(
-		encoding.NewSwarmID(key.Public),
-		// encoding.NewDefaultSwarmOptions(),
-		encoding.SwarmOptions{
+	s, err := ppspp.NewSwarm(
+		ppspp.NewSwarmID(key.Public),
+		// ppspp.NewDefaultSwarmOptions(),
+		ppspp.SwarmOptions{
 			LiveWindow: 1 << 15, // 32mb
 			// LiveWindow: 1 << 16, // 64mb
 		},
@@ -173,7 +173,7 @@ type VideoSwarm struct {
 	close     context.CancelFunc
 	closeOnce sync.Once
 	key       []byte
-	s         *encoding.Swarm
+	s         *ppspp.Swarm
 	svc       []*NetworkServices
 }
 

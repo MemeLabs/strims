@@ -1,4 +1,4 @@
-package encoding
+package ppspp
 
 import (
 	"errors"
@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/MemeLabs/go-ppspp/pkg/encoding/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 )
 
 // TODO: implement this with content integrity...
