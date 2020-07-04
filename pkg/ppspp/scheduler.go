@@ -158,7 +158,9 @@ func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 			if !s.store.FilledAt(i.Bin()) {
 				for b := i.Bin().BaseLeft(); b <= i.Bin().BaseRight(); b += 2 {
 					if s.store.EmptyAt(b) {
+						s.bins.Lock()
 						s.bins.Requested.Reset(b)
+						s.bins.Unlock()
 						p.AddCancelledChunk()
 					}
 				}

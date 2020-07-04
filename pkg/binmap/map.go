@@ -747,7 +747,8 @@ func (m *Map) FindEmptyAfter(target Bin) Bin {
 
 	for {
 		b = b.Parent()
-		if !m.FilledAt(b) && b > target {
+		if !m.FilledAt(b.Right()) && b > target {
+			b = b.Right()
 			break
 		}
 		if b == m.rootBin {
@@ -832,7 +833,8 @@ func (m *Map) FindFilledAfter(target Bin) Bin {
 
 	for {
 		b = b.Parent()
-		if !m.EmptyAt(b) {
+		if !m.EmptyAt(b.Right()) && b > target {
+			b = b.Right()
 			break
 		}
 		if b == m.rootBin {

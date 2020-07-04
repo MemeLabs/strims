@@ -163,6 +163,13 @@ func TestFindEmptyAfter(t *testing.T) {
 	}
 }
 
+func TestFindEmptyAfter2(t *testing.T) {
+	m := New()
+	m.Set(2)
+	m.Set(5)
+	assert.Equal(t, Bin(8), m.FindEmptyAfter(2))
+}
+
 func TestFindFilled1(t *testing.T) {
 	assert := assert.New(t)
 	hole := New()
@@ -188,4 +195,12 @@ func TestFindFilled3(t *testing.T) {
 	hole.Set(NewBin(3, 0))
 	hole.Reset(NewBin(2, 0))
 	assert.Equal(NewBin(0, 4), hole.FindFilled().BaseLeft())
+}
+
+func TestFindFilledAfter(t *testing.T) {
+	m := New()
+	m.Set(1)
+	m.Set(4)
+	m.Set(9)
+	assert.Equal(t, Bin(8), m.FindFilledAfter(6))
 }

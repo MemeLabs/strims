@@ -28,6 +28,8 @@ func (c *Conn) Flush() error {
 
 // Close ...
 func (c *Conn) Close() error {
+	c.w.Close()
+	c.r.Close()
 	return nil
 }
 

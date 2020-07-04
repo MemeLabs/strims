@@ -25,3 +25,21 @@ func Logger() *zap.Logger {
 	}
 	return logger
 }
+
+// MessageHandler ...
+type MessageHandler interface {
+	HandleMessage(b []byte) (int, error)
+}
+
+// ReadChannelConn ...
+func ReadChannelConn(c *Conn, ch MessageHandler) {
+	b := make([]byte, c.MTU())
+	for {
+		n, err := c.Read(b)
+		if err != nil {
+			panic(err)
+			return
+		}
+		ch.HandleMessage(b[:n])
+	}
+}

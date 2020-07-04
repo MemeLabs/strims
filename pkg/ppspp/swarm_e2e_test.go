@@ -12,17 +12,6 @@ import (
 	"github.com/tj/assert"
 )
 
-func readChannelConn(c *ppspptest.Conn, ch *ChannelReader) {
-	b := make([]byte, c.MTU())
-	for {
-		n, err := c.Read(b)
-		if err != nil {
-			return
-		}
-		ch.HandleMessage(b[:n])
-	}
-}
-
 func TestSwarmE2E(t *testing.T) {
 	key := ppspptest.Key()
 	id := NewSwarmID(key.Public)
@@ -48,7 +37,7 @@ func TestSwarmE2E(t *testing.T) {
 	assert.NoError(t, err, "writer constructor failed")
 
 	clients := []*client{{swarm: src.Swarm()}}
-	for i := 0; i < 2; i++ {
+	for i := 0; i < 5; i++ {
 		clients = append(clients, newClient())
 	}
 
@@ -75,13 +64,13 @@ func TestSwarmE2E(t *testing.T) {
 			jChan, err := OpenChannel(jPeer, clients[j].swarm, jConn)
 			assert.NoError(t, err, "channel open failed")
 
-			go readChannelConn(iConn, iChan)
-			go readChannelConn(jConn, jChan)
+			go ppspptest.ReadChannelConn(iConn, iChan)
+			go ppspptest.ReadChannelConn(jConn, jChan)
 		}
 	}
 
 	go func() {
-		tc := time.NewTicker(10 * time.Millisecond).C
+		tc := time.NewTicker(100 * time.Millisecond).C
 		b := make([]byte, 75000)
 		for range tc {
 			src.Write(b)
