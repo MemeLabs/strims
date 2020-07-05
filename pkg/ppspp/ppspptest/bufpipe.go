@@ -56,7 +56,7 @@ func (b *bufPipe) Close() error {
 	return nil
 }
 
-func (b *bufPipe) NotifyClose() <-chan struct{} {
+func (b *bufPipe) CloseNotify() <-chan struct{} {
 	return b.close
 }
 
@@ -64,6 +64,10 @@ type bufPipeWriter struct {
 	ch  chan int
 	n   int
 	buf *bufPipe
+}
+
+func (w *bufPipeWriter) Buffered() int {
+	return w.n
 }
 
 func (w *bufPipeWriter) Write(p []byte) (int, error) {
@@ -92,7 +96,7 @@ func (r *bufPipeReader) Read(p []byte) (int, error) {
 	if r.n == 0 {
 		select {
 		case r.n = <-r.ch:
-		case <-r.buf.NotifyClose():
+		case <-r.buf.CloseNotify():
 			return 0, errBufPipeClosed
 		}
 	}

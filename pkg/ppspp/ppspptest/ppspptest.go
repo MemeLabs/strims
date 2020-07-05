@@ -2,6 +2,7 @@ package ppspptest
 
 import (
 	"encoding/json"
+	"io"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"go.uber.org/zap"
@@ -31,14 +32,19 @@ type MessageHandler interface {
 	HandleMessage(b []byte) (int, error)
 }
 
+// ReaderMTUer ...
+type ReaderMTUer interface {
+	io.Reader
+	MTU() int
+}
+
 // ReadChannelConn ...
-func ReadChannelConn(c *Conn, ch MessageHandler) {
+func ReadChannelConn(c ReaderMTUer, ch MessageHandler) {
 	b := make([]byte, c.MTU())
 	for {
 		n, err := c.Read(b)
 		if err != nil {
 			panic(err)
-			return
 		}
 		ch.HandleMessage(b[:n])
 	}
