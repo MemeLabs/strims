@@ -15491,6 +15491,7 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
          * @property {number|null} [sentTime] Message sentTime
          * @property {number|null} [serverTime] Message serverTime
          * @property {string|null} [body] Message body
+         * @property {IMessageEntities|null} [entities] Message entities
          */
 
         /**
@@ -15533,6 +15534,14 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
         Message.prototype.body = "";
 
         /**
+         * Message entities.
+         * @member {IMessageEntities|null|undefined} entities
+         * @memberof ChatClientEvent.Message
+         * @instance
+         */
+        Message.prototype.entities = null;
+
+        /**
          * Creates a new Message instance using the specified properties.
          * @function create
          * @memberof ChatClientEvent.Message
@@ -15562,6 +15571,8 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
                 writer.uint32(/* id 2, wireType 0 =*/16).int64(message.serverTime);
             if (message.body != null && Object.hasOwnProperty.call(message, "body"))
                 writer.uint32(/* id 3, wireType 2 =*/26).string(message.body);
+            if (message.entities != null && Object.hasOwnProperty.call(message, "entities"))
+                $root.MessageEntities.encode(message.entities, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
             return writer;
         };
 
@@ -15604,6 +15615,9 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
                     break;
                 case 3:
                     message.body = reader.string();
+                    break;
+                case 4:
+                    message.entities = $root.MessageEntities.decode(reader, reader.uint32());
                     break;
                 default:
                     reader.skipType(tag & 7);
@@ -15649,6 +15663,11 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
             if (message.body != null && message.hasOwnProperty("body"))
                 if (!$util.isString(message.body))
                     return "body: string expected";
+            if (message.entities != null && message.hasOwnProperty("entities")) {
+                let error = $root.MessageEntities.verify(message.entities);
+                if (error)
+                    return "entities." + error;
+            }
             return null;
         };
 
@@ -15684,6 +15703,11 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
                     message.serverTime = new $util.LongBits(object.serverTime.low >>> 0, object.serverTime.high >>> 0).toNumber();
             if (object.body != null)
                 message.body = String(object.body);
+            if (object.entities != null) {
+                if (typeof object.entities !== "object")
+                    throw TypeError(".ChatClientEvent.Message.entities: object expected");
+                message.entities = $root.MessageEntities.fromObject(object.entities);
+            }
             return message;
         };
 
@@ -15712,6 +15736,7 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
                 } else
                     object.serverTime = options.longs === String ? "0" : 0;
                 object.body = "";
+                object.entities = null;
             }
             if (message.sentTime != null && message.hasOwnProperty("sentTime"))
                 if (typeof message.sentTime === "number")
@@ -15725,6 +15750,8 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
                     object.serverTime = options.longs === String ? $util.Long.prototype.toString.call(message.serverTime) : options.longs === Number ? new $util.LongBits(message.serverTime.low >>> 0, message.serverTime.high >>> 0).toNumber() : message.serverTime;
             if (message.body != null && message.hasOwnProperty("body"))
                 object.body = message.body;
+            if (message.entities != null && message.hasOwnProperty("entities"))
+                object.entities = $root.MessageEntities.toObject(message.entities, options);
             return object;
         };
 
@@ -15903,6 +15930,2235 @@ export const ChatClientEvent = $root.ChatClientEvent = (() => {
     })();
 
     return ChatClientEvent;
+})();
+
+export const MessageEntities = $root.MessageEntities = (() => {
+
+    /**
+     * Properties of a MessageEntities.
+     * @exports IMessageEntities
+     * @interface IMessageEntities
+     * @property {Array.<ILink>|null} [links] MessageEntities links
+     * @property {Array.<IEmote>|null} [emotes] MessageEntities emotes
+     * @property {Array.<INick>|null} [nicks] MessageEntities nicks
+     * @property {Array.<ITag>|null} [tags] MessageEntities tags
+     * @property {Array.<ICodeBlock>|null} [codeBlocks] MessageEntities codeBlocks
+     * @property {Array.<ISpoiler>|null} [spoilers] MessageEntities spoilers
+     * @property {IGenericEntity|null} [greenText] MessageEntities greenText
+     * @property {IGenericEntity|null} [selfMessage] MessageEntities selfMessage
+     */
+
+    /**
+     * Constructs a new MessageEntities.
+     * @exports MessageEntities
+     * @classdesc Represents a MessageEntities.
+     * @implements IMessageEntities
+     * @constructor
+     * @param {IMessageEntities=} [properties] Properties to set
+     */
+    function MessageEntities(properties) {
+        this.links = [];
+        this.emotes = [];
+        this.nicks = [];
+        this.tags = [];
+        this.codeBlocks = [];
+        this.spoilers = [];
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * MessageEntities links.
+     * @member {Array.<ILink>} links
+     * @memberof MessageEntities
+     * @instance
+     */
+    MessageEntities.prototype.links = $util.emptyArray;
+
+    /**
+     * MessageEntities emotes.
+     * @member {Array.<IEmote>} emotes
+     * @memberof MessageEntities
+     * @instance
+     */
+    MessageEntities.prototype.emotes = $util.emptyArray;
+
+    /**
+     * MessageEntities nicks.
+     * @member {Array.<INick>} nicks
+     * @memberof MessageEntities
+     * @instance
+     */
+    MessageEntities.prototype.nicks = $util.emptyArray;
+
+    /**
+     * MessageEntities tags.
+     * @member {Array.<ITag>} tags
+     * @memberof MessageEntities
+     * @instance
+     */
+    MessageEntities.prototype.tags = $util.emptyArray;
+
+    /**
+     * MessageEntities codeBlocks.
+     * @member {Array.<ICodeBlock>} codeBlocks
+     * @memberof MessageEntities
+     * @instance
+     */
+    MessageEntities.prototype.codeBlocks = $util.emptyArray;
+
+    /**
+     * MessageEntities spoilers.
+     * @member {Array.<ISpoiler>} spoilers
+     * @memberof MessageEntities
+     * @instance
+     */
+    MessageEntities.prototype.spoilers = $util.emptyArray;
+
+    /**
+     * MessageEntities greenText.
+     * @member {IGenericEntity|null|undefined} greenText
+     * @memberof MessageEntities
+     * @instance
+     */
+    MessageEntities.prototype.greenText = null;
+
+    /**
+     * MessageEntities selfMessage.
+     * @member {IGenericEntity|null|undefined} selfMessage
+     * @memberof MessageEntities
+     * @instance
+     */
+    MessageEntities.prototype.selfMessage = null;
+
+    /**
+     * Creates a new MessageEntities instance using the specified properties.
+     * @function create
+     * @memberof MessageEntities
+     * @static
+     * @param {IMessageEntities=} [properties] Properties to set
+     * @returns {MessageEntities} MessageEntities instance
+     */
+    MessageEntities.create = function create(properties) {
+        return new MessageEntities(properties);
+    };
+
+    /**
+     * Encodes the specified MessageEntities message. Does not implicitly {@link MessageEntities.verify|verify} messages.
+     * @function encode
+     * @memberof MessageEntities
+     * @static
+     * @param {IMessageEntities} message MessageEntities message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    MessageEntities.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.links != null && message.links.length)
+            for (let i = 0; i < message.links.length; ++i)
+                $root.Link.encode(message.links[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.emotes != null && message.emotes.length)
+            for (let i = 0; i < message.emotes.length; ++i)
+                $root.Emote.encode(message.emotes[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        if (message.nicks != null && message.nicks.length)
+            for (let i = 0; i < message.nicks.length; ++i)
+                $root.Nick.encode(message.nicks[i], writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+        if (message.tags != null && message.tags.length)
+            for (let i = 0; i < message.tags.length; ++i)
+                $root.Tag.encode(message.tags[i], writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+        if (message.codeBlocks != null && message.codeBlocks.length)
+            for (let i = 0; i < message.codeBlocks.length; ++i)
+                $root.CodeBlock.encode(message.codeBlocks[i], writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
+        if (message.spoilers != null && message.spoilers.length)
+            for (let i = 0; i < message.spoilers.length; ++i)
+                $root.Spoiler.encode(message.spoilers[i], writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
+        if (message.greenText != null && Object.hasOwnProperty.call(message, "greenText"))
+            $root.GenericEntity.encode(message.greenText, writer.uint32(/* id 7, wireType 2 =*/58).fork()).ldelim();
+        if (message.selfMessage != null && Object.hasOwnProperty.call(message, "selfMessage"))
+            $root.GenericEntity.encode(message.selfMessage, writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified MessageEntities message, length delimited. Does not implicitly {@link MessageEntities.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof MessageEntities
+     * @static
+     * @param {IMessageEntities} message MessageEntities message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    MessageEntities.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a MessageEntities message from the specified reader or buffer.
+     * @function decode
+     * @memberof MessageEntities
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {MessageEntities} MessageEntities
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    MessageEntities.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.MessageEntities();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                if (!(message.links && message.links.length))
+                    message.links = [];
+                message.links.push($root.Link.decode(reader, reader.uint32()));
+                break;
+            case 2:
+                if (!(message.emotes && message.emotes.length))
+                    message.emotes = [];
+                message.emotes.push($root.Emote.decode(reader, reader.uint32()));
+                break;
+            case 3:
+                if (!(message.nicks && message.nicks.length))
+                    message.nicks = [];
+                message.nicks.push($root.Nick.decode(reader, reader.uint32()));
+                break;
+            case 4:
+                if (!(message.tags && message.tags.length))
+                    message.tags = [];
+                message.tags.push($root.Tag.decode(reader, reader.uint32()));
+                break;
+            case 5:
+                if (!(message.codeBlocks && message.codeBlocks.length))
+                    message.codeBlocks = [];
+                message.codeBlocks.push($root.CodeBlock.decode(reader, reader.uint32()));
+                break;
+            case 6:
+                if (!(message.spoilers && message.spoilers.length))
+                    message.spoilers = [];
+                message.spoilers.push($root.Spoiler.decode(reader, reader.uint32()));
+                break;
+            case 7:
+                message.greenText = $root.GenericEntity.decode(reader, reader.uint32());
+                break;
+            case 8:
+                message.selfMessage = $root.GenericEntity.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a MessageEntities message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof MessageEntities
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {MessageEntities} MessageEntities
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    MessageEntities.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a MessageEntities message.
+     * @function verify
+     * @memberof MessageEntities
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    MessageEntities.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.links != null && message.hasOwnProperty("links")) {
+            if (!Array.isArray(message.links))
+                return "links: array expected";
+            for (let i = 0; i < message.links.length; ++i) {
+                let error = $root.Link.verify(message.links[i]);
+                if (error)
+                    return "links." + error;
+            }
+        }
+        if (message.emotes != null && message.hasOwnProperty("emotes")) {
+            if (!Array.isArray(message.emotes))
+                return "emotes: array expected";
+            for (let i = 0; i < message.emotes.length; ++i) {
+                let error = $root.Emote.verify(message.emotes[i]);
+                if (error)
+                    return "emotes." + error;
+            }
+        }
+        if (message.nicks != null && message.hasOwnProperty("nicks")) {
+            if (!Array.isArray(message.nicks))
+                return "nicks: array expected";
+            for (let i = 0; i < message.nicks.length; ++i) {
+                let error = $root.Nick.verify(message.nicks[i]);
+                if (error)
+                    return "nicks." + error;
+            }
+        }
+        if (message.tags != null && message.hasOwnProperty("tags")) {
+            if (!Array.isArray(message.tags))
+                return "tags: array expected";
+            for (let i = 0; i < message.tags.length; ++i) {
+                let error = $root.Tag.verify(message.tags[i]);
+                if (error)
+                    return "tags." + error;
+            }
+        }
+        if (message.codeBlocks != null && message.hasOwnProperty("codeBlocks")) {
+            if (!Array.isArray(message.codeBlocks))
+                return "codeBlocks: array expected";
+            for (let i = 0; i < message.codeBlocks.length; ++i) {
+                let error = $root.CodeBlock.verify(message.codeBlocks[i]);
+                if (error)
+                    return "codeBlocks." + error;
+            }
+        }
+        if (message.spoilers != null && message.hasOwnProperty("spoilers")) {
+            if (!Array.isArray(message.spoilers))
+                return "spoilers: array expected";
+            for (let i = 0; i < message.spoilers.length; ++i) {
+                let error = $root.Spoiler.verify(message.spoilers[i]);
+                if (error)
+                    return "spoilers." + error;
+            }
+        }
+        if (message.greenText != null && message.hasOwnProperty("greenText")) {
+            let error = $root.GenericEntity.verify(message.greenText);
+            if (error)
+                return "greenText." + error;
+        }
+        if (message.selfMessage != null && message.hasOwnProperty("selfMessage")) {
+            let error = $root.GenericEntity.verify(message.selfMessage);
+            if (error)
+                return "selfMessage." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a MessageEntities message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof MessageEntities
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {MessageEntities} MessageEntities
+     */
+    MessageEntities.fromObject = function fromObject(object) {
+        if (object instanceof $root.MessageEntities)
+            return object;
+        let message = new $root.MessageEntities();
+        if (object.links) {
+            if (!Array.isArray(object.links))
+                throw TypeError(".MessageEntities.links: array expected");
+            message.links = [];
+            for (let i = 0; i < object.links.length; ++i) {
+                if (typeof object.links[i] !== "object")
+                    throw TypeError(".MessageEntities.links: object expected");
+                message.links[i] = $root.Link.fromObject(object.links[i]);
+            }
+        }
+        if (object.emotes) {
+            if (!Array.isArray(object.emotes))
+                throw TypeError(".MessageEntities.emotes: array expected");
+            message.emotes = [];
+            for (let i = 0; i < object.emotes.length; ++i) {
+                if (typeof object.emotes[i] !== "object")
+                    throw TypeError(".MessageEntities.emotes: object expected");
+                message.emotes[i] = $root.Emote.fromObject(object.emotes[i]);
+            }
+        }
+        if (object.nicks) {
+            if (!Array.isArray(object.nicks))
+                throw TypeError(".MessageEntities.nicks: array expected");
+            message.nicks = [];
+            for (let i = 0; i < object.nicks.length; ++i) {
+                if (typeof object.nicks[i] !== "object")
+                    throw TypeError(".MessageEntities.nicks: object expected");
+                message.nicks[i] = $root.Nick.fromObject(object.nicks[i]);
+            }
+        }
+        if (object.tags) {
+            if (!Array.isArray(object.tags))
+                throw TypeError(".MessageEntities.tags: array expected");
+            message.tags = [];
+            for (let i = 0; i < object.tags.length; ++i) {
+                if (typeof object.tags[i] !== "object")
+                    throw TypeError(".MessageEntities.tags: object expected");
+                message.tags[i] = $root.Tag.fromObject(object.tags[i]);
+            }
+        }
+        if (object.codeBlocks) {
+            if (!Array.isArray(object.codeBlocks))
+                throw TypeError(".MessageEntities.codeBlocks: array expected");
+            message.codeBlocks = [];
+            for (let i = 0; i < object.codeBlocks.length; ++i) {
+                if (typeof object.codeBlocks[i] !== "object")
+                    throw TypeError(".MessageEntities.codeBlocks: object expected");
+                message.codeBlocks[i] = $root.CodeBlock.fromObject(object.codeBlocks[i]);
+            }
+        }
+        if (object.spoilers) {
+            if (!Array.isArray(object.spoilers))
+                throw TypeError(".MessageEntities.spoilers: array expected");
+            message.spoilers = [];
+            for (let i = 0; i < object.spoilers.length; ++i) {
+                if (typeof object.spoilers[i] !== "object")
+                    throw TypeError(".MessageEntities.spoilers: object expected");
+                message.spoilers[i] = $root.Spoiler.fromObject(object.spoilers[i]);
+            }
+        }
+        if (object.greenText != null) {
+            if (typeof object.greenText !== "object")
+                throw TypeError(".MessageEntities.greenText: object expected");
+            message.greenText = $root.GenericEntity.fromObject(object.greenText);
+        }
+        if (object.selfMessage != null) {
+            if (typeof object.selfMessage !== "object")
+                throw TypeError(".MessageEntities.selfMessage: object expected");
+            message.selfMessage = $root.GenericEntity.fromObject(object.selfMessage);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a MessageEntities message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof MessageEntities
+     * @static
+     * @param {MessageEntities} message MessageEntities
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    MessageEntities.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.arrays || options.defaults) {
+            object.links = [];
+            object.emotes = [];
+            object.nicks = [];
+            object.tags = [];
+            object.codeBlocks = [];
+            object.spoilers = [];
+        }
+        if (options.defaults) {
+            object.greenText = null;
+            object.selfMessage = null;
+        }
+        if (message.links && message.links.length) {
+            object.links = [];
+            for (let j = 0; j < message.links.length; ++j)
+                object.links[j] = $root.Link.toObject(message.links[j], options);
+        }
+        if (message.emotes && message.emotes.length) {
+            object.emotes = [];
+            for (let j = 0; j < message.emotes.length; ++j)
+                object.emotes[j] = $root.Emote.toObject(message.emotes[j], options);
+        }
+        if (message.nicks && message.nicks.length) {
+            object.nicks = [];
+            for (let j = 0; j < message.nicks.length; ++j)
+                object.nicks[j] = $root.Nick.toObject(message.nicks[j], options);
+        }
+        if (message.tags && message.tags.length) {
+            object.tags = [];
+            for (let j = 0; j < message.tags.length; ++j)
+                object.tags[j] = $root.Tag.toObject(message.tags[j], options);
+        }
+        if (message.codeBlocks && message.codeBlocks.length) {
+            object.codeBlocks = [];
+            for (let j = 0; j < message.codeBlocks.length; ++j)
+                object.codeBlocks[j] = $root.CodeBlock.toObject(message.codeBlocks[j], options);
+        }
+        if (message.spoilers && message.spoilers.length) {
+            object.spoilers = [];
+            for (let j = 0; j < message.spoilers.length; ++j)
+                object.spoilers[j] = $root.Spoiler.toObject(message.spoilers[j], options);
+        }
+        if (message.greenText != null && message.hasOwnProperty("greenText"))
+            object.greenText = $root.GenericEntity.toObject(message.greenText, options);
+        if (message.selfMessage != null && message.hasOwnProperty("selfMessage"))
+            object.selfMessage = $root.GenericEntity.toObject(message.selfMessage, options);
+        return object;
+    };
+
+    /**
+     * Converts this MessageEntities to JSON.
+     * @function toJSON
+     * @memberof MessageEntities
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    MessageEntities.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return MessageEntities;
+})();
+
+export const Bounds = $root.Bounds = (() => {
+
+    /**
+     * Properties of a Bounds.
+     * @exports IBounds
+     * @interface IBounds
+     * @property {number|null} [start] Bounds start
+     * @property {number|null} [end] Bounds end
+     */
+
+    /**
+     * Constructs a new Bounds.
+     * @exports Bounds
+     * @classdesc Represents a Bounds.
+     * @implements IBounds
+     * @constructor
+     * @param {IBounds=} [properties] Properties to set
+     */
+    function Bounds(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Bounds start.
+     * @member {number} start
+     * @memberof Bounds
+     * @instance
+     */
+    Bounds.prototype.start = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+    /**
+     * Bounds end.
+     * @member {number} end
+     * @memberof Bounds
+     * @instance
+     */
+    Bounds.prototype.end = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+    /**
+     * Creates a new Bounds instance using the specified properties.
+     * @function create
+     * @memberof Bounds
+     * @static
+     * @param {IBounds=} [properties] Properties to set
+     * @returns {Bounds} Bounds instance
+     */
+    Bounds.create = function create(properties) {
+        return new Bounds(properties);
+    };
+
+    /**
+     * Encodes the specified Bounds message. Does not implicitly {@link Bounds.verify|verify} messages.
+     * @function encode
+     * @memberof Bounds
+     * @static
+     * @param {IBounds} message Bounds message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Bounds.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.start != null && Object.hasOwnProperty.call(message, "start"))
+            writer.uint32(/* id 1, wireType 0 =*/8).int64(message.start);
+        if (message.end != null && Object.hasOwnProperty.call(message, "end"))
+            writer.uint32(/* id 2, wireType 0 =*/16).int64(message.end);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified Bounds message, length delimited. Does not implicitly {@link Bounds.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof Bounds
+     * @static
+     * @param {IBounds} message Bounds message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Bounds.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a Bounds message from the specified reader or buffer.
+     * @function decode
+     * @memberof Bounds
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {Bounds} Bounds
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Bounds.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.Bounds();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.start = reader.int64();
+                break;
+            case 2:
+                message.end = reader.int64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a Bounds message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof Bounds
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {Bounds} Bounds
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Bounds.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a Bounds message.
+     * @function verify
+     * @memberof Bounds
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    Bounds.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.start != null && message.hasOwnProperty("start"))
+            if (!$util.isInteger(message.start) && !(message.start && $util.isInteger(message.start.low) && $util.isInteger(message.start.high)))
+                return "start: integer|Long expected";
+        if (message.end != null && message.hasOwnProperty("end"))
+            if (!$util.isInteger(message.end) && !(message.end && $util.isInteger(message.end.low) && $util.isInteger(message.end.high)))
+                return "end: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates a Bounds message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof Bounds
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {Bounds} Bounds
+     */
+    Bounds.fromObject = function fromObject(object) {
+        if (object instanceof $root.Bounds)
+            return object;
+        let message = new $root.Bounds();
+        if (object.start != null)
+            if ($util.Long)
+                (message.start = $util.Long.fromValue(object.start)).unsigned = false;
+            else if (typeof object.start === "string")
+                message.start = parseInt(object.start, 10);
+            else if (typeof object.start === "number")
+                message.start = object.start;
+            else if (typeof object.start === "object")
+                message.start = new $util.LongBits(object.start.low >>> 0, object.start.high >>> 0).toNumber();
+        if (object.end != null)
+            if ($util.Long)
+                (message.end = $util.Long.fromValue(object.end)).unsigned = false;
+            else if (typeof object.end === "string")
+                message.end = parseInt(object.end, 10);
+            else if (typeof object.end === "number")
+                message.end = object.end;
+            else if (typeof object.end === "object")
+                message.end = new $util.LongBits(object.end.low >>> 0, object.end.high >>> 0).toNumber();
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a Bounds message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof Bounds
+     * @static
+     * @param {Bounds} message Bounds
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    Bounds.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, false);
+                object.start = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.start = options.longs === String ? "0" : 0;
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, false);
+                object.end = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.end = options.longs === String ? "0" : 0;
+        }
+        if (message.start != null && message.hasOwnProperty("start"))
+            if (typeof message.start === "number")
+                object.start = options.longs === String ? String(message.start) : message.start;
+            else
+                object.start = options.longs === String ? $util.Long.prototype.toString.call(message.start) : options.longs === Number ? new $util.LongBits(message.start.low >>> 0, message.start.high >>> 0).toNumber() : message.start;
+        if (message.end != null && message.hasOwnProperty("end"))
+            if (typeof message.end === "number")
+                object.end = options.longs === String ? String(message.end) : message.end;
+            else
+                object.end = options.longs === String ? $util.Long.prototype.toString.call(message.end) : options.longs === Number ? new $util.LongBits(message.end.low >>> 0, message.end.high >>> 0).toNumber() : message.end;
+        return object;
+    };
+
+    /**
+     * Converts this Bounds to JSON.
+     * @function toJSON
+     * @memberof Bounds
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    Bounds.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return Bounds;
+})();
+
+export const Link = $root.Link = (() => {
+
+    /**
+     * Properties of a Link.
+     * @exports ILink
+     * @interface ILink
+     * @property {IBounds|null} [bounds] Link bounds
+     * @property {string|null} [url] Link url
+     */
+
+    /**
+     * Constructs a new Link.
+     * @exports Link
+     * @classdesc Represents a Link.
+     * @implements ILink
+     * @constructor
+     * @param {ILink=} [properties] Properties to set
+     */
+    function Link(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Link bounds.
+     * @member {IBounds|null|undefined} bounds
+     * @memberof Link
+     * @instance
+     */
+    Link.prototype.bounds = null;
+
+    /**
+     * Link url.
+     * @member {string} url
+     * @memberof Link
+     * @instance
+     */
+    Link.prototype.url = "";
+
+    /**
+     * Creates a new Link instance using the specified properties.
+     * @function create
+     * @memberof Link
+     * @static
+     * @param {ILink=} [properties] Properties to set
+     * @returns {Link} Link instance
+     */
+    Link.create = function create(properties) {
+        return new Link(properties);
+    };
+
+    /**
+     * Encodes the specified Link message. Does not implicitly {@link Link.verify|verify} messages.
+     * @function encode
+     * @memberof Link
+     * @static
+     * @param {ILink} message Link message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Link.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.bounds != null && Object.hasOwnProperty.call(message, "bounds"))
+            $root.Bounds.encode(message.bounds, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.url != null && Object.hasOwnProperty.call(message, "url"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.url);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified Link message, length delimited. Does not implicitly {@link Link.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof Link
+     * @static
+     * @param {ILink} message Link message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Link.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a Link message from the specified reader or buffer.
+     * @function decode
+     * @memberof Link
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {Link} Link
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Link.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.Link();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.bounds = $root.Bounds.decode(reader, reader.uint32());
+                break;
+            case 2:
+                message.url = reader.string();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a Link message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof Link
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {Link} Link
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Link.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a Link message.
+     * @function verify
+     * @memberof Link
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    Link.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.bounds != null && message.hasOwnProperty("bounds")) {
+            let error = $root.Bounds.verify(message.bounds);
+            if (error)
+                return "bounds." + error;
+        }
+        if (message.url != null && message.hasOwnProperty("url"))
+            if (!$util.isString(message.url))
+                return "url: string expected";
+        return null;
+    };
+
+    /**
+     * Creates a Link message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof Link
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {Link} Link
+     */
+    Link.fromObject = function fromObject(object) {
+        if (object instanceof $root.Link)
+            return object;
+        let message = new $root.Link();
+        if (object.bounds != null) {
+            if (typeof object.bounds !== "object")
+                throw TypeError(".Link.bounds: object expected");
+            message.bounds = $root.Bounds.fromObject(object.bounds);
+        }
+        if (object.url != null)
+            message.url = String(object.url);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a Link message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof Link
+     * @static
+     * @param {Link} message Link
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    Link.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            object.bounds = null;
+            object.url = "";
+        }
+        if (message.bounds != null && message.hasOwnProperty("bounds"))
+            object.bounds = $root.Bounds.toObject(message.bounds, options);
+        if (message.url != null && message.hasOwnProperty("url"))
+            object.url = message.url;
+        return object;
+    };
+
+    /**
+     * Converts this Link to JSON.
+     * @function toJSON
+     * @memberof Link
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    Link.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return Link;
+})();
+
+export const Emote = $root.Emote = (() => {
+
+    /**
+     * Properties of an Emote.
+     * @exports IEmote
+     * @interface IEmote
+     * @property {IBounds|null} [bounds] Emote bounds
+     * @property {string|null} [name] Emote name
+     * @property {Array.<string>|null} [modifiers] Emote modifiers
+     * @property {number|null} [combo] Emote combo
+     */
+
+    /**
+     * Constructs a new Emote.
+     * @exports Emote
+     * @classdesc Represents an Emote.
+     * @implements IEmote
+     * @constructor
+     * @param {IEmote=} [properties] Properties to set
+     */
+    function Emote(properties) {
+        this.modifiers = [];
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Emote bounds.
+     * @member {IBounds|null|undefined} bounds
+     * @memberof Emote
+     * @instance
+     */
+    Emote.prototype.bounds = null;
+
+    /**
+     * Emote name.
+     * @member {string} name
+     * @memberof Emote
+     * @instance
+     */
+    Emote.prototype.name = "";
+
+    /**
+     * Emote modifiers.
+     * @member {Array.<string>} modifiers
+     * @memberof Emote
+     * @instance
+     */
+    Emote.prototype.modifiers = $util.emptyArray;
+
+    /**
+     * Emote combo.
+     * @member {number} combo
+     * @memberof Emote
+     * @instance
+     */
+    Emote.prototype.combo = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+    /**
+     * Creates a new Emote instance using the specified properties.
+     * @function create
+     * @memberof Emote
+     * @static
+     * @param {IEmote=} [properties] Properties to set
+     * @returns {Emote} Emote instance
+     */
+    Emote.create = function create(properties) {
+        return new Emote(properties);
+    };
+
+    /**
+     * Encodes the specified Emote message. Does not implicitly {@link Emote.verify|verify} messages.
+     * @function encode
+     * @memberof Emote
+     * @static
+     * @param {IEmote} message Emote message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Emote.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.bounds != null && Object.hasOwnProperty.call(message, "bounds"))
+            $root.Bounds.encode(message.bounds, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.name != null && Object.hasOwnProperty.call(message, "name"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.name);
+        if (message.modifiers != null && message.modifiers.length)
+            for (let i = 0; i < message.modifiers.length; ++i)
+                writer.uint32(/* id 3, wireType 2 =*/26).string(message.modifiers[i]);
+        if (message.combo != null && Object.hasOwnProperty.call(message, "combo"))
+            writer.uint32(/* id 4, wireType 0 =*/32).int64(message.combo);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified Emote message, length delimited. Does not implicitly {@link Emote.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof Emote
+     * @static
+     * @param {IEmote} message Emote message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Emote.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes an Emote message from the specified reader or buffer.
+     * @function decode
+     * @memberof Emote
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {Emote} Emote
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Emote.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.Emote();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.bounds = $root.Bounds.decode(reader, reader.uint32());
+                break;
+            case 2:
+                message.name = reader.string();
+                break;
+            case 3:
+                if (!(message.modifiers && message.modifiers.length))
+                    message.modifiers = [];
+                message.modifiers.push(reader.string());
+                break;
+            case 4:
+                message.combo = reader.int64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes an Emote message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof Emote
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {Emote} Emote
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Emote.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies an Emote message.
+     * @function verify
+     * @memberof Emote
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    Emote.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.bounds != null && message.hasOwnProperty("bounds")) {
+            let error = $root.Bounds.verify(message.bounds);
+            if (error)
+                return "bounds." + error;
+        }
+        if (message.name != null && message.hasOwnProperty("name"))
+            if (!$util.isString(message.name))
+                return "name: string expected";
+        if (message.modifiers != null && message.hasOwnProperty("modifiers")) {
+            if (!Array.isArray(message.modifiers))
+                return "modifiers: array expected";
+            for (let i = 0; i < message.modifiers.length; ++i)
+                if (!$util.isString(message.modifiers[i]))
+                    return "modifiers: string[] expected";
+        }
+        if (message.combo != null && message.hasOwnProperty("combo"))
+            if (!$util.isInteger(message.combo) && !(message.combo && $util.isInteger(message.combo.low) && $util.isInteger(message.combo.high)))
+                return "combo: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates an Emote message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof Emote
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {Emote} Emote
+     */
+    Emote.fromObject = function fromObject(object) {
+        if (object instanceof $root.Emote)
+            return object;
+        let message = new $root.Emote();
+        if (object.bounds != null) {
+            if (typeof object.bounds !== "object")
+                throw TypeError(".Emote.bounds: object expected");
+            message.bounds = $root.Bounds.fromObject(object.bounds);
+        }
+        if (object.name != null)
+            message.name = String(object.name);
+        if (object.modifiers) {
+            if (!Array.isArray(object.modifiers))
+                throw TypeError(".Emote.modifiers: array expected");
+            message.modifiers = [];
+            for (let i = 0; i < object.modifiers.length; ++i)
+                message.modifiers[i] = String(object.modifiers[i]);
+        }
+        if (object.combo != null)
+            if ($util.Long)
+                (message.combo = $util.Long.fromValue(object.combo)).unsigned = false;
+            else if (typeof object.combo === "string")
+                message.combo = parseInt(object.combo, 10);
+            else if (typeof object.combo === "number")
+                message.combo = object.combo;
+            else if (typeof object.combo === "object")
+                message.combo = new $util.LongBits(object.combo.low >>> 0, object.combo.high >>> 0).toNumber();
+        return message;
+    };
+
+    /**
+     * Creates a plain object from an Emote message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof Emote
+     * @static
+     * @param {Emote} message Emote
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    Emote.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.arrays || options.defaults)
+            object.modifiers = [];
+        if (options.defaults) {
+            object.bounds = null;
+            object.name = "";
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, false);
+                object.combo = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.combo = options.longs === String ? "0" : 0;
+        }
+        if (message.bounds != null && message.hasOwnProperty("bounds"))
+            object.bounds = $root.Bounds.toObject(message.bounds, options);
+        if (message.name != null && message.hasOwnProperty("name"))
+            object.name = message.name;
+        if (message.modifiers && message.modifiers.length) {
+            object.modifiers = [];
+            for (let j = 0; j < message.modifiers.length; ++j)
+                object.modifiers[j] = message.modifiers[j];
+        }
+        if (message.combo != null && message.hasOwnProperty("combo"))
+            if (typeof message.combo === "number")
+                object.combo = options.longs === String ? String(message.combo) : message.combo;
+            else
+                object.combo = options.longs === String ? $util.Long.prototype.toString.call(message.combo) : options.longs === Number ? new $util.LongBits(message.combo.low >>> 0, message.combo.high >>> 0).toNumber() : message.combo;
+        return object;
+    };
+
+    /**
+     * Converts this Emote to JSON.
+     * @function toJSON
+     * @memberof Emote
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    Emote.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return Emote;
+})();
+
+export const Nick = $root.Nick = (() => {
+
+    /**
+     * Properties of a Nick.
+     * @exports INick
+     * @interface INick
+     * @property {IBounds|null} [bounds] Nick bounds
+     * @property {string|null} [nick] Nick nick
+     */
+
+    /**
+     * Constructs a new Nick.
+     * @exports Nick
+     * @classdesc Represents a Nick.
+     * @implements INick
+     * @constructor
+     * @param {INick=} [properties] Properties to set
+     */
+    function Nick(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Nick bounds.
+     * @member {IBounds|null|undefined} bounds
+     * @memberof Nick
+     * @instance
+     */
+    Nick.prototype.bounds = null;
+
+    /**
+     * Nick nick.
+     * @member {string} nick
+     * @memberof Nick
+     * @instance
+     */
+    Nick.prototype.nick = "";
+
+    /**
+     * Creates a new Nick instance using the specified properties.
+     * @function create
+     * @memberof Nick
+     * @static
+     * @param {INick=} [properties] Properties to set
+     * @returns {Nick} Nick instance
+     */
+    Nick.create = function create(properties) {
+        return new Nick(properties);
+    };
+
+    /**
+     * Encodes the specified Nick message. Does not implicitly {@link Nick.verify|verify} messages.
+     * @function encode
+     * @memberof Nick
+     * @static
+     * @param {INick} message Nick message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Nick.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.bounds != null && Object.hasOwnProperty.call(message, "bounds"))
+            $root.Bounds.encode(message.bounds, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.nick != null && Object.hasOwnProperty.call(message, "nick"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.nick);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified Nick message, length delimited. Does not implicitly {@link Nick.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof Nick
+     * @static
+     * @param {INick} message Nick message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Nick.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a Nick message from the specified reader or buffer.
+     * @function decode
+     * @memberof Nick
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {Nick} Nick
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Nick.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.Nick();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.bounds = $root.Bounds.decode(reader, reader.uint32());
+                break;
+            case 2:
+                message.nick = reader.string();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a Nick message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof Nick
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {Nick} Nick
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Nick.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a Nick message.
+     * @function verify
+     * @memberof Nick
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    Nick.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.bounds != null && message.hasOwnProperty("bounds")) {
+            let error = $root.Bounds.verify(message.bounds);
+            if (error)
+                return "bounds." + error;
+        }
+        if (message.nick != null && message.hasOwnProperty("nick"))
+            if (!$util.isString(message.nick))
+                return "nick: string expected";
+        return null;
+    };
+
+    /**
+     * Creates a Nick message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof Nick
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {Nick} Nick
+     */
+    Nick.fromObject = function fromObject(object) {
+        if (object instanceof $root.Nick)
+            return object;
+        let message = new $root.Nick();
+        if (object.bounds != null) {
+            if (typeof object.bounds !== "object")
+                throw TypeError(".Nick.bounds: object expected");
+            message.bounds = $root.Bounds.fromObject(object.bounds);
+        }
+        if (object.nick != null)
+            message.nick = String(object.nick);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a Nick message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof Nick
+     * @static
+     * @param {Nick} message Nick
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    Nick.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            object.bounds = null;
+            object.nick = "";
+        }
+        if (message.bounds != null && message.hasOwnProperty("bounds"))
+            object.bounds = $root.Bounds.toObject(message.bounds, options);
+        if (message.nick != null && message.hasOwnProperty("nick"))
+            object.nick = message.nick;
+        return object;
+    };
+
+    /**
+     * Converts this Nick to JSON.
+     * @function toJSON
+     * @memberof Nick
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    Nick.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return Nick;
+})();
+
+export const Tag = $root.Tag = (() => {
+
+    /**
+     * Properties of a Tag.
+     * @exports ITag
+     * @interface ITag
+     * @property {IBounds|null} [bounds] Tag bounds
+     * @property {string|null} [name] Tag name
+     */
+
+    /**
+     * Constructs a new Tag.
+     * @exports Tag
+     * @classdesc Represents a Tag.
+     * @implements ITag
+     * @constructor
+     * @param {ITag=} [properties] Properties to set
+     */
+    function Tag(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Tag bounds.
+     * @member {IBounds|null|undefined} bounds
+     * @memberof Tag
+     * @instance
+     */
+    Tag.prototype.bounds = null;
+
+    /**
+     * Tag name.
+     * @member {string} name
+     * @memberof Tag
+     * @instance
+     */
+    Tag.prototype.name = "";
+
+    /**
+     * Creates a new Tag instance using the specified properties.
+     * @function create
+     * @memberof Tag
+     * @static
+     * @param {ITag=} [properties] Properties to set
+     * @returns {Tag} Tag instance
+     */
+    Tag.create = function create(properties) {
+        return new Tag(properties);
+    };
+
+    /**
+     * Encodes the specified Tag message. Does not implicitly {@link Tag.verify|verify} messages.
+     * @function encode
+     * @memberof Tag
+     * @static
+     * @param {ITag} message Tag message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Tag.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.bounds != null && Object.hasOwnProperty.call(message, "bounds"))
+            $root.Bounds.encode(message.bounds, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.name != null && Object.hasOwnProperty.call(message, "name"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.name);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified Tag message, length delimited. Does not implicitly {@link Tag.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof Tag
+     * @static
+     * @param {ITag} message Tag message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Tag.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a Tag message from the specified reader or buffer.
+     * @function decode
+     * @memberof Tag
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {Tag} Tag
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Tag.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.Tag();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.bounds = $root.Bounds.decode(reader, reader.uint32());
+                break;
+            case 2:
+                message.name = reader.string();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a Tag message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof Tag
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {Tag} Tag
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Tag.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a Tag message.
+     * @function verify
+     * @memberof Tag
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    Tag.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.bounds != null && message.hasOwnProperty("bounds")) {
+            let error = $root.Bounds.verify(message.bounds);
+            if (error)
+                return "bounds." + error;
+        }
+        if (message.name != null && message.hasOwnProperty("name"))
+            if (!$util.isString(message.name))
+                return "name: string expected";
+        return null;
+    };
+
+    /**
+     * Creates a Tag message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof Tag
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {Tag} Tag
+     */
+    Tag.fromObject = function fromObject(object) {
+        if (object instanceof $root.Tag)
+            return object;
+        let message = new $root.Tag();
+        if (object.bounds != null) {
+            if (typeof object.bounds !== "object")
+                throw TypeError(".Tag.bounds: object expected");
+            message.bounds = $root.Bounds.fromObject(object.bounds);
+        }
+        if (object.name != null)
+            message.name = String(object.name);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a Tag message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof Tag
+     * @static
+     * @param {Tag} message Tag
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    Tag.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            object.bounds = null;
+            object.name = "";
+        }
+        if (message.bounds != null && message.hasOwnProperty("bounds"))
+            object.bounds = $root.Bounds.toObject(message.bounds, options);
+        if (message.name != null && message.hasOwnProperty("name"))
+            object.name = message.name;
+        return object;
+    };
+
+    /**
+     * Converts this Tag to JSON.
+     * @function toJSON
+     * @memberof Tag
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    Tag.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return Tag;
+})();
+
+export const CodeBlock = $root.CodeBlock = (() => {
+
+    /**
+     * Properties of a CodeBlock.
+     * @exports ICodeBlock
+     * @interface ICodeBlock
+     * @property {IBounds|null} [bounds] CodeBlock bounds
+     */
+
+    /**
+     * Constructs a new CodeBlock.
+     * @exports CodeBlock
+     * @classdesc Represents a CodeBlock.
+     * @implements ICodeBlock
+     * @constructor
+     * @param {ICodeBlock=} [properties] Properties to set
+     */
+    function CodeBlock(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * CodeBlock bounds.
+     * @member {IBounds|null|undefined} bounds
+     * @memberof CodeBlock
+     * @instance
+     */
+    CodeBlock.prototype.bounds = null;
+
+    /**
+     * Creates a new CodeBlock instance using the specified properties.
+     * @function create
+     * @memberof CodeBlock
+     * @static
+     * @param {ICodeBlock=} [properties] Properties to set
+     * @returns {CodeBlock} CodeBlock instance
+     */
+    CodeBlock.create = function create(properties) {
+        return new CodeBlock(properties);
+    };
+
+    /**
+     * Encodes the specified CodeBlock message. Does not implicitly {@link CodeBlock.verify|verify} messages.
+     * @function encode
+     * @memberof CodeBlock
+     * @static
+     * @param {ICodeBlock} message CodeBlock message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    CodeBlock.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.bounds != null && Object.hasOwnProperty.call(message, "bounds"))
+            $root.Bounds.encode(message.bounds, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified CodeBlock message, length delimited. Does not implicitly {@link CodeBlock.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof CodeBlock
+     * @static
+     * @param {ICodeBlock} message CodeBlock message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    CodeBlock.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a CodeBlock message from the specified reader or buffer.
+     * @function decode
+     * @memberof CodeBlock
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {CodeBlock} CodeBlock
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    CodeBlock.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.CodeBlock();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.bounds = $root.Bounds.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a CodeBlock message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof CodeBlock
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {CodeBlock} CodeBlock
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    CodeBlock.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a CodeBlock message.
+     * @function verify
+     * @memberof CodeBlock
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    CodeBlock.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.bounds != null && message.hasOwnProperty("bounds")) {
+            let error = $root.Bounds.verify(message.bounds);
+            if (error)
+                return "bounds." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a CodeBlock message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof CodeBlock
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {CodeBlock} CodeBlock
+     */
+    CodeBlock.fromObject = function fromObject(object) {
+        if (object instanceof $root.CodeBlock)
+            return object;
+        let message = new $root.CodeBlock();
+        if (object.bounds != null) {
+            if (typeof object.bounds !== "object")
+                throw TypeError(".CodeBlock.bounds: object expected");
+            message.bounds = $root.Bounds.fromObject(object.bounds);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a CodeBlock message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof CodeBlock
+     * @static
+     * @param {CodeBlock} message CodeBlock
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    CodeBlock.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.bounds = null;
+        if (message.bounds != null && message.hasOwnProperty("bounds"))
+            object.bounds = $root.Bounds.toObject(message.bounds, options);
+        return object;
+    };
+
+    /**
+     * Converts this CodeBlock to JSON.
+     * @function toJSON
+     * @memberof CodeBlock
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    CodeBlock.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return CodeBlock;
+})();
+
+export const Spoiler = $root.Spoiler = (() => {
+
+    /**
+     * Properties of a Spoiler.
+     * @exports ISpoiler
+     * @interface ISpoiler
+     * @property {IBounds|null} [bounds] Spoiler bounds
+     */
+
+    /**
+     * Constructs a new Spoiler.
+     * @exports Spoiler
+     * @classdesc Represents a Spoiler.
+     * @implements ISpoiler
+     * @constructor
+     * @param {ISpoiler=} [properties] Properties to set
+     */
+    function Spoiler(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Spoiler bounds.
+     * @member {IBounds|null|undefined} bounds
+     * @memberof Spoiler
+     * @instance
+     */
+    Spoiler.prototype.bounds = null;
+
+    /**
+     * Creates a new Spoiler instance using the specified properties.
+     * @function create
+     * @memberof Spoiler
+     * @static
+     * @param {ISpoiler=} [properties] Properties to set
+     * @returns {Spoiler} Spoiler instance
+     */
+    Spoiler.create = function create(properties) {
+        return new Spoiler(properties);
+    };
+
+    /**
+     * Encodes the specified Spoiler message. Does not implicitly {@link Spoiler.verify|verify} messages.
+     * @function encode
+     * @memberof Spoiler
+     * @static
+     * @param {ISpoiler} message Spoiler message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Spoiler.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.bounds != null && Object.hasOwnProperty.call(message, "bounds"))
+            $root.Bounds.encode(message.bounds, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified Spoiler message, length delimited. Does not implicitly {@link Spoiler.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof Spoiler
+     * @static
+     * @param {ISpoiler} message Spoiler message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Spoiler.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a Spoiler message from the specified reader or buffer.
+     * @function decode
+     * @memberof Spoiler
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {Spoiler} Spoiler
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Spoiler.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.Spoiler();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.bounds = $root.Bounds.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a Spoiler message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof Spoiler
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {Spoiler} Spoiler
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Spoiler.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a Spoiler message.
+     * @function verify
+     * @memberof Spoiler
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    Spoiler.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.bounds != null && message.hasOwnProperty("bounds")) {
+            let error = $root.Bounds.verify(message.bounds);
+            if (error)
+                return "bounds." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a Spoiler message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof Spoiler
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {Spoiler} Spoiler
+     */
+    Spoiler.fromObject = function fromObject(object) {
+        if (object instanceof $root.Spoiler)
+            return object;
+        let message = new $root.Spoiler();
+        if (object.bounds != null) {
+            if (typeof object.bounds !== "object")
+                throw TypeError(".Spoiler.bounds: object expected");
+            message.bounds = $root.Bounds.fromObject(object.bounds);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a Spoiler message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof Spoiler
+     * @static
+     * @param {Spoiler} message Spoiler
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    Spoiler.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.bounds = null;
+        if (message.bounds != null && message.hasOwnProperty("bounds"))
+            object.bounds = $root.Bounds.toObject(message.bounds, options);
+        return object;
+    };
+
+    /**
+     * Converts this Spoiler to JSON.
+     * @function toJSON
+     * @memberof Spoiler
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    Spoiler.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return Spoiler;
+})();
+
+export const GenericEntity = $root.GenericEntity = (() => {
+
+    /**
+     * Properties of a GenericEntity.
+     * @exports IGenericEntity
+     * @interface IGenericEntity
+     * @property {IBounds|null} [bounds] GenericEntity bounds
+     */
+
+    /**
+     * Constructs a new GenericEntity.
+     * @exports GenericEntity
+     * @classdesc Represents a GenericEntity.
+     * @implements IGenericEntity
+     * @constructor
+     * @param {IGenericEntity=} [properties] Properties to set
+     */
+    function GenericEntity(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * GenericEntity bounds.
+     * @member {IBounds|null|undefined} bounds
+     * @memberof GenericEntity
+     * @instance
+     */
+    GenericEntity.prototype.bounds = null;
+
+    /**
+     * Creates a new GenericEntity instance using the specified properties.
+     * @function create
+     * @memberof GenericEntity
+     * @static
+     * @param {IGenericEntity=} [properties] Properties to set
+     * @returns {GenericEntity} GenericEntity instance
+     */
+    GenericEntity.create = function create(properties) {
+        return new GenericEntity(properties);
+    };
+
+    /**
+     * Encodes the specified GenericEntity message. Does not implicitly {@link GenericEntity.verify|verify} messages.
+     * @function encode
+     * @memberof GenericEntity
+     * @static
+     * @param {IGenericEntity} message GenericEntity message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    GenericEntity.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.bounds != null && Object.hasOwnProperty.call(message, "bounds"))
+            $root.Bounds.encode(message.bounds, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified GenericEntity message, length delimited. Does not implicitly {@link GenericEntity.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof GenericEntity
+     * @static
+     * @param {IGenericEntity} message GenericEntity message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    GenericEntity.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a GenericEntity message from the specified reader or buffer.
+     * @function decode
+     * @memberof GenericEntity
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {GenericEntity} GenericEntity
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    GenericEntity.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.GenericEntity();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.bounds = $root.Bounds.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a GenericEntity message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof GenericEntity
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {GenericEntity} GenericEntity
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    GenericEntity.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a GenericEntity message.
+     * @function verify
+     * @memberof GenericEntity
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    GenericEntity.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.bounds != null && message.hasOwnProperty("bounds")) {
+            let error = $root.Bounds.verify(message.bounds);
+            if (error)
+                return "bounds." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a GenericEntity message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof GenericEntity
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {GenericEntity} GenericEntity
+     */
+    GenericEntity.fromObject = function fromObject(object) {
+        if (object instanceof $root.GenericEntity)
+            return object;
+        let message = new $root.GenericEntity();
+        if (object.bounds != null) {
+            if (typeof object.bounds !== "object")
+                throw TypeError(".GenericEntity.bounds: object expected");
+            message.bounds = $root.Bounds.fromObject(object.bounds);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a GenericEntity message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof GenericEntity
+     * @static
+     * @param {GenericEntity} message GenericEntity
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    GenericEntity.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.bounds = null;
+        if (message.bounds != null && message.hasOwnProperty("bounds"))
+            object.bounds = $root.Bounds.toObject(message.bounds, options);
+        return object;
+    };
+
+    /**
+     * Converts this GenericEntity to JSON.
+     * @function toJSON
+     * @memberof GenericEntity
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    GenericEntity.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return GenericEntity;
 })();
 
 export const CallChatClientRequest = $root.CallChatClientRequest = (() => {

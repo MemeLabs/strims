@@ -51,13 +51,12 @@ func (s *ChatServer) Events() <-chan *pb.ChatServerEvent {
 }
 
 func (s *ChatServer) transformChatMessages(ps *PubSubServer) {
-	for p := range ps.Messages() {
-		// TODO: chat output schema
-		// TODO: use strims chat parser?
+	for message := range ps.Messages() {
 		// TODO: map source host id to nick... need to retain vpn.Message meatadata
 
 		var e pb.ChatClientEvent
-		if err := proto.Unmarshal(p.Body, &e); err != nil {
+		if err := proto.Unmarshal(message.Body, &e); err != nil {
+			s.logger.Error("failed to unmarshal message", zap.Error(err))
 			continue
 		}
 
@@ -65,6 +64,13 @@ func (s *ChatServer) transformChatMessages(ps *PubSubServer) {
 		case *pb.ChatClientEvent_Message_:
 			s.logger.Debug("chat message received", zap.String("message", b.Message.Body))
 			b.Message.ServerTime = time.Now().UnixNano() / int64(time.Millisecond)
+			b.Message.Entities = entities.Extract(b.Message.Body)
+		case *pb.ChatClientEvent_Open_:
+			// TODO: add joining nicks
+			// entities.AddNick(b.Open.ClientId)
+		case *pb.ChatClientEvent_Close_:
+			// TODO: remove leaving nicks
+			// entities.RemoveNick(b.Close.ClientId)
 		}
 
 		b, err := proto.Marshal(&e)

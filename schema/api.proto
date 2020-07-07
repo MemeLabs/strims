@@ -251,6 +251,7 @@ message ChatClientEvent {
     int64 sent_time = 1;
     int64 server_time = 2;
     string body = 3;
+    MessageEntities entities = 4;
   }
 
   message Close {}
@@ -260,6 +261,56 @@ message ChatClientEvent {
     Message message = 2;
     Close close = 3;
   }
+}
+
+message MessageEntities {
+  repeated Link links = 1;
+  repeated Emote emotes = 2;
+  repeated Nick nicks = 3;
+  repeated Tag tags = 4;
+  repeated CodeBlock code_blocks = 5;
+  repeated Spoiler spoilers = 6;
+  GenericEntity green_text = 7;
+  GenericEntity self_message = 8;
+}
+
+message Bounds {
+  int64 start = 1;
+  int64 end = 2;
+}
+
+message Link {
+  Bounds bounds = 1;
+  string url = 2;
+}
+
+message Emote {
+  Bounds bounds = 1;
+  string name = 2;
+  repeated string modifiers = 3;
+  int64 combo = 4;
+}
+
+message Nick {
+  Bounds bounds = 1;
+  string nick = 2;
+}
+
+message Tag {
+  Bounds bounds = 1;
+  string name = 2;
+}
+
+message CodeBlock {
+  Bounds bounds = 1;
+}
+
+message Spoiler {
+  Bounds bounds = 1;
+}
+
+message GenericEntity {
+    Bounds bounds = 1;
 }
 
 message CallChatClientRequest {

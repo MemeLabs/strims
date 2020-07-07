@@ -7001,6 +7001,9 @@ export namespace ChatClientEvent {
 
         /** Message body */
         body?: (string|null);
+
+        /** Message entities */
+        entities?: (IMessageEntities|null);
     }
 
     /** Represents a Message. */
@@ -7020,6 +7023,9 @@ export namespace ChatClientEvent {
 
         /** Message body. */
         public body: string;
+
+        /** Message entities. */
+        public entities?: (IMessageEntities|null);
 
         /**
          * Creates a new Message instance using the specified properties.
@@ -7175,6 +7181,900 @@ export namespace ChatClientEvent {
          */
         public toJSON(): { [k: string]: any };
     }
+}
+
+/** Properties of a MessageEntities. */
+export interface IMessageEntities {
+
+    /** MessageEntities links */
+    links?: (ILink[]|null);
+
+    /** MessageEntities emotes */
+    emotes?: (IEmote[]|null);
+
+    /** MessageEntities nicks */
+    nicks?: (INick[]|null);
+
+    /** MessageEntities tags */
+    tags?: (ITag[]|null);
+
+    /** MessageEntities codeBlocks */
+    codeBlocks?: (ICodeBlock[]|null);
+
+    /** MessageEntities spoilers */
+    spoilers?: (ISpoiler[]|null);
+
+    /** MessageEntities greenText */
+    greenText?: (IGenericEntity|null);
+
+    /** MessageEntities selfMessage */
+    selfMessage?: (IGenericEntity|null);
+}
+
+/** Represents a MessageEntities. */
+export class MessageEntities implements IMessageEntities {
+
+    /**
+     * Constructs a new MessageEntities.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IMessageEntities);
+
+    /** MessageEntities links. */
+    public links: ILink[];
+
+    /** MessageEntities emotes. */
+    public emotes: IEmote[];
+
+    /** MessageEntities nicks. */
+    public nicks: INick[];
+
+    /** MessageEntities tags. */
+    public tags: ITag[];
+
+    /** MessageEntities codeBlocks. */
+    public codeBlocks: ICodeBlock[];
+
+    /** MessageEntities spoilers. */
+    public spoilers: ISpoiler[];
+
+    /** MessageEntities greenText. */
+    public greenText?: (IGenericEntity|null);
+
+    /** MessageEntities selfMessage. */
+    public selfMessage?: (IGenericEntity|null);
+
+    /**
+     * Creates a new MessageEntities instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns MessageEntities instance
+     */
+    public static create(properties?: IMessageEntities): MessageEntities;
+
+    /**
+     * Encodes the specified MessageEntities message. Does not implicitly {@link MessageEntities.verify|verify} messages.
+     * @param message MessageEntities message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IMessageEntities, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified MessageEntities message, length delimited. Does not implicitly {@link MessageEntities.verify|verify} messages.
+     * @param message MessageEntities message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IMessageEntities, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a MessageEntities message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns MessageEntities
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): MessageEntities;
+
+    /**
+     * Decodes a MessageEntities message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns MessageEntities
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): MessageEntities;
+
+    /**
+     * Verifies a MessageEntities message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a MessageEntities message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns MessageEntities
+     */
+    public static fromObject(object: { [k: string]: any }): MessageEntities;
+
+    /**
+     * Creates a plain object from a MessageEntities message. Also converts values to other types if specified.
+     * @param message MessageEntities
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: MessageEntities, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this MessageEntities to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a Bounds. */
+export interface IBounds {
+
+    /** Bounds start */
+    start?: (number|null);
+
+    /** Bounds end */
+    end?: (number|null);
+}
+
+/** Represents a Bounds. */
+export class Bounds implements IBounds {
+
+    /**
+     * Constructs a new Bounds.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBounds);
+
+    /** Bounds start. */
+    public start: number;
+
+    /** Bounds end. */
+    public end: number;
+
+    /**
+     * Creates a new Bounds instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns Bounds instance
+     */
+    public static create(properties?: IBounds): Bounds;
+
+    /**
+     * Encodes the specified Bounds message. Does not implicitly {@link Bounds.verify|verify} messages.
+     * @param message Bounds message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBounds, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified Bounds message, length delimited. Does not implicitly {@link Bounds.verify|verify} messages.
+     * @param message Bounds message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBounds, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a Bounds message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns Bounds
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): Bounds;
+
+    /**
+     * Decodes a Bounds message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns Bounds
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): Bounds;
+
+    /**
+     * Verifies a Bounds message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a Bounds message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns Bounds
+     */
+    public static fromObject(object: { [k: string]: any }): Bounds;
+
+    /**
+     * Creates a plain object from a Bounds message. Also converts values to other types if specified.
+     * @param message Bounds
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: Bounds, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this Bounds to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a Link. */
+export interface ILink {
+
+    /** Link bounds */
+    bounds?: (IBounds|null);
+
+    /** Link url */
+    url?: (string|null);
+}
+
+/** Represents a Link. */
+export class Link implements ILink {
+
+    /**
+     * Constructs a new Link.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ILink);
+
+    /** Link bounds. */
+    public bounds?: (IBounds|null);
+
+    /** Link url. */
+    public url: string;
+
+    /**
+     * Creates a new Link instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns Link instance
+     */
+    public static create(properties?: ILink): Link;
+
+    /**
+     * Encodes the specified Link message. Does not implicitly {@link Link.verify|verify} messages.
+     * @param message Link message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ILink, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified Link message, length delimited. Does not implicitly {@link Link.verify|verify} messages.
+     * @param message Link message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ILink, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a Link message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns Link
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): Link;
+
+    /**
+     * Decodes a Link message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns Link
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): Link;
+
+    /**
+     * Verifies a Link message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a Link message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns Link
+     */
+    public static fromObject(object: { [k: string]: any }): Link;
+
+    /**
+     * Creates a plain object from a Link message. Also converts values to other types if specified.
+     * @param message Link
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: Link, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this Link to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of an Emote. */
+export interface IEmote {
+
+    /** Emote bounds */
+    bounds?: (IBounds|null);
+
+    /** Emote name */
+    name?: (string|null);
+
+    /** Emote modifiers */
+    modifiers?: (string[]|null);
+
+    /** Emote combo */
+    combo?: (number|null);
+}
+
+/** Represents an Emote. */
+export class Emote implements IEmote {
+
+    /**
+     * Constructs a new Emote.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IEmote);
+
+    /** Emote bounds. */
+    public bounds?: (IBounds|null);
+
+    /** Emote name. */
+    public name: string;
+
+    /** Emote modifiers. */
+    public modifiers: string[];
+
+    /** Emote combo. */
+    public combo: number;
+
+    /**
+     * Creates a new Emote instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns Emote instance
+     */
+    public static create(properties?: IEmote): Emote;
+
+    /**
+     * Encodes the specified Emote message. Does not implicitly {@link Emote.verify|verify} messages.
+     * @param message Emote message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IEmote, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified Emote message, length delimited. Does not implicitly {@link Emote.verify|verify} messages.
+     * @param message Emote message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IEmote, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes an Emote message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns Emote
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): Emote;
+
+    /**
+     * Decodes an Emote message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns Emote
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): Emote;
+
+    /**
+     * Verifies an Emote message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates an Emote message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns Emote
+     */
+    public static fromObject(object: { [k: string]: any }): Emote;
+
+    /**
+     * Creates a plain object from an Emote message. Also converts values to other types if specified.
+     * @param message Emote
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: Emote, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this Emote to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a Nick. */
+export interface INick {
+
+    /** Nick bounds */
+    bounds?: (IBounds|null);
+
+    /** Nick nick */
+    nick?: (string|null);
+}
+
+/** Represents a Nick. */
+export class Nick implements INick {
+
+    /**
+     * Constructs a new Nick.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: INick);
+
+    /** Nick bounds. */
+    public bounds?: (IBounds|null);
+
+    /** Nick nick. */
+    public nick: string;
+
+    /**
+     * Creates a new Nick instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns Nick instance
+     */
+    public static create(properties?: INick): Nick;
+
+    /**
+     * Encodes the specified Nick message. Does not implicitly {@link Nick.verify|verify} messages.
+     * @param message Nick message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: INick, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified Nick message, length delimited. Does not implicitly {@link Nick.verify|verify} messages.
+     * @param message Nick message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: INick, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a Nick message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns Nick
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): Nick;
+
+    /**
+     * Decodes a Nick message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns Nick
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): Nick;
+
+    /**
+     * Verifies a Nick message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a Nick message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns Nick
+     */
+    public static fromObject(object: { [k: string]: any }): Nick;
+
+    /**
+     * Creates a plain object from a Nick message. Also converts values to other types if specified.
+     * @param message Nick
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: Nick, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this Nick to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a Tag. */
+export interface ITag {
+
+    /** Tag bounds */
+    bounds?: (IBounds|null);
+
+    /** Tag name */
+    name?: (string|null);
+}
+
+/** Represents a Tag. */
+export class Tag implements ITag {
+
+    /**
+     * Constructs a new Tag.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ITag);
+
+    /** Tag bounds. */
+    public bounds?: (IBounds|null);
+
+    /** Tag name. */
+    public name: string;
+
+    /**
+     * Creates a new Tag instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns Tag instance
+     */
+    public static create(properties?: ITag): Tag;
+
+    /**
+     * Encodes the specified Tag message. Does not implicitly {@link Tag.verify|verify} messages.
+     * @param message Tag message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ITag, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified Tag message, length delimited. Does not implicitly {@link Tag.verify|verify} messages.
+     * @param message Tag message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ITag, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a Tag message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns Tag
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): Tag;
+
+    /**
+     * Decodes a Tag message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns Tag
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): Tag;
+
+    /**
+     * Verifies a Tag message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a Tag message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns Tag
+     */
+    public static fromObject(object: { [k: string]: any }): Tag;
+
+    /**
+     * Creates a plain object from a Tag message. Also converts values to other types if specified.
+     * @param message Tag
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: Tag, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this Tag to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a CodeBlock. */
+export interface ICodeBlock {
+
+    /** CodeBlock bounds */
+    bounds?: (IBounds|null);
+}
+
+/** Represents a CodeBlock. */
+export class CodeBlock implements ICodeBlock {
+
+    /**
+     * Constructs a new CodeBlock.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ICodeBlock);
+
+    /** CodeBlock bounds. */
+    public bounds?: (IBounds|null);
+
+    /**
+     * Creates a new CodeBlock instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns CodeBlock instance
+     */
+    public static create(properties?: ICodeBlock): CodeBlock;
+
+    /**
+     * Encodes the specified CodeBlock message. Does not implicitly {@link CodeBlock.verify|verify} messages.
+     * @param message CodeBlock message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ICodeBlock, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified CodeBlock message, length delimited. Does not implicitly {@link CodeBlock.verify|verify} messages.
+     * @param message CodeBlock message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ICodeBlock, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a CodeBlock message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns CodeBlock
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CodeBlock;
+
+    /**
+     * Decodes a CodeBlock message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns CodeBlock
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CodeBlock;
+
+    /**
+     * Verifies a CodeBlock message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a CodeBlock message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns CodeBlock
+     */
+    public static fromObject(object: { [k: string]: any }): CodeBlock;
+
+    /**
+     * Creates a plain object from a CodeBlock message. Also converts values to other types if specified.
+     * @param message CodeBlock
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: CodeBlock, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this CodeBlock to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a Spoiler. */
+export interface ISpoiler {
+
+    /** Spoiler bounds */
+    bounds?: (IBounds|null);
+}
+
+/** Represents a Spoiler. */
+export class Spoiler implements ISpoiler {
+
+    /**
+     * Constructs a new Spoiler.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ISpoiler);
+
+    /** Spoiler bounds. */
+    public bounds?: (IBounds|null);
+
+    /**
+     * Creates a new Spoiler instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns Spoiler instance
+     */
+    public static create(properties?: ISpoiler): Spoiler;
+
+    /**
+     * Encodes the specified Spoiler message. Does not implicitly {@link Spoiler.verify|verify} messages.
+     * @param message Spoiler message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ISpoiler, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified Spoiler message, length delimited. Does not implicitly {@link Spoiler.verify|verify} messages.
+     * @param message Spoiler message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ISpoiler, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a Spoiler message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns Spoiler
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): Spoiler;
+
+    /**
+     * Decodes a Spoiler message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns Spoiler
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): Spoiler;
+
+    /**
+     * Verifies a Spoiler message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a Spoiler message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns Spoiler
+     */
+    public static fromObject(object: { [k: string]: any }): Spoiler;
+
+    /**
+     * Creates a plain object from a Spoiler message. Also converts values to other types if specified.
+     * @param message Spoiler
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: Spoiler, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this Spoiler to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a GenericEntity. */
+export interface IGenericEntity {
+
+    /** GenericEntity bounds */
+    bounds?: (IBounds|null);
+}
+
+/** Represents a GenericEntity. */
+export class GenericEntity implements IGenericEntity {
+
+    /**
+     * Constructs a new GenericEntity.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IGenericEntity);
+
+    /** GenericEntity bounds. */
+    public bounds?: (IBounds|null);
+
+    /**
+     * Creates a new GenericEntity instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns GenericEntity instance
+     */
+    public static create(properties?: IGenericEntity): GenericEntity;
+
+    /**
+     * Encodes the specified GenericEntity message. Does not implicitly {@link GenericEntity.verify|verify} messages.
+     * @param message GenericEntity message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IGenericEntity, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified GenericEntity message, length delimited. Does not implicitly {@link GenericEntity.verify|verify} messages.
+     * @param message GenericEntity message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IGenericEntity, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a GenericEntity message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns GenericEntity
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GenericEntity;
+
+    /**
+     * Decodes a GenericEntity message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns GenericEntity
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GenericEntity;
+
+    /**
+     * Verifies a GenericEntity message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a GenericEntity message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns GenericEntity
+     */
+    public static fromObject(object: { [k: string]: any }): GenericEntity;
+
+    /**
+     * Creates a plain object from a GenericEntity message. Also converts values to other types if specified.
+     * @param message GenericEntity
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: GenericEntity, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this GenericEntity to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
 }
 
 /** Properties of a CallChatClientRequest. */

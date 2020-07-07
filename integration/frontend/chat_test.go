@@ -5,20 +5,21 @@ package frontend
 import (
 	"context"
 	"fmt"
-	"log"
 	"testing"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/integration/driver"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
+	"github.com/davecgh/go-spew/spew"
+	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
 )
 
 func TestChat(t *testing.T) {
 	d, err := driver.NewNative()
 	if err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 
 	type state struct {
@@ -40,14 +41,14 @@ func TestChat(t *testing.T) {
 		Password: "password",
 	}
 	if err := a.client.CallUnary(ctx, "createProfile", profile, &a.profile); err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 
 	vpn := &pb.StartVPNRequest{
 		EnableBootstrapPublishing: true,
 	}
 	if err := a.client.CallStreaming(ctx, "startVPN", vpn, make(chan *pb.NetworkEvent)); err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 
 	time.Sleep(time.Second)
@@ -83,26 +84,27 @@ func TestChat(t *testing.T) {
 	g.Go(func() error { return initClient(b, "testb") })
 	g.Go(func() error { return initClient(c, "testc") })
 	if err := g.Wait(); err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 
 	time.Sleep(time.Second)
 
 	bootstrapPeersRes := &pb.GetBootstrapPeersResponse{}
 	if err := b.client.CallUnary(ctx, "getBootstrapPeers", &pb.GetBootstrapPeersRequest{}, bootstrapPeersRes); err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 
 	if len(bootstrapPeersRes.Peers) == 0 {
-		log.Fatal("received 0 bootstrap peers")
+		t.Error("received 0 bootstrap peers")
 	}
 
 	createNetworkReq := &pb.CreateNetworkRequest{
 		Name: "test",
 	}
+
 	createNetworkRes := &pb.CreateNetworkResponse{}
 	if err := b.client.CallUnary(ctx, "createNetwork", createNetworkReq, createNetworkRes); err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 
 	publishReq := &pb.PublishNetworkToBootstrapPeerRequest{
@@ -110,7 +112,7 @@ func TestChat(t *testing.T) {
 		Network: createNetworkRes.Network,
 	}
 	if err := b.client.CallUnary(ctx, "publishNetworkToBootstrapPeer", publishReq, &pb.PublishNetworkToBootstrapPeerResponse{}); err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 
 	invitationReq := &pb.CreateNetworkInvitationRequest{
@@ -120,7 +122,7 @@ func TestChat(t *testing.T) {
 	}
 	invitationRes := &pb.CreateNetworkInvitationResponse{}
 	if err := b.client.CallUnary(ctx, "createNetworkInvitation", invitationReq, invitationRes); err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 
 	createInvitationReq := &pb.CreateNetworkMembershipFromInvitationRequest{
@@ -129,7 +131,7 @@ func TestChat(t *testing.T) {
 		},
 	}
 	if err := c.client.CallUnary(ctx, "createNetworkMembershipFromInvitation", createInvitationReq, &pb.CreateNetworkMembershipFromInvitationResponse{}); err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 
 	createChatServerReq := &pb.CreateChatServerRequest{
@@ -140,7 +142,7 @@ func TestChat(t *testing.T) {
 	}
 	createChatServerRes := &pb.CreateChatServerResponse{}
 	if err := c.client.CallUnary(ctx, "createChatServer", createChatServerReq, createChatServerRes); err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 
 	openChatServerReq := &pb.OpenChatServerRequest{
@@ -148,12 +150,12 @@ func TestChat(t *testing.T) {
 	}
 	chatServerEvents := make(chan *pb.ChatServerEvent, 1)
 	if err := c.client.CallStreaming(ctx, "openChatServer", openChatServerReq, chatServerEvents); err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 
 	go func() {
 		for e := range chatServerEvents {
-			log.Println("chat server event", e)
+			t.Log("chat server event", e)
 		}
 	}()
 
@@ -165,26 +167,26 @@ func TestChat(t *testing.T) {
 	}
 	chatClientEvents := make(chan *pb.ChatClientEvent, 1)
 	if err := b.client.CallStreaming(ctx, "openChatClient", openChatClientReq, chatClientEvents); err != nil {
-		log.Fatal(err)
+		t.Error(err)
 	}
 
 	sendMessages := func(ctx context.Context, clientID uint64) {
 		for {
-			t := time.NewTicker(time.Second)
+			ticker := time.NewTicker(time.Second)
 
 			select {
-			case now := <-t.C:
+			case now := <-ticker.C:
 				callChatClientReq := &pb.CallChatClientRequest{
 					ClientId: clientID,
 					Body: &pb.CallChatClientRequest_Message_{
 						Message: &pb.CallChatClientRequest_Message{
 							Time: now.UnixNano(),
-							Body: fmt.Sprintf("test message %s", now.UTC().Format(time.RFC3339)),
+							Body: fmt.Sprint("PEPE:WIDE `code` test ||spoiler|| https://google.com nsfw"),
 						},
 					},
 				}
 				if err := b.client.Call(ctx, "callChatClient", callChatClientReq); err != nil {
-					log.Fatal(err)
+					t.Error(err)
 				}
 			case <-ctx.Done():
 				return
@@ -203,16 +205,32 @@ func TestChat(t *testing.T) {
 			case *pb.ChatClientEvent_Open_:
 				go sendMessages(ctx, b.Open.ClientId)
 			case *pb.ChatClientEvent_Message_:
-				log.Println("chat client message", b.Message.Body)
+				t.Log("chat client message", b.Message.Body)
+				t.Log(spew.Sdump(b.Message.Entities))
+
+				assert.True(t, len(b.Message.Entities.Emotes) == 1, "should contain an emote")
+				assert.Equal(t, "PEPE", b.Message.Entities.Emotes[0].Name, "emote should be 'PEPE'")
+				assert.True(t, len(b.Message.Entities.Links) == 1, "should contain a link")
+				assert.Equal(t, "https://google.com", b.Message.Entities.Links[0].Url, "link should be correct")
+				assert.True(t, len(b.Message.Entities.CodeBlocks) == 1, "should contain a code block")
+				assert.Equal(t, "`code`", fromBounds(b.Message.Body, b.Message.Entities.CodeBlocks[0].Bounds), "code block content should be correct")
+				assert.True(t, len(b.Message.Entities.Spoilers) == 1, "should contain a spoiler")
+				assert.Equal(t, "||spoiler||", fromBounds(b.Message.Body, b.Message.Entities.Spoilers[0].Bounds), "spoiler content should be correct")
+				assert.True(t, len(b.Message.Entities.Tags) == 1, "should contain a tag")
+				assert.Equal(t, "nsfw", b.Message.Entities.Tags[0].Name, "tag should be correct")
 				close(done)
 			case *pb.ChatClientEvent_Close_:
 				return
 			}
 		}
-		log.Println("chat client closed")
+		t.Log("chat client closed")
 	}()
 
 	<-done
 
 	d.Close()
+}
+
+func fromBounds(base string, bounds *pb.Bounds) string {
+	return base[bounds.Start:bounds.End]
 }

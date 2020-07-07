@@ -3,6 +3,7 @@ module github.com/MemeLabs/go-ppspp
 go 1.13
 
 require (
+	github.com/MemeLabs/chat-parser v1.0.2
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/aead/ecdh v0.2.0
 	github.com/avast/retry-go v2.6.0+incompatible
@@ -45,6 +46,7 @@ require (
 	google.golang.org/protobuf v1.24.0
 	gopkg.in/yaml.v2 v2.3.0
 	lukechampine.com/uint128 v1.0.0
+	mvdan.cc/xurls/v2 v2.2.0
 )
 
 replace github.com/prometheus/client_golang => ./vendor/client_golang
