@@ -2,7 +2,6 @@ package ppspptest
 
 import (
 	"context"
-	"math"
 
 	"golang.org/x/time/rate"
 )
@@ -17,8 +16,8 @@ const (
 // NewConnThrottle ...
 func NewConnThrottle(r, w int) *ConnThrottle {
 	return &ConnThrottle{
-		r: rate.NewLimiter(rate.Limit(r), math.MaxInt32),
-		w: rate.NewLimiter(rate.Limit(w), math.MaxInt32),
+		r: rate.NewLimiter(rate.Limit(r), r),
+		w: rate.NewLimiter(rate.Limit(w), w),
 	}
 }
 
@@ -43,7 +42,9 @@ type ThrottleConn struct {
 
 // Flush ...
 func (c *ThrottleConn) Flush() error {
-	c.t.w.WaitN(c.ctx, c.Conn.Buffered())
+	if err := c.t.w.WaitN(c.ctx, c.Conn.Buffered()); err != nil {
+		return err
+	}
 	return c.Conn.Flush()
 }
 

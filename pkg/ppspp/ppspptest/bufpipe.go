@@ -71,9 +71,9 @@ func (w *bufPipeWriter) Buffered() int {
 }
 
 func (w *bufPipeWriter) Write(p []byte) (int, error) {
-	n, _ := w.buf.Write(p)
+	n, err := w.buf.Write(p)
 	w.n += n
-	return n, nil
+	return n, err
 }
 
 func (w *bufPipeWriter) Flush() error {

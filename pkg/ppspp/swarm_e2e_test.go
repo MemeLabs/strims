@@ -16,7 +16,7 @@ func TestSwarmE2E(t *testing.T) {
 	key := ppspptest.Key()
 	id := NewSwarmID(key.Public)
 	options := SwarmOptions{
-		LiveWindow: 1 << 20,
+		LiveWindow: 1 << 12,
 	}
 
 	type client struct {

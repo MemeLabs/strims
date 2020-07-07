@@ -2,81 +2,95 @@ package ppspp
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"log"
+	"os"
+	"strconv"
+	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
-	"github.com/golang/geo/s2"
 	"github.com/tj/assert"
 )
 
-const (
-	earthRadius = 6378.1370
-	c           = 300000
-	linkSpeed   = c / 10
-)
-
-type peer struct {
+type testPeer struct {
 	downloadRate int
 	uploadRate   int
-	location     s2.LatLng
+	city         ppspptest.City
 }
 
 func TestSwarmSim(t *testing.T) {
-	peers := []peer{
+	peers := []testPeer{
 		{
-			downloadRate: 300 * ppspptest.Mbps,
-			uploadRate:   30 * ppspptest.Mbps,
-			// new york
-			location: s2.LatLngFromDegrees(40.7128, -74.0060),
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.NewYork,
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   150 * ppspptest.Mbps,
-			// boston
-			location: s2.LatLngFromDegrees(42.3601, -71.0589),
-		},
-		{
-			downloadRate: 60 * ppspptest.Mbps,
-			uploadRate:   3 * ppspptest.Mbps,
-			// seattle
-			location: s2.LatLngFromDegrees(47.6062, -122.3321),
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.Boston,
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   6 * ppspptest.Mbps,
-			// san francisco
-			location: s2.LatLngFromDegrees(37.7749, -122.4194),
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.Seattle,
 		},
 		{
-			downloadRate: 250 * ppspptest.Mbps,
-			uploadRate:   25 * ppspptest.Mbps,
-			// los angeles
-			location: s2.LatLngFromDegrees(34.0522, -118.2437),
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.SanFrancisco,
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.LosAngeles,
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.London,
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.Berlin,
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.Paris,
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.Rome,
 		},
 	}
 
 	key := ppspptest.Key()
 	id := NewSwarmID(key.Public)
 	options := SwarmOptions{
-		LiveWindow: 1 << 22,
+		LiveWindow: 1 << 14,
 	}
 
 	type client struct {
-		location  s2.LatLng
+		city      ppspptest.City
 		bandwidth *ppspptest.ConnThrottle
 		swarm     *Swarm
 		scheduler *Scheduler
 		conns     []*ppspptest.MeterConn
 	}
 
-	newClient := func(p peer) *client {
+	newClient := func(p testPeer) *client {
 		swarm, err := NewSwarm(id, options)
 		assert.NoError(t, err, "swarm constructor failed")
 		return &client{
-			location:  p.location,
+			city:      p.city,
 			bandwidth: ppspptest.NewConnThrottle(p.downloadRate, p.uploadRate),
 			swarm:     swarm,
 			conns:     make([]*ppspptest.MeterConn, len(peers)),
@@ -90,7 +104,7 @@ func TestSwarmSim(t *testing.T) {
 	assert.NoError(t, err, "writer constructor failed")
 
 	clients := []*client{{
-		location:  peers[0].location,
+		city:      peers[0].city,
 		bandwidth: ppspptest.NewConnThrottle(peers[0].downloadRate, peers[0].uploadRate),
 		swarm:     src.Swarm(),
 		conns:     make([]*ppspptest.MeterConn, len(peers)),
@@ -120,8 +134,7 @@ func TestSwarmSim(t *testing.T) {
 			iConn = ppspptest.NewThrottleConn(iConn, clients[i].bandwidth)
 			jConn = ppspptest.NewThrottleConn(jConn, clients[j].bandwidth)
 
-			d := clients[i].location.Distance(clients[j].location).Radians() * earthRadius
-			latency := time.Duration(float64(time.Second) * d / linkSpeed)
+			latency := ppspptest.ComputeLatency(clients[i].city.LatLng, clients[j].city.LatLng)
 			iConn, jConn = ppspptest.NewLagConnPair(iConn, jConn, latency)
 
 			imConn := ppspptest.NewMeterConn(iConn)
@@ -142,7 +155,8 @@ func TestSwarmSim(t *testing.T) {
 
 	go func() {
 		t := time.NewTicker(100 * time.Millisecond)
-		b := make([]byte, 75000)
+		// b := make([]byte, 75000)
+		b := make([]byte, 43750)
 		var nn int
 		for range t.C {
 			n, _ := src.Write(b)
@@ -153,17 +167,61 @@ func TestSwarmSim(t *testing.T) {
 	}()
 
 	go func() {
-		t := time.NewTicker(time.Second)
-		for range t.C {
-			log.Println("---")
-			for i, c := range clients {
-				for j, conn := range c.conns {
-					if i != j {
-						log.Printf("conn: %d:%d, in: %d, out: %d", i, j, conn.ReadBytes(), conn.WrittenBytes())
-					}
+		f, err := os.OpenFile(fmt.Sprintf("./samples-%d.csv", time.Now().Unix()), os.O_CREATE|os.O_WRONLY, 0644)
+		assert.NoError(t, err, "log open failed")
+		defer f.Close()
+
+		var prev []int64
+
+		var labels strings.Builder
+		labels.WriteString("tick")
+		for i, c := range clients {
+			// labels.WriteString(fmt.Sprintf(",%s", c.location))
+			for j, conn := range c.conns {
+				if conn != nil {
+					// labels.WriteString(fmt.Sprintf(",%d:%d", i, j))
+					labels.WriteString(fmt.Sprintf(",%s:%s", clients[i].city.Name, clients[j].city.Name))
+					prev = append(prev, 0)
 				}
 			}
-			log.Println("---")
+		}
+		labels.WriteRune('\n')
+		f.WriteString(labels.String())
+
+		// t := time.NewTicker(time.Second)
+		t := time.NewTicker(time.Second)
+		var tick int
+		for range t.C {
+			// log.Println("==================================================")
+
+			var row strings.Builder
+			row.WriteString(strconv.FormatInt(int64(tick), 10))
+			var k int
+			for _, c := range clients {
+				var rn, wn int64
+				for _, conn := range c.conns {
+					if conn != nil {
+						rn += conn.ReadBytes()
+						wn += conn.WrittenBytes()
+
+						row.WriteString(fmt.Sprintf(",%d", conn.ReadBytes()-prev[k]))
+						prev[k] = conn.ReadBytes()
+						k++
+
+						// log.Printf("conn: %d:%d in: %-12d out: %d", i, j, conn.ReadBytes(), conn.WrittenBytes())
+					}
+				}
+				// log.Printf("conn: %d in: %-12d out: %d", i, rn, wn)
+				// log.Println("____")
+
+				// row.WriteString(fmt.Sprintf(",%d", wn-prev[i]))
+				// prev[i] = wn
+			}
+			row.WriteRune('\n')
+			f.WriteString(row.String())
+
+			// log.Println("---")
+			tick++
 		}
 	}()
 
@@ -171,25 +229,36 @@ func TestSwarmSim(t *testing.T) {
 	for i := 1; i < len(clients); i++ {
 		wg.Add(1)
 		go func(i int) {
-			var nn int
-			r := clients[i].swarm.Reader()
-			b := make([]byte, 1024)
-			for nn < 5000000 {
-				n, err := r.Read(b)
-				if err != nil {
-					panic(err)
-				}
-				// log.Println("read from", i, n, nn)
-				nn += n
-			}
-			// log.Println("done --------------", i)
+			defer wg.Done()
 
-			// limit := int64(500000)
-			// n, err := io.CopyN(ioutil.Discard, clients[i].swarm.Reader(), limit)
-			// assert.NoError(t, err, "read failed")
-			// assert.Equal(t, limit, n, "short read")
-			wg.Done()
+			var w testWriter
+			t := time.NewTicker(time.Second)
+			defer t.Stop()
+
+			go func() {
+				var prev uint64
+				for range t.C {
+					n := w.WrittenBytes()
+					log.Printf("%d read bytes: % -10d %t", i, n-prev, (n-prev) >= 437500)
+					prev = n
+				}
+			}()
+
+			io.CopyN(&w, clients[i].swarm.Reader(), 5000000)
 		}(i)
 	}
 	wg.Wait()
+}
+
+type testWriter struct {
+	n uint64
+}
+
+func (w *testWriter) Write(p []byte) (int, error) {
+	atomic.AddUint64(&w.n, uint64(len(p)))
+	return len(p), nil
+}
+
+func (w *testWriter) WrittenBytes() uint64 {
+	return atomic.LoadUint64(&w.n)
 }

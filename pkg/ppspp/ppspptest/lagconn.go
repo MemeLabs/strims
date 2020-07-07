@@ -2,7 +2,21 @@ package ppspptest
 
 import (
 	"time"
+
+	"github.com/golang/geo/s2"
 )
+
+const (
+	earthRadius = 6378.1370
+	c           = 300000
+	linkSpeed   = c / 3
+)
+
+// ComputeLatency ...
+func ComputeLatency(a, b s2.LatLng) time.Duration {
+	d := a.Distance(b).Radians() * earthRadius
+	return time.Duration(float64(time.Second) * d / linkSpeed)
+}
 
 // NewLagConnPair ...
 func NewLagConnPair(a, b Conn, l time.Duration) (*LagConn, *LagConn) {
