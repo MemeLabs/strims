@@ -94,5 +94,4 @@ func (s *Server) Listen() error {
 		}
 		go srv.HandleNetConn(nc)
 	}
-	return nil
 }
