@@ -8,7 +8,9 @@ import (
 
 // NewPubSub ...
 func NewPubSub(subs ...Subscriber) *PubSub {
-	return &PubSub{subs: subs}
+	return &PubSub{
+		subs: subs,
+	}
 }
 
 // PubSub ...
@@ -38,18 +40,21 @@ func (p *PubSub) Unsubscribe(s Subscriber) {
 }
 
 // Publish ...
-func (p *PubSub) Publish(c Chunk) {
+func (p *PubSub) Publish(c Chunk) bool {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
 	for _, s := range p.subs {
-		s.Consume(c)
+		if !s.Consume(c) {
+			return false
+		}
 	}
+	return true
 }
 
 // Subscriber ...
 type Subscriber interface {
-	Consume(c Chunk)
+	Consume(c Chunk) bool
 }
 
 // Chunk ...

@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
@@ -92,7 +93,8 @@ type channel struct {
 	sentBinHistory      *binTimeoutQueue // recently sent bins
 	requestedBinHistory *binTimeoutQueue // bins recently requested from the peer
 	acks                []codec.Ack
-	pong                *codec.Pong
+	pongNonce           binmap.Bin
+	pongTime            time.Time
 	closeOnce           sync.Once
 	close               chan struct{}
 }
@@ -131,7 +133,7 @@ func (c *channel) addAckedBin(b binmap.Bin) bool {
 	c.Lock()
 	defer c.Unlock()
 
-	if !c.unackedBins.FilledAt(b) {
+	if c.unackedBins.EmptyAt(b) {
 		return false
 	}
 
@@ -148,40 +150,44 @@ func (c *channel) enqueueAck(a codec.Ack) {
 }
 
 // TODO: count filled bins in b
-func (c *channel) addCancelledBins(b binmap.Bin) int {
+func (c *channel) addCancelledBins(b binmap.Bin) {
+	c.Lock()
+	c.requestedBins.Reset(b)
+	c.Unlock()
+}
+
+func (c *channel) enqueuePong(nonce binmap.Bin) {
 	c.Lock()
 	defer c.Unlock()
 
-	var n uint64
-
-	if !c.unackedBins.EmptyAt(b) {
-		n += b.BaseLength()
-		c.unackedBins.Reset(b)
-	}
-	c.requestedBins.Reset(b)
-
-	return int(n)
-}
-
-func (c *channel) enqueuePong(p *codec.Pong) {
-	c.Lock()
-	c.pong = p
-	c.Unlock()
+	c.pongNonce = nonce
+	c.pongTime = iotime.Load()
 }
 
 func (c *channel) dequeuePong() *codec.Pong {
 	c.Lock()
-	p := c.pong
-	c.pong = nil
-	c.Unlock()
+	defer c.Unlock()
+
+	if c.pongNonce.IsNone() {
+		return nil
+	}
+
+	p := &codec.Pong{
+		Nonce: uint64(c.pongNonce),
+		Delay: uint64(time.Now().Sub(c.pongTime)),
+	}
+
+	c.pongNonce = binmap.None
 
 	return p
 }
 
-func (c *channel) Consume(sc store.Chunk) {
+func (c *channel) Consume(sc store.Chunk) bool {
 	c.Lock()
+	defer c.Unlock()
+
 	c.addedBins.Set(sc.Bin)
-	c.Unlock()
+	return true
 }
 
 func (c *channel) Close() {
@@ -386,18 +392,22 @@ func (c *channelMessageHandler) HandleData(v codec.Data) {
 		},
 	})
 
-	c.swarm.pubSub.Publish(store.Chunk{
+	ok := c.swarm.pubSub.Publish(store.Chunk{
 		Bin:  v.Address.Bin(),
 		Data: v.Data,
 	})
 
-	c.peer.addReceivedChunk()
+	if ok {
+		c.peer.addReceivedChunk()
+	}
 }
 
 func (c *channelMessageHandler) HandleAck(v codec.Ack) {
 	c.metrics.AckCount.Inc()
 
 	if c.channel.addAckedBin(v.Address.Bin()) {
+		// TODO: ack queuing delay
+		// c.peer.addRTTSample(c.channel.id, v.Address.Bin(), 0)
 		c.peer.addDelaySample(v.DelaySample.Duration, c.swarm.chunkSize())
 		c.swarm.bins.AddAvailable(v.Address.Bin())
 	}
@@ -416,9 +426,7 @@ func (c *channelMessageHandler) HandleRequest(v codec.Request) {
 
 func (c *channelMessageHandler) HandleCancel(v codec.Cancel) {
 	c.metrics.CancelCount.Inc()
-
-	n := c.channel.addCancelledBins(v.Address.Bin())
-	c.peer.addDataLoss(n * c.swarm.chunkSize())
+	c.channel.addCancelledBins(v.Address.Bin())
 }
 
 func (c *channelMessageHandler) HandleChoke(v codec.Choke) {
@@ -433,12 +441,13 @@ func (c *channelMessageHandler) HandleUnchoke(v codec.Unchoke) {
 
 func (c *channelMessageHandler) HandlePing(v codec.Ping) {
 	c.metrics.PingCount.Inc()
-	c.channel.enqueuePong(&codec.Pong{Nonce: v.Nonce})
+	c.channel.enqueuePong(binmap.Bin(v.Nonce.Value))
 }
 
 func (c *channelMessageHandler) HandlePong(v codec.Pong) {
 	c.metrics.PongCount.Inc()
-	c.peer.addRTTSample(c.channel.id, binmap.Bin(v.Nonce.Value))
+	// c.peer.addRTTSample(c.channel.id, binmap.Bin(v.Nonce), time.Duration(v.Delay))
+	c.peer.addRTTSample(c.channel.id, binmap.Bin(v.Nonce), 0)
 }
 
 func newChannelMetrics(channel *channel, direction string) channelMetrics {

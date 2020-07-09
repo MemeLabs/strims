@@ -8,7 +8,7 @@ import (
 
 // Publisher ...
 type Publisher interface {
-	Publish(Chunk)
+	Publish(Chunk) bool
 }
 
 // NewWriter ...

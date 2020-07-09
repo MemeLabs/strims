@@ -72,6 +72,7 @@ type networkBrokerLocalParams struct {
 
 type networkBrokerPeer struct {
 	logger       *zap.Logger
+	cLock        sync.Mutex
 	c            ReadWriteFlusher
 	localParams  chan networkBrokerLocalParams
 	initLock     sync.Mutex
@@ -148,6 +149,9 @@ func (p *networkBrokerPeer) readInits() (err error) {
 }
 
 func (p *networkBrokerPeer) sendInit(discriminator uint16, keys [][]byte) error {
+	p.cLock.Lock()
+	defer p.cLock.Unlock()
+
 	err := WriteProtoStream(p.c, &pb.NetworkHandshake{
 		Body: &pb.NetworkHandshake_Init_{
 			Init: &pb.NetworkHandshake_Init{
@@ -208,6 +212,9 @@ func (p *networkBrokerPeer) handleInit(init *pb.NetworkHandshake_Init) error {
 }
 
 func (p *networkBrokerPeer) exchangeKeysAsSender(keys [][]byte) error {
+	p.cLock.Lock()
+	defer p.cLock.Unlock()
+
 	rng, err := newRNG()
 	if err != nil {
 		return err
@@ -237,6 +244,9 @@ func (p *networkBrokerPeer) exchangeKeysAsSender(keys [][]byte) error {
 }
 
 func (p *networkBrokerPeer) exchangeKeysAsReceiver(keys [][]byte) ([][]byte, error) {
+	p.cLock.Lock()
+	defer p.cLock.Unlock()
+
 	rng, err := newRNG()
 	if err != nil {
 		return nil, err

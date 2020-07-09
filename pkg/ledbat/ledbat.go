@@ -10,8 +10,8 @@ import (
 
 const (
 	// rfc6817
-	target          = 100 * time.Millisecond
-	allowedIncrease = 1
+	target          = int(100 * time.Millisecond)
+	allowedIncrease = 4
 	gain            = 1
 	baseHistory     = 4
 	currentDelays   = 10
@@ -22,7 +22,7 @@ const (
 	mss      = 1024
 
 	// rfc6298
-	coefG = 1
+	coefG = 100000000.0 // 100ms
 	coefK = 4
 
 	// jacobson, v. "congestion avoidance and control"
@@ -33,7 +33,7 @@ const (
 	maxDelaySample = time.Duration(math.MaxInt64)
 )
 
-func filter(durations ...time.Duration) (min time.Duration) {
+func filter(durations []time.Duration) (min time.Duration) {
 	min = maxDelaySample
 	for _, d := range durations {
 		if d < min {
@@ -53,7 +53,7 @@ func New() *Controller {
 		cto:  time.Second,
 
 		lastDataLoss: time.Unix(0, 0),
-		lastAckTime:  time.Unix(math.MaxInt64, math.MaxInt64),
+		lastAckTime:  time.Unix(0, math.MaxInt64),
 		rttMean:      ma.NewExponential(coefAlpha),
 		rttVar:       ma.NewExponential(coefBeta),
 		debug:        false,
@@ -169,12 +169,7 @@ func (l *Controller) updateBaseDelay(d time.Duration) {
 func (l *Controller) DigestDelaySamples() {
 	// if no acks have been received in cto (heavy congestion) reset cwnd
 	// and adjust cto
-	// TODO: this is just cto...
-	timeout := l.cto
-	if timeout < time.Second*2 {
-		timeout = time.Second * 2
-	}
-	if l.flightSize > 0 && iotime.Load().Sub(l.lastAckTime) > timeout {
+	if l.flightSize > 0 && iotime.Load().Sub(l.lastAckTime) > l.cto {
 		l.cwnd = minCWND * mss
 		l.cto = 2 * l.cto
 		if l.cto > time.Second {
@@ -186,11 +181,11 @@ func (l *Controller) DigestDelaySamples() {
 		return
 	}
 
-	queuingDelay := filter(l.currentDelays...) - filter(l.baseDelays...)
-	l.cwnd += (int(target-queuingDelay) * gain * l.ackSize * mss) / l.cwnd / int(target)
-	if max := l.cwnd + l.flightSize + allowedIncrease*mss; max < l.cwnd {
-		l.cwnd = max
-	}
+	queuingDelay := int(filter(l.currentDelays) - filter(l.baseDelays))
+	l.cwnd += ((target - queuingDelay) * gain * l.ackSize * mss) / l.cwnd / target
+	// if max := l.flightSize + allowedIncrease*mss; max < l.cwnd {
+	// 	l.cwnd = max
+	// }
 	if min := minCWND * mss; min > l.cwnd {
 		l.cwnd = min
 	}
@@ -226,11 +221,10 @@ func (l *Controller) AddDataLoss(size int, retransmitting bool) {
 		}
 	}
 
-	// TODO: should this be CTO?
 	timeout := time.Duration(l.rttMean.Value())
-	if timeout < time.Second*2 {
-		timeout = time.Second * 2
-	}
+	// if timeout < time.Second*2 {
+	// 	timeout = time.Second * 2
+	// }
 	if l.lastDataLoss.IsZero() && iotime.Load().Sub(l.lastDataLoss) < timeout {
 		return
 	}

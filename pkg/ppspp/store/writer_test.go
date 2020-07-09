@@ -22,6 +22,7 @@ type testPublisher struct {
 	chunks []Chunk
 }
 
-func (s *testPublisher) Publish(c Chunk) {
+func (s *testPublisher) Publish(c Chunk) bool {
 	s.chunks = append(s.chunks, c)
+	return true
 }

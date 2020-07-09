@@ -46,15 +46,26 @@ type Buffer struct {
 }
 
 // Consume ...
-func (s *Buffer) Consume(c Chunk) {
-	s.Set(c.Bin, c.Data)
+func (s *Buffer) Consume(c Chunk) bool {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if s.bins.FilledAt(c.Bin) {
+		return false
+	}
+
+	s.set(c.Bin, c.Data)
+	return true
 }
 
 // Set ...
 func (s *Buffer) Set(b binmap.Bin, d []byte) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+	s.set(b, d)
+}
 
+func (s *Buffer) set(b binmap.Bin, d []byte) {
 	copy(s.buf[s.index(b):], d)
 
 	h := b.BaseRight() + 2

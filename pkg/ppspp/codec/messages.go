@@ -524,12 +524,38 @@ func (v *Ping) Type() MessageType {
 
 // Pong ...
 type Pong struct {
-	Nonce
+	Nonce uint64
+	Delay uint64
 }
 
 // Type ...
 func (v *Pong) Type() MessageType {
 	return PongMessage
+}
+
+// Unmarshal ...
+func (v *Pong) Unmarshal(b []byte) (size int, err error) {
+	v.Nonce = binary.BigEndian.Uint64(b)
+	size += 8
+	v.Delay = binary.BigEndian.Uint64(b[size:])
+	size += 8
+
+	return
+}
+
+// Marshal ...
+func (v *Pong) Marshal(b []byte) (size int) {
+	binary.BigEndian.PutUint64(b, v.Nonce)
+	size += 8
+	binary.BigEndian.PutUint64(b[size:], v.Delay)
+	size += 8
+
+	return
+}
+
+// ByteLen ...
+func (v *Pong) ByteLen() int {
+	return 16
 }
 
 // Have ...

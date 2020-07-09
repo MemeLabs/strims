@@ -199,7 +199,7 @@ func TestSwarmSim(t *testing.T) {
 			var k int
 			for _, c := range clients {
 				var rn, wn int64
-				for _, conn := range c.conns {
+				for j, conn := range c.conns {
 					if conn != nil {
 						rn += conn.ReadBytes()
 						wn += conn.WrittenBytes()
@@ -208,11 +208,17 @@ func TestSwarmSim(t *testing.T) {
 						prev[k] = conn.ReadBytes()
 						k++
 
-						// log.Printf("conn: %d:%d in: %-12d out: %d", i, j, conn.ReadBytes(), conn.WrittenBytes())
+						log.Printf(
+							"%-16s%-16s in: %-12d out: %d",
+							c.city.Name,
+							clients[j].city.Name,
+							conn.ReadBytes(),
+							conn.WrittenBytes(),
+						)
 					}
 				}
-				// log.Printf("conn: %d in: %-12d out: %d", i, rn, wn)
-				// log.Println("____")
+				log.Printf("%-32s in: %-12d out: %d", c.city.Name, rn, wn)
+				log.Println("____")
 
 				// row.WriteString(fmt.Sprintf(",%d", wn-prev[i]))
 				// prev[i] = wn
@@ -235,14 +241,14 @@ func TestSwarmSim(t *testing.T) {
 			t := time.NewTicker(time.Second)
 			defer t.Stop()
 
-			go func() {
-				var prev uint64
-				for range t.C {
-					n := w.WrittenBytes()
-					log.Printf("%d read bytes: % -10d %t", i, n-prev, (n-prev) >= 437500)
-					prev = n
-				}
-			}()
+			// go func() {
+			// 	var prev uint64
+			// 	for range t.C {
+			// 		n := w.WrittenBytes()
+			// 		log.Printf("%d read bytes: % -10d %t", i, n-prev, (n-prev) >= 437500)
+			// 		prev = n
+			// 	}
+			// }()
 
 			io.CopyN(&w, clients[i].swarm.Reader(), 5000000)
 		}(i)

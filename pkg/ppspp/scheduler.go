@@ -12,6 +12,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const planForIntervals = 2
+
 // NewScheduler ...
 func NewScheduler(ctx context.Context, logger *zap.Logger) (s *Scheduler) {
 	s = &Scheduler{
@@ -75,7 +77,7 @@ func (r *Scheduler) RemovePeer(peer *Peer) {
 
 func (r *Scheduler) peerWriteInterval(peer *Peer) (i time.Duration) {
 	peer.Lock()
-	// writeInterval := peer.ledbat.RTTMean() / time.DuRration(peer.ledbat.CWND() )
+	// writeInterval := peer.ledbat.RTTMean() / time.Duration(peer.ledbat.CWND() )
 	i = peer.ledbat.RTTMean()
 	peer.Unlock()
 
@@ -112,27 +114,26 @@ func (r *Scheduler) runPeer(p *Peer, t time.Time) {
 func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 	// TODO: separate read and write timeouts
 	// TODO: mediate cancel/retry floods from increased latency
-	// timeout := time.Now().Add(-p.ledbat.CTO() * 2)
-	timeout := t.Add(-2 * time.Second)
+	deadline := t.Add(-p.ledbat.CTO() * planForIntervals)
 
 	for s, c := range p.channels {
 		c.Lock()
 
-		for i := c.sentBinHistory.IterateUntil(timeout); i.Next(); {
+		for i := c.sentBinHistory.IterateUntil(deadline); i.Next(); {
 			if c.unackedBins.FilledAt(i.Bin()) {
-				p.ledbat.AddDataLoss(s.chunkSize(), false)
+				p.ledbat.AddDataLoss(int(i.Bin().BaseLength())*s.chunkSize(), false)
 				c.unackedBins.Reset(i.Bin())
 			}
 		}
 
-		for i := c.requestedBinHistory.IterateUntil(timeout); i.Next(); {
+		for i := c.requestedBinHistory.IterateUntil(deadline); i.Next(); {
 			if !s.store.FilledAt(i.Bin()) {
 				for b := i.Bin().BaseLeft(); b <= i.Bin().BaseRight(); b += 2 {
 					if s.store.EmptyAt(b) {
 						s.bins.Lock()
 						s.bins.Requested.Reset(b)
 						s.bins.Unlock()
-						p.AddCancelledChunk()
+						p.addCancelledChunk()
 					}
 				}
 
@@ -183,7 +184,7 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 
 		for _, b := range requestBins {
 			c.WriteRequest(codec.Request{Address: codec.Address(b)})
-			p.AddRequestedChunks(b.BaseLength())
+			p.addRequestedChunks(b.BaseLength())
 			c.requestedBinHistory.Push(b, t)
 		}
 
@@ -206,6 +207,8 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 					Data:      codec.Buffer(b),
 				})
 
+				// TODO: re-add with merged acks
+				// p.trackBinRTT(c.id, rb, t)
 				p.ledbat.AddSent(s.chunkSize())
 				c.unackedBins.Set(rb)
 				c.sentBinHistory.Push(rb, t)
@@ -229,7 +232,7 @@ func (r *Scheduler) sendPongs(p *Peer, t time.Time) {
 func (r *Scheduler) sendPeerPing(p *Peer, t time.Time) {
 	for _, c := range p.channels {
 		if c.Dirty() {
-			if nonce, ok := p.TrackPingRTT(c.id, t); ok {
+			if nonce, ok := p.trackPingRTT(c.id, t); ok {
 				c.WritePing(codec.Ping{Nonce: codec.Nonce{Value: nonce}})
 			}
 		}
@@ -246,16 +249,23 @@ func (r *Scheduler) peerRequestCapacity(p *Peer) int {
 	if planForDuration < minWriteInterval {
 		planForDuration = minWriteInterval
 	}
-	planForDuration *= 4
-	if planForDuration > time.Second {
-		planForDuration = time.Second
-	}
+	planForDuration *= planForIntervals
+	// if planForDuration > time.Second {
+	// 	planForDuration = time.Second
+	// }
 
 	capacity := 1
-	if p.ChunkIntervalMean() != 0 {
-		capacity = int(planForDuration / p.ChunkIntervalMean())
+	chunkInterval := p.chunkInterval()
+	if chunkInterval != 0 {
+		// r.logger.Debug(
+		// 	"capacity",
+		// 	zap.Duration("p.ledbat.RTTMean()", p.ledbat.RTTMean()),
+		// 	zap.Duration("planforDuration", planForDuration),
+		// 	zap.Duration("chunkInterval", chunkInterval),
+		// )
+		capacity = int(planForDuration / chunkInterval)
 	}
-	capacity -= p.OutstandingChunks()
+	capacity -= p.outstandingChunks()
 	if capacity < 1 {
 		capacity = 1
 	}

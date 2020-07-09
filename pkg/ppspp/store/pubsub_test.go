@@ -43,6 +43,7 @@ type testSubscriber struct {
 	chunks []Chunk
 }
 
-func (s *testSubscriber) Consume(c Chunk) {
+func (s *testSubscriber) Consume(c Chunk) bool {
 	s.chunks = append(s.chunks, c)
+	return true
 }

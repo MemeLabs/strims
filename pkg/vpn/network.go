@@ -425,6 +425,7 @@ type Network struct {
 	seq              uint64
 	certificate      *pb.Certificate
 	recentMessageIDs *lru.Cache
+	linksLock        sync.Mutex
 	links            *kademlia.KBucket
 	closeOnce        sync.Once
 	done             chan struct{}
@@ -498,12 +499,16 @@ func (n *Network) CAKey() []byte {
 
 // AddLink ...
 func (n *Network) AddLink(link *networkLink) {
+	n.linksLock.Lock()
 	n.links.Insert(link)
+	n.linksLock.Unlock()
 }
 
 // RemoveLink ...
 func (n *Network) RemoveLink(link *networkLink) {
+	n.linksLock.Lock()
 	n.links.Remove(link.ID())
+	n.linksLock.Unlock()
 }
 
 // HandleFrame ...
@@ -577,7 +582,10 @@ func (n *Network) sendMessage(m *Message) error {
 	}
 
 	var conns [maxMessageReplicas * 2]kademlia.Interface
+	n.linksLock.Lock()
 	ln := n.links.Closest(m.Header.DstID, conns[:])
+	n.linksLock.Unlock()
+
 	var k int
 	for _, li := range conns[:ln] {
 		l := li.(*networkLink)

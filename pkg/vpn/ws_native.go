@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var wsMaxMessageByteLen = 64 * 1024
+var wsMTU = 64 * 1024
 
 // ErrUnexpectedMessageType ...
 var ErrUnexpectedMessageType = errors.New("unexpected non-binary message type")
@@ -33,7 +33,7 @@ type WSReadWriter struct {
 
 // MTU ...
 func (w *WSReadWriter) MTU() int {
-	return 65536
+	return wsMTU
 }
 
 // Read ...

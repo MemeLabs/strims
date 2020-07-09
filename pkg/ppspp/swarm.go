@@ -75,10 +75,11 @@ func (s *swarmBins) AddAvailable(b binmap.Bin) {
 	s.Available.Set(b)
 }
 
-func (s *swarmBins) Consume(c store.Chunk) {
+func (s *swarmBins) Consume(c store.Chunk) bool {
 	s.Lock()
 	defer s.Unlock()
 	s.Requested.Set(c.Bin)
+	return true
 }
 
 // Swarm ...
