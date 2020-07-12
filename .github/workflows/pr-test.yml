@@ -9,6 +9,8 @@ jobs:
     name: Test
     runs-on: ubuntu-latest
     steps:
+    - name: Install ffmpeg
+      run: sudo apt install ffmpeg
     - name: Set up Go 1.x
       uses: actions/setup-go@v2
       with:
