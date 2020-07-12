@@ -53,5 +53,3 @@ require (
 	lukechampine.com/uint128 v1.0.0
 	mvdan.cc/xurls/v2 v2.2.0
 )
-
-replace github.com/prometheus/client_golang => ./vendor/client_golang
