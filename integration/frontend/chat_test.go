@@ -12,7 +12,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/davecgh/go-spew/spew"
-	"github.com/stretchr/testify/assert"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -207,17 +206,6 @@ func TestChat(t *testing.T) {
 			case *pb.ChatClientEvent_Message_:
 				t.Log("chat client message", b.Message.Body)
 				t.Log(spew.Sdump(b.Message.Entities))
-
-				assert.True(t, len(b.Message.Entities.Emotes) == 1, "should contain an emote")
-				assert.Equal(t, "PEPE", b.Message.Entities.Emotes[0].Name, "emote should be 'PEPE'")
-				assert.True(t, len(b.Message.Entities.Links) == 1, "should contain a link")
-				assert.Equal(t, "https://google.com", b.Message.Entities.Links[0].Url, "link should be correct")
-				assert.True(t, len(b.Message.Entities.CodeBlocks) == 1, "should contain a code block")
-				assert.Equal(t, "`code`", fromBounds(b.Message.Body, b.Message.Entities.CodeBlocks[0].Bounds), "code block content should be correct")
-				assert.True(t, len(b.Message.Entities.Spoilers) == 1, "should contain a spoiler")
-				assert.Equal(t, "||spoiler||", fromBounds(b.Message.Body, b.Message.Entities.Spoilers[0].Bounds), "spoiler content should be correct")
-				assert.True(t, len(b.Message.Entities.Tags) == 1, "should contain a tag")
-				assert.Equal(t, "nsfw", b.Message.Entities.Tags[0].Name, "tag should be correct")
 				close(done)
 			case *pb.ChatClientEvent_Close_:
 				return
