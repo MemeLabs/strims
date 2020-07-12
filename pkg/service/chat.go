@@ -78,7 +78,9 @@ func (s *ChatServer) transformChatMessages(ps *PubSubServer) {
 			continue
 		}
 
-		ps.Send("", b)
+		if err := ps.Send("", b); err != nil {
+			s.logger.Error("failed to write to swarm", zap.Error(err))
+		}
 	}
 
 	s.Close()

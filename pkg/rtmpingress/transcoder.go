@@ -1,6 +1,7 @@
 package rtmpingress
 
 import (
+	"encoding/binary"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -26,7 +27,8 @@ type Transcoder struct {
 func (h *Transcoder) listen() (err error) {
 	router := mux.NewRouter()
 	router.HandleFunc("/{key}/{variant}/index.m3u8", postHandleFunc(h.handlePlaylist))
-	router.HandleFunc("/{key}/{variant}/{segment:[0-9]+}.ts", postHandleFunc(h.handleSegment))
+	router.HandleFunc("/{key}/{variant}/init.mp4", postHandleFunc(h.handleInit))
+	router.HandleFunc("/{key}/{variant}/{segment:[0-9]+}.m4s", postHandleFunc(h.handleSegment))
 
 	h.lis, err = net.Listen("tcp", transcoderAddr)
 	if err != nil {
@@ -46,6 +48,30 @@ func (h *Transcoder) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	r.Body.Close()
 }
 
+func (h *Transcoder) handleInit(w http.ResponseWriter, r *http.Request) {
+	params := mux.Vars(r)
+	twi, ok := h.writers.Load(transcoderKey{params["key"], params["variant"]})
+	if !ok {
+		http.NotFound(w, r)
+		return
+	}
+
+	tw := twi.(*transcoderWriter)
+
+	tw.mu.Lock()
+	defer tw.mu.Unlock()
+
+	b, err := ioutil.ReadAll(r.Body)
+	if err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
+	tw.init = make([]byte, len(b)+2)
+	binary.BigEndian.PutUint16(tw.init, uint16(len(b)))
+	copy(tw.init[2:], b)
+}
+
 func (h *Transcoder) handleSegment(w http.ResponseWriter, r *http.Request) {
 	params := mux.Vars(r)
 	twi, ok := h.writers.Load(transcoderKey{params["key"], params["variant"]})
@@ -59,7 +85,11 @@ func (h *Transcoder) handleSegment(w http.ResponseWriter, r *http.Request) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
 
-	defer r.Body.Close()
+	if _, err := tw.w.Write(tw.init); err != nil {
+		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		return
+	}
+
 	if _, err := io.Copy(tw.w, r.Body); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
@@ -120,8 +150,9 @@ type transcoderKey struct {
 }
 
 type transcoderWriter struct {
-	mu sync.Mutex
-	w  WriteFlushCloser
+	mu   sync.Mutex
+	init []byte
+	w    WriteFlushCloser
 }
 
 // WriteFlushCloser ...
@@ -169,7 +200,8 @@ func buildArgs(srcURI, addr, key, variant string) []string {
 	args = append(args,
 		"-hls_init_time", "1",
 		"-hls_time", "1",
-		"-hls_segment_filename", fmt.Sprintf("http://%s/%s/%s/%%d.ts", addr, key, variant),
+		"-hls_segment_type", "fmp4",
+		"-hls_segment_filename", fmt.Sprintf("http://%s/%s/%s/%%d.m4s", addr, key, variant),
 		"-hls_flags", "+program_date_time+append_list+omit_endlist",
 		"-method", "POST",
 		"-f", "hls", fmt.Sprintf("http://%s/%s/%s/index.m3u8", addr, key, variant),

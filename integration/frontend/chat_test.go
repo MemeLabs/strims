@@ -11,7 +11,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/integration/driver"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
-	"github.com/davecgh/go-spew/spew"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -100,7 +99,6 @@ func TestChat(t *testing.T) {
 	createNetworkReq := &pb.CreateNetworkRequest{
 		Name: "test",
 	}
-
 	createNetworkRes := &pb.CreateNetworkResponse{}
 	if err := b.client.CallUnary(ctx, "createNetwork", createNetworkReq, createNetworkRes); err != nil {
 		t.Error(err)
@@ -180,7 +178,7 @@ func TestChat(t *testing.T) {
 					Body: &pb.CallChatClientRequest_Message_{
 						Message: &pb.CallChatClientRequest_Message{
 							Time: now.UnixNano(),
-							Body: fmt.Sprint("PEPE:WIDE `code` test ||spoiler|| https://google.com nsfw"),
+							Body: fmt.Sprintf("test message %s", now.UTC().Format(time.RFC3339)),
 						},
 					},
 				}
@@ -205,7 +203,6 @@ func TestChat(t *testing.T) {
 				go sendMessages(ctx, b.Open.ClientId)
 			case *pb.ChatClientEvent_Message_:
 				t.Log("chat client message", b.Message.Body)
-				t.Log(spew.Sdump(b.Message.Entities))
 				close(done)
 			case *pb.ChatClientEvent_Close_:
 				return
@@ -217,8 +214,4 @@ func TestChat(t *testing.T) {
 	<-done
 
 	d.Close()
-}
-
-func fromBounds(base string, bounds *pb.Bounds) string {
-	return base[bounds.Start:bounds.End]
 }

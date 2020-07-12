@@ -272,7 +272,6 @@ func (s *PeerExchange) HandleMessage(msg *Message) (bool, error) {
 
 // Connect create mediator to negotiate connection with peer
 func (s *PeerExchange) Connect(hostID kademlia.ID) error {
-	return nil
 	// TODO: handle races
 	if _, ok := s.network.host.GetPeer(hostID); ok {
 		return nil

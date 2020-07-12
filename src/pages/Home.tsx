@@ -6,6 +6,7 @@ import { MainLayout } from "../components/MainLayout";
 import { useClient, useLazyCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
+import * as fmp4 from "../lib/media/fmp4";
 import * as mpegts from "../lib/media/mpegts";
 import * as webm from "../lib/media/webm";
 import { CallChatClientRequest, OpenChatClientRequest, OpenChatServerRequest } from "../lib/pb";
@@ -101,7 +102,7 @@ const HomePage = () => {
     });
   };
 
-  const handleViewBroadcastClick = (decoder: webm.Decoder | mpegts.Decoder) => {
+  const handleViewBroadcastClick = (decoder: webm.Decoder | fmp4.Decoder) => {
     const video = videoRef.current;
     video.src = URL.createObjectURL(decoder.mediaSource);
     video.oncanplay = () => video.play();
@@ -276,7 +277,7 @@ const HomePage = () => {
             </button>
             <button
               className="input input_button"
-              onClick={() => handleViewBroadcastClick(new mpegts.Decoder())}
+              onClick={() => handleViewBroadcastClick(new fmp4.Decoder())}
             >
               view rtmp broadcast
             </button>

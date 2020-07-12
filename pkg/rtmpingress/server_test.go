@@ -186,9 +186,10 @@ func sendStream(t *testing.T, samplepath, addr string) error {
 }
 
 type tw struct {
-	i    int
-	path string
-	file io.WriteCloser
+	i          int
+	path       string
+	file       io.WriteCloser
+	headerRead bool
 }
 
 func newTw() *tw {
@@ -196,14 +197,24 @@ func newTw() *tw {
 	if err != nil {
 		panic(err)
 	}
-	f, err := os.Create(path.Join(tmp, "0.ts"))
-	if err != nil {
-		panic(err)
-	}
-	return &tw{0, tmp, f}
+	return &tw{path: tmp}
 }
 
 func (t *tw) Write(p []byte) (int, error) {
+	if !t.headerRead {
+		t.headerRead = true
+		p = p[2:]
+	}
+
+	if t.file == nil {
+		f, err := os.Create(path.Join(t.path, fmt.Sprintf("%d.mp4", t.i)))
+		if err != nil {
+			return 0, err
+		}
+		t.file = f
+		t.i++
+	}
+
 	n, err := t.file.Write(p)
 	if err != nil {
 		return 0, err
@@ -217,13 +228,8 @@ func (t *tw) Flush() error {
 		return err
 	}
 
-	t.i++
-	f, err := os.Create(path.Join(t.path, fmt.Sprintf("%d.ts", t.i)))
-	if err != nil {
-		return err
-	}
-
-	t.file = f
+	t.file = nil
+	t.headerRead = false
 
 	return nil
 }
