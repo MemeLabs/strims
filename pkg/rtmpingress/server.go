@@ -52,6 +52,7 @@ func (s *Server) handleConn(c *rtmp.Conn, nc net.Conn) {
 	}
 
 	if s.CheckOrigin != nil && !s.CheckOrigin(a, c, nc) {
+		nc.Close()
 		return
 	}
 
