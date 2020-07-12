@@ -11,22 +11,90 @@ import (
 	"os"
 	"os/exec"
 	"path"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/nareix/joy5/format/rtmp"
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
-func TestServerAcceptsMultipleStreams(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode.")
+var rtmpServerAddr string = ":9999"
+
+func TestServerTranscodesMultipleStreams(t *testing.T) {
+	tcs := []struct {
+		tw      *tw
+		w, h    int
+		variant string
+	}{
+		{
+			newTw(),
+			640, 360,
+			"source",
+		},
+		{
+			newTw(),
+			426, 240,
+			"240",
+		},
 	}
 
-	handleCalled, checkOriginCalled := false, false
-	rtmpServerAddr := ":9999"
+	z := Transcoder{}
+	rtmp := Server{
+		Addr: rtmpServerAddr,
+		HandleStream: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) {
+			for _, tc := range tcs {
+				go z.Transcode(a.URI, a.Key, tc.variant, tc.tw)
+			}
+		},
+		CheckOrigin: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) bool {
+			return true
+		},
+	}
+	go rtmp.Listen()
+	defer rtmp.Close()
 
+	time.Sleep(500 * time.Millisecond)
+
+	err := sendStream(t, path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
+	assert.Nil(t, err, "failed sending stream")
+
+	for _, tc := range tcs {
+		files, err := ioutil.ReadDir(tc.tw.path)
+		assert.Nil(t, err, fmt.Sprintf("failed to read prob dir %s", tc.tw.path))
+		for _, file := range files {
+			y := path.Join(tc.tw.path, file.Name())
+			data := probeFile(t, y)
+			assert.Equal(t, 2, len(data.Streams))
+			assert.Equal(t, "h264", data.Streams[0].CodecName)
+			assert.Equal(t, "aac", data.Streams[1].CodecName)
+			assert.Equal(t, tc.h, data.Streams[0].Height)
+			assert.Equal(t, tc.w, data.Streams[0].Width)
+		}
+	}
+}
+
+func TestServerClosesStreamOnCheckOriginReject(t *testing.T) {
+	z := Transcoder{}
+	rtmp := Server{
+		Addr: rtmpServerAddr,
+		HandleStream: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) {
+			go z.Transcode(a.URI, a.Key, "source", newTw())
+		},
+		CheckOrigin: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) bool {
+			return false
+		},
+	}
+	go rtmp.Listen()
+	defer rtmp.Close()
+
+	time.Sleep(500 * time.Millisecond)
+
+	err := sendStream(t, path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
+	assert.Error(t, err, "failed to close stream on checkOrigin reject")
+}
+
+func TestServerAcceptsMultipleStreams(t *testing.T) {
+	handleCalled, checkOriginCalled := false, false
 	tsfolders := []string{}
 
 	x := Transcoder{}
@@ -44,48 +112,37 @@ func TestServerAcceptsMultipleStreams(t *testing.T) {
 		},
 	}
 	go rtmp.Listen()
+	defer rtmp.Close()
 
 	time.Sleep(500 * time.Millisecond)
-	var wg sync.WaitGroup
 
-	send := func(file, url string) {
-		if err := sendStream(t, file, url); err != nil {
-			panic(err)
-		}
-		wg.Done()
-	}
+	err := sendStream(t, path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
+	assert.Nil(t, err, "failed sending stream")
 
-	wg.Add(2)
-	go send(path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
-	go send(path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test2", rtmpServerAddr))
-	wg.Wait()
-
-	if !handleCalled || !checkOriginCalled {
-		t.Fatal("failed to call handle or checkorigin")
-	}
+	assert.True(t, handleCalled, "HandleStream should be called")
+	assert.True(t, checkOriginCalled, "CheckOrigin should be called")
 
 	for _, folder := range tsfolders {
 		files, err := ioutil.ReadDir(folder)
-		if err != nil {
-			t.Error(err)
-		}
+		assert.Nil(t, err, fmt.Sprintf("failed to read prob dir %s", folder))
 		for _, file := range files {
-			if err := probeFile(t, path.Join(folder, file.Name())); err != nil {
-				t.Fatal(err)
-			}
+			data := probeFile(t, path.Join(folder, file.Name()))
+			assert.Equal(t, 2, len(data.Streams))
+			assert.Equal(t, "h264", data.Streams[0].CodecName)
+			assert.Equal(t, "aac", data.Streams[1].CodecName)
+			assert.Equal(t, 360, data.Streams[0].Height)
+			assert.Equal(t, 640, data.Streams[0].Width)
 		}
 	}
 }
 
-func probeFile(t *testing.T, filename string) error {
+func probeFile(t *testing.T, filename string) *ffprobeResp {
 	t.Helper()
-	_, err := exec.LookPath("ffprobe")
-	if err != nil {
-		t.Fatalf("ffprobe is not in $PATH. %v", err)
-	}
+	ffprobe, err := exec.LookPath("ffprobe")
+	assert.Nil(t, err, "failed to probe file: %s", filename)
 
 	cmd := exec.Command(
-		"ffprobe", "-loglevel", "fatal",
+		ffprobe, "-loglevel", "fatal",
 		"-print_format", "json",
 		"-show_format",
 		"-show_streams", filename,
@@ -94,40 +151,32 @@ func probeFile(t *testing.T, filename string) error {
 	var outb, errb bytes.Buffer
 	cmd.Stderr = &errb
 	cmd.Stdout = &outb
-	if err = cmd.Run(); err != nil {
-		return fmt.Errorf("cmd failed: %s", errb.String())
+	if err := cmd.Run(); err != nil {
+		t.Fatalf("failed to probe file (%q) %v:", cmd.String(), err)
 	}
 
 	var data ffprobeResp
-	if err := json.Unmarshal(outb.Bytes(), &data); err != nil {
-		return fmt.Errorf("failed to unmarshal ffprobe results: %v", err)
-	}
-
-	assert.Equal(t, len(data.Streams), 2)
-	assert.Equal(t, data.Streams[0].CodecName, "h264")
-	assert.Equal(t, data.Streams[1].CodecName, "aac")
-	assert.Equal(t, data.Streams[0].Height, 360)
-	assert.Equal(t, data.Streams[0].Width, 640)
-	return nil
+	assert.Nil(t, json.Unmarshal(outb.Bytes(), &data), "failed to unmarshal data: %s", outb.String())
+	return &data
 }
 
 func sendStream(t *testing.T, samplepath, addr string) error {
 	t.Helper()
 	_, err := exec.LookPath("ffmpeg")
-	if err != nil {
-		t.Fatalf("ffmpeg is not in $PATH. %v", err)
-	}
+	assert.Nil(t, err, "ffmpeg is not in $PATH. %v", err)
 
 	cmd := exec.Command(
 		"ffmpeg",
 		"-re",
 		"-i", samplepath,
+		"-t", "00:00:05.0",
 		"-c", "copy",
 		"-f", "flv", addr,
 	)
 
 	var errb bytes.Buffer
 	cmd.Stderr = &errb
+	cmd.Stdout = os.Stdout
 	err = cmd.Run()
 	if err != nil {
 		return fmt.Errorf("cmd failed: %s", errb.String())
@@ -155,8 +204,6 @@ func newTw() *tw {
 }
 
 func (t *tw) Write(p []byte) (int, error) {
-	log.Println(len(p))
-
 	n, err := t.file.Write(p)
 	if err != nil {
 		return 0, err
@@ -166,7 +213,6 @@ func (t *tw) Write(p []byte) (int, error) {
 }
 
 func (t *tw) Flush() error {
-	log.Println("FLUSH ...")
 	if err := t.file.Close(); err != nil {
 		return err
 	}

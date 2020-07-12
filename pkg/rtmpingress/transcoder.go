@@ -158,9 +158,9 @@ func relayStdio(cmd *exec.Cmd) error {
 var transcodingVariants = map[string][]string{
 	"source": {"-c", "copy"},
 	"720":    {"-vf", "scale=w=1280:h=720:force_original_aspect_ratio=decrease"},
-	"480":    {"-vf", "scale=w=858:h=480:force_original_aspect_ratio=decrease"},
-	"360":    {"-vf", "scale=w=480:h=360:force_original_aspect_ratio=decrease"},
-	"240":    {"-vf", "scale=w=352:h=240:force_original_aspect_ratio=decrease"},
+	"480":    {"-vf", "scale=w=854:h=480:force_original_aspect_ratio=decrease"},
+	"360":    {"-vf", "scale=w=640:h=360:force_original_aspect_ratio=decrease"},
+	"240":    {"-vf", "scale=w=426:h=240:force_original_aspect_ratio=decrease"},
 }
 
 func buildArgs(srcURI, addr, key, variant string) []string {
