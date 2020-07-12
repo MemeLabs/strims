@@ -5,7 +5,7 @@ import (
 
 	parser "github.com/MemeLabs/chat-parser"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 	"mvdan.cc/xurls/v2"
 )
 
@@ -90,6 +90,7 @@ func TestParse(t *testing.T) {
 	extractor := xtractor()
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
+			t.Parallel()
 			result := extractor.Extract(c.input)
 			assert.Equal(t, c.entities.CodeBlocks, result.CodeBlocks)
 			assert.Equal(t, c.entities.Emotes, result.Emotes)
