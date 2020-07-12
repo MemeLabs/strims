@@ -27,12 +27,10 @@ require (
 	github.com/lucas-clemente/quic-go v0.17.2 // indirect
 	github.com/marten-seemann/qtls v0.10.0 // indirect
 	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
-	github.com/nareix/joy4 v0.0.0-20200507095837-05a4ffbb5369
 	github.com/nareix/joy5 v0.0.0-20200409150540-6c2a804a2816
 	github.com/onsi/gomega v1.10.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99
-	github.com/pion/dtls v1.5.4 // indirect
 	github.com/pion/transport v0.10.1 // indirect
 	github.com/pion/turn/v2 v2.0.4 // indirect
 	github.com/pion/webrtc/v2 v2.2.18
@@ -43,7 +41,6 @@ require (
 	github.com/tj/assert v0.0.3
 	go.etcd.io/bbolt v1.3.5
 	go.uber.org/zap v1.15.0
-	golang.org/dl v0.0.0-20200611200201-72429b14455f // indirect
 	golang.org/x/crypto v0.0.0-20200707235045-ab33eee955e0
 	golang.org/x/net v0.0.0-20200707034311-ab3426394381 // indirect
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
