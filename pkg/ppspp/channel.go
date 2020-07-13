@@ -133,20 +133,20 @@ func (c *channel) addAckedBin(b binmap.Bin) bool {
 	c.Lock()
 	defer c.Unlock()
 
-	if c.unackedBins.EmptyAt(b) {
-		return false
-	}
+	// if c.unackedBins.EmptyAt(b) {
+	// 	return false
+	// }
 
-	c.availableBins.Set(b)
-	c.unackedBins.Reset(b)
+	// c.availableBins.Set(b)
+	// c.unackedBins.Reset(b)
 
 	return true
 }
 
 func (c *channel) enqueueAck(a codec.Ack) {
-	c.Lock()
-	c.acks = append(c.acks, a)
-	c.Unlock()
+	// c.Lock()
+	// c.acks = append(c.acks, a)
+	// c.Unlock()
 }
 
 // TODO: count filled bins in b
@@ -400,6 +400,7 @@ func (c *channelMessageHandler) HandleData(v codec.Data) {
 	if ok {
 		c.peer.addReceivedChunk()
 	}
+	c.peer.addRTTSample(c.channel.id, v.Address.Bin(), 0)
 }
 
 func (c *channelMessageHandler) HandleAck(v codec.Ack) {
@@ -407,7 +408,7 @@ func (c *channelMessageHandler) HandleAck(v codec.Ack) {
 
 	if c.channel.addAckedBin(v.Address.Bin()) {
 		// TODO: ack queuing delay
-		// c.peer.addRTTSample(c.channel.id, v.Address.Bin(), 0)
+		c.peer.addRTTSample(c.channel.id, v.Address.Bin(), 0)
 		c.peer.addDelaySample(v.DelaySample.Duration, c.swarm.chunkSize())
 		c.swarm.bins.AddAvailable(v.Address.Bin())
 	}

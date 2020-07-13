@@ -3,6 +3,7 @@ package ppspp
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
@@ -27,6 +28,7 @@ func NewScheduler(ctx context.Context, logger *zap.Logger) (s *Scheduler) {
 type Scheduler struct {
 	logger *zap.Logger
 	close  sync.Map
+	sent   int64
 }
 
 const (
@@ -54,8 +56,7 @@ func (r *Scheduler) AddPeer(ctx context.Context, peer *Peer) {
 			case <-ctx.Done():
 				return
 			case <-rescheduleTicker.C:
-				newWriteInterval := r.peerWriteInterval(peer)
-				if writeInterval != newWriteInterval {
+				if newWriteInterval, ok := r.peerWriteInterval(peer, writeInterval); ok {
 					r.logger.Debug("updating write interval", zap.Duration("duration", newWriteInterval))
 					writeTicker.Stop()
 					writeTicker = time.NewTicker(newWriteInterval)
@@ -75,18 +76,24 @@ func (r *Scheduler) RemovePeer(peer *Peer) {
 	}
 }
 
-func (r *Scheduler) peerWriteInterval(peer *Peer) (i time.Duration) {
+func (r *Scheduler) peerWriteInterval(peer *Peer, prev time.Duration) (time.Duration, bool) {
 	peer.Lock()
 	// writeInterval := peer.ledbat.RTTMean() / time.Duration(peer.ledbat.CWND() )
-	i = peer.ledbat.RTTMean()
+	m := peer.ledbat.RTTMean()
+	v := peer.ledbat.RTTVar()
 	peer.Unlock()
 
-	if i < minWriteInterval {
-		return minWriteInterval
-	} else if i > maxWriteInterval {
-		return maxWriteInterval
+	if m < minWriteInterval {
+		return minWriteInterval, prev != minWriteInterval
+	} else if m > maxWriteInterval {
+		return maxWriteInterval, prev != maxWriteInterval
 	}
-	return
+	if m+v*2 < prev {
+		return m, true
+	} else if m-v*2 > prev {
+		return m, true
+	}
+	return 0, false
 }
 
 func (r *Scheduler) runPeer(p *Peer, t time.Time) {
@@ -114,17 +121,19 @@ func (r *Scheduler) runPeer(p *Peer, t time.Time) {
 func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 	// TODO: separate read and write timeouts
 	// TODO: mediate cancel/retry floods from increased latency
-	deadline := t.Add(-p.ledbat.CTO() * planForIntervals)
+	// deadline := t.Add(-p.ledbat.CTO() * planForIntervals)
+	deadline := t.Add(-24 * time.Hour)
 
+	var nn int
 	for s, c := range p.channels {
 		c.Lock()
 
-		for i := c.sentBinHistory.IterateUntil(deadline); i.Next(); {
-			if c.unackedBins.FilledAt(i.Bin()) {
-				p.ledbat.AddDataLoss(int(i.Bin().BaseLength())*s.chunkSize(), false)
-				c.unackedBins.Reset(i.Bin())
-			}
-		}
+		// for i := c.sentBinHistory.IterateUntil(deadline); i.Next(); {
+		// 	if c.unackedBins.FilledAt(i.Bin()) {
+		// 		p.ledbat.AddDataLoss(int(i.Bin().BaseLength())*s.chunkSize(), false)
+		// 		c.unackedBins.Reset(i.Bin())
+		// 	}
+		// }
 
 		for i := c.requestedBinHistory.IterateUntil(deadline); i.Next(); {
 			if !s.store.FilledAt(i.Bin()) {
@@ -135,6 +144,7 @@ func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 						s.bins.Unlock()
 						p.addCancelledChunk()
 					}
+					nn++
 				}
 
 				c.WriteCancel(codec.Cancel{Address: codec.Address(i.Bin())})
@@ -142,6 +152,12 @@ func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 		}
 
 		c.Unlock()
+	}
+	if nn > 0 {
+		r.logger.Debug(
+			"cancel",
+			zap.Int("bins", nn),
+		)
 	}
 }
 
@@ -156,10 +172,10 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 		}
 
 		// TODO: compress ACKs like HAVEs... min(delay sample)
-		for _, a := range c.acks {
-			c.WriteAck(a)
-		}
-		c.acks = c.acks[:0]
+		// for _, a := range c.acks {
+		// 	c.WriteAck(a)
+		// }
+		// c.acks = c.acks[:0]
 
 		// TODO: avoid holding swarm lock during io...
 
@@ -186,12 +202,15 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 			c.WriteRequest(codec.Request{Address: codec.Address(b)})
 			p.addRequestedChunks(b.BaseLength())
 			c.requestedBinHistory.Push(b, t)
+			p.trackBinRTT(c.id, b, t)
 		}
 
 		b := pool.Get(uint16(s.chunkSize()))
 
+		var nw, no int
 		// TODO: rlock s.chunks here
-		for p.ledbat.FlightSize() < p.ledbat.CWND() {
+		// for p.ledbat.FlightSize() < p.ledbat.CWND() {
+		for {
 			rb := c.requestedBins.FindFilled()
 			if rb.IsNone() {
 				break
@@ -208,11 +227,25 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 				})
 
 				// TODO: re-add with merged acks
-				// p.trackBinRTT(c.id, rb, t)
+				p.trackBinRTT(c.id, rb, t)
 				p.ledbat.AddSent(s.chunkSize())
-				c.unackedBins.Set(rb)
-				c.sentBinHistory.Push(rb, t)
+				// c.unackedBins.Set(rb)
+				// c.sentBinHistory.Push(rb, t)
+				nw++
+				atomic.AddInt64(&r.sent, 1)
+			} else {
+				no++
 			}
+		}
+
+		if atomic.LoadInt64(&r.sent) > 100 {
+			// r.logger.Debug(
+			// 	"data",
+			// 	zap.Int("sent", nw),
+			// 	zap.Int("missing", no),
+			// 	zap.Int("flightSize", p.ledbat.FlightSize()),
+			// 	zap.Int("cwnd", p.ledbat.CWND()),
+			// )
 		}
 
 		pool.Put(b)
@@ -254,32 +287,25 @@ func (r *Scheduler) peerRequestCapacity(p *Peer) int {
 	// 	planForDuration = time.Second
 	// }
 
-	capacity := 1
+	var capacity int
 	chunkInterval := p.chunkInterval()
+	if chunkInterval != 0 {
+		capacity = int(planForDuration / chunkInterval)
+	}
+	capacity -= p.outstandingChunks()
+	if capacity < planForIntervals {
+		capacity = planForIntervals * 120
+	}
+
 	if chunkInterval != 0 {
 		// r.logger.Debug(
 		// 	"capacity",
+		// 	zap.Int("capacity", capacity),
 		// 	zap.Duration("p.ledbat.RTTMean()", p.ledbat.RTTMean()),
 		// 	zap.Duration("planforDuration", planForDuration),
 		// 	zap.Duration("chunkInterval", chunkInterval),
 		// )
-		capacity = int(planForDuration / chunkInterval)
 	}
-	capacity -= p.outstandingChunks()
-	if capacity < 1 {
-		capacity = 1
-	}
-
-	// if !p.ledbat.Debug() {
-	// log.Println(
-	// 	"\np.ledbat.RTTMean()", p.ledbat.RTTMean(),
-	// 	"\nminWriteInterval", minWriteInterval,
-	// 	"\np.ChunkIntervalMean()", p.ChunkIntervalMean(),
-	// 	"\nplanForDuration", planForDuration,
-	// 	"\np.OutstandingChunks()", p.OutstandingChunks(),
-	// 	"\ncapacity", capacity,
-	// )
-	// }
 
 	return capacity
 }
@@ -295,7 +321,7 @@ func (r *Scheduler) requestBins(count int, s *Swarm, c *channel) ([]binmap.Bin, 
 		}
 		return bins, n
 	}
-	return (&SequentialChunkSelector{}).SelectBins(count, s.bins.Available, s.bins.Requested, c.availableBins)
+	return (&Test2ChunkSelector{}).SelectBins(count, s.bins.Available, s.bins.Requested, c.availableBins)
 }
 
 // ChunkSelector ...

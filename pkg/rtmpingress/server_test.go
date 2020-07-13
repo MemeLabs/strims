@@ -186,10 +186,9 @@ func sendStream(t *testing.T, samplepath, addr string) error {
 }
 
 type tw struct {
-	i          int
-	path       string
-	file       io.WriteCloser
-	headerRead bool
+	i    int
+	path string
+	file io.WriteCloser
 }
 
 func newTw() *tw {
@@ -201,11 +200,6 @@ func newTw() *tw {
 }
 
 func (t *tw) Write(p []byte) (int, error) {
-	if !t.headerRead {
-		t.headerRead = true
-		p = p[2:]
-	}
-
 	if t.file == nil {
 		f, err := os.Create(path.Join(t.path, fmt.Sprintf("%d.mp4", t.i)))
 		if err != nil {
@@ -213,6 +207,9 @@ func (t *tw) Write(p []byte) (int, error) {
 		}
 		t.file = f
 		t.i++
+
+		// trim moov atom length header
+		p = p[2:]
 	}
 
 	n, err := t.file.Write(p)
@@ -229,7 +226,6 @@ func (t *tw) Flush() error {
 	}
 
 	t.file = nil
-	t.headerRead = false
 
 	return nil
 }

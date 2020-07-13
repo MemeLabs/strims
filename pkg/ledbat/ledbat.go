@@ -123,6 +123,11 @@ func (l *Controller) RTTMean() time.Duration {
 	return time.Duration(l.rttMean.Value())
 }
 
+// RTTVar ...
+func (l *Controller) RTTVar() time.Duration {
+	return time.Duration(l.rttVar.Value())
+}
+
 // AddSent ...
 func (l *Controller) AddSent(size int) {
 	l.flightSize += size

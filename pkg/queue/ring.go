@@ -65,3 +65,28 @@ func (r *Ring) Pop() (i uint64, ok bool) {
 	}
 	return
 }
+
+// Iterator ...
+func (r *Ring) Iterator() *RingIterator {
+	return &RingIterator{
+		i:    r.low - 1,
+		end:  r.high,
+		mask: r.mask,
+	}
+}
+
+// RingIterator ...
+type RingIterator struct {
+	i, end, mask uint64
+}
+
+// Next ...
+func (r *RingIterator) Next() bool {
+	r.i++
+	return r.i < r.end
+}
+
+// Value ...
+func (r *RingIterator) Value() uint64 {
+	return r.i & r.mask
+}

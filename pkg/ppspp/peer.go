@@ -107,8 +107,8 @@ func (p *Peer) trackBinRTT(cid uint64, bin binmap.Bin, t time.Time) {
 
 // trackPingRTT ...
 func (p *Peer) trackPingRTT(cid uint64, t time.Time) (nonce uint64, ok bool) {
-	if t.Sub(p.rttSampleTime) < minPingInterval {
-		return 0, false
+	if !p.rttSampleBin.IsNone() || t.Sub(p.rttSampleTime) < minPingInterval {
+		return
 	}
 
 	// with even nonces Contains(nonce) is an equality check
