@@ -74,7 +74,7 @@ const HomePage = () => {
       // console.log("write/flush", b);
     };
 
-    videoRef.current.src = URL.createObjectURL(decoder.mediaSource);
+    videoRef.current.src = URL.createObjectURL(decoder.source.mediaSource);
   };
 
   const broadcastEncoder = (encoder: webm.Encoder, id: number, mediaStream: MediaStream) => {
@@ -104,7 +104,7 @@ const HomePage = () => {
 
   const handleViewBroadcastClick = (decoder: webm.Decoder | fmp4.Decoder) => {
     const video = videoRef.current;
-    video.src = URL.createObjectURL(decoder.mediaSource);
+    video.src = URL.createObjectURL(decoder.source.mediaSource);
     video.oncanplay = () => video.play();
 
     const timeShifted = 0;
@@ -127,7 +127,7 @@ const HomePage = () => {
             //   videoRef.current.currentTime = 999999999999;
             // }
 
-            const end = decoder.end();
+            const end = decoder.source.end();
             const { currentTime } = videoRef.current;
             if (currentTime < end - 10) {
               videoRef.current.currentTime = end - 5;
