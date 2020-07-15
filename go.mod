@@ -36,7 +36,6 @@ require (
 	github.com/pion/webrtc/v2 v2.2.18
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/common v0.10.0
-	github.com/prometheus/procfs v0.1.3 // indirect
 	github.com/stretchr/testify v1.6.1
 	github.com/tj/assert v0.0.3
 	go.etcd.io/bbolt v1.3.5

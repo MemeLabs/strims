@@ -5,15 +5,13 @@ import (
 	"testing"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func generateED25519Key(t *testing.T) *pb.Key {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(nil)
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Nil(t, err, "failed to generate ed25519 key")
 
 	return &pb.Key{
 		Type:    pb.KeyType_KEY_TYPE_ED25519,
@@ -34,37 +32,27 @@ func buildTestCases(t *testing.T) (map[string]testcase, error) {
 	key := generateED25519Key(t)
 
 	successCsr, err := NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN)
-	if err != nil {
-		return nil, err
-	}
+	assert.Nil(t, err, "failed to create success CSR")
 
 	invalidLenCsr, err := NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN)
-	if err != nil {
-		return nil, err
-	}
+	assert.Nil(t, err, "failed to create invalid CSR")
+
 	invalidLenCsr.Key = key.Public[:len(key.Public)-5]
 
 	invalidTypeCsr, err := NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN)
-	if err != nil {
-		return nil, err
-	}
+	assert.Nil(t, err, "failed to create invalid key type CSR")
+
 	invalidTypeCsr.KeyType = pb.KeyType_KEY_TYPE_X25519
 
 	successCert, err := SignCertificateRequest(successCsr, defaultCertTTL, key)
-	if err != nil {
-		return nil, err
-	}
+	assert.Nil(t, err, "failed to sign success CSR")
 
 	invalidLenCert, err := SignCertificateRequest(successCsr, defaultCertTTL, key)
-	if err != nil {
-		return nil, err
-	}
+	assert.Nil(t, err, "failed to sign success CSR")
 	invalidLenCert.Key = key.Private[:len(key.Private)-5]
 
 	invalidTypeCert, err := SignCertificateRequest(successCsr, defaultCertTTL, key)
-	if err != nil {
-		return nil, err
-	}
+	assert.Nil(t, err, "failed to sign success CSR")
 	invalidTypeCert.KeyType = pb.KeyType_KEY_TYPE_X25519
 
 	tcs := map[string]testcase{
@@ -102,7 +90,7 @@ func TestNewCertificateRequest(t *testing.T) {
 			if tc.err != nil {
 				assert.EqualError(t, err, tc.err.Error())
 			} else {
-				assert.NoError(t, err)
+				assert.Nil(t, err)
 			}
 		})
 	}
@@ -120,7 +108,7 @@ func TestVerifyCertificateRequest(t *testing.T) {
 			if tc.err != nil {
 				assert.EqualError(t, err, tc.err.Error())
 			} else {
-				assert.NoError(t, err)
+				assert.Nil(t, err)
 			}
 		})
 	}
@@ -138,7 +126,7 @@ func TestSignCertificateRequest(t *testing.T) {
 			if tc.err != nil {
 				assert.EqualError(t, err, tc.err.Error())
 			} else {
-				assert.NoError(t, err)
+				assert.Nil(t, err)
 				assert.NotNil(t, cert.GetKey())
 			}
 		})
@@ -157,7 +145,7 @@ func TestVerifyCertificate(t *testing.T) {
 			if tc.err != nil {
 				assert.EqualError(t, err, tc.err.Error())
 			} else {
-				assert.NoError(t, err)
+				assert.Nil(t, err)
 			}
 		})
 	}
