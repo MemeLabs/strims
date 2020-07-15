@@ -4,19 +4,17 @@ import (
 	"testing"
 
 	"github.com/MemeLabs/go-ppspp/pkg/memkv"
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func createMetadataStore(t *testing.T) *MetadataStore {
 	t.Helper()
 
 	kvStore, err := memkv.NewStore("strims")
-	if err != nil {
-		t.Fatal(err)
-	}
+	assert.Nil(t, err, "failed to create kvstore")
 
 	mdStore, err := NewMetadataStore(kvStore)
-	assert.NoError(t, err, "failed to metadata store")
+	assert.Nil(t, err, "failed to metadata store")
 
 	return mdStore
 }
@@ -26,7 +24,7 @@ func TestCreateProfile(t *testing.T) {
 
 	name := "jbpratt"
 	profile, profileStore, err := CreateProfile(mdStore, name, "autumnmajora")
-	assert.NoError(t, err, "failed to create profile")
+	assert.Nil(t, err, "failed to create profile")
 	assert.NotNil(t, profile)
 	assert.NotNil(t, profileStore)
 
@@ -38,7 +36,7 @@ func TestCreateProfileUsernameTaken(t *testing.T) {
 
 	name := "jbpratt"
 	_, _, err := CreateProfile(mdStore, name, "autumnmajora")
-	assert.NoError(t, err, "failed to create profile")
+	assert.Nil(t, err, "failed to create profile")
 
 	_, _, err = CreateProfile(mdStore, name, "autumnmajora")
 	assert.EqualError(t, err, ErrProfileNameNotAvailable.Error())
@@ -47,25 +45,23 @@ func TestCreateProfileUsernameTaken(t *testing.T) {
 func TestDeleteProfile(t *testing.T) {
 	mdStore := createMetadataStore(t)
 
-	name := "jbpratt"
-	profile, _, err := CreateProfile(mdStore, name, "autumnmajora")
-	assert.NoError(t, err, "failed to create profile")
-
-	assert.NoError(t, DeleteProfile(mdStore, profile), "failed to delete profile")
+	profile, _, err := CreateProfile(mdStore, "jbpratt", "autumnmajora")
+	assert.Nil(t, err, "failed to create profile")
+	assert.Nil(t, DeleteProfile(mdStore, profile), "failed to delete profile")
 }
 
 func TestGetProfileSummaries(t *testing.T) {
 	mdStore := createMetadataStore(t)
 
 	_, _, err := CreateProfile(mdStore, "jbpratt", "autumnmajora")
-	assert.NoError(t, err, "failed to create profile")
+	assert.Nil(t, err, "failed to create profile")
 	_, _, err = CreateProfile(mdStore, "autumn", "jbprattmajora")
-	assert.NoError(t, err, "failed to create profile")
+	assert.Nil(t, err, "failed to create profile")
 	_, _, err = CreateProfile(mdStore, "majora", "jbprattautumn")
-	assert.NoError(t, err, "failed to create profile")
+	assert.Nil(t, err, "failed to create profile")
 
 	summaries, err := GetProfileSummaries(mdStore)
-	assert.NoError(t, err, "failed to get profile summaries")
+	assert.Nil(t, err, "failed to get profile summaries")
 
 	assert.Equal(t, 3, len(summaries))
 }
