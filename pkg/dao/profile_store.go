@@ -3,12 +3,13 @@ package dao
 import (
 	"errors"
 
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"google.golang.org/protobuf/proto"
 )
 
 // NewProfileStore ...
-func NewProfileStore(profileID uint64, store BlobStore, key *StorageKey) *ProfileStore {
+func NewProfileStore(profileID uint64, store kv.BlobStore, key *StorageKey) *ProfileStore {
 	return &ProfileStore{
 		store: store,
 		key:   key,
@@ -18,7 +19,7 @@ func NewProfileStore(profileID uint64, store BlobStore, key *StorageKey) *Profil
 
 // ProfileStore ...
 type ProfileStore struct {
-	store BlobStore
+	store kv.BlobStore
 	key   *StorageKey
 	name  string
 }
@@ -28,7 +29,7 @@ func (s *ProfileStore) Init(profile *pb.Profile) error {
 	if err := s.store.CreateStoreIfNotExists(s.name); err != nil {
 		return err
 	}
-	return s.store.Update(s.name, func(tx BlobTx) error {
+	return s.store.Update(s.name, func(tx kv.BlobTx) error {
 		b, err := MarshalStorageKey(s.key)
 		if err != nil {
 			return err
@@ -55,8 +56,8 @@ func (s *ProfileStore) Key() *StorageKey {
 }
 
 // View ...
-func (s *ProfileStore) View(fn func(tx Tx) error) error {
-	return s.store.View(s.name, func(tx BlobTx) error {
+func (s *ProfileStore) View(fn func(tx kv.Tx) error) error {
+	return s.store.View(s.name, func(tx kv.BlobTx) error {
 		return fn(&profileStoreTx{
 			tx:       tx,
 			sk:       s.key,
@@ -66,8 +67,8 @@ func (s *ProfileStore) View(fn func(tx Tx) error) error {
 }
 
 // Update ...
-func (s *ProfileStore) Update(fn func(tx RWTx) error) error {
-	return s.store.Update(s.name, func(tx BlobTx) error {
+func (s *ProfileStore) Update(fn func(tx kv.RWTx) error) error {
+	return s.store.Update(s.name, func(tx kv.BlobTx) error {
 		return fn(&profileStoreTx{
 			tx: tx,
 			sk: s.key,
@@ -76,16 +77,16 @@ func (s *ProfileStore) Update(fn func(tx RWTx) error) error {
 }
 
 type profileStoreTx struct {
-	tx       BlobTx
+	tx       kv.BlobTx
 	sk       *StorageKey
 	readOnly bool
 }
 
-func (t *profileStoreTx) View(fn func(tx Tx) error) error {
+func (t *profileStoreTx) View(fn func(tx kv.Tx) error) error {
 	return fn(t)
 }
 
-func (t *profileStoreTx) Update(fn func(tx RWTx) error) error {
+func (t *profileStoreTx) Update(fn func(tx kv.RWTx) error) error {
 	if t.readOnly {
 		return errors.New("cannot create read/write transaction from read only transaction")
 	}

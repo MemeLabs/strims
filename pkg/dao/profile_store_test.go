@@ -3,6 +3,7 @@ package dao
 import (
 	"testing"
 
+	"github.com/MemeLabs/go-ppspp/pkg/memkv"
 	"github.com/tj/assert"
 )
 
@@ -19,7 +20,7 @@ func createProfileStore(t *testing.T) (*ProfileStore, error) {
 		return nil, err
 	}
 
-	kvStore, err := NewKVStore("strims")
+	kvStore, err := memkv.NewStore("strims")
 	if err != nil {
 		return nil, err
 	}

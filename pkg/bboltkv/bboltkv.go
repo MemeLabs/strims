@@ -1,30 +1,30 @@
-package kv
+package bboltkv
 
 import (
 	"bytes"
 	"fmt"
 
-	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"go.etcd.io/bbolt"
 )
 
-// NewKVStore ...
-func NewKVStore(path string) (*KVStore, error) {
+// NewStore ...
+func NewStore(path string) (*Store, error) {
 	db, err := bbolt.Open(path, 0600, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	return &KVStore{db: db}, nil
+	return &Store{db: db}, nil
 }
 
-// KVStore ...
-type KVStore struct {
+// Store ...
+type Store struct {
 	db *bbolt.DB
 }
 
 // CreateStoreIfNotExists ...
-func (s *KVStore) CreateStoreIfNotExists(table string) error {
+func (s *Store) CreateStoreIfNotExists(table string) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte(table))
 		return err
@@ -32,61 +32,61 @@ func (s *KVStore) CreateStoreIfNotExists(table string) error {
 }
 
 // DeleteStore ...
-func (s *KVStore) DeleteStore(table string) error {
+func (s *Store) DeleteStore(table string) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		return tx.DeleteBucket([]byte(table))
 	})
 }
 
 // View ...
-func (s *KVStore) View(table string, fn func(tx dao.BlobTx) error) error {
+func (s *Store) View(table string, fn func(tx kv.BlobTx) error) error {
 	return s.db.View(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(table))
 		if b == nil {
 			return fmt.Errorf("bucket not found %s", table)
 		}
-		return fn(KVTx{tx, b})
+		return fn(Tx{tx, b})
 	})
 }
 
 // Update ...
-func (s *KVStore) Update(table string, fn func(tx dao.BlobTx) error) error {
+func (s *Store) Update(table string, fn func(tx kv.BlobTx) error) error {
 	return s.db.Update(func(tx *bbolt.Tx) error {
 		b := tx.Bucket([]byte(table))
 		if b == nil {
 			return fmt.Errorf("bucket not found %s", table)
 		}
-		return fn(KVTx{tx, b})
+		return fn(Tx{tx, b})
 	})
 }
 
-// KVTx ...
-type KVTx struct {
+// Tx ...
+type Tx struct {
 	tx *bbolt.Tx
 	b  *bbolt.Bucket
 }
 
 // Put ...
-func (t KVTx) Put(key string, value []byte) error {
+func (t Tx) Put(key string, value []byte) error {
 	return t.b.Put([]byte(key), value)
 }
 
 // Delete ...
-func (t KVTx) Delete(key string) error {
+func (t Tx) Delete(key string) error {
 	return t.b.Delete([]byte(key))
 }
 
 // Get ...
-func (t KVTx) Get(key string) (value []byte, err error) {
+func (t Tx) Get(key string) (value []byte, err error) {
 	value = t.b.Get([]byte(key))
 	if value == nil {
-		return nil, dao.ErrRecordNotFound
+		return nil, kv.ErrRecordNotFound
 	}
 	return value, nil
 }
 
 // ScanPrefix ...
-func (t KVTx) ScanPrefix(prefix string) (values [][]byte, err error) {
+func (t Tx) ScanPrefix(prefix string) (values [][]byte, err error) {
 	c := t.b.Cursor()
 
 	p := []byte(prefix)

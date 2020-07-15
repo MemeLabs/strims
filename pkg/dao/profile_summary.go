@@ -1,6 +1,9 @@
 package dao
 
-import "github.com/MemeLabs/go-ppspp/pkg/pb"
+import (
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/go-ppspp/pkg/pb"
+)
 
 const profileSummaryKeyPrefix = "profileSummary:"
 
@@ -9,9 +12,9 @@ func prefixProfileSummaryKey(name string) string {
 }
 
 // GetProfileSummaries ...
-func GetProfileSummaries(s BlobStore) ([]*pb.ProfileSummary, error) {
+func GetProfileSummaries(s kv.BlobStore) ([]*pb.ProfileSummary, error) {
 	var profileBufs [][]byte
-	err := s.View(metadataTable, func(tx BlobTx) (err error) {
+	err := s.View(metadataTable, func(tx kv.BlobTx) (err error) {
 		profileBufs, err = tx.ScanPrefix(profileSummaryKeyPrefix)
 		return err
 	})

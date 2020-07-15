@@ -3,6 +3,7 @@ package dao
 import (
 	"strconv"
 
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
@@ -13,32 +14,32 @@ func prefixChatServerKey(id uint64) string {
 }
 
 // InsertChatServer ...
-func InsertChatServer(s RWStore, v *pb.ChatServer) error {
-	return s.Update(func(tx RWTx) (err error) {
+func InsertChatServer(s kv.RWStore, v *pb.ChatServer) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
 		return tx.Put(prefixChatServerKey(v.Id), v)
 	})
 }
 
 // DeleteChatServer ...
-func DeleteChatServer(s RWStore, id uint64) error {
-	return s.Update(func(tx RWTx) (err error) {
+func DeleteChatServer(s kv.RWStore, id uint64) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
 		return tx.Delete(prefixChatServerKey(id))
 	})
 }
 
 // GetChatServer ...
-func GetChatServer(s Store, id uint64) (v *pb.ChatServer, err error) {
+func GetChatServer(s kv.Store, id uint64) (v *pb.ChatServer, err error) {
 	v = &pb.ChatServer{}
-	err = s.View(func(tx Tx) error {
+	err = s.View(func(tx kv.Tx) error {
 		return tx.Get(prefixChatServerKey(id), v)
 	})
 	return
 }
 
 // GetChatServers ...
-func GetChatServers(s Store) (v []*pb.ChatServer, err error) {
+func GetChatServers(s kv.Store) (v []*pb.ChatServer, err error) {
 	v = []*pb.ChatServer{}
-	err = s.View(func(tx Tx) error {
+	err = s.View(func(tx kv.Tx) error {
 		return tx.ScanPrefix(chatServerPrefix, &v)
 	})
 	return

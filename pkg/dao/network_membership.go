@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
@@ -16,39 +17,39 @@ func prefixNetworkMembershipKey(id uint64) string {
 }
 
 // InsertNetworkMembership ...
-func InsertNetworkMembership(s RWStore, v *pb.NetworkMembership) error {
-	return s.Update(func(tx RWTx) (err error) {
+func InsertNetworkMembership(s kv.RWStore, v *pb.NetworkMembership) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
 		return tx.Put(prefixNetworkMembershipKey(v.Id), v)
 	})
 }
 
 // DeleteNetworkMembership ...
-func DeleteNetworkMembership(s RWStore, id uint64) error {
-	return s.Update(func(tx RWTx) (err error) {
+func DeleteNetworkMembership(s kv.RWStore, id uint64) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
 		return tx.Delete(prefixNetworkMembershipKey(id))
 	})
 }
 
 // GetNetworkMembership ...
-func GetNetworkMembership(s Store, id uint64) (v *pb.NetworkMembership, err error) {
+func GetNetworkMembership(s kv.Store, id uint64) (v *pb.NetworkMembership, err error) {
 	v = &pb.NetworkMembership{}
-	err = s.View(func(tx Tx) error {
+	err = s.View(func(tx kv.Tx) error {
 		return tx.Get(prefixNetworkMembershipKey(id), v)
 	})
 	return
 }
 
 // GetNetworkMemberships ...
-func GetNetworkMemberships(s Store) (v []*pb.NetworkMembership, err error) {
+func GetNetworkMemberships(s kv.Store) (v []*pb.NetworkMembership, err error) {
 	v = []*pb.NetworkMembership{}
-	err = s.View(func(tx Tx) error {
+	err = s.View(func(tx kv.Tx) error {
 		return tx.ScanPrefix(networkMembershipPrefix, &v)
 	})
 	return
 }
 
 // GetNetworkMembershipByNetworkKey returns the membership belonging to the given network
-func GetNetworkMembershipByNetworkKey(s Store, k []byte) (*pb.NetworkMembership, error) {
+func GetNetworkMembershipByNetworkKey(s kv.Store, k []byte) (*pb.NetworkMembership, error) {
 	memberships, err := GetNetworkMemberships(s)
 	if err != nil {
 		return nil, err
@@ -59,14 +60,14 @@ func GetNetworkMembershipByNetworkKey(s Store, k []byte) (*pb.NetworkMembership,
 			return im, nil
 		}
 	}
-	return nil, ErrRecordNotFound
+	return nil, kv.ErrRecordNotFound
 }
 
 // GetNetworkMembershipForNetwork returns the membership belonging to the given network
-func GetNetworkMembershipForNetwork(s Store, netID uint64) (*pb.NetworkMembership, error) {
+func GetNetworkMembershipForNetwork(s kv.Store, netID uint64) (*pb.NetworkMembership, error) {
 	network, err := GetNetwork(s, netID)
 	if err != nil {
-		if err == ErrRecordNotFound {
+		if err == kv.ErrRecordNotFound {
 			return nil, fmt.Errorf("could not find network: %w", err)
 		}
 		return nil, err

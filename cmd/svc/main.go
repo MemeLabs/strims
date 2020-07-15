@@ -10,8 +10,8 @@ import (
 	"os"
 	"path"
 
+	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -116,7 +116,7 @@ func initProfileStore() (*dao.ProfileStore, error) {
 	if err != nil {
 		log.Fatalf("failed to locate home directory: %s", err)
 	}
-	kv, err := kv.NewKVStore(path.Join(homeDir, ".strims"))
+	kv, err := bboltkv.NewStore(path.Join(homeDir, ".strims"))
 	if err != nil {
 		log.Fatalf("failed to open db: %s", err)
 	}

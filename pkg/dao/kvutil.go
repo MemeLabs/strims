@@ -1,59 +1,13 @@
 package dao
 
 import (
-	"errors"
 	"reflect"
 
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"google.golang.org/protobuf/proto"
 )
 
-// ErrRecordNotFound ...
-var ErrRecordNotFound = errors.New("record not found")
-
-// BlobStore ...
-type BlobStore interface {
-	CreateStoreIfNotExists(table string) error
-	DeleteStore(table string) error
-	View(table string, fn func(tx BlobTx) error) error
-	Update(table string, fn func(tx BlobTx) error) error
-}
-
-// BlobTx ...
-type BlobTx interface {
-	Put(key string, value []byte) error
-	Get(key string) ([]byte, error)
-	Delete(key string) error
-	ScanPrefix(prefix string) ([][]byte, error)
-}
-
-// Store ...
-type Store interface {
-	View(fn func(tx Tx) error) error
-}
-
-// RWStore ...
-type RWStore interface {
-	Store
-	Update(fn func(tx RWTx) error) error
-}
-
-// Tx ..
-type Tx interface {
-	Store
-	Get(key string, m proto.Message) error
-	ScanPrefix(prefix string, messages interface{}) error
-}
-
-// RWTx ...
-type RWTx interface {
-	RWStore
-	Delete(key string) error
-	Get(key string, m proto.Message) error
-	Put(key string, m proto.Message) error
-	ScanPrefix(prefix string, messages interface{}) error
-}
-
-func put(tx BlobTx, sk *StorageKey, key string, m proto.Message) error {
+func put(tx kv.BlobTx, sk *StorageKey, key string, m proto.Message) error {
 	b, err := proto.Marshal(m)
 	if err != nil {
 		return err
@@ -65,7 +19,7 @@ func put(tx BlobTx, sk *StorageKey, key string, m proto.Message) error {
 	return tx.Put(key, b)
 }
 
-func get(tx BlobTx, sk *StorageKey, key string, m proto.Message) error {
+func get(tx kv.BlobTx, sk *StorageKey, key string, m proto.Message) error {
 	b, err := tx.Get(key)
 	if err != nil {
 		return err
@@ -82,7 +36,7 @@ var protoMessageType = reflect.TypeOf(protoMessage)
 
 // read from the tx values from keys matching prefix and append them to the
 // *[]*proto.Message
-func scanPrefix(tx BlobTx, sk *StorageKey, prefix string, messages interface{}) error {
+func scanPrefix(tx kv.BlobTx, sk *StorageKey, prefix string, messages interface{}) error {
 	bs, err := tx.ScanPrefix(prefix)
 	if err != nil {
 		return err
@@ -123,9 +77,9 @@ func appendUnmarshalled(messages interface{}, bufs ...[]byte) (interface{}, erro
 	return mv.Interface(), nil
 }
 
-func exists(tx BlobTx, key string) (bool, error) {
+func exists(tx kv.BlobTx, key string) (bool, error) {
 	_, err := tx.Get(key)
-	if err == ErrRecordNotFound {
+	if err == kv.ErrRecordNotFound {
 		return false, nil
 	}
 	return true, err

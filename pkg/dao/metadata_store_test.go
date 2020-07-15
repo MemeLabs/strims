@@ -3,13 +3,14 @@ package dao
 import (
 	"testing"
 
+	"github.com/MemeLabs/go-ppspp/pkg/memkv"
 	"github.com/tj/assert"
 )
 
 func createMetadataStore(t *testing.T) *MetadataStore {
 	t.Helper()
 
-	kvStore, err := NewKVStore("strims")
+	kvStore, err := memkv.NewStore("strims")
 	if err != nil {
 		t.Fatal(err)
 	}

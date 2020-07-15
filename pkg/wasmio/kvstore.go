@@ -6,7 +6,7 @@ import (
 	"errors"
 	"syscall/js"
 
-	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 )
 
 // NewKVStore ...
@@ -23,7 +23,7 @@ type KVStore struct {
 
 // CreateStoreIfNotExists ...
 func (s *KVStore) CreateStoreIfNotExists(table string) error {
-	return s.transact(table, true, true, func(tx dao.BlobTx) error { return nil })
+	return s.transact(table, true, true, func(tx kv.BlobTx) error { return nil })
 }
 
 // DeleteStore ...
@@ -32,16 +32,16 @@ func (s *KVStore) DeleteStore(table string) error {
 }
 
 // View ...
-func (s *KVStore) View(table string, fn func(tx dao.BlobTx) error) error {
+func (s *KVStore) View(table string, fn func(tx kv.BlobTx) error) error {
 	return s.transact(table, false, true, fn)
 }
 
 // Update ...
-func (s *KVStore) Update(table string, fn func(tx dao.BlobTx) error) error {
+func (s *KVStore) Update(table string, fn func(tx kv.BlobTx) error) error {
 	return s.transact(table, false, false, fn)
 }
 
-func (s *KVStore) transact(table string, createTable, readOnly bool, fn func(tx dao.BlobTx) error) error {
+func (s *KVStore) transact(table string, createTable, readOnly bool, fn func(tx kv.BlobTx) error) error {
 	tx := &KVTx{
 		proxy: s.bridge.Call("openKVStore", table, createTable, readOnly),
 	}
@@ -75,7 +75,7 @@ func (t *KVTx) Delete(key string) error {
 func (t *KVTx) Get(key string) (value []byte, err error) {
 	readValue := func(arg js.Value) error {
 		if arg.IsUndefined() {
-			return dao.ErrRecordNotFound
+			return kv.ErrRecordNotFound
 		}
 		value = make([]byte, arg.Get("length").Int())
 		js.CopyBytesToGo(value, arg)

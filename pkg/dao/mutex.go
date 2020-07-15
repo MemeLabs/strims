@@ -10,6 +10,7 @@ import (
 	"math/rand"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
@@ -81,12 +82,12 @@ func (m *Mutex) notifyLock(ctx context.Context, ch chan error) {
 }
 
 func (m *Mutex) tryLock(t time.Time) error {
-	return m.store.Update(func(tx RWTx) error {
+	return m.store.Update(func(tx kv.RWTx) error {
 		now := t.UnixNano()
 
 		mu := &pb.Mutex{}
 		err := tx.Get(m.key, mu)
-		if err != nil && err != ErrRecordNotFound {
+		if err != nil && err != kv.ErrRecordNotFound {
 			return err
 		}
 
@@ -103,7 +104,7 @@ func (m *Mutex) tryLock(t time.Time) error {
 
 // Release ...
 func (m *Mutex) Release() error {
-	return m.store.Update(func(tx RWTx) error {
+	return m.store.Update(func(tx kv.RWTx) error {
 		mu := &pb.Mutex{}
 		err := tx.Get(m.key, mu)
 		if err != nil {

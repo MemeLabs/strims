@@ -2,6 +2,8 @@ package dao
 
 import (
 	"errors"
+
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 )
 
 const metadataTable = "default"
@@ -13,7 +15,7 @@ var (
 )
 
 // NewMetadataStore ...
-func NewMetadataStore(store BlobStore) (*MetadataStore, error) {
+func NewMetadataStore(store kv.BlobStore) (*MetadataStore, error) {
 	if err := store.CreateStoreIfNotExists(metadataTable); err != nil {
 		return nil, err
 	}
@@ -25,5 +27,5 @@ func NewMetadataStore(store BlobStore) (*MetadataStore, error) {
 
 // MetadataStore ...
 type MetadataStore struct {
-	BlobStore
+	kv.BlobStore
 }

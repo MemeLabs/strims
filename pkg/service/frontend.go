@@ -13,6 +13,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -31,7 +32,7 @@ var (
 
 // Options ...
 type Options struct {
-	Store      dao.BlobStore
+	Store      kv.BlobStore
 	Logger     *zap.Logger
 	VPNOptions []vpn.HostOption
 }
@@ -54,7 +55,7 @@ func New(options Options) (*Frontend, error) {
 // Frontend ...
 type Frontend struct {
 	logger     *zap.Logger
-	store      dao.BlobStore
+	store      kv.BlobStore
 	metadata   *dao.MetadataStore
 	vpnOptions []vpn.HostOption
 }
@@ -178,7 +179,7 @@ func (s *Frontend) CreateNetwork(ctx context.Context, r *pb.CreateNetworkRequest
 		return nil, err
 	}
 
-	err = session.ProfileStore().Update(func(tx dao.RWTx) error {
+	err = session.ProfileStore().Update(func(tx kv.RWTx) error {
 		if err := dao.InsertNetwork(tx, network); err != nil {
 			return err
 		}
@@ -204,9 +205,9 @@ func (s *Frontend) DeleteNetwork(ctx context.Context, r *pb.DeleteNetworkRequest
 		return nil, ErrAuthenticationRequired
 	}
 
-	err := session.ProfileStore().Update(func(tx dao.RWTx) error {
+	err := session.ProfileStore().Update(func(tx kv.RWTx) error {
 		membership, err := dao.GetNetworkMembershipForNetwork(tx, r.Id)
-		if err != nil && err != dao.ErrRecordNotFound {
+		if err != nil && err != kv.ErrRecordNotFound {
 			return err
 		}
 
@@ -217,7 +218,7 @@ func (s *Frontend) DeleteNetwork(ctx context.Context, r *pb.DeleteNetworkRequest
 		}
 
 		if err := dao.DeleteNetwork(tx, r.Id); err != nil {
-			if err == dao.ErrRecordNotFound {
+			if err == kv.ErrRecordNotFound {
 				return fmt.Errorf("could not delete network: %w", err)
 			}
 			return err
@@ -282,7 +283,7 @@ func (s *Frontend) DeleteNetworkMembership(ctx context.Context, r *pb.DeleteNetw
 
 	membership, err := dao.GetNetworkMembership(session.ProfileStore(), r.Id)
 	if err != nil {
-		if err == dao.ErrRecordNotFound {
+		if err == kv.ErrRecordNotFound {
 			return nil, fmt.Errorf("could not delete network membership: %w", err)
 		}
 		return nil, err
@@ -982,7 +983,7 @@ func (s *Frontend) saveNetworkMembership(ctx context.Context, membership *pb.Net
 	}
 
 	old, err := dao.GetNetworkMembershipByNetworkKey(session.ProfileStore(), dao.GetRootCert(membership.Certificate).Key)
-	if err != nil && err != dao.ErrRecordNotFound {
+	if err != nil && err != kv.ErrRecordNotFound {
 		return err
 	}
 	if old != nil {

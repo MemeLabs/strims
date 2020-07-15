@@ -3,6 +3,7 @@ package dao
 import (
 	"strconv"
 
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
@@ -13,32 +14,32 @@ func prefixNetworkKey(id uint64) string {
 }
 
 // InsertNetwork ...
-func InsertNetwork(s RWStore, v *pb.Network) error {
-	return s.Update(func(tx RWTx) (err error) {
+func InsertNetwork(s kv.RWStore, v *pb.Network) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
 		return tx.Put(prefixNetworkKey(v.Id), v)
 	})
 }
 
 // DeleteNetwork ...
-func DeleteNetwork(s RWStore, id uint64) error {
-	return s.Update(func(tx RWTx) (err error) {
+func DeleteNetwork(s kv.RWStore, id uint64) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
 		return tx.Delete(prefixNetworkKey(id))
 	})
 }
 
 // GetNetwork ...
-func GetNetwork(s Store, id uint64) (v *pb.Network, err error) {
+func GetNetwork(s kv.Store, id uint64) (v *pb.Network, err error) {
 	v = &pb.Network{}
-	err = s.View(func(tx Tx) error {
+	err = s.View(func(tx kv.Tx) error {
 		return tx.Get(prefixNetworkKey(id), v)
 	})
 	return
 }
 
 // GetNetworks ...
-func GetNetworks(s Store) (v []*pb.Network, err error) {
+func GetNetworks(s kv.Store) (v []*pb.Network, err error) {
 	v = []*pb.Network{}
-	err = s.View(func(tx Tx) error {
+	err = s.View(func(tx kv.Tx) error {
 		return tx.ScanPrefix(networkPrefix, &v)
 	})
 	return

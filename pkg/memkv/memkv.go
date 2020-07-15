@@ -1,23 +1,25 @@
-package dao
+package memkv
 
 import (
 	"fmt"
 	"strings"
+
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 )
 
-// NewKVStore ...
-func NewKVStore(path string) (*KVStore, error) {
+// NewStore ...
+func NewStore(path string) (*Store, error) {
 	db := make(map[string]map[string][]byte)
-	return &KVStore{store: db}, nil
+	return &Store{store: db}, nil
 }
 
-// KVStore ...
-type KVStore struct {
+// Store ...
+type Store struct {
 	store map[string]map[string][]byte
 }
 
 // CreateStoreIfNotExists ...
-func (s *KVStore) CreateStoreIfNotExists(table string) error {
+func (s *Store) CreateStoreIfNotExists(table string) error {
 	if _, ok := s.store[table]; !ok {
 		s.store[table] = make(map[string][]byte)
 	}
@@ -25,57 +27,57 @@ func (s *KVStore) CreateStoreIfNotExists(table string) error {
 }
 
 // DeleteStore ...
-func (s *KVStore) DeleteStore(table string) error {
+func (s *Store) DeleteStore(table string) error {
 	delete(s.store, table)
 	return nil
 }
 
 // View ...
-func (s *KVStore) View(table string, fn func(tx BlobTx) error) error {
+func (s *Store) View(table string, fn func(tx kv.BlobTx) error) error {
 	b, ok := s.store[table]
 	if !ok {
 		return fmt.Errorf("bucket not found %s", table)
 	}
-	return fn(KVTx{b})
+	return fn(Tx{b})
 }
 
 // Update ...
-func (s *KVStore) Update(table string, fn func(tx BlobTx) error) error {
+func (s *Store) Update(table string, fn func(tx kv.BlobTx) error) error {
 	b, ok := s.store[table]
 	if !ok {
 		return fmt.Errorf("bucket not found %s", table)
 	}
-	return fn(KVTx{b})
+	return fn(Tx{b})
 }
 
-// KVTx ...
-type KVTx struct {
+// Tx ...
+type Tx struct {
 	b map[string][]byte
 }
 
 // Put ...
-func (t KVTx) Put(key string, value []byte) error {
+func (t Tx) Put(key string, value []byte) error {
 	t.b[key] = value
 	return nil
 }
 
 // Delete ...
-func (t KVTx) Delete(key string) error {
+func (t Tx) Delete(key string) error {
 	delete(t.b, key)
 	return nil
 }
 
 // Get ...
-func (t KVTx) Get(key string) (value []byte, err error) {
+func (t Tx) Get(key string) (value []byte, err error) {
 	val, ok := t.b[key]
 	if !ok {
-		return nil, ErrRecordNotFound
+		return nil, kv.ErrRecordNotFound
 	}
 	return val, nil
 }
 
 // ScanPrefix ...
-func (t KVTx) ScanPrefix(prefix string) (values [][]byte, err error) {
+func (t Tx) ScanPrefix(prefix string) (values [][]byte, err error) {
 
 	for key, v := range t.b {
 		if strings.HasPrefix(key, prefix) {
