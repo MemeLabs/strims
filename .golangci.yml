@@ -1,0 +1,8 @@
+run:
+  skip-dirs:
+    - pkg/pb/*
+  build-tags:
+    - codeanalysis
+linters:
+  enable:
+    - gofmt
