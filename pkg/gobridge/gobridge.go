@@ -1,4 +1,5 @@
 //+ build js,wasm
+// +build !codeanalysis
 
 // SEE: https://github.com/aaronpowell/webpack-golang-wasm-async-loader/blob/master/gobridge/gobridge.go
 // This is duplicated here because importing the original breaks the build...
