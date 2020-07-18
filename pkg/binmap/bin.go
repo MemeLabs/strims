@@ -126,8 +126,8 @@ func (b Bin) Base() bool {
 }
 
 // LayerOffset leftmost bin in layer
-func (b Bin) LayerOffset() int {
-	return int(b >> (uint64(b.Layer()) + 1))
+func (b Bin) LayerOffset() uint64 {
+	return uint64(b >> (b.Layer() + 1))
 }
 
 // Contains true if o is equal to or a descendent of b
@@ -139,8 +139,8 @@ func (b Bin) Contains(o Bin) bool {
 }
 
 // Layer tree height at b
-func (b Bin) Layer() int {
-	return bits.TrailingZeros64(uint64(b + 1))
+func (b Bin) Layer() uint64 {
+	return uint64(bits.TrailingZeros64(uint64(b + 1)))
 }
 
 // BaseOffset index of leftmost bin in layer 1
@@ -156,5 +156,15 @@ func (b Bin) BaseLength() uint64 {
 
 // Sibling ...
 func (b Bin) Sibling() Bin {
-	return b ^ ((b ^ (b + 1)) + 1)
+	return b ^ (b.LayerBits() + 1)
+}
+
+// IsLeft ...
+func (b Bin) IsLeft() bool {
+	return b&(b.LayerBits()+1) == 0
+}
+
+// IsRight ...
+func (b Bin) IsRight() bool {
+	return !b.IsLeft()
 }

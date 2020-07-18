@@ -388,7 +388,7 @@ func (m *Map) setLowLayerBitmap(target Bin, _bitmap bitmap) {
 		}
 	}
 
-	m.reserveCells(b.Layer() - preBin.Layer())
+	m.reserveCells(int(b.Layer() - preBin.Layer()))
 
 	for {
 		nr := m.allocCell()
@@ -490,7 +490,7 @@ func (m *Map) setHighLayerBitmap(target Bin, _bitmap bitmap) {
 		}
 	}
 
-	m.reserveCells(b.Layer() - preBin.Layer())
+	m.reserveCells(int(b.Layer() - preBin.Layer()))
 
 	for {
 		nr := m.allocCell()
