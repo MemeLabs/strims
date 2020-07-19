@@ -181,6 +181,5 @@ func (t *Tree) Verify(b binmap.Bin, d []byte) bool {
 		}
 	}
 
-	// should be false since we never found a reference hash?
-	return true
+	return false
 }
