@@ -26,7 +26,7 @@ func NewProvisionalTree(t *Tree) *Tree {
 		chunkSize: t.chunkSize,
 		rootBin:   t.rootBin,
 		baseLeft:  t.baseLeft,
-		digests:   make([]byte, int(t.rootBin.BaseLength()*2-1)*t.hash.Size()),
+		digests:   make([]byte, len(t.digests)),
 	}
 }
 
@@ -40,11 +40,12 @@ type Tree struct {
 	chunkSize int
 	// root node of the tree
 	rootBin binmap.Bin
+	// bin of leftmost node
+	baseLeft binmap.Bin
 	// verified bitmask containing nodes the tree knows as verified
 	verified uint64
 	// known hashes to the tree
-	digests  []byte
-	baseLeft binmap.Bin
+	digests []byte
 }
 
 // Reset sets the tree's rootbin and sets the verified bitmask to 0
@@ -72,7 +73,7 @@ func (t *Tree) SetRoot(digest []byte) {
 
 // Set the hash of b to the given data
 func (t *Tree) Set(b binmap.Bin, d []byte) {
-	start := int(b-t.rootBin.BaseLeft()) * t.hash.Size()
+	start := int(b-t.baseLeft) * t.hash.Size()
 	copy(t.digests[start:], d)
 }
 
@@ -123,7 +124,7 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 
 		if ok, verified := t.setOrVerify(l + binmap.Bin(i*2)); !ok {
 			return false, false
-		} else if verified {
+		} else if verified && b.Layer() == 0 {
 			return true, true
 		}
 	}
@@ -139,7 +140,7 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 
 			if ok, verified := t.setOrVerify(j); !ok {
 				return false, false
-			} else if verified && i == b.Layer() {
+			} else if verified && b.Layer() == i {
 				return true, true
 			}
 		}
