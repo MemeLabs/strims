@@ -25,7 +25,6 @@ func (r *Ring) Resize(size uint64) {
 	if r.size&r.mask != 0 {
 		panic("ring size should be power of 2")
 	}
-	return
 }
 
 // Head ...

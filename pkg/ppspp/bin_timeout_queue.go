@@ -55,7 +55,6 @@ func (s *binTimeoutQueue) Push(b binmap.Bin, t time.Time) {
 		Time: t,
 		Bin:  b,
 	}
-	return
 }
 
 // Peek ...

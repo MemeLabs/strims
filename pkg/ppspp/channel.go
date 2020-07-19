@@ -174,7 +174,7 @@ func (c *channel) dequeuePong() *codec.Pong {
 
 	p := &codec.Pong{
 		Nonce: uint64(c.pongNonce),
-		Delay: uint64(time.Now().Sub(c.pongTime)),
+		Delay: uint64(time.Since(c.pongTime)),
 	}
 
 	c.pongNonce = binmap.None
