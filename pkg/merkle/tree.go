@@ -43,8 +43,8 @@ type Tree struct {
 	// verified bitmask containing nodes the tree knows as verified
 	verified uint64
 	// known hashes to the tree
-	digests []byte
-	baseLeft  binmap.Bin
+	digests  []byte
+	baseLeft binmap.Bin
 }
 
 // Reset sets the tree's rootbin and sets the verified bitmask to 0
@@ -130,8 +130,8 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 
 	// iterate through layers from 1 to b's layer
 	for i := uint64(1); i <= b.Layer(); i++ {
-		leftBin = leftBin.Parent()
-		rightBin = rightBin.Parent()
+		l = l.Parent()
+		r = r.Parent()
 		w := binmap.Bin(1 << (i + 1))
 		for j := l; j <= r; j += w {
 			t.hash.Write(t.Get(j.Left()))

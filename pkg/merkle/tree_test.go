@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -29,7 +28,6 @@ func TestVerify(t *testing.T) {
 	assert.True(t, r1.Verify(bin, data), "expected successful validation")
 
 	r0.Merge(r1)
-	spew.Dump(r0)
 }
 
 func TestVerifyForward(t *testing.T) {
@@ -53,9 +51,7 @@ func TestVerifyForward(t *testing.T) {
 	}
 
 	verified := r1.Verify(17, data[8*chunkSize:10*chunkSize])
-
 	assert.True(t, verified)
-	spew.Dump(r)
 }
 
 func TestNoVeriefiedReferenceNode(t *testing.T) {
@@ -79,7 +75,5 @@ func TestNoVeriefiedReferenceNode(t *testing.T) {
 
 	// should return false seince r0 has no hashes to verify against
 	verified := r1.Verify(17, data[8*chunkSize:10*chunkSize])
-
 	assert.False(t, verified)
-	spew.Dump(r)
 }
