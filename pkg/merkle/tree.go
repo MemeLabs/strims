@@ -13,6 +13,7 @@ func NewTree(rootBin binmap.Bin, chunkSize int, h hash.Hash) *Tree {
 		hash:      h,
 		chunkSize: chunkSize,
 		rootBin:   rootBin,
+		baseLeft:  rootBin.BaseLeft(),
 		digests:   make([]byte, int(rootBin.BaseLength()*2-1)*h.Size()),
 	}
 }
@@ -24,6 +25,7 @@ func NewProvisionalTree(t *Tree) *Tree {
 		hash:      t.hash,
 		chunkSize: t.chunkSize,
 		rootBin:   t.rootBin,
+		baseLeft:  t.baseLeft,
 		digests:   make([]byte, int(t.rootBin.BaseLength()*2-1)*t.hash.Size()),
 	}
 }
@@ -42,6 +44,7 @@ type Tree struct {
 	verified uint64
 	// known hashes to the tree
 	digests []byte
+	baseLeft  binmap.Bin
 }
 
 // Reset sets the tree's rootbin and sets the verified bitmask to 0
@@ -75,17 +78,17 @@ func (t *Tree) Set(b binmap.Bin, d []byte) {
 
 // check if the bin is verified
 func (t *Tree) isVerified(b binmap.Bin) bool {
-	return t.verified&(1<<(b-t.rootBin.BaseLeft())) != 0
+	return t.verified&(1<<(b-t.baseLeft)) != 0
 }
 
 // mark the bin as verified
 func (t *Tree) setVerified(b binmap.Bin) {
-	t.verified |= 1 << (b - t.rootBin.BaseLeft())
+	t.verified |= 1 << (b - t.baseLeft)
 }
 
 // Get ...
 func (t *Tree) Get(b binmap.Bin) []byte {
-	i := int(b - t.rootBin.BaseLeft())
+	i := int(b - t.baseLeft)
 	s := t.hash.Size()
 	return t.digests[i*s : (i+1)*s]
 }
@@ -95,6 +98,7 @@ func (t *Tree) setOrVerify(b binmap.Bin) (ok, done bool) {
 	d := t.Get(b)
 	// overwrite the hash of the current node with the one from the hash we calculated
 	t.hash.Sum(d[:0])
+	t.hash.Reset()
 
 	// if we have a parent tree and the parent tree's node with the current index has a verified hash
 	if t.parent != nil && t.parent.isVerified(b) {
@@ -108,18 +112,19 @@ func (t *Tree) setOrVerify(b binmap.Bin) (ok, done bool) {
 	return true, false
 }
 
-// Fill fills the leaf nodes under bin with data and verify that the reference tree doesn't have other hashes for the affected nodes
-func (t *Tree) Fill(b binmap.Bin, data []byte) bool {
-	leftBin := b.BaseLeft()
-	rightBin := b.BaseRight()
+// Fill ...
+func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
+	l := b.BaseLeft()
+	r := b.BaseRight()
 
 	// compute hash of data (leaf) nodes under b from left to right
 	for i := 0; i < int(b.BaseLength()); i++ {
-		t.hash.Reset()
-		t.hash.Write(data[i*t.chunkSize : (i+1)*t.chunkSize])
-		// set hash and verify integrity
-		if ok, _ := t.setOrVerify(leftBin + binmap.Bin(i*2)); !ok {
-			return false
+		t.hash.Write(d[i*t.chunkSize : (i+1)*t.chunkSize])
+
+		if ok, verified := t.setOrVerify(l + binmap.Bin(i*2)); !ok {
+			return false, false
+		} else if verified {
+			return true, true
 		}
 	}
 
@@ -128,25 +133,27 @@ func (t *Tree) Fill(b binmap.Bin, data []byte) bool {
 		leftBin = leftBin.Parent()
 		rightBin = rightBin.Parent()
 		w := binmap.Bin(1 << (i + 1))
-		// move through laery nodes under b from left to right
-		for j := leftBin; j <= rightBin; j += w {
-			t.hash.Reset()
-			// calculate and verify hash
+		for j := l; j <= r; j += w {
 			t.hash.Write(t.Get(j.Left()))
 			t.hash.Write(t.Get(j.Right()))
-			if ok, _ := t.setOrVerify(j); !ok {
-				return false
+
+			if ok, verified := t.setOrVerify(j); !ok {
+				return false, false
+			} else if verified && i == b.Layer() {
+				return true, true
 			}
 		}
 	}
 
-	return true
+	return true, false
 }
 
-// Verify that the hashes of the target tree and it's parent  match if we assign the specified data to the specified bin
-func (t *Tree) Verify(b binmap.Bin, data []byte) bool {
-	if !t.Fill(b, data) {
+// Verify ...
+func (t *Tree) Verify(b binmap.Bin, d []byte) bool {
+	if ok, verified := t.Fill(b, d); !ok {
 		return false
+	} else if verified {
+		return true
 	}
 
 	for b != t.rootBin {

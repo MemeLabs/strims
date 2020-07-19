@@ -8,7 +8,7 @@ import (
 	"os"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -38,7 +38,7 @@ type nativeDriverClient struct {
 
 func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 	file := tempFile()
-	store, err := kv.NewKVStore(file)
+	store, err := bboltkv.NewStore(file)
 	if err != nil {
 		log.Fatalf("failed to open db: %s", err)
 	}
