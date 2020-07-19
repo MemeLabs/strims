@@ -147,7 +147,9 @@ func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 					nn++
 				}
 
-				c.WriteCancel(codec.Cancel{Address: codec.Address(i.Bin())})
+				if _, err := c.WriteCancel(codec.Cancel{Address: codec.Address(i.Bin())}); err != nil {
+					panic(err)
+				}
 			}
 		}
 
@@ -192,14 +194,18 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 			}
 			c.addedBins.Reset(b)
 
-			c.WriteHave(codec.Have{Address: codec.Address(b)})
+			if _, err := c.WriteHave(codec.Have{Address: codec.Address(b)}); err != nil {
+				panic(err)
+			}
 		}
 
 		requestBins, n := r.requestBins(requesteCapacity, s, c.channel)
 		requesteCapacity -= n
 
 		for _, b := range requestBins {
-			c.WriteRequest(codec.Request{Address: codec.Address(b)})
+			if _, err := c.WriteRequest(codec.Request{Address: codec.Address(b)}); err != nil {
+				panic(err)
+			}
 			p.addRequestedChunks(b.BaseLength())
 			c.requestedBinHistory.Push(b, t)
 			p.trackBinRTT(c.id, b, t)
@@ -220,11 +226,13 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 
 			if ok := s.store.ReadBin(rb, b); ok {
 				// TODO: avoid writing data until after this?
-				c.WriteData(codec.Data{
+				if _, err := c.WriteData(codec.Data{
 					Address:   codec.Address(rb),
 					Timestamp: codec.Timestamp{Time: t},
 					Data:      codec.Buffer(b),
-				})
+				}); err != nil {
+					panic(err)
+				}
 
 				// TODO: re-add with merged acks
 				p.trackBinRTT(c.id, rb, t)
@@ -257,7 +265,9 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 func (r *Scheduler) sendPongs(p *Peer, t time.Time) {
 	for _, c := range p.channels {
 		if p := c.dequeuePong(); p != nil {
-			c.WritePong(*p)
+			if _, err := c.WritePong(*p); err != nil {
+				panic(err)
+			}
 		}
 	}
 }
@@ -266,7 +276,9 @@ func (r *Scheduler) sendPeerPing(p *Peer, t time.Time) {
 	for _, c := range p.channels {
 		if c.Dirty() {
 			if nonce, ok := p.trackPingRTT(c.id, t); ok {
-				c.WritePing(codec.Ping{Nonce: codec.Nonce{Value: nonce}})
+				if _, err := c.WritePing(codec.Ping{Nonce: codec.Nonce{Value: nonce}}); err != nil {
+					panic(err)
+				}
 			}
 		}
 	}

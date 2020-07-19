@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"io"
 	"testing"
+
+	"github.com/stretchr/testify/assert"
 )
 
 func TestE2E(t *testing.T) {
@@ -14,7 +16,8 @@ func TestE2E(t *testing.T) {
 	ns := []int{27, 100000, 128}
 
 	for _, n := range ns {
-		w.Write(make([]byte, n))
+		_, err := w.Write(make([]byte, n))
+		assert.Nil(t, err)
 	}
 
 	for _, n := range ns {

@@ -58,7 +58,7 @@ func (m *Mutex) notifyLock(ctx context.Context, ch chan error) {
 		select {
 		case <-ctx.Done():
 			if held {
-				m.Release()
+				ch <- m.Release()
 			} else {
 				ch <- ctx.Err()
 			}

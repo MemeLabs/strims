@@ -46,6 +46,8 @@ func ReadChannelConn(c ReaderMTUer, ch MessageHandler) {
 		if err != nil {
 			panic(err)
 		}
-		ch.HandleMessage(b[:n])
+		if _, err := ch.HandleMessage(b[:n]); err != nil {
+			panic(err)
+		}
 	}
 }

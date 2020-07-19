@@ -60,7 +60,11 @@ func newNetworkBrokerPeer(logger *zap.Logger, c ReadWriteFlusher) *networkBroker
 		keys:         make(chan [][]byte, 1),
 	}
 
-	go p.readInits()
+	go func() {
+		if err := p.readInits(); err != nil {
+			panic(err)
+		}
+	}()
 
 	return p
 }
@@ -283,6 +287,8 @@ type ReadWriteFlusher interface {
 
 func newRNG() (*mpc.AESRNG, error) {
 	var seed [16]byte
-	rand.Read(seed[:])
+	if _, err := rand.Read(seed[:]); err != nil {
+		return nil, err
+	}
 	return mpc.NewAESRNG(seed[:])
 }

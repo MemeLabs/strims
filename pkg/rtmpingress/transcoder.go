@@ -38,14 +38,23 @@ func (h *Transcoder) listen() (err error) {
 	srv := &http.Server{
 		Handler: router,
 	}
-	go srv.Serve(h.lis)
+	go func() {
+		if err := srv.Serve(h.lis); err != nil {
+			panic(err)
+		}
+	}()
 
 	return nil
 }
 
 func (h *Transcoder) handlePlaylist(w http.ResponseWriter, r *http.Request) {
-	io.Copy(ioutil.Discard, r.Body)
-	r.Body.Close()
+	_, err := io.Copy(ioutil.Discard, r.Body)
+	if err != nil {
+		panic(err)
+	}
+	if err := r.Body.Close(); err != nil {
+		panic(err)
+	}
 }
 
 func (h *Transcoder) handleInit(w http.ResponseWriter, r *http.Request) {
@@ -110,7 +119,9 @@ func (h *Transcoder) close(k transcoderKey, cmd *exec.Cmd) {
 		h.lis.Close()
 	}
 
-	cmd.Process.Kill()
+	if err := cmd.Process.Kill(); err != nil {
+		panic(err)
+	}
 
 	// wi, _ := h.writers.Load(k)
 	// wi.(WriteFlushCloser).Close()
@@ -127,7 +138,9 @@ func (h *Transcoder) Transcode(srcURI, key, variant string, w WriteFlushCloser) 
 
 	h.lock.Lock()
 	if h.n == 0 {
-		h.listen()
+		if err := h.listen(); err != nil {
+			return err
+		}
 	}
 	h.n++
 	h.lock.Unlock()
@@ -181,8 +194,15 @@ func relayStdio(cmd *exec.Cmd) error {
 	if err != nil {
 		return err
 	}
-	go io.Copy(os.Stderr, stderr)
-	go io.Copy(os.Stdout, stdout)
+
+	copy := func(w io.Writer, r io.Reader) {
+		if _, err := io.Copy(w, r); err != nil {
+			panic(err)
+		}
+	}
+
+	go copy(os.Stderr, stderr)
+	go copy(os.Stdout, stdout)
 	return nil
 }
 

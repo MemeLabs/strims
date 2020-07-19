@@ -118,9 +118,15 @@ func (c *NetworkController) StartNetwork(cert *pb.Certificate, opts ...NetworkOp
 	peerIndex := vpn.NewPeerIndex(c.logger, network, c.peerIndexStore)
 	peerExchange := vpn.NewPeerExchange(c.logger, network)
 
-	network.SetHandler(vpn.HashTablePort, hashTable)
-	network.SetHandler(vpn.PeerIndexPort, peerIndex)
-	network.SetHandler(vpn.PeerExchangePort, peerExchange)
+	if err := network.SetHandler(vpn.HashTablePort, hashTable); err != nil {
+		return nil, err
+	}
+	if err := network.SetHandler(vpn.PeerIndexPort, peerIndex); err != nil {
+		return nil, err
+	}
+	if err := network.SetHandler(vpn.PeerExchangePort, peerExchange); err != nil {
+		return nil, err
+	}
 
 	svc := &NetworkServices{
 		Host:         c.host,

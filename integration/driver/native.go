@@ -60,12 +60,14 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 	hr, hw := io.Pipe()
 	cr, cw := io.Pipe()
 
-	go host.Handle(context.Background(), cw, hr)
+	go func() {
+		if err := host.Handle(context.Background(), cw, hr); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	client := rpc.NewClient(hw, cr)
-
 	d.clients = append(d.clients, nativeDriverClient{file, client})
-
 	return client
 }
 

@@ -13,7 +13,10 @@ func TestAESRNG(t *testing.T) {
 	}
 
 	var v [16]byte
-	rng.Read(v[:])
+	if _, err := rng.Read(v[:]); err != nil {
+		t.Error("failed to read rng data")
+		t.FailNow()
+	}
 
 	r := [16]byte{181, 112, 57, 74, 222, 107, 231, 247, 116, 218, 250, 128, 240, 47, 242, 146}
 	if v != r {
@@ -33,6 +36,8 @@ func BenchmarkAESRNG(b *testing.B) {
 
 	r := make([]byte, 16)
 	for i := 0; i < b.N; i++ {
-		rng.Read(r)
+		if _, err := rng.Read(r); err != nil {
+			panic(err)
+		}
 	}
 }

@@ -24,12 +24,18 @@ func testOT(
 			panic(err)
 		}
 		for i := 0; i < n; i++ {
-			rng.Read(values[i][0][:])
-			rng.Read(values[i][1][:])
+			if _, err := rng.Read(values[i][0][:]); err != nil {
+				return err
+			}
+			if _, err := rng.Read(values[i][1][:]); err != nil {
+				return err
+			}
 		}
 
 		tmp := make([]byte, (n+7)/8)
-		rng.Read(tmp)
+		if _, err := rng.Read(tmp); err != nil {
+			return err
+		}
 		receive = boolsFromBytes(tmp)[:n]
 	}
 

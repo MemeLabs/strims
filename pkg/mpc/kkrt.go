@@ -7,11 +7,15 @@ import (
 // NewKKRTSender ...
 func NewKKRTSender(c Conn, ot OTReceiver, rng io.Reader) (*KKRTSender, error) {
 	var sb [64]byte
-	rng.Read(sb[:])
+	if _, err := rng.Read(sb[:]); err != nil {
+		return nil, err
+	}
 	s := boolsFromBytes(sb[:])
 	var seeds [4]Block
 	for i := 0; i < 4; i++ {
-		rng.Read(seeds[i][:])
+		if _, err := rng.Read(seeds[i][:]); err != nil {
+			return nil, err
+		}
 	}
 	keys, err := cointossSend(c, seeds[:])
 	if err != nil {
@@ -62,7 +66,9 @@ func (k *KKRTSender) Send(
 	qs := make([]byte, nrows*ncols/8)
 	for i, b := range k.s {
 		q := qs[i*nrows/8 : (i+1)*nrows/8]
-		k.rngs[i].Read(q)
+		if _, err := k.rngs[i].Read(q); err != nil {
+			return nil, err
+		}
 		if _, err := io.ReadFull(conn, t0); err != nil {
 			return nil, err
 		}
@@ -101,7 +107,9 @@ func (k *KKRTSender) Encode(dst *Block512, src Block) {
 func NewKKRTReceiver(c Conn, ot OTSender, rng io.Reader) (*KKRTReceiver, error) {
 	var seeds [4]Block
 	for i := 0; i < 4; i++ {
-		rng.Read(seeds[i][:])
+		if _, err := rng.Read(seeds[i][:]); err != nil {
+			return nil, err
+		}
 	}
 	keys, err := cointossReceive(c, seeds[:])
 	if err != nil {
@@ -114,8 +122,12 @@ func NewKKRTReceiver(c Conn, ot OTSender, rng io.Reader) (*KKRTReceiver, error) 
 
 	ks := make([][2]Block, 512)
 	for i := 0; i < 512; i++ {
-		rng.Read(ks[i][0][:])
-		rng.Read(ks[i][1][:])
+		if _, err := rng.Read(ks[i][0][:]); err != nil {
+			return nil, err
+		}
+		if _, err := rng.Read(ks[i][1][:]); err != nil {
+			return nil, err
+		}
 	}
 	if err := ot.Send(c, ks, rng); err != nil {
 		return nil, err
@@ -156,7 +168,9 @@ func (k *KKRTReceiver) Receive(
 	nrows = padMatrix(nrows, ncols)
 
 	t0s := make([]byte, nrows*ncols/8)
-	rng.Read(t0s)
+	if _, err := rng.Read(t0s); err != nil {
+		return nil, err
+	}
 	out := make([]Block512, nrows)
 	for i := 0; i < nrows; i++ {
 		copy(out[i][:], t0s[i*ncols/8:])
@@ -176,13 +190,17 @@ func (k *KKRTReceiver) Receive(
 	t := make([]byte, nrows/8)
 	for i, rngs := range k.rngs {
 		t0 := t0s[i*nrows/8 : (i+1)*nrows/8]
-		rngs[0].Read(t)
+		if _, err := rngs[0].Read(t); err != nil {
+			return nil, err
+		}
 		xorBytes(t, t, t0)
 		if _, err := conn.Write(t); err != nil {
 			return nil, err
 		}
 		t1 := t1s[i*nrows/8 : (i+1)*nrows/8]
-		rngs[1].Read(t)
+		if _, err := rngs[1].Read(t); err != nil {
+			return nil, err
+		}
 		xorBytes(t, t, t1)
 		if _, err := conn.Write(t); err != nil {
 			return nil, err

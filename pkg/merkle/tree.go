@@ -103,7 +103,10 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 	r := b.BaseRight()
 
 	for i := 0; i < int(b.BaseLength()); i++ {
-		t.hash.Write(d[i*t.chunkSize : (i+1)*t.chunkSize])
+		if _, err := t.hash.Write(d[i*t.chunkSize : (i+1)*t.chunkSize]); err != nil {
+			panic(err)
+			// return false, false
+		}
 
 		if ok, verified := t.setOrVerify(l + binmap.Bin(i*2)); !ok {
 			return false, false
@@ -117,8 +120,12 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 		r = r.Parent()
 		w := binmap.Bin(1 << (i + 1))
 		for j := l; j <= r; j += w {
-			t.hash.Write(t.Get(j.Left()))
-			t.hash.Write(t.Get(j.Right()))
+			if _, err := t.hash.Write(t.Get(j.Left())); err != nil {
+				panic(err)
+			}
+			if _, err := t.hash.Write(t.Get(j.Right())); err != nil {
+				panic(err)
+			}
 
 			if ok, verified := t.setOrVerify(j); !ok {
 				return false, false
@@ -141,11 +148,19 @@ func (t *Tree) Verify(b binmap.Bin, d []byte) bool {
 
 	for b != t.rootBin {
 		if b.IsLeft() {
-			t.hash.Write(t.Get(b))
-			t.hash.Write(t.Get(b.Sibling()))
+			if _, err := t.hash.Write(t.Get(b)); err != nil {
+				panic(err)
+			}
+			if _, err := t.hash.Write(t.Get(b.Sibling())); err != nil {
+				panic(err)
+			}
 		} else {
-			t.hash.Write(t.Get(b.Sibling()))
-			t.hash.Write(t.Get(b))
+			if _, err := t.hash.Write(t.Get(b.Sibling())); err != nil {
+				panic(err)
+			}
+			if _, err := t.hash.Write(t.Get(b)); err != nil {
+				panic(err)
+			}
 		}
 		t.setVerified(b.Sibling())
 
