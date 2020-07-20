@@ -253,7 +253,7 @@ func TestSwarmSim(t *testing.T) {
 			// }()
 
 			if _, err := io.CopyN(&w, clients[i].swarm.Reader(), 5000000); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 		}(i)
 	}

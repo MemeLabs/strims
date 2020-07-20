@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	"log"
 	"sync"
 	"testing"
 	"time"
@@ -74,7 +75,7 @@ func TestSwarmE2E(t *testing.T) {
 		b := make([]byte, 75000)
 		for range tc {
 			if _, err := src.Write(b); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 		}
 	}()

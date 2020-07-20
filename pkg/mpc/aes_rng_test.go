@@ -1,6 +1,7 @@
 package mpc
 
 import (
+	"log"
 	"testing"
 )
 
@@ -37,7 +38,7 @@ func BenchmarkAESRNG(b *testing.B) {
 	r := make([]byte, 16)
 	for i := 0; i < b.N; i++ {
 		if _, err := rng.Read(r); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 	}
 }

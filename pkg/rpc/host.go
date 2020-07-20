@@ -124,19 +124,19 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 
 			if !ok {
 				if err := call(ctx, c, callbackMethod, &pb.Close{}, withParentID(m.Id)); err != nil {
-					panic(err)
+					log.Println(err)
 				}
 				return
 			}
 			if err := call(ctx, c, callbackMethod, v.Interface().(proto.Message), withParentID(m.Id)); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 		}
 	}
 
 	if a, ok := rs[0].Interface().(proto.Message); ok {
 		if err := call(ctx, c, callbackMethod, a, withParentID(m.Id)); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 	}
 }
