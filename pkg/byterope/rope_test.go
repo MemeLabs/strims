@@ -27,9 +27,7 @@ func TestCopy(t *testing.T) {
 	r := New(x, y, z)
 
 	firstHalf := make([]byte, r.Len()/2)
-	n := New(firstHalf).Copy(r...)
-	if n != len(firstHalf) {
-	}
+	New(firstHalf).Copy(r...)
 	check(t, firstHalf, []byte("first chunk of filesecond chu"))
 }
 

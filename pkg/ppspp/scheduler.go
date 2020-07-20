@@ -246,15 +246,15 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 			}
 		}
 
-		if atomic.LoadInt64(&r.sent) > 100 {
-			// r.logger.Debug(
-			// 	"data",
-			// 	zap.Int("sent", nw),
-			// 	zap.Int("missing", no),
-			// 	zap.Int("flightSize", p.ledbat.FlightSize()),
-			// 	zap.Int("cwnd", p.ledbat.CWND()),
-			// )
-		}
+		//if atomic.LoadInt64(&r.sent) > 100 {
+		// r.logger.Debug(
+		// 	"data",
+		// 	zap.Int("sent", nw),
+		// 	zap.Int("missing", no),
+		// 	zap.Int("flightSize", p.ledbat.FlightSize()),
+		// 	zap.Int("cwnd", p.ledbat.CWND()),
+		// )
+		//}
 
 		pool.Put(b)
 
@@ -309,15 +309,15 @@ func (r *Scheduler) peerRequestCapacity(p *Peer) int {
 		capacity = planForIntervals * 120
 	}
 
-	if chunkInterval != 0 {
-		// r.logger.Debug(
-		// 	"capacity",
-		// 	zap.Int("capacity", capacity),
-		// 	zap.Duration("p.ledbat.RTTMean()", p.ledbat.RTTMean()),
-		// 	zap.Duration("planforDuration", planForDuration),
-		// 	zap.Duration("chunkInterval", chunkInterval),
-		// )
-	}
+	//if chunkInterval != 0 {
+	// r.logger.Debug(
+	// 	"capacity",
+	// 	zap.Int("capacity", capacity),
+	// 	zap.Duration("p.ledbat.RTTMean()", p.ledbat.RTTMean()),
+	// 	zap.Duration("planforDuration", planForDuration),
+	// 	zap.Duration("chunkInterval", chunkInterval),
+	// )
+	//}
 
 	return capacity
 }

@@ -58,6 +58,10 @@ func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubSer
 		HostId: svc.Host.ID().Bytes(nil),
 		Port:   uint32(port),
 	})
+	if err != nil {
+		cancel()
+		return nil, err
+	}
 	_, err = svc.HashTable.Set(ctx, key, salt, b)
 	if err != nil {
 		cancel()

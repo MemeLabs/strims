@@ -54,7 +54,7 @@ func handleCancel(c *conn, m *pb.Call) {
 
 func readCall(r io.Reader) (*pb.Call, error) {
 	b := readBuffers.Get().([]byte)
-	defer readBuffers.Put(b)
+	defer readBuffers.Put(&b)
 
 	l, err := binary.ReadUvarint(bytereader.New(r))
 	if err != nil {
