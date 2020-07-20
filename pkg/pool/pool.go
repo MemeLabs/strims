@@ -46,8 +46,8 @@ func (p *Pool) Get(size uint16) (b []byte) {
 // Put ...
 func (p *Pool) Put(b []byte) {
 	if i := bits.LeadingZeros16(uint16(cap(b))); i < p.n {
-		p.zones[i].Put(b)
+		p.zones[i].Put(&b)
 	} else {
-		p.zones[p.n-1].Put(b)
+		p.zones[p.n-1].Put(&b)
 	}
 }

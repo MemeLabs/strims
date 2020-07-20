@@ -63,6 +63,9 @@ func (p *PSZSender) Send(
 		return err
 	}
 	seeds, err := p.oprf.Send(conn, nbins, rng)
+	if err != nil {
+		return err
+	}
 
 	indices := make([]int, len(inputs))
 	for i := range inputs {
