@@ -36,7 +36,7 @@ func newManager(logger *zap.Logger) (*manager, error) {
 	}
 
 	t := &manager{
-		RPCService: rpc.NewHost(svc),
+		RPCService: rpc.NewHost(logger, svc),
 	}
 
 	return t, nil

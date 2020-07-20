@@ -173,7 +173,7 @@ func (c *channel) dequeuePong() *codec.Pong {
 	}
 
 	p := &codec.Pong{
-		Nonce: uint64(c.pongNonce),
+		Nonce: codec.Nonce{Value: uint64(c.pongNonce)},
 		Delay: uint64(time.Since(c.pongTime)),
 	}
 
@@ -258,6 +258,18 @@ func (c *channelWriter) WriteData(m codec.Data) (int, error) {
 	c.metrics.DataCount.Inc()
 	c.dirty = true
 	return c.w.WriteData(m)
+}
+
+func (c *channelWriter) WriteIntegrity(m codec.Integrity) (int, error) {
+	c.metrics.IntegrityCount.Inc()
+	c.dirty = true
+	return c.w.WriteIntegrity(m)
+}
+
+func (c *channelWriter) WriteSignedIntegrity(m codec.SignedIntegrity) (int, error) {
+	c.metrics.SignedIntegrityCount.Inc()
+	c.dirty = true
+	return c.w.WriteSignedIntegrity(m)
 }
 
 func (c *channelWriter) WriteRequest(m codec.Request) (int, error) {
@@ -403,6 +415,14 @@ func (c *channelMessageHandler) HandleData(v codec.Data) {
 	c.peer.addRTTSample(c.channel.id, v.Address.Bin(), 0)
 }
 
+func (c *channelMessageHandler) HandleIntegrity(v codec.Integrity) {
+	c.metrics.IntegrityCount.Inc()
+}
+
+func (c *channelMessageHandler) HandleSignedIntegrity(v codec.SignedIntegrity) {
+	c.metrics.SignedIntegrityCount.Inc()
+}
+
 func (c *channelMessageHandler) HandleAck(v codec.Ack) {
 	c.metrics.AckCount.Inc()
 
@@ -447,46 +467,52 @@ func (c *channelMessageHandler) HandlePing(v codec.Ping) {
 
 func (c *channelMessageHandler) HandlePong(v codec.Pong) {
 	c.metrics.PongCount.Inc()
-	// c.peer.addRTTSample(c.channel.id, binmap.Bin(v.Nonce), time.Duration(v.Delay))
-	c.peer.addRTTSample(c.channel.id, binmap.Bin(v.Nonce), 0)
+	// c.peer.addRTTSample(c.channel.id, binmap.Bin(v.Nonce.Value), time.Duration(v.Delay))
+	c.peer.addRTTSample(c.channel.id, binmap.Bin(v.Nonce.Value), 0)
 }
 
 func newChannelMetrics(channel *channel, direction string) channelMetrics {
 	id := strconv.FormatUint(channel.id, 10)
 	return channelMetrics{
-		id:             id,
-		direction:      direction,
-		HandshakeCount: channelMessageCount.WithLabelValues(id, direction, "handshake"),
-		DataCount:      channelMessageCount.WithLabelValues(id, direction, "data"),
-		AckCount:       channelMessageCount.WithLabelValues(id, direction, "ack"),
-		HaveCount:      channelMessageCount.WithLabelValues(id, direction, "have"),
-		RequestCount:   channelMessageCount.WithLabelValues(id, direction, "request"),
-		CancelCount:    channelMessageCount.WithLabelValues(id, direction, "cancel"),
-		ChokeCount:     channelMessageCount.WithLabelValues(id, direction, "choke"),
-		UnchokeCount:   channelMessageCount.WithLabelValues(id, direction, "unchoke"),
-		PingCount:      channelMessageCount.WithLabelValues(id, direction, "ping"),
-		PongCount:      channelMessageCount.WithLabelValues(id, direction, "pong"),
+		id:                   id,
+		direction:            direction,
+		HandshakeCount:       channelMessageCount.WithLabelValues(id, direction, "handshake"),
+		DataCount:            channelMessageCount.WithLabelValues(id, direction, "data"),
+		IntegrityCount:       channelMessageCount.WithLabelValues(id, direction, "integrity"),
+		SignedIntegrityCount: channelMessageCount.WithLabelValues(id, direction, "signed_integrity"),
+		AckCount:             channelMessageCount.WithLabelValues(id, direction, "ack"),
+		HaveCount:            channelMessageCount.WithLabelValues(id, direction, "have"),
+		RequestCount:         channelMessageCount.WithLabelValues(id, direction, "request"),
+		CancelCount:          channelMessageCount.WithLabelValues(id, direction, "cancel"),
+		ChokeCount:           channelMessageCount.WithLabelValues(id, direction, "choke"),
+		UnchokeCount:         channelMessageCount.WithLabelValues(id, direction, "unchoke"),
+		PingCount:            channelMessageCount.WithLabelValues(id, direction, "ping"),
+		PongCount:            channelMessageCount.WithLabelValues(id, direction, "pong"),
 	}
 }
 
 type channelMetrics struct {
-	id             string
-	direction      string
-	HandshakeCount prometheus.Counter
-	DataCount      prometheus.Counter
-	AckCount       prometheus.Counter
-	HaveCount      prometheus.Counter
-	RequestCount   prometheus.Counter
-	CancelCount    prometheus.Counter
-	ChokeCount     prometheus.Counter
-	UnchokeCount   prometheus.Counter
-	PingCount      prometheus.Counter
-	PongCount      prometheus.Counter
+	id                   string
+	direction            string
+	HandshakeCount       prometheus.Counter
+	DataCount            prometheus.Counter
+	IntegrityCount       prometheus.Counter
+	SignedIntegrityCount prometheus.Counter
+	AckCount             prometheus.Counter
+	HaveCount            prometheus.Counter
+	RequestCount         prometheus.Counter
+	CancelCount          prometheus.Counter
+	ChokeCount           prometheus.Counter
+	UnchokeCount         prometheus.Counter
+	PingCount            prometheus.Counter
+	PongCount            prometheus.Counter
 }
 
 func (m *channelMetrics) Delete() {
 	channelMessageCount.DeleteLabelValues(m.id, m.direction, "handshake")
 	channelMessageCount.DeleteLabelValues(m.id, m.direction, "data")
+	channelMessageCount.DeleteLabelValues(m.id, m.direction, "integrity")
+	channelMessageCount.DeleteLabelValues(m.id, m.direction, "signed_integrity")
 	channelMessageCount.DeleteLabelValues(m.id, m.direction, "ack")
 	channelMessageCount.DeleteLabelValues(m.id, m.direction, "have")
 	channelMessageCount.DeleteLabelValues(m.id, m.direction, "request")

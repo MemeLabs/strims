@@ -1,4 +1,4 @@
-//+ build js,wasm
+// +build js,wasm
 // +build !codeanalysis
 
 // SEE: https://github.com/aaronpowell/webpack-golang-wasm-async-loader/blob/master/gobridge/gobridge.go

@@ -29,7 +29,7 @@ func NewCertificateRequest(key *pb.Key, keyUsage pb.KeyUsage) (*pb.CertificateRe
 		KeyUsage: uint32(keyUsage),
 	}
 
-	reqBytes := serializeCertificateRequest(csr)
+	reqBytes, _ := serializeCertificateRequest(csr)
 
 	switch key.Type {
 	case pb.KeyType_KEY_TYPE_ED25519:
@@ -49,7 +49,7 @@ func VerifyCertificateRequest(csr *pb.CertificateRequest, usage pb.KeyUsage) err
 		return ErrUnsupportedKeyUsage
 	}
 
-	reqBytes := serializeCertificateRequest(csr)
+	reqBytes, _ := serializeCertificateRequest(csr)
 
 	var validSig bool
 	switch csr.KeyType {
@@ -88,7 +88,7 @@ func SignCertificateRequest(
 		return nil, err
 	}
 
-	certBytes := serializeCertificate(cert)
+	certBytes, _ := serializeCertificate(cert)
 
 	switch key.Type {
 	case pb.KeyType_KEY_TYPE_ED25519:
@@ -115,7 +115,7 @@ func VerifyCertificate(cert *pb.Certificate) error {
 			return ErrUnsupportedKeyUsage
 		}
 
-		certBytes := serializeCertificate(cert)
+		certBytes, _ := serializeCertificate(cert)
 
 		var validSig bool
 		switch signingCert.KeyType {
@@ -162,7 +162,7 @@ func CertIsExpired(cert *pb.Certificate) bool {
 }
 
 // serializeCertificate returns a stable byte representation of a certificate
-func serializeCertificate(cert *pb.Certificate) []byte {
+func serializeCertificate(cert *pb.Certificate) ([]byte, int) {
 	b := make([]byte, 24+len(cert.Key)+len(cert.SerialNumber))
 
 	n := copy(b, cert.Key)
@@ -176,11 +176,11 @@ func serializeCertificate(cert *pb.Certificate) []byte {
 	n += 8
 	n += copy(b[n:], cert.SerialNumber)
 
-	return b
+	return b, n
 }
 
 // serializeCertificateRequest returns a stable byte representation of a certificate request
-func serializeCertificateRequest(csr *pb.CertificateRequest) []byte {
+func serializeCertificateRequest(csr *pb.CertificateRequest) ([]byte, int) {
 	b := make([]byte, 8+len(csr.Key))
 
 	n := copy(b, csr.Key)
@@ -189,5 +189,5 @@ func serializeCertificateRequest(csr *pb.CertificateRequest) []byte {
 	binary.BigEndian.PutUint32(b[n:], csr.KeyUsage)
 	n += 4
 
-	return b
+	return b, n
 }

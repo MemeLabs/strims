@@ -16,10 +16,6 @@ func (m MessageType) String() string {
 		return "Have"
 	case IntegrityMessage:
 		return "Integrity"
-	case PExResV4Message:
-		return "PExResV4"
-	case PExReqMessage:
-		return "PExReq"
 	case SignedIntegrityMessage:
 		return "SignedIntegrity"
 	case RequestMessage:
@@ -30,18 +26,10 @@ func (m MessageType) String() string {
 		return "Choke"
 	case UnchokeMessage:
 		return "Unchoke"
-	case PExResV6Message:
-		return "PExResV6"
-	case PExResCertMessage:
-		return "PExResCert"
 	case PingMessage:
 		return "Ping"
 	case PongMessage:
 		return "Pong"
-	case PExResURIMessage:
-		return "PExResURI"
-	case DHTRelayMessage:
-		return "DHTRelay"
 	case EndMessage:
 		return "End"
 	}
@@ -55,19 +43,13 @@ const (
 	AckMessage
 	HaveMessage
 	IntegrityMessage
-	PExResV4Message
-	PExReqMessage
 	SignedIntegrityMessage
 	RequestMessage
 	CancelMessage
 	ChokeMessage
 	UnchokeMessage
-	PExResV6Message
-	PExResCertMessage
 	PingMessage
 	PongMessage
-	PExResURIMessage
-	DHTRelayMessage
 	EndMessage MessageType = 255
 )
 

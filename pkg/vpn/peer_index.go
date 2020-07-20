@@ -524,9 +524,9 @@ func signPeerIndexRecord(r *pb.PeerIndexMessage_Record, key *pb.Key) error {
 	m := peerIndexMarshaler{r}
 	b := pool.Get(uint16(m.Size()))
 	defer pool.Put(b)
-	m.Marshal(b)
+	m.Marshal(*b)
 
-	r.Signature = ed25519.Sign(ed25519.PrivateKey(key.Private), b)
+	r.Signature = ed25519.Sign(ed25519.PrivateKey(key.Private), *b)
 	return nil
 }
 
@@ -534,10 +534,10 @@ func verifyPeerIndexRecord(r *pb.PeerIndexMessage_Record) bool {
 	m := peerIndexMarshaler{r}
 	b := pool.Get(uint16(m.Size()))
 	defer pool.Put(b)
-	m.Marshal(b)
+	m.Marshal(*b)
 
 	if len(r.Key) != ed25519.PublicKeySize {
 		return false
 	}
-	return ed25519.Verify(r.Key, b, r.Signature)
+	return ed25519.Verify(r.Key, *b, r.Signature)
 }

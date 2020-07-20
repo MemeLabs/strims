@@ -158,7 +158,7 @@ type NetworkOption func(svc *NetworkServices) error
 // WithOwnerServices ...
 func WithOwnerServices(logger *zap.Logger, store *dao.ProfileStore, network *pb.Network) NetworkOption {
 	return func(svc *NetworkServices) error {
-		lock := dao.NewMutex(store, []byte(fmt.Sprintf("network:%d", network.Id)))
+		lock := dao.NewMutex(logger, store, []byte(fmt.Sprintf("network:%d", network.Id)))
 
 		directory, err := NewDirectoryServer(logger, lock, svc, network.Key)
 		if err != nil {

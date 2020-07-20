@@ -2,9 +2,7 @@ package ppspp
 
 import (
 	"context"
-	"log"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
@@ -108,7 +106,7 @@ func (r *Scheduler) runPeer(p *Peer, t time.Time) {
 	r.sendPeerPing(p, t)
 
 	// if err := w.Flush(); err != nil {
-	// 	log.Println(err)
+	// 	r.logger.Debug("flush failed", zap.Error(err))
 	// }
 
 	// TODO: only flush/push the last
@@ -149,7 +147,7 @@ func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 				}
 
 				if _, err := c.WriteCancel(codec.Cancel{Address: codec.Address(i.Bin())}); err != nil {
-					log.Println(err)
+					r.logger.Debug("write failed", zap.Error(err))
 				}
 			}
 		}
@@ -196,7 +194,7 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 			c.addedBins.Reset(b)
 
 			if _, err := c.WriteHave(codec.Have{Address: codec.Address(b)}); err != nil {
-				log.Println(err)
+				r.logger.Debug("write failed", zap.Error(err))
 			}
 		}
 
@@ -205,14 +203,15 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 
 		for _, b := range requestBins {
 			if _, err := c.WriteRequest(codec.Request{Address: codec.Address(b)}); err != nil {
-				log.Println(err)
+				r.logger.Debug("write failed", zap.Error(err))
 			}
 			p.addRequestedChunks(b.BaseLength())
 			c.requestedBinHistory.Push(b, t)
 			p.trackBinRTT(c.id, b, t)
 		}
 
-		b := pool.Get(uint16(s.chunkSize()))
+		maxChunksPerData := 8
+		b := pool.Get(uint16(maxChunksPerData * s.chunkSize()))
 
 		var nw, no int
 		// TODO: rlock s.chunks here
@@ -222,17 +221,21 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 			if rb.IsNone() {
 				break
 			}
-			rb = rb.BaseLeft()
+			// TODO: limit with CWND/MTU/free bytes in frame
+			for int(rb.BaseLength()) > maxChunksPerData {
+				rb = rb.Left()
+			}
+			// rb = rb.BaseLeft()
 			c.requestedBins.Reset(rb)
 
-			if ok := s.store.ReadBin(rb, b); ok {
+			if ok := s.store.ReadBin(rb, *b); ok {
 				// TODO: avoid writing data until after this?
 				if _, err := c.WriteData(codec.Data{
 					Address:   codec.Address(rb),
 					Timestamp: codec.Timestamp{Time: t},
-					Data:      codec.Buffer(b),
+					Data:      codec.Buffer((*b)[:int(rb.BaseLength())*s.chunkSize()]),
 				}); err != nil {
-					log.Println(err)
+					r.logger.Debug("write failed", zap.Error(err))
 				}
 
 				// TODO: re-add with merged acks
@@ -241,7 +244,7 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 				// c.unackedBins.Set(rb)
 				// c.sentBinHistory.Push(rb, t)
 				nw++
-				atomic.AddInt64(&r.sent, 1)
+				// atomic.AddInt64(&r.sent, 1)
 			} else {
 				no++
 			}
@@ -267,7 +270,7 @@ func (r *Scheduler) sendPongs(p *Peer, t time.Time) {
 	for _, c := range p.channels {
 		if p := c.dequeuePong(); p != nil {
 			if _, err := c.WritePong(*p); err != nil {
-				log.Println(err)
+				r.logger.Debug("write failed", zap.Error(err))
 			}
 		}
 	}
@@ -278,7 +281,7 @@ func (r *Scheduler) sendPeerPing(p *Peer, t time.Time) {
 		if c.Dirty() {
 			if nonce, ok := p.trackPingRTT(c.id, t); ok {
 				if _, err := c.WritePing(codec.Ping{Nonce: codec.Nonce{Value: nonce}}); err != nil {
-					log.Println(err)
+					r.logger.Debug("write failed", zap.Error(err))
 				}
 			}
 		}

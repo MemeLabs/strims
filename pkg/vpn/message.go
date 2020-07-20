@@ -195,11 +195,11 @@ func (m Message) WriteTo(w io.Writer, host *Host) (int64, error) {
 	b := pool.Get(uint16(m.Size()))
 	defer pool.Put(b)
 
-	n, err := m.Marshal(b, host)
+	n, err := m.Marshal(*b, host)
 	if err != nil {
 		return 0, err
 	}
-	if _, err = w.Write(b[:n]); err != nil {
+	if _, err = w.Write((*b)[:n]); err != nil {
 		return 0, err
 	}
 	return int64(n), nil

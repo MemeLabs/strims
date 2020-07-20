@@ -580,7 +580,7 @@ func (n *Network) callHandler(m *Message) (bool, error) {
 func (n *Network) sendMessage(m *Message) error {
 	b := pool.Get(uint16(m.Size()))
 	defer pool.Put(b)
-	if _, err := m.Marshal(b, n.host); err != nil {
+	if _, err := m.Marshal(*b, n.host); err != nil {
 		return err
 	}
 
@@ -598,7 +598,7 @@ func (n *Network) sendMessage(m *Message) error {
 			continue
 		}
 
-		if _, err := l.WriteFrame(b); err != nil {
+		if _, err := l.WriteFrame(*b); err != nil {
 			n.logger.Debug("failed to write frame", zap.Error(err))
 		}
 

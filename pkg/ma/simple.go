@@ -66,7 +66,12 @@ func (s *Simple) Value() uint64 {
 
 // Interval ...
 func (s *Simple) Interval() time.Duration {
-	s.advance(time.Now())
+	return s.IntervalWithTime(time.Now())
+}
+
+// IntervalWithTime ...
+func (s *Simple) IntervalWithTime(t time.Time) time.Duration {
+	s.advance(t)
 
 	if s.v == 0 {
 		return 0
@@ -76,7 +81,12 @@ func (s *Simple) Interval() time.Duration {
 
 // SampleInterval ...
 func (s *Simple) SampleInterval() time.Duration {
-	s.advance(time.Now())
+	return s.SampleIntervalWithTime(time.Now())
+}
+
+// SampleIntervalWithTime ...
+func (s *Simple) SampleIntervalWithTime(t time.Time) time.Duration {
+	s.advance(t)
 
 	if s.n == 0 {
 		return 0

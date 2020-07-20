@@ -52,13 +52,14 @@ func (f *FrameHeader) Unmarshal(b []byte) int {
 type Frame struct {
 	Header FrameHeader
 	Body   []byte
+	body   *[]byte
 }
 
 // WriteTo ...
 func (f Frame) WriteTo(w io.Writer) (int64, error) {
 	b := pool.Get(frameHeaderLen + f.Header.Length)
-	n := f.Marshal(b)
-	_, err := w.Write(b[:n])
+	n := f.Marshal(*b)
+	_, err := w.Write(*b)
 	pool.Put(b)
 	return int64(n), err
 }
@@ -75,7 +76,8 @@ func (f *Frame) ReadFrom(r io.Reader) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	f.Body = pool.Get(f.Header.Length)
+	f.body = pool.Get(f.Header.Length)
+	f.Body = *f.body
 	bn, err := io.ReadFull(r, f.Body)
 	return hn + int64(bn), err
 }
@@ -90,7 +92,8 @@ func (f *Frame) Unmarshal(b []byte) int {
 
 // Free ...
 func (f *Frame) Free() {
-	pool.Put(f.Body)
+	pool.Put(f.body)
+	f.body = nil
 	f.Body = nil
 }
 

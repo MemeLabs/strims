@@ -27,6 +27,7 @@ import (
 	"github.com/docker/docker/client"
 	"github.com/docker/go-connections/nat"
 	"github.com/gorilla/websocket"
+	"go.uber.org/zap"
 )
 
 const (
@@ -40,15 +41,20 @@ const (
 
 // NewWeb ...
 func NewWeb() (Driver, error) {
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		return nil, err
+	}
+
 	d := &webDriver{}
 
 	d.sig = make(chan os.Signal)
 	signal.Notify(d.sig, syscall.SIGINT, syscall.SIGTERM)
 
-	d.bridge = newTestClientBridgeServer()
+	d.bridge = newTestClientBridgeServer(logger)
 	go func() {
 		if err := d.bridge.Run(); err != nil {
-			log.Println(err)
+			log.Println("client bridge failed", err)
 		}
 	}()
 
@@ -112,19 +118,21 @@ func (d *webDriver) Close() {
 		for _, c := range d.clients {
 			c.devClient.Stop()
 			if err := c.chrome.Stop(); err != nil {
-				log.Println(err)
+				log.Println("closing chrome failed", err)
 			}
 		}
 	})
 }
 
-func newTestClientBridgeServer() *testClientBridgeServer {
+func newTestClientBridgeServer(logger *zap.Logger) *testClientBridgeServer {
 	return &testClientBridgeServer{
+		logger:  logger,
 		Clients: make(chan *rpc.Client, 1),
 	}
 }
 
 type testClientBridgeServer struct {
+	logger   *zap.Logger
 	upgrader websocket.Upgrader
 	server   http.Server
 	Clients  chan *rpc.Client
@@ -152,7 +160,7 @@ func (t *testClientBridgeServer) handleRequest(w http.ResponseWriter, r *http.Re
 	}
 
 	rw := vpn.NewWSReadWriter(c)
-	client := rpc.NewClient(rw, rw)
+	client := rpc.NewClient(t.logger, rw, rw)
 
 	t.Clients <- client
 

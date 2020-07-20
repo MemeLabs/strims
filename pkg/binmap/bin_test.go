@@ -12,11 +12,11 @@ func TestInitGet(t *testing.T) {
 
 	assert.Equal(0x1, int(NewBin(1, 0)))
 	assert.Equal(0xB, int(NewBin(2, 1)))
-	assert.Equal(uint64(0x2), NewBin(2, 1).Layer())
-	assert.Equal(uint64(0x22), NewBin(34, 2345).Layer())
+	assert.Equal(uint64(2), NewBin(2, 1).Layer())
+	assert.Equal(uint64(34), NewBin(34, 2345).Layer())
 	assert.Equal(0x7ffffffff, int(NewBin(34, 2345).LayerBits()))
-	assert.Equal(uint64(0x1), NewBin(2, 1).LayerOffset())
-	assert.Equal(uint64(0x929), NewBin(34, 2345).LayerOffset())
+	assert.Equal(uint64(1), NewBin(2, 1).LayerOffset())
+	assert.Equal(uint64(2345), NewBin(34, 2345).LayerOffset())
 	assert.Equal((1<<1)-1, int(NewBin(0, 123).LayerBits()))
 	assert.Equal((1<<17)-1, int(NewBin(16, 123).LayerBits()))
 }

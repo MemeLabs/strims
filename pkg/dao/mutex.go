@@ -12,6 +12,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"go.uber.org/zap"
 )
 
 // ErrLockBusy ...
@@ -23,22 +24,24 @@ const mutexRecheckMinInterval = 20 * time.Second
 const mutexRecheckMaxInterval = 40 * time.Second
 
 // NewMutex ...
-func NewMutex(store *ProfileStore, key []byte) *Mutex {
+func NewMutex(logger *zap.Logger, store *ProfileStore, key []byte) *Mutex {
 	token := make([]byte, 8)
 	binary.BigEndian.PutUint64(token, rand.Uint64())
 
 	return &Mutex{
-		store: store,
-		key:   fmt.Sprintf("mutex:%x", key),
-		token: token,
+		logger: logger,
+		store:  store,
+		key:    fmt.Sprintf("mutex:%x", key),
+		token:  token,
 	}
 }
 
 // Mutex ...
 type Mutex struct {
-	store *ProfileStore
-	key   string
-	token []byte
+	logger *zap.Logger
+	store  *ProfileStore
+	key    string
+	token  []byte
 }
 
 // Lock ...
@@ -58,7 +61,9 @@ func (m *Mutex) notifyLock(ctx context.Context, ch chan error) {
 		select {
 		case <-ctx.Done():
 			if held {
-				ch <- m.Release()
+				if err := m.Release(); err != nil {
+					m.logger.Debug("releasing mutex failed", zap.Error(err))
+				}
 			} else {
 				ch <- ctx.Err()
 			}

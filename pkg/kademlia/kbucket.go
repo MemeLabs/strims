@@ -85,13 +85,11 @@ func (k *KBucket) Insert(n Interface) bool {
 
 	l := len(k.b[i])
 	if l == k.k {
-		maxID := n.ID()
-		maxDistance := k.id.XOr(maxID)
+		maxDistance := k.id.XOr(n.ID())
 		maxIndex := -1
 		for j, n := range k.b[i] {
 			distance := k.id.XOr(n.ID())
 			if maxDistance.Less(distance) {
-				maxID = n.ID()
 				maxDistance = distance
 				maxIndex = j
 			}

@@ -3,7 +3,6 @@ package ppspptest
 import (
 	"io"
 	"io/ioutil"
-	"log"
 	"sync"
 	"testing"
 	"time"
@@ -36,7 +35,7 @@ func TestConnThrottle(t *testing.T) {
 	go func() {
 		defer wg.Done()
 		if _, err := io.CopyN(ioutil.Discard, b, 30*Kbps); err != nil {
-			log.Println(err)
+			t.Error(err)
 		}
 		b.Close()
 	}()

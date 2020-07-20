@@ -147,7 +147,7 @@ type brokerServicePeer struct {
 
 // NewBrokerClient ....
 func NewBrokerClient(logger *zap.Logger, bus *wasmio.Bus) NetworkBroker {
-	client := rpc.NewClient(bus, bus)
+	client := rpc.NewClient(logger, bus, bus)
 
 	return &BrokerClient{
 		logger: logger,

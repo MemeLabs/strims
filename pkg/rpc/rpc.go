@@ -16,6 +16,7 @@ import (
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
+	"go.uber.org/zap"
 )
 
 const (
@@ -53,7 +54,7 @@ func handleCancel(c *conn, m *pb.Call) {
 }
 
 func readCall(r io.Reader) (*pb.Call, error) {
-	b := readBuffers.Get().([]byte)
+	b := *readBuffers.Get().(*[]byte)
 	defer readBuffers.Put(&b)
 
 	l, err := binary.ReadUvarint(bytereader.New(r))
@@ -79,12 +80,15 @@ func readCall(r io.Reader) (*pb.Call, error) {
 
 var readBuffers = sync.Pool{
 	New: func() interface{} {
-		return make([]byte, 1024)
+		b := make([]byte, 1024)
+		return &b
 	},
 }
 
 func recoverError(v interface{}) error {
 	switch err := v.(type) {
+	case nil:
+		return nil
 	case error:
 		return err
 	case string:
@@ -150,17 +154,19 @@ func call(ctx context.Context, c *conn, method string, v proto.Message, opts ...
 	return nil
 }
 
-func newCallbackReceiver(c *conn) *callbackReceiver {
+func newCallbackReceiver(logger *zap.Logger, c *conn) *callbackReceiver {
 	return &callbackReceiver{
-		conn: c,
-		res:  make(chan *pb.Call, 1),
+		logger: logger,
+		conn:   c,
+		res:    make(chan *pb.Call, 1),
 	}
 }
 
 type callbackReceiver struct {
-	conn *conn
-	res  chan *pb.Call
-	call *pb.Call
+	logger *zap.Logger
+	conn   *conn
+	res    chan *pb.Call
+	call   *pb.Call
 }
 
 func (r *callbackReceiver) CallOption() CallOption {
@@ -201,7 +207,7 @@ func (r *callbackReceiver) ReceiveStream(ctx context.Context, ch interface{}) {
 		select {
 		case <-ctx.Done():
 			if err := call(context.Background(), r.conn, cancelMethod, &pb.Cancel{}, withParentID(r.call.Id)); err != nil {
-				log.Println(err)
+				r.logger.Debug("call failed", zap.Error(err))
 			}
 			return
 		case res := <-r.res:

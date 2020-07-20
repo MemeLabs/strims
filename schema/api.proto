@@ -328,9 +328,6 @@ message CallChatClientRequest {
   }
 }
 
-message TestMutexRequest {}
-message TestMutexResponse {}
-
 message Mutex {
   int64 eol = 1;
   bytes token = 2;

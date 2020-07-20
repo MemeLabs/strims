@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"log"
 	"path"
 	"runtime"
 	"time"
@@ -91,12 +90,11 @@ func streamToWriter(w io.Writer) {
 			n = len(b) - i
 		}
 		if _, err := rand.Read(b[i : i+n]); err != nil {
-			log.Println(err)
+			panic(err)
 		}
 	}
 	for range time.NewTicker(time.Millisecond * 100).C {
 		if _, err := w.Write(b); err != nil {
-			log.Println("write error")
 			return
 		}
 	}

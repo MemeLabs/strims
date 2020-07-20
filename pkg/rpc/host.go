@@ -4,24 +4,25 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"log"
 	"reflect"
-	"runtime/debug"
 	"strings"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/golang/protobuf/proto"
+	"go.uber.org/zap"
 )
 
 // NewHost ...
-func NewHost(service interface{}) *Host {
+func NewHost(logger *zap.Logger, service interface{}) *Host {
 	return &Host{
+		logger:  logger,
 		service: service,
 	}
 }
 
 // Host ...
 type Host struct {
+	logger  *zap.Logger
 	service interface{}
 }
 
@@ -61,12 +62,12 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 	defer func() {
 		c.calls.Delete(k)
 
-		if err := recover(); err != nil {
-			fmt.Printf("panic: %s\n\n%s", err, string(debug.Stack()))
+		if err := recoverError(recover()); err != nil {
+			h.logger.Debug("call handler panicked", zap.Error(err), zap.Stack("stack"))
 
-			e := &pb.Error{Message: recoverError(err).Error()}
+			e := &pb.Error{Message: err.Error()}
 			if err := call(ctx, c, callbackMethod, e, withParentID(m.Id)); err != nil {
-				log.Println(err)
+				h.logger.Debug("call failed", zap.Error(err))
 			}
 		}
 	}()
@@ -83,7 +84,7 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 	if !method.IsValid() {
 		e := &pb.Error{Message: fmt.Sprintf("undefined method: %s", m.Method)}
 		if err := call(ctx, c, callbackMethod, e, withParentID(m.Id)); err != nil {
-			log.Println(err)
+			h.logger.Debug("call failed", zap.Error(err))
 		}
 		return
 	}
@@ -91,14 +92,14 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 	rs := method.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(arg)})
 	if len(rs) == 0 {
 		if err := call(ctx, c, callbackMethod, &pb.Undefined{}, withParentID(m.Id)); err != nil {
-			log.Println(err)
+			h.logger.Debug("call failed", zap.Error(err))
 		}
 		return
 	}
 
 	if err, ok := rs[len(rs)-1].Interface().(error); ok && err != nil {
 		if err := call(ctx, c, callbackMethod, &pb.Error{Message: err.Error()}, withParentID(m.Id)); err != nil {
-			log.Println(err)
+			h.logger.Debug("call failed", zap.Error(err))
 		}
 		return
 	}
@@ -124,19 +125,19 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 
 			if !ok {
 				if err := call(ctx, c, callbackMethod, &pb.Close{}, withParentID(m.Id)); err != nil {
-					log.Println(err)
+					h.logger.Debug("call failed", zap.Error(err))
 				}
 				return
 			}
 			if err := call(ctx, c, callbackMethod, v.Interface().(proto.Message), withParentID(m.Id)); err != nil {
-				log.Println(err)
+				h.logger.Debug("call failed", zap.Error(err))
 			}
 		}
 	}
 
 	if a, ok := rs[0].Interface().(proto.Message); ok {
 		if err := call(ctx, c, callbackMethod, a, withParentID(m.Id)); err != nil {
-			log.Println(err)
+			h.logger.Debug("call failed", zap.Error(err))
 		}
 	}
 }

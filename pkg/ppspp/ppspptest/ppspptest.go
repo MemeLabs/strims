@@ -48,7 +48,7 @@ func ReadChannelConn(c ReaderMTUer, ch MessageHandler) {
 			panic(err)
 		}
 		if _, err := ch.HandleMessage(b[:n]); err != nil {
-			log.Println(err)
+			log.Println("handling message failed", err)
 		}
 	}
 }

@@ -3,12 +3,11 @@ package merkle
 import (
 	"bytes"
 	"hash"
-	"log"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
 
-// NewTree creates an empty Merkle tree, taking in the root bin, chunck size, and root hash
+// NewTree creates an empty Merkle tree
 func NewTree(rootBin binmap.Bin, chunkSize int, h hash.Hash) *Tree {
 	return &Tree{
 		hash:      h,
@@ -51,11 +50,14 @@ type Tree struct {
 
 // Reset sets the tree's rootbin and sets the verified bitmask to 0
 func (t *Tree) Reset(rootBin binmap.Bin) {
+	t.parent = nil
 	t.rootBin = rootBin
+	t.baseLeft = rootBin.BaseLeft()
 	t.verified = 0
 }
 
-// Merge copies the verified hashes from o to the corresponding bin in t if the bin in t is not verified
+// Merge copies the verified hashes from o to the corresponding bin in t if the
+// bin in t is not verified
 func (t *Tree) Merge(o *Tree) {
 	for i := 0; i < int(t.rootBin.BaseLength()*2); i++ {
 		if o.verified&(1<<i) != 0 && t.verified&(1<<i) == 0 {
@@ -95,26 +97,32 @@ func (t *Tree) Get(b binmap.Bin) []byte {
 	return t.digests[i*s : (i+1)*s]
 }
 
-// setOrVerify updates the hash of b. If the node b of the parent tree is verified their hashes are compared
-func (t *Tree) setOrVerify(b binmap.Bin) (ok, done bool) {
+// setOrVerify updates the hash of b. If the node b of the parent tree is
+// verified their hashes are compared
+func (t *Tree) setOrVerify(b binmap.Bin) (ok, verified bool) {
 	d := t.Get(b)
-	// overwrite the hash of the current node with the one from the hash we calculated
+	// overwrite the hash of the current node with the one from the hash we
+	// calculated
 	t.hash.Sum(d[:0])
 	t.hash.Reset()
 
-	// if we have a parent tree and the parent tree's node with the current index has a verified hash
+	// if we have a parent tree and the parent tree's node with the current index
+	// has a verified hash
 	if t.parent != nil && t.parent.isVerified(b) {
-		// ok if the hashes match ok == true - we got to a node with a verified counterpart in the parent tree, so done == true
+		// ok if the hashes match - we found a node with a verified counterpart in
+		// the parent tree
 		return bytes.Equal(d, t.parent.Get(b)), true
 	}
 
-	// we are not at the top so set the current node as verified on the assumption that the hashes match
+	// we are not at the top so set the current node as verified on the assumption
+	// that the hashes match
 	t.setVerified(b)
 	// ok, but not done yet
 	return true, false
 }
 
-// Fill ...
+// Fill fills the leaf nodes under bin with data and verify that the reference
+// tree doesn't have other hashes for the affected nodes
 func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 	l := b.BaseLeft()
 	r := b.BaseRight()
@@ -122,8 +130,7 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 	// compute hash of data (leaf) nodes under b from left to right
 	for i := 0; i < int(b.BaseLength()); i++ {
 		if _, err := t.hash.Write(d[i*t.chunkSize : (i+1)*t.chunkSize]); err != nil {
-			log.Println(err)
-			// return false, false
+			return false, false
 		}
 
 		if ok, verified := t.setOrVerify(l + binmap.Bin(i*2)); !ok {
@@ -133,17 +140,16 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 		}
 	}
 
-	// iterate through layers from 1 to b's layer
 	for i := uint64(1); i <= b.Layer(); i++ {
 		l = l.Parent()
 		r = r.Parent()
 		w := binmap.Bin(1 << (i + 1))
 		for j := l; j <= r; j += w {
 			if _, err := t.hash.Write(t.Get(j.Left())); err != nil {
-				log.Println(err)
+				return false, false
 			}
 			if _, err := t.hash.Write(t.Get(j.Right())); err != nil {
-				log.Println(err)
+				return false, false
 			}
 
 			if ok, verified := t.setOrVerify(j); !ok {
@@ -157,7 +163,8 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 	return true, false
 }
 
-// Verify ...
+// Verify that the hashes of the target tree and it's parent  match if we assign
+// the specified data to the specified bin
 func (t *Tree) Verify(b binmap.Bin, d []byte) bool {
 	if ok, verified := t.Fill(b, d); !ok {
 		return false
@@ -167,32 +174,26 @@ func (t *Tree) Verify(b binmap.Bin, d []byte) bool {
 
 	for b != t.rootBin {
 		t.hash.Reset()
-		// calculate hash from left to right
 		if b.IsLeft() {
 			if _, err := t.hash.Write(t.Get(b)); err != nil {
-				log.Println(err)
+				return false
 			}
 			if _, err := t.hash.Write(t.Get(b.Sibling())); err != nil {
-				log.Println(err)
+				return false
 			}
 		} else {
 			if _, err := t.hash.Write(t.Get(b.Sibling())); err != nil {
-				log.Println(err)
+				return false
 			}
 			if _, err := t.hash.Write(t.Get(b)); err != nil {
-				log.Println(err)
+				return false
 			}
 		}
-		// switch to parent node
+
 		b = b.Parent()
-		// set hash or verify the hash if parent tree node at b is verified
-		ok, done := t.setOrVerify(b)
-		if !ok {
-			// reached a verified node in the parent tree and hashes did not match
+		if ok, verified := t.setOrVerify(b); !ok {
 			return false
-		}
-		if done {
-			// found verified parent node and hashes matched
+		} else if verified {
 			return true
 		}
 	}

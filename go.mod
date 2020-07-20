@@ -20,6 +20,7 @@ require (
 	github.com/gobwas/ws v1.0.3 // indirect
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
 	github.com/golang/protobuf v1.4.2
+	github.com/golangci/golangci-lint v1.27.0 // indirect
 	github.com/gorilla/mux v1.7.4
 	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/golang-lru v0.5.4
@@ -31,6 +32,7 @@ require (
 	github.com/onsi/gomega v1.10.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99
+	github.com/pion/dtls v1.5.4
 	github.com/pion/transport v0.10.1 // indirect
 	github.com/pion/turn/v2 v2.0.4 // indirect
 	github.com/pion/webrtc/v2 v2.2.18

@@ -2,7 +2,6 @@ package service
 
 import (
 	"errors"
-	"log"
 	"sync"
 	"time"
 
@@ -258,7 +257,7 @@ func (t bootstrapServicePeerMapItem) Less(oi llrb.Item) bool {
 }
 
 // StartBootstrapClients ...
-func StartBootstrapClients(host *vpn.Host, store *dao.ProfileStore) error {
+func StartBootstrapClients(logger *zap.Logger, host *vpn.Host, store *dao.ProfileStore) error {
 	clients, err := dao.GetBootstrapClients(store)
 	if err != nil {
 		return err
@@ -269,7 +268,7 @@ func StartBootstrapClients(host *vpn.Host, store *dao.ProfileStore) error {
 		case *pb.BootstrapClient_WebsocketOptions:
 			go func() {
 				if err := host.Dial(vpn.WebSocketAddr(o.WebsocketOptions.Url)); err != nil {
-					log.Println(err)
+					logger.Debug("websocket botstrap client dial failed", zap.Error(err))
 				}
 			}()
 		}

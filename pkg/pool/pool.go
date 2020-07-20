@@ -1,12 +1,10 @@
 package pool
 
 import (
-	"errors"
+	"log"
 	"math/bits"
 	"sync"
 )
-
-var errBufferTooSmall = errors.New("buffer too small")
 
 // New ...
 func New(n int) *Pool {
@@ -19,7 +17,8 @@ func New(n int) *Pool {
 		size := 1<<(16-i) - 1
 		p.zones[i] = &sync.Pool{
 			New: func() interface{} {
-				return make([]byte, size)
+				b := make([]byte, size)
+				return &b
 			},
 		}
 	}
@@ -34,20 +33,30 @@ type Pool struct {
 }
 
 // Get ...
-func (p *Pool) Get(size uint16) (b []byte) {
+func (p *Pool) Get(size uint16) (b *[]byte) {
 	if i := bits.LeadingZeros16(size); i < p.n {
-		b = p.zones[i].Get().([]byte)
+		b = p.zones[i].Get().(*[]byte)
 	} else {
-		b = p.zones[p.n-1].Get().([]byte)
+		b = p.zones[p.n-1].Get().(*[]byte)
 	}
-	return b[:size]
+
+	if cap(*b) == 0 {
+		log.Println("got here...")
+		return p.Get(size)
+	}
+
+	*b = (*b)[:size]
+	return b
 }
 
 // Put ...
-func (p *Pool) Put(b []byte) {
-	if i := bits.LeadingZeros16(uint16(cap(b))); i < p.n {
-		p.zones[i].Put(&b)
+func (p *Pool) Put(b *[]byte) {
+	if cap(*b) == 0 {
+		panic("found it")
+	}
+	if i := bits.LeadingZeros16(uint16(cap(*b))); i < p.n {
+		p.zones[i].Put(b)
 	} else {
-		p.zones[p.n-1].Put(&b)
+		p.zones[p.n-1].Put(b)
 	}
 }

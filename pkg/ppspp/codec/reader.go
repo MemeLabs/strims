@@ -6,6 +6,8 @@ type MessageHandler interface {
 	HandleData(v Data)
 	HandleAck(v Ack)
 	HandleHave(v Have)
+	HandleIntegrity(v Integrity)
+	HandleSignedIntegrity(v SignedIntegrity)
 	HandleRequest(v Request)
 	HandleCancel(v Cancel)
 	HandleChoke(v Choke)
@@ -16,8 +18,10 @@ type MessageHandler interface {
 
 // Reader ...
 type Reader struct {
-	ChunkSize int
-	Handler   MessageHandler
+	ChunkSize              int
+	IntegrityHashSize      int
+	IntegritySignatureSize int
+	Handler                MessageHandler
 }
 
 func (v Reader) Read(b []byte) (n int, err error) {
@@ -39,6 +43,10 @@ func (v Reader) Read(b []byte) (n int, err error) {
 			mn, err = v.readAck(b[n:])
 		case HaveMessage:
 			mn, err = v.readHave(b[n:])
+		case IntegrityMessage:
+			mn, err = v.readIntegrity(b[n:])
+		case SignedIntegrityMessage:
+			mn, err = v.readSignedIntegrity(b[n:])
 		case RequestMessage:
 			mn, err = v.readRequest(b[n:])
 		case CancelMessage:
@@ -101,6 +109,29 @@ func (v Reader) readHave(b []byte) (int, error) {
 		return 0, err
 	}
 	v.Handler.HandleHave(msg)
+	return n, err
+}
+
+func (v Reader) readIntegrity(b []byte) (int, error) {
+	msg := Integrity{hashSize: v.IntegrityHashSize}
+	n, err := msg.Unmarshal(b)
+	if err != nil {
+		return 0, err
+	}
+	v.Handler.HandleIntegrity(msg)
+	return n, err
+}
+
+func (v Reader) readSignedIntegrity(b []byte) (int, error) {
+	msg := SignedIntegrity{
+		hashSize:      v.IntegrityHashSize,
+		signatureSize: v.IntegritySignatureSize,
+	}
+	n, err := msg.Unmarshal(b)
+	if err != nil {
+		return 0, err
+	}
+	v.Handler.HandleSignedIntegrity(msg)
 	return n, err
 }
 

@@ -96,11 +96,12 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 		log.Fatalf("error creating service: %s", err)
 	}
 
-	rpc.NewHost(svc).Handle(context.Background(), bus, bus)
+	rpc.NewHost(logger, svc).Handle(context.Background(), bus, bus)
 }
 
 func initBroker(bridge js.Value, bus *wasmio.Bus) {
-	svc := vpn.NewBrokerService(newLogger(bridge))
+	logger := newLogger(bridge)
+	svc := vpn.NewBrokerService(logger)
 
-	rpc.NewHost(svc).Handle(context.Background(), bus, bus)
+	rpc.NewHost(logger, svc).Handle(context.Background(), bus, bus)
 }

@@ -10,13 +10,11 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 )
 
-var channelBufs = pool.New(8)
-
 // newChannel ...
 func newChannel(mtu int, bridge js.Value, method string, args ...interface{}) (*channel, error) {
 	p := &channel{
 		mtu: mtu,
-		q:   make(chan []byte, 16),
+		q:   make(chan *[]byte, 16),
 	}
 
 	onOpen := func(this js.Value, args []js.Value) interface{} {
@@ -40,7 +38,7 @@ func newChannelFromProxy(mtu int, v js.Value) (*channel, js.Value) {
 	p := &channel{
 		mtu:   mtu,
 		proxy: v,
-		q:     make(chan []byte, 16),
+		q:     make(chan *[]byte, 16),
 	}
 
 	proxy := jsObject.New()
@@ -56,8 +54,8 @@ type channel struct {
 	mtu    int
 	proxy  js.Value
 	funcs  Funcs
-	q      chan []byte
-	b      []byte
+	q      chan *[]byte
+	b      *[]byte
 	off    int
 	closed bool
 	err    error
@@ -82,9 +80,9 @@ func (p *channel) Write(b []byte) (int, error) {
 
 // Read ...
 func (p *channel) Read(b []byte) (n int, err error) {
-	if p.b == nil || p.off == len(p.b) {
+	if p.b == nil || p.off == len(*p.b) {
 		if p.b != nil {
-			channelBufs.Put(p.b)
+			pool.Put(p.b)
 		}
 
 		b, ok := <-p.q
@@ -96,12 +94,12 @@ func (p *channel) Read(b []byte) (n int, err error) {
 		p.off = 0
 	}
 
-	n = len(p.b) - p.off
+	n = len(*p.b) - p.off
 	if n > len(b) {
 		n = len(b)
 	}
 
-	copy(b[:n], p.b[p.off:])
+	copy(b[:n], (*p.b)[p.off:])
 	p.off += n
 	return
 }
@@ -124,8 +122,8 @@ func (p *channel) closeWithError(err error) {
 
 func (p *channel) onData(this js.Value, args []js.Value) interface{} {
 	iotime.Store(int64(args[2].Float()))
-	b := channelBufs.Get(uint16(args[1].Int()))
-	js.CopyBytesToGo(b, args[0])
+	b := pool.Get(uint16(args[1].Int()))
+	js.CopyBytesToGo(*b, args[0])
 	p.q <- b
 	return nil
 }

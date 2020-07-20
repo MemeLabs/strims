@@ -9,9 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// should verify that verifying chunks in different orders works... like forward and backward and in chunks and striped...
-// should test that it fails with incorrect data
-
 func TestVerify(t *testing.T) {
 	chunkSize := 1024
 	bin := binmap.NewBin(5, 0)

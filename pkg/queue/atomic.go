@@ -9,7 +9,6 @@ type AtomicRing struct {
 	size  uint64
 	mask  uint64
 	start uint64
-	alloc uint64
 	end   uint64
 }
 

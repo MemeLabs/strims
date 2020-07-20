@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
-	"log"
 	"net"
 	"net/http"
 	"os"
@@ -13,12 +12,20 @@ import (
 	"sync"
 
 	"github.com/gorilla/mux"
+	"go.uber.org/zap"
 )
 
 const transcoderAddr = "localhost:0"
 
+func NewTranscoder(logger *zap.Logger) *Transcoder {
+	return &Transcoder{
+		logger: logger,
+	}
+}
+
 // Transcoder ...
 type Transcoder struct {
+	logger  *zap.Logger
 	lock    sync.Mutex
 	lis     net.Listener
 	n       uint32
@@ -41,7 +48,7 @@ func (h *Transcoder) listen() (err error) {
 	}
 	go func() {
 		if err := srv.Serve(h.lis); err != nil {
-			log.Println(err)
+			h.logger.Debug("failed", zap.Error(err))
 		}
 	}()
 
@@ -49,13 +56,7 @@ func (h *Transcoder) listen() (err error) {
 }
 
 func (h *Transcoder) handlePlaylist(w http.ResponseWriter, r *http.Request) {
-	_, err := io.Copy(ioutil.Discard, r.Body)
-	if err != nil {
-		log.Println(err)
-	}
-	if err := r.Body.Close(); err != nil {
-		log.Println(err)
-	}
+	// noop
 }
 
 func (h *Transcoder) handleInit(w http.ResponseWriter, r *http.Request) {
@@ -121,7 +122,7 @@ func (h *Transcoder) close(k transcoderKey, cmd *exec.Cmd) {
 	}
 
 	if err := cmd.Process.Kill(); err != nil {
-		log.Println(err)
+		h.logger.Debug("killing ffmpeg failed", zap.Error(err))
 	}
 
 	// wi, _ := h.writers.Load(k)
@@ -198,7 +199,7 @@ func relayStdio(cmd *exec.Cmd) error {
 
 	copy := func(w io.Writer, r io.Reader) {
 		if _, err := io.Copy(w, r); err != nil {
-			log.Println(err)
+			panic(err)
 		}
 	}
 

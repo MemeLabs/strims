@@ -200,22 +200,22 @@ func (s *directoryServer) transformDirectoryMessages(ps *PubSubServer) {
 			case *pb.DirectoryClientEvent_Publish_:
 				if verifyPublish(b.Publish) {
 					if err := s.Publish(b.Publish.Listing); err != nil {
-						continue
+						s.logger.Debug("handling publish failed", zap.Error(err))
 					}
 				}
 			case *pb.DirectoryClientEvent_Unpublish_:
 				if verifyUnpublish(b.Unpublish) {
 					if err := s.Unpublish(b.Unpublish.Key); err != nil {
-						continue
+						s.logger.Debug("handling unpublish failed", zap.Error(err))
 					}
 				}
 			case *pb.DirectoryClientEvent_Join_:
 				if err := s.Join(b.Join.ListingId); err != nil {
-					continue
+					s.logger.Debug("handling join failed", zap.Error(err))
 				}
 			case *pb.DirectoryClientEvent_Part_:
 				if err := s.Part(b.Part.ListingId); err != nil {
-					continue
+					s.logger.Debug("handling part failed", zap.Error(err))
 				}
 			}
 		}
@@ -431,10 +431,10 @@ func sendProto(ps pubSub, m proto.Message) error {
 	b := pool.Get(uint16(proto.Size(m)))
 	defer pool.Put(b)
 
-	b, err := proto.MarshalOptions{}.MarshalAppend(b[:0], m)
+	_, err := proto.MarshalOptions{}.MarshalAppend((*b)[:0], m)
 	if err != nil {
 		return err
 	}
 
-	return ps.Send("", b)
+	return ps.Send("", *b)
 }

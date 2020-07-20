@@ -30,7 +30,7 @@ func testPSZ(alen, blen, ilen int) error {
 		}
 		for i := 0; i < blen; i++ {
 			bset[i] = make([]byte, 16)
-			if _, err := rng.Read(aset[i]); err != nil {
+			if _, err := rng.Read(bset[i]); err != nil {
 				return err
 			}
 		}

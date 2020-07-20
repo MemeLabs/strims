@@ -268,9 +268,9 @@ func (c *cipherLink) Write(p []byte) (int, error) {
 
 	c.writeLock.Lock()
 	defer c.writeLock.Unlock()
-	c.writeStream.XORKeyStream(b[:len(p)], p)
+	c.writeStream.XORKeyStream(*b, p)
 
-	return c.link.Write(b[:len(p)])
+	return c.link.Write(*b)
 }
 
 func (c *cipherLink) MTU() int {

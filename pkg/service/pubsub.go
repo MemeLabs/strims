@@ -147,15 +147,16 @@ func (s *PubSubServer) send(e *pb.PubSubEvent) (int, error) {
 	b := pool.Get(uint16(proto.Size(e)))
 	defer pool.Put(b)
 
-	b, err := proto.MarshalOptions{}.MarshalAppend(b[:0], e)
+	var err error
+	*b, err = proto.MarshalOptions{}.MarshalAppend((*b)[:0], e)
 	if err != nil {
 		return 0, err
 	}
 
-	if _, err := s.w.Write(b); err != nil {
+	if _, err := s.w.Write(*b); err != nil {
 		return 0, err
 	}
-	return len(b), nil
+	return len(*b), nil
 }
 
 // HandleMessage ...

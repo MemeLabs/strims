@@ -4,11 +4,11 @@ package pool
 var DefaultPool = New(8)
 
 // Get ...
-func Get(size uint16) (b []byte) {
+func Get(size uint16) *[]byte {
 	return DefaultPool.Get(size)
 }
 
 // Put ...
-func Put(b []byte) {
+func Put(b *[]byte) {
 	DefaultPool.Put(b)
 }

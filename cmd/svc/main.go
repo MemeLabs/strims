@@ -72,49 +72,66 @@ func main() {
 
 	_ = bootstrapService
 
-	test(profileStore, networkController)
+	test(logger, profileStore, networkController)
 
 	select {}
 }
 
-func test(profileStore *dao.ProfileStore, ctl *service.NetworkController) {
-	x := rtmpingress.Transcoder{}
+func test(logger *zap.Logger, profileStore *dao.ProfileStore, ctl *service.NetworkController) {
+	x := rtmpingress.NewTranscoder(logger)
 	rtmp := rtmpingress.Server{
 		Addr: "0.0.0.0:1935",
 		HandleStream: func(a *rtmpingress.StreamAddr, c *rtmp.Conn, nc net.Conn) {
-			log.Println("handling stream...")
+			logger.Debug("rtmp stream opened", zap.String("key", a.Key))
 
 			v, err := service.NewVideoServer()
 			if err != nil {
-				panic(err)
+				logger.Debug("starting video server failed", zap.Error(err))
+				if err := nc.Close(); err != nil {
+					logger.Debug("closing rtmp net con failed", zap.Error(err))
+				}
+				return
 			}
 
 			go func() {
 				if err := x.Transcode(a.URI, a.Key, "source", v); err != nil {
-					log.Println(err)
+					logger.Debug("transcoder finished", zap.Error(err))
 				}
 			}()
 
 			memberships, err := dao.GetNetworkMemberships(profileStore)
 			if err != nil {
-				panic(err)
+				logger.Debug("loading network memberships failed", zap.Error(err))
+
+				v.Stop()
+
+				if err := nc.Close(); err != nil {
+					logger.Debug("closing rtmp net con failed", zap.Error(err))
+				}
+				return
 			}
 
 			for _, membership := range memberships {
 				svc, ok := ctl.NetworkServices(dao.GetRootCert(membership.Certificate).Key)
 				if !ok {
-					panic(errors.New("unknown network"))
+					logger.Debug("publishing video swarm failed", zap.Error(errors.New("unknown network")))
 				}
 
 				if err := v.PublishSwarm(svc); err != nil {
-					panic(err)
+					logger.Debug("publishing video swarm failed", zap.Error(err))
 				}
 			}
+
+			go func() {
+				<-c.CloseNotify()
+				logger.Debug("rtmp stream closed", zap.String("key", a.Key))
+				v.Stop()
+			}()
 		},
 	}
 	go func() {
 		if err := rtmp.Listen(); err != nil {
-			log.Fatal(err)
+			logger.Fatal("rtmp server listen failed", zap.Error(err))
 		}
 	}()
 }

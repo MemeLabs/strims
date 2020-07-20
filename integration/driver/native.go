@@ -56,17 +56,17 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 		log.Fatal(err)
 	}
 
-	host := rpc.NewHost(svc)
+	host := rpc.NewHost(d.logger, svc)
 	hr, hw := io.Pipe()
 	cr, cw := io.Pipe()
 
 	go func() {
 		if err := host.Handle(context.Background(), cw, hr); err != nil {
-			log.Fatal(err)
+			log.Println("rpc host closed with error", err)
 		}
 	}()
 
-	client := rpc.NewClient(hw, cr)
+	client := rpc.NewClient(d.logger, hw, cr)
 	d.clients = append(d.clients, nativeDriverClient{file, client})
 	return client
 }

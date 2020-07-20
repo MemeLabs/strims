@@ -155,7 +155,4 @@ export default class Client extends RPCHost {
   public publishNetworkToBootstrapPeer(v: pb.IPublishNetworkToBootstrapPeerRequest = new pb.PublishNetworkToBootstrapPeerRequest()): Promise<pb.PublishNetworkToBootstrapPeerResponse> {
     return this.expectOne(this.call("publishNetworkToBootstrapPeer", new pb.PublishNetworkToBootstrapPeerRequest(v)));
   }
-  public testMutex(v: pb.ITestMutexRequest = new pb.TestMutexRequest()): Promise<pb.TestMutexResponse> {
-    return this.expectOne(this.call("testMutex", new pb.TestMutexRequest(v)));
-  }
 }

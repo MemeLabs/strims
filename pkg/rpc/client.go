@@ -3,16 +3,17 @@ package rpc
 import (
 	"context"
 	"io"
-	"log"
 	"sync"
 
 	"github.com/golang/protobuf/proto"
+	"go.uber.org/zap"
 )
 
 // NewClient ...
-func NewClient(w io.Writer, r io.Reader) *Client {
+func NewClient(logger *zap.Logger, w io.Writer, r io.Reader) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Client{
+		logger: logger,
 		ctx:    ctx,
 		cancel: cancel,
 		conn:   &conn{w: w},
@@ -20,7 +21,7 @@ func NewClient(w io.Writer, r io.Reader) *Client {
 
 	go func() {
 		if err := c.readCalls(r); err != nil {
-			log.Println(err)
+			c.Close()
 		}
 	}()
 
@@ -29,6 +30,7 @@ func NewClient(w io.Writer, r io.Reader) *Client {
 
 // Client ...
 type Client struct {
+	logger    *zap.Logger
 	ctx       context.Context
 	cancel    context.CancelFunc
 	closeOnce sync.Once
@@ -69,7 +71,7 @@ func (c *Client) Call(ctx context.Context, method string, req proto.Message) err
 
 // CallUnary ...
 func (c *Client) CallUnary(ctx context.Context, method string, req, res proto.Message) error {
-	r := newCallbackReceiver(c.conn)
+	r := newCallbackReceiver(c.logger, c.conn)
 	if err := call(ctx, c.conn, method, req, r.CallOption()); err != nil {
 		return err
 	}
@@ -78,7 +80,7 @@ func (c *Client) CallUnary(ctx context.Context, method string, req, res proto.Me
 
 // CallStreaming ...
 func (c *Client) CallStreaming(ctx context.Context, method string, req proto.Message, ch interface{}) error {
-	r := newCallbackReceiver(c.conn)
+	r := newCallbackReceiver(c.logger, c.conn)
 	if err := call(ctx, c.conn, method, req, r.CallOption()); err != nil {
 		return err
 	}

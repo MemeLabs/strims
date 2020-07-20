@@ -73,8 +73,6 @@ registerType("CodeBlock", pb.CodeBlock);
 registerType("Spoiler", pb.Spoiler);
 registerType("GenericEntity", pb.GenericEntity);
 registerType("CallChatClientRequest", pb.CallChatClientRequest);
-registerType("TestMutexRequest", pb.TestMutexRequest);
-registerType("TestMutexResponse", pb.TestMutexResponse);
 registerType("Mutex", pb.Mutex);
 registerType("DirectoryListing", pb.DirectoryListing);
 registerType("DirectoryServerEvent", pb.DirectoryServerEvent);

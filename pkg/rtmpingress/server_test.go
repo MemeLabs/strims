@@ -16,6 +16,7 @@ import (
 
 	"github.com/nareix/joy5/format/rtmp"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap"
 )
 
 var rtmpServerAddr string = ":9999"
@@ -38,7 +39,12 @@ func TestServerTranscodesMultipleStreams(t *testing.T) {
 		},
 	}
 
-	z := Transcoder{}
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	z := NewTranscoder(logger)
 	rtmp := Server{
 		Addr: rtmpServerAddr,
 		HandleStream: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) {
@@ -63,7 +69,7 @@ func TestServerTranscodesMultipleStreams(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 
-	err := sendStream(t, path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
+	err = sendStream(t, path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
 	assert.Nil(t, err, "failed sending stream")
 
 	for _, tc := range tcs {
@@ -82,7 +88,12 @@ func TestServerTranscodesMultipleStreams(t *testing.T) {
 }
 
 func TestServerClosesStreamOnCheckOriginReject(t *testing.T) {
-	z := Transcoder{}
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	z := NewTranscoder(logger)
 	rtmp := Server{
 		Addr: rtmpServerAddr,
 		HandleStream: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) {
@@ -105,7 +116,7 @@ func TestServerClosesStreamOnCheckOriginReject(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 
-	err := sendStream(t, path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
+	err = sendStream(t, path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
 	assert.Error(t, err, "failed to close stream on checkOrigin reject")
 }
 
@@ -113,7 +124,12 @@ func TestServerAcceptsMultipleStreams(t *testing.T) {
 	handleCalled, checkOriginCalled := false, false
 	tsfolders := []string{}
 
-	x := Transcoder{}
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	x := NewTranscoder(logger)
 	rtmp := Server{
 		Addr: rtmpServerAddr,
 		HandleStream: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) {
@@ -140,7 +156,7 @@ func TestServerAcceptsMultipleStreams(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 
-	err := sendStream(t, path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
+	err = sendStream(t, path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
 	assert.Nil(t, err, "failed sending stream")
 
 	assert.True(t, handleCalled, "HandleStream should be called")

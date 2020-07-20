@@ -464,7 +464,7 @@ func (v *Ack) Unmarshal(b []byte) (size int, err error) {
 	}
 	size += n
 
-	n, err = v.DelaySample.Unmarshal(b[n:])
+	n, err = v.DelaySample.Unmarshal(b[size:])
 	if err != nil {
 		return
 	}
@@ -484,6 +484,98 @@ func (v *Ack) Marshal(b []byte) (size int) {
 // ByteLen ...
 func (v *Ack) ByteLen() int {
 	return v.Address.ByteLen() + v.DelaySample.ByteLen()
+}
+
+// Integrity ...
+type Integrity struct {
+	hashSize int
+	Address  Address
+	Hash     Buffer
+}
+
+// Type ...
+func (v *Integrity) Type() MessageType {
+	return IntegrityMessage
+}
+
+// Unmarshal ...
+func (v *Integrity) Unmarshal(b []byte) (size int, err error) {
+	n, err := v.Address.Unmarshal(b)
+	if err != nil {
+		return
+	}
+	size += n
+
+	v.Hash = b[size : size+v.hashSize]
+	size += v.hashSize
+
+	return
+}
+
+// Marshal ...
+func (v *Integrity) Marshal(b []byte) (size int) {
+	size += v.Address.Marshal(b)
+	size += v.Hash.Marshal(b[size:])
+
+	return
+}
+
+// ByteLen ...
+func (v *Integrity) ByteLen() int {
+	return v.Address.ByteLen() + v.Hash.ByteLen()
+}
+
+// SignedIntegrity ...
+type SignedIntegrity struct {
+	hashSize      int
+	signatureSize int
+	Address       Address
+	Timestamp     Timestamp
+	Hash          Buffer
+	Signature     Buffer
+}
+
+// Type ...
+func (v *SignedIntegrity) Type() MessageType {
+	return SignedIntegrityMessage
+}
+
+// Unmarshal ...
+func (v *SignedIntegrity) Unmarshal(b []byte) (size int, err error) {
+	n, err := v.Address.Unmarshal(b)
+	if err != nil {
+		return
+	}
+	size += n
+
+	n, err = v.Timestamp.Unmarshal(b[size:])
+	if err != nil {
+		return
+	}
+	size += n
+
+	v.Hash = b[size : size+v.hashSize]
+	size += v.hashSize
+
+	v.Signature = b[size : size+v.signatureSize]
+	size += v.signatureSize
+
+	return
+}
+
+// Marshal ...
+func (v *SignedIntegrity) Marshal(b []byte) (size int) {
+	size += v.Address.Marshal(b)
+	size += v.Timestamp.Marshal(b[size:])
+	size += v.Hash.Marshal(b[size:])
+	size += v.Signature.Marshal(b[size:])
+
+	return
+}
+
+// ByteLen ...
+func (v *SignedIntegrity) ByteLen() int {
+	return v.Address.ByteLen() + v.Timestamp.ByteLen() + v.Hash.ByteLen() + v.Signature.ByteLen()
 }
 
 // Nonce ...
@@ -524,7 +616,7 @@ func (v *Ping) Type() MessageType {
 
 // Pong ...
 type Pong struct {
-	Nonce uint64
+	Nonce Nonce
 	Delay uint64
 }
 
@@ -535,8 +627,12 @@ func (v *Pong) Type() MessageType {
 
 // Unmarshal ...
 func (v *Pong) Unmarshal(b []byte) (size int, err error) {
-	v.Nonce = binary.BigEndian.Uint64(b)
-	size += 8
+	n, err := v.Nonce.Unmarshal(b)
+	if err != nil {
+		return
+	}
+	size += n
+
 	v.Delay = binary.BigEndian.Uint64(b[size:])
 	size += 8
 
@@ -545,8 +641,7 @@ func (v *Pong) Unmarshal(b []byte) (size int, err error) {
 
 // Marshal ...
 func (v *Pong) Marshal(b []byte) (size int) {
-	binary.BigEndian.PutUint64(b, v.Nonce)
-	size += 8
+	size += v.Nonce.Marshal(b)
 	binary.BigEndian.PutUint64(b[size:], v.Delay)
 	size += 8
 
@@ -624,16 +719,6 @@ type Unchoke struct {
 // Type ...
 func (v *Unchoke) Type() MessageType {
 	return UnchokeMessage
-}
-
-// PExReq ...
-type PExReq struct {
-	Empty
-}
-
-// Type ...
-func (v *PExReq) Type() MessageType {
-	return PExReqMessage
 }
 
 // End ...

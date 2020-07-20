@@ -2,8 +2,11 @@ package ppspp
 
 import (
 	"sync"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/iotime"
+	"github.com/MemeLabs/go-ppspp/pkg/ma"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 )
@@ -49,8 +52,10 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 	}
 
 	bins := &swarmBins{
-		Requested: binmap.New(),
-		Available: binmap.New(),
+		Requested:   binmap.New(),
+		Available:   binmap.New(),
+		binRateFast: ma.NewSimple(30, 100*time.Millisecond),
+		binRateSlow: ma.NewSimple(300, 100*time.Millisecond),
 	}
 
 	return &Swarm{
@@ -67,12 +72,49 @@ type swarmBins struct {
 	sync.Mutex
 	Requested *binmap.Map // bins we have or have requested
 	Available *binmap.Map // bins at least one peer has
+
+	binRateFast   ma.Simple
+	binRateSlow   ma.Simple
+	lastAvailable binmap.Bin
+	lastTime      time.Time
 }
 
 func (s *swarmBins) AddAvailable(b binmap.Bin) {
 	s.Lock()
 	defer s.Unlock()
 	s.Available.Set(b)
+
+	br := b.BaseRight()
+	if s.lastAvailable > br {
+		return
+	}
+
+	t := iotime.Load()
+
+	if s.lastAvailable == 0 {
+		s.lastAvailable = br
+		s.lastTime = t
+		return
+	}
+
+	d := uint64((br - s.lastAvailable) / 2)
+	s.binRateFast.AddWithTime(d, t)
+	s.binRateSlow.AddWithTime(d, t)
+	s.lastAvailable = br
+
+	// TODO: compute rate and time from timestamp in munro signatures?
+	td := time.Duration(d) * s.binRateSlow.IntervalWithTime(t)
+	et := s.lastTime.Add(td)
+	s.lastTime = s.lastTime.Add(t.Sub(et) / 2)
+}
+
+func (s *swarmBins) estEndBinWithTime(t time.Time) binmap.Bin {
+	d := t.Sub(s.lastTime)
+	ivl := s.binRateSlow.Interval()
+	if d == 0 || ivl == 0 {
+		return s.lastAvailable
+	}
+	return s.lastAvailable + binmap.Bin(d/ivl)*2
 }
 
 func (s *swarmBins) Consume(c store.Chunk) bool {

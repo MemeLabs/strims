@@ -15,12 +15,12 @@ func sendProto(network *Network, id kademlia.ID, port, srcPort uint16, msg proto
 	b := pool.Get(uint16(proto.Size(msg)))
 	defer pool.Put(b)
 
-	b, err := proto.MarshalOptions{}.MarshalAppend(b[:0], msg)
+	_, err := proto.MarshalOptions{}.MarshalAppend((*b)[:0], msg)
 	if err != nil {
 		return err
 	}
 
-	return network.Send(id, port, srcPort, b)
+	return network.Send(id, port, srcPort, *b)
 }
 
 // ReadProtoStream ...
@@ -34,10 +34,10 @@ func ReadProtoStream(r io.Reader, m proto.Message) error {
 	b := pool.Get(n)
 	defer pool.Put(b)
 
-	if _, err := io.ReadFull(r, b[:n]); err != nil {
+	if _, err := io.ReadFull(r, *b); err != nil {
 		return fmt.Errorf("data read failed: %w", err)
 	}
-	if err := proto.Unmarshal(b[:n], m); err != nil {
+	if err := proto.Unmarshal(*b, m); err != nil {
 		return fmt.Errorf("proto unmarshal failed: %w", err)
 	}
 	return nil
@@ -54,13 +54,13 @@ func WriteProtoStream(w io.Writer, m proto.Message) error {
 	b := pool.Get(uint16(n))
 	defer pool.Put(b)
 
-	binary.BigEndian.PutUint16(b, uint16(mn))
-	_, err := proto.MarshalOptions{}.MarshalAppend(b[2:2], m)
+	binary.BigEndian.PutUint16(*b, uint16(mn))
+	_, err := proto.MarshalOptions{}.MarshalAppend((*b)[2:2], m)
 	if err != nil {
 		return fmt.Errorf("proto marshal failed: %w", err)
 	}
 
-	if _, err = w.Write(b); err != nil {
+	if _, err = w.Write(*b); err != nil {
 		return fmt.Errorf("data write failed: %w", err)
 	}
 	return nil

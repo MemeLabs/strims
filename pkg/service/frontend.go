@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"log"
 	"runtime"
 	"runtime/pprof"
 	"time"
@@ -511,7 +510,7 @@ func (s *Frontend) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (<-chan 
 		return nil, err
 	}
 
-	if err := StartBootstrapClients(host, session.ProfileStore()); err != nil {
+	if err := StartBootstrapClients(s.logger, host, session.ProfileStore()); err != nil {
 		return nil, err
 	}
 
@@ -959,28 +958,6 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 	return &pb.CreateNetworkMembershipFromInvitationResponse{
 		Membership: membership,
 	}, nil
-}
-
-// TestMutex ...
-func (s *Frontend) TestMutex(ctx context.Context, r *pb.TestMutexRequest) (*pb.TestMutexResponse, error) {
-	session := rpc.ContextSession(ctx)
-	if session.Anonymous() {
-		return nil, ErrAuthenticationRequired
-	}
-
-	mu := dao.NewMutex(session.ProfileStore(), []byte("test"))
-
-	go func() {
-		if err := mu.Lock(context.Background()); err != nil {
-			log.Println(err)
-		}
-		s.logger.Debug("lock acquired")
-		if err := mu.Release(); err != nil {
-			log.Println(err)
-		}
-	}()
-
-	return &pb.TestMutexResponse{}, nil
 }
 
 // saveNetworkMembership saves a network membership.
