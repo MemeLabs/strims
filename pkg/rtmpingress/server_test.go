@@ -45,7 +45,7 @@ func TestServerTranscodesMultipleStreams(t *testing.T) {
 			for _, tc := range tcs {
 				go func(variant string, tw *tw) {
 					if err := z.Transcode(a.URI, a.Key, variant, tw); err != nil {
-						panic(err)
+						log.Println(err)
 					}
 				}(tc.variant, tc.tw)
 			}
@@ -56,7 +56,7 @@ func TestServerTranscodesMultipleStreams(t *testing.T) {
 	}
 	go func() {
 		if err := rtmp.Listen(); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 	}()
 	defer rtmp.Close()
@@ -88,7 +88,7 @@ func TestServerClosesStreamOnCheckOriginReject(t *testing.T) {
 		HandleStream: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) {
 			go func() {
 				if err := z.Transcode(a.URI, a.Key, "source", newTw()); err != nil {
-					panic(err)
+					log.Println(err)
 				}
 			}()
 		},
@@ -98,7 +98,7 @@ func TestServerClosesStreamOnCheckOriginReject(t *testing.T) {
 	}
 	go func() {
 		if err := rtmp.Listen(); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 	}()
 	defer rtmp.Close()
@@ -121,7 +121,7 @@ func TestServerAcceptsMultipleStreams(t *testing.T) {
 			z := newTw()
 			go func() {
 				if err := x.Transcode(a.URI, a.Key, "source", z); err != nil {
-					panic(err)
+					log.Println(err)
 				}
 			}()
 			tsfolders = append(tsfolders, z.path)
@@ -133,7 +133,7 @@ func TestServerAcceptsMultipleStreams(t *testing.T) {
 	}
 	go func() {
 		if err := rtmp.Listen(); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 	}()
 	defer rtmp.Close()

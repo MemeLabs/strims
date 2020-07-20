@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"log"
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
@@ -182,7 +183,7 @@ func (t *swarmNetwork) addPeer(p *swarmPeer) {
 
 	t.swarms.Range(func(_, si interface{}) bool {
 		if err := t.sendOpen(si.(*swarmSwarm), p); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		return true
 	})
@@ -205,7 +206,7 @@ func (t *swarmNetwork) OpenSwarm(swarm *ppspp.Swarm) {
 
 	t.peers.Range(func(_, pi interface{}) bool {
 		if err := t.sendOpen(s, pi.(*swarmPeer)); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		pi.(*swarmPeer).rw.Flush()
 		return true
@@ -255,7 +256,7 @@ func (t *swarmNetwork) CloseSwarm(id ppspp.SwarmID) {
 	t.peers.Range(func(_, value interface{}) bool {
 		rw := value.(*swarmPeer).rw
 		if err := vpn.WriteProtoStream(rw, msg); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		rw.Flush()
 		return true

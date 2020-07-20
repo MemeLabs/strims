@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"log"
 	"runtime"
 	"runtime/pprof"
 	"time"
@@ -971,11 +972,11 @@ func (s *Frontend) TestMutex(ctx context.Context, r *pb.TestMutexRequest) (*pb.T
 
 	go func() {
 		if err := mu.Lock(context.Background()); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		s.logger.Debug("lock acquired")
 		if err := mu.Release(); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 	}()
 

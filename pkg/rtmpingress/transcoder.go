@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"log"
 	"net"
 	"net/http"
 	"os"
@@ -40,7 +41,7 @@ func (h *Transcoder) listen() (err error) {
 	}
 	go func() {
 		if err := srv.Serve(h.lis); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 	}()
 
@@ -50,10 +51,10 @@ func (h *Transcoder) listen() (err error) {
 func (h *Transcoder) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	_, err := io.Copy(ioutil.Discard, r.Body)
 	if err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	if err := r.Body.Close(); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 }
 
@@ -120,7 +121,7 @@ func (h *Transcoder) close(k transcoderKey, cmd *exec.Cmd) {
 	}
 
 	if err := cmd.Process.Kill(); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 
 	// wi, _ := h.writers.Load(k)
@@ -197,7 +198,7 @@ func relayStdio(cmd *exec.Cmd) error {
 
 	copy := func(w io.Writer, r io.Reader) {
 		if _, err := io.Copy(w, r); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 	}
 

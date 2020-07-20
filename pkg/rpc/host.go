@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"log"
 	"reflect"
 	"runtime/debug"
 	"strings"
@@ -65,7 +66,7 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 
 			e := &pb.Error{Message: recoverError(err).Error()}
 			if err := call(ctx, c, callbackMethod, e, withParentID(m.Id)); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 		}
 	}()
@@ -82,7 +83,7 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 	if !method.IsValid() {
 		e := &pb.Error{Message: fmt.Sprintf("undefined method: %s", m.Method)}
 		if err := call(ctx, c, callbackMethod, e, withParentID(m.Id)); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		return
 	}
@@ -90,14 +91,14 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 	rs := method.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(arg)})
 	if len(rs) == 0 {
 		if err := call(ctx, c, callbackMethod, &pb.Undefined{}, withParentID(m.Id)); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		return
 	}
 
 	if err, ok := rs[len(rs)-1].Interface().(error); ok && err != nil {
 		if err := call(ctx, c, callbackMethod, &pb.Error{Message: err.Error()}, withParentID(m.Id)); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 		return
 	}

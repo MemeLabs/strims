@@ -3,6 +3,7 @@ package vpn
 import (
 	"bytes"
 	"errors"
+	"log"
 	"math"
 	"sort"
 	"sync"
@@ -524,7 +525,7 @@ func (n *Network) HandleFrame(f Frame) {
 	}
 
 	if err := n.handleMessage(&m); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 }
 

@@ -91,7 +91,7 @@ func test(profileStore *dao.ProfileStore, ctl *service.NetworkController) {
 
 			go func() {
 				if err := x.Transcode(a.URI, a.Key, "source", v); err != nil {
-					panic(err)
+					log.Println(err)
 				}
 			}()
 
@@ -114,7 +114,7 @@ func test(profileStore *dao.ProfileStore, ctl *service.NetworkController) {
 	}
 	go func() {
 		if err := rtmp.Listen(); err != nil {
-			panic(err)
+			log.Fatal(err)
 		}
 	}()
 }

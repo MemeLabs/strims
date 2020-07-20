@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"errors"
 	"io"
+	"log"
 	"sync"
 	"time"
 
@@ -62,7 +63,7 @@ func newNetworkBrokerPeer(logger *zap.Logger, c ReadWriteFlusher) *networkBroker
 
 	go func() {
 		if err := p.readInits(); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 	}()
 

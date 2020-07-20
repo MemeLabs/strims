@@ -3,6 +3,7 @@ package merkle
 import (
 	"bytes"
 	"hash"
+	"log"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
@@ -104,7 +105,7 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 
 	for i := 0; i < int(b.BaseLength()); i++ {
 		if _, err := t.hash.Write(d[i*t.chunkSize : (i+1)*t.chunkSize]); err != nil {
-			panic(err)
+			log.Println(err)
 			// return false, false
 		}
 
@@ -121,10 +122,10 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 		w := binmap.Bin(1 << (i + 1))
 		for j := l; j <= r; j += w {
 			if _, err := t.hash.Write(t.Get(j.Left())); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 			if _, err := t.hash.Write(t.Get(j.Right())); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 
 			if ok, verified := t.setOrVerify(j); !ok {
@@ -149,17 +150,17 @@ func (t *Tree) Verify(b binmap.Bin, d []byte) bool {
 	for b != t.rootBin {
 		if b.IsLeft() {
 			if _, err := t.hash.Write(t.Get(b)); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 			if _, err := t.hash.Write(t.Get(b.Sibling())); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 		} else {
 			if _, err := t.hash.Write(t.Get(b.Sibling())); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 			if _, err := t.hash.Write(t.Get(b)); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 		}
 		t.setVerified(b.Sibling())

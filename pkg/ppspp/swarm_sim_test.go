@@ -168,7 +168,7 @@ func TestSwarmSim(t *testing.T) {
 
 	go func() {
 		f, err := os.OpenFile(fmt.Sprintf("./samples-%d.csv", time.Now().Unix()), os.O_CREATE|os.O_WRONLY, 0644)
-		assert.NoError(t, err, "log open failed")
+		assert.Nil(t, err, "log open failed")
 		defer f.Close()
 
 		var prev []int64
@@ -186,14 +186,13 @@ func TestSwarmSim(t *testing.T) {
 			}
 		}
 		labels.WriteRune('\n')
-		if _, err := f.WriteString(labels.String()); err != nil {
-			panic(err)
-		}
+		_, err = f.WriteString(labels.String())
+		assert.Nil(t, err, "writing string failed")
 
 		// t := time.NewTicker(time.Second)
-		t := time.NewTicker(time.Second)
+		ticker := time.NewTicker(time.Second)
 		var tick int
-		for range t.C {
+		for range ticker.C {
 			// log.Println("==================================================")
 
 			var row strings.Builder
@@ -226,9 +225,8 @@ func TestSwarmSim(t *testing.T) {
 				// prev[i] = wn
 			}
 			row.WriteRune('\n')
-			if _, err := f.WriteString(row.String()); err != nil {
-				panic(err)
-			}
+			_, err = f.WriteString(row.String())
+			assert.Nil(t, err, "writing string failed")
 
 			// log.Println("---")
 			tick++

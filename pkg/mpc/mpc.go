@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"log"
 	"math"
 
 	"github.com/bwesterb/go-ristretto"
@@ -204,7 +205,7 @@ func hashPoint(dst []byte, tweak uint64, pt *ristretto.Point) {
 func ristrettoPointFromRNG(rng io.Reader) *ristretto.Point {
 	var buf [32]byte
 	if _, err := rng.Read(buf[:]); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	p := new(ristretto.Point)
 	return p.SetElligator(&buf)
@@ -213,7 +214,7 @@ func ristrettoPointFromRNG(rng io.Reader) *ristretto.Point {
 func ristrettoScalarFromRNG(rng io.Reader) *ristretto.Scalar {
 	var buf [64]byte
 	if _, err := rng.Read(buf[:]); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	s := new(ristretto.Scalar)
 	return s.SetReduced(&buf)

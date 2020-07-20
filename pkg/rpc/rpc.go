@@ -201,7 +201,7 @@ func (r *callbackReceiver) ReceiveStream(ctx context.Context, ch interface{}) {
 		select {
 		case <-ctx.Done():
 			if err := call(context.Background(), r.conn, cancelMethod, &pb.Cancel{}, withParentID(r.call.Id)); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 			return
 		case res := <-r.res:

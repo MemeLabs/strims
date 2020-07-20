@@ -3,6 +3,7 @@ package hmac_drbg
 import (
 	"crypto/hmac"
 	"hash"
+	"log"
 )
 
 // NewReader ...
@@ -43,13 +44,13 @@ func (r *Reader) update() {
 	copy(t, r.v)
 	copy(t[r.size+1:], r.a)
 	if _, err := h.Write(t); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	kTemp := h.Sum(nil)
 
 	h = hmac.New(r.h, kTemp)
 	if _, err := h.Write(r.v); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	vTemp := h.Sum(nil)
 
@@ -58,13 +59,13 @@ func (r *Reader) update() {
 	t[r.size] = 1
 	copy(t[r.size+1:], r.a)
 	if _, err := h.Write(t); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	r.k = h.Sum(r.k[:0])
 
 	h = hmac.New(r.h, r.k)
 	if _, err := h.Write(vTemp); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	r.v = h.Sum(r.v[:0])
 }

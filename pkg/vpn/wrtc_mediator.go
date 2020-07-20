@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -37,7 +38,7 @@ func newMediationID() uint64 {
 	var b [8]byte
 	_, err := rand.Read(b[:])
 	if err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	return binary.LittleEndian.Uint64(b[:])
 }
@@ -331,7 +332,10 @@ func (s *PeerExchange) handleOffer(m *pb.PeerExchangeMessage_Offer, msg *Message
 	)
 	go func() {
 		if err := s.dial(newMediatorFromOffer(msg.FromHostID(), s.network, m.MediationId, m.Data)); err != nil {
-			panic(err)
+			s.logger.Debug(
+				"dial failed for newMediatorFromOffer",
+				zap.Error(err),
+			)
 		}
 	}()
 	return nil

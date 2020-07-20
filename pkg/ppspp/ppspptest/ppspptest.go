@@ -3,6 +3,7 @@ package ppspptest
 import (
 	"encoding/json"
 	"io"
+	"log"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"go.uber.org/zap"
@@ -47,7 +48,7 @@ func ReadChannelConn(c ReaderMTUer, ch MessageHandler) {
 			panic(err)
 		}
 		if _, err := ch.HandleMessage(b[:n]); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 	}
 }

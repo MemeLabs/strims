@@ -1,6 +1,7 @@
 package mpc
 
 import (
+	"log"
 	"testing"
 
 	"github.com/MemeLabs/go-ppspp/pkg/mpc/mpctest"
@@ -17,7 +18,7 @@ func TestKKRT(t *testing.T) {
 		}
 		for i := 0; i < len(inputs); i++ {
 			if _, err := rng.Read(inputs[i][:]); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 		}
 	}

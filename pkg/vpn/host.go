@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math"
 	"path"
 	"reflect"
@@ -99,7 +100,7 @@ func NewHost(logger *zap.Logger, key *pb.Key, options ...HostOption) (*Host, err
 		if listener, ok := iface.(Listener); ok {
 			go func() {
 				if err := listener.Listen(h); err != nil {
-					panic(err)
+					log.Println(err)
 				}
 			}()
 		}

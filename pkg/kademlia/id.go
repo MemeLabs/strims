@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"log"
 )
 
 // constants ...
@@ -89,7 +90,7 @@ func (d ID) Bytes(b []byte) []byte {
 		b = make([]byte, IDByteLength)
 	}
 	if _, err := d.Marshal(b); err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	return b
 }

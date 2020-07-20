@@ -48,7 +48,7 @@ func NewWeb() (Driver, error) {
 	d.bridge = newTestClientBridgeServer()
 	go func() {
 		if err := d.bridge.Run(); err != nil {
-			panic(err)
+			log.Println(err)
 		}
 	}()
 
@@ -112,7 +112,7 @@ func (d *webDriver) Close() {
 		for _, c := range d.clients {
 			c.devClient.Stop()
 			if err := c.chrome.Stop(); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 		}
 	})

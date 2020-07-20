@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"log"
 	"sync"
 	"time"
 
@@ -268,7 +269,7 @@ func StartBootstrapClients(host *vpn.Host, store *dao.ProfileStore) error {
 		case *pb.BootstrapClient_WebsocketOptions:
 			go func() {
 				if err := host.Dial(vpn.WebSocketAddr(o.WebsocketOptions.Url)); err != nil {
-					panic(err)
+					log.Println(err)
 				}
 			}()
 		}

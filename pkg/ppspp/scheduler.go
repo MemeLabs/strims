@@ -2,6 +2,7 @@ package ppspp
 
 import (
 	"context"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -148,7 +149,7 @@ func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 				}
 
 				if _, err := c.WriteCancel(codec.Cancel{Address: codec.Address(i.Bin())}); err != nil {
-					panic(err)
+					log.Println(err)
 				}
 			}
 		}
@@ -195,7 +196,7 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 			c.addedBins.Reset(b)
 
 			if _, err := c.WriteHave(codec.Have{Address: codec.Address(b)}); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 		}
 
@@ -204,7 +205,7 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 
 		for _, b := range requestBins {
 			if _, err := c.WriteRequest(codec.Request{Address: codec.Address(b)}); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 			p.addRequestedChunks(b.BaseLength())
 			c.requestedBinHistory.Push(b, t)
@@ -231,7 +232,7 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 					Timestamp: codec.Timestamp{Time: t},
 					Data:      codec.Buffer(b),
 				}); err != nil {
-					panic(err)
+					log.Println(err)
 				}
 
 				// TODO: re-add with merged acks
@@ -266,7 +267,7 @@ func (r *Scheduler) sendPongs(p *Peer, t time.Time) {
 	for _, c := range p.channels {
 		if p := c.dequeuePong(); p != nil {
 			if _, err := c.WritePong(*p); err != nil {
-				panic(err)
+				log.Println(err)
 			}
 		}
 	}
@@ -277,7 +278,7 @@ func (r *Scheduler) sendPeerPing(p *Peer, t time.Time) {
 		if c.Dirty() {
 			if nonce, ok := p.trackPingRTT(c.id, t); ok {
 				if _, err := c.WritePing(codec.Ping{Nonce: codec.Nonce{Value: nonce}}); err != nil {
-					panic(err)
+					log.Println(err)
 				}
 			}
 		}
