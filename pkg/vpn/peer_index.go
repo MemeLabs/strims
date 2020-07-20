@@ -374,8 +374,12 @@ func (p *PeerIndexStore) Closest(peerIndexID uint32, hostID kademlia.ID, hash []
 
 func peerIndexRecordHash(key, salt []byte) []byte {
 	hash := sha1.New()
-	hash.Write(key)
-	hash.Write(salt)
+	if _, err := hash.Write(key); err != nil {
+		panic(err)
+	}
+	if _, err := hash.Write(salt); err != nil {
+		panic(err)
+	}
 	return hash.Sum(nil)
 }
 

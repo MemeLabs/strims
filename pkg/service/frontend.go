@@ -690,7 +690,9 @@ func (s *Frontend) PProf(ctx context.Context, r *pb.PProfRequest) (*pb.PProfResp
 	if r.Debug {
 		debug = 1
 	}
-	p.WriteTo(b, debug)
+	if err := p.WriteTo(b, debug); err != nil {
+		return nil, err
+	}
 
 	return &pb.PProfResponse{Name: r.Name, Data: b.Bytes()}, nil
 }
@@ -827,9 +829,11 @@ func (s *Frontend) CallChatClient(ctx context.Context, r *pb.CallChatClientReque
 
 	switch b := r.Body.(type) {
 	case *pb.CallChatClientRequest_Message_:
-		client.Send(&pb.ChatClientEvent_Message{
+		if err := client.Send(&pb.ChatClientEvent_Message{
 			Body: b.Message.Body,
-		})
+		}); err != nil {
+			return err
+		}
 	case *pb.CallChatClientRequest_Close_:
 		client.Close()
 	}
@@ -966,9 +970,13 @@ func (s *Frontend) TestMutex(ctx context.Context, r *pb.TestMutexRequest) (*pb.T
 	mu := dao.NewMutex(session.ProfileStore(), []byte("test"))
 
 	go func() {
-		mu.Lock(context.Background())
+		if err := mu.Lock(context.Background()); err != nil {
+			panic(err)
+		}
 		s.logger.Debug("lock acquired")
-		mu.Release()
+		if err := mu.Release(); err != nil {
+			panic(err)
+		}
 	}()
 
 	return &pb.TestMutexResponse{}, nil

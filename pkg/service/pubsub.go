@@ -347,7 +347,9 @@ func (m *swarmPeerManager) update(_ time.Time) {
 	}
 
 	for _, peer := range peers {
-		m.svc.PeerExchange.Connect(peer.HostID)
+		if err := m.svc.PeerExchange.Connect(peer.HostID); err != nil {
+			continue
+		}
 	}
 }
 

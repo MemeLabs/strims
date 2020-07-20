@@ -97,7 +97,11 @@ func NewHost(logger *zap.Logger, key *pb.Key, options ...HostOption) (*Host, err
 
 	for _, iface := range h.interfaces {
 		if listener, ok := iface.(Listener); ok {
-			go listener.Listen(h)
+			go func() {
+				if err := listener.Listen(h); err != nil {
+					panic(err)
+				}
+			}()
 		}
 	}
 

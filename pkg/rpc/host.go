@@ -64,7 +64,9 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 			fmt.Printf("panic: %s\n\n%s", err, string(debug.Stack()))
 
 			e := &pb.Error{Message: recoverError(err).Error()}
-			call(ctx, c, callbackMethod, e, withParentID(m.Id))
+			if err := call(ctx, c, callbackMethod, e, withParentID(m.Id)); err != nil {
+				panic(err)
+			}
 		}
 	}()
 
@@ -79,18 +81,24 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 	method := reflect.ValueOf(h.service).MethodByName(strings.Title(m.Method))
 	if !method.IsValid() {
 		e := &pb.Error{Message: fmt.Sprintf("undefined method: %s", m.Method)}
-		call(ctx, c, callbackMethod, e, withParentID(m.Id))
+		if err := call(ctx, c, callbackMethod, e, withParentID(m.Id)); err != nil {
+			panic(err)
+		}
 		return
 	}
 
 	rs := method.Call([]reflect.Value{reflect.ValueOf(ctx), reflect.ValueOf(arg)})
 	if len(rs) == 0 {
-		call(ctx, c, callbackMethod, &pb.Undefined{}, withParentID(m.Id))
+		if err := call(ctx, c, callbackMethod, &pb.Undefined{}, withParentID(m.Id)); err != nil {
+			panic(err)
+		}
 		return
 	}
 
 	if err, ok := rs[len(rs)-1].Interface().(error); ok && err != nil {
-		call(ctx, c, callbackMethod, &pb.Error{Message: err.Error()}, withParentID(m.Id))
+		if err := call(ctx, c, callbackMethod, &pb.Error{Message: err.Error()}, withParentID(m.Id)); err != nil {
+			panic(err)
+		}
 		return
 	}
 
@@ -114,14 +122,20 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 			}
 
 			if !ok {
-				call(ctx, c, callbackMethod, &pb.Close{}, withParentID(m.Id))
+				if err := call(ctx, c, callbackMethod, &pb.Close{}, withParentID(m.Id)); err != nil {
+					panic(err)
+				}
 				return
 			}
-			call(ctx, c, callbackMethod, v.Interface().(proto.Message), withParentID(m.Id))
+			if err := call(ctx, c, callbackMethod, v.Interface().(proto.Message), withParentID(m.Id)); err != nil {
+				panic(err)
+			}
 		}
 	}
 
 	if a, ok := rs[0].Interface().(proto.Message); ok {
-		call(ctx, c, callbackMethod, a, withParentID(m.Id))
+		if err := call(ctx, c, callbackMethod, a, withParentID(m.Id)); err != nil {
+			panic(err)
+		}
 	}
 }

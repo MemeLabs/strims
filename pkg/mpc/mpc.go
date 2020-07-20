@@ -203,14 +203,18 @@ func hashPoint(dst []byte, tweak uint64, pt *ristretto.Point) {
 
 func ristrettoPointFromRNG(rng io.Reader) *ristretto.Point {
 	var buf [32]byte
-	rng.Read(buf[:])
+	if _, err := rng.Read(buf[:]); err != nil {
+		panic(err)
+	}
 	p := new(ristretto.Point)
 	return p.SetElligator(&buf)
 }
 
 func ristrettoScalarFromRNG(rng io.Reader) *ristretto.Scalar {
 	var buf [64]byte
-	rng.Read(buf[:])
+	if _, err := rng.Read(buf[:]); err != nil {
+		panic(err)
+	}
 	s := new(ristretto.Scalar)
 	return s.SetReduced(&buf)
 }

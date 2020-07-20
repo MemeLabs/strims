@@ -17,7 +17,11 @@ func NewClient(w io.Writer, r io.Reader) *Client {
 		conn:   &conn{w: w},
 	}
 
-	go c.readCalls(r)
+	go func() {
+		if err := c.readCalls(r); err != nil {
+			panic(err)
+		}
+	}()
 
 	return c
 }

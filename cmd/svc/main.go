@@ -89,7 +89,11 @@ func test(profileStore *dao.ProfileStore, ctl *service.NetworkController) {
 				panic(err)
 			}
 
-			go x.Transcode(a.URI, a.Key, "source", v)
+			go func() {
+				if err := x.Transcode(a.URI, a.Key, "source", v); err != nil {
+					panic(err)
+				}
+			}()
 
 			memberships, err := dao.GetNetworkMemberships(profileStore)
 			if err != nil {
@@ -108,7 +112,11 @@ func test(profileStore *dao.ProfileStore, ctl *service.NetworkController) {
 			}
 		},
 	}
-	go rtmp.Listen()
+	go func() {
+		if err := rtmp.Listen(); err != nil {
+			panic(err)
+		}
+	}()
 }
 
 func initProfileStore() (*dao.ProfileStore, error) {

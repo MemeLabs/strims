@@ -136,7 +136,9 @@ func call(ctx context.Context, c *conn, method string, v proto.Message, opts ...
 	defer callBuffers.Put(b)
 	b.Reset()
 
-	b.EncodeVarint(uint64(proto.Size(m)))
+	if err := b.EncodeVarint(uint64(proto.Size(m))); err != nil {
+		return err
+	}
 	if err := b.Marshal(m); err != nil {
 		return err
 	}
@@ -173,7 +175,9 @@ func (r *callbackReceiver) ReceiveUnary(ctx context.Context, v proto.Message) er
 
 	select {
 	case <-ctx.Done():
-		call(context.Background(), r.conn, cancelMethod, &pb.Cancel{}, withParentID(r.call.Id))
+		if err := call(context.Background(), r.conn, cancelMethod, &pb.Cancel{}, withParentID(r.call.Id)); err != nil {
+			return err
+		}
 		return ctx.Err()
 	case res := <-r.res:
 		return unmarshalAny(res.Argument, v)
@@ -196,7 +200,9 @@ func (r *callbackReceiver) ReceiveStream(ctx context.Context, ch interface{}) {
 	for {
 		select {
 		case <-ctx.Done():
-			call(context.Background(), r.conn, cancelMethod, &pb.Cancel{}, withParentID(r.call.Id))
+			if err := call(context.Background(), r.conn, cancelMethod, &pb.Cancel{}, withParentID(r.call.Id)); err != nil {
+				panic(err)
+			}
 			return
 		case res := <-r.res:
 			v := reflect.New(chv.Type().Elem().Elem())

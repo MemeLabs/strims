@@ -46,7 +46,11 @@ func NewWeb() (Driver, error) {
 	signal.Notify(d.sig, syscall.SIGINT, syscall.SIGTERM)
 
 	d.bridge = newTestClientBridgeServer()
-	go d.bridge.Run()
+	go func() {
+		if err := d.bridge.Run(); err != nil {
+			panic(err)
+		}
+	}()
 
 	go func() {
 		<-d.sig
@@ -81,13 +85,17 @@ func (d *webDriver) Client(o *ClientOptions) *rpc.Client {
 	}
 
 	go func() {
-		devClient.Run(fmt.Sprintf(
+		if err := devClient.Run(fmt.Sprintf(
 			"https://%s:%d/%s",
 			chrome.Description.NetworkSettings.Gateway,
 			webpackDevServerPort,
 			testClientFilename,
-		))
-		chrome.Stop()
+		)); err != nil {
+			log.Fatal(err)
+		}
+		if err := chrome.Stop(); err != nil {
+			log.Fatal(err)
+		}
 	}()
 
 	d.clients = append(d.clients, webDriverClient{chrome, devClient})
@@ -103,7 +111,9 @@ func (d *webDriver) Close() {
 
 		for _, c := range d.clients {
 			c.devClient.Stop()
-			c.chrome.Stop()
+			if err := c.chrome.Stop(); err != nil {
+				panic(err)
+			}
 		}
 	})
 }

@@ -42,22 +42,30 @@ func (r *Reader) update() {
 	h := hmac.New(r.h, r.k)
 	copy(t, r.v)
 	copy(t[r.size+1:], r.a)
-	h.Write(t)
+	if _, err := h.Write(t); err != nil {
+		panic(err)
+	}
 	kTemp := h.Sum(nil)
 
 	h = hmac.New(r.h, kTemp)
-	h.Write(r.v)
+	if _, err := h.Write(r.v); err != nil {
+		panic(err)
+	}
 	vTemp := h.Sum(nil)
 
 	h = hmac.New(r.h, kTemp)
 	copy(t, vTemp)
 	t[r.size] = 1
 	copy(t[r.size+1:], r.a)
-	h.Write(t)
+	if _, err := h.Write(t); err != nil {
+		panic(err)
+	}
 	r.k = h.Sum(r.k[:0])
 
 	h = hmac.New(r.h, r.k)
-	h.Write(vTemp)
+	if _, err := h.Write(vTemp); err != nil {
+		panic(err)
+	}
 	r.v = h.Sum(r.v[:0])
 }
 
@@ -65,7 +73,9 @@ func (r *Reader) Read(b []byte) (n int, err error) {
 	r.update()
 
 	h := hmac.New(r.h, r.k)
-	h.Write(r.v)
+	if _, err := h.Write(r.v); err != nil {
+		return 0, err
+	}
 	n = copy(b, h.Sum(nil))
 
 	return

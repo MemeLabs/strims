@@ -523,7 +523,9 @@ func (n *Network) HandleFrame(f Frame) {
 		return
 	}
 
-	n.handleMessage(&m)
+	if err := n.handleMessage(&m); err != nil {
+		panic(err)
+	}
 }
 
 // Send ...

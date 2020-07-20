@@ -16,7 +16,9 @@ func TestKKRT(t *testing.T) {
 			panic(err)
 		}
 		for i := 0; i < len(inputs); i++ {
-			rng.Read(inputs[i][:])
+			if _, err := rng.Read(inputs[i][:]); err != nil {
+				panic(err)
+			}
 		}
 	}
 

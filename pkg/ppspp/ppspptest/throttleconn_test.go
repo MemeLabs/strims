@@ -34,7 +34,9 @@ func TestConnThrottle(t *testing.T) {
 
 	go func() {
 		defer wg.Done()
-		io.CopyN(ioutil.Discard, b, 30*Kbps)
+		if _, err := io.CopyN(ioutil.Discard, b, 30*Kbps); err != nil {
+			panic(err)
+		}
 		b.Close()
 	}()
 

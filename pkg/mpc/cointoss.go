@@ -16,7 +16,9 @@ func cointossSend(conn Conn, seeds []Block) (out []Block, err error) {
 		if _, err := rng.Read(com[:]); err != nil {
 			return nil, err
 		}
-		conn.Write(com[:])
+		if _, err := conn.Write(com[:]); err != nil {
+			return nil, err
+		}
 	}
 	if err := conn.Flush(); err != nil {
 		return nil, err
@@ -33,7 +35,9 @@ func cointossSend(conn Conn, seeds []Block) (out []Block, err error) {
 	}
 
 	for _, seed := range seeds {
-		conn.Write(seed[:])
+		if _, err := conn.Write(seed[:]); err != nil {
+			return nil, err
+		}
 	}
 	if err := conn.Flush(); err != nil {
 		return nil, err
@@ -50,7 +54,9 @@ func cointossReceive(conn Conn, seeds []Block) (out []Block, err error) {
 	}
 
 	for _, seed := range seeds {
-		conn.Write(seed[:])
+		if _, err := conn.Write(seed[:]); err != nil {
+			return nil, err
+		}
 	}
 	if err := conn.Flush(); err != nil {
 		return nil, err
@@ -65,7 +71,9 @@ func cointossReceive(conn Conn, seeds []Block) (out []Block, err error) {
 		if err != nil {
 			return nil, err
 		}
-		rng.Read(rc[:])
+		if _, err := rng.Read(rc[:]); err != nil {
+			return nil, err
+		}
 		if !bytes.Equal(cs[i][:], rc[:]) {
 			return nil, errors.New("commitment check failed")
 		}

@@ -153,7 +153,9 @@ func (s *bootstrapServicePeer) readMessages() {
 			s.logger.Info("bootstrap offer received", logutil.ByteHex("peer", s.vpnPeer.Certificate.Key))
 			s.enablePublishing = true
 		case *pb.BootstrapServiceMessage_PublishRequest_:
-			s.handlePublish(b.PublishRequest)
+			if err := s.handlePublish(b.PublishRequest); err != nil {
+				s.logger.Info("bootstrap service publish error", zap.Error(err))
+			}
 		}
 	}
 }
@@ -264,7 +266,11 @@ func StartBootstrapClients(host *vpn.Host, store *dao.ProfileStore) error {
 	for _, o := range clients {
 		switch o := o.ClientOptions.(type) {
 		case *pb.BootstrapClient_WebsocketOptions:
-			go host.Dial(vpn.WebSocketAddr(o.WebsocketOptions.Url))
+			go func() {
+				if err := host.Dial(vpn.WebSocketAddr(o.WebsocketOptions.Url)); err != nil {
+					panic(err)
+				}
+			}()
 		}
 	}
 	return nil

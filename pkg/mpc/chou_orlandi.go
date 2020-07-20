@@ -45,9 +45,13 @@ func (o *ChaoOrlandiSender) Send(
 	var c Block
 	for i := range inputs {
 		xorBytes(c[:], ks[i][0][:], inputs[i][0][:])
-		conn.Write(c[:])
+		if _, err := conn.Write(c[:]); err != nil {
+			return err
+		}
 		xorBytes(c[:], ks[i][1][:], inputs[i][1][:])
-		conn.Write(c[:])
+		if _, err := conn.Write(c[:]); err != nil {
+			return err
+		}
 	}
 	if err := conn.Flush(); err != nil {
 		return err
@@ -86,7 +90,9 @@ func (o *ChaoOrlandiReceiver) Receive(
 	r := new(ristretto.Point)
 	ks := make([]Block, len(inputs))
 	for i, b := range inputs {
-		rng.Read(xb[:])
+		if _, err := rng.Read(xb[:]); err != nil {
+			return nil, err
+		}
 		x.SetReduced(&xb)
 		c = zero
 		if b {

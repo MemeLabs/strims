@@ -47,7 +47,9 @@ func (a *KOSSender) SendSetup(
 		return nil, err
 	}
 	var seed Block
-	rng.Read(seed[:])
+	if _, err := rng.Read(seed[:]); err != nil {
+		return nil, err
+	}
 	seeds, err := cointossSend(conn, []Block{seed})
 	if err != nil {
 		return nil, err
@@ -61,7 +63,9 @@ func (a *KOSSender) SendSetup(
 	var q, chi Block
 	for i := 0; i < ncols; i++ {
 		copy(q[:], qs[i*16:(i+1)*16])
-		rng.Read(chi[:])
+		if _, err := rng.Read(chi[:]); err != nil {
+			return nil, err
+		}
 		tmp := clmulBlock(q, chi)
 		xorBytes(check[0][:], check[0][:], tmp[0][:])
 		xorBytes(check[1][:], check[1][:], tmp[1][:])
@@ -107,8 +111,12 @@ func (a *KOSSender) Send(
 		xorBytes(q[:], q[:], a.ot.sb[:])
 		y1 := a.ot.hash.TCCRHash(blockFromUint(uint64(i)), q)
 		xorBytes(y1[:], y1[:], input[1][:])
-		conn.Write(y0[:])
-		conn.Write(y1[:])
+		if _, err := conn.Write(y0[:]); err != nil {
+			return err
+		}
+		if _, err := conn.Write(y1[:]); err != nil {
+			return err
+		}
 	}
 	if err := conn.Flush(); err != nil {
 		return err
@@ -150,7 +158,9 @@ func (a *KOSReceiver) ReceiveSetup(
 	mp := m + 128 + SPP
 	r := bytesFromBools(inputs)
 	ext := make([]byte, (mp-m)/8)
-	rng.Read(ext)
+	if _, err := rng.Read(ext); err != nil {
+		return nil, err
+	}
 	r = append(r, ext...)
 
 	ts, err := a.ot.ReceiveSetup(conn, r, mp)
@@ -158,7 +168,9 @@ func (a *KOSReceiver) ReceiveSetup(
 		return nil, err
 	}
 	var seed Block
-	rng.Read(seed[:])
+	if _, err := rng.Read(seed[:]); err != nil {
+		return nil, err
+	}
 	seeds, err := cointossReceive(conn, []Block{seed})
 	if err != nil {
 		return nil, err
@@ -172,7 +184,9 @@ func (a *KOSReceiver) ReceiveSetup(
 	var x, ti, chi, zero Block
 	for i, xi := range boolsFromBytes(r) {
 		copy(ti[:], ts[i*16:(i+1)*16])
-		rng.Read(chi[:])
+		if _, err := rng.Read(chi[:]); err != nil {
+			return nil, err
+		}
 		if xi {
 			xorBytes(x[:], x[:], chi[:])
 		} else {

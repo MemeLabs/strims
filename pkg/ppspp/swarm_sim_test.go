@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 type testPeer struct {
@@ -186,7 +186,9 @@ func TestSwarmSim(t *testing.T) {
 			}
 		}
 		labels.WriteRune('\n')
-		f.WriteString(labels.String())
+		if _, err := f.WriteString(labels.String()); err != nil {
+			panic(err)
+		}
 
 		// t := time.NewTicker(time.Second)
 		t := time.NewTicker(time.Second)
@@ -224,7 +226,9 @@ func TestSwarmSim(t *testing.T) {
 				// prev[i] = wn
 			}
 			row.WriteRune('\n')
-			f.WriteString(row.String())
+			if _, err := f.WriteString(row.String()); err != nil {
+				panic(err)
+			}
 
 			// log.Println("---")
 			tick++
@@ -250,7 +254,9 @@ func TestSwarmSim(t *testing.T) {
 			// 	}
 			// }()
 
-			io.CopyN(&w, clients[i].swarm.Reader(), 5000000)
+			if _, err := io.CopyN(&w, clients[i].swarm.Reader(), 5000000); err != nil {
+				panic(err)
+			}
 		}(i)
 	}
 	wg.Wait()
