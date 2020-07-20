@@ -7,6 +7,7 @@ import (
 	"crypto/sha1"
 	"encoding/binary"
 	"errors"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -122,7 +123,9 @@ func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse) error 
 		return nil
 	}
 
-	s.store.Insert(s.id, m.Record)
+	if err := s.store.Insert(s.id, m.Record); err != nil {
+		return err
+	}
 	sendHashTableGetResponse(&s.searchResponseChans, m.RequestId, m.Record)
 	return nil
 }
@@ -322,8 +325,12 @@ func (p *HashTableStore) Get(hashTableID uint32, hash []byte) *pb.HashTableMessa
 
 func hashTableRecordHash(key, salt []byte) []byte {
 	hash := sha1.New()
-	hash.Write(key)
-	hash.Write(salt)
+	if _, err := hash.Write(key); err != nil {
+		log.Println(err)
+	}
+	if _, err := hash.Write(salt); err != nil {
+		log.Println(err)
+	}
 	return hash.Sum(nil)
 }
 

@@ -1,8 +1,9 @@
 package mpc
 
-import "crypto/cipher"
-
-import "crypto/aes"
+import (
+	"crypto/aes"
+	"crypto/cipher"
+)
 
 // NewPseudorandomCode ...
 func NewPseudorandomCode(k0, k1, k2, k3 Block) (*PseudorandomCode, error) {
@@ -36,5 +37,4 @@ func (p *PseudorandomCode) Encode(dst *Block512, b Block) {
 	p.cipher1.Encrypt(dst[16:32], b[:])
 	p.cipher2.Encrypt(dst[32:48], b[:])
 	p.cipher3.Encrypt(dst[48:64], b[:])
-	return
 }

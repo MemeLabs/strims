@@ -44,7 +44,9 @@ func (p *PSZSender) Send(
 	}
 
 	var seed Block
-	rng.Read(seed[:])
+	if _, err := rng.Read(seed[:]); err != nil {
+		return err
+	}
 	keys, err := cointossSend(conn, []Block{seed})
 	if err != nil {
 		return err
@@ -63,6 +65,9 @@ func (p *PSZSender) Send(
 		return err
 	}
 	seeds, err := p.oprf.Send(conn, nbins, rng)
+	if err != nil {
+		return err
+	}
 
 	indices := make([]int, len(inputs))
 	for i := range inputs {
@@ -187,7 +192,9 @@ func (p *PSZReceiver) performOPRFS(
 	rng io.Reader,
 ) (*CuckooHashMap, []Block512, error) {
 	var seed Block
-	rng.Read(seed[:])
+	if _, err := rng.Read(seed[:]); err != nil {
+		return nil, nil, err
+	}
 	keys, err := cointossReceive(conn, []Block{seed})
 	if err != nil {
 		return nil, nil, err
@@ -242,7 +249,9 @@ func compressAndHashInputs(inputs [][]byte, key Block) ([]Block, error) {
 
 func shuffleInts(ns []int, rng io.Reader) error {
 	var b [8]byte
-	rng.Read(b[:])
+	if _, err := rng.Read(b[:]); err != nil {
+		return err
+	}
 	seed := int64(binary.BigEndian.Uint64(b[:]) & (1<<63 - 1))
 	r := rand.New(rand.NewSource(seed))
 	r.Shuffle(len(ns), func(i int, j int) {

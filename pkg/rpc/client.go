@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"io"
+	"log"
 	"sync"
 
 	"github.com/golang/protobuf/proto"
@@ -17,7 +18,11 @@ func NewClient(w io.Writer, r io.Reader) *Client {
 		conn:   &conn{w: w},
 	}
 
-	go c.readCalls(r)
+	go func() {
+		if err := c.readCalls(r); err != nil {
+			log.Println(err)
+		}
+	}()
 
 	return c
 }

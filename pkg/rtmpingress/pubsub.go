@@ -85,7 +85,7 @@ type splitSeqhdr struct {
 }
 
 func (s *splitSeqhdr) sendmeta(pkt av.Packet) error {
-	if bytes.Compare(s.hdrpkt.Metadata, pkt.Metadata) != 0 {
+	if !bytes.Equal(s.hdrpkt.Metadata, pkt.Metadata) {
 		if err := s.cb(av.Packet{
 			Type: av.Metadata,
 			Data: pkt.Metadata,
@@ -104,7 +104,7 @@ func (s *splitSeqhdr) do(pkt av.Packet) error {
 			return err
 		}
 		if pkt.IsKeyFrame {
-			if bytes.Compare(s.hdrpkt.VSeqHdr, pkt.VSeqHdr) != 0 {
+			if !bytes.Equal(s.hdrpkt.VSeqHdr, pkt.VSeqHdr) {
 				if err := s.cb(av.Packet{
 					Type: av.H264DecoderConfig,
 					Data: pkt.VSeqHdr,
@@ -119,7 +119,7 @@ func (s *splitSeqhdr) do(pkt av.Packet) error {
 		if err := s.sendmeta(pkt); err != nil {
 			return err
 		}
-		if bytes.Compare(s.hdrpkt.ASeqHdr, pkt.ASeqHdr) != 0 {
+		if !bytes.Equal(s.hdrpkt.ASeqHdr, pkt.ASeqHdr) {
 			if err := s.cb(av.Packet{
 				Type: av.AACDecoderConfig,
 				Data: pkt.ASeqHdr,

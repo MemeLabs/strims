@@ -92,8 +92,12 @@ func (a *ALSZSender) Send(
 		xorBytes(q[:], q[:], a.sb[:])
 		y1 := a.hash.CRHash(q)
 		xorBytes(y1[:], y1[:], input[1][:])
-		conn.Write(y0[:])
-		conn.Write(y1[:])
+		if _, err := conn.Write(y0[:]); err != nil {
+			return err
+		}
+		if _, err := conn.Write(y1[:]); err != nil {
+			return err
+		}
 	}
 	if err := conn.Flush(); err != nil {
 		return err
@@ -116,7 +120,9 @@ func NewALSZReceiver(
 			return nil, err
 		}
 	}
-	ot.Send(conn, ks, rng)
+	if err := ot.Send(conn, ks, rng); err != nil {
+		return nil, err
+	}
 
 	rngs := make([][2]io.Reader, len(ks))
 	for i, k := range ks {
@@ -165,7 +171,9 @@ func (a *ALSZReceiver) ReceiveSetup(
 		}
 		xorBytes(g, g, t)
 		xorBytes(g, g, r)
-		conn.Write(g)
+		if _, err := conn.Write(g); err != nil {
+			return nil, err
+		}
 	}
 	if err := conn.Flush(); err != nil {
 		return nil, err

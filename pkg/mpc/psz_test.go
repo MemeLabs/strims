@@ -20,15 +20,19 @@ func testPSZ(alen, blen, ilen int) error {
 	{
 		rng, err := newRNG(seed)
 		if err != nil {
-			panic(err)
+			return err
 		}
 		for i := 0; i < alen; i++ {
 			aset[i] = make([]byte, 16)
-			rng.Read(aset[i])
+			if _, err := rng.Read(aset[i]); err != nil {
+				return err
+			}
 		}
 		for i := 0; i < blen; i++ {
 			bset[i] = make([]byte, 16)
-			rng.Read(bset[i])
+			if _, err := rng.Read(aset[i]); err != nil {
+				return err
+			}
 		}
 
 		log.Printf("sending %d, receiving %d", len(aset), len(bset))
@@ -73,23 +77,23 @@ func testPSZ(alen, blen, ilen int) error {
 
 	rng, err := newRNG(seed)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	ot, err := NewChaoOrlandiReceiver(cb, rng)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	ote, err := NewKOSSender(cb, ot, rng)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	oprf, err := NewKKRTReceiver(cb, ote, rng)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	psi, err := NewPSZReceiver(oprf)
 	if err != nil {
-		panic(err)
+		return err
 	}
 	results, err := psi.Receive(cb, bset, rng)
 	if err != nil {

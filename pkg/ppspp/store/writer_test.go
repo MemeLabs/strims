@@ -3,7 +3,7 @@ package store
 import (
 	"testing"
 
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestWriter(t *testing.T) {
@@ -12,7 +12,8 @@ func TestWriter(t *testing.T) {
 	p := &testPublisher{}
 	w := NewWriter(p, chunkSize)
 
-	w.Write(make([]byte, chunkSize*3))
+	_, err := w.Write(make([]byte, chunkSize*3))
+	assert.Nil(t, err)
 	w.Flush()
 
 	assert.Equal(t, 3, len(p.chunks), "publisher did not receive chunk")

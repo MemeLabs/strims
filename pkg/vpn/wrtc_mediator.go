@@ -5,6 +5,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -37,7 +38,7 @@ func newMediationID() uint64 {
 	var b [8]byte
 	_, err := rand.Read(b[:])
 	if err != nil {
-		panic(err)
+		log.Println(err)
 	}
 	return binary.LittleEndian.Uint64(b[:])
 }
@@ -291,7 +292,12 @@ func (s *PeerExchange) Connect(hostID kademlia.ID) error {
 				logutil.ByteHex("host", hostID.Bytes(nil)),
 				zap.Error(err),
 			)
-			s.sendCallbackRequest(hostID)
+			if err := s.sendCallbackRequest(hostID); err != nil {
+				s.logger.Debug(
+					"send callback request failed",
+					zap.Error(err),
+				)
+			}
 		}
 	}()
 
@@ -308,7 +314,14 @@ func (s *PeerExchange) sendCallbackRequest(hostID kademlia.ID) error {
 }
 
 func (s *PeerExchange) handleCallbackRequest(m *pb.PeerExchangeMessage_CallbackRequest, msg *Message) error {
-	go s.dial(newMediator(msg.FromHostID(), s.network))
+	go func() {
+		if err := s.dial(newMediator(msg.FromHostID(), s.network)); err != nil {
+			s.logger.Debug(
+				"dial failed handling callback request",
+				zap.Error(err),
+			)
+		}
+	}()
 	return nil
 }
 
@@ -317,7 +330,14 @@ func (s *PeerExchange) handleOffer(m *pb.PeerExchangeMessage_Offer, msg *Message
 		"handling offer",
 		logutil.ByteHex("host", msg.FromHostID().Bytes(nil)),
 	)
-	go s.dial(newMediatorFromOffer(msg.FromHostID(), s.network, m.MediationId, m.Data))
+	go func() {
+		if err := s.dial(newMediatorFromOffer(msg.FromHostID(), s.network, m.MediationId, m.Data)); err != nil {
+			s.logger.Debug(
+				"dial failed for newMediatorFromOffer",
+				zap.Error(err),
+			)
+		}
+	}()
 	return nil
 }
 

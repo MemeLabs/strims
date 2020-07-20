@@ -90,7 +90,9 @@ func streamToWriter(w io.Writer) {
 		if i+n > len(b) {
 			n = len(b) - i
 		}
-		rand.Read(b[i : i+n])
+		if _, err := rand.Read(b[i : i+n]); err != nil {
+			log.Println(err)
+		}
 	}
 	for range time.NewTicker(time.Millisecond * 100).C {
 		if _, err := w.Write(b); err != nil {

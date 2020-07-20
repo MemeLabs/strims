@@ -14,7 +14,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 type testPeer struct {
@@ -168,7 +168,7 @@ func TestSwarmSim(t *testing.T) {
 
 	go func() {
 		f, err := os.OpenFile(fmt.Sprintf("./samples-%d.csv", time.Now().Unix()), os.O_CREATE|os.O_WRONLY, 0644)
-		assert.NoError(t, err, "log open failed")
+		assert.Nil(t, err, "log open failed")
 		defer f.Close()
 
 		var prev []int64
@@ -186,12 +186,13 @@ func TestSwarmSim(t *testing.T) {
 			}
 		}
 		labels.WriteRune('\n')
-		f.WriteString(labels.String())
+		_, err = f.WriteString(labels.String())
+		assert.Nil(t, err, "writing string failed")
 
 		// t := time.NewTicker(time.Second)
-		t := time.NewTicker(time.Second)
+		ticker := time.NewTicker(time.Second)
 		var tick int
-		for range t.C {
+		for range ticker.C {
 			// log.Println("==================================================")
 
 			var row strings.Builder
@@ -224,7 +225,8 @@ func TestSwarmSim(t *testing.T) {
 				// prev[i] = wn
 			}
 			row.WriteRune('\n')
-			f.WriteString(row.String())
+			_, err = f.WriteString(row.String())
+			assert.Nil(t, err, "writing string failed")
 
 			// log.Println("---")
 			tick++
@@ -250,7 +252,9 @@ func TestSwarmSim(t *testing.T) {
 			// 	}
 			// }()
 
-			io.CopyN(&w, clients[i].swarm.Reader(), 5000000)
+			if _, err := io.CopyN(&w, clients[i].swarm.Reader(), 5000000); err != nil {
+				log.Println(err)
+			}
 		}(i)
 	}
 	wg.Wait()

@@ -60,7 +60,9 @@ func TestReader(t *testing.T) {
 		b[i] = 255
 	}
 
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		t.Fatal("failed to write bytes")
+	}
 	w.Flush()
 
 	r, err := NewReaderSize(&buf, 0, 32)
@@ -91,7 +93,9 @@ func TestOffsetReader(t *testing.T) {
 		b[i] = 255
 	}
 
-	w.Write(b)
+	if _, err := w.Write(b); err != nil {
+		t.Fatal("failed to write bytes")
+	}
 	w.Flush()
 
 	ob := make([]byte, 95)

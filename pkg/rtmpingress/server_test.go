@@ -43,14 +43,22 @@ func TestServerTranscodesMultipleStreams(t *testing.T) {
 		Addr: rtmpServerAddr,
 		HandleStream: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) {
 			for _, tc := range tcs {
-				go z.Transcode(a.URI, a.Key, tc.variant, tc.tw)
+				go func(variant string, tw *tw) {
+					if err := z.Transcode(a.URI, a.Key, variant, tw); err != nil {
+						log.Println(err)
+					}
+				}(tc.variant, tc.tw)
 			}
 		},
 		CheckOrigin: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) bool {
 			return true
 		},
 	}
-	go rtmp.Listen()
+	go func() {
+		if err := rtmp.Listen(); err != nil {
+			log.Println(err)
+		}
+	}()
 	defer rtmp.Close()
 
 	time.Sleep(500 * time.Millisecond)
@@ -78,13 +86,21 @@ func TestServerClosesStreamOnCheckOriginReject(t *testing.T) {
 	rtmp := Server{
 		Addr: rtmpServerAddr,
 		HandleStream: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) {
-			go z.Transcode(a.URI, a.Key, "source", newTw())
+			go func() {
+				if err := z.Transcode(a.URI, a.Key, "source", newTw()); err != nil {
+					log.Println(err)
+				}
+			}()
 		},
 		CheckOrigin: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) bool {
 			return false
 		},
 	}
-	go rtmp.Listen()
+	go func() {
+		if err := rtmp.Listen(); err != nil {
+			log.Println(err)
+		}
+	}()
 	defer rtmp.Close()
 
 	time.Sleep(500 * time.Millisecond)
@@ -103,7 +119,11 @@ func TestServerAcceptsMultipleStreams(t *testing.T) {
 		HandleStream: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) {
 			handleCalled = true
 			z := newTw()
-			go x.Transcode(a.URI, a.Key, "source", z)
+			go func() {
+				if err := x.Transcode(a.URI, a.Key, "source", z); err != nil {
+					log.Println(err)
+				}
+			}()
 			tsfolders = append(tsfolders, z.path)
 		},
 		CheckOrigin: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) bool {
@@ -111,7 +131,11 @@ func TestServerAcceptsMultipleStreams(t *testing.T) {
 			return true
 		},
 	}
-	go rtmp.Listen()
+	go func() {
+		if err := rtmp.Listen(); err != nil {
+			log.Println(err)
+		}
+	}()
 	defer rtmp.Close()
 
 	time.Sleep(500 * time.Millisecond)

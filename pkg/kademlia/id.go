@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/hex"
 	"errors"
+	"log"
 )
 
 // constants ...
@@ -75,7 +76,10 @@ func (d ID) MarshalJSON() ([]byte, error) {
 // UnmarshalJSON ...
 func (d *ID) UnmarshalJSON(j []byte) (err error) {
 	var b [IDByteLength]byte
-	base64.StdEncoding.Decode(b[:], j)
+	_, err = base64.StdEncoding.Decode(b[:], j)
+	if err != nil {
+		return
+	}
 	*d, err = UnmarshalID(b[:])
 	return
 }
@@ -85,7 +89,9 @@ func (d ID) Bytes(b []byte) []byte {
 	if b == nil || len(b) < IDByteLength {
 		b = make([]byte, IDByteLength)
 	}
-	d.Marshal(b)
+	if _, err := d.Marshal(b); err != nil {
+		log.Println(err)
+	}
 	return b
 }
 

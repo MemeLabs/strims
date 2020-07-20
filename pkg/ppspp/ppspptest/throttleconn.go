@@ -51,7 +51,9 @@ func (c *ThrottleConn) Flush() error {
 // Read ...
 func (c *ThrottleConn) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
-	c.t.r.WaitN(c.ctx, n)
+	if err := c.t.r.WaitN(c.ctx, n); err != nil {
+		return 0, err
+	}
 	return n, err
 }
 

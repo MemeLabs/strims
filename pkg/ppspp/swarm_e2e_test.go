@@ -4,12 +4,13 @@ import (
 	"context"
 	"io"
 	"io/ioutil"
+	"log"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestSwarmE2E(t *testing.T) {
@@ -73,7 +74,9 @@ func TestSwarmE2E(t *testing.T) {
 		tc := time.NewTicker(100 * time.Millisecond).C
 		b := make([]byte, 75000)
 		for range tc {
-			src.Write(b)
+			if _, err := src.Write(b); err != nil {
+				log.Println(err)
+			}
 		}
 	}()
 

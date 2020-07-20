@@ -58,6 +58,10 @@ func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubSer
 		HostId: svc.Host.ID().Bytes(nil),
 		Port:   uint32(port),
 	})
+	if err != nil {
+		cancel()
+		return nil, err
+	}
 	_, err = svc.HashTable.Set(ctx, key, salt, b)
 	if err != nil {
 		cancel()
@@ -347,7 +351,9 @@ func (m *swarmPeerManager) update(_ time.Time) {
 	}
 
 	for _, peer := range peers {
-		m.svc.PeerExchange.Connect(peer.HostID)
+		if err := m.svc.PeerExchange.Connect(peer.HostID); err != nil {
+			continue
+		}
 	}
 }
 

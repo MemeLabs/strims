@@ -95,7 +95,9 @@ func (s *DirectoryServer) pumpEvents() {
 // Close ...
 func (s *DirectoryServer) Close() {
 	s.close()
-	s.lock.Release()
+	if err := s.lock.Release(); err != nil {
+		s.logger.Error("failed to release lock", zap.Error(err))
+	}
 
 	s.directoryLock.RLock()
 	defer s.directoryLock.RUnlock()
@@ -185,7 +187,9 @@ func (s *directoryServer) transformDirectoryMessages(ps *PubSubServer) {
 	for {
 		select {
 		case t := <-ticker.C:
-			s.ping(t)
+			if err := s.ping(t); err != nil {
+				s.logger.Error("failed to send ping", zap.Error(err))
+			}
 		case p := <-ps.Messages():
 			var e pb.DirectoryClientEvent
 			if err := proto.Unmarshal(p.Body, &e); err != nil {
@@ -195,16 +199,24 @@ func (s *directoryServer) transformDirectoryMessages(ps *PubSubServer) {
 			switch b := e.Body.(type) {
 			case *pb.DirectoryClientEvent_Publish_:
 				if verifyPublish(b.Publish) {
-					s.Publish(b.Publish.Listing)
+					if err := s.Publish(b.Publish.Listing); err != nil {
+						continue
+					}
 				}
 			case *pb.DirectoryClientEvent_Unpublish_:
 				if verifyUnpublish(b.Unpublish) {
-					s.Unpublish(b.Unpublish.Key)
+					if err := s.Unpublish(b.Unpublish.Key); err != nil {
+						continue
+					}
 				}
 			case *pb.DirectoryClientEvent_Join_:
-				s.Join(b.Join.ListingId)
+				if err := s.Join(b.Join.ListingId); err != nil {
+					continue
+				}
 			case *pb.DirectoryClientEvent_Part_:
-				s.Part(b.Part.ListingId)
+				if err := s.Part(b.Part.ListingId); err != nil {
+					continue
+				}
 			}
 		}
 	}
