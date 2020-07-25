@@ -1,0 +1,80 @@
+syntax = "proto3";
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+
+import "api.proto";
+
+message ServerConfig {
+  Key key = 1;
+  uint32 name_change_quota = 2;
+  uint64 token_ttl = 3;
+  repeated string roles = 4;
+}
+
+message NickRecord {
+  Key peer_public_key = 1;
+  string name = 2;
+  int64 updated_timestamp = 3;
+  int64 created_timestamp = 4;
+  uint32 remaining_name_change_quota = 5;
+  repeated string roles = 6;
+}
+
+message NickServToken {
+  Key owner_public_key = 1;
+  string nick = 2;
+  repeated string roles = 3;
+  uint64 valid_until = 4;
+  bytes signature = 5;
+}
+
+message RPCCommand {
+  uint64 request_id = 1;
+  Key source_public_key = 2;
+
+  message Create {
+    string nick = 1;
+  }
+
+  message Retrieve {}
+
+  message Update {
+    string nick = 1;
+    oneof param {
+      string new_nick = 2;
+      uint32 name_change_quota = 3;
+      string roles = 4;
+    }
+  }
+
+  message Delete {
+    string nick = 1;
+  }
+
+  oneof body {
+    Create create = 5;
+    Retrieve retrieve = 6;
+    Update update = 7;
+    Delete delete = 8;
+  }
+}
+
+message RPCResponse {
+  uint64 request_id = 1;
+
+  message Error {
+    string msg = 1;
+  }
+
+  message Update {}
+  
+  message Delete {}
+
+  oneof body {
+    Error error = 2;
+    Update update = 3;
+    Delete delete = 4;
+    NickServToken create = 5;
+    NickServToken retrieve = 6;
+  }
+}
