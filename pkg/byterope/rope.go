@@ -1,4 +1,4 @@
-// Package byterope allows slicing and copying of byte slices with minimum allocations
+// Package byterope allows efficiently manipulating fragmented buffers
 package byterope
 
 // Rope data structure for byte slices
@@ -9,9 +9,10 @@ func New(v ...[]byte) Rope {
 	return Rope(v)
 }
 
-// Slice loops over a Rope, constructing a new rope with the bytes in between the range
+// Slice returns r modified to include only bytes in the range [low, high)
 func (r Rope) Slice(low, high int) (next Rope) {
 	var n int
+	next = r[:0]
 	for i := 0; i < len(r); i++ {
 		rn := len(r[i])
 		rh := n + rn
@@ -35,7 +36,7 @@ func (r Rope) Slice(low, high int) (next Rope) {
 	return
 }
 
-// Copy copies bytes from the source slice into the Rope structure
+// Copy copies bytes from the src slices to r returning the number of bytes copied
 func (r Rope) Copy(src ...[]byte) (n int) {
 	var i, in int
 	for _, b := range src {

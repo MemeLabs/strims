@@ -1,19 +1,26 @@
 package merkle
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
+	"io"
 	"testing"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/hmac_drbg"
 	"github.com/stretchr/testify/assert"
 )
 
+func rng() io.Reader {
+	return hmac_drbg.NewReader(sha256.New, []byte{1, 2, 3, 4})
+}
+
 func TestVerify(t *testing.T) {
-	chunkSize := 1024
+	const chunkSize = 1024
 	bin := binmap.NewBin(5, 0)
-	data := make([]byte, int(bin.BaseLength())*chunkSize)
-	rand.Read(data)
+	data := make([]byte, bin.BaseLength()*chunkSize)
+	if _, err := io.ReadFull(rng(), data); err != nil {
+		t.Fatal(err)
+	}
 
 	r := NewTree(bin, chunkSize, sha256.New())
 	r.Fill(bin, data)
@@ -22,17 +29,20 @@ func TestVerify(t *testing.T) {
 	r0.SetRoot(r.Get(bin))
 
 	r1 := NewProvisionalTree(r0)
-	assert.True(t, r1.Verify(bin, data), "expected successful validation")
+	_, verified := r1.Verify(bin, data)
+	assert.True(t, verified, "expected successful validation")
 
 	r0.Merge(r1)
 }
 
 func TestVerifyForward(t *testing.T) {
-	chunkSize := 1024
+	const chunkSize = 1024
 	bin := binmap.NewBin(5, 0)
 	fillBin := binmap.NewBin(1, 4)
-	data := make([]byte, int(bin.BaseLength())*chunkSize)
-	rand.Read(data)
+	data := make([]byte, bin.BaseLength()*chunkSize)
+	if _, err := io.ReadFull(rng(), data); err != nil {
+		t.Fatal(err)
+	}
 
 	r := NewTree(bin, chunkSize, sha256.New())
 	r.Fill(bin, data)
@@ -47,16 +57,18 @@ func TestVerifyForward(t *testing.T) {
 		r1.Set(b.Sibling(), r.Get(b.Sibling()))
 	}
 
-	verified := r1.Verify(17, data[8*chunkSize:10*chunkSize])
+	_, verified := r1.Verify(17, data[8*chunkSize:10*chunkSize])
 	assert.True(t, verified)
 }
 
 func TestNoVeriefiedReferenceNode(t *testing.T) {
-	chunkSize := 1024
+	const chunkSize = 1024
 	bin := binmap.NewBin(5, 0)
 	fillBin := binmap.NewBin(1, 4)
-	data := make([]byte, int(bin.BaseLength())*chunkSize)
-	rand.Read(data)
+	data := make([]byte, bin.BaseLength()*chunkSize)
+	if _, err := io.ReadFull(rng(), data); err != nil {
+		t.Fatal(err)
+	}
 
 	r := NewTree(bin, chunkSize, sha256.New())
 	r.Fill(bin, data)
@@ -71,6 +83,6 @@ func TestNoVeriefiedReferenceNode(t *testing.T) {
 	}
 
 	// should return false seince r0 has no hashes to verify against
-	verified := r1.Verify(17, data[8*chunkSize:10*chunkSize])
+	_, verified := r1.Verify(17, data[8*chunkSize:10*chunkSize])
 	assert.False(t, verified)
 }

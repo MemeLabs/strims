@@ -2,6 +2,7 @@ package ppspp
 
 import (
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 )
 
@@ -9,6 +10,7 @@ import (
 type WriterOptions struct {
 	SwarmOptions SwarmOptions
 	Key          *pb.Key
+	Integrity    integrity.WriterOptions
 }
 
 // NewWriter ...
@@ -19,15 +21,29 @@ func NewWriter(o WriterOptions) (*Writer, error) {
 		return nil, err
 	}
 
+	w, err := integrity.NewWriter(o.Key.Private, integrity.WriterOptions{
+		ChunksPerSignature: 32,
+		SwarmOptions: integrity.WriterSwarmOptions{
+			LiveSignatureAlgorithm: s.liveSignatureAlgorithm(),
+			ProtectionMethod:       s.contentIntegrityProtectionMethod(),
+			ChunkSize:              s.chunkSize(),
+			Verifier:               s.verifier,
+			Writer:                 store.NewWriter(s.pubSub, s.chunkSize()),
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &Writer{
-		w: store.NewWriter(s.pubSub, s.chunkSize()),
+		w: w,
 		s: s,
 	}, nil
 }
 
 // Writer ...
 type Writer struct {
-	w *store.Writer
+	w integrity.WriteFlusher
 	s *Swarm
 }
 

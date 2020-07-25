@@ -3,6 +3,7 @@ package merkle
 import (
 	"bytes"
 	"hash"
+	"log"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
@@ -59,7 +60,8 @@ func (t *Tree) Reset(rootBin binmap.Bin) {
 // Merge copies the verified hashes from o to the corresponding bin in t if the
 // bin in t is not verified
 func (t *Tree) Merge(o *Tree) {
-	for i := 0; i < int(t.rootBin.BaseLength()*2); i++ {
+	bl := int(t.rootBin.BaseLength())
+	for i := 0; i < bl*2; i++ {
 		if o.verified&(1<<i) != 0 && t.verified&(1<<i) == 0 {
 			t.verified |= 1 << i
 			s := t.hash.Size()
@@ -72,6 +74,24 @@ func (t *Tree) Merge(o *Tree) {
 func (t *Tree) SetRoot(digest []byte) {
 	t.Set(t.rootBin, digest)
 	t.setVerified(t.rootBin)
+}
+
+func (t *Tree) RootBin() binmap.Bin {
+	return t.rootBin
+}
+
+func (t *Tree) BaseLeft() binmap.Bin {
+	return t.baseLeft
+}
+
+func (t *Tree) Verified() []binmap.Bin {
+	v := []binmap.Bin{}
+	for i := t.rootBin.BaseLeft(); i < t.rootBin.BaseRight(); i++ {
+		if t.isVerified(i) {
+			v = append(v, i-t.RootBin().BaseLeft())
+		}
+	}
+	return v
 }
 
 // Set the hash of b to the given data
@@ -92,6 +112,10 @@ func (t *Tree) setVerified(b binmap.Bin) {
 
 // Get ...
 func (t *Tree) Get(b binmap.Bin) []byte {
+	if t.parent != nil && t.parent.isVerified(b) {
+		return t.parent.Get(b)
+	}
+
 	i := int(b - t.baseLeft)
 	s := t.hash.Size()
 	return t.digests[i*s : (i+1)*s]
@@ -111,6 +135,9 @@ func (t *Tree) setOrVerify(b binmap.Bin) (ok, verified bool) {
 	if t.parent != nil && t.parent.isVerified(b) {
 		// ok if the hashes match - we found a node with a verified counterpart in
 		// the parent tree
+		if !bytes.Equal(d, t.parent.Get(b)) {
+			log.Printf("%x %x", d, t.parent.Get(b))
+		}
 		return bytes.Equal(d, t.parent.Get(b)), true
 	}
 
@@ -128,7 +155,8 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 	r := b.BaseRight()
 
 	// compute hash of data (leaf) nodes under b from left to right
-	for i := 0; i < int(b.BaseLength()); i++ {
+	bl := int(b.BaseLength())
+	for i := 0; i < bl; i++ {
 		if _, err := t.hash.Write(d[i*t.chunkSize : (i+1)*t.chunkSize]); err != nil {
 			return false, false
 		}
@@ -165,38 +193,38 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 
 // Verify that the hashes of the target tree and it's parent  match if we assign
 // the specified data to the specified bin
-func (t *Tree) Verify(b binmap.Bin, d []byte) bool {
+func (t *Tree) Verify(b binmap.Bin, d []byte) (ok, verified bool) {
 	if ok, verified := t.Fill(b, d); !ok {
-		return false
+		return false, false
 	} else if verified {
-		return true
+		return true, true
 	}
 
 	for b != t.rootBin {
 		t.hash.Reset()
 		if b.IsLeft() {
 			if _, err := t.hash.Write(t.Get(b)); err != nil {
-				return false
+				return false, false
 			}
 			if _, err := t.hash.Write(t.Get(b.Sibling())); err != nil {
-				return false
+				return false, false
 			}
 		} else {
 			if _, err := t.hash.Write(t.Get(b.Sibling())); err != nil {
-				return false
+				return false, false
 			}
 			if _, err := t.hash.Write(t.Get(b)); err != nil {
-				return false
+				return false, false
 			}
 		}
 
 		b = b.Parent()
 		if ok, verified := t.setOrVerify(b); !ok {
-			return false
+			return false, false
 		} else if verified {
-			return true
+			return true, true
 		}
 	}
 
-	return false
+	return true, false
 }

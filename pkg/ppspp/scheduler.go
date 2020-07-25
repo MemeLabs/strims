@@ -120,8 +120,7 @@ func (r *Scheduler) runPeer(p *Peer, t time.Time) {
 func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 	// TODO: separate read and write timeouts
 	// TODO: mediate cancel/retry floods from increased latency
-	// deadline := t.Add(-p.ledbat.CTO() * planForIntervals)
-	deadline := t.Add(-24 * time.Hour)
+	deadline := t.Add(-p.ledbat.CTO() * planForIntervals)
 
 	var nn int
 	for s, c := range p.channels {
@@ -136,19 +135,19 @@ func (r *Scheduler) sendPeerTimeouts(p *Peer, t time.Time) {
 
 		for i := c.requestedBinHistory.IterateUntil(deadline); i.Next(); {
 			if !s.store.FilledAt(i.Bin()) {
-				for b := i.Bin().BaseLeft(); b <= i.Bin().BaseRight(); b += 2 {
-					if s.store.EmptyAt(b) {
-						s.bins.Lock()
-						s.bins.Requested.Reset(b)
-						s.bins.Unlock()
-						p.addCancelledChunk()
-					}
-					nn++
-				}
+				// for b := i.Bin().BaseLeft(); b <= i.Bin().BaseRight(); b += 2 {
+				// 	if s.store.EmptyAt(b) {
+				// 		s.bins.Lock()
+				// 		s.bins.Requested.Reset(b)
+				// 		s.bins.Unlock()
+				// 		p.addCancelledChunk()
+				// 	}
+				// 	nn++
+				// }
 
-				if _, err := c.WriteCancel(codec.Cancel{Address: codec.Address(i.Bin())}); err != nil {
-					r.logger.Debug("write failed", zap.Error(err))
-				}
+				// if _, err := c.WriteCancel(codec.Cancel{Address: codec.Address(i.Bin())}); err != nil {
+				// 	r.logger.Debug("write failed", zap.Error(err))
+				// }
 			}
 		}
 
@@ -176,7 +175,7 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 		// for _, a := range c.acks {
 		// 	c.WriteAck(a)
 		// }
-		// c.acks = c.acks[:0]
+		c.acks = c.acks[:0]
 
 		// TODO: avoid holding swarm lock during io...
 
@@ -229,6 +228,10 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 			c.requestedBins.Reset(rb)
 
 			if ok := s.store.ReadBin(rb, *b); ok {
+				if _, err := s.verifier.WriteIntegrity(rb, c.availableBins, c); err != nil {
+					r.logger.Debug("write failed", zap.Error(err))
+				}
+
 				// TODO: avoid writing data until after this?
 				if _, err := c.WriteData(codec.Data{
 					Address:   codec.Address(rb),

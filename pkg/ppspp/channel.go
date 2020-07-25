@@ -2,6 +2,7 @@ package ppspp
 
 import (
 	"errors"
+	"log"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -10,6 +11,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -21,16 +23,22 @@ var channelMessageCount = promauto.NewCounterVec(prometheus.CounterOpts{
 }, []string{"channel_id", "direction", "type"})
 
 var (
-	errNoVersionOption         = errors.New("handshake missing VersionOption")
-	errNoMinimumVersionOption  = errors.New("handshake missing MinimumVersionOption")
-	errNoLiveWindowOption      = errors.New("handshake missing LiveWindowOption")
-	errNoChunkSizeOption       = errors.New("handshake missing ChunkSizeOption")
-	errNoSwarmIdentifierOption = errors.New("handshake missing SwarmIdentifierOption")
+	errNoVersionOption                    = errors.New("handshake missing VersionOption")
+	errNoMinimumVersionOption             = errors.New("handshake missing MinimumVersionOption")
+	errNoLiveWindowOption                 = errors.New("handshake missing LiveWindowOption")
+	errNoChunkSizeOption                  = errors.New("handshake missing ChunkSizeOption")
+	errNoSwarmIdentifierOption            = errors.New("handshake missing SwarmIdentifierOption")
+	errNoContentIntegrityProtectionMethod = errors.New("handshake missing ContentIntegrityProtectionMethod")
+	errNoMerkleHashTreeFunction           = errors.New("handshake missing MerkleHashTreeFunction")
+	errNoLiveSignatureAlgorithm           = errors.New("handshake missing LiveSignatureAlgorithm")
 
-	errIncompatibleVersionOption         = errors.New("incompatible VersionOption")
-	errIncompatibleMinimumVersionOption  = errors.New("incompatible MinimumVersionOption")
-	errIncompatibleChunkSizeOption       = errors.New("incompatible ChunkSizeOption")
-	errIncompatibleSwarmIdentifierOption = errors.New("incompatible SwarmIdentifierOption")
+	errIncompatibleVersionOption                    = errors.New("incompatible VersionOption")
+	errIncompatibleMinimumVersionOption             = errors.New("incompatible MinimumVersionOption")
+	errIncompatibleChunkSizeOption                  = errors.New("incompatible ChunkSizeOption")
+	errIncompatibleSwarmIdentifierOption            = errors.New("incompatible SwarmIdentifierOption")
+	errIncompatibleContentIntegrityProtectionMethod = errors.New("incompatible ContentIntegrityProtectionMethod")
+	errIncompatibleMerkleHashTreeFunction           = errors.New("incompatible MerkleHashTreeFunction")
+	errIncompatibleLiveSignatureAlgorithm           = errors.New("incompatible LiveSignatureAlgorithm")
 )
 
 var nextChannelID uint64
@@ -201,15 +209,20 @@ func (c *channel) Done() <-chan struct{} {
 }
 
 func newHandshake(swarm *Swarm) codec.Handshake {
-	return codec.Handshake{
+	h := codec.Handshake{
 		Options: []codec.ProtocolOption{
+			codec.NewSwarmIdentifierProtocolOption(swarm.ID()),
 			&codec.VersionProtocolOption{Value: 2},
 			&codec.MinimumVersionProtocolOption{Value: 2},
 			&codec.LiveWindowProtocolOption{Value: uint32(swarm.liveWindow())},
 			&codec.ChunkSizeProtocolOption{Value: uint32(swarm.chunkSize())},
-			codec.NewSwarmIdentifierProtocolOption(swarm.ID()),
+			&codec.ContentIntegrityProtectionMethodProtocolOption{Value: uint8(swarm.contentIntegrityProtectionMethod())},
+			&codec.MerkleHashTreeFunctionProtocolOption{Value: uint8(swarm.merkleHashTreeFunction())},
+			&codec.LiveSignatureAlgorithmProtocolOption{Value: uint8(swarm.liveSignatureAlgorithm())},
 		},
 	}
+
+	return h
 }
 
 func newChannelWriter(channel *channel, conn WriteFlushCloser) *channelWriter {
@@ -300,12 +313,15 @@ func newChannelReader(channel *channel, peer *Peer, swarm *Swarm) *ChannelReader
 	return &ChannelReader{
 		channel: channel,
 		r: codec.Reader{
-			ChunkSize: swarm.chunkSize(),
+			ChunkSize:              swarm.chunkSize(),
+			IntegrityHashSize:      swarm.merkleHashTreeFunction().HashSize(),
+			IntegritySignatureSize: swarm.liveSignatureAlgorithm().SignatureSize(),
 			Handler: &channelMessageHandler{
-				swarm:   swarm,
-				peer:    peer,
-				channel: channel,
-				metrics: newChannelMetrics(channel, "in"),
+				swarm:    swarm,
+				peer:     peer,
+				channel:  channel,
+				metrics:  newChannelMetrics(channel, "in"),
+				verifier: swarm.verifier.ChannelVerifier(),
 			},
 		},
 	}
@@ -338,18 +354,23 @@ func (c *ChannelReader) Done() <-chan struct{} {
 }
 
 type channelMessageHandler struct {
-	swarm *Swarm
-	// * ID()
-	// * chunkSize()
-	// * loadedBins()
-	// * pubSub
-	peer    *Peer
-	channel *channel
-	metrics channelMetrics
+	swarm    *Swarm
+	peer     *Peer
+	channel  *channel
+	metrics  channelMetrics
+	verifier integrity.ChannelVerifier
 }
 
 func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 	c.metrics.HandshakeCount.Inc()
+
+	if swarmID, ok := v.Options.Find(codec.SwarmIdentifierOption); ok {
+		if !c.swarm.ID().Equals(NewSwarmID(*swarmID.(*codec.SwarmIdentifierProtocolOption))) {
+			return errIncompatibleSwarmIdentifierOption
+		}
+	} else {
+		return errNoSwarmIdentifierOption
+	}
 
 	if version, ok := v.Options.Find(codec.VersionOption); ok {
 		if version.(*codec.VersionProtocolOption).Value < MinimumProtocolVersion {
@@ -381,56 +402,88 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoChunkSizeOption
 	}
 
-	if swarmID, ok := v.Options.Find(codec.SwarmIdentifierOption); ok {
-		if !c.swarm.ID().Equals(NewSwarmID(*swarmID.(*codec.SwarmIdentifierProtocolOption))) {
-			return errIncompatibleSwarmIdentifierOption
+	if contentIntegrityProtectionMethod, ok := v.Options.Find(codec.ContentIntegrityProtectionMethodOption); ok {
+		if contentIntegrityProtectionMethod.(*codec.ContentIntegrityProtectionMethodProtocolOption).Value != uint8(c.swarm.contentIntegrityProtectionMethod()) {
+			return errIncompatibleContentIntegrityProtectionMethod
 		}
 	} else {
-		return errNoSwarmIdentifierOption
+		return errNoContentIntegrityProtectionMethod
 	}
 
+	if merkleHashTreeFunction, ok := v.Options.Find(codec.MerkleHashTreeFunctionOption); ok {
+		if merkleHashTreeFunction.(*codec.MerkleHashTreeFunctionProtocolOption).Value != uint8(c.swarm.merkleHashTreeFunction()) {
+			return errIncompatibleMerkleHashTreeFunction
+		}
+	} else {
+		return errNoMerkleHashTreeFunction
+	}
+
+	if liveSignatureAlgorithm, ok := v.Options.Find(codec.LiveSignatureAlgorithmOption); ok {
+		if liveSignatureAlgorithm.(*codec.LiveSignatureAlgorithmProtocolOption).Value != uint8(c.swarm.liveSignatureAlgorithm()) {
+			return errIncompatibleLiveSignatureAlgorithm
+		}
+	} else {
+		return errNoLiveSignatureAlgorithm
+	}
+
+	// TODO: send rightmost signed munro
 	c.channel.setAddedBins(c.swarm.loadedBins())
 
 	return nil
 }
 
-func (c *channelMessageHandler) HandleData(v codec.Data) {
+func (c *channelMessageHandler) HandleData(m codec.Data) {
 	c.metrics.DataCount.Inc()
 
+	if v := c.verifier.ChunkVerifier(m.Address.Bin()); v != nil {
+		if !v.Verify(m.Address.Bin(), m.Data) {
+			log.Println("chunk verification failed")
+			return
+		}
+	}
+
 	c.channel.enqueueAck(codec.Ack{
-		Address: v.Address,
+		Address: m.Address,
 		DelaySample: codec.DelaySample{
-			Duration: iotime.Load().Sub(v.Timestamp.Time),
+			Duration: iotime.Load().Sub(m.Timestamp.Time),
 		},
 	})
 
 	ok := c.swarm.pubSub.Publish(store.Chunk{
-		Bin:  v.Address.Bin(),
-		Data: v.Data,
+		Bin:  m.Address.Bin(),
+		Data: m.Data,
 	})
 
 	if ok {
 		c.peer.addReceivedChunk()
 	}
-	c.peer.addRTTSample(c.channel.id, v.Address.Bin(), 0)
+	c.peer.addRTTSample(c.channel.id, m.Address.Bin(), 0)
 }
 
-func (c *channelMessageHandler) HandleIntegrity(v codec.Integrity) {
+func (c *channelMessageHandler) HandleIntegrity(m codec.Integrity) {
 	c.metrics.IntegrityCount.Inc()
+
+	if v := c.verifier.ChunkVerifier(m.Address.Bin()); v != nil {
+		v.SetIntegrity(m.Address.Bin(), m.Hash)
+	}
 }
 
-func (c *channelMessageHandler) HandleSignedIntegrity(v codec.SignedIntegrity) {
+func (c *channelMessageHandler) HandleSignedIntegrity(m codec.SignedIntegrity) {
 	c.metrics.SignedIntegrityCount.Inc()
+
+	if v := c.verifier.ChunkVerifier(m.Address.Bin()); v != nil {
+		v.SetSignedIntegrity(m.Address.Bin(), m.Timestamp.Time, m.Signature)
+	}
 }
 
-func (c *channelMessageHandler) HandleAck(v codec.Ack) {
+func (c *channelMessageHandler) HandleAck(m codec.Ack) {
 	c.metrics.AckCount.Inc()
 
-	if c.channel.addAckedBin(v.Address.Bin()) {
+	if c.channel.addAckedBin(m.Address.Bin()) {
 		// TODO: ack queuing delay
-		c.peer.addRTTSample(c.channel.id, v.Address.Bin(), 0)
-		c.peer.addDelaySample(v.DelaySample.Duration, c.swarm.chunkSize())
-		c.swarm.bins.AddAvailable(v.Address.Bin())
+		c.peer.addRTTSample(c.channel.id, m.Address.Bin(), 0)
+		c.peer.addDelaySample(m.DelaySample.Duration, c.swarm.chunkSize())
+		c.swarm.bins.AddAvailable(m.Address.Bin())
 	}
 }
 
@@ -440,35 +493,35 @@ func (c *channelMessageHandler) HandleHave(v codec.Have) {
 	c.swarm.bins.AddAvailable(v.Bin())
 }
 
-func (c *channelMessageHandler) HandleRequest(v codec.Request) {
+func (c *channelMessageHandler) HandleRequest(m codec.Request) {
 	c.metrics.RequestCount.Inc()
-	c.channel.addRequestedBin(v.Bin())
+	c.channel.addRequestedBin(m.Bin())
 }
 
-func (c *channelMessageHandler) HandleCancel(v codec.Cancel) {
+func (c *channelMessageHandler) HandleCancel(m codec.Cancel) {
 	c.metrics.CancelCount.Inc()
-	c.channel.addCancelledBins(v.Address.Bin())
+	c.channel.addCancelledBins(m.Address.Bin())
 }
 
-func (c *channelMessageHandler) HandleChoke(v codec.Choke) {
+func (c *channelMessageHandler) HandleChoke(m codec.Choke) {
 	c.metrics.ChokeCount.Inc()
 	c.channel.setChoked(true)
 }
 
-func (c *channelMessageHandler) HandleUnchoke(v codec.Unchoke) {
+func (c *channelMessageHandler) HandleUnchoke(m codec.Unchoke) {
 	c.metrics.UnchokeCount.Inc()
 	c.channel.setChoked(false)
 }
 
-func (c *channelMessageHandler) HandlePing(v codec.Ping) {
+func (c *channelMessageHandler) HandlePing(m codec.Ping) {
 	c.metrics.PingCount.Inc()
-	c.channel.enqueuePong(binmap.Bin(v.Nonce.Value))
+	c.channel.enqueuePong(binmap.Bin(m.Nonce.Value))
 }
 
-func (c *channelMessageHandler) HandlePong(v codec.Pong) {
+func (c *channelMessageHandler) HandlePong(m codec.Pong) {
 	c.metrics.PongCount.Inc()
 	// c.peer.addRTTSample(c.channel.id, binmap.Bin(v.Nonce.Value), time.Duration(v.Delay))
-	c.peer.addRTTSample(c.channel.id, binmap.Bin(v.Nonce.Value), 0)
+	c.peer.addRTTSample(c.channel.id, binmap.Bin(m.Nonce.Value), 0)
 }
 
 func newChannelMetrics(channel *channel, direction string) channelMetrics {

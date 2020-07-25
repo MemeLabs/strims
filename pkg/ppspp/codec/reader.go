@@ -123,10 +123,7 @@ func (v Reader) readIntegrity(b []byte) (int, error) {
 }
 
 func (v Reader) readSignedIntegrity(b []byte) (int, error) {
-	msg := SignedIntegrity{
-		hashSize:      v.IntegrityHashSize,
-		signatureSize: v.IntegritySignatureSize,
-	}
+	msg := SignedIntegrity{signatureSize: v.IntegritySignatureSize}
 	n, err := msg.Unmarshal(b)
 	if err != nil {
 		return 0, err

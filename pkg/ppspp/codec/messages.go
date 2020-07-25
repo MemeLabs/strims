@@ -211,6 +211,87 @@ func (v *ChunkSizeProtocolOption) ByteLen() int {
 	return 4
 }
 
+// ContentIntegrityProtectionMethodProtocolOption ...
+type ContentIntegrityProtectionMethodProtocolOption struct {
+	Value uint8
+}
+
+// Unmarshal ...
+func (v *ContentIntegrityProtectionMethodProtocolOption) Unmarshal(b []byte) (int, error) {
+	v.Value = b[0]
+	return 1, nil
+}
+
+// Marshal ...
+func (v *ContentIntegrityProtectionMethodProtocolOption) Marshal(b []byte) int {
+	b[0] = v.Value
+	return 1
+}
+
+// Type ...
+func (v *ContentIntegrityProtectionMethodProtocolOption) Type() ProtocolOptionType {
+	return ContentIntegrityProtectionMethodOption
+}
+
+// ByteLen ...
+func (v *ContentIntegrityProtectionMethodProtocolOption) ByteLen() int {
+	return 1
+}
+
+// MerkleHashTreeFunctionProtocolOption ...
+type MerkleHashTreeFunctionProtocolOption struct {
+	Value uint8
+}
+
+// Unmarshal ...
+func (v *MerkleHashTreeFunctionProtocolOption) Unmarshal(b []byte) (int, error) {
+	v.Value = b[0]
+	return 1, nil
+}
+
+// Marshal ...
+func (v *MerkleHashTreeFunctionProtocolOption) Marshal(b []byte) int {
+	b[0] = v.Value
+	return 1
+}
+
+// Type ...
+func (v *MerkleHashTreeFunctionProtocolOption) Type() ProtocolOptionType {
+	return MerkleHashTreeFunctionOption
+}
+
+// ByteLen ...
+func (v *MerkleHashTreeFunctionProtocolOption) ByteLen() int {
+	return 1
+}
+
+// LiveSignatureAlgorithmProtocolOption ...
+type LiveSignatureAlgorithmProtocolOption struct {
+	Value uint8
+}
+
+// Unmarshal ...
+func (v *LiveSignatureAlgorithmProtocolOption) Unmarshal(b []byte) (int, error) {
+	v.Value = b[0]
+	return 1, nil
+}
+
+// Marshal ...
+func (v *LiveSignatureAlgorithmProtocolOption) Marshal(b []byte) int {
+	b[0] = v.Value
+	return 1
+}
+
+// Type ...
+func (v *LiveSignatureAlgorithmProtocolOption) Type() ProtocolOptionType {
+	return LiveSignatureAlgorithmOption
+}
+
+// ByteLen ...
+func (v *LiveSignatureAlgorithmProtocolOption) ByteLen() int {
+	return 1
+}
+
 // NewSwarmIdentifierProtocolOption ...
 func NewSwarmIdentifierProtocolOption(id []byte) *SwarmIdentifierProtocolOption {
 	o := SwarmIdentifierProtocolOption(id)
@@ -286,6 +367,12 @@ func (v *Handshake) Unmarshal(b []byte) (size int, err error) {
 			option = &LiveWindowProtocolOption{}
 		case ChunkSizeOption:
 			option = &ChunkSizeProtocolOption{}
+		case ContentIntegrityProtectionMethodOption:
+			option = &ContentIntegrityProtectionMethodProtocolOption{}
+		case MerkleHashTreeFunctionOption:
+			option = &MerkleHashTreeFunctionProtocolOption{}
+		case LiveSignatureAlgorithmOption:
+			option = &LiveSignatureAlgorithmProtocolOption{}
 		case EndOption:
 			return
 		default:
@@ -527,11 +614,9 @@ func (v *Integrity) ByteLen() int {
 
 // SignedIntegrity ...
 type SignedIntegrity struct {
-	hashSize      int
 	signatureSize int
 	Address       Address
 	Timestamp     Timestamp
-	Hash          Buffer
 	Signature     Buffer
 }
 
@@ -554,9 +639,6 @@ func (v *SignedIntegrity) Unmarshal(b []byte) (size int, err error) {
 	}
 	size += n
 
-	v.Hash = b[size : size+v.hashSize]
-	size += v.hashSize
-
 	v.Signature = b[size : size+v.signatureSize]
 	size += v.signatureSize
 
@@ -567,7 +649,6 @@ func (v *SignedIntegrity) Unmarshal(b []byte) (size int, err error) {
 func (v *SignedIntegrity) Marshal(b []byte) (size int) {
 	size += v.Address.Marshal(b)
 	size += v.Timestamp.Marshal(b[size:])
-	size += v.Hash.Marshal(b[size:])
 	size += v.Signature.Marshal(b[size:])
 
 	return
@@ -575,7 +656,7 @@ func (v *SignedIntegrity) Marshal(b []byte) (size int) {
 
 // ByteLen ...
 func (v *SignedIntegrity) ByteLen() int {
-	return v.Address.ByteLen() + v.Timestamp.ByteLen() + v.Hash.ByteLen() + v.Signature.ByteLen()
+	return v.Address.ByteLen() + v.Timestamp.ByteLen() + v.Signature.ByteLen()
 }
 
 // Nonce ...

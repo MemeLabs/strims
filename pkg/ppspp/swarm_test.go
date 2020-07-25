@@ -32,7 +32,7 @@ func TestSwarmOptions(t *testing.T) {
 			assert := assert.New(t)
 
 			opt := NewDefaultSwarmOptions()
-			opt.assign(tc.req)
+			opt.Assign(tc.req)
 
 			assert.Equal(tc.expected, opt)
 		})

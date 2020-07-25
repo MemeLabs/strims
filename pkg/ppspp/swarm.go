@@ -8,6 +8,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ma"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 )
 
@@ -15,15 +16,22 @@ import (
 type SwarmOptions struct {
 	ChunkSize  int
 	LiveWindow int
+	Integrity  integrity.VerifierOptions
 }
 
-func (o *SwarmOptions) assign(u SwarmOptions) {
+func (o *SwarmOptions) Assign(u SwarmOptions) {
 	if u.ChunkSize != 0 {
 		o.ChunkSize = u.ChunkSize
 	}
 
 	if u.LiveWindow != 0 {
 		o.LiveWindow = u.LiveWindow
+	}
+
+	o.Integrity.Assign(u.Integrity)
+	o.Integrity.SwarmOptions = integrity.VerifierSwarmOptions{
+		LiveDiscardWindow: o.LiveWindow,
+		ChunkSize:         o.ChunkSize,
 	}
 }
 
@@ -32,6 +40,7 @@ func NewDefaultSwarmOptions() SwarmOptions {
 	return SwarmOptions{
 		ChunkSize:  1024,
 		LiveWindow: 1 << 16,
+		Integrity:  integrity.NewDefaultVerifierOptions(),
 	}
 }
 
@@ -44,7 +53,7 @@ func NewDefaultSwarm(id SwarmID) (s *Swarm) {
 // NewSwarm ...
 func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 	o := NewDefaultSwarmOptions()
-	o.assign(opt)
+	o.Assign(opt)
 
 	buf, err := store.NewBuffer(o.LiveWindow, o.ChunkSize)
 	if err != nil {
@@ -58,6 +67,11 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 		binRateSlow: ma.NewSimple(300, 100*time.Millisecond),
 	}
 
+	verifier, err := integrity.NewVerifier(id.Binary(), o.Integrity)
+	if err != nil {
+		return nil, err
+	}
+
 	return &Swarm{
 		id:       id,
 		options:  o,
@@ -65,6 +79,7 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 		store:    buf,
 		pubSub:   store.NewPubSub(buf, bins),
 		bins:     bins,
+		verifier: verifier,
 	}, nil
 }
 
@@ -133,6 +148,7 @@ type Swarm struct {
 	store        *store.Buffer
 	pubSub       *store.PubSub
 	bins         *swarmBins
+	verifier     integrity.SwarmVerifier
 }
 
 // ID ...
@@ -156,6 +172,18 @@ func (s *Swarm) chunkSize() int {
 
 func (s *Swarm) liveWindow() int {
 	return s.options.LiveWindow
+}
+
+func (s *Swarm) contentIntegrityProtectionMethod() integrity.ProtectionMethod {
+	return s.options.Integrity.ProtectionMethod
+}
+
+func (s *Swarm) merkleHashTreeFunction() integrity.MerkleHashTreeFunction {
+	return s.options.Integrity.MerkleHashTreeFunction
+}
+
+func (s *Swarm) liveSignatureAlgorithm() integrity.LiveSignatureAlgorithm {
+	return s.options.Integrity.LiveSignatureAlgorithm
 }
 
 func (s *Swarm) loadedBins() *binmap.Map {
