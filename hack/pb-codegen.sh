@@ -1,7 +1,7 @@
 #! /bin/bash
 
 set -e
-pushd $(/bin/pwd) > /dev/null
+pushd $(/bin/pwd) >/dev/null
 
 BASE="$(realpath $0)"
 cd "$(dirname $BASE)/.."

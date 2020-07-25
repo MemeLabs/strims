@@ -36,6 +36,8 @@ require (
 	github.com/nareix/joy5 v0.0.0-20200712071056-a55089207c88
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/olekukonko/tablewriter v0.0.4
+	github.com/minio/blake2b-simd v0.0.0-20160723061019-3f5f724cb5b1
+	github.com/onsi/gomega v1.10.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/ovh/go-ovh v1.1.0
 	github.com/pelletier/go-toml v1.8.0 // indirect
@@ -43,6 +45,8 @@ require (
 	github.com/pion/quic v0.1.4 // indirect
 	github.com/pion/webrtc/v2 v2.2.24
 	github.com/pkg/errors v0.9.1
+	github.com/pion/transport v0.10.1 // indirect
+	github.com/pion/turn/v2 v2.0.4 // indirect
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/common v0.13.0
 	github.com/scaleway/scaleway-sdk-go v1.0.0-beta.6
