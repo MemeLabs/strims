@@ -1,7 +1,11 @@
 package service
 
 import (
+	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"io"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -10,14 +14,18 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/prefixstream"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/petar/GoLLRB/llrb"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
-// TODO: message routing to crud handlers
+var defaultNameChangeQuota uint32 = 5
+
 // TODO: crud handlers
 // TODO: dao helpers for storing nickservtokens
+// TODO: sign/verify nickservtoken
 
-func NewNickServer(svc *NetworkServices, cfg *pb.ServerConfig, salt []byte) (*NickServer, error) {
+func NewNickServ(svc *NetworkServices, cfg *pb.ServerConfig, salt []byte) (*NickServ, error) {
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
 		// SwarmOptions: ppspp.NewDefaultSwarmOptions(),
 		SwarmOptions: ppspp.SwarmOptions{
@@ -54,7 +62,7 @@ func NewNickServer(svc *NetworkServices, cfg *pb.ServerConfig, salt []byte) (*Ni
 		return nil, err
 	}
 
-	s := &NickServer{
+	s := &NickServ{
 		close:           cancel,
 		swarm:           w.Swarm(),
 		svc:             svc,
@@ -72,27 +80,73 @@ func NewNickServer(svc *NetworkServices, cfg *pb.ServerConfig, salt []byte) (*Ni
 	return s, nil
 }
 
-type NickServer struct {
-	//	cfg             *pb.ServerConfig
+type NickServ struct {
+	//	cfg             *pb.ServConfig
 	close           context.CancelFunc
 	swarm           *ppspp.Swarm
 	closeOnce       sync.Once
 	svc             *NetworkServices
 	w               *prefixstream.Writer
+	store           *NickServStore
 	roles           []string
 	tokenttl        uint64
 	nameChangeQuota uint32 // smaller?
 }
 
-func (s *NickServer) Close() {
+func (s *NickServ) Close() {
 	s.closeOnce.Do(func() {
 		s.close()
 		s.svc.Swarms.CloseSwarm(s.swarm.ID())
 	})
 }
 
-func (s *NickServer) HandleMessage(msg *vpn.Message) (forward bool, err error) {
+func (s *NickServ) HandleMessage(msg *vpn.Message) (forward bool, err error) {
+	var m pb.NickServEvent
+	if err := proto.Unmarshal(msg.Body, &m); err != nil {
+		return true, err
+	}
+
+	// TODO: verify `source_public_key`
+
+	switch b := m.Body.(type) {
+	case *pb.NickServEvent_Create_:
+		err = s.handleCreate(m.RequestId, m.SourcePublicKey, b.Create)
+	case *pb.NickServEvent_Retrieve_:
+		err = s.handleRetrieve(b.Retrieve)
+	case *pb.NickServEvent_Update_:
+		err = s.handleUpdate(b.Update)
+	case *pb.NickServEvent_Delete_:
+		err = s.handleDelete(b.Delete)
+	default:
+		err = errors.New("unexpected message type")
+	}
+
 	return true, nil
+}
+
+func (s *NickServ) handleCreate(id uint64, key *pb.Key, msg *pb.NickServEvent_Create) error {
+	now := time.Now()
+	r := &pb.NickRecord{
+		PeerPublicKey:            key,
+		Name:                     msg.Nick,
+		CreatedTimestamp:         uint64(now.Unix()),
+		UpdatedTimestamp:         uint64(now.Unix()),
+		RemainingNameChangeQuota: defaultNameChangeQuota,
+		Roles:                    []string{},
+	}
+	return s.store.Insert(r)
+}
+
+func (s *NickServ) handleRetrieve(msg *pb.NickServEvent_Retrieve) error {
+	return fmt.Errorf("unimplemented")
+}
+
+func (s *NickServ) handleUpdate(msg *pb.NickServEvent_Update) error {
+	return fmt.Errorf("unimplemented")
+}
+
+func (s *NickServ) handleDelete(msg *pb.NickServEvent_Delete) error {
+	return fmt.Errorf("unimplemented")
 }
 
 func NewNickServClient(svc *NetworkServices, key, salt []byte) (*NickServClient, error) {
@@ -179,4 +233,77 @@ func (c *NickServClient) Close() {
 		c.close()
 		c.svc.Swarms.CloseSwarm(c.swarm.ID())
 	})
+}
+
+// Send ...
+func (c *NickServClient) Send(key string, body []byte) error {
+	select {
+	case <-c.addrReady:
+	case <-c.ctx.Done():
+	}
+	if c.ctx.Err() != nil {
+		return c.ctx.Err()
+	}
+
+	id, err := generateSnowflake()
+	if err != nil {
+		return err
+	}
+
+	b, err := proto.Marshal(&pb.NickServEvent{
+		RequestId: id,
+	})
+	if err != nil {
+		return err
+	}
+
+	addr := c.addr.Load().(*hostAddr)
+	return c.svc.Network.Send(addr.HostID, addr.Port, c.port, b)
+}
+
+func readNickServEvents(swarm *ppspp.Swarm, messages chan *pb.NickServEvent) {
+	r := prefixstream.NewReader(swarm.Reader())
+	b := bytes.NewBuffer(nil)
+	for {
+		b.Reset()
+		if _, err := io.Copy(b, r); err != nil {
+			return
+		}
+
+		var msg pb.NickServEvent
+		if err := proto.Unmarshal(b.Bytes(), &msg); err != nil {
+			continue
+		}
+	}
+}
+
+type NickServStore struct {
+	logger  *zap.Logger
+	lock    sync.Mutex
+	records *llrb.LLRB
+}
+
+func (s *NickServStore) Insert(r *pb.NickRecord) error {
+	return fmt.Errorf("unimplemented")
+}
+
+func (s *NickServStore) Delete(r *pb.NickRecord) error {
+	return fmt.Errorf("unimplemented")
+}
+
+func (s *NickServStore) Update(r *pb.NickRecord) error {
+	return fmt.Errorf("unimplemented")
+}
+
+func (s *NickServStore) Retrieve(nick string) error {
+	return fmt.Errorf("unimplemented")
+}
+
+var nextSnowflakeID uint64
+
+// generate a 53 bit locally unique id
+func generateSnowflake() (uint64, error) {
+	seconds := uint64(time.Since(time.Date(2020, 0, 0, 0, 0, 0, 0, time.UTC)) / time.Second)
+	sequence := atomic.AddUint64(&nextSnowflakeID, 1) << 32
+	return (seconds | sequence) & 0x1fffffffffffff, nil
 }

@@ -14,8 +14,8 @@ message ServerConfig {
 message NickRecord {
   Key peer_public_key = 1;
   string name = 2;
-  int64 updated_timestamp = 3;
-  int64 created_timestamp = 4;
+  uint64 updated_timestamp = 3;
+  uint64 created_timestamp = 4;
   uint32 remaining_name_change_quota = 5;
   repeated string roles = 6;
 }
@@ -28,7 +28,7 @@ message NickServToken {
   bytes signature = 5;
 }
 
-message RPCCommand {
+message NickServEvent {
   uint64 request_id = 1;
   Key source_public_key = 2;
 
@@ -36,7 +36,9 @@ message RPCCommand {
     string nick = 1;
   }
 
-  message Retrieve {}
+  message Retrieve {
+    string nick = 1;
+  }
 
   message Update {
     string nick = 1;
