@@ -120,13 +120,6 @@ func (b Bin) BaseRight() Bin {
 	return (b | (b + 1)) - 1
 }
 
-func (b Bin) LayerShifted(z uint64) Bin {
-	if b.LayerBits()>>z != 0 {
-		return b >> z
-	}
-	return (b >> z) &^ 1
-}
-
 // Base true if b is in the base
 func (b Bin) Base() bool {
 	return b&1 == 0

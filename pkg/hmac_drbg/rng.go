@@ -7,7 +7,7 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/minio/blake2b-simd"
+	"golang.org/x/crypto/blake2b"
 )
 
 // NewRNG ...
@@ -25,7 +25,10 @@ func NewDefaultRNG() *RNG {
 		panic(err)
 	}
 
-	return NewRNG(blake2b.New512, seed)
+	return NewRNG(func() hash.Hash {
+		h, _ := blake2b.New512(nil)
+		return h
+	}, seed)
 }
 
 // RNG ...

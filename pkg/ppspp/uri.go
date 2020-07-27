@@ -33,12 +33,12 @@ var protocolOptions = []struct {
 		"x.sa",
 	},
 	{
-		codec.ChunkAddressingMethodOption,
-		"x.am",
-	},
-	{
 		codec.ChunkSizeOption,
 		"x.cs",
+	},
+	{
+		codec.ChunksPerSignatureOption,
+		"x.ps",
 	},
 }
 

@@ -211,6 +211,33 @@ func (v *ChunkSizeProtocolOption) ByteLen() int {
 	return 4
 }
 
+// ChunksPerSignatureProtocolOption ...
+type ChunksPerSignatureProtocolOption struct {
+	Value uint32
+}
+
+// Unmarshal ...
+func (v *ChunksPerSignatureProtocolOption) Unmarshal(b []byte) (int, error) {
+	v.Value = binary.BigEndian.Uint32(b)
+	return 4, nil
+}
+
+// Marshal ...
+func (v *ChunksPerSignatureProtocolOption) Marshal(b []byte) int {
+	binary.BigEndian.PutUint32(b, v.Value)
+	return 4
+}
+
+// Type ...
+func (v *ChunksPerSignatureProtocolOption) Type() ProtocolOptionType {
+	return ChunksPerSignatureOption
+}
+
+// ByteLen ...
+func (v *ChunksPerSignatureProtocolOption) ByteLen() int {
+	return 4
+}
+
 // ContentIntegrityProtectionMethodProtocolOption ...
 type ContentIntegrityProtectionMethodProtocolOption struct {
 	Value uint8
@@ -367,6 +394,8 @@ func (v *Handshake) Unmarshal(b []byte) (size int, err error) {
 			option = &LiveWindowProtocolOption{}
 		case ChunkSizeOption:
 			option = &ChunkSizeProtocolOption{}
+		case ChunksPerSignatureOption:
+			option = &ChunksPerSignatureProtocolOption{}
 		case ContentIntegrityProtectionMethodOption:
 			option = &ContentIntegrityProtectionMethodProtocolOption{}
 		case MerkleHashTreeFunctionOption:

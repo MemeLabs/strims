@@ -14,9 +14,10 @@ import (
 
 // SwarmOptions ...
 type SwarmOptions struct {
-	ChunkSize  int
-	LiveWindow int
-	Integrity  integrity.VerifierOptions
+	ChunkSize          int
+	ChunksPerSignature int
+	LiveWindow         int
+	Integrity          integrity.VerifierOptions
 }
 
 func (o *SwarmOptions) Assign(u SwarmOptions) {
@@ -30,17 +31,19 @@ func (o *SwarmOptions) Assign(u SwarmOptions) {
 
 	o.Integrity.Assign(u.Integrity)
 	o.Integrity.SwarmOptions = integrity.VerifierSwarmOptions{
-		LiveDiscardWindow: o.LiveWindow,
-		ChunkSize:         o.ChunkSize,
+		LiveDiscardWindow:  o.LiveWindow,
+		ChunkSize:          o.ChunkSize,
+		ChunksPerSignature: o.ChunksPerSignature,
 	}
 }
 
 // NewDefaultSwarmOptions ...
 func NewDefaultSwarmOptions() SwarmOptions {
 	return SwarmOptions{
-		ChunkSize:  1024,
-		LiveWindow: 1 << 16,
-		Integrity:  integrity.NewDefaultVerifierOptions(),
+		ChunkSize:          1024,
+		ChunksPerSignature: 32,
+		LiveWindow:         1 << 16,
+		Integrity:          integrity.NewDefaultVerifierOptions(),
 	}
 }
 
@@ -161,13 +164,21 @@ func (s *Swarm) URI() *URI {
 	return &URI{
 		ID: s.ID(),
 		Options: URIOptions{
-			codec.ChunkSizeOption: s.chunkSize(),
+			codec.ChunkSizeOption:                        s.chunkSize(),
+			codec.ChunksPerSignatureOption:               s.chunksPerSignature(),
+			codec.ContentIntegrityProtectionMethodOption: int(s.contentIntegrityProtectionMethod()),
+			codec.MerkleHashTreeFunctionOption:           int(s.merkleHashTreeFunction()),
+			codec.LiveSignatureAlgorithmOption:           int(s.liveSignatureAlgorithm()),
 		},
 	}
 }
 
 func (s *Swarm) chunkSize() int {
 	return s.options.ChunkSize
+}
+
+func (s *Swarm) chunksPerSignature() int {
+	return s.options.ChunksPerSignature
 }
 
 func (s *Swarm) liveWindow() int {

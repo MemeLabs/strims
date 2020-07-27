@@ -79,6 +79,8 @@ func (m ProtocolOptionType) String() string {
 		return "SupportedMessages"
 	case ChunkSizeOption:
 		return "ChunkSize"
+	case ChunksPerSignatureOption:
+		return "ChunksPerSignature"
 	case EndOption:
 		return "EndOption"
 	}
@@ -97,5 +99,6 @@ const (
 	LiveWindowOption
 	SupportedMessagesOption
 	ChunkSizeOption
+	ChunksPerSignatureOption
 	EndOption ProtocolOptionType = 255
 )

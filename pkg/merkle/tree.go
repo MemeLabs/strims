@@ -3,7 +3,6 @@ package merkle
 import (
 	"bytes"
 	"hash"
-	"log"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
@@ -50,11 +49,17 @@ type Tree struct {
 }
 
 // Reset sets the tree's rootbin and sets the verified bitmask to 0
-func (t *Tree) Reset(rootBin binmap.Bin) {
-	t.parent = nil
+func (t *Tree) Reset(rootBin binmap.Bin, parent *Tree) {
+	t.parent = parent
 	t.rootBin = rootBin
 	t.baseLeft = rootBin.BaseLeft()
 	t.verified = 0
+
+	if l := int(rootBin.BaseLength()*2-1) * t.hash.Size(); cap(t.digests) < l {
+		t.digests = make([]byte, l)
+	} else {
+		t.digests = t.digests[:l]
+	}
 }
 
 // Merge copies the verified hashes from o to the corresponding bin in t if the
@@ -68,6 +73,10 @@ func (t *Tree) Merge(o *Tree) {
 			copy(t.digests[i*s:], o.digests[i*s:(i+1)*s])
 		}
 	}
+}
+
+func (t *Tree) SetParent(parent *Tree) {
+	t.parent = parent
 }
 
 // SetRoot set the root hash to the given data
@@ -135,9 +144,6 @@ func (t *Tree) setOrVerify(b binmap.Bin) (ok, verified bool) {
 	if t.parent != nil && t.parent.isVerified(b) {
 		// ok if the hashes match - we found a node with a verified counterpart in
 		// the parent tree
-		if !bytes.Equal(d, t.parent.Get(b)) {
-			log.Printf("%x %x", d, t.parent.Get(b))
-		}
 		return bytes.Equal(d, t.parent.Get(b)), true
 	}
 
@@ -201,7 +207,6 @@ func (t *Tree) Verify(b binmap.Bin, d []byte) (ok, verified bool) {
 	}
 
 	for b != t.rootBin {
-		t.hash.Reset()
 		if b.IsLeft() {
 			if _, err := t.hash.Write(t.Get(b)); err != nil {
 				return false, false

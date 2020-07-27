@@ -2,7 +2,6 @@ package ppspp
 
 import (
 	"errors"
-	"log"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -27,6 +26,7 @@ var (
 	errNoMinimumVersionOption             = errors.New("handshake missing MinimumVersionOption")
 	errNoLiveWindowOption                 = errors.New("handshake missing LiveWindowOption")
 	errNoChunkSizeOption                  = errors.New("handshake missing ChunkSizeOption")
+	errNoChunksPerSignatureOption         = errors.New("handshake missing ChunksPerSignatureOption")
 	errNoSwarmIdentifierOption            = errors.New("handshake missing SwarmIdentifierOption")
 	errNoContentIntegrityProtectionMethod = errors.New("handshake missing ContentIntegrityProtectionMethod")
 	errNoMerkleHashTreeFunction           = errors.New("handshake missing MerkleHashTreeFunction")
@@ -35,6 +35,7 @@ var (
 	errIncompatibleVersionOption                    = errors.New("incompatible VersionOption")
 	errIncompatibleMinimumVersionOption             = errors.New("incompatible MinimumVersionOption")
 	errIncompatibleChunkSizeOption                  = errors.New("incompatible ChunkSizeOption")
+	errIncompatibleChunksPerSignatureOption         = errors.New("incompatible ChunksPerSignatureOption")
 	errIncompatibleSwarmIdentifierOption            = errors.New("incompatible SwarmIdentifierOption")
 	errIncompatibleContentIntegrityProtectionMethod = errors.New("incompatible ContentIntegrityProtectionMethod")
 	errIncompatibleMerkleHashTreeFunction           = errors.New("incompatible MerkleHashTreeFunction")
@@ -219,6 +220,7 @@ func newHandshake(swarm *Swarm) codec.Handshake {
 			&codec.ContentIntegrityProtectionMethodProtocolOption{Value: uint8(swarm.contentIntegrityProtectionMethod())},
 			&codec.MerkleHashTreeFunctionProtocolOption{Value: uint8(swarm.merkleHashTreeFunction())},
 			&codec.LiveSignatureAlgorithmProtocolOption{Value: uint8(swarm.liveSignatureAlgorithm())},
+			&codec.ChunksPerSignatureProtocolOption{Value: uint32(swarm.chunksPerSignature())},
 		},
 	}
 
@@ -402,6 +404,14 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoChunkSizeOption
 	}
 
+	if chunksPerSignature, ok := v.Options.Find(codec.ChunksPerSignatureOption); ok {
+		if chunksPerSignature.(*codec.ChunksPerSignatureProtocolOption).Value != uint32(c.swarm.chunksPerSignature()) {
+			return errIncompatibleChunksPerSignatureOption
+		}
+	} else {
+		return errNoChunksPerSignatureOption
+	}
+
 	if contentIntegrityProtectionMethod, ok := v.Options.Find(codec.ContentIntegrityProtectionMethodOption); ok {
 		if contentIntegrityProtectionMethod.(*codec.ContentIntegrityProtectionMethodProtocolOption).Value != uint8(c.swarm.contentIntegrityProtectionMethod()) {
 			return errIncompatibleContentIntegrityProtectionMethod
@@ -437,7 +447,6 @@ func (c *channelMessageHandler) HandleData(m codec.Data) {
 
 	if v := c.verifier.ChunkVerifier(m.Address.Bin()); v != nil {
 		if !v.Verify(m.Address.Bin(), m.Data) {
-			log.Println("chunk verification failed")
 			return
 		}
 	}

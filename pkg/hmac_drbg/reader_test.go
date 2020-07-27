@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/minio/blake2b-simd"
+	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/sha3"
 )
 
@@ -32,7 +32,7 @@ func TestRNG(t *testing.T) {
 		},
 		{
 			Seed:  []byte{0xfd, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
-			Hash:  blake2b.New512,
+			Hash:  newBlake2B512,
 			Value: 8389461046711400686,
 		},
 	}
@@ -55,7 +55,7 @@ func TestRNGDistribution(t *testing.T) {
 	)
 
 	seed := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
-	rng := NewRNG(blake2b.New512, seed)
+	rng := NewRNG(newBlake2B512, seed)
 
 	bins := make([]int, binCount)
 	for i := 0; i < n; i++ {
@@ -103,10 +103,10 @@ func BenchmarkSha3(b *testing.B) {
 	runHashBenchmark(b, sha3.New512)
 }
 func BenchmarkBlake2b256(b *testing.B) {
-	runHashBenchmark(b, blake2b.New256)
+	runHashBenchmark(b, newBlake2B256)
 }
 func BenchmarkBlake2b512(b *testing.B) {
-	runHashBenchmark(b, blake2b.New512)
+	runHashBenchmark(b, newBlake2B512)
 }
 
 func runHashBenchmark(b *testing.B, h func() hash.Hash) {
@@ -116,4 +116,14 @@ func runHashBenchmark(b *testing.B, h func() hash.Hash) {
 	for i := 0; i < b.N; i++ {
 		rng.Uint64()
 	}
+}
+
+func newBlake2B256() hash.Hash {
+	h, _ := blake2b.New256(nil)
+	return h
+}
+
+func newBlake2B512() hash.Hash {
+	h, _ := blake2b.New512(nil)
+	return h
 }

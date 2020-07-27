@@ -2,13 +2,14 @@ package integrity
 
 import (
 	"crypto/ed25519"
-	"crypto/md5"
 	"crypto/sha1"
 	"crypto/sha256"
 	"crypto/sha512"
 	"errors"
 	"hash"
 	"time"
+
+	"golang.org/x/crypto/blake2b"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
@@ -33,6 +34,8 @@ const (
 	MerkleHashTreeFunctionSHA1
 	MerkleHashTreeFunctionSHA256
 	MerkleHashTreeFunctionSHA512
+	MerkleHashTreeFunctionBLAKE2B256
+	MerkleHashTreeFunctionBLAKE2B512
 	MerkleHashTreeFunctionMD5
 )
 
@@ -44,8 +47,10 @@ func (f MerkleHashTreeFunction) HashSize() int {
 		return sha256.Size
 	case MerkleHashTreeFunctionSHA512:
 		return sha512.Size
-	case MerkleHashTreeFunctionMD5:
-		return md5.Size
+	case MerkleHashTreeFunctionBLAKE2B256:
+		return blake2b.Size256
+	case MerkleHashTreeFunctionBLAKE2B512:
+		return blake2b.Size
 	default:
 		panic("unsupported hash tree function")
 	}
@@ -72,14 +77,15 @@ func (a LiveSignatureAlgorithm) SignatureSize() int {
 func NewDefaultVerifierOptions() VerifierOptions {
 	return VerifierOptions{
 		ProtectionMethod:       ProtectionMethodMerkleTree,
-		MerkleHashTreeFunction: MerkleHashTreeFunctionSHA256,
+		MerkleHashTreeFunction: MerkleHashTreeFunctionBLAKE2B256,
 		LiveSignatureAlgorithm: LiveSignatureAlgorithmED25519,
 	}
 }
 
 type VerifierSwarmOptions struct {
-	LiveDiscardWindow int
-	ChunkSize         int
+	LiveDiscardWindow  int
+	ChunkSize          int
+	ChunksPerSignature int
 }
 
 // VerifierOptions ...
@@ -123,8 +129,10 @@ func NewVerifier(key []byte, opt VerifierOptions) (SwarmVerifier, error) {
 		hash = sha256.New
 	case MerkleHashTreeFunctionSHA512:
 		hash = sha512.New
-	case MerkleHashTreeFunctionMD5:
-		hash = md5.New
+	case MerkleHashTreeFunctionBLAKE2B256:
+		hash = blake2bFunc(blake2b.New256)
+	case MerkleHashTreeFunctionBLAKE2B512:
+		hash = blake2bFunc(blake2b.New512)
 	}
 
 	switch opt.ProtectionMethod {
@@ -132,10 +140,11 @@ func NewVerifier(key []byte, opt VerifierOptions) (SwarmVerifier, error) {
 		return &NoneSwarmVerifier{}, nil
 	case ProtectionMethodMerkleTree:
 		return NewMerkleSwarmVerifier(&MerkleTreeOptions{
-			LiveDiscardWindow: opt.SwarmOptions.LiveDiscardWindow,
-			ChunkSize:         opt.SwarmOptions.ChunkSize,
-			Verifier:          signatureVerifier,
-			Hash:              hash,
+			LiveDiscardWindow:  opt.SwarmOptions.LiveDiscardWindow,
+			ChunkSize:          opt.SwarmOptions.ChunkSize,
+			ChunksPerSignature: opt.SwarmOptions.ChunksPerSignature,
+			Verifier:           signatureVerifier,
+			Hash:               hash,
 		}), nil
 	default:
 		return nil, errors.New("unsupported protection method")
@@ -143,6 +152,13 @@ func NewVerifier(key []byte, opt VerifierOptions) (SwarmVerifier, error) {
 }
 
 type hashFunc func() hash.Hash
+
+func blake2bFunc(fn func([]byte) (hash.Hash, error)) hashFunc {
+	return func() hash.Hash {
+		h, _ := fn(nil)
+		return h
+	}
+}
 
 type WriterSwarmOptions struct {
 	LiveSignatureAlgorithm LiveSignatureAlgorithm
