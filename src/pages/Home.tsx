@@ -47,7 +47,12 @@ const HomePage = () => {
       client.openVideoServer(),
       (navigator.mediaDevices as any).getDisplayMedia({
         video: true,
-        audio: true,
+        audio: {
+          autoGainControl: false,
+          echoCancellation: false,
+          googAutoGainControl: false,
+          noiseSuppression: false,
+        },
         frameRate: 30,
       }) as Promise<MediaStream>,
     ]);
