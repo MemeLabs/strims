@@ -8,14 +8,17 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 )
 
+// NewED25519Signer ...
 func NewED25519Signer(key ed25519.PrivateKey) *ED25519Signer {
 	return &ED25519Signer{key: key}
 }
 
+// ED25519Signer ...
 type ED25519Signer struct {
 	key ed25519.PrivateKey
 }
 
+// Sign ...
 func (s *ED25519Signer) Sign(t time.Time, p []byte) []byte {
 	b := pool.Get(uint16(len(p) + 8))
 	defer pool.Put(b)
@@ -25,18 +28,22 @@ func (s *ED25519Signer) Sign(t time.Time, p []byte) []byte {
 	return ed25519.Sign(s.key, *b)
 }
 
+// Size ...
 func (s *ED25519Signer) Size() int {
 	return ed25519.SignatureSize
 }
 
+// NewED25519Verifier ...
 func NewED25519Verifier(key ed25519.PublicKey) *ED25519Verifier {
 	return &ED25519Verifier{key: key}
 }
 
+// ED25519Verifier ...
 type ED25519Verifier struct {
 	key ed25519.PublicKey
 }
 
+// Verify ...
 func (s *ED25519Verifier) Verify(t time.Time, p []byte, sig []byte) bool {
 	b := pool.Get(uint16(len(p) + 8))
 	defer pool.Put(b)
@@ -46,6 +53,7 @@ func (s *ED25519Verifier) Verify(t time.Time, p []byte, sig []byte) bool {
 	return ed25519.Verify(s.key, *b, sig)
 }
 
+// Size ...
 func (s *ED25519Verifier) Size() int {
 	return ed25519.SignatureSize
 }

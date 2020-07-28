@@ -15,6 +15,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/prefixstream"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"google.golang.org/protobuf/proto"
@@ -35,6 +36,9 @@ func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubSer
 		SwarmOptions: ppspp.SwarmOptions{
 			LiveWindow: 1 << 10, // 1MB
 			ChunkSize:  128,
+			Integrity: integrity.VerifierOptions{
+				ProtectionMethod: integrity.ProtectionMethodSignAll,
+			},
 		},
 		Key: key,
 	})
@@ -189,6 +193,9 @@ func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, err
 		ppspp.SwarmOptions{
 			LiveWindow: 1 << 10, // 1MB
 			ChunkSize:  128,
+			Integrity: integrity.VerifierOptions{
+				ProtectionMethod: integrity.ProtectionMethodSignAll,
+			},
 		},
 	)
 	if err != nil {

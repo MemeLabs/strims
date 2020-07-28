@@ -23,6 +23,7 @@ const (
 	_ ProtectionMethod = iota
 	ProtectionMethodNone
 	ProtectionMethodMerkleTree
+	ProtectionMethodSignAll
 )
 
 // MerkleHashTreeFunction ...
@@ -39,6 +40,7 @@ const (
 	MerkleHashTreeFunctionMD5
 )
 
+// HashSize ...
 func (f MerkleHashTreeFunction) HashSize() int {
 	switch f {
 	case MerkleHashTreeFunctionSHA1:
@@ -65,6 +67,7 @@ const (
 	LiveSignatureAlgorithmED25519
 )
 
+// SignatureSize ...
 func (a LiveSignatureAlgorithm) SignatureSize() int {
 	switch a {
 	case LiveSignatureAlgorithmED25519:
@@ -74,6 +77,7 @@ func (a LiveSignatureAlgorithm) SignatureSize() int {
 	}
 }
 
+// NewDefaultVerifierOptions ...
 func NewDefaultVerifierOptions() VerifierOptions {
 	return VerifierOptions{
 		ProtectionMethod:       ProtectionMethodMerkleTree,
@@ -82,6 +86,7 @@ func NewDefaultVerifierOptions() VerifierOptions {
 	}
 }
 
+// VerifierSwarmOptions ...
 type VerifierSwarmOptions struct {
 	LiveDiscardWindow  int
 	ChunkSize          int
@@ -96,6 +101,7 @@ type VerifierOptions struct {
 	SwarmOptions           VerifierSwarmOptions
 }
 
+// Assign ...
 func (o VerifierOptions) Assign(u VerifierOptions) {
 	if u.ProtectionMethod != 0 {
 		o.ProtectionMethod = u.ProtectionMethod
@@ -108,7 +114,8 @@ func (o VerifierOptions) Assign(u VerifierOptions) {
 	}
 }
 
-type IntegrityWriter interface {
+// Writer ...
+type Writer interface {
 	WriteSignedIntegrity(m codec.SignedIntegrity) (int, error)
 	WriteIntegrity(m codec.Integrity) (int, error)
 }
@@ -146,6 +153,12 @@ func NewVerifier(key []byte, opt VerifierOptions) (SwarmVerifier, error) {
 			Verifier:           signatureVerifier,
 			Hash:               hash,
 		}), nil
+	case ProtectionMethodSignAll:
+		return NewSignAllSwarmVerifier(&SignAllOptions{
+			LiveDiscardWindow: opt.SwarmOptions.LiveDiscardWindow,
+			ChunkSize:         opt.SwarmOptions.ChunkSize,
+			Verifier:          signatureVerifier,
+		}), nil
 	default:
 		return nil, errors.New("unsupported protection method")
 	}
@@ -160,6 +173,7 @@ func blake2bFunc(fn func([]byte) (hash.Hash, error)) hashFunc {
 	}
 }
 
+// WriterSwarmOptions ...
 type WriterSwarmOptions struct {
 	LiveSignatureAlgorithm LiveSignatureAlgorithm
 	ProtectionMethod       ProtectionMethod
@@ -168,11 +182,13 @@ type WriterSwarmOptions struct {
 	Writer                 WriteFlusher
 }
 
+// WriterOptions ...
 type WriterOptions struct {
 	ChunksPerSignature int
 	SwarmOptions       WriterSwarmOptions
 }
 
+// NewWriter ...
 func NewWriter(key []byte, opt WriterOptions) (WriteFlusher, error) {
 	var signatureSigner SignatureSigner
 	switch opt.SwarmOptions.LiveSignatureAlgorithm {
@@ -191,36 +207,49 @@ func NewWriter(key []byte, opt WriterOptions) (WriteFlusher, error) {
 			Signer:             signatureSigner,
 			Writer:             opt.SwarmOptions.Writer,
 		}), nil
+	case ProtectionMethodSignAll:
+		return NewSignAllWriter(&SignAllWriterOptions{
+			ChunkSize: opt.SwarmOptions.ChunkSize,
+			Verifier:  opt.SwarmOptions.Verifier.(*SignAllSwarmVerifier),
+			Signer:    signatureSigner,
+			Writer:    opt.SwarmOptions.Writer,
+		}), nil
 	default:
 		return nil, errors.New("unsupported protection method")
 	}
 }
 
+// SwarmVerifier ...
 type SwarmVerifier interface {
-	WriteIntegrity(b binmap.Bin, m *binmap.Map, w IntegrityWriter) (int, error)
+	WriteIntegrity(b binmap.Bin, m *binmap.Map, w Writer) (int, error)
 	ChannelVerifier() ChannelVerifier
 }
 
+// ChannelVerifier ...
 type ChannelVerifier interface {
 	ChunkVerifier(b binmap.Bin) ChunkVerifier
 }
 
+// ChunkVerifier ...
 type ChunkVerifier interface {
 	SetSignedIntegrity(b binmap.Bin, t time.Time, sig []byte)
 	SetIntegrity(b binmap.Bin, hash []byte)
 	Verify(b binmap.Bin, d []byte) bool
 }
 
+// SignatureSigner ...
 type SignatureSigner interface {
 	Sign(timestamp time.Time, hash []byte) []byte
 	Size() int
 }
 
+// SignatureVerifier ...
 type SignatureVerifier interface {
 	Verify(timestamp time.Time, hash, sig []byte) bool
 	Size() int
 }
 
+// WriteFlusher ...
 type WriteFlusher interface {
 	Write(p []byte) (int, error)
 	Flush() error

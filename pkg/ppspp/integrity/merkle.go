@@ -15,6 +15,7 @@ import (
 
 var errMissingHashSubtree = errors.New("missing hash subtree")
 
+// MerkleTreeOptions ...
 type MerkleTreeOptions struct {
 	LiveDiscardWindow  int
 	ChunkSize          int
@@ -23,6 +24,7 @@ type MerkleTreeOptions struct {
 	Hash               hashFunc
 }
 
+// NewDefaultMerkleTreeOptions ...
 func NewDefaultMerkleTreeOptions() MerkleTreeOptions {
 	return MerkleTreeOptions{
 		LiveDiscardWindow: 1 << 12,
@@ -84,7 +86,7 @@ func (v *MerkleSwarmVerifier) segment(b binmap.Bin) (*merkleTreeSegment, uint64)
 	return s, s.Semaphore()
 }
 
-func (v *MerkleSwarmVerifier) storeSegment(timestamp time.Time, tree *merkle.Tree, signature []byte) {
+func (v *MerkleSwarmVerifier) storeSegment(ts time.Time, tree *merkle.Tree, sig []byte) {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
@@ -118,13 +120,13 @@ func (v *MerkleSwarmVerifier) storeSegment(timestamp time.Time, tree *merkle.Tre
 		v.treePool.Put(tree)
 	} else {
 		s := segmentPool.Get().(*merkleTreeSegment)
-		s.Reset(timestamp, tree, signature)
+		s.Reset(ts, tree, sig)
 		v.segments[i&v.mask] = s
 	}
 }
 
 // WriteIntegrity ...
-func (v *MerkleSwarmVerifier) WriteIntegrity(b binmap.Bin, m *binmap.Map, w IntegrityWriter) (int, error) {
+func (v *MerkleSwarmVerifier) WriteIntegrity(b binmap.Bin, m *binmap.Map, w Writer) (int, error) {
 	s, sem := v.segment(b)
 	if s == nil {
 		return 0, errMissingHashSubtree
@@ -171,6 +173,7 @@ func (v *MerkleSwarmVerifier) WriteIntegrity(b binmap.Bin, m *binmap.Map, w Inte
 	return n, nil
 }
 
+// ChannelVerifier ...
 func (v *MerkleSwarmVerifier) ChannelVerifier() ChannelVerifier {
 	return newMerkleChannelVerifier(v)
 }
@@ -187,6 +190,12 @@ type merkleTreeSegment struct {
 	Timestamp time.Time
 	Signature []byte
 	Tree      *merkle.Tree
+}
+
+func (s *merkleTreeSegment) Reset(ts time.Time, tree *merkle.Tree, sig []byte) {
+	s.Timestamp = ts
+	s.Signature = append(s.Signature[:0], sig...)
+	s.Tree = tree
 }
 
 func (s *merkleTreeSegment) Touch() {
@@ -214,12 +223,6 @@ func (s *merkleTreeSegment) Merge(tree *merkle.Tree) {
 	s.Lock()
 	defer s.Unlock()
 	s.Tree.Merge(tree)
-}
-
-func (t *merkleTreeSegment) Reset(timestamp time.Time, tree *merkle.Tree, signature []byte) {
-	t.Timestamp = timestamp
-	t.Signature = append(t.Signature[:0], signature...)
-	t.Tree = tree
 }
 
 func newMerkleChannelVerifier(v *MerkleSwarmVerifier) *MerkleChannelVerifier {
@@ -254,6 +257,7 @@ type MerkleChunkVerifier struct {
 	tree          *merkle.Tree
 }
 
+// Reset ...
 func (v *MerkleChunkVerifier) Reset(b binmap.Bin) {
 	v.tree = v.swarmVerifier.tree(b)
 	v.segment, v.segmentSem = v.swarmVerifier.segment(b)
@@ -309,6 +313,7 @@ func (v *MerkleChunkVerifier) Verify(b binmap.Bin, d []byte) bool {
 	return true
 }
 
+// MerkleWriterOptions ...
 type MerkleWriterOptions struct {
 	Verifier           *MerkleSwarmVerifier
 	Writer             WriteFlusher
@@ -317,35 +322,39 @@ type MerkleWriterOptions struct {
 	Signer             SignatureSigner
 }
 
+// NewMerkleWriter ...
 func NewMerkleWriter(o *MerkleWriterOptions) *MerkleWriter {
 	mw := &merkleWriter{
-		chunkSize:       o.ChunkSize,
 		munroLayer:      uint64(bits.TrailingZeros64(uint64(o.ChunksPerSignature))),
+		segmentSize:     o.ChunksPerSignature * o.ChunkSize,
 		swarmVerifier:   o.Verifier,
 		signatureSigner: o.Signer,
 		w:               o.Writer,
 	}
 	return &MerkleWriter{
-		bw: bufio.NewWriterSize(mw, o.ChunksPerSignature*o.ChunkSize),
+		bw: bufio.NewWriterSize(mw, mw.segmentSize),
 	}
 }
 
+// MerkleWriter ...
 type MerkleWriter struct {
 	bw *bufio.Writer
 }
 
+// Write ...
 func (w *MerkleWriter) Write(p []byte) (int, error) {
 	return w.bw.Write(p)
 }
 
+// Flush ...
 func (w *MerkleWriter) Flush() error {
 	return w.bw.Flush()
 }
 
 type merkleWriter struct {
-	chunkSize       int
 	munroLayer      uint64
 	n               uint64
+	segmentSize     int
 	swarmVerifier   *MerkleSwarmVerifier
 	signatureSigner SignatureSigner
 	w               io.Writer
@@ -353,15 +362,18 @@ type merkleWriter struct {
 
 // Write ...
 func (w *merkleWriter) Write(p []byte) (int, error) {
+	if len(p) > w.segmentSize {
+		p = p[:w.segmentSize]
+	}
+
 	b := binmap.NewBin(w.munroLayer, w.n)
 	w.n++
 
 	ts := time.Now()
-	t := w.swarmVerifier.tree(b)
-	t.Fill(b, p)
-	s := w.signatureSigner.Sign(ts, t.Get(b))
-
-	w.swarmVerifier.storeSegment(ts, t, s)
+	tree := w.swarmVerifier.tree(b)
+	tree.Fill(b, p)
+	sig := w.signatureSigner.Sign(ts, tree.Get(b))
+	w.swarmVerifier.storeSegment(ts, tree, sig)
 
 	return w.w.Write(p)
 }
