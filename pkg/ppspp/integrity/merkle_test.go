@@ -30,7 +30,7 @@ func TestWriter(t *testing.T) {
 	chunksPerSignature := 32
 	chunkSize := 1024
 	w := NewMerkleWriter(&MerkleWriterOptions{
-		Verifier: NewMerkleSwarmVerifier(&MerkleTreeOptions{
+		Verifier: NewMerkleSwarmVerifier(&MerkleOptions{
 			LiveDiscardWindow:  liveDiscardWindow,
 			ChunksPerSignature: chunksPerSignature,
 			ChunkSize:          chunkSize,

@@ -209,14 +209,17 @@ func (s *Swarm) addChannel(p *Peer, c *channel) {
 	s.channels[p] = c
 }
 
-func (s *Swarm) removeChannel(p *Peer) {
+func (s *Swarm) removeChannel(p *Peer) []*channel {
 	s.channelsLock.Lock()
 	defer s.channelsLock.Unlock()
 
+	cs := []*channel{}
 	if c, ok := s.channels[p]; ok {
+		cs = append(cs, c)
 		s.pubSub.Unsubscribe(c)
 		delete(s.channels, p)
 	}
+	return cs
 }
 
 // Reader ...

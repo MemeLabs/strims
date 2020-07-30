@@ -53,8 +53,8 @@ type Channel interface {
 // OpenChannel ...
 func OpenChannel(p *Peer, s *Swarm, conn WriteFlushCloser) (*ChannelReader, error) {
 	c := newChannel()
-	cw := newChannelWriter(c, conn)
-	cr := newChannelReader(c, p, s)
+	cw := newChannelWriter(newChannelWriterMetrics(c), c, conn)
+	cr := newChannelReader(newChannelReaderMetrics(c), c, p, s)
 
 	if _, err := cw.WriteHandshake(newHandshake(s)); err != nil {
 		return nil, err
@@ -72,7 +72,11 @@ func OpenChannel(p *Peer, s *Swarm, conn WriteFlushCloser) (*ChannelReader, erro
 // CloseChannel ...
 func CloseChannel(p *Peer, s *Swarm) {
 	p.removeChannel(s)
-	s.removeChannel(p)
+	cs := s.removeChannel(p)
+	for _, c := range cs {
+		deleteChannelWriterMetrics(c)
+		deleteChannelReaderMetrics(c)
+	}
 }
 
 // newchannel ...
@@ -227,18 +231,18 @@ func newHandshake(swarm *Swarm) codec.Handshake {
 	return h
 }
 
-func newChannelWriter(channel *channel, conn WriteFlushCloser) *channelWriter {
+func newChannelWriter(metrics channelWriterMetrics, channel *channel, conn WriteFlushCloser) *channelWriter {
 	return &channelWriter{
 		channel: channel,
 		w:       codec.NewWriter(conn, conn.MTU()),
-		metrics: newChannelMetrics(channel, "out"),
+		metrics: metrics,
 	}
 }
 
 type channelWriter struct {
 	*channel
 	w       codec.Writer
-	metrics channelMetrics
+	metrics channelWriterMetrics
 	dirty   bool
 }
 
@@ -271,6 +275,7 @@ func (c *channelWriter) WriteHave(m codec.Have) (int, error) {
 
 func (c *channelWriter) WriteData(m codec.Data) (int, error) {
 	c.metrics.DataCount.Inc()
+	c.metrics.DataChunkCount.Add(float64(m.Address.Bin().BaseLength()))
 	c.dirty = true
 	return c.w.WriteData(m)
 }
@@ -311,7 +316,7 @@ func (c *channelWriter) WriteCancel(m codec.Cancel) (int, error) {
 	return c.w.WriteCancel(m)
 }
 
-func newChannelReader(channel *channel, peer *Peer, swarm *Swarm) *ChannelReader {
+func newChannelReader(metrics channelReaderMetrics, channel *channel, peer *Peer, swarm *Swarm) *ChannelReader {
 	return &ChannelReader{
 		channel: channel,
 		r: codec.Reader{
@@ -322,7 +327,7 @@ func newChannelReader(channel *channel, peer *Peer, swarm *Swarm) *ChannelReader
 				swarm:    swarm,
 				peer:     peer,
 				channel:  channel,
-				metrics:  newChannelMetrics(channel, "in"),
+				metrics:  metrics,
 				verifier: swarm.verifier.ChannelVerifier(),
 			},
 		},
@@ -359,7 +364,7 @@ type channelMessageHandler struct {
 	swarm    *Swarm
 	peer     *Peer
 	channel  *channel
-	metrics  channelMetrics
+	metrics  channelReaderMetrics
 	verifier integrity.ChannelVerifier
 }
 
@@ -444,10 +449,12 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 
 func (c *channelMessageHandler) HandleData(m codec.Data) {
 	c.metrics.DataCount.Inc()
+	c.metrics.DataChunkCount.Add(float64(m.Address.Bin().BaseLength()))
 
 	if v := c.verifier.ChunkVerifier(m.Address.Bin()); v != nil {
 		if !v.Verify(m.Address.Bin(), m.Data) {
-			return
+			c.metrics.InvalidDataCount.Inc()
+			// return
 		}
 	}
 
@@ -533,13 +540,49 @@ func (c *channelMessageHandler) HandlePong(m codec.Pong) {
 	c.peer.addRTTSample(c.channel.id, binmap.Bin(m.Nonce.Value), 0)
 }
 
+func newChannelReaderMetrics(channel *channel) channelReaderMetrics {
+	id := strconv.FormatUint(channel.id, 10)
+	direction := "in"
+
+	return channelReaderMetrics{
+		channelMetrics:   newChannelMetrics(channel, direction),
+		InvalidDataCount: channelMessageCount.WithLabelValues(id, direction, "invalid_data"),
+	}
+}
+
+type channelReaderMetrics struct {
+	channelMetrics
+	InvalidDataCount prometheus.Counter
+}
+
+func deleteChannelReaderMetrics(channel *channel) {
+	id := strconv.FormatUint(channel.id, 10)
+	direction := "in"
+
+	deleteChannelMetrics(channel, direction)
+	channelMessageCount.DeleteLabelValues(id, direction, "invalid_data")
+}
+
+func newChannelWriterMetrics(channel *channel) channelWriterMetrics {
+	return channelWriterMetrics{
+		channelMetrics: newChannelMetrics(channel, "out"),
+	}
+}
+
+type channelWriterMetrics struct {
+	channelMetrics
+}
+
+func deleteChannelWriterMetrics(channel *channel) {
+	deleteChannelMetrics(channel, "out")
+}
+
 func newChannelMetrics(channel *channel, direction string) channelMetrics {
 	id := strconv.FormatUint(channel.id, 10)
 	return channelMetrics{
-		id:                   id,
-		direction:            direction,
 		HandshakeCount:       channelMessageCount.WithLabelValues(id, direction, "handshake"),
 		DataCount:            channelMessageCount.WithLabelValues(id, direction, "data"),
+		DataChunkCount:       channelMessageCount.WithLabelValues(id, direction, "data_chunk"),
 		IntegrityCount:       channelMessageCount.WithLabelValues(id, direction, "integrity"),
 		SignedIntegrityCount: channelMessageCount.WithLabelValues(id, direction, "signed_integrity"),
 		AckCount:             channelMessageCount.WithLabelValues(id, direction, "ack"),
@@ -554,10 +597,9 @@ func newChannelMetrics(channel *channel, direction string) channelMetrics {
 }
 
 type channelMetrics struct {
-	id                   string
-	direction            string
 	HandshakeCount       prometheus.Counter
 	DataCount            prometheus.Counter
+	DataChunkCount       prometheus.Counter
 	IntegrityCount       prometheus.Counter
 	SignedIntegrityCount prometheus.Counter
 	AckCount             prometheus.Counter
@@ -570,17 +612,19 @@ type channelMetrics struct {
 	PongCount            prometheus.Counter
 }
 
-func (m *channelMetrics) Delete() {
-	channelMessageCount.DeleteLabelValues(m.id, m.direction, "handshake")
-	channelMessageCount.DeleteLabelValues(m.id, m.direction, "data")
-	channelMessageCount.DeleteLabelValues(m.id, m.direction, "integrity")
-	channelMessageCount.DeleteLabelValues(m.id, m.direction, "signed_integrity")
-	channelMessageCount.DeleteLabelValues(m.id, m.direction, "ack")
-	channelMessageCount.DeleteLabelValues(m.id, m.direction, "have")
-	channelMessageCount.DeleteLabelValues(m.id, m.direction, "request")
-	channelMessageCount.DeleteLabelValues(m.id, m.direction, "cancel")
-	channelMessageCount.DeleteLabelValues(m.id, m.direction, "choke")
-	channelMessageCount.DeleteLabelValues(m.id, m.direction, "unchoke")
-	channelMessageCount.DeleteLabelValues(m.id, m.direction, "ping")
-	channelMessageCount.DeleteLabelValues(m.id, m.direction, "pong")
+func deleteChannelMetrics(channel *channel, direction string) {
+	id := strconv.FormatUint(channel.id, 10)
+	channelMessageCount.DeleteLabelValues(id, direction, "handshake")
+	channelMessageCount.DeleteLabelValues(id, direction, "data")
+	channelMessageCount.DeleteLabelValues(id, direction, "data_chunk")
+	channelMessageCount.DeleteLabelValues(id, direction, "integrity")
+	channelMessageCount.DeleteLabelValues(id, direction, "signed_integrity")
+	channelMessageCount.DeleteLabelValues(id, direction, "ack")
+	channelMessageCount.DeleteLabelValues(id, direction, "have")
+	channelMessageCount.DeleteLabelValues(id, direction, "request")
+	channelMessageCount.DeleteLabelValues(id, direction, "cancel")
+	channelMessageCount.DeleteLabelValues(id, direction, "choke")
+	channelMessageCount.DeleteLabelValues(id, direction, "unchoke")
+	channelMessageCount.DeleteLabelValues(id, direction, "ping")
+	channelMessageCount.DeleteLabelValues(id, direction, "pong")
 }

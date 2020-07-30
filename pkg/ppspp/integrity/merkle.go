@@ -15,8 +15,8 @@ import (
 
 var errMissingHashSubtree = errors.New("missing hash subtree")
 
-// MerkleTreeOptions ...
-type MerkleTreeOptions struct {
+// MerkleOptions ...
+type MerkleOptions struct {
 	LiveDiscardWindow  int
 	ChunkSize          int
 	ChunksPerSignature int
@@ -24,15 +24,8 @@ type MerkleTreeOptions struct {
 	Hash               hashFunc
 }
 
-// NewDefaultMerkleTreeOptions ...
-func NewDefaultMerkleTreeOptions() MerkleTreeOptions {
-	return MerkleTreeOptions{
-		LiveDiscardWindow: 1 << 12,
-	}
-}
-
 // NewMerkleSwarmVerifier ...
-func NewMerkleSwarmVerifier(o *MerkleTreeOptions) *MerkleSwarmVerifier {
+func NewMerkleSwarmVerifier(o *MerkleOptions) *MerkleSwarmVerifier {
 	size := uint64(o.LiveDiscardWindow / o.ChunksPerSignature)
 	return &MerkleSwarmVerifier{
 		treeHeight:        uint64(bits.TrailingZeros(uint(o.ChunksPerSignature))) + 1,

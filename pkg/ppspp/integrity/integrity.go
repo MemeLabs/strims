@@ -146,7 +146,7 @@ func NewVerifier(key []byte, opt VerifierOptions) (SwarmVerifier, error) {
 	case ProtectionMethodNone:
 		return &NoneSwarmVerifier{}, nil
 	case ProtectionMethodMerkleTree:
-		return NewMerkleSwarmVerifier(&MerkleTreeOptions{
+		return NewMerkleSwarmVerifier(&MerkleOptions{
 			LiveDiscardWindow:  opt.SwarmOptions.LiveDiscardWindow,
 			ChunkSize:          opt.SwarmOptions.ChunkSize,
 			ChunksPerSignature: opt.SwarmOptions.ChunksPerSignature,

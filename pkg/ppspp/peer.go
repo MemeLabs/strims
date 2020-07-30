@@ -51,20 +51,26 @@ func NewPeer() *Peer {
 
 func (p *Peer) addChannel(s *Swarm, c *channelWriter) {
 	p.Lock()
-	p.channels[s] = c
 	p.Unlock()
+
+	p.channels[s] = c
 }
 
-func (p *Peer) removeChannel(s *Swarm) {
+func (p *Peer) removeChannel(s *Swarm) *channelWriter {
 	p.Lock()
+	defer p.Unlock()
+
+	c := p.channels[s]
 	delete(p.channels, s)
-	p.Unlock()
+
+	return c
 }
 
 func (p *Peer) addDelaySample(sample time.Duration, chunkSize int) {
 	p.Lock()
-	p.ledbat.AddDelaySample(sample, chunkSize)
 	p.Unlock()
+
+	p.ledbat.AddDelaySample(sample, chunkSize)
 }
 
 // outstandingChunks ...
@@ -84,9 +90,10 @@ func (p *Peer) addCancelledChunk() {
 
 func (p *Peer) addReceivedChunk() {
 	p.Lock()
+	defer p.Unlock()
+
 	p.receivedChunkCount++
 	p.chunkRate.AddWithTime(1, iotime.Load())
-	p.Unlock()
 }
 
 // chunkInterval ...
