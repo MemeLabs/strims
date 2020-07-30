@@ -97,7 +97,7 @@ export class WindowBridge extends EventEmitter {
       ],
     });
 
-    const dataChannelPorts: { id: number; port: MessagePort }[] = [];
+    const dataChannels: { id: number; port: MessagePort; dataChannel: RTCDataChannel }[] = [];
     const handleDataChannel = (dataChannel) => {
       let open: () => void;
       const ready = new Promise((resolve) => (open = resolve));
@@ -146,20 +146,38 @@ export class WindowBridge extends EventEmitter {
           }
         });
 
-      dataChannelPorts.push({
+      dataChannels.push({
         port: port1,
         id: portId,
+        dataChannel,
       });
     };
 
     peerConnection.ondatachannel = ({ channel }: RTCDataChannelEvent) => handleDataChannel(channel);
 
-    const onclose = () =>
-      dataChannelPorts.forEach((p) => {
-        p.port.postMessage({ type: EVENT_TYPE_DATA_CHANNEL_CLOSE });
-        this.dataChannelPorts.delete(p.id);
-        peerConnection.close();
+    const onclose = () => {
+      dataChannels.forEach(({ id, port, dataChannel }) => {
+        port.postMessage({ type: EVENT_TYPE_DATA_CHANNEL_CLOSE });
+        this.dataChannelPorts.delete(id);
+
+        dataChannel.onmessage = null;
+        dataChannel.onopen = null;
+        dataChannel.close();
+
+        port.onmessage = null;
+        port.close();
       });
+
+      peerConnection.ondatachannel = null;
+      peerConnection.onicecandidate = null;
+      peerConnection.oniceconnectionstatechange = null;
+      peerConnection.onicegatheringstatechange = null;
+      peerConnection.onsignalingstatechange = null;
+      peerConnection.close();
+
+      port.onmessage = null;
+      port.close();
+    };
 
     peerConnection.onicecandidate = (e: RTCPeerConnectionIceEvent) =>
       port.postMessage({
@@ -203,12 +221,13 @@ export class WindowBridge extends EventEmitter {
                 description: JSON.stringify(description),
               })
             )
-            .catch((error) =>
+            .catch((error) => {
               port.postMessage({
                 type: EVENT_TYPE_CREATE_OFFER,
                 error: String(error),
-              })
-            );
+              });
+              onclose();
+            });
           break;
         case EVENT_TYPE_CREATE_ANSWER:
           peerConnection
@@ -219,12 +238,13 @@ export class WindowBridge extends EventEmitter {
                 description: JSON.stringify(description),
               })
             )
-            .catch((error) =>
+            .catch((error) => {
               port.postMessage({
                 type: EVENT_TYPE_CREATE_ANSWER,
                 error: String(error),
-              })
-            );
+              });
+              onclose();
+            });
           break;
         case EVENT_TYPE_CREATE_DATA_CHANNEL:
           handleDataChannel(peerConnection.createDataChannel(data.label));
@@ -244,6 +264,7 @@ export class WindowBridge extends EventEmitter {
           break;
         case EVENT_TYPE_CLOSE:
           peerConnection.close();
+          onclose();
           break;
       }
     };
@@ -354,16 +375,27 @@ export interface ServiceProxy {
 export class WorkerBridge {
   public openWebSocket(uri: string, proxy: WebSocketProxy) {
     const ws = new WebSocket(uri);
+
+    const onclose = () => {
+      ws.onopen = null;
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.onmessage = null;
+    };
+
     ws.binaryType = "arraybuffer";
     ws.onopen = () => proxy.onopen();
-    ws.onclose = () => proxy.onclose();
+    ws.onclose = () => {
+      onclose();
+      proxy.onclose();
+    };
     ws.onerror = (e: ErrorEvent) => proxy.onerror(String(e.message || "unknown websocket error"));
     ws.onmessage = ({ data }) => proxy.ondata(new Uint8Array(data), data.byteLength, Date.now());
 
     return {
       write: (data: Uint8Array) => ws.send(data),
       close: () => {
-        ws.onclose = undefined;
+        onclose();
         ws.close();
       },
     };
