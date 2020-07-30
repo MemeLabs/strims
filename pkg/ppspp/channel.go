@@ -452,9 +452,9 @@ func (c *channelMessageHandler) HandleData(m codec.Data) {
 	c.metrics.DataChunkCount.Add(float64(m.Address.Bin().BaseLength()))
 
 	if v := c.verifier.ChunkVerifier(m.Address.Bin()); v != nil {
-		if !v.Verify(m.Address.Bin(), m.Data) {
+		if verified, _ := v.Verify(m.Address.Bin(), m.Data); !verified {
 			c.metrics.InvalidDataCount.Inc()
-			// return
+			return
 		}
 	}
 

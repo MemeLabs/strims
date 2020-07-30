@@ -29,7 +29,8 @@ func TestVerify(t *testing.T) {
 	r0.SetRoot(r.Get(bin))
 
 	r1 := NewProvisionalTree(r0)
-	_, verified := r1.Verify(bin, data)
+	verified, err := r1.Verify(bin, data)
+	assert.Nil(t, err, "unexpected error")
 	assert.True(t, verified, "expected successful validation")
 
 	r0.Merge(r1)
@@ -53,7 +54,9 @@ func TestVerifyMerge(t *testing.T) {
 			dst.Set(b.Sibling(), src.Get(b.Sibling()))
 		}
 
-		_, verified := dst.Verify(fillBin, fillBytes)
+		verified, err := dst.Verify(fillBin, fillBytes)
+		assert.Nil(t, err, "unexpected error")
+
 		return verified
 	}
 
@@ -92,7 +95,8 @@ func TestVerifyForward(t *testing.T) {
 		r1.Set(b.Sibling(), r.Get(b.Sibling()))
 	}
 
-	_, verified := r1.Verify(17, data[8*chunkSize:10*chunkSize])
+	verified, err := r1.Verify(17, data[8*chunkSize:10*chunkSize])
+	assert.Nil(t, err, "unexpected error")
 	assert.True(t, verified)
 }
 
@@ -118,6 +122,7 @@ func TestNoVeriefiedReferenceNode(t *testing.T) {
 	}
 
 	// should return false seince r0 has no hashes to verify against
-	_, verified := r1.Verify(17, data[8*chunkSize:10*chunkSize])
+	verified, err := r1.Verify(17, data[8*chunkSize:10*chunkSize])
+	assert.Nil(t, err, "unexpected error")
 	assert.False(t, verified)
 }

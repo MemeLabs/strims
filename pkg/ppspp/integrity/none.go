@@ -40,6 +40,6 @@ func (v *NoneChunkVerifier) SetSignedIntegrity(b binmap.Bin, ts time.Time, sig [
 func (v *NoneChunkVerifier) SetIntegrity(b binmap.Bin, hash []byte) {}
 
 // Verify ...
-func (v *NoneChunkVerifier) Verify(b binmap.Bin, d []byte) bool {
-	return true
+func (v *NoneChunkVerifier) Verify(b binmap.Bin, d []byte) (bool, error) {
+	return true, nil
 }

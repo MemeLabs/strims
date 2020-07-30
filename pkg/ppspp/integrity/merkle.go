@@ -13,7 +13,12 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 )
 
-var errMissingHashSubtree = errors.New("missing hash subtree")
+// errors ...
+var (
+	ErrMissingHashSubtree = errors.New("missing hash subtree")
+	ErrSignatureTooShort  = errors.New("signature too short")
+	ErrInvalidSignature   = errors.New("signature mismatch")
+)
 
 // MerkleOptions ...
 type MerkleOptions struct {
@@ -122,11 +127,11 @@ func (v *MerkleSwarmVerifier) storeSegment(ts time.Time, tree *merkle.Tree, sig 
 func (v *MerkleSwarmVerifier) WriteIntegrity(b binmap.Bin, m *binmap.Map, w Writer) (int, error) {
 	s, sem := v.segment(b)
 	if s == nil {
-		return 0, errMissingHashSubtree
+		return 0, ErrMissingHashSubtree
 	}
 
 	if !s.LockIf(sem) {
-		return 0, errMissingHashSubtree
+		return 0, ErrMissingHashSubtree
 	}
 	defer s.Unlock()
 
@@ -273,37 +278,39 @@ func (v *MerkleChunkVerifier) SetIntegrity(b binmap.Bin, hash []byte) {
 	v.tree.Set(b, hash)
 }
 
-func (v *MerkleChunkVerifier) verify(b binmap.Bin, d []byte) bool {
+func (v *MerkleChunkVerifier) verify(b binmap.Bin, d []byte) (bool, error) {
 	if v.segment != nil {
 		if !v.segment.LockIf(v.segmentSem) {
-			return false
+			return false, ErrMissingHashSubtree
 		}
 		defer v.segment.Unlock()
 	}
 
-	if ok, verified := v.tree.Verify(b, d); !ok {
-		return false
+	if verified, err := v.tree.Verify(b, d); err != nil {
+		return false, err
 	} else if verified {
-		return true
+		return true, nil
 	}
 
 	if len(v.signature) != v.swarmVerifier.signatureVerifier.Size() {
-		return false
+		return false, ErrSignatureTooShort
 	}
-
-	return v.swarmVerifier.signatureVerifier.Verify(v.timestamp, v.tree.Get(v.tree.RootBin()), v.signature)
+	if !v.swarmVerifier.signatureVerifier.Verify(v.timestamp, v.tree.Get(v.tree.RootBin()), v.signature) {
+		return false, ErrInvalidSignature
+	}
+	return true, nil
 }
 
 // Verify ...
-func (v *MerkleChunkVerifier) Verify(b binmap.Bin, d []byte) bool {
+func (v *MerkleChunkVerifier) Verify(b binmap.Bin, d []byte) (bool, error) {
 	v.bin = binmap.None
 
-	if !v.verify(b, d) {
-		return false
+	if verified, err := v.verify(b, d); !verified || err != nil {
+		return false, err
 	}
 
 	v.swarmVerifier.storeSegment(v.timestamp, v.tree, v.signature)
-	return true
+	return true, nil
 }
 
 // MerkleWriterOptions ...

@@ -2,10 +2,14 @@ package merkle
 
 import (
 	"bytes"
+	"errors"
 	"hash"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
+
+// ErrHashMismatch ...
+var ErrHashMismatch = errors.New("hash mismatch")
 
 // NewTree creates an empty Merkle tree
 func NewTree(rootBin binmap.Bin, chunkSize int, h hash.Hash) *Tree {
@@ -156,7 +160,7 @@ func (t *Tree) setOrVerify(b binmap.Bin) (ok, verified bool) {
 
 // Fill fills the leaf nodes under bin with data and verify that the reference
 // tree doesn't have other hashes for the affected nodes
-func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
+func (t *Tree) Fill(b binmap.Bin, d []byte) (bool, error) {
 	l := b.BaseLeft()
 	r := b.BaseRight()
 
@@ -164,13 +168,13 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 	bl := int(b.BaseLength())
 	for i := 0; i < bl; i++ {
 		if _, err := t.hash.Write(d[i*t.chunkSize : (i+1)*t.chunkSize]); err != nil {
-			return false, false
+			return false, err
 		}
 
 		if ok, verified := t.setOrVerify(l + binmap.Bin(i*2)); !ok {
-			return false, false
+			return false, ErrHashMismatch
 		} else if verified && b.Layer() == 0 {
-			return true, true
+			return true, nil
 		}
 	}
 
@@ -180,57 +184,57 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (ok, verified bool) {
 		w := binmap.Bin(1 << (i + 1))
 		for j := l; j <= r; j += w {
 			if _, err := t.hash.Write(t.Get(j.Left())); err != nil {
-				return false, false
+				return false, err
 			}
 			if _, err := t.hash.Write(t.Get(j.Right())); err != nil {
-				return false, false
+				return false, err
 			}
 
 			if ok, verified := t.setOrVerify(j); !ok {
-				return false, false
+				return false, ErrHashMismatch
 			} else if verified && b.Layer() == i {
-				return true, true
+				return true, nil
 			}
 		}
 	}
 
-	return true, false
+	return false, nil
 }
 
 // Verify that the hashes of the target tree and it's parent  match if we assign
 // the specified data to the specified bin
-func (t *Tree) Verify(b binmap.Bin, d []byte) (ok, verified bool) {
-	if ok, verified := t.Fill(b, d); !ok {
-		return false, false
+func (t *Tree) Verify(b binmap.Bin, d []byte) (bool, error) {
+	if verified, err := t.Fill(b, d); err != nil {
+		return false, err
 	} else if verified {
-		return true, true
+		return true, nil
 	}
 
 	for b != t.rootBin {
 		if b.IsLeft() {
 			if _, err := t.hash.Write(t.Get(b)); err != nil {
-				return false, false
+				return false, err
 			}
 			if _, err := t.hash.Write(t.Get(b.Sibling())); err != nil {
-				return false, false
+				return false, err
 			}
 		} else {
 			if _, err := t.hash.Write(t.Get(b.Sibling())); err != nil {
-				return false, false
+				return false, err
 			}
 			if _, err := t.hash.Write(t.Get(b)); err != nil {
-				return false, false
+				return false, err
 			}
 		}
 		t.setVerified(b.Sibling())
 
 		b = b.Parent()
 		if ok, verified := t.setOrVerify(b); !ok {
-			return false, false
+			return false, ErrHashMismatch
 		} else if verified {
-			return true, true
+			return true, nil
 		}
 	}
 
-	return true, false
+	return false, nil
 }

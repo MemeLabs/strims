@@ -234,7 +234,7 @@ type ChannelVerifier interface {
 type ChunkVerifier interface {
 	SetSignedIntegrity(b binmap.Bin, t time.Time, sig []byte)
 	SetIntegrity(b binmap.Bin, hash []byte)
-	Verify(b binmap.Bin, d []byte) bool
+	Verify(b binmap.Bin, d []byte) (bool, error)
 }
 
 // SignatureSigner ...

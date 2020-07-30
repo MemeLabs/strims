@@ -11,7 +11,11 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 )
 
-var errMissingSignature = errors.New("missing signature")
+// errors ...
+var (
+	ErrMissingChunkSignature = errors.New("missing chunk signature")
+	ErrInvalidChunkSignature = errors.New("invalid chunk signature")
+)
 
 // SignAllOptions ...
 type SignAllOptions struct {
@@ -54,7 +58,7 @@ func (v *SignAllSwarmVerifier) WriteIntegrity(b binmap.Bin, m *binmap.Map, w Wri
 
 	for l, r := b.BaseLeft(), b.BaseRight(); l <= r; l += 2 {
 		if l < v.tail || l >= v.head {
-			return n, errMissingSignature
+			return n, ErrMissingChunkSignature
 		}
 
 		i := uint64(l>>1) & v.mask
@@ -136,14 +140,14 @@ func (v *SignAllChunkVerifier) SetSignedIntegrity(b binmap.Bin, ts time.Time, si
 // SetIntegrity ...
 func (v *SignAllChunkVerifier) SetIntegrity(b binmap.Bin, d []byte) {}
 
-func (v *SignAllChunkVerifier) verify(b binmap.Bin, d []byte) bool {
+func (v *SignAllChunkVerifier) verify(b binmap.Bin, d []byte) (bool, error) {
 	if b.BaseLeft() != v.bin {
-		return false
+		return false, ErrMissingChunkSignature
 	}
 
 	l := int(b.BaseLength())
 	if l > len(v.timestamps) {
-		return false
+		return false, ErrMissingChunkSignature
 	}
 	for i := 0; i < l; i++ {
 		ts := v.timestamps[i]
@@ -151,23 +155,25 @@ func (v *SignAllChunkVerifier) verify(b binmap.Bin, d []byte) bool {
 		sig := v.signatures[i*v.swarmVerifier.signatureVerifier.Size() : (i+1)*v.swarmVerifier.signatureVerifier.Size()]
 
 		if !v.swarmVerifier.signatureVerifier.Verify(ts, chunk, sig) {
-			return false
+			return false, ErrInvalidChunkSignature
 		}
 		v.swarmVerifier.storeSignature(v.bin+binmap.Bin(i*2), ts, sig)
 	}
 
-	return true
+	return true, nil
 }
 
 // Verify ...
-func (v *SignAllChunkVerifier) Verify(b binmap.Bin, d []byte) bool {
-	verified := v.verify(b, d)
+func (v *SignAllChunkVerifier) Verify(b binmap.Bin, d []byte) (bool, error) {
+	if verified, err := v.verify(b, d); !verified {
+		return false, err
+	}
 
 	v.bin = binmap.None
 	v.timestamps = v.timestamps[:0]
 	v.signatures = v.signatures[:0]
 
-	return verified
+	return true, nil
 }
 
 // SignAllWriterOptions ...
