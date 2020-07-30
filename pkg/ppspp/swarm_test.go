@@ -3,6 +3,7 @@ package ppspp
 import (
 	"testing"
 
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -17,12 +18,24 @@ func TestSwarmOptions(t *testing.T) {
 		},
 		"custom options": {
 			req: SwarmOptions{
-				ChunkSize:  2048,
-				LiveWindow: 1 << 12,
+				ChunkSize:          2048,
+				ChunksPerSignature: 16,
+				LiveWindow:         1 << 12,
+				Integrity: integrity.VerifierOptions{
+					ProtectionMethod:       integrity.ProtectionMethodSignAll,
+					MerkleHashTreeFunction: integrity.MerkleHashTreeFunctionSHA256,
+					LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithmED25519,
+				},
 			},
 			expected: SwarmOptions{
-				ChunkSize:  2048,
-				LiveWindow: 1 << 12,
+				ChunkSize:          2048,
+				ChunksPerSignature: 16,
+				LiveWindow:         1 << 12,
+				Integrity: integrity.VerifierOptions{
+					ProtectionMethod:       integrity.ProtectionMethodSignAll,
+					MerkleHashTreeFunction: integrity.MerkleHashTreeFunctionSHA256,
+					LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithmED25519,
+				},
 			},
 		},
 	}

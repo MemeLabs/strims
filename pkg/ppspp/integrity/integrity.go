@@ -86,11 +86,12 @@ func NewDefaultVerifierOptions() VerifierOptions {
 	}
 }
 
-// VerifierSwarmOptions ...
-type VerifierSwarmOptions struct {
+// SwarmVerifierOptions ...
+type SwarmVerifierOptions struct {
 	LiveDiscardWindow  int
 	ChunkSize          int
 	ChunksPerSignature int
+	VerifierOptions
 }
 
 // VerifierOptions ...
@@ -98,11 +99,10 @@ type VerifierOptions struct {
 	ProtectionMethod       ProtectionMethod
 	MerkleHashTreeFunction MerkleHashTreeFunction
 	LiveSignatureAlgorithm LiveSignatureAlgorithm
-	SwarmOptions           VerifierSwarmOptions
 }
 
 // Assign ...
-func (o VerifierOptions) Assign(u VerifierOptions) {
+func (o *VerifierOptions) Assign(u VerifierOptions) {
 	if u.ProtectionMethod != 0 {
 		o.ProtectionMethod = u.ProtectionMethod
 	}
@@ -121,7 +121,7 @@ type Writer interface {
 }
 
 // NewVerifier ...
-func NewVerifier(key []byte, opt VerifierOptions) (SwarmVerifier, error) {
+func NewVerifier(key []byte, opt SwarmVerifierOptions) (SwarmVerifier, error) {
 	var signatureVerifier SignatureVerifier
 	switch opt.LiveSignatureAlgorithm {
 	case LiveSignatureAlgorithmED25519:
@@ -147,16 +147,16 @@ func NewVerifier(key []byte, opt VerifierOptions) (SwarmVerifier, error) {
 		return &NoneSwarmVerifier{}, nil
 	case ProtectionMethodMerkleTree:
 		return NewMerkleSwarmVerifier(&MerkleOptions{
-			LiveDiscardWindow:  opt.SwarmOptions.LiveDiscardWindow,
-			ChunkSize:          opt.SwarmOptions.ChunkSize,
-			ChunksPerSignature: opt.SwarmOptions.ChunksPerSignature,
+			LiveDiscardWindow:  opt.LiveDiscardWindow,
+			ChunkSize:          opt.ChunkSize,
+			ChunksPerSignature: opt.ChunksPerSignature,
 			Verifier:           signatureVerifier,
 			Hash:               hash,
 		}), nil
 	case ProtectionMethodSignAll:
 		return NewSignAllSwarmVerifier(&SignAllOptions{
-			LiveDiscardWindow: opt.SwarmOptions.LiveDiscardWindow,
-			ChunkSize:         opt.SwarmOptions.ChunkSize,
+			LiveDiscardWindow: opt.LiveDiscardWindow,
+			ChunkSize:         opt.ChunkSize,
 			Verifier:          signatureVerifier,
 		}), nil
 	default:
@@ -173,46 +173,46 @@ func blake2bFunc(fn func([]byte) (hash.Hash, error)) hashFunc {
 	}
 }
 
-// WriterSwarmOptions ...
-type WriterSwarmOptions struct {
+// SwarmWriterOptions ...
+type SwarmWriterOptions struct {
 	LiveSignatureAlgorithm LiveSignatureAlgorithm
 	ProtectionMethod       ProtectionMethod
 	ChunkSize              int
 	Verifier               SwarmVerifier
 	Writer                 WriteFlusher
+	WriterOptions
 }
 
 // WriterOptions ...
 type WriterOptions struct {
 	ChunksPerSignature int
-	SwarmOptions       WriterSwarmOptions
 }
 
 // NewWriter ...
-func NewWriter(key []byte, opt WriterOptions) (WriteFlusher, error) {
+func NewWriter(key []byte, opt SwarmWriterOptions) (WriteFlusher, error) {
 	var signatureSigner SignatureSigner
-	switch opt.SwarmOptions.LiveSignatureAlgorithm {
+	switch opt.LiveSignatureAlgorithm {
 	case LiveSignatureAlgorithmED25519:
 		signatureSigner = NewED25519Signer(key)
 	}
 
-	switch opt.SwarmOptions.ProtectionMethod {
+	switch opt.ProtectionMethod {
 	case ProtectionMethodNone:
-		return opt.SwarmOptions.Writer, nil
+		return opt.Writer, nil
 	case ProtectionMethodMerkleTree:
 		return NewMerkleWriter(&MerkleWriterOptions{
 			ChunksPerSignature: opt.ChunksPerSignature,
-			ChunkSize:          opt.SwarmOptions.ChunkSize,
-			Verifier:           opt.SwarmOptions.Verifier.(*MerkleSwarmVerifier),
+			ChunkSize:          opt.ChunkSize,
+			Verifier:           opt.Verifier.(*MerkleSwarmVerifier),
 			Signer:             signatureSigner,
-			Writer:             opt.SwarmOptions.Writer,
+			Writer:             opt.Writer,
 		}), nil
 	case ProtectionMethodSignAll:
 		return NewSignAllWriter(&SignAllWriterOptions{
-			ChunkSize: opt.SwarmOptions.ChunkSize,
-			Verifier:  opt.SwarmOptions.Verifier.(*SignAllSwarmVerifier),
+			ChunkSize: opt.ChunkSize,
+			Verifier:  opt.Verifier.(*SignAllSwarmVerifier),
 			Signer:    signatureSigner,
-			Writer:    opt.SwarmOptions.Writer,
+			Writer:    opt.Writer,
 		}), nil
 	default:
 		return nil, errors.New("unsupported protection method")

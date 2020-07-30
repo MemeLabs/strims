@@ -21,14 +21,14 @@ func NewWriter(o WriterOptions) (*Writer, error) {
 		return nil, err
 	}
 
-	w, err := integrity.NewWriter(o.Key.Private, integrity.WriterOptions{
-		ChunksPerSignature: 32,
-		SwarmOptions: integrity.WriterSwarmOptions{
-			LiveSignatureAlgorithm: s.liveSignatureAlgorithm(),
-			ProtectionMethod:       s.contentIntegrityProtectionMethod(),
-			ChunkSize:              s.chunkSize(),
-			Verifier:               s.verifier,
-			Writer:                 store.NewWriter(s.pubSub, s.chunkSize()),
+	w, err := integrity.NewWriter(o.Key.Private, integrity.SwarmWriterOptions{
+		LiveSignatureAlgorithm: s.liveSignatureAlgorithm(),
+		ProtectionMethod:       s.contentIntegrityProtectionMethod(),
+		ChunkSize:              s.chunkSize(),
+		Verifier:               s.verifier,
+		Writer:                 store.NewWriter(s.pubSub, s.chunkSize()),
+		WriterOptions: integrity.WriterOptions{
+			ChunksPerSignature: 32,
 		},
 	})
 	if err != nil {

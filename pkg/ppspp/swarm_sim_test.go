@@ -24,6 +24,8 @@ type testPeer struct {
 }
 
 func TestSwarmSim(t *testing.T) {
+	t.SkipNow()
+
 	peers := []testPeer{
 		{
 			downloadRate: 150 * ppspptest.Mbps,

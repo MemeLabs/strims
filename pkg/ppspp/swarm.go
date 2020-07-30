@@ -20,21 +20,19 @@ type SwarmOptions struct {
 	Integrity          integrity.VerifierOptions
 }
 
+// Assign ...
 func (o *SwarmOptions) Assign(u SwarmOptions) {
 	if u.ChunkSize != 0 {
 		o.ChunkSize = u.ChunkSize
 	}
-
+	if u.ChunksPerSignature != 0 {
+		o.ChunksPerSignature = u.ChunksPerSignature
+	}
 	if u.LiveWindow != 0 {
 		o.LiveWindow = u.LiveWindow
 	}
 
 	o.Integrity.Assign(u.Integrity)
-	o.Integrity.SwarmOptions = integrity.VerifierSwarmOptions{
-		LiveDiscardWindow:  o.LiveWindow,
-		ChunkSize:          o.ChunkSize,
-		ChunksPerSignature: o.ChunksPerSignature,
-	}
 }
 
 // NewDefaultSwarmOptions ...
@@ -70,7 +68,13 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 		binRateSlow: ma.NewSimple(300, 100*time.Millisecond),
 	}
 
-	verifier, err := integrity.NewVerifier(id.Binary(), o.Integrity)
+	vo := integrity.SwarmVerifierOptions{
+		LiveDiscardWindow:  o.LiveWindow,
+		ChunkSize:          o.ChunkSize,
+		ChunksPerSignature: o.ChunksPerSignature,
+		VerifierOptions:    o.Integrity,
+	}
+	v, err := integrity.NewVerifier(id.Binary(), vo)
 	if err != nil {
 		return nil, err
 	}
@@ -82,7 +86,7 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 		store:    buf,
 		pubSub:   store.NewPubSub(buf, bins),
 		bins:     bins,
-		verifier: verifier,
+		verifier: v,
 	}, nil
 }
 
