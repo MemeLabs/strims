@@ -35,6 +35,41 @@ func TestVerify(t *testing.T) {
 	r0.Merge(r1)
 }
 
+func TestVerifyMerge(t *testing.T) {
+	const chunkSize = 1024
+	bin := binmap.NewBin(5, 0)
+	fillBin := binmap.NewBin(1, 4)
+	data := make([]byte, bin.BaseLength()*chunkSize)
+	if _, err := io.ReadFull(rng(), data); err != nil {
+		t.Fatal(err)
+	}
+	fillBytes := data[fillBin.BaseOffset()*chunkSize : (fillBin.BaseOffset()+fillBin.BaseLength())*chunkSize]
+
+	r := NewTree(bin, chunkSize, sha256.New())
+	r.Fill(bin, data)
+
+	copyAndVerify := func(dst, src *Tree) bool {
+		for b := fillBin; b != bin; b = b.Parent() {
+			dst.Set(b.Sibling(), src.Get(b.Sibling()))
+		}
+
+		_, verified := dst.Verify(fillBin, fillBytes)
+		return verified
+	}
+
+	r00 := NewTree(bin, chunkSize, sha256.New())
+	r00.SetRoot(r.Get(bin))
+	r01 := NewProvisionalTree(r00)
+	assert.True(t, copyAndVerify(r01, r), "expected successful validation")
+
+	r00.Merge(r01)
+
+	r10 := NewTree(bin, chunkSize, sha256.New())
+	r10.SetRoot(r10.Get(bin))
+	r11 := NewProvisionalTree(r10)
+	assert.True(t, copyAndVerify(r11, r00), "expected successful validation")
+}
+
 func TestVerifyForward(t *testing.T) {
 	const chunkSize = 1024
 	bin := binmap.NewBin(5, 0)

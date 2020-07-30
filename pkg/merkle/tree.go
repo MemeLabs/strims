@@ -222,6 +222,7 @@ func (t *Tree) Verify(b binmap.Bin, d []byte) (ok, verified bool) {
 				return false, false
 			}
 		}
+		t.setVerified(b.Sibling())
 
 		b = b.Parent()
 		if ok, verified := t.setOrVerify(b); !ok {
