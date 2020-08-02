@@ -30,7 +30,7 @@ type ServerConfig struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Key             *Key     `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
+	Key             []byte   `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
 	NameChangeQuota uint32   `protobuf:"varint,2,opt,name=name_change_quota,json=nameChangeQuota,proto3" json:"name_change_quota,omitempty"`
 	TokenTtl        uint64   `protobuf:"varint,3,opt,name=token_ttl,json=tokenTtl,proto3" json:"token_ttl,omitempty"`
 	Roles           []string `protobuf:"bytes,4,rep,name=roles,proto3" json:"roles,omitempty"`
@@ -68,7 +68,7 @@ func (*ServerConfig) Descriptor() ([]byte, []int) {
 	return file_nickserv_proto_rawDescGZIP(), []int{0}
 }
 
-func (x *ServerConfig) GetKey() *Key {
+func (x *ServerConfig) GetKey() []byte {
 	if x != nil {
 		return x.Key
 	}
@@ -96,21 +96,14 @@ func (x *ServerConfig) GetRoles() []string {
 	return nil
 }
 
-type NickRecord struct {
+type NickServMessage struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
-
-	PeerPublicKey            *Key     `protobuf:"bytes,1,opt,name=peer_public_key,json=peerPublicKey,proto3" json:"peer_public_key,omitempty"`
-	Name                     string   `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	UpdatedTimestamp         uint64   `protobuf:"varint,3,opt,name=updated_timestamp,json=updatedTimestamp,proto3" json:"updated_timestamp,omitempty"`
-	CreatedTimestamp         uint64   `protobuf:"varint,4,opt,name=created_timestamp,json=createdTimestamp,proto3" json:"created_timestamp,omitempty"`
-	RemainingNameChangeQuota uint32   `protobuf:"varint,5,opt,name=remaining_name_change_quota,json=remainingNameChangeQuota,proto3" json:"remaining_name_change_quota,omitempty"`
-	Roles                    []string `protobuf:"bytes,6,rep,name=roles,proto3" json:"roles,omitempty"`
 }
 
-func (x *NickRecord) Reset() {
-	*x = NickRecord{}
+func (x *NickServMessage) Reset() {
+	*x = NickServMessage{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_nickserv_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -118,13 +111,13 @@ func (x *NickRecord) Reset() {
 	}
 }
 
-func (x *NickRecord) String() string {
+func (x *NickServMessage) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NickRecord) ProtoMessage() {}
+func (*NickServMessage) ProtoMessage() {}
 
-func (x *NickRecord) ProtoReflect() protoreflect.Message {
+func (x *NickServMessage) ProtoReflect() protoreflect.Message {
 	mi := &file_nickserv_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -136,51 +129,9 @@ func (x *NickRecord) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NickRecord.ProtoReflect.Descriptor instead.
-func (*NickRecord) Descriptor() ([]byte, []int) {
+// Deprecated: Use NickServMessage.ProtoReflect.Descriptor instead.
+func (*NickServMessage) Descriptor() ([]byte, []int) {
 	return file_nickserv_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *NickRecord) GetPeerPublicKey() *Key {
-	if x != nil {
-		return x.PeerPublicKey
-	}
-	return nil
-}
-
-func (x *NickRecord) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *NickRecord) GetUpdatedTimestamp() uint64 {
-	if x != nil {
-		return x.UpdatedTimestamp
-	}
-	return 0
-}
-
-func (x *NickRecord) GetCreatedTimestamp() uint64 {
-	if x != nil {
-		return x.CreatedTimestamp
-	}
-	return 0
-}
-
-func (x *NickRecord) GetRemainingNameChangeQuota() uint32 {
-	if x != nil {
-		return x.RemainingNameChangeQuota
-	}
-	return 0
-}
-
-func (x *NickRecord) GetRoles() []string {
-	if x != nil {
-		return x.Roles
-	}
-	return nil
 }
 
 type NickServToken struct {
@@ -188,7 +139,7 @@ type NickServToken struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	OwnerPublicKey *Key     `protobuf:"bytes,1,opt,name=owner_public_key,json=ownerPublicKey,proto3" json:"owner_public_key,omitempty"`
+	OwnerPublicKey []byte   `protobuf:"bytes,1,opt,name=owner_public_key,json=ownerPublicKey,proto3" json:"owner_public_key,omitempty"`
 	Nick           string   `protobuf:"bytes,2,opt,name=nick,proto3" json:"nick,omitempty"`
 	Roles          []string `protobuf:"bytes,3,rep,name=roles,proto3" json:"roles,omitempty"`
 	ValidUntil     uint64   `protobuf:"varint,4,opt,name=valid_until,json=validUntil,proto3" json:"valid_until,omitempty"`
@@ -227,7 +178,7 @@ func (*NickServToken) Descriptor() ([]byte, []int) {
 	return file_nickserv_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *NickServToken) GetOwnerPublicKey() *Key {
+func (x *NickServToken) GetOwnerPublicKey() []byte {
 	if x != nil {
 		return x.OwnerPublicKey
 	}
@@ -262,23 +213,23 @@ func (x *NickServToken) GetSignature() []byte {
 	return nil
 }
 
-type NickServEvent struct {
+type NickServRPCCommand struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
 	RequestId       uint64 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
-	SourcePublicKey *Key   `protobuf:"bytes,2,opt,name=source_public_key,json=sourcePublicKey,proto3" json:"source_public_key,omitempty"`
+	SourcePublicKey []byte `protobuf:"bytes,2,opt,name=source_public_key,json=sourcePublicKey,proto3" json:"source_public_key,omitempty"`
 	// Types that are assignable to Body:
-	//	*NickServEvent_Create_
-	//	*NickServEvent_Retrieve_
-	//	*NickServEvent_Update_
-	//	*NickServEvent_Delete_
-	Body isNickServEvent_Body `protobuf_oneof:"body"`
+	//	*NickServRPCCommand_Create_
+	//	*NickServRPCCommand_Retrieve_
+	//	*NickServRPCCommand_Update_
+	//	*NickServRPCCommand_Delete_
+	Body isNickServRPCCommand_Body `protobuf_oneof:"body"`
 }
 
-func (x *NickServEvent) Reset() {
-	*x = NickServEvent{}
+func (x *NickServRPCCommand) Reset() {
+	*x = NickServRPCCommand{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_nickserv_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -286,13 +237,13 @@ func (x *NickServEvent) Reset() {
 	}
 }
 
-func (x *NickServEvent) String() string {
+func (x *NickServRPCCommand) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NickServEvent) ProtoMessage() {}
+func (*NickServRPCCommand) ProtoMessage() {}
 
-func (x *NickServEvent) ProtoReflect() protoreflect.Message {
+func (x *NickServRPCCommand) ProtoReflect() protoreflect.Message {
 	mi := &file_nickserv_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -304,105 +255,105 @@ func (x *NickServEvent) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NickServEvent.ProtoReflect.Descriptor instead.
-func (*NickServEvent) Descriptor() ([]byte, []int) {
+// Deprecated: Use NickServRPCCommand.ProtoReflect.Descriptor instead.
+func (*NickServRPCCommand) Descriptor() ([]byte, []int) {
 	return file_nickserv_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *NickServEvent) GetRequestId() uint64 {
+func (x *NickServRPCCommand) GetRequestId() uint64 {
 	if x != nil {
 		return x.RequestId
 	}
 	return 0
 }
 
-func (x *NickServEvent) GetSourcePublicKey() *Key {
+func (x *NickServRPCCommand) GetSourcePublicKey() []byte {
 	if x != nil {
 		return x.SourcePublicKey
 	}
 	return nil
 }
 
-func (m *NickServEvent) GetBody() isNickServEvent_Body {
+func (m *NickServRPCCommand) GetBody() isNickServRPCCommand_Body {
 	if m != nil {
 		return m.Body
 	}
 	return nil
 }
 
-func (x *NickServEvent) GetCreate() *NickServEvent_Create {
-	if x, ok := x.GetBody().(*NickServEvent_Create_); ok {
+func (x *NickServRPCCommand) GetCreate() *NickServRPCCommand_Create {
+	if x, ok := x.GetBody().(*NickServRPCCommand_Create_); ok {
 		return x.Create
 	}
 	return nil
 }
 
-func (x *NickServEvent) GetRetrieve() *NickServEvent_Retrieve {
-	if x, ok := x.GetBody().(*NickServEvent_Retrieve_); ok {
+func (x *NickServRPCCommand) GetRetrieve() *NickServRPCCommand_Retrieve {
+	if x, ok := x.GetBody().(*NickServRPCCommand_Retrieve_); ok {
 		return x.Retrieve
 	}
 	return nil
 }
 
-func (x *NickServEvent) GetUpdate() *NickServEvent_Update {
-	if x, ok := x.GetBody().(*NickServEvent_Update_); ok {
+func (x *NickServRPCCommand) GetUpdate() *NickServRPCCommand_Update {
+	if x, ok := x.GetBody().(*NickServRPCCommand_Update_); ok {
 		return x.Update
 	}
 	return nil
 }
 
-func (x *NickServEvent) GetDelete() *NickServEvent_Delete {
-	if x, ok := x.GetBody().(*NickServEvent_Delete_); ok {
+func (x *NickServRPCCommand) GetDelete() *NickServRPCCommand_Delete {
+	if x, ok := x.GetBody().(*NickServRPCCommand_Delete_); ok {
 		return x.Delete
 	}
 	return nil
 }
 
-type isNickServEvent_Body interface {
-	isNickServEvent_Body()
+type isNickServRPCCommand_Body interface {
+	isNickServRPCCommand_Body()
 }
 
-type NickServEvent_Create_ struct {
-	Create *NickServEvent_Create `protobuf:"bytes,5,opt,name=create,proto3,oneof"`
+type NickServRPCCommand_Create_ struct {
+	Create *NickServRPCCommand_Create `protobuf:"bytes,5,opt,name=create,proto3,oneof"`
 }
 
-type NickServEvent_Retrieve_ struct {
-	Retrieve *NickServEvent_Retrieve `protobuf:"bytes,6,opt,name=retrieve,proto3,oneof"`
+type NickServRPCCommand_Retrieve_ struct {
+	Retrieve *NickServRPCCommand_Retrieve `protobuf:"bytes,6,opt,name=retrieve,proto3,oneof"`
 }
 
-type NickServEvent_Update_ struct {
-	Update *NickServEvent_Update `protobuf:"bytes,7,opt,name=update,proto3,oneof"`
+type NickServRPCCommand_Update_ struct {
+	Update *NickServRPCCommand_Update `protobuf:"bytes,7,opt,name=update,proto3,oneof"`
 }
 
-type NickServEvent_Delete_ struct {
-	Delete *NickServEvent_Delete `protobuf:"bytes,8,opt,name=delete,proto3,oneof"`
+type NickServRPCCommand_Delete_ struct {
+	Delete *NickServRPCCommand_Delete `protobuf:"bytes,8,opt,name=delete,proto3,oneof"`
 }
 
-func (*NickServEvent_Create_) isNickServEvent_Body() {}
+func (*NickServRPCCommand_Create_) isNickServRPCCommand_Body() {}
 
-func (*NickServEvent_Retrieve_) isNickServEvent_Body() {}
+func (*NickServRPCCommand_Retrieve_) isNickServRPCCommand_Body() {}
 
-func (*NickServEvent_Update_) isNickServEvent_Body() {}
+func (*NickServRPCCommand_Update_) isNickServRPCCommand_Body() {}
 
-func (*NickServEvent_Delete_) isNickServEvent_Body() {}
+func (*NickServRPCCommand_Delete_) isNickServRPCCommand_Body() {}
 
-type RPCResponse struct {
+type NickServRPCResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
 	RequestId uint64 `protobuf:"varint,1,opt,name=request_id,json=requestId,proto3" json:"request_id,omitempty"`
 	// Types that are assignable to Body:
-	//	*RPCResponse_Error_
-	//	*RPCResponse_Update_
-	//	*RPCResponse_Delete_
-	//	*RPCResponse_Create
-	//	*RPCResponse_Retrieve
-	Body isRPCResponse_Body `protobuf_oneof:"body"`
+	//	*NickServRPCResponse_Error_
+	//	*NickServRPCResponse_Update_
+	//	*NickServRPCResponse_Delete_
+	//	*NickServRPCResponse_Create
+	//	*NickServRPCResponse_Retrieve
+	Body isNickServRPCResponse_Body `protobuf_oneof:"body"`
 }
 
-func (x *RPCResponse) Reset() {
-	*x = RPCResponse{}
+func (x *NickServRPCResponse) Reset() {
+	*x = NickServRPCResponse{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_nickserv_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -410,13 +361,13 @@ func (x *RPCResponse) Reset() {
 	}
 }
 
-func (x *RPCResponse) String() string {
+func (x *NickServRPCResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RPCResponse) ProtoMessage() {}
+func (*NickServRPCResponse) ProtoMessage() {}
 
-func (x *RPCResponse) ProtoReflect() protoreflect.Message {
+func (x *NickServRPCResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_nickserv_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -428,104 +379,112 @@ func (x *RPCResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RPCResponse.ProtoReflect.Descriptor instead.
-func (*RPCResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use NickServRPCResponse.ProtoReflect.Descriptor instead.
+func (*NickServRPCResponse) Descriptor() ([]byte, []int) {
 	return file_nickserv_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *RPCResponse) GetRequestId() uint64 {
+func (x *NickServRPCResponse) GetRequestId() uint64 {
 	if x != nil {
 		return x.RequestId
 	}
 	return 0
 }
 
-func (m *RPCResponse) GetBody() isRPCResponse_Body {
+func (m *NickServRPCResponse) GetBody() isNickServRPCResponse_Body {
 	if m != nil {
 		return m.Body
 	}
 	return nil
 }
 
-func (x *RPCResponse) GetError() *RPCResponse_Error {
-	if x, ok := x.GetBody().(*RPCResponse_Error_); ok {
+func (x *NickServRPCResponse) GetError() *NickServRPCResponse_Error {
+	if x, ok := x.GetBody().(*NickServRPCResponse_Error_); ok {
 		return x.Error
 	}
 	return nil
 }
 
-func (x *RPCResponse) GetUpdate() *RPCResponse_Update {
-	if x, ok := x.GetBody().(*RPCResponse_Update_); ok {
+func (x *NickServRPCResponse) GetUpdate() *NickServRPCResponse_Update {
+	if x, ok := x.GetBody().(*NickServRPCResponse_Update_); ok {
 		return x.Update
 	}
 	return nil
 }
 
-func (x *RPCResponse) GetDelete() *RPCResponse_Delete {
-	if x, ok := x.GetBody().(*RPCResponse_Delete_); ok {
+func (x *NickServRPCResponse) GetDelete() *NickServRPCResponse_Delete {
+	if x, ok := x.GetBody().(*NickServRPCResponse_Delete_); ok {
 		return x.Delete
 	}
 	return nil
 }
 
-func (x *RPCResponse) GetCreate() *NickServToken {
-	if x, ok := x.GetBody().(*RPCResponse_Create); ok {
+func (x *NickServRPCResponse) GetCreate() *NickServToken {
+	if x, ok := x.GetBody().(*NickServRPCResponse_Create); ok {
 		return x.Create
 	}
 	return nil
 }
 
-func (x *RPCResponse) GetRetrieve() *NickServToken {
-	if x, ok := x.GetBody().(*RPCResponse_Retrieve); ok {
+func (x *NickServRPCResponse) GetRetrieve() *NickServToken {
+	if x, ok := x.GetBody().(*NickServRPCResponse_Retrieve); ok {
 		return x.Retrieve
 	}
 	return nil
 }
 
-type isRPCResponse_Body interface {
-	isRPCResponse_Body()
+type isNickServRPCResponse_Body interface {
+	isNickServRPCResponse_Body()
 }
 
-type RPCResponse_Error_ struct {
-	Error *RPCResponse_Error `protobuf:"bytes,2,opt,name=error,proto3,oneof"`
+type NickServRPCResponse_Error_ struct {
+	Error *NickServRPCResponse_Error `protobuf:"bytes,2,opt,name=error,proto3,oneof"`
 }
 
-type RPCResponse_Update_ struct {
-	Update *RPCResponse_Update `protobuf:"bytes,3,opt,name=update,proto3,oneof"`
+type NickServRPCResponse_Update_ struct {
+	Update *NickServRPCResponse_Update `protobuf:"bytes,3,opt,name=update,proto3,oneof"`
 }
 
-type RPCResponse_Delete_ struct {
-	Delete *RPCResponse_Delete `protobuf:"bytes,4,opt,name=delete,proto3,oneof"`
+type NickServRPCResponse_Delete_ struct {
+	Delete *NickServRPCResponse_Delete `protobuf:"bytes,4,opt,name=delete,proto3,oneof"`
 }
 
-type RPCResponse_Create struct {
+type NickServRPCResponse_Create struct {
 	Create *NickServToken `protobuf:"bytes,5,opt,name=create,proto3,oneof"`
 }
 
-type RPCResponse_Retrieve struct {
+type NickServRPCResponse_Retrieve struct {
 	Retrieve *NickServToken `protobuf:"bytes,6,opt,name=retrieve,proto3,oneof"`
 }
 
-func (*RPCResponse_Error_) isRPCResponse_Body() {}
+func (*NickServRPCResponse_Error_) isNickServRPCResponse_Body() {}
 
-func (*RPCResponse_Update_) isRPCResponse_Body() {}
+func (*NickServRPCResponse_Update_) isNickServRPCResponse_Body() {}
 
-func (*RPCResponse_Delete_) isRPCResponse_Body() {}
+func (*NickServRPCResponse_Delete_) isNickServRPCResponse_Body() {}
 
-func (*RPCResponse_Create) isRPCResponse_Body() {}
+func (*NickServRPCResponse_Create) isNickServRPCResponse_Body() {}
 
-func (*RPCResponse_Retrieve) isRPCResponse_Body() {}
+func (*NickServRPCResponse_Retrieve) isNickServRPCResponse_Body() {}
 
-type NickServEvent_Create struct {
+type NickServMessage_Record struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Nick string `protobuf:"bytes,1,opt,name=nick,proto3" json:"nick,omitempty"`
+	Hash                     []byte   `protobuf:"bytes,1,opt,name=hash,proto3" json:"hash,omitempty"`
+	Key                      []byte   `protobuf:"bytes,2,opt,name=key,proto3" json:"key,omitempty"`
+	HostId                   []byte   `protobuf:"bytes,3,opt,name=host_id,json=hostId,proto3" json:"host_id,omitempty"`
+	Name                     string   `protobuf:"bytes,4,opt,name=name,proto3" json:"name,omitempty"`
+	RemainingNameChangeQuota uint32   `protobuf:"varint,5,opt,name=remaining_name_change_quota,json=remainingNameChangeQuota,proto3" json:"remaining_name_change_quota,omitempty"`
+	UpdatedTimestamp         uint64   `protobuf:"varint,6,opt,name=updated_timestamp,json=updatedTimestamp,proto3" json:"updated_timestamp,omitempty"`
+	CreatedTimestamp         uint64   `protobuf:"varint,7,opt,name=created_timestamp,json=createdTimestamp,proto3" json:"created_timestamp,omitempty"`
+	Roles                    []string `protobuf:"bytes,8,rep,name=roles,proto3" json:"roles,omitempty"`
+	Signature                []byte   `protobuf:"bytes,9,opt,name=signature,proto3" json:"signature,omitempty"`
 }
 
-func (x *NickServEvent_Create) Reset() {
-	*x = NickServEvent_Create{}
+func (x *NickServMessage_Record) Reset() {
+	*x = NickServMessage_Record{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_nickserv_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -533,13 +492,13 @@ func (x *NickServEvent_Create) Reset() {
 	}
 }
 
-func (x *NickServEvent_Create) String() string {
+func (x *NickServMessage_Record) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NickServEvent_Create) ProtoMessage() {}
+func (*NickServMessage_Record) ProtoMessage() {}
 
-func (x *NickServEvent_Create) ProtoReflect() protoreflect.Message {
+func (x *NickServMessage_Record) ProtoReflect() protoreflect.Message {
 	mi := &file_nickserv_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -551,19 +510,75 @@ func (x *NickServEvent_Create) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NickServEvent_Create.ProtoReflect.Descriptor instead.
-func (*NickServEvent_Create) Descriptor() ([]byte, []int) {
-	return file_nickserv_proto_rawDescGZIP(), []int{3, 0}
+// Deprecated: Use NickServMessage_Record.ProtoReflect.Descriptor instead.
+func (*NickServMessage_Record) Descriptor() ([]byte, []int) {
+	return file_nickserv_proto_rawDescGZIP(), []int{1, 0}
 }
 
-func (x *NickServEvent_Create) GetNick() string {
+func (x *NickServMessage_Record) GetHash() []byte {
 	if x != nil {
-		return x.Nick
+		return x.Hash
+	}
+	return nil
+}
+
+func (x *NickServMessage_Record) GetKey() []byte {
+	if x != nil {
+		return x.Key
+	}
+	return nil
+}
+
+func (x *NickServMessage_Record) GetHostId() []byte {
+	if x != nil {
+		return x.HostId
+	}
+	return nil
+}
+
+func (x *NickServMessage_Record) GetName() string {
+	if x != nil {
+		return x.Name
 	}
 	return ""
 }
 
-type NickServEvent_Retrieve struct {
+func (x *NickServMessage_Record) GetRemainingNameChangeQuota() uint32 {
+	if x != nil {
+		return x.RemainingNameChangeQuota
+	}
+	return 0
+}
+
+func (x *NickServMessage_Record) GetUpdatedTimestamp() uint64 {
+	if x != nil {
+		return x.UpdatedTimestamp
+	}
+	return 0
+}
+
+func (x *NickServMessage_Record) GetCreatedTimestamp() uint64 {
+	if x != nil {
+		return x.CreatedTimestamp
+	}
+	return 0
+}
+
+func (x *NickServMessage_Record) GetRoles() []string {
+	if x != nil {
+		return x.Roles
+	}
+	return nil
+}
+
+func (x *NickServMessage_Record) GetSignature() []byte {
+	if x != nil {
+		return x.Signature
+	}
+	return nil
+}
+
+type NickServRPCCommand_Create struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -571,8 +586,8 @@ type NickServEvent_Retrieve struct {
 	Nick string `protobuf:"bytes,1,opt,name=nick,proto3" json:"nick,omitempty"`
 }
 
-func (x *NickServEvent_Retrieve) Reset() {
-	*x = NickServEvent_Retrieve{}
+func (x *NickServRPCCommand_Create) Reset() {
+	*x = NickServRPCCommand_Create{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_nickserv_proto_msgTypes[6]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -580,13 +595,13 @@ func (x *NickServEvent_Retrieve) Reset() {
 	}
 }
 
-func (x *NickServEvent_Retrieve) String() string {
+func (x *NickServRPCCommand_Create) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NickServEvent_Retrieve) ProtoMessage() {}
+func (*NickServRPCCommand_Create) ProtoMessage() {}
 
-func (x *NickServEvent_Retrieve) ProtoReflect() protoreflect.Message {
+func (x *NickServRPCCommand_Create) ProtoReflect() protoreflect.Message {
 	mi := &file_nickserv_proto_msgTypes[6]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -598,33 +613,28 @@ func (x *NickServEvent_Retrieve) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NickServEvent_Retrieve.ProtoReflect.Descriptor instead.
-func (*NickServEvent_Retrieve) Descriptor() ([]byte, []int) {
-	return file_nickserv_proto_rawDescGZIP(), []int{3, 1}
+// Deprecated: Use NickServRPCCommand_Create.ProtoReflect.Descriptor instead.
+func (*NickServRPCCommand_Create) Descriptor() ([]byte, []int) {
+	return file_nickserv_proto_rawDescGZIP(), []int{3, 0}
 }
 
-func (x *NickServEvent_Retrieve) GetNick() string {
+func (x *NickServRPCCommand_Create) GetNick() string {
 	if x != nil {
 		return x.Nick
 	}
 	return ""
 }
 
-type NickServEvent_Update struct {
+type NickServRPCCommand_Retrieve struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
 	Nick string `protobuf:"bytes,1,opt,name=nick,proto3" json:"nick,omitempty"`
-	// Types that are assignable to Param:
-	//	*NickServEvent_Update_NewNick
-	//	*NickServEvent_Update_NameChangeQuota
-	//	*NickServEvent_Update_Roles
-	Param isNickServEvent_Update_Param `protobuf_oneof:"param"`
 }
 
-func (x *NickServEvent_Update) Reset() {
-	*x = NickServEvent_Update{}
+func (x *NickServRPCCommand_Retrieve) Reset() {
+	*x = NickServRPCCommand_Retrieve{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_nickserv_proto_msgTypes[7]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -632,13 +642,13 @@ func (x *NickServEvent_Update) Reset() {
 	}
 }
 
-func (x *NickServEvent_Update) String() string {
+func (x *NickServRPCCommand_Retrieve) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NickServEvent_Update) ProtoMessage() {}
+func (*NickServRPCCommand_Retrieve) ProtoMessage() {}
 
-func (x *NickServEvent_Update) ProtoReflect() protoreflect.Message {
+func (x *NickServRPCCommand_Retrieve) ProtoReflect() protoreflect.Message {
 	mi := &file_nickserv_proto_msgTypes[7]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -650,78 +660,33 @@ func (x *NickServEvent_Update) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NickServEvent_Update.ProtoReflect.Descriptor instead.
-func (*NickServEvent_Update) Descriptor() ([]byte, []int) {
-	return file_nickserv_proto_rawDescGZIP(), []int{3, 2}
+// Deprecated: Use NickServRPCCommand_Retrieve.ProtoReflect.Descriptor instead.
+func (*NickServRPCCommand_Retrieve) Descriptor() ([]byte, []int) {
+	return file_nickserv_proto_rawDescGZIP(), []int{3, 1}
 }
 
-func (x *NickServEvent_Update) GetNick() string {
+func (x *NickServRPCCommand_Retrieve) GetNick() string {
 	if x != nil {
 		return x.Nick
 	}
 	return ""
 }
 
-func (m *NickServEvent_Update) GetParam() isNickServEvent_Update_Param {
-	if m != nil {
-		return m.Param
-	}
-	return nil
-}
-
-func (x *NickServEvent_Update) GetNewNick() string {
-	if x, ok := x.GetParam().(*NickServEvent_Update_NewNick); ok {
-		return x.NewNick
-	}
-	return ""
-}
-
-func (x *NickServEvent_Update) GetNameChangeQuota() uint32 {
-	if x, ok := x.GetParam().(*NickServEvent_Update_NameChangeQuota); ok {
-		return x.NameChangeQuota
-	}
-	return 0
-}
-
-func (x *NickServEvent_Update) GetRoles() string {
-	if x, ok := x.GetParam().(*NickServEvent_Update_Roles); ok {
-		return x.Roles
-	}
-	return ""
-}
-
-type isNickServEvent_Update_Param interface {
-	isNickServEvent_Update_Param()
-}
-
-type NickServEvent_Update_NewNick struct {
-	NewNick string `protobuf:"bytes,2,opt,name=new_nick,json=newNick,proto3,oneof"`
-}
-
-type NickServEvent_Update_NameChangeQuota struct {
-	NameChangeQuota uint32 `protobuf:"varint,3,opt,name=name_change_quota,json=nameChangeQuota,proto3,oneof"`
-}
-
-type NickServEvent_Update_Roles struct {
-	Roles string `protobuf:"bytes,4,opt,name=roles,proto3,oneof"`
-}
-
-func (*NickServEvent_Update_NewNick) isNickServEvent_Update_Param() {}
-
-func (*NickServEvent_Update_NameChangeQuota) isNickServEvent_Update_Param() {}
-
-func (*NickServEvent_Update_Roles) isNickServEvent_Update_Param() {}
-
-type NickServEvent_Delete struct {
+type NickServRPCCommand_Update struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
 	Nick string `protobuf:"bytes,1,opt,name=nick,proto3" json:"nick,omitempty"`
+	// Types that are assignable to Param:
+	//	*NickServRPCCommand_Update_NewNick
+	//	*NickServRPCCommand_Update_NameChangeQuota
+	//	*NickServRPCCommand_Update_Roles
+	Param isNickServRPCCommand_Update_Param `protobuf_oneof:"param"`
 }
 
-func (x *NickServEvent_Delete) Reset() {
-	*x = NickServEvent_Delete{}
+func (x *NickServRPCCommand_Update) Reset() {
+	*x = NickServRPCCommand_Update{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_nickserv_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -729,13 +694,13 @@ func (x *NickServEvent_Delete) Reset() {
 	}
 }
 
-func (x *NickServEvent_Delete) String() string {
+func (x *NickServRPCCommand_Update) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*NickServEvent_Delete) ProtoMessage() {}
+func (*NickServRPCCommand_Update) ProtoMessage() {}
 
-func (x *NickServEvent_Delete) ProtoReflect() protoreflect.Message {
+func (x *NickServRPCCommand_Update) ProtoReflect() protoreflect.Message {
 	mi := &file_nickserv_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -747,28 +712,78 @@ func (x *NickServEvent_Delete) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use NickServEvent_Delete.ProtoReflect.Descriptor instead.
-func (*NickServEvent_Delete) Descriptor() ([]byte, []int) {
-	return file_nickserv_proto_rawDescGZIP(), []int{3, 3}
+// Deprecated: Use NickServRPCCommand_Update.ProtoReflect.Descriptor instead.
+func (*NickServRPCCommand_Update) Descriptor() ([]byte, []int) {
+	return file_nickserv_proto_rawDescGZIP(), []int{3, 2}
 }
 
-func (x *NickServEvent_Delete) GetNick() string {
+func (x *NickServRPCCommand_Update) GetNick() string {
 	if x != nil {
 		return x.Nick
 	}
 	return ""
 }
 
-type RPCResponse_Error struct {
+func (m *NickServRPCCommand_Update) GetParam() isNickServRPCCommand_Update_Param {
+	if m != nil {
+		return m.Param
+	}
+	return nil
+}
+
+func (x *NickServRPCCommand_Update) GetNewNick() string {
+	if x, ok := x.GetParam().(*NickServRPCCommand_Update_NewNick); ok {
+		return x.NewNick
+	}
+	return ""
+}
+
+func (x *NickServRPCCommand_Update) GetNameChangeQuota() uint32 {
+	if x, ok := x.GetParam().(*NickServRPCCommand_Update_NameChangeQuota); ok {
+		return x.NameChangeQuota
+	}
+	return 0
+}
+
+func (x *NickServRPCCommand_Update) GetRoles() string {
+	if x, ok := x.GetParam().(*NickServRPCCommand_Update_Roles); ok {
+		return x.Roles
+	}
+	return ""
+}
+
+type isNickServRPCCommand_Update_Param interface {
+	isNickServRPCCommand_Update_Param()
+}
+
+type NickServRPCCommand_Update_NewNick struct {
+	NewNick string `protobuf:"bytes,2,opt,name=new_nick,json=newNick,proto3,oneof"`
+}
+
+type NickServRPCCommand_Update_NameChangeQuota struct {
+	NameChangeQuota uint32 `protobuf:"varint,3,opt,name=name_change_quota,json=nameChangeQuota,proto3,oneof"`
+}
+
+type NickServRPCCommand_Update_Roles struct {
+	Roles string `protobuf:"bytes,4,opt,name=roles,proto3,oneof"`
+}
+
+func (*NickServRPCCommand_Update_NewNick) isNickServRPCCommand_Update_Param() {}
+
+func (*NickServRPCCommand_Update_NameChangeQuota) isNickServRPCCommand_Update_Param() {}
+
+func (*NickServRPCCommand_Update_Roles) isNickServRPCCommand_Update_Param() {}
+
+type NickServRPCCommand_Delete struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Msg string `protobuf:"bytes,1,opt,name=msg,proto3" json:"msg,omitempty"`
+	Nick string `protobuf:"bytes,1,opt,name=nick,proto3" json:"nick,omitempty"`
 }
 
-func (x *RPCResponse_Error) Reset() {
-	*x = RPCResponse_Error{}
+func (x *NickServRPCCommand_Delete) Reset() {
+	*x = NickServRPCCommand_Delete{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_nickserv_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -776,13 +791,13 @@ func (x *RPCResponse_Error) Reset() {
 	}
 }
 
-func (x *RPCResponse_Error) String() string {
+func (x *NickServRPCCommand_Delete) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RPCResponse_Error) ProtoMessage() {}
+func (*NickServRPCCommand_Delete) ProtoMessage() {}
 
-func (x *RPCResponse_Error) ProtoReflect() protoreflect.Message {
+func (x *NickServRPCCommand_Delete) ProtoReflect() protoreflect.Message {
 	mi := &file_nickserv_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -794,26 +809,28 @@ func (x *RPCResponse_Error) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RPCResponse_Error.ProtoReflect.Descriptor instead.
-func (*RPCResponse_Error) Descriptor() ([]byte, []int) {
-	return file_nickserv_proto_rawDescGZIP(), []int{4, 0}
+// Deprecated: Use NickServRPCCommand_Delete.ProtoReflect.Descriptor instead.
+func (*NickServRPCCommand_Delete) Descriptor() ([]byte, []int) {
+	return file_nickserv_proto_rawDescGZIP(), []int{3, 3}
 }
 
-func (x *RPCResponse_Error) GetMsg() string {
+func (x *NickServRPCCommand_Delete) GetNick() string {
 	if x != nil {
-		return x.Msg
+		return x.Nick
 	}
 	return ""
 }
 
-type RPCResponse_Update struct {
+type NickServRPCResponse_Error struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
+
+	Msg string `protobuf:"bytes,1,opt,name=msg,proto3" json:"msg,omitempty"`
 }
 
-func (x *RPCResponse_Update) Reset() {
-	*x = RPCResponse_Update{}
+func (x *NickServRPCResponse_Error) Reset() {
+	*x = NickServRPCResponse_Error{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_nickserv_proto_msgTypes[10]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -821,13 +838,13 @@ func (x *RPCResponse_Update) Reset() {
 	}
 }
 
-func (x *RPCResponse_Update) String() string {
+func (x *NickServRPCResponse_Error) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RPCResponse_Update) ProtoMessage() {}
+func (*NickServRPCResponse_Error) ProtoMessage() {}
 
-func (x *RPCResponse_Update) ProtoReflect() protoreflect.Message {
+func (x *NickServRPCResponse_Error) ProtoReflect() protoreflect.Message {
 	mi := &file_nickserv_proto_msgTypes[10]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -839,19 +856,26 @@ func (x *RPCResponse_Update) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RPCResponse_Update.ProtoReflect.Descriptor instead.
-func (*RPCResponse_Update) Descriptor() ([]byte, []int) {
-	return file_nickserv_proto_rawDescGZIP(), []int{4, 1}
+// Deprecated: Use NickServRPCResponse_Error.ProtoReflect.Descriptor instead.
+func (*NickServRPCResponse_Error) Descriptor() ([]byte, []int) {
+	return file_nickserv_proto_rawDescGZIP(), []int{4, 0}
 }
 
-type RPCResponse_Delete struct {
+func (x *NickServRPCResponse_Error) GetMsg() string {
+	if x != nil {
+		return x.Msg
+	}
+	return ""
+}
+
+type NickServRPCResponse_Update struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 }
 
-func (x *RPCResponse_Delete) Reset() {
-	*x = RPCResponse_Delete{}
+func (x *NickServRPCResponse_Update) Reset() {
+	*x = NickServRPCResponse_Update{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_nickserv_proto_msgTypes[11]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -859,13 +883,13 @@ func (x *RPCResponse_Delete) Reset() {
 	}
 }
 
-func (x *RPCResponse_Delete) String() string {
+func (x *NickServRPCResponse_Update) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*RPCResponse_Delete) ProtoMessage() {}
+func (*NickServRPCResponse_Update) ProtoMessage() {}
 
-func (x *RPCResponse_Delete) ProtoReflect() protoreflect.Message {
+func (x *NickServRPCResponse_Update) ProtoReflect() protoreflect.Message {
 	mi := &file_nickserv_proto_msgTypes[11]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -877,8 +901,46 @@ func (x *RPCResponse_Delete) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use RPCResponse_Delete.ProtoReflect.Descriptor instead.
-func (*RPCResponse_Delete) Descriptor() ([]byte, []int) {
+// Deprecated: Use NickServRPCResponse_Update.ProtoReflect.Descriptor instead.
+func (*NickServRPCResponse_Update) Descriptor() ([]byte, []int) {
+	return file_nickserv_proto_rawDescGZIP(), []int{4, 1}
+}
+
+type NickServRPCResponse_Delete struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *NickServRPCResponse_Delete) Reset() {
+	*x = NickServRPCResponse_Delete{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_nickserv_proto_msgTypes[12]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *NickServRPCResponse_Delete) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NickServRPCResponse_Delete) ProtoMessage() {}
+
+func (x *NickServRPCResponse_Delete) ProtoReflect() protoreflect.Message {
+	mi := &file_nickserv_proto_msgTypes[12]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NickServRPCResponse_Delete.ProtoReflect.Descriptor instead.
+func (*NickServRPCResponse_Delete) Descriptor() ([]byte, []int) {
 	return file_nickserv_proto_rawDescGZIP(), []int{4, 2}
 }
 
@@ -886,100 +948,105 @@ var File_nickserv_proto protoreflect.FileDescriptor
 
 var file_nickserv_proto_rawDesc = []byte{
 	0x0a, 0x0e, 0x6e, 0x69, 0x63, 0x6b, 0x73, 0x65, 0x72, 0x76, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x1a, 0x09, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x85, 0x01, 0x0a, 0x0c,
-	0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67, 0x12, 0x16, 0x0a, 0x03,
-	0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x04, 0x2e, 0x4b, 0x65, 0x79, 0x52,
-	0x03, 0x6b, 0x65, 0x79, 0x12, 0x2a, 0x0a, 0x11, 0x6e, 0x61, 0x6d, 0x65, 0x5f, 0x63, 0x68, 0x61,
-	0x6e, 0x67, 0x65, 0x5f, 0x71, 0x75, 0x6f, 0x74, 0x61, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52,
-	0x0f, 0x6e, 0x61, 0x6d, 0x65, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x51, 0x75, 0x6f, 0x74, 0x61,
-	0x12, 0x1b, 0x0a, 0x09, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x5f, 0x74, 0x74, 0x6c, 0x18, 0x03, 0x20,
-	0x01, 0x28, 0x04, 0x52, 0x08, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x54, 0x74, 0x6c, 0x12, 0x14, 0x0a,
-	0x05, 0x72, 0x6f, 0x6c, 0x65, 0x73, 0x18, 0x04, 0x20, 0x03, 0x28, 0x09, 0x52, 0x05, 0x72, 0x6f,
-	0x6c, 0x65, 0x73, 0x22, 0xfd, 0x01, 0x0a, 0x0a, 0x4e, 0x69, 0x63, 0x6b, 0x52, 0x65, 0x63, 0x6f,
-	0x72, 0x64, 0x12, 0x2c, 0x0a, 0x0f, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x70, 0x75, 0x62, 0x6c, 0x69,
-	0x63, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x04, 0x2e, 0x4b, 0x65,
-	0x79, 0x52, 0x0d, 0x70, 0x65, 0x65, 0x72, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x4b, 0x65, 0x79,
-	0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04,
-	0x6e, 0x61, 0x6d, 0x65, 0x12, 0x2b, 0x0a, 0x11, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x5f,
-	0x74, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x18, 0x03, 0x20, 0x01, 0x28, 0x04, 0x52,
-	0x10, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d,
-	0x70, 0x12, 0x2b, 0x0a, 0x11, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x74, 0x69, 0x6d,
-	0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x18, 0x04, 0x20, 0x01, 0x28, 0x04, 0x52, 0x10, 0x63, 0x72,
-	0x65, 0x61, 0x74, 0x65, 0x64, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x12, 0x3d,
-	0x0a, 0x1b, 0x72, 0x65, 0x6d, 0x61, 0x69, 0x6e, 0x69, 0x6e, 0x67, 0x5f, 0x6e, 0x61, 0x6d, 0x65,
-	0x5f, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x5f, 0x71, 0x75, 0x6f, 0x74, 0x61, 0x18, 0x05, 0x20,
-	0x01, 0x28, 0x0d, 0x52, 0x18, 0x72, 0x65, 0x6d, 0x61, 0x69, 0x6e, 0x69, 0x6e, 0x67, 0x4e, 0x61,
-	0x6d, 0x65, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x51, 0x75, 0x6f, 0x74, 0x61, 0x12, 0x14, 0x0a,
-	0x05, 0x72, 0x6f, 0x6c, 0x65, 0x73, 0x18, 0x06, 0x20, 0x03, 0x28, 0x09, 0x52, 0x05, 0x72, 0x6f,
-	0x6c, 0x65, 0x73, 0x22, 0xa8, 0x01, 0x0a, 0x0d, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72, 0x76,
-	0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x12, 0x2e, 0x0a, 0x10, 0x6f, 0x77, 0x6e, 0x65, 0x72, 0x5f, 0x70,
-	0x75, 0x62, 0x6c, 0x69, 0x63, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x04, 0x2e, 0x4b, 0x65, 0x79, 0x52, 0x0e, 0x6f, 0x77, 0x6e, 0x65, 0x72, 0x50, 0x75, 0x62, 0x6c,
-	0x69, 0x63, 0x4b, 0x65, 0x79, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x18, 0x02, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x12, 0x14, 0x0a, 0x05, 0x72, 0x6f, 0x6c,
-	0x65, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x09, 0x52, 0x05, 0x72, 0x6f, 0x6c, 0x65, 0x73, 0x12,
-	0x1f, 0x0a, 0x0b, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x5f, 0x75, 0x6e, 0x74, 0x69, 0x6c, 0x18, 0x04,
-	0x20, 0x01, 0x28, 0x04, 0x52, 0x0a, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x55, 0x6e, 0x74, 0x69, 0x6c,
-	0x12, 0x1c, 0x0a, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x18, 0x05, 0x20,
-	0x01, 0x28, 0x0c, 0x52, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x22, 0x99,
-	0x04, 0x0a, 0x0d, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72, 0x76, 0x45, 0x76, 0x65, 0x6e, 0x74,
-	0x12, 0x1d, 0x0a, 0x0a, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x04, 0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x12,
-	0x30, 0x0a, 0x11, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63,
-	0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x04, 0x2e, 0x4b, 0x65, 0x79,
-	0x52, 0x0f, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x4b, 0x65,
-	0x79, 0x12, 0x2f, 0x0a, 0x06, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x15, 0x2e, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72, 0x76, 0x45, 0x76, 0x65, 0x6e,
-	0x74, 0x2e, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x48, 0x00, 0x52, 0x06, 0x63, 0x72, 0x65, 0x61,
-	0x74, 0x65, 0x12, 0x35, 0x0a, 0x08, 0x72, 0x65, 0x74, 0x72, 0x69, 0x65, 0x76, 0x65, 0x18, 0x06,
-	0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72, 0x76, 0x45,
-	0x76, 0x65, 0x6e, 0x74, 0x2e, 0x52, 0x65, 0x74, 0x72, 0x69, 0x65, 0x76, 0x65, 0x48, 0x00, 0x52,
-	0x08, 0x72, 0x65, 0x74, 0x72, 0x69, 0x65, 0x76, 0x65, 0x12, 0x2f, 0x0a, 0x06, 0x75, 0x70, 0x64,
-	0x61, 0x74, 0x65, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x15, 0x2e, 0x4e, 0x69, 0x63, 0x6b,
-	0x53, 0x65, 0x72, 0x76, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65,
-	0x48, 0x00, 0x52, 0x06, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x12, 0x2f, 0x0a, 0x06, 0x64, 0x65,
-	0x6c, 0x65, 0x74, 0x65, 0x18, 0x08, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x15, 0x2e, 0x4e, 0x69, 0x63,
-	0x6b, 0x53, 0x65, 0x72, 0x76, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74,
-	0x65, 0x48, 0x00, 0x52, 0x06, 0x64, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x1a, 0x1c, 0x0a, 0x06, 0x43,
-	0x72, 0x65, 0x61, 0x74, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x1a, 0x1e, 0x0a, 0x08, 0x52, 0x65, 0x74,
-	0x72, 0x69, 0x65, 0x76, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x1a, 0x88, 0x01, 0x0a, 0x06, 0x55, 0x70,
-	0x64, 0x61, 0x74, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x09, 0x52, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x12, 0x1b, 0x0a, 0x08, 0x6e, 0x65, 0x77, 0x5f,
-	0x6e, 0x69, 0x63, 0x6b, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x07, 0x6e, 0x65,
-	0x77, 0x4e, 0x69, 0x63, 0x6b, 0x12, 0x2c, 0x0a, 0x11, 0x6e, 0x61, 0x6d, 0x65, 0x5f, 0x63, 0x68,
-	0x61, 0x6e, 0x67, 0x65, 0x5f, 0x71, 0x75, 0x6f, 0x74, 0x61, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0d,
-	0x48, 0x00, 0x52, 0x0f, 0x6e, 0x61, 0x6d, 0x65, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x51, 0x75,
-	0x6f, 0x74, 0x61, 0x12, 0x16, 0x0a, 0x05, 0x72, 0x6f, 0x6c, 0x65, 0x73, 0x18, 0x04, 0x20, 0x01,
-	0x28, 0x09, 0x48, 0x00, 0x52, 0x05, 0x72, 0x6f, 0x6c, 0x65, 0x73, 0x42, 0x07, 0x0a, 0x05, 0x70,
-	0x61, 0x72, 0x61, 0x6d, 0x1a, 0x1c, 0x0a, 0x06, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x12, 0x12,
-	0x0a, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x69,
-	0x63, 0x6b, 0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0xc5, 0x02, 0x0a, 0x0b, 0x52,
-	0x50, 0x43, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1d, 0x0a, 0x0a, 0x72, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x09,
-	0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x12, 0x2a, 0x0a, 0x05, 0x65, 0x72, 0x72,
-	0x6f, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x12, 0x2e, 0x52, 0x50, 0x43, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x45, 0x72, 0x72, 0x6f, 0x72, 0x48, 0x00, 0x52, 0x05,
-	0x65, 0x72, 0x72, 0x6f, 0x72, 0x12, 0x2d, 0x0a, 0x06, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x18,
-	0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x52, 0x50, 0x43, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x48, 0x00, 0x52, 0x06, 0x75, 0x70,
-	0x64, 0x61, 0x74, 0x65, 0x12, 0x2d, 0x0a, 0x06, 0x64, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x18, 0x04,
-	0x20, 0x01, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x52, 0x50, 0x43, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
-	0x73, 0x65, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x48, 0x00, 0x52, 0x06, 0x64, 0x65, 0x6c,
-	0x65, 0x74, 0x65, 0x12, 0x28, 0x0a, 0x06, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x18, 0x05, 0x20,
-	0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72, 0x76, 0x54, 0x6f,
-	0x6b, 0x65, 0x6e, 0x48, 0x00, 0x52, 0x06, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x12, 0x2c, 0x0a,
+	0x22, 0x7f, 0x0a, 0x0c, 0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x43, 0x6f, 0x6e, 0x66, 0x69, 0x67,
+	0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x6b,
+	0x65, 0x79, 0x12, 0x2a, 0x0a, 0x11, 0x6e, 0x61, 0x6d, 0x65, 0x5f, 0x63, 0x68, 0x61, 0x6e, 0x67,
+	0x65, 0x5f, 0x71, 0x75, 0x6f, 0x74, 0x61, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x0f, 0x6e,
+	0x61, 0x6d, 0x65, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x51, 0x75, 0x6f, 0x74, 0x61, 0x12, 0x1b,
+	0x0a, 0x09, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x5f, 0x74, 0x74, 0x6c, 0x18, 0x03, 0x20, 0x01, 0x28,
+	0x04, 0x52, 0x08, 0x74, 0x6f, 0x6b, 0x65, 0x6e, 0x54, 0x74, 0x6c, 0x12, 0x14, 0x0a, 0x05, 0x72,
+	0x6f, 0x6c, 0x65, 0x73, 0x18, 0x04, 0x20, 0x03, 0x28, 0x09, 0x52, 0x05, 0x72, 0x6f, 0x6c, 0x65,
+	0x73, 0x22, 0xbc, 0x02, 0x0a, 0x0f, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72, 0x76, 0x4d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x1a, 0xa8, 0x02, 0x0a, 0x06, 0x52, 0x65, 0x63, 0x6f, 0x72, 0x64,
+	0x12, 0x12, 0x0a, 0x04, 0x68, 0x61, 0x73, 0x68, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04,
+	0x68, 0x61, 0x73, 0x68, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x0c, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x17, 0x0a, 0x07, 0x68, 0x6f, 0x73, 0x74, 0x5f, 0x69,
+	0x64, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x06, 0x68, 0x6f, 0x73, 0x74, 0x49, 0x64, 0x12,
+	0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e,
+	0x61, 0x6d, 0x65, 0x12, 0x3d, 0x0a, 0x1b, 0x72, 0x65, 0x6d, 0x61, 0x69, 0x6e, 0x69, 0x6e, 0x67,
+	0x5f, 0x6e, 0x61, 0x6d, 0x65, 0x5f, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x5f, 0x71, 0x75, 0x6f,
+	0x74, 0x61, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0d, 0x52, 0x18, 0x72, 0x65, 0x6d, 0x61, 0x69, 0x6e,
+	0x69, 0x6e, 0x67, 0x4e, 0x61, 0x6d, 0x65, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x51, 0x75, 0x6f,
+	0x74, 0x61, 0x12, 0x2b, 0x0a, 0x11, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x74, 0x69,
+	0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x18, 0x06, 0x20, 0x01, 0x28, 0x04, 0x52, 0x10, 0x75,
+	0x70, 0x64, 0x61, 0x74, 0x65, 0x64, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x12,
+	0x2b, 0x0a, 0x11, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x64, 0x5f, 0x74, 0x69, 0x6d, 0x65, 0x73,
+	0x74, 0x61, 0x6d, 0x70, 0x18, 0x07, 0x20, 0x01, 0x28, 0x04, 0x52, 0x10, 0x63, 0x72, 0x65, 0x61,
+	0x74, 0x65, 0x64, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x12, 0x14, 0x0a, 0x05,
+	0x72, 0x6f, 0x6c, 0x65, 0x73, 0x18, 0x08, 0x20, 0x03, 0x28, 0x09, 0x52, 0x05, 0x72, 0x6f, 0x6c,
+	0x65, 0x73, 0x12, 0x1c, 0x0a, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x18,
+	0x09, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65,
+	0x22, 0xa2, 0x01, 0x0a, 0x0d, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72, 0x76, 0x54, 0x6f, 0x6b,
+	0x65, 0x6e, 0x12, 0x28, 0x0a, 0x10, 0x6f, 0x77, 0x6e, 0x65, 0x72, 0x5f, 0x70, 0x75, 0x62, 0x6c,
+	0x69, 0x63, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0e, 0x6f, 0x77,
+	0x6e, 0x65, 0x72, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x4b, 0x65, 0x79, 0x12, 0x12, 0x0a, 0x04,
+	0x6e, 0x69, 0x63, 0x6b, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x69, 0x63, 0x6b,
+	0x12, 0x14, 0x0a, 0x05, 0x72, 0x6f, 0x6c, 0x65, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x09, 0x52,
+	0x05, 0x72, 0x6f, 0x6c, 0x65, 0x73, 0x12, 0x1f, 0x0a, 0x0b, 0x76, 0x61, 0x6c, 0x69, 0x64, 0x5f,
+	0x75, 0x6e, 0x74, 0x69, 0x6c, 0x18, 0x04, 0x20, 0x01, 0x28, 0x04, 0x52, 0x0a, 0x76, 0x61, 0x6c,
+	0x69, 0x64, 0x55, 0x6e, 0x74, 0x69, 0x6c, 0x12, 0x1c, 0x0a, 0x09, 0x73, 0x69, 0x67, 0x6e, 0x61,
+	0x74, 0x75, 0x72, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x73, 0x69, 0x67, 0x6e,
+	0x61, 0x74, 0x75, 0x72, 0x65, 0x22, 0xac, 0x04, 0x0a, 0x12, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65,
+	0x72, 0x76, 0x52, 0x50, 0x43, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x12, 0x1d, 0x0a, 0x0a,
+	0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04,
+	0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x12, 0x2a, 0x0a, 0x11, 0x73,
+	0x6f, 0x75, 0x72, 0x63, 0x65, 0x5f, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x63, 0x5f, 0x6b, 0x65, 0x79,
+	0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0f, 0x73, 0x6f, 0x75, 0x72, 0x63, 0x65, 0x50, 0x75,
+	0x62, 0x6c, 0x69, 0x63, 0x4b, 0x65, 0x79, 0x12, 0x34, 0x0a, 0x06, 0x63, 0x72, 0x65, 0x61, 0x74,
+	0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65,
+	0x72, 0x76, 0x52, 0x50, 0x43, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x2e, 0x43, 0x72, 0x65,
+	0x61, 0x74, 0x65, 0x48, 0x00, 0x52, 0x06, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x12, 0x3a, 0x0a,
 	0x08, 0x72, 0x65, 0x74, 0x72, 0x69, 0x65, 0x76, 0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x0e, 0x2e, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72, 0x76, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x48,
-	0x00, 0x52, 0x08, 0x72, 0x65, 0x74, 0x72, 0x69, 0x65, 0x76, 0x65, 0x1a, 0x19, 0x0a, 0x05, 0x45,
-	0x72, 0x72, 0x6f, 0x72, 0x12, 0x10, 0x0a, 0x03, 0x6d, 0x73, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x03, 0x6d, 0x73, 0x67, 0x1a, 0x08, 0x0a, 0x06, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65,
-	0x1a, 0x08, 0x0a, 0x06, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f,
-	0x64, 0x79, 0x42, 0x28, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d,
-	0x2f, 0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73,
-	0x70, 0x70, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x62, 0x3b, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x33,
+	0x1c, 0x2e, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72, 0x76, 0x52, 0x50, 0x43, 0x43, 0x6f, 0x6d,
+	0x6d, 0x61, 0x6e, 0x64, 0x2e, 0x52, 0x65, 0x74, 0x72, 0x69, 0x65, 0x76, 0x65, 0x48, 0x00, 0x52,
+	0x08, 0x72, 0x65, 0x74, 0x72, 0x69, 0x65, 0x76, 0x65, 0x12, 0x34, 0x0a, 0x06, 0x75, 0x70, 0x64,
+	0x61, 0x74, 0x65, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x4e, 0x69, 0x63, 0x6b,
+	0x53, 0x65, 0x72, 0x76, 0x52, 0x50, 0x43, 0x43, 0x6f, 0x6d, 0x6d, 0x61, 0x6e, 0x64, 0x2e, 0x55,
+	0x70, 0x64, 0x61, 0x74, 0x65, 0x48, 0x00, 0x52, 0x06, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x12,
+	0x34, 0x0a, 0x06, 0x64, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x18, 0x08, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x1a, 0x2e, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72, 0x76, 0x52, 0x50, 0x43, 0x43, 0x6f, 0x6d,
+	0x6d, 0x61, 0x6e, 0x64, 0x2e, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x48, 0x00, 0x52, 0x06, 0x64,
+	0x65, 0x6c, 0x65, 0x74, 0x65, 0x1a, 0x1c, 0x0a, 0x06, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x12,
+	0x12, 0x0a, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e,
+	0x69, 0x63, 0x6b, 0x1a, 0x1e, 0x0a, 0x08, 0x52, 0x65, 0x74, 0x72, 0x69, 0x65, 0x76, 0x65, 0x12,
+	0x12, 0x0a, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e,
+	0x69, 0x63, 0x6b, 0x1a, 0x88, 0x01, 0x0a, 0x06, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x12, 0x12,
+	0x0a, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x69,
+	0x63, 0x6b, 0x12, 0x1b, 0x0a, 0x08, 0x6e, 0x65, 0x77, 0x5f, 0x6e, 0x69, 0x63, 0x6b, 0x18, 0x02,
+	0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x07, 0x6e, 0x65, 0x77, 0x4e, 0x69, 0x63, 0x6b, 0x12,
+	0x2c, 0x0a, 0x11, 0x6e, 0x61, 0x6d, 0x65, 0x5f, 0x63, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x5f, 0x71,
+	0x75, 0x6f, 0x74, 0x61, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0d, 0x48, 0x00, 0x52, 0x0f, 0x6e, 0x61,
+	0x6d, 0x65, 0x43, 0x68, 0x61, 0x6e, 0x67, 0x65, 0x51, 0x75, 0x6f, 0x74, 0x61, 0x12, 0x16, 0x0a,
+	0x05, 0x72, 0x6f, 0x6c, 0x65, 0x73, 0x18, 0x04, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x05,
+	0x72, 0x6f, 0x6c, 0x65, 0x73, 0x42, 0x07, 0x0a, 0x05, 0x70, 0x61, 0x72, 0x61, 0x6d, 0x1a, 0x1c,
+	0x0a, 0x06, 0x44, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x69, 0x63, 0x6b,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x42, 0x06, 0x0a, 0x04,
+	0x62, 0x6f, 0x64, 0x79, 0x22, 0xe5, 0x02, 0x0a, 0x13, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72,
+	0x76, 0x52, 0x50, 0x43, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1d, 0x0a, 0x0a,
+	0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04,
+	0x52, 0x09, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x49, 0x64, 0x12, 0x32, 0x0a, 0x05, 0x65,
+	0x72, 0x72, 0x6f, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x4e, 0x69, 0x63,
+	0x6b, 0x53, 0x65, 0x72, 0x76, 0x52, 0x50, 0x43, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x2e, 0x45, 0x72, 0x72, 0x6f, 0x72, 0x48, 0x00, 0x52, 0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x12,
+	0x35, 0x0a, 0x06, 0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x1b, 0x2e, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72, 0x76, 0x52, 0x50, 0x43, 0x52, 0x65, 0x73,
+	0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x48, 0x00, 0x52, 0x06,
+	0x75, 0x70, 0x64, 0x61, 0x74, 0x65, 0x12, 0x35, 0x0a, 0x06, 0x64, 0x65, 0x6c, 0x65, 0x74, 0x65,
+	0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1b, 0x2e, 0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72,
+	0x76, 0x52, 0x50, 0x43, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x2e, 0x44, 0x65, 0x6c,
+	0x65, 0x74, 0x65, 0x48, 0x00, 0x52, 0x06, 0x64, 0x65, 0x6c, 0x65, 0x74, 0x65, 0x12, 0x28, 0x0a,
+	0x06, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e,
+	0x4e, 0x69, 0x63, 0x6b, 0x53, 0x65, 0x72, 0x76, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x48, 0x00, 0x52,
+	0x06, 0x63, 0x72, 0x65, 0x61, 0x74, 0x65, 0x12, 0x2c, 0x0a, 0x08, 0x72, 0x65, 0x74, 0x72, 0x69,
+	0x65, 0x76, 0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x4e, 0x69, 0x63, 0x6b,
+	0x53, 0x65, 0x72, 0x76, 0x54, 0x6f, 0x6b, 0x65, 0x6e, 0x48, 0x00, 0x52, 0x08, 0x72, 0x65, 0x74,
+	0x72, 0x69, 0x65, 0x76, 0x65, 0x1a, 0x19, 0x0a, 0x05, 0x45, 0x72, 0x72, 0x6f, 0x72, 0x12, 0x10,
+	0x0a, 0x03, 0x6d, 0x73, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x6d, 0x73, 0x67,
+	0x1a, 0x08, 0x0a, 0x06, 0x55, 0x70, 0x64, 0x61, 0x74, 0x65, 0x1a, 0x08, 0x0a, 0x06, 0x44, 0x65,
+	0x6c, 0x65, 0x74, 0x65, 0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x42, 0x28, 0x5a, 0x26,
+	0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65, 0x4c,
+	0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f, 0x70, 0x6b, 0x67,
+	0x2f, 0x70, 0x62, 0x3b, 0x70, 0x62, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -994,41 +1061,37 @@ func file_nickserv_proto_rawDescGZIP() []byte {
 	return file_nickserv_proto_rawDescData
 }
 
-var file_nickserv_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_nickserv_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_nickserv_proto_goTypes = []interface{}{
-	(*ServerConfig)(nil),           // 0: ServerConfig
-	(*NickRecord)(nil),             // 1: NickRecord
-	(*NickServToken)(nil),          // 2: NickServToken
-	(*NickServEvent)(nil),          // 3: NickServEvent
-	(*RPCResponse)(nil),            // 4: RPCResponse
-	(*NickServEvent_Create)(nil),   // 5: NickServEvent.Create
-	(*NickServEvent_Retrieve)(nil), // 6: NickServEvent.Retrieve
-	(*NickServEvent_Update)(nil),   // 7: NickServEvent.Update
-	(*NickServEvent_Delete)(nil),   // 8: NickServEvent.Delete
-	(*RPCResponse_Error)(nil),      // 9: RPCResponse.Error
-	(*RPCResponse_Update)(nil),     // 10: RPCResponse.Update
-	(*RPCResponse_Delete)(nil),     // 11: RPCResponse.Delete
-	(*Key)(nil),                    // 12: Key
+	(*ServerConfig)(nil),                // 0: ServerConfig
+	(*NickServMessage)(nil),             // 1: NickServMessage
+	(*NickServToken)(nil),               // 2: NickServToken
+	(*NickServRPCCommand)(nil),          // 3: NickServRPCCommand
+	(*NickServRPCResponse)(nil),         // 4: NickServRPCResponse
+	(*NickServMessage_Record)(nil),      // 5: NickServMessage.Record
+	(*NickServRPCCommand_Create)(nil),   // 6: NickServRPCCommand.Create
+	(*NickServRPCCommand_Retrieve)(nil), // 7: NickServRPCCommand.Retrieve
+	(*NickServRPCCommand_Update)(nil),   // 8: NickServRPCCommand.Update
+	(*NickServRPCCommand_Delete)(nil),   // 9: NickServRPCCommand.Delete
+	(*NickServRPCResponse_Error)(nil),   // 10: NickServRPCResponse.Error
+	(*NickServRPCResponse_Update)(nil),  // 11: NickServRPCResponse.Update
+	(*NickServRPCResponse_Delete)(nil),  // 12: NickServRPCResponse.Delete
 }
 var file_nickserv_proto_depIdxs = []int32{
-	12, // 0: ServerConfig.key:type_name -> Key
-	12, // 1: NickRecord.peer_public_key:type_name -> Key
-	12, // 2: NickServToken.owner_public_key:type_name -> Key
-	12, // 3: NickServEvent.source_public_key:type_name -> Key
-	5,  // 4: NickServEvent.create:type_name -> NickServEvent.Create
-	6,  // 5: NickServEvent.retrieve:type_name -> NickServEvent.Retrieve
-	7,  // 6: NickServEvent.update:type_name -> NickServEvent.Update
-	8,  // 7: NickServEvent.delete:type_name -> NickServEvent.Delete
-	9,  // 8: RPCResponse.error:type_name -> RPCResponse.Error
-	10, // 9: RPCResponse.update:type_name -> RPCResponse.Update
-	11, // 10: RPCResponse.delete:type_name -> RPCResponse.Delete
-	2,  // 11: RPCResponse.create:type_name -> NickServToken
-	2,  // 12: RPCResponse.retrieve:type_name -> NickServToken
-	13, // [13:13] is the sub-list for method output_type
-	13, // [13:13] is the sub-list for method input_type
-	13, // [13:13] is the sub-list for extension type_name
-	13, // [13:13] is the sub-list for extension extendee
-	0,  // [0:13] is the sub-list for field type_name
+	6,  // 0: NickServRPCCommand.create:type_name -> NickServRPCCommand.Create
+	7,  // 1: NickServRPCCommand.retrieve:type_name -> NickServRPCCommand.Retrieve
+	8,  // 2: NickServRPCCommand.update:type_name -> NickServRPCCommand.Update
+	9,  // 3: NickServRPCCommand.delete:type_name -> NickServRPCCommand.Delete
+	10, // 4: NickServRPCResponse.error:type_name -> NickServRPCResponse.Error
+	11, // 5: NickServRPCResponse.update:type_name -> NickServRPCResponse.Update
+	12, // 6: NickServRPCResponse.delete:type_name -> NickServRPCResponse.Delete
+	2,  // 7: NickServRPCResponse.create:type_name -> NickServToken
+	2,  // 8: NickServRPCResponse.retrieve:type_name -> NickServToken
+	9,  // [9:9] is the sub-list for method output_type
+	9,  // [9:9] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_nickserv_proto_init() }
@@ -1036,7 +1099,6 @@ func file_nickserv_proto_init() {
 	if File_nickserv_proto != nil {
 		return
 	}
-	file_api_proto_init()
 	if !protoimpl.UnsafeEnabled {
 		file_nickserv_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ServerConfig); i {
@@ -1051,7 +1113,7 @@ func file_nickserv_proto_init() {
 			}
 		}
 		file_nickserv_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NickRecord); i {
+			switch v := v.(*NickServMessage); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1075,7 +1137,7 @@ func file_nickserv_proto_init() {
 			}
 		}
 		file_nickserv_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NickServEvent); i {
+			switch v := v.(*NickServRPCCommand); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1087,7 +1149,7 @@ func file_nickserv_proto_init() {
 			}
 		}
 		file_nickserv_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RPCResponse); i {
+			switch v := v.(*NickServRPCResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1099,7 +1161,7 @@ func file_nickserv_proto_init() {
 			}
 		}
 		file_nickserv_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NickServEvent_Create); i {
+			switch v := v.(*NickServMessage_Record); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1111,7 +1173,7 @@ func file_nickserv_proto_init() {
 			}
 		}
 		file_nickserv_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NickServEvent_Retrieve); i {
+			switch v := v.(*NickServRPCCommand_Create); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1123,7 +1185,7 @@ func file_nickserv_proto_init() {
 			}
 		}
 		file_nickserv_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NickServEvent_Update); i {
+			switch v := v.(*NickServRPCCommand_Retrieve); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1135,7 +1197,7 @@ func file_nickserv_proto_init() {
 			}
 		}
 		file_nickserv_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NickServEvent_Delete); i {
+			switch v := v.(*NickServRPCCommand_Update); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1147,7 +1209,7 @@ func file_nickserv_proto_init() {
 			}
 		}
 		file_nickserv_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RPCResponse_Error); i {
+			switch v := v.(*NickServRPCCommand_Delete); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1159,7 +1221,7 @@ func file_nickserv_proto_init() {
 			}
 		}
 		file_nickserv_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RPCResponse_Update); i {
+			switch v := v.(*NickServRPCResponse_Error); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1171,7 +1233,19 @@ func file_nickserv_proto_init() {
 			}
 		}
 		file_nickserv_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*RPCResponse_Delete); i {
+			switch v := v.(*NickServRPCResponse_Update); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_nickserv_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*NickServRPCResponse_Delete); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -1184,22 +1258,22 @@ func file_nickserv_proto_init() {
 		}
 	}
 	file_nickserv_proto_msgTypes[3].OneofWrappers = []interface{}{
-		(*NickServEvent_Create_)(nil),
-		(*NickServEvent_Retrieve_)(nil),
-		(*NickServEvent_Update_)(nil),
-		(*NickServEvent_Delete_)(nil),
+		(*NickServRPCCommand_Create_)(nil),
+		(*NickServRPCCommand_Retrieve_)(nil),
+		(*NickServRPCCommand_Update_)(nil),
+		(*NickServRPCCommand_Delete_)(nil),
 	}
 	file_nickserv_proto_msgTypes[4].OneofWrappers = []interface{}{
-		(*RPCResponse_Error_)(nil),
-		(*RPCResponse_Update_)(nil),
-		(*RPCResponse_Delete_)(nil),
-		(*RPCResponse_Create)(nil),
-		(*RPCResponse_Retrieve)(nil),
+		(*NickServRPCResponse_Error_)(nil),
+		(*NickServRPCResponse_Update_)(nil),
+		(*NickServRPCResponse_Delete_)(nil),
+		(*NickServRPCResponse_Create)(nil),
+		(*NickServRPCResponse_Retrieve)(nil),
 	}
-	file_nickserv_proto_msgTypes[7].OneofWrappers = []interface{}{
-		(*NickServEvent_Update_NewNick)(nil),
-		(*NickServEvent_Update_NameChangeQuota)(nil),
-		(*NickServEvent_Update_Roles)(nil),
+	file_nickserv_proto_msgTypes[8].OneofWrappers = []interface{}{
+		(*NickServRPCCommand_Update_NewNick)(nil),
+		(*NickServRPCCommand_Update_NameChangeQuota)(nil),
+		(*NickServRPCCommand_Update_Roles)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -1207,7 +1281,7 @@ func file_nickserv_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_nickserv_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   12,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -121,7 +121,7 @@ func TestNoVeriefiedReferenceNode(t *testing.T) {
 		r1.Set(b.Sibling(), r.Get(b.Sibling()))
 	}
 
-	// should return false seince r0 has no hashes to verify against
+	// should return false since r0 has no hashes to verify against
 	verified, err := r1.Verify(17, data[8*chunkSize:10*chunkSize])
 	assert.Nil(t, err, "unexpected error")
 	assert.False(t, verified)
