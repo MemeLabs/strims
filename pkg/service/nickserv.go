@@ -3,14 +3,20 @@ package service
 import (
 	"bytes"
 	"context"
+	"crypto/ed25519"
+	"encoding/binary"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"sync"
 	"sync/atomic"
 	"time"
+	"unsafe"
 
+	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/prefixstream"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -26,13 +32,18 @@ var defaultNameChangeQuota uint32 = 5
 // TODO: sign/verify nickservtoken
 
 func NewNickServ(svc *NetworkServices, cfg *pb.ServerConfig, salt []byte) (*NickServ, error) {
+	key := &pb.Key{}
+	if err := json.Unmarshal(cfg.Key, &key); err != nil {
+		return nil, err
+	}
+
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
 		// SwarmOptions: ppspp.NewDefaultSwarmOptions(),
 		SwarmOptions: ppspp.SwarmOptions{
 			LiveWindow: 1 << 10, // 1MB
 			ChunkSize:  128,
 		},
-		Key: cfg.Key,
+		Key: key,
 	})
 	if err != nil {
 		return nil, err
@@ -46,7 +57,7 @@ func NewNickServ(svc *NetworkServices, cfg *pb.ServerConfig, salt []byte) (*Nick
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	newSwarmPeerManager(ctx, svc, getPeersGetter(ctx, svc, cfg.Key.Public, salt))
+	newSwarmPeerManager(ctx, svc, getPeersGetter(ctx, svc, key.Public, salt))
 
 	b, err := proto.Marshal(&pb.NetworkAddress{
 		HostId: svc.Host.ID().Bytes(nil),
@@ -56,7 +67,7 @@ func NewNickServ(svc *NetworkServices, cfg *pb.ServerConfig, salt []byte) (*Nick
 		cancel()
 		return nil, err
 	}
-	_, err = svc.HashTable.Set(ctx, cfg.Key, salt, b)
+	_, err = svc.HashTable.Set(ctx, key, salt, b)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -101,7 +112,7 @@ func (s *NickServ) Close() {
 }
 
 func (s *NickServ) HandleMessage(msg *vpn.Message) (forward bool, err error) {
-	var m pb.NickServEvent
+	var m pb.NickServRPCCommand
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
 		return true, err
 	}
@@ -109,13 +120,13 @@ func (s *NickServ) HandleMessage(msg *vpn.Message) (forward bool, err error) {
 	// TODO: verify `source_public_key`
 
 	switch b := m.Body.(type) {
-	case *pb.NickServEvent_Create_:
+	case *pb.NickServRPCCommand_Create_:
 		err = s.handleCreate(m.RequestId, m.SourcePublicKey, b.Create)
-	case *pb.NickServEvent_Retrieve_:
+	case *pb.NickServRPCCommand_Retrieve_:
 		err = s.handleRetrieve(b.Retrieve)
-	case *pb.NickServEvent_Update_:
+	case *pb.NickServRPCCommand_Update_:
 		err = s.handleUpdate(b.Update)
-	case *pb.NickServEvent_Delete_:
+	case *pb.NickServRPCCommand_Delete_:
 		err = s.handleDelete(b.Delete)
 	default:
 		err = errors.New("unexpected message type")
@@ -124,28 +135,30 @@ func (s *NickServ) HandleMessage(msg *vpn.Message) (forward bool, err error) {
 	return true, nil
 }
 
-func (s *NickServ) handleCreate(id uint64, key *pb.Key, msg *pb.NickServEvent_Create) error {
+func (s *NickServ) handleCreate(id uint64, key []byte, msg *pb.NickServRPCCommand_Create) error {
 	now := time.Now()
-	r := &pb.NickRecord{
-		PeerPublicKey:            key,
+	r := &pb.NickServMessage_Record{
+		Key:                      key,
 		Name:                     msg.Nick,
 		CreatedTimestamp:         uint64(now.Unix()),
 		UpdatedTimestamp:         uint64(now.Unix()),
 		RemainingNameChangeQuota: defaultNameChangeQuota,
 		Roles:                    []string{},
 	}
-	return s.store.Insert(r)
-}
-
-func (s *NickServ) handleRetrieve(msg *pb.NickServEvent_Retrieve) error {
+	//return s.store.Insert(r)
+	_ = r
 	return fmt.Errorf("unimplemented")
 }
 
-func (s *NickServ) handleUpdate(msg *pb.NickServEvent_Update) error {
+func (s *NickServ) handleRetrieve(msg *pb.NickServRPCCommand_Retrieve) error {
 	return fmt.Errorf("unimplemented")
 }
 
-func (s *NickServ) handleDelete(msg *pb.NickServEvent_Delete) error {
+func (s *NickServ) handleUpdate(msg *pb.NickServRPCCommand_Update) error {
+	return fmt.Errorf("unimplemented")
+}
+
+func (s *NickServ) handleDelete(msg *pb.NickServRPCCommand_Delete) error {
 	return fmt.Errorf("unimplemented")
 }
 
@@ -194,15 +207,16 @@ func NewNickServClient(svc *NetworkServices, key, salt []byte) (*NickServClient,
 }
 
 type NickServClient struct {
-	ctx       context.Context
-	close     context.CancelFunc
-	closeOnce sync.Once
-	svc       *NetworkServices
-	requests  map[uint64]chan struct{}
-	swarm     *ppspp.Swarm
-	addrReady chan struct{}
-	addr      atomic.Value
-	port      uint16
+	ctx           context.Context
+	close         context.CancelFunc
+	closeOnce     sync.Once
+	svc           *NetworkServices
+	requests      map[uint64]chan pb.NickServRPCCommand
+	nextRequestID uint64
+	swarm         *ppspp.Swarm
+	addrReady     chan struct{}
+	addr          atomic.Value
+	port          uint16
 }
 
 func (c *NickServClient) syncAddr(svc *NetworkServices, key, salt []byte) {
@@ -250,7 +264,7 @@ func (c *NickServClient) Send(key string, body []byte) error {
 		return err
 	}
 
-	b, err := proto.Marshal(&pb.NickServEvent{
+	b, err := proto.Marshal(&pb.NickServRPCResponse{
 		RequestId: id,
 	})
 	if err != nil {
@@ -261,7 +275,7 @@ func (c *NickServClient) Send(key string, body []byte) error {
 	return c.svc.Network.Send(addr.HostID, addr.Port, c.port, b)
 }
 
-func readNickServEvents(swarm *ppspp.Swarm, messages chan *pb.NickServEvent) {
+func readNickServEvents(swarm *ppspp.Swarm, messages chan *pb.NickServRPCCommand) {
 	r := prefixstream.NewReader(swarm.Reader())
 	b := bytes.NewBuffer(nil)
 	for {
@@ -270,33 +284,203 @@ func readNickServEvents(swarm *ppspp.Swarm, messages chan *pb.NickServEvent) {
 			return
 		}
 
-		var msg pb.NickServEvent
+		var msg pb.NickServRPCCommand
 		if err := proto.Unmarshal(b.Bytes(), &msg); err != nil {
 			continue
 		}
 	}
 }
 
+func (c *NickServClient) MessageHandler(msg *pb.NickServRPCCommand) {
+	ch, ok := c.requests[msg.RequestId]
+	if !ok {
+		return
+	}
+	select {
+	case ch <- *msg:
+	default:
+	}
+}
+
+func (c *NickServClient) registerResponseChan() uint64 {
+	rid := c.nextRequestID
+	c.nextRequestID++
+
+	c.requests[rid] = make(chan pb.NickServRPCCommand)
+
+	return rid
+}
+
 type NickServStore struct {
 	logger  *zap.Logger
+	hostID  kademlia.ID
 	lock    sync.Mutex
 	records *llrb.LLRB
 }
 
-func (s *NickServStore) Insert(r *pb.NickRecord) error {
-	return fmt.Errorf("unimplemented")
+func newNickServItemKeyRange(nickServID uint32, hash []byte, localHostID kademlia.ID) (nickServItemKey, nickServItemKey) {
+	min := newNickServItemKey(nickServID, hash, localHostID, []byte{})
+	max := newNickServItemKey(nickServID+1, hash, localHostID, []byte{})
+	return min, max
 }
 
-func (s *NickServStore) Delete(r *pb.NickRecord) error {
-	return fmt.Errorf("unimplemented")
+func newNickServItemKey(nickServID uint32, hash []byte, localHostID kademlia.ID, remoteHostID []byte) (k nickServItemKey) {
+	localHostID.Bytes(k[:])
+	for i := 0; i < len(k) && i < len(hash); i++ {
+		k[i] ^= hash[i]
+	}
+
+	binary.BigEndian.PutUint32(k[20:], nickServID)
+	copy(k[24:], remoteHostID)
+	return k
 }
 
-func (s *NickServStore) Update(r *pb.NickRecord) error {
+type nickServItemKey [44]byte
+
+func (k nickServItemKey) Less(o nickServItemKey) bool {
+	return bytes.Compare(k[:], o[:]) == -1
+}
+
+func newNickServItemRecordRange(nickServID uint32, hash []byte, localHostID kademlia.ID) (*nickServItem, *nickServItem) {
+	min, max := newNickServItemKeyRange(nickServID, hash, localHostID)
+	return &nickServItem{key: min}, &nickServItem{key: max}
+}
+
+func newNickServItem(nickServID uint32, localHostID kademlia.ID, r *pb.NickServMessage_Record) (*nickServItem, error) {
+	hostID, err := kademlia.UnmarshalID(r.HostId)
+	if err != nil {
+		return nil, err
+	}
+
+	return &nickServItem{
+		key:    newNickServItemKey(nickServID, r.Hash, localHostID, r.HostId),
+		hostID: hostID,
+		record: unsafe.Pointer(r),
+	}, nil
+}
+
+type nickServItem struct {
+	key    nickServItemKey
+	hostID kademlia.ID
+	record unsafe.Pointer
+}
+
+func (p *nickServItem) HostID() kademlia.ID {
+	return p.hostID
+}
+
+func (p *nickServItem) SetRecord(r *pb.NickServMessage_Record) {
+	atomic.SwapPointer(&p.record, unsafe.Pointer(r))
+}
+
+func (p *nickServItem) Record() *pb.NickServMessage_Record {
+	return (*pb.NickServMessage_Record)(atomic.LoadPointer(&p.record))
+}
+
+// Less implements llrb.Item
+func (p *nickServItem) Less(oi llrb.Item) bool {
+	o, ok := oi.(*nickServItem)
+	return ok && p.key.Less(o.key)
+}
+
+// ID implements kademlia.Interface
+func (p *nickServItem) ID() kademlia.ID {
+	return p.hostID
+}
+
+func (s *NickServStore) Insert(nickServID uint32, r *pb.NickServMessage_Record) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	item, err := newNickServItem(nickServID, s.hostID, r)
+	if err != nil {
+		return err
+	}
+
+	prev, ok := s.records.Get(item).(*nickServItem)
+	if !ok {
+		s.records.ReplaceOrInsert(item)
+	}
+
+	// TODO: logging
+
+	prev.SetRecord(r)
+	return nil
+}
+
+func (s *NickServStore) Delete(nickServID uint32, r *pb.NickServMessage_Record) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	item, err := newNickServItem(nickServID, s.hostID, r)
+	if err != nil {
+		return err
+	}
+
+	_, ok := s.records.Get(item).(*nickServItem)
+	if ok {
+		// TODO: logging
+		s.records.Delete(item)
+	}
+
+	return nil
+}
+
+func (s *NickServStore) Update(r *pb.NickServMessage_Record) error {
 	return fmt.Errorf("unimplemented")
 }
 
 func (s *NickServStore) Retrieve(nick string) error {
 	return fmt.Errorf("unimplemented")
+}
+
+type nickServMarshaler struct {
+	*pb.NickServMessage_Record
+}
+
+func (r nickServMarshaler) Size() int {
+	return 12 + len(r.Hash) + len(r.Key) + len(r.HostId)
+}
+
+func (r nickServMarshaler) Marshal(b []byte) int {
+	n := copy(b, r.Hash)
+	n += copy(b[n:], r.Key)
+	n += copy(b[n:], r.HostId)
+	n += copy(b[n:], []byte(r.Name))
+	binary.BigEndian.PutUint32(b[n:], r.RemainingNameChangeQuota)
+	n += 4
+	binary.BigEndian.PutUint64(b[n:], uint64(r.CreatedTimestamp))
+	n += 8
+	binary.BigEndian.PutUint64(b[n:], uint64(r.UpdatedTimestamp))
+	n += 8
+	// TODO: marshal roles
+	return n
+}
+
+func signNickServRecord(r *pb.NickServMessage_Record, key *pb.Key) error {
+	if key.Type != pb.KeyType_KEY_TYPE_ED25519 {
+		return errors.New("unsupported key type")
+	}
+
+	m := nickServMarshaler{r}
+	b := pool.Get(uint16(m.Size()))
+	defer pool.Put(b)
+	m.Marshal(*b)
+
+	r.Signature = ed25519.Sign(ed25519.PrivateKey(key.Private), *b)
+	return nil
+}
+
+func verifyNickServRecord(r *pb.NickServMessage_Record) bool {
+	m := nickServMarshaler{r}
+	b := pool.Get(uint16(m.Size()))
+	defer pool.Put(b)
+	m.Marshal(*b)
+
+	if len(r.Key) != ed25519.PublicKeySize {
+		return false
+	}
+	return ed25519.Verify(r.Key, *b, r.Signature)
 }
 
 var nextSnowflakeID uint64
