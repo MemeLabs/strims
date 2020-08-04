@@ -9,26 +9,23 @@ message ServerConfig {
   repeated string roles = 4;
 }
 
-message NickServMessage {
-  message Record {
-    bytes hash = 1;
-    bytes key = 2;
-    bytes host_id = 3;
-    string name = 4;
-    uint32 remaining_name_change_quota = 5;
-    uint64 updated_timestamp = 6;
-    uint64 created_timestamp = 7;
-    repeated string roles = 8;
-    bytes signature = 9;
-  }
+message NickServRecord {
+  bytes hash = 1;
+  bytes key = 2;
+  bytes host_id = 3;
+  string name = 4;
+  uint32 remaining_name_change_quota = 5;
+  uint64 updated_timestamp = 6;
+  uint64 created_timestamp = 7;
+  repeated string roles = 8;
 }
 
 message NickServToken {
-  bytes owner_public_key = 1;
+  bytes key = 1;
   string nick = 2;
-  repeated string roles = 3;
-  uint64 valid_until = 4;
-  bytes signature = 5;
+  uint64 valid_until = 3;
+  bytes signature = 4;
+  repeated string roles = 5;
 }
 
 message NickServRPCCommand {

@@ -19044,6 +19044,9 @@ export class OpenDirectoryClientRequest implements IOpenDirectoryClientRequest {
     /** OpenDirectoryClientRequest serverKey. */
     public serverKey: Uint8Array;
 
+    /** NickServToken roles. */
+    public roles: string[];
+
     /**
      * Creates a new OpenDirectoryClientRequest instance using the specified properties.
      * @param [properties] Properties to set
