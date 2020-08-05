@@ -139,7 +139,12 @@ func (s *NickServ) HandleMessage(msg *vpn.Message) (forward bool, err error) {
 
 func (s *NickServ) handleCreate(id uint64, key []byte, msg *pb.NickServRPCCommand_Create) error {
 	now := time.Now()
+	rid, err := generateSnowflake()
+	if err != nil {
+		return err
+	}
 	r := &pb.NickServRecord{
+		Id:                       rid,
 		Key:                      key,
 		Name:                     msg.Nick,
 		CreatedTimestamp:         uint64(now.Unix()),
@@ -313,7 +318,7 @@ func (c *NickServClient) registerResponseChan() uint64 {
 	return rid
 }
 
-func (c *NickServClient) awaitResponse(ctx context.Context, rid uint64) (*vpn.Message, error) {
+func (c *NickServClient) awaitResponse(ctx context.Context, rid uint64) (*pb.NickServRPCResponse, error) {
 	defer delete(c.responses, rid)
 
 	ctx, cancel := context.WithTimeout(ctx, clientTimeout)
@@ -467,6 +472,7 @@ type nickServMarshaler struct {
 }
 
 func (r nickServMarshaler) Size() int {
+	// TODO: roles
 	return 8 + len(r.Key) + len(r.Nick) + len(r.Signature)
 }
 
