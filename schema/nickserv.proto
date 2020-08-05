@@ -10,14 +10,15 @@ message ServerConfig {
 }
 
 message NickServRecord {
-  bytes hash = 1;
-  bytes key = 2;
-  bytes host_id = 3;
-  string name = 4;
-  uint32 remaining_name_change_quota = 5;
-  uint64 updated_timestamp = 6;
-  uint64 created_timestamp = 7;
-  repeated string roles = 8;
+  uint64 id = 1;
+  bytes hash = 2;
+  bytes key = 3;
+  bytes host_id = 4;
+  string name = 5;
+  uint32 remaining_name_change_quota = 6;
+  uint64 updated_timestamp = 7;
+  uint64 created_timestamp = 8;
+  repeated string roles = 9;
 }
 
 message NickServToken {
