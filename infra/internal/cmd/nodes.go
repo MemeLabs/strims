@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"strconv"
 
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/olekukonko/tablewriter"
@@ -11,19 +12,25 @@ import (
 )
 
 func init() {
-	rootCmd.AddCommand(regionsCmd)
+	rootCmd.AddCommand(nodesCmd)
 }
 
-var regionsCmd = &cobra.Command{
-	Use:               "regions [provider]",
-	Short:             "List provider regions",
+var nodesCmd = &cobra.Command{
+	Use:               "nodes [provider]",
+	Short:             "List provider nodes",
 	Args:              cobra.MaximumNArgs(1),
 	ValidArgsFunction: providerValidArgsFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		header := []string{
+			"ID",
 			"Name",
-			"City",
-			"Lat/Lng",
+			"Memory (MB)",
+			"CPUs",
+			"Disk (GB)",
+			"Networks",
+			"Status",
+			"Region",
+			"SKU",
 		}
 		var data [][]string
 
@@ -34,7 +41,7 @@ var regionsCmd = &cobra.Command{
 				return fmt.Errorf("Unsupported provider: %s", provider)
 			}
 
-			rows, err := formatProviderRegions(cmd.Context(), driver)
+			rows, err := formatProviderNodes(cmd.Context(), driver)
 			if err != nil {
 				return err
 			}
@@ -42,7 +49,7 @@ var regionsCmd = &cobra.Command{
 		} else {
 			header = append([]string{"Provider"}, header...)
 			for _, driver := range backend.NodeDrivers {
-				rows, err := formatProviderRegions(cmd.Context(), driver)
+				rows, err := formatProviderNodes(cmd.Context(), driver)
 				if err != nil {
 					return err
 				}
@@ -59,18 +66,28 @@ var regionsCmd = &cobra.Command{
 	},
 }
 
-func formatProviderRegions(ctx context.Context, driver node.Driver) ([][]string, error) {
-	regions, err := driver.Regions(ctx, &node.RegionsRequest{})
+func formatProviderNodes(ctx context.Context, driver node.Driver) ([][]string, error) {
+	nodes, err := driver.List(ctx, &node.ListRequest{})
 	if err != nil {
-		return nil, fmt.Errorf("Loading regions failed: %w", err)
+		return nil, fmt.Errorf("Loading nodes failed: %w", err)
 	}
 
 	rows := [][]string{}
-	for _, r := range regions {
+	for _, r := range nodes {
+		var networks []string
+		networks = append(networks, r.Networks.V4...)
+		networks = append(networks, r.Networks.V6...)
+
 		rows = append(rows, []string{
+			strconv.Itoa(r.ProviderID),
 			r.Name,
-			r.City,
-			r.LatLng.String(),
+			strconv.Itoa(r.Memory),
+			strconv.Itoa(r.CPUs),
+			strconv.Itoa(r.Disk),
+			fmt.Sprintf("%s", networks),
+			r.Status,
+			r.Region.Name,
+			r.SKU.Name,
 		})
 	}
 	return rows, nil

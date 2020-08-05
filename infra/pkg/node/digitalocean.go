@@ -99,8 +99,8 @@ func (d *DigitalOceanDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU
 		}
 
 		for _, size := range sizes {
-			if req.Region != nil {
-				if sort.SearchStrings(size.Regions, req.Region.Name) != len(size.Regions) {
+			if req.Region != "" {
+				if sort.SearchStrings(size.Regions, req.Region) != len(size.Regions) {
 					skus = append(skus, digitalOceanSKU(&size))
 				}
 			} else {
@@ -255,6 +255,7 @@ func digitalOceanNode(droplet *godo.Droplet) *Node {
 		Name:       droplet.Name,
 		Memory:     droplet.Memory,
 		CPUs:       droplet.Vcpus,
+		Disk:       droplet.Disk,
 		Networks:   &Networks{},
 		Status:     droplet.Status,
 		SKU:        digitalOceanSKU(droplet.Size),

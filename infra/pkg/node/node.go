@@ -22,7 +22,7 @@ type RegionsRequest struct {
 
 // SKUsRequest ...
 type SKUsRequest struct {
-	Region *Region
+	Region string
 }
 
 // CreateRequest ...
