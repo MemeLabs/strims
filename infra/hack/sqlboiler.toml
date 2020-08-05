@@ -1,0 +1,11 @@
+[sqlite3]
+dbname = "./dev.sqlite"
+
+[aliases.tables.nodes.columns]
+cpus = "CPUs"
+region_lng = "RegionLng"
+sku_name = "SKUName"
+sku_network_cap = "SKUNetworkCap"
+sku_network_speed = "SKUNetworkSpeed"
+sku_price_monthly = "SKUPriceMonthly"
+sku_price_hourly = "SKUPriceHourly"

@@ -4,3 +4,4 @@ pkg/pb/* linguist-generated
 vendor linguist-vendored
 go.sum linguist-generated
 package-lock.json linguist-generated
+infra/internal/models/* linguist-generated
