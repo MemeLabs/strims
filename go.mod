@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.4.1 // indirect
-	github.com/MemeLabs/chat-parser v1.0.2
+	github.com/MemeLabs/chat-parser v1.0.1
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/aead/ecdh v0.2.0
 	github.com/avast/retry-go v2.6.0+incompatible
@@ -38,6 +38,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.4
 	github.com/onsi/gomega v1.10.1 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
+	github.com/ovh/go-ovh v1.1.0
 	github.com/pelletier/go-toml v1.8.0 // indirect
 	github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99
 	github.com/pion/quic v0.1.3 // indirect
@@ -71,7 +72,6 @@ require (
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20200609130330-bd2cb7843e1b
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
-	gopkg.in/ini.v1 v1.57.0 // indirect
 	gopkg.in/yaml.v2 v2.3.0
 	honnef.co/go/tools v0.0.1-2020.1.3 // indirect
 	lukechampine.com/uint128 v1.0.0
