@@ -119,6 +119,15 @@ func New(cfg Config) (*Backend, error) {
 		}
 	}
 
+	if cfg.Providers.OVH != nil {
+		driver, err := node.NewOVHDriver(node.OVHDefaultSubsidiary, cfg.Providers.OVH.AppKey, cfg.Providers.OVH.AppSecret, cfg.Providers.OVH.ConsumerSecret, cfg.Providers.OVH.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+
+		drivers["ovh"] = driver
+	}
+
 	return &Backend{
 		Log:         log,
 		DB:          db,

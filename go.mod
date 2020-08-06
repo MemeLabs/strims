@@ -24,6 +24,7 @@ require (
 	github.com/gobwas/ws v1.0.3 // indirect
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
 	github.com/golang/protobuf v1.4.2
+	github.com/gophercloud/gophercloud v0.12.0
 	github.com/gorilla/mux v1.7.4
 	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/golang-lru v0.5.4

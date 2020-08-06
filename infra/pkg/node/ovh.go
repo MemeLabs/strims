@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"net"
 	"net/url"
 	"time"
 
@@ -11,19 +12,59 @@ import (
 )
 
 const ovhOS = "ubuntu-20-04-x64"
+const OVHDefaultSubsidiary = "CA"
 
 var ovhRegions = []*Region{
-	{Name: "VIN1", City: "Virginia, United States", LatLng: s2.LatLngFromDegrees(38.7465, 77.6738)},
-	{Name: "HIL1", City: "Oregon, United States", LatLng: s2.LatLngFromDegrees(45.5272, 122.9361)},
-	{Name: "UK1", City: "London, United Kingdom", LatLng: s2.LatLngFromDegrees(51.5074, 0.1278)},
-	{Name: "GRA7", City: "Gravelines, France", LatLng: s2.LatLngFromDegrees(50.9871, 2.1255)},
-	{Name: "SBG5", City: "Strasbourg, France", LatLng: s2.LatLngFromDegrees(48.5734, 7.7521)},
-	{Name: "DE1", City: "Frankfurt, Germany", LatLng: s2.LatLngFromDegrees(50.1109, 8.6821)},
-	{Name: "BHS5", City: "Beauharnois, Quebec, Canada", LatLng: s2.LatLngFromDegrees(45.3151, 73.8779)},
-	{Name: "WAW1", City: "Warsaw, Poland", LatLng: s2.LatLngFromDegrees(52.2297, 21.0122)},
-	{Name: "SYD1", City: "Sydney, Australia", LatLng: s2.LatLngFromDegrees(33.8688, 151.2093)},
-	// generalized
-	{Name: "SGP1", City: "Singapore", LatLng: s2.LatLngFromDegrees(1.3521, 103.8198)},
+	{
+		Name:   "VIN1",
+		City:   "Virginia, United States",
+		LatLng: s2.LatLngFromDegrees(38.7465, 77.6738),
+	},
+	{
+		Name:   "HIL1",
+		City:   "Oregon, United States",
+		LatLng: s2.LatLngFromDegrees(45.5272, 122.9361),
+	},
+	{
+		Name:   "UK1",
+		City:   "London, United Kingdom",
+		LatLng: s2.LatLngFromDegrees(51.5074, 0.1278),
+	},
+	{
+		Name:   "GRA7",
+		City:   "Gravelines, France",
+		LatLng: s2.LatLngFromDegrees(50.9871, 2.1255),
+	},
+	{
+		Name:   "SBG5",
+		City:   "Strasbourg, France",
+		LatLng: s2.LatLngFromDegrees(48.5734, 7.7521),
+	},
+	{
+		Name:   "DE1",
+		City:   "Frankfurt, Germany",
+		LatLng: s2.LatLngFromDegrees(50.1109, 8.6821),
+	},
+	{
+		Name:   "BHS5",
+		City:   "Beauharnois, Quebec, Canada",
+		LatLng: s2.LatLngFromDegrees(45.3151, 73.8779),
+	},
+	{
+		Name:   "WAW1",
+		City:   "Warsaw, Poland",
+		LatLng: s2.LatLngFromDegrees(52.2297, 21.0122),
+	},
+	{
+		Name:   "SYD1",
+		City:   "Sydney, Australia",
+		LatLng: s2.LatLngFromDegrees(33.8688, 151.2093),
+	},
+	{
+		Name:   "SGP1",
+		City:   "Singapore",
+		LatLng: s2.LatLngFromDegrees(1.3521, 103.8198),
+	},
 }
 
 func NewOVHDriver(region, appKey, appSecret, consumerSecret, projectID string) (*OVHDriver, error) {
@@ -31,11 +72,12 @@ func NewOVHDriver(region, appKey, appSecret, consumerSecret, projectID string) (
 	if err != nil {
 		return nil, err
 	}
-	return &OVHDriver{projectID, client}, nil
+	return &OVHDriver{projectID: projectID, client: client}, nil
 }
 
 type OVHDriver struct {
 	projectID string
+	pricemap  map[string]int
 	client    *ovh.Client
 }
 
@@ -48,8 +90,34 @@ func (d *OVHDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region
 }
 
 func (d *OVHDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error) {
-	d.client.GetWithContext(ctx, "/cloud/project/%s/flavor", nil)
-	return nil, fmt.Errorf("unimplemented")
+	skus := []*SKU{}
+	pricemap, err := d.loadPricesForSKUs(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	d.pricemap = pricemap
+
+	path := fmt.Sprintf("/cloud/project/%s/", d.projectID)
+	for _, region := range ovhRegions {
+		if req.Region != "" && req.Region != region.Name {
+			continue
+		}
+		resp := []*sku{}
+		if err := d.client.GetWithContext(
+			ctx,
+			fmt.Sprintf("%s/%s", path, url.QueryEscape(region.Name)),
+			&resp,
+		); err != nil {
+			return nil, err
+		}
+
+		for _, s := range resp {
+			skus = append(skus, d.ovhSKU(s))
+		}
+	}
+
+	return skus, nil
 }
 
 func (d *OVHDriver) Create(ctx context.Context, req *CreateRequest) (*Node, error) {
@@ -68,7 +136,7 @@ func (d *OVHDriver) Create(ctx context.Context, req *CreateRequest) (*Node, erro
 		return nil, err
 	}
 
-	flavorID, err := d.findFlavorIdFromName(ctx, req.Size, req.Region)
+	flavorID, err := d.findFlavorIdFromName(ctx, req.SKU, req.Region)
 	if err != nil {
 		return nil, err
 	}
@@ -98,7 +166,7 @@ func (d *OVHDriver) Create(ctx context.Context, req *CreateRequest) (*Node, erro
 			}
 
 			if resp.Status == "ACTIVE" {
-				return ovhNode(&resp), nil
+				return d.ovhNode(&resp), nil
 			}
 		}
 	}
@@ -119,7 +187,7 @@ func (d *OVHDriver) List(ctx context.Context, req *ListRequest) ([]*Node, error)
 	}
 
 	for _, instance := range resp {
-		nodes = append(nodes, ovhNode(instance))
+		nodes = append(nodes, d.ovhNode(instance))
 	}
 
 	return nodes, nil
@@ -193,28 +261,63 @@ func (d *OVHDriver) findFlavorIdFromName(ctx context.Context, name, region strin
 	return "", fmt.Errorf("failed to find %s", name)
 }
 
-func ovhSKU(flavor *sku) *SKU {
+func (d *OVHDriver) loadPricesForSKUs(ctx context.Context, req *SKUsRequest) (map[string]int, error) {
+	resp := catalog{}
+	if err := d.client.GetWithContext(ctx, "/order/catalog/public/cloud", &resp); err != nil {
+		return nil, err
+	}
+
+	out := make(map[string]int)
+	for _, addon := range resp.Addons {
+		if len(addon.Pricings) == 0 {
+			continue
+		}
+		// assuming we care about the first price listed
+		out[addon.InvoiceName] = addon.Pricings[0].Price
+	}
+
+	return out, nil
+}
+
+func priceForPlan(pricemap map[string]int, code string) float64 {
+	price, ok := pricemap[code]
+	if !ok {
+		// TODO: handle differently
+		return 0
+	}
+	return float64(price / 100000000)
+}
+
+func (d *OVHDriver) ovhSKU(flavor *sku) *SKU {
 	return &SKU{
 		Name:         flavor.Name,
 		CPUs:         flavor.Vcpus,
 		Memory:       flavor.RAM,
 		NetworkCap:   int(flavor.InboundBandwidth * 1024),
 		NetworkSpeed: 1000,
-		//		PriceHourly:  size.PriceHourly,
-		//		PriceMonthly: size.PriceMonthly,
+		PriceHourly:  priceForPlan(d.pricemap, flavor.PlanCodes.Hourly),
+		PriceMonthly: priceForPlan(d.pricemap, flavor.PlanCodes.Monthly),
 	}
 }
 
-func ovhNode(instance *ovhInstance) *Node {
+func (d *OVHDriver) ovhNode(instance *ovhInstance) *Node {
+	v4s, v6s := []string{}, []string{}
+	for _, ip := range instance.IPAddresses {
+		if len([]byte(ip.IP)) == net.IPv4len {
+			v4s = append(v4s, ip.IP)
+		} else {
+			v6s = append(v6s, ip.IP)
+		}
+	}
 	return &Node{
 		ProviderID: instance.ID,
 		Name:       instance.Name,
 		Memory:     instance.Flavor.RAM,
 		CPUs:       instance.Flavor.Vcpus,
 		Disk:       instance.Flavor.Disk,
-		Networks:   &Networks{},
+		Networks:   &Networks{V4: v4s, V6: v6s},
 		Status:     instance.Status,
-		SKU:        ovhSKU(&instance.Flavor),
+		SKU:        d.ovhSKU(&instance.Flavor),
 	}
 }
 
@@ -275,4 +378,40 @@ type ovhInstance struct {
 	MonthlyBilling interface{}   `json:"monthlyBilling"`
 	PlanCode       string        `json:"planCode"`
 	OperationIds   []interface{} `json:"operationIds"`
+}
+
+type catalog struct {
+	Addons []struct {
+		PlanCode       string        `json:"planCode"`
+		InvoiceName    string        `json:"invoiceName"`
+		Blobs          interface{}   `json:"blobs"`
+		Family         interface{}   `json:"family"`
+		Product        string        `json:"product"`
+		PricingType    string        `json:"pricingType"`
+		Configurations []interface{} `json:"configurations"`
+		AddonFamilies  []interface{} `json:"addonFamilies"`
+		Pricings       []struct {
+			Phase           int           `json:"phase"`
+			MustBeCompleted bool          `json:"mustBeCompleted"`
+			Capacities      []string      `json:"capacities"`
+			Interval        int           `json:"interval"`
+			Tax             int           `json:"tax"`
+			Mode            string        `json:"mode"`
+			Price           int           `json:"price"`
+			Promotions      []interface{} `json:"promotions"`
+			Description     string        `json:"description"`
+			Repeat          struct {
+				Max int `json:"max"`
+				Min int `json:"min"`
+			} `json:"repeat"`
+			Commitment int    `json:"commitment"`
+			Strategy   string `json:"strategy"`
+			Type       string `json:"type"`
+			Quantity   struct {
+				Min int         `json:"min"`
+				Max interface{} `json:"max"`
+			} `json:"quantity"`
+			IntervalUnit string `json:"intervalUnit"`
+		} `json:"pricings"`
+	} `json:"addons"`
 }
