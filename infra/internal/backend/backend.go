@@ -132,6 +132,15 @@ func New(cfg Config) (*Backend, error) {
 		drivers["hetzner"] = node.NewHetznerDriver(cfg.Providers.Hetzner.Token)
 	}
 
+	if cfg.Providers.OVH != nil {
+		driver, err := node.NewOVHDriver(node.OVHDefaultSubsidiary, cfg.Providers.OVH.AppKey, cfg.Providers.OVH.AppSecret, cfg.Providers.OVH.ConsumerSecret, cfg.Providers.OVH.ProjectID)
+		if err != nil {
+			return nil, err
+		}
+
+		drivers["ovh"] = driver
+	}
+
 	return &Backend{
 		Log:         log,
 		DB:          db,
