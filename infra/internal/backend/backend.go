@@ -20,12 +20,15 @@ type Config struct {
 	DB       struct {
 		Path string
 	}
-	Flake struct {
-		StartTime time.Time
-	}
-	Providers struct {
-		DigitalOcean struct {
+	FlakeStartTime string
+	Providers      struct {
+		DigitalOcean *struct {
 			Token string
+		}
+		Scaleway *struct {
+			OrganizationID string
+			AccessKey      string
+			SecretKey      string
 		}
 	}
 	SSH struct {
@@ -46,14 +49,26 @@ func New(cfg Config) (*Backend, error) {
 		return nil, err
 	}
 
+	startTime, err := time.Parse(time.RFC3339, cfg.FlakeStartTime)
+	if err != nil {
+		return nil, err
+	}
 	flake := sonyflake.NewSonyflake(sonyflake.Settings{
-		StartTime: cfg.Flake.StartTime,
+		StartTime: startTime,
 	})
 
 	drivers := map[string]node.Driver{}
 
-	if cfg.Providers.DigitalOcean.Token != "" {
+	if cfg.Providers.DigitalOcean != nil {
 		drivers["digitalocean"] = node.NewDigitalOceanDriver(cfg.Providers.DigitalOcean.Token)
+	}
+
+	if cfg.Providers.Scaleway != nil {
+		driver, err := node.NewScalewayDriver(cfg.Providers.Scaleway.OrganizationID, cfg.Providers.Scaleway.AccessKey, cfg.Providers.Scaleway.SecretKey)
+		if err != nil {
+			return nil, err
+		}
+		drivers["scaleway"] = driver
 	}
 
 	return &Backend{

@@ -45,6 +45,7 @@ require (
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/common v0.10.0
+	github.com/scaleway/scaleway-sdk-go v1.0.0-beta.6
 	github.com/sony/sonyflake v1.0.0
 	github.com/spf13/afero v1.3.2 // indirect
 	github.com/spf13/cast v1.3.1 // indirect

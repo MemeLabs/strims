@@ -79,7 +79,7 @@ func formatProviderNodes(ctx context.Context, driver node.Driver) ([][]string, e
 		networks = append(networks, r.Networks.V6...)
 
 		rows = append(rows, []string{
-			strconv.Itoa(r.ProviderID),
+			r.ProviderID,
 			r.Name,
 			strconv.Itoa(r.Memory),
 			strconv.Itoa(r.CPUs),

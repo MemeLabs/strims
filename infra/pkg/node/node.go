@@ -29,7 +29,7 @@ type SKUsRequest struct {
 type CreateRequest struct {
 	Name    string
 	Region  string
-	Size    string
+	SKU     string
 	SSHKeys []string
 }
 
@@ -39,7 +39,8 @@ type ListRequest struct {
 
 // DeleteRequest ...
 type DeleteRequest struct {
-	ProviderID int
+	Region     string
+	ProviderID string
 }
 
 // Region represents the Node's datacenter location
@@ -62,7 +63,7 @@ type SKU struct {
 
 // Node represents a host
 type Node struct {
-	ProviderID int       `json:"provider_id,float64,omitempty"`
+	ProviderID string    `json:"provider_id,omitempty"`
 	Name       string    `json:"name,omitempty"`
 	Memory     int       `json:"memory,omitempty"`
 	CPUs       int       `json:"vcpus,omitempty"`

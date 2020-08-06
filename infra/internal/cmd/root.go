@@ -57,16 +57,18 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
-		log.Println("Error reading config file:", err)
+		log.Println("Error reading config:", err)
 		os.Exit(1)
 	}
-	fmt.Println("Using config file:", viper.ConfigFileUsed())
 
 	var config be.Config
-	viper.Unmarshal(&config)
+	if err := viper.Unmarshal(&config); err != nil {
+		log.Println("Error reading config:", err)
+		os.Exit(1)
+	}
 
 	if b, err := be.New(config); err != nil {
-		log.Println("Error reading config file:", err)
+		log.Println("Error starting backend:", err)
 		os.Exit(1)
 	} else {
 		backend = b

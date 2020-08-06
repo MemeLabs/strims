@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/digitalocean/godo"
@@ -170,11 +171,10 @@ func (d *DigitalOceanDriver) findOrAddKey(ctx context.Context, public string) (*
 
 // Create ...
 func (d *DigitalOceanDriver) Create(ctx context.Context, req *CreateRequest) (*Node, error) {
-
 	godoReq := &godo.DropletCreateRequest{
 		Name:   req.Name,
 		Region: req.Region,
-		Size:   req.Size,
+		Size:   req.SKU,
 		Image: godo.DropletCreateImage{
 			Slug: digitalOceanOS,
 		},
@@ -245,13 +245,17 @@ func (d *DigitalOceanDriver) List(ctx context.Context, req *ListRequest) ([]*Nod
 
 // Delete ...
 func (d *DigitalOceanDriver) Delete(ctx context.Context, req *DeleteRequest) error {
-	_, err := d.client.Droplets.Delete(ctx, req.ProviderID)
+	id, err := strconv.Atoi(req.ProviderID)
+	if err != nil {
+		return fmt.Errorf("Invalid provider ID: %w", err)
+	}
+	_, err = d.client.Droplets.Delete(ctx, id)
 	return err
 }
 
 func digitalOceanNode(droplet *godo.Droplet) *Node {
 	node := &Node{
-		ProviderID: droplet.ID,
+		ProviderID: strconv.Itoa(droplet.ID),
 		Name:       droplet.Name,
 		Memory:     droplet.Memory,
 		CPUs:       droplet.Vcpus,

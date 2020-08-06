@@ -72,14 +72,22 @@ func formatProviderSKUs(ctx context.Context, driver node.Driver) ([][]string, er
 
 	rows := [][]string{}
 	for _, r := range skus {
+		var networkCap, priceHourly string
+		if r.NetworkCap != 0 {
+			networkCap = strconv.Itoa(r.NetworkCap)
+		}
+		if r.PriceHourly != 0 {
+			priceHourly = strconv.FormatFloat(r.PriceHourly, 'f', 4, 64)
+		}
+
 		rows = append(rows, []string{
 			r.Name,
 			strconv.Itoa(r.CPUs),
 			strconv.Itoa(r.Memory),
-			strconv.Itoa(r.NetworkCap),
+			networkCap,
 			strconv.Itoa(r.NetworkSpeed),
-			strconv.FormatFloat(r.PriceMonthly, 'f', -1, 64),
-			strconv.FormatFloat(r.PriceHourly, 'f', -1, 64),
+			strconv.FormatFloat(r.PriceMonthly, 'f', 4, 64),
+			priceHourly,
 		})
 	}
 	return rows, nil
