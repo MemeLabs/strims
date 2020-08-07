@@ -98,8 +98,14 @@ func hetznerSKU(serverType *hcloud.ServerType, pricing hcloud.ServerTypeLocation
 		Memory:       int(serverType.Memory * 1024),
 		NetworkCap:   20 * 1024,
 		NetworkSpeed: 1000,
-		PriceHourly:  pricingHourly,
-		PriceMonthly: pricingMonthly,
+		PriceHourly: &Price{
+			Value:    pricingHourly,
+			Currency: "EUR",
+		},
+		PriceMonthly: &Price{
+			Value:    pricingMonthly,
+			Currency: "EUR",
+		},
 	}, nil
 }
 

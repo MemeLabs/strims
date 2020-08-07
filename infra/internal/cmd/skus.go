@@ -30,6 +30,15 @@ var skusCmd = &cobra.Command{
 			"Price Monthly",
 			"Price Hourly",
 		}
+		alignment := []int{
+			tablewriter.ALIGN_DEFAULT,
+			tablewriter.ALIGN_DEFAULT,
+			tablewriter.ALIGN_DEFAULT,
+			tablewriter.ALIGN_DEFAULT,
+			tablewriter.ALIGN_DEFAULT,
+			tablewriter.ALIGN_RIGHT,
+			tablewriter.ALIGN_RIGHT,
+		}
 		var data [][]string
 
 		if len(args) == 1 {
@@ -46,6 +55,7 @@ var skusCmd = &cobra.Command{
 			data = rows
 		} else {
 			header = append([]string{"Provider"}, header...)
+			alignment = append([]int{tablewriter.ALIGN_DEFAULT}, alignment...)
 			for _, driver := range backend.NodeDrivers {
 				rows, err := formatProviderSKUs(cmd.Context(), driver)
 				if err != nil {
@@ -57,6 +67,7 @@ var skusCmd = &cobra.Command{
 
 		table := tablewriter.NewWriter(os.Stdout)
 		table.SetHeader(header)
+		table.SetColumnAlignment(alignment)
 		table.AppendBulk(data)
 		table.Render()
 
@@ -72,12 +83,15 @@ func formatProviderSKUs(ctx context.Context, driver node.Driver) ([][]string, er
 
 	rows := [][]string{}
 	for _, r := range skus {
-		var networkCap, priceHourly string
+		var networkCap, priceHourly, priceMonthly string
 		if r.NetworkCap != 0 {
 			networkCap = strconv.Itoa(r.NetworkCap)
 		}
-		if r.PriceHourly != 0 {
-			priceHourly = strconv.FormatFloat(r.PriceHourly, 'f', 4, 64)
+		if r.PriceHourly != nil {
+			priceHourly = fmt.Sprintf("%.4f %s", r.PriceHourly.Value, r.PriceHourly.Currency)
+		}
+		if r.PriceMonthly != nil {
+			priceMonthly = fmt.Sprintf("%.4f %s", r.PriceMonthly.Value, r.PriceMonthly.Currency)
 		}
 
 		rows = append(rows, []string{
@@ -86,7 +100,7 @@ func formatProviderSKUs(ctx context.Context, driver node.Driver) ([][]string, er
 			strconv.Itoa(r.Memory),
 			networkCap,
 			strconv.Itoa(r.NetworkSpeed),
-			strconv.FormatFloat(r.PriceMonthly, 'f', 4, 64),
+			priceMonthly,
 			priceHourly,
 		})
 	}

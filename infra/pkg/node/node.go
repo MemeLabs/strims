@@ -57,8 +57,14 @@ type SKU struct {
 	Memory       int
 	NetworkCap   int
 	NetworkSpeed int
-	PriceMonthly float64
-	PriceHourly  float64
+	PriceMonthly *Price
+	PriceHourly  *Price
+}
+
+// Price ...
+type Price struct {
+	Value    float64
+	Currency string
 }
 
 // Node represents a host

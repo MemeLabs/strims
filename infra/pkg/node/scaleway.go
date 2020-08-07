@@ -100,8 +100,14 @@ func scalewaySKU(name string, serverType *instance.ServerType) *SKU {
 		Memory:       int(serverType.RAM / (1 << 20)),
 		NetworkCap:   0,
 		NetworkSpeed: int(*serverType.Network.SumInternetBandwidth / (1 << 20)),
-		PriceHourly:  float64(serverType.HourlyPrice),
-		PriceMonthly: float64(serverType.MonthlyPrice),
+		PriceHourly: &Price{
+			Value:    float64(serverType.HourlyPrice),
+			Currency: "EUR",
+		},
+		PriceMonthly: &Price{
+			Value:    float64(serverType.MonthlyPrice),
+			Currency: "EUR",
+		},
 	}
 }
 

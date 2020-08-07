@@ -131,8 +131,14 @@ func digitalOceanSKU(size *godo.Size) *SKU {
 		Memory:       size.Memory,
 		NetworkCap:   int(size.Transfer * 1024),
 		NetworkSpeed: 1000,
-		PriceHourly:  size.PriceHourly,
-		PriceMonthly: size.PriceMonthly,
+		PriceHourly: &Price{
+			Value:    size.PriceHourly,
+			Currency: "USD",
+		},
+		PriceMonthly: &Price{
+			Value:    size.PriceMonthly,
+			Currency: "USD",
+		},
 	}
 }
 
