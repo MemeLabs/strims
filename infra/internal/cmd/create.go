@@ -36,8 +36,8 @@ var createCmd = &cobra.Command{
 
 		n, err := d.Create(context.Background(), &node.CreateRequest{
 			Name:   "test",
-			Region: "fr-par-1",
-			SKU:    "DEV1-S",
+			Region: "fsn1",
+			SKU:    "cx11",
 			SSHKeys: []string{
 				"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCwDB5GVPYZvxCncGsMRcC1ZLaWNDPlQnhsLSKxSwisg3n01XRGaX29h7WBWmuN3hc0YDDqgG5te3YGYwAALLHZ5Hm15rMzXdrmq8HxaknzbDNOrauwsgdXro/9t7PkZyDdDMOekZLn7/yatrsIUHTj0HGh9SQmLCsDjiX8CS+6k8+9kdBwxwt6l3ybDNxP2A+UeVQXnMfEBj96iG9o5hyrlKQYoD2oS+n9FQTw/Zr+McmdDz8XJz94ab4uCVCOBW1177q5kkNgHbe7oxKJyTisU/As85EONELcq//i3akGb7pygoCkaFELdUi6BessHy8TXKH6Nn3H6uXkNLhVpV/4mHCkyUdX14qjUg08aOjwiXbCNG4LmeehY1HOKjWqDh3NOAOGMIGObHr/M2rrHU5QLclX+Lr7LW1NGNergWCY6qi2zvsDoKRC8AXlGFqCmMig9pxaNZSPvHF7HhmX1f/mX7neri7X3ThzZmnb8PcsZMXCleVF6AQ/+0iyTSoyR1QDaGcJg0PmEdcD0ShqEP0RLXEGsG0OSAFy30BPRk0Q88iAkFsaHIM8msjXwIB2D0V/qzU+n6dfzs1Yx7in77admtKZYwvaDEkn9A5vo2EDwL+JrceLS4p2GOiw4E7sHbS4h6SMpyWcEVvr6hfGN3puJc/q/zLs9YGG/h5JmHZrUw== slugalisk@gmail.com",
 			},

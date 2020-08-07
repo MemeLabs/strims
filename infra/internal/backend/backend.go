@@ -30,6 +30,9 @@ type Config struct {
 			AccessKey      string
 			SecretKey      string
 		}
+		Hetzner *struct {
+			Token string
+		}
 	}
 	SSH struct {
 		IdentityFile string
@@ -69,6 +72,10 @@ func New(cfg Config) (*Backend, error) {
 			return nil, err
 		}
 		drivers["scaleway"] = driver
+	}
+
+	if cfg.Providers.Hetzner != nil {
+		drivers["hetzner"] = node.NewHetznerDriver(cfg.Providers.Hetzner.Token)
 	}
 
 	return &Backend{

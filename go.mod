@@ -27,6 +27,7 @@ require (
 	github.com/gorilla/mux v1.7.4
 	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/golang-lru v0.5.4
+	github.com/hetznercloud/hcloud-go v1.19.0
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lucas-clemente/quic-go v0.17.3 // indirect
 	github.com/marten-seemann/qtls v0.10.0 // indirect

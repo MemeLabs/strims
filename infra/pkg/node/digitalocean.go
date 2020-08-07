@@ -247,7 +247,7 @@ func (d *DigitalOceanDriver) List(ctx context.Context, req *ListRequest) ([]*Nod
 func (d *DigitalOceanDriver) Delete(ctx context.Context, req *DeleteRequest) error {
 	id, err := strconv.Atoi(req.ProviderID)
 	if err != nil {
-		return fmt.Errorf("Invalid provider ID: %w", err)
+		return fmt.Errorf("invalid provider id: %w", err)
 	}
 	_, err = d.client.Droplets.Delete(ctx, id)
 	return err

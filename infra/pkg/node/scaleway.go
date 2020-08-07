@@ -97,7 +97,7 @@ func scalewaySKU(name string, serverType *instance.ServerType) *SKU {
 	return &SKU{
 		Name:         name,
 		CPUs:         int(serverType.Ncpus),
-		Memory:       int(serverType.RAM / 1024 / 1024),
+		Memory:       int(serverType.RAM / (1 << 20)),
 		NetworkCap:   0,
 		NetworkSpeed: int(*serverType.Network.SumInternetBandwidth / (1 << 20)),
 		PriceHourly:  float64(serverType.HourlyPrice),
@@ -300,7 +300,7 @@ func (d *ScalewayDriver) scalewayNode(ctx context.Context, server *instance.Serv
 		ProviderID: server.ID,
 		Name:       server.Name,
 		CPUs:       int(serverType.Ncpus),
-		Memory:     int(serverType.RAM / 1024 / 1024),
+		Memory:     int(serverType.RAM / (1 << 20)),
 		Disk:       int(serverType.VolumesConstraint.MinSize / scw.GB),
 		Status:     server.State.String(),
 		SKU:        scalewaySKU(server.CommercialType, serverType),
