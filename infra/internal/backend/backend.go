@@ -128,6 +128,10 @@ func New(cfg Config) (*Backend, error) {
 		drivers["ovh"] = driver
 	}
 
+	if cfg.Providers.Hetzner != nil {
+		drivers["hetzner"] = node.NewHetznerDriver(cfg.Providers.Hetzner.Token)
+	}
+
 	return &Backend{
 		Log:         log,
 		DB:          db,
