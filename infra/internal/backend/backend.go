@@ -46,6 +46,17 @@ type HetznerConfig struct {
 
 func (c *HetznerConfig) isDriverConfig() {}
 
+// HetznerConfig ...
+type OVHConfig struct {
+	AppKey      string
+	AppSecret   string
+	ConsumerKey string
+	ProjectID   string
+	Subsidiary  string
+}
+
+func (c *OVHConfig) isDriverConfig() {}
+
 // Config ...
 type Config struct {
 	LogLevel int
@@ -75,6 +86,8 @@ func (c *Config) DecoderConfigOptions(config *mapstructure.DecoderConfig) {
 				driverConfig = &ScalewayConfig{}
 			case "Hetzner":
 				driverConfig = &HetznerConfig{}
+			case "OVH":
+				driverConfig = &OVHConfig{}
 			default:
 				return nil, errors.New("unsupported driver")
 			}
@@ -116,8 +129,23 @@ func New(cfg Config) (*Backend, error) {
 			drivers[name] = driver
 		case *HetznerConfig:
 			drivers[name] = node.NewHetznerDriver(dc.Token)
+		case *OVHConfig:
+			driver, err := node.NewOVHDriver(dc.Subsidiary, dc.AppKey, dc.AppSecret, dc.ConsumerKey, dc.ProjectID)
+			if err != nil {
+				return nil, err
+			}
+			drivers[name] = driver
 		}
 	}
+
+	/*
+		if cfg.Providers.Dreamhost != nil {
+			drivers["dreamhost"], err = node.NewDreamhostDriver(cfg.Providers.Dreamhost.IdentityEndpoint, cfg.Providers.Dreamhost.TokenID, cfg.Providers.Dreamhost.TenantID)
+			if err != nil {
+				return nil, err
+			}
+		}
+	*/
 
 	return &Backend{
 		Log:         log,

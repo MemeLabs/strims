@@ -25,7 +25,7 @@ var destroyCmd = &cobra.Command{
 		}
 
 		err := d.Delete(context.Background(), &node.DeleteRequest{
-			ProviderID: "7056346",
+			ProviderID: "b7631217-03d1-4bca-a8ed-46dc0f70be9c",
 		})
 		if err != nil {
 			return err
