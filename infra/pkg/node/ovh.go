@@ -3,7 +3,6 @@ package node
 import (
 	"context"
 	"fmt"
-	"net"
 	"net/url"
 	"strings"
 	"time"
@@ -168,8 +167,6 @@ func (d *OVHDriver) Create(ctx context.Context, req *CreateRequest) (*Node, erro
 		"sshKeyId": sshkeyIDs[0], // TODO: handle multiple ssh keys or decide against it
 	}
 
-	fmt.Println(data)
-
 	if err := d.client.PostWithContext(ctx, fmt.Sprintf("%s/instance", path), data, &resp); err != nil {
 		return nil, err
 	}
@@ -279,7 +276,6 @@ func (d *OVHDriver) findFlavorIdFromName(ctx context.Context, name, region strin
 	}
 
 	for _, flavor := range flavors {
-		fmt.Println(flavor)
 		if flavor.Name == strings.ToLower(name) {
 			return flavor.ID, nil
 		}
@@ -311,16 +307,14 @@ func (d *OVHDriver) loadPricesForSKUs(ctx context.Context) (map[string]price, er
 }
 
 func priceForPlan(pricemap map[string]price, code string) float64 {
-	x, ok := pricemap[code]
+	x, ok := pricemap[strings.Split(code, ".")[0]]
 	if !ok {
 		// TODO: handle differently
+		fmt.Printf("failed to find price code in map %q %+v\n", code, pricemap)
 		return 0
 	}
 
-	// TODO: handle tax
-	total := float64(x.price / 100000000)
-
-	return total
+	return float64(x.price) / float64(100000000)
 }
 
 func (d *OVHDriver) ovhSKU(flavor *ovhSKU) *SKU {
@@ -338,7 +332,7 @@ func (d *OVHDriver) ovhSKU(flavor *ovhSKU) *SKU {
 func (d *OVHDriver) ovhNode(instance *ovhInstance) *Node {
 	v4s, v6s := []string{}, []string{}
 	for _, ip := range instance.IPAddresses {
-		if len([]byte(ip.IP)) == net.IPv4len {
+		if isIPv4(ip.IP) {
 			v4s = append(v4s, ip.IP)
 		} else {
 			v6s = append(v6s, ip.IP)
@@ -363,6 +357,10 @@ func subToFullname(sub string) string {
 	default:
 		return ""
 	}
+}
+
+func isIPv4(address string) bool {
+	return strings.Count(address, ":") < 2
 }
 
 type ovhSKU struct {
