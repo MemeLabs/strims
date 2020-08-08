@@ -2,10 +2,14 @@ package backend
 
 import (
 	"database/sql"
+	"errors"
 	"os"
+	"reflect"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
+	"github.com/mitchellh/mapstructure"
+
 	// db driver
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/sony/sonyflake"
@@ -14,29 +18,72 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
+// DriverConfig ...
+type DriverConfig interface {
+	isDriverConfig()
+}
+
+// DigitalOceanConfig ...
+type DigitalOceanConfig struct {
+	Token string
+}
+
+func (c *DigitalOceanConfig) isDriverConfig() {}
+
+// ScalewayConfig ...
+type ScalewayConfig struct {
+	OrganizationID string
+	AccessKey      string
+	SecretKey      string
+}
+
+func (c *ScalewayConfig) isDriverConfig() {}
+
+// HetznerConfig ...
+type HetznerConfig struct {
+	Token string
+}
+
+func (c *HetznerConfig) isDriverConfig() {}
+
 // Config ...
 type Config struct {
 	LogLevel int
 	DB       struct {
 		Path string
 	}
-	FlakeStartTime string
-	Providers      struct {
-		DigitalOcean *struct {
-			Token string
-		}
-		Scaleway *struct {
-			OrganizationID string
-			AccessKey      string
-			SecretKey      string
-		}
-		Hetzner *struct {
-			Token string
-		}
-	}
-	SSH struct {
+	FlakeStartTime time.Time
+	Providers      map[string]DriverConfig
+	SSH            struct {
 		IdentityFile string
 	}
+}
+
+var driverConfigType = reflect.TypeOf((*DriverConfig)(nil)).Elem()
+var timeType = reflect.TypeOf(time.Time{})
+
+// DecoderConfigOptions ...
+func (c *Config) DecoderConfigOptions(config *mapstructure.DecoderConfig) {
+	config.DecodeHook = mapstructure.ComposeDecodeHookFunc(config.DecodeHook, func(src, dst reflect.Type, val interface{}) (interface{}, error) {
+		switch dst {
+		case driverConfigType:
+			var driverConfig DriverConfig
+			switch val.(map[string]interface{})["driver"] {
+			case "DigitalOcean":
+				driverConfig = &DigitalOceanConfig{}
+			case "Scaleway":
+				driverConfig = &ScalewayConfig{}
+			case "Hetzner":
+				driverConfig = &HetznerConfig{}
+			default:
+				return nil, errors.New("unsupported driver")
+			}
+			return driverConfig, mapstructure.Decode(val, driverConfig)
+		case timeType:
+			return time.Parse(time.RFC3339, val.(string))
+		}
+		return val, nil
+	})
 }
 
 // New creates a Backend taking in the Config
@@ -52,30 +99,24 @@ func New(cfg Config) (*Backend, error) {
 		return nil, err
 	}
 
-	startTime, err := time.Parse(time.RFC3339, cfg.FlakeStartTime)
-	if err != nil {
-		return nil, err
-	}
 	flake := sonyflake.NewSonyflake(sonyflake.Settings{
-		StartTime: startTime,
+		StartTime: cfg.FlakeStartTime,
 	})
 
 	drivers := map[string]node.Driver{}
-
-	if cfg.Providers.DigitalOcean != nil {
-		drivers["digitalocean"] = node.NewDigitalOceanDriver(cfg.Providers.DigitalOcean.Token)
-	}
-
-	if cfg.Providers.Scaleway != nil {
-		driver, err := node.NewScalewayDriver(cfg.Providers.Scaleway.OrganizationID, cfg.Providers.Scaleway.AccessKey, cfg.Providers.Scaleway.SecretKey)
-		if err != nil {
-			return nil, err
+	for name, dci := range cfg.Providers {
+		switch dc := dci.(type) {
+		case *DigitalOceanConfig:
+			drivers[name] = node.NewDigitalOceanDriver(dc.Token)
+		case *ScalewayConfig:
+			driver, err := node.NewScalewayDriver(dc.OrganizationID, dc.AccessKey, dc.SecretKey)
+			if err != nil {
+				return nil, err
+			}
+			drivers[name] = driver
+		case *HetznerConfig:
+			drivers[name] = node.NewHetznerDriver(dc.Token)
 		}
-		drivers["scaleway"] = driver
-	}
-
-	if cfg.Providers.Hetzner != nil {
-		drivers["hetzner"] = node.NewHetznerDriver(cfg.Providers.Hetzner.Token)
 	}
 
 	return &Backend{

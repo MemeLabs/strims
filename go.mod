@@ -32,7 +32,7 @@ require (
 	github.com/lucas-clemente/quic-go v0.17.3 // indirect
 	github.com/marten-seemann/qtls v0.10.0 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
-	github.com/mitchellh/mapstructure v1.3.3 // indirect
+	github.com/mitchellh/mapstructure v1.3.3
 	github.com/nareix/joy5 v0.0.0-20200712071056-a55089207c88
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
 	github.com/olekukonko/tablewriter v0.0.4

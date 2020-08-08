@@ -62,7 +62,7 @@ func initConfig() {
 	}
 
 	var config be.Config
-	if err := viper.Unmarshal(&config); err != nil {
+	if err := viper.Unmarshal(&config, config.DecoderConfigOptions); err != nil {
 		log.Println("Error reading config:", err)
 		os.Exit(1)
 	}
