@@ -5,14 +5,14 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/golang/geo/s2"
 	"github.com/ovh/go-ovh/ovh"
 )
 
-const ovhOS = "ubuntu-20-04-x64"
-const OVHDefaultSubsidiary = "CA"
+const ovhOS = "Ubuntu 20.04"
 
 var ovhCurrency = map[string]string{
 	"CA": "CAD",
@@ -20,16 +20,18 @@ var ovhCurrency = map[string]string{
 }
 
 var ovhRegions = []*Region{
-	{
-		Name:   "VIN1",
-		City:   "Virginia, United States",
-		LatLng: s2.LatLngFromDegrees(38.7465, 77.6738),
-	},
-	{
-		Name:   "HIL1",
-		City:   "Oregon, United States",
-		LatLng: s2.LatLngFromDegrees(45.5272, 122.9361),
-	},
+	/*
+		{
+			Name:   "VIN1",
+			City:   "Virginia, United States",
+			LatLng: s2.LatLngFromDegrees(38.7465, 77.6738),
+		},
+		{
+			Name:   "HIL1",
+			City:   "Oregon, United States",
+			LatLng: s2.LatLngFromDegrees(45.5272, 122.9361),
+		},
+	*/
 	{
 		Name:   "UK1",
 		City:   "London, United Kingdom",
@@ -72,8 +74,8 @@ var ovhRegions = []*Region{
 	},
 }
 
-func NewOVHDriver(region, appKey, appSecret, consumerSecret, projectID string) (*OVHDriver, error) {
-	client, err := ovh.NewClient(region, appKey, appSecret, consumerSecret)
+func NewOVHDriver(region, appKey, appSecret, consumerKey, projectID string) (*OVHDriver, error) {
+	client, err := ovh.NewClient(subToFullname(region), appKey, appSecret, consumerKey)
 	if err != nil {
 		return nil, err
 	}
@@ -108,7 +110,7 @@ func (d *OVHDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error) 
 	}
 	d.pricemap = pricemap
 
-	path := fmt.Sprintf("/cloud/project/%s/", d.projectID)
+	path := fmt.Sprintf("/cloud/project/%s/flavor", d.projectID)
 	for _, region := range ovhRegions {
 		if req.Region != "" && req.Region != region.Name {
 			continue
@@ -116,7 +118,7 @@ func (d *OVHDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error) 
 		resp := []*ovhSKU{}
 		if err := d.client.GetWithContext(
 			ctx,
-			fmt.Sprintf("%s/%s", path, url.QueryEscape(region.Name)),
+			fmt.Sprintf("%s?region=%s", path, url.QueryEscape(region.Name)),
 			&resp,
 		); err != nil {
 			return nil, err
@@ -165,6 +167,8 @@ func (d *OVHDriver) Create(ctx context.Context, req *CreateRequest) (*Node, erro
 		"imageId":  imageID,
 		"sshKeyId": sshkeyIDs[0], // TODO: handle multiple ssh keys or decide against it
 	}
+
+	fmt.Println(data)
 
 	if err := d.client.PostWithContext(ctx, fmt.Sprintf("%s/instance", path), data, &resp); err != nil {
 		return nil, err
@@ -246,7 +250,7 @@ func (d *OVHDriver) findOrAddKey(ctx context.Context, public string) (string, er
 }
 
 func (d *OVHDriver) findImageIdForRegion(ctx context.Context, region string) (string, error) {
-	path := fmt.Sprintf("/cloud/project/%s/image", url.QueryEscape(d.projectID))
+	path := fmt.Sprintf("/cloud/project/%s/image?osType=linux&region=%s", url.QueryEscape(d.projectID), region)
 	images := []struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -265,7 +269,7 @@ func (d *OVHDriver) findImageIdForRegion(ctx context.Context, region string) (st
 }
 
 func (d *OVHDriver) findFlavorIdFromName(ctx context.Context, name, region string) (string, error) {
-	path := fmt.Sprintf("/cloud/project/%s/flavor", url.QueryEscape(d.projectID))
+	path := fmt.Sprintf("/cloud/project/%s/flavor?region=%s", url.QueryEscape(d.projectID), region)
 	flavors := []struct {
 		ID   string `json:"id"`
 		Name string `json:"name"`
@@ -275,7 +279,8 @@ func (d *OVHDriver) findFlavorIdFromName(ctx context.Context, name, region strin
 	}
 
 	for _, flavor := range flavors {
-		if flavor.Name == name {
+		fmt.Println(flavor)
+		if flavor.Name == strings.ToLower(name) {
 			return flavor.ID, nil
 		}
 	}
@@ -283,8 +288,9 @@ func (d *OVHDriver) findFlavorIdFromName(ctx context.Context, name, region strin
 }
 
 func (d *OVHDriver) loadPricesForSKUs(ctx context.Context) (map[string]price, error) {
+	path := fmt.Sprintf("/order/catalog/public/cloud?ovhSubsidiary=%s", d.subsidiary)
 	resp := catalog{}
-	if err := d.client.GetWithContext(ctx, "/order/catalog/public/cloud", &resp); err != nil {
+	if err := d.client.GetWithContext(ctx, path, &resp); err != nil {
 		return nil, err
 	}
 
@@ -347,6 +353,15 @@ func (d *OVHDriver) ovhNode(instance *ovhInstance) *Node {
 		Networks:   &Networks{V4: v4s, V6: v6s},
 		Status:     instance.Status,
 		SKU:        d.ovhSKU(&instance.Flavor),
+	}
+}
+
+func subToFullname(sub string) string {
+	switch sub {
+	case "CA":
+		return "ovh-ca"
+	default:
+		return ""
 	}
 }
 

@@ -36,10 +36,10 @@ var createCmd = &cobra.Command{
 
 		n, err := d.Create(context.Background(), &node.CreateRequest{
 			Name:   "test",
-			Region: "fsn1",
-			SKU:    "cx11",
+			Region: "BHS5",
+			SKU:    "S1-2",
 			SSHKeys: []string{
-				"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCwDB5GVPYZvxCncGsMRcC1ZLaWNDPlQnhsLSKxSwisg3n01XRGaX29h7WBWmuN3hc0YDDqgG5te3YGYwAALLHZ5Hm15rMzXdrmq8HxaknzbDNOrauwsgdXro/9t7PkZyDdDMOekZLn7/yatrsIUHTj0HGh9SQmLCsDjiX8CS+6k8+9kdBwxwt6l3ybDNxP2A+UeVQXnMfEBj96iG9o5hyrlKQYoD2oS+n9FQTw/Zr+McmdDz8XJz94ab4uCVCOBW1177q5kkNgHbe7oxKJyTisU/As85EONELcq//i3akGb7pygoCkaFELdUi6BessHy8TXKH6Nn3H6uXkNLhVpV/4mHCkyUdX14qjUg08aOjwiXbCNG4LmeehY1HOKjWqDh3NOAOGMIGObHr/M2rrHU5QLclX+Lr7LW1NGNergWCY6qi2zvsDoKRC8AXlGFqCmMig9pxaNZSPvHF7HhmX1f/mX7neri7X3ThzZmnb8PcsZMXCleVF6AQ/+0iyTSoyR1QDaGcJg0PmEdcD0ShqEP0RLXEGsG0OSAFy30BPRk0Q88iAkFsaHIM8msjXwIB2D0V/qzU+n6dfzs1Yx7in77admtKZYwvaDEkn9A5vo2EDwL+JrceLS4p2GOiw4E7sHbS4h6SMpyWcEVvr6hfGN3puJc/q/zLs9YGG/h5JmHZrUw== slugalisk@gmail.com",
+				"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCqii+2B/KMkBtJOr0ku4wgbMrnuj5iVo5BmJGNzjdPmkLxQsOhZ3es0Gxb/1HJgOg1DptKPIxrMpWb1QCJf56zxUIcWKTHUIXzXY4KW0sT4bKSsE43AQQ0J2Ao3fQz8vdccWDPwpgrTaV6t1ZaFhb9sJJkzfplrBo2v0xVMSBieIpt4Znpi6HrIgXt6aqd5JpYuYv4SjYs/n+V2j62gAKKl7lt3ie+Nz50nrx9SPJ2+VrwCSQvidpGv1VY/tbG9j8VNff4fuxFl37au2TCfRYC7ANhTZjZWQOG3Yo920jziD+EY6lVv6G3GeMpVCny9lqcc+hUI+wP2Rd4Kw0RShwX1NrW7NyG+u8hjluIEubj4PWwwArMp6MQgdQKGhurOtBWBhdaFFrooiC4/DmAHUuPZAOK5vO0F1KEOUVVOz4VDsrU5Kw3X0NhBVcLDqrC9dwBMrqVBY5gnuboDb4Cq+RuW0cT9CIz2b7iwZZU8sg82O1Z2iu7qvER8TYJH4y8U2sE7OpkAfbOVqMlxW2x+O4ci6f9m8M/C7WRwGRoKvx422aaBihEJ7eQ5JXxlEwSWErbU+oXwdMRxJ6aMlWfXUCBhGfrTEa8sbyhThh9EsGvk+JV58EjfgqNqidDqSgzTh3Zfve0frj5rsS55CKK700pm8k/v/+sSl8tMC6oxGDdmw== jbpratt78@gmail.com",
 			},
 		})
 		if err != nil {
