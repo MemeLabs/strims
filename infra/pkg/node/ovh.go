@@ -19,18 +19,16 @@ var ovhCurrency = map[string]string{
 }
 
 var ovhRegions = []*Region{
-	/*
-		{
-			Name:   "VIN1",
-			City:   "Virginia, United States",
-			LatLng: s2.LatLngFromDegrees(38.7465, 77.6738),
-		},
-		{
-			Name:   "HIL1",
-			City:   "Oregon, United States",
-			LatLng: s2.LatLngFromDegrees(45.5272, 122.9361),
-		},
-	*/
+	{
+		Name:   "VIN1",
+		City:   "Virginia, United States",
+		LatLng: s2.LatLngFromDegrees(38.7465, 77.6738),
+	},
+	{
+		Name:   "HIL1",
+		City:   "Oregon, United States",
+		LatLng: s2.LatLngFromDegrees(45.5272, 122.9361),
+	},
 	{
 		Name:   "UK1",
 		City:   "London, United Kingdom",
@@ -98,7 +96,22 @@ func (d *OVHDriver) Provider() string {
 }
 
 func (d *OVHDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region, error) {
-	return append(make([]*Region, 0, len(ovhRegions)), ovhRegions...), nil
+	regions := make([]*Region, 0, len(ovhRegions))
+	path := fmt.Sprintf("/cloud/project/%s/region", url.QueryEscape(d.projectID))
+	resp := []string{}
+	if err := d.client.GetWithContext(ctx, path, &resp); err != nil {
+		return nil, err
+	}
+
+	for _, region := range resp {
+		for _, x := range ovhRegions {
+			if x.Name == region {
+				regions = append(regions, x)
+			}
+		}
+	}
+
+	return regions, nil
 }
 
 func (d *OVHDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error) {
@@ -109,7 +122,7 @@ func (d *OVHDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error) 
 	}
 	d.pricemap = pricemap
 
-	path := fmt.Sprintf("/cloud/project/%s/flavor", d.projectID)
+	path := fmt.Sprintf("/cloud/project/%s/flavor", url.QueryEscape(d.projectID))
 	for _, region := range ovhRegions {
 		if req.Region != "" && req.Region != region.Name {
 			continue
@@ -233,7 +246,7 @@ func (d *OVHDriver) findOrAddKey(ctx context.Context, public string) (string, er
 		}
 	}
 
-	var resp *key
+	var resp key
 	data := map[string]string{
 		"publicKey": public,
 		"name":      fmt.Sprintf("infra-key-%d", time.Now().UnixNano()),
@@ -314,7 +327,7 @@ func priceForPlan(pricemap map[string]price, code string) float64 {
 		return 0
 	}
 
-	return float64(x.price) / float64(100000000)
+	return float64(x.price) / 100000000.0
 }
 
 func (d *OVHDriver) ovhSKU(flavor *ovhSKU) *SKU {
