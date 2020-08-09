@@ -70,6 +70,15 @@ type DreamHostConfig struct {
 
 func (c *DreamHostConfig) isDriverConfig() {}
 
+// HeficedConfig ...
+type HeficedConfig struct {
+	ClientID     string
+	ClientSecret string
+	TenantID     string
+}
+
+func (c *HeficedConfig) isDriverConfig() {}
+
 // Config ...
 type Config struct {
 	LogLevel int
@@ -112,6 +121,8 @@ func (c *Config) DecoderConfigOptions(config *mapstructure.DecoderConfig) {
 				driverConfig = &OVHConfig{}
 			case "DreamHost":
 				driverConfig = &DreamHostConfig{}
+			case "Heficed":
+				driverConfig = &HeficedConfig{}
 			default:
 				return nil, fmt.Errorf("unsupported driver: %s", driverName)
 			}
@@ -161,6 +172,12 @@ func New(cfg Config) (*Backend, error) {
 			drivers[name] = driver
 		case *DreamHostConfig:
 			driver, err := node.NewDreamHostDriver(dc.TenantID, dc.TenantName, dc.Username, dc.Password)
+			if err != nil {
+				return nil, err
+			}
+			drivers[name] = driver
+		case *HeficedConfig:
+			driver, err := node.NewHeficedDriver(dc.ClientID, dc.ClientSecret, dc.TenantID)
 			if err != nil {
 				return nil, err
 			}
