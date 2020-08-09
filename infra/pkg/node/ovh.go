@@ -9,6 +9,7 @@ import (
 
 	"github.com/golang/geo/s2"
 	"github.com/ovh/go-ovh/ovh"
+	"golang.org/x/sync/errgroup"
 )
 
 const ovhOS = "Ubuntu 20.04"
@@ -17,6 +18,9 @@ var ovhCurrency = map[string]string{
 	"CA": "CAD",
 	"US": "USD",
 }
+
+// 30 days with 50% monthly billing discount
+const ovhMonthlyBillingRate = 30 * 24 * 0.5
 
 var ovhRegions = []*Region{
 	{
@@ -71,6 +75,7 @@ var ovhRegions = []*Region{
 	},
 }
 
+// NewOVHDriver ...
 func NewOVHDriver(region, appKey, appSecret, consumerKey, projectID string) (*OVHDriver, error) {
 	client, err := ovh.NewClient(subToFullname(region), appKey, appSecret, consumerKey)
 	if err != nil {
@@ -79,22 +84,54 @@ func NewOVHDriver(region, appKey, appSecret, consumerKey, projectID string) (*OV
 	return &OVHDriver{projectID: projectID, subsidiary: region, client: client}, nil
 }
 
-type price struct {
+func newOVHPriceMap(c *ovhCatalog) ovhPriceMap {
+	m := ovhPriceMap{}
+	for _, addon := range c.Addons {
+		if len(addon.Pricings) == 0 {
+			continue
+		}
+		for _, p := range addon.Pricings {
+			if p.Price == 0 {
+				continue
+			}
+			m[addon.InvoiceName] = ovhPrice{price: p.Price, tax: p.Tax}
+		}
+	}
+	return m
+}
+
+type ovhPriceMap map[string]ovhPrice
+
+func (m ovhPriceMap) FindByCode(code string) float64 {
+	x, ok := m[strings.Split(code, ".")[0]]
+	if !ok {
+		// TODO: handle differently
+		fmt.Printf("failed to find price code in map %q %+v\n", code, m)
+		panic(fmt.Sprintf("failed to find price code in map \"%s\"", code))
+		return 0
+	}
+
+	return float64(x.price) / 100000000.0
+}
+
+type ovhPrice struct {
 	price int
 	tax   int
 }
 
+// OVHDriver ...
 type OVHDriver struct {
 	projectID  string
 	subsidiary string
-	pricemap   map[string]price
 	client     *ovh.Client
 }
 
+// Provider ...
 func (d *OVHDriver) Provider() string {
 	return "ovh"
 }
 
+// Regions ...
 func (d *OVHDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region, error) {
 	regions := make([]*Region, 0, len(ovhRegions))
 	path := fmt.Sprintf("/cloud/project/%s/region", url.QueryEscape(d.projectID))
@@ -114,16 +151,22 @@ func (d *OVHDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region
 	return regions, nil
 }
 
+// SKUs ...
 func (d *OVHDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error) {
 	skus := []*SKU{}
-	pricemap, err := d.loadPricesForSKUs(ctx)
+	priceMap, err := d.loadPricesForSKUs(ctx)
 	if err != nil {
 		return nil, err
 	}
-	d.pricemap = pricemap
 
+	regions, err := d.Regions(ctx, &RegionsRequest{})
+	if err != nil {
+		return nil, err
+	}
+
+	names := map[string]bool{}
 	path := fmt.Sprintf("/cloud/project/%s/flavor", url.QueryEscape(d.projectID))
-	for _, region := range ovhRegions {
+	for _, region := range regions {
 		if req.Region != "" && req.Region != region.Name {
 			continue
 		}
@@ -137,36 +180,35 @@ func (d *OVHDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error) 
 		}
 
 		for _, s := range resp {
-			skus = append(skus, d.ovhSKU(s))
+			if _, ok := names[s.Name]; !ok {
+				names[s.Name] = true
+				skus = append(skus, d.ovhSKU(s, priceMap))
+			}
 		}
 	}
 
 	return skus, nil
 }
 
+// Create ...
 func (d *OVHDriver) Create(ctx context.Context, req *CreateRequest) (*Node, error) {
 	path := fmt.Sprintf("/cloud/project/%s", url.QueryEscape(d.projectID))
-	pricemap, err := d.loadPricesForSKUs(ctx)
-	if err != nil {
-		return nil, err
-	}
-	d.pricemap = pricemap
-
-	sshkeyIDs := []string{}
-	for _, public := range req.SSHKeys {
-		key, err := d.findOrAddKey(ctx, public)
-		if err != nil {
-			return nil, err
-		}
-		sshkeyIDs = append(sshkeyIDs, key)
-	}
-
-	imageID, err := d.findImageIdForRegion(ctx, req.Region)
+	priceMap, err := d.loadPricesForSKUs(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	flavorID, err := d.findFlavorIdFromName(ctx, req.SKU, req.Region)
+	key, err := d.findOrAddKey(ctx, req.SSHKey)
+	if err != nil {
+		return nil, err
+	}
+
+	imageID, err := d.findImageIDForRegion(ctx, req.Region)
+	if err != nil {
+		return nil, err
+	}
+
+	flavorID, err := d.findFlavorIDFromName(ctx, req.SKU, req.Region)
 	if err != nil {
 		return nil, err
 	}
@@ -177,7 +219,7 @@ func (d *OVHDriver) Create(ctx context.Context, req *CreateRequest) (*Node, erro
 		"region":   req.Region,
 		"flavorId": flavorID,
 		"imageId":  imageID,
-		"sshKeyId": sshkeyIDs[0], // TODO: handle multiple ssh keys or decide against it
+		"sshKeyId": key,
 	}
 
 	if err := d.client.PostWithContext(ctx, fmt.Sprintf("%s/instance", path), data, &resp); err != nil {
@@ -196,33 +238,51 @@ func (d *OVHDriver) Create(ctx context.Context, req *CreateRequest) (*Node, erro
 			}
 
 			if resp.Status == "ACTIVE" {
-				return d.ovhNode(&resp), nil
+				return d.ovhNode(&resp, priceMap), nil
 			}
 		}
 	}
 }
 
+// Delete ...
 func (d *OVHDriver) Delete(ctx context.Context, req *DeleteRequest) error {
 	path := fmt.Sprintf("/cloud/project/%s/instance/%s", url.QueryEscape(d.projectID), url.QueryEscape(req.ProviderID))
 	return d.client.DeleteWithContext(ctx, path, nil)
 }
 
+// List ...
 func (d *OVHDriver) List(ctx context.Context, req *ListRequest) ([]*Node, error) {
 	path := fmt.Sprintf("/cloud/project/%s/instance", url.QueryEscape(d.projectID))
 	nodes := []*Node{}
-	pricemap, err := d.loadPricesForSKUs(ctx)
+	priceMap, err := d.loadPricesForSKUs(ctx)
 	if err != nil {
 		return nil, err
 	}
-	d.pricemap = pricemap
 
 	resp := []*ovhInstance{}
 	if err := d.client.GetWithContext(ctx, path, &resp); err != nil {
 		return nil, err
 	}
 
+	var eg errgroup.Group
+	skus := map[string]*ovhSKU{}
 	for _, instance := range resp {
-		nodes = append(nodes, d.ovhNode(instance))
+		if _, ok := skus[instance.FlavorID]; ok {
+			continue
+		}
+		skus[instance.FlavorID] = &ovhSKU{}
+		eg.Go(func() error {
+			path := fmt.Sprintf("/cloud/project/%s/flavor/%s", url.QueryEscape(d.projectID), instance.FlavorID)
+			return d.client.GetWithContext(ctx, path, skus[instance.FlavorID])
+		})
+	}
+	if err := eg.Wait(); err != nil {
+		return nil, err
+	}
+
+	for _, instance := range resp {
+		instance.Flavor = *skus[instance.FlavorID]
+		nodes = append(nodes, d.ovhNode(instance, priceMap))
 	}
 
 	return nodes, nil
@@ -259,7 +319,7 @@ func (d *OVHDriver) findOrAddKey(ctx context.Context, public string) (string, er
 	return resp.ID, nil
 }
 
-func (d *OVHDriver) findImageIdForRegion(ctx context.Context, region string) (string, error) {
+func (d *OVHDriver) findImageIDForRegion(ctx context.Context, region string) (string, error) {
 	path := fmt.Sprintf("/cloud/project/%s/image?osType=linux&region=%s", url.QueryEscape(d.projectID), region)
 	images := []struct {
 		ID   string `json:"id"`
@@ -278,7 +338,7 @@ func (d *OVHDriver) findImageIdForRegion(ctx context.Context, region string) (st
 	return "", fmt.Errorf("failed to find %s in %s", ovhOS, region)
 }
 
-func (d *OVHDriver) findFlavorIdFromName(ctx context.Context, name, region string) (string, error) {
+func (d *OVHDriver) findFlavorIDFromName(ctx context.Context, name, region string) (string, error) {
 	path := fmt.Sprintf("/cloud/project/%s/flavor?region=%s", url.QueryEscape(d.projectID), region)
 	flavors := []struct {
 		ID   string `json:"id"`
@@ -296,70 +356,61 @@ func (d *OVHDriver) findFlavorIdFromName(ctx context.Context, name, region strin
 	return "", fmt.Errorf("failed to find %s", name)
 }
 
-func (d *OVHDriver) loadPricesForSKUs(ctx context.Context) (map[string]price, error) {
+func (d *OVHDriver) loadPricesForSKUs(ctx context.Context) (ovhPriceMap, error) {
 	path := fmt.Sprintf("/order/catalog/public/cloud?ovhSubsidiary=%s", d.subsidiary)
-	resp := catalog{}
-	if err := d.client.GetWithContext(ctx, path, &resp); err != nil {
+	resp := &ovhCatalog{}
+	if err := d.client.GetWithContext(ctx, path, resp); err != nil {
 		return nil, err
 	}
-
-	out := make(map[string]price)
-	for _, addon := range resp.Addons {
-		if len(addon.Pricings) == 0 {
-			continue
-		}
-		for _, p := range addon.Pricings {
-			if p.Price == 0 {
-				continue
-			}
-			out[addon.InvoiceName] = price{price: p.Price, tax: p.Tax}
-		}
-	}
-
-	return out, nil
+	return newOVHPriceMap(resp), nil
 }
 
-func priceForPlan(pricemap map[string]price, code string) float64 {
-	x, ok := pricemap[strings.Split(code, ".")[0]]
-	if !ok {
-		// TODO: handle differently
-		fmt.Printf("failed to find price code in map %q %+v\n", code, pricemap)
-		return 0
-	}
-
-	return float64(x.price) / 100000000.0
-}
-
-func (d *OVHDriver) ovhSKU(flavor *ovhSKU) *SKU {
+func (d *OVHDriver) ovhSKU(flavor *ovhSKU, priceMap ovhPriceMap) *SKU {
 	return &SKU{
 		Name:         flavor.Name,
 		CPUs:         flavor.Vcpus,
 		Memory:       flavor.RAM,
+		Disk:         flavor.Disk,
 		NetworkCap:   0,
 		NetworkSpeed: flavor.OutboundBandwidth,
-		PriceHourly:  &Price{priceForPlan(d.pricemap, flavor.PlanCodes.Hourly), ovhCurrency[d.subsidiary]},
-		PriceMonthly: &Price{priceForPlan(d.pricemap, flavor.PlanCodes.Monthly), ovhCurrency[d.subsidiary]},
+		PriceHourly: &Price{
+			Value:    priceMap.FindByCode(flavor.PlanCodes.Hourly),
+			Currency: ovhCurrency[d.subsidiary],
+		},
+		PriceMonthly: &Price{
+			Value:    priceMap.FindByCode(flavor.PlanCodes.Monthly) * ovhMonthlyBillingRate,
+			Currency: ovhCurrency[d.subsidiary],
+		},
 	}
 }
 
-func (d *OVHDriver) ovhNode(instance *ovhInstance) *Node {
-	v4s, v6s := []string{}, []string{}
+func (d *OVHDriver) ovhNode(instance *ovhInstance, priceMap ovhPriceMap) *Node {
+	var networks Networks
 	for _, ip := range instance.IPAddresses {
 		if isIPv4(ip.IP) {
-			v4s = append(v4s, ip.IP)
+			networks.V4 = append(networks.V4, ip.IP)
 		} else {
-			v6s = append(v6s, ip.IP)
+			networks.V6 = append(networks.V6, ip.IP)
 		}
 	}
+
+	var region *Region
+	for _, r := range ovhRegions {
+		if instance.Region == r.Name {
+			region = r
+		}
+	}
+
 	return &Node{
 		ProviderID: instance.ID,
 		Name:       instance.Name,
 		Memory:     instance.Flavor.RAM,
 		CPUs:       instance.Flavor.Vcpus,
 		Disk:       instance.Flavor.Disk,
-		Networks:   &Networks{V4: v4s, V6: v6s},
+		Networks:   &networks,
 		Status:     instance.Status,
-		SKU:        d.ovhSKU(&instance.Flavor),
+		SKU:        d.ovhSKU(&instance.Flavor, priceMap),
+		Region:     region,
 	}
 }
 
@@ -409,11 +460,12 @@ type ovhInstance struct {
 		NetworkID string `json:"networkId"`
 		GatewayIP string `json:"gatewayIp"`
 	} `json:"ipAddresses"`
-	Status  string    `json:"status"`
-	Created time.Time `json:"created"`
-	Region  string    `json:"region"`
-	Flavor  ovhSKU    `json:"flavor"`
-	Image   struct {
+	Status   string    `json:"status"`
+	Created  time.Time `json:"created"`
+	Region   string    `json:"region"`
+	Flavor   ovhSKU    `json:"flavor"`
+	FlavorID string    `json:"flavorId"`
+	Image    struct {
 		ID           string        `json:"id"`
 		Name         string        `json:"name"`
 		Region       string        `json:"region"`
@@ -435,7 +487,7 @@ type ovhInstance struct {
 	OperationIds   []interface{} `json:"operationIds"`
 }
 
-type catalog struct {
+type ovhCatalog struct {
 	Addons []struct {
 		PlanCode       string        `json:"planCode"`
 		InvoiceName    string        `json:"invoiceName"`

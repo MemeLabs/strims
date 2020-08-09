@@ -96,6 +96,7 @@ func hetznerSKU(serverType *hcloud.ServerType, pricing hcloud.ServerTypeLocation
 		Name:         serverType.Name,
 		CPUs:         serverType.Cores,
 		Memory:       int(serverType.Memory * 1024),
+		Disk:         serverType.Disk,
 		NetworkCap:   20 * 1024,
 		NetworkSpeed: 1000,
 		PriceHourly: &Price{
@@ -130,13 +131,9 @@ func (d *HetznerDriver) findOrAddKey(ctx context.Context, public string) (*hclou
 
 // Create ...
 func (d *HetznerDriver) Create(ctx context.Context, req *CreateRequest) (*Node, error) {
-	sshKeys := []*hcloud.SSHKey{}
-	for _, public := range req.SSHKeys {
-		key, err := d.findOrAddKey(ctx, public)
-		if err != nil {
-			return nil, err
-		}
-		sshKeys = append(sshKeys, key)
+	key, err := d.findOrAddKey(ctx, req.SSHKey)
+	if err != nil {
+		return nil, err
 	}
 
 	createRes, _, err := d.client.Server.Create(ctx, hcloud.ServerCreateOpts{
@@ -147,7 +144,7 @@ func (d *HetznerDriver) Create(ctx context.Context, req *CreateRequest) (*Node, 
 		Image: &hcloud.Image{
 			Name: hetznerOS,
 		},
-		SSHKeys: sshKeys,
+		SSHKeys: []*hcloud.SSHKey{key},
 		Location: &hcloud.Location{
 			Name: req.Region,
 		},

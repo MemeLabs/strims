@@ -98,6 +98,7 @@ func scalewaySKU(name string, serverType *instance.ServerType) *SKU {
 		Name:         name,
 		CPUs:         int(serverType.Ncpus),
 		Memory:       int(serverType.RAM / (1 << 20)),
+		Disk:         int(serverType.VolumesConstraint.MinSize / scw.GB),
 		NetworkCap:   0,
 		NetworkSpeed: int(*serverType.Network.SumInternetBandwidth / (1 << 20)),
 		PriceHourly: &Price{
@@ -180,11 +181,8 @@ func (d *ScalewayDriver) Create(ctx context.Context, req *CreateRequest) (*Node,
 		return nil, err
 	}
 
-	for _, public := range req.SSHKeys {
-		_, err := d.findOrAddKey(ctx, public)
-		if err != nil {
-			return nil, err
-		}
+	if _, err := d.findOrAddKey(ctx, req.SSHKey); err != nil {
+		return nil, err
 	}
 
 	createRes, err := instance.NewAPI(d.client).CreateServer(&instance.CreateServerRequest{

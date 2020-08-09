@@ -1,8 +1,11 @@
 package backend
 
 import (
+	"bytes"
 	"database/sql"
 	"errors"
+	"fmt"
+	"io/ioutil"
 	"os"
 	"reflect"
 	"time"
@@ -46,7 +49,7 @@ type HetznerConfig struct {
 
 func (c *HetznerConfig) isDriverConfig() {}
 
-// HetznerConfig ...
+// OVHConfig ...
 type OVHConfig struct {
 	AppKey      string
 	AppSecret   string
@@ -56,6 +59,16 @@ type OVHConfig struct {
 }
 
 func (c *OVHConfig) isDriverConfig() {}
+
+// DreamHostConfig ...
+type DreamHostConfig struct {
+	TenantID   string
+	TenantName string
+	Username   string
+	Password   string
+}
+
+func (c *DreamHostConfig) isDriverConfig() {}
 
 // Config ...
 type Config struct {
@@ -78,8 +91,17 @@ func (c *Config) DecoderConfigOptions(config *mapstructure.DecoderConfig) {
 	config.DecodeHook = mapstructure.ComposeDecodeHookFunc(config.DecodeHook, func(src, dst reflect.Type, val interface{}) (interface{}, error) {
 		switch dst {
 		case driverConfigType:
+			valMap, ok := val.(map[string]interface{})
+			if !ok {
+				return nil, errors.New("invalid provider definition")
+			}
+			driverName, ok := valMap["driver"]
+			if !ok {
+				return nil, errors.New("provider definition missing driver")
+			}
+
 			var driverConfig DriverConfig
-			switch val.(map[string]interface{})["driver"] {
+			switch driverName {
 			case "DigitalOcean":
 				driverConfig = &DigitalOceanConfig{}
 			case "Scaleway":
@@ -88,8 +110,10 @@ func (c *Config) DecoderConfigOptions(config *mapstructure.DecoderConfig) {
 				driverConfig = &HetznerConfig{}
 			case "OVH":
 				driverConfig = &OVHConfig{}
+			case "DreamHost":
+				driverConfig = &DreamHostConfig{}
 			default:
-				return nil, errors.New("unsupported driver")
+				return nil, fmt.Errorf("unsupported driver: %s", driverName)
 			}
 			return driverConfig, mapstructure.Decode(val, driverConfig)
 		case timeType:
@@ -135,6 +159,12 @@ func New(cfg Config) (*Backend, error) {
 				return nil, err
 			}
 			drivers[name] = driver
+		case *DreamHostConfig:
+			driver, err := node.NewDreamHostDriver(dc.TenantID, dc.TenantName, dc.Username, dc.Password)
+			if err != nil {
+				return nil, err
+			}
+			drivers[name] = driver
 		}
 	}
 
@@ -148,22 +178,38 @@ func New(cfg Config) (*Backend, error) {
 	*/
 
 	return &Backend{
-		Log:         log,
-		DB:          db,
-		NodeDrivers: drivers,
-		flake:       flake,
+		Log:             log,
+		DB:              db,
+		NodeDrivers:     drivers,
+		flake:           flake,
+		sshIdentityFile: cfg.SSH.IdentityFile,
 	}, nil
 }
 
 // Backend ...
 type Backend struct {
-	DB          *sql.DB
-	Log         *zap.Logger
-	NodeDrivers map[string]node.Driver
-	flake       *sonyflake.Sonyflake
+	DB              *sql.DB
+	Log             *zap.Logger
+	NodeDrivers     map[string]node.Driver
+	flake           *sonyflake.Sonyflake
+	sshIdentityFile string
 }
 
 // NextID ...
 func (b *Backend) NextID() (uint64, error) {
 	return b.flake.NextID()
+}
+
+// SSHIdentityFile ...
+func (b *Backend) SSHIdentityFile() string {
+	return b.sshIdentityFile
+}
+
+// SSHPublicKey ...
+func (b *Backend) SSHPublicKey() string {
+	d, err := ioutil.ReadFile(b.sshIdentityFile + ".pub")
+	if err != nil {
+		b.Log.Fatal("error reading ssh public key", zap.Error(err))
+	}
+	return string(bytes.Trim(d, "\r\n\t "))
 }

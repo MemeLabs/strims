@@ -129,6 +129,7 @@ func digitalOceanSKU(size *godo.Size) *SKU {
 		Name:         size.Slug,
 		CPUs:         size.Vcpus,
 		Memory:       size.Memory,
+		Disk:         size.Disk,
 		NetworkCap:   int(size.Transfer * 1024),
 		NetworkSpeed: 1000,
 		PriceHourly: &Price{
@@ -177,27 +178,25 @@ func (d *DigitalOceanDriver) findOrAddKey(ctx context.Context, public string) (*
 
 // Create ...
 func (d *DigitalOceanDriver) Create(ctx context.Context, req *CreateRequest) (*Node, error) {
-	godoReq := &godo.DropletCreateRequest{
+	key, err := d.findOrAddKey(ctx, req.SSHKey)
+	if err != nil {
+		return nil, err
+	}
+
+	droplet, _, err := d.client.Droplets.Create(ctx, &godo.DropletCreateRequest{
 		Name:   req.Name,
 		Region: req.Region,
 		Size:   req.SKU,
 		Image: godo.DropletCreateImage{
 			Slug: digitalOceanOS,
 		},
+		SSHKeys: []godo.DropletCreateSSHKey{
+			godo.DropletCreateSSHKey{
+				Fingerprint: key.Fingerprint,
+			},
+		},
 		IPv6: true,
-	}
-
-	for _, public := range req.SSHKeys {
-		key, err := d.findOrAddKey(ctx, public)
-		if err != nil {
-			return nil, err
-		}
-		godoReq.SSHKeys = append(godoReq.SSHKeys, godo.DropletCreateSSHKey{
-			Fingerprint: key.Fingerprint,
-		})
-	}
-
-	droplet, _, err := d.client.Droplets.Create(ctx, godoReq)
+	})
 	if err != nil {
 		return nil, err
 	}

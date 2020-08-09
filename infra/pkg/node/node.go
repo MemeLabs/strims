@@ -27,10 +27,10 @@ type SKUsRequest struct {
 
 // CreateRequest ...
 type CreateRequest struct {
-	Name    string
-	Region  string
-	SKU     string
-	SSHKeys []string
+	Name   string
+	Region string
+	SKU    string
+	SSHKey string
 }
 
 // ListRequest ...
@@ -55,6 +55,7 @@ type SKU struct {
 	Name         string
 	CPUs         int
 	Memory       int
+	Disk         int
 	NetworkCap   int
 	NetworkSpeed int
 	PriceMonthly *Price

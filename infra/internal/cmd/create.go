@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -34,13 +33,11 @@ var createCmd = &cobra.Command{
 			return fmt.Errorf("Unsupported provider: %s", provider)
 		}
 
-		n, err := d.Create(context.Background(), &node.CreateRequest{
+		n, err := d.Create(cmd.Context(), &node.CreateRequest{
 			Name:   "test",
-			Region: "BHS5",
-			SKU:    "S1-2",
-			SSHKeys: []string{
-				"ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQCqii+2B/KMkBtJOr0ku4wgbMrnuj5iVo5BmJGNzjdPmkLxQsOhZ3es0Gxb/1HJgOg1DptKPIxrMpWb1QCJf56zxUIcWKTHUIXzXY4KW0sT4bKSsE43AQQ0J2Ao3fQz8vdccWDPwpgrTaV6t1ZaFhb9sJJkzfplrBo2v0xVMSBieIpt4Znpi6HrIgXt6aqd5JpYuYv4SjYs/n+V2j62gAKKl7lt3ie+Nz50nrx9SPJ2+VrwCSQvidpGv1VY/tbG9j8VNff4fuxFl37au2TCfRYC7ANhTZjZWQOG3Yo920jziD+EY6lVv6G3GeMpVCny9lqcc+hUI+wP2Rd4Kw0RShwX1NrW7NyG+u8hjluIEubj4PWwwArMp6MQgdQKGhurOtBWBhdaFFrooiC4/DmAHUuPZAOK5vO0F1KEOUVVOz4VDsrU5Kw3X0NhBVcLDqrC9dwBMrqVBY5gnuboDb4Cq+RuW0cT9CIz2b7iwZZU8sg82O1Z2iu7qvER8TYJH4y8U2sE7OpkAfbOVqMlxW2x+O4ci6f9m8M/C7WRwGRoKvx422aaBihEJ7eQ5JXxlEwSWErbU+oXwdMRxJ6aMlWfXUCBhGfrTEa8sbyhThh9EsGvk+JV58EjfgqNqidDqSgzTh3Zfve0frj5rsS55CKK700pm8k/v/+sSl8tMC6oxGDdmw== jbpratt78@gmail.com",
-			},
+			Region: "RegionOne",
+			SKU:    "100",
+			SSHKey: backend.SSHPublicKey(),
 		})
 		if err != nil {
 			return err
