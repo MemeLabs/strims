@@ -76,7 +76,7 @@ var skusCmd = &cobra.Command{
 }
 
 func formatProviderSKUs(ctx context.Context, driver node.Driver) ([][]string, error) {
-	skus, err := driver.SKUs(ctx, &node.SKUsRequest{})
+	skus, err := driver.SKUs(ctx, &node.SKUsRequest{Region: "us-lax1"})
 	if err != nil {
 		return nil, fmt.Errorf("Loading SKUs failed: %w", err)
 	}
