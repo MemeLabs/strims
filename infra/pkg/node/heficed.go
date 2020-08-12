@@ -189,7 +189,7 @@ func toHeficedOrder(spec *heficedAlacart, templateID, region string) *heficedOrd
 		Vcpu:                spec.vcpus,
 		Memory:              spec.memory,
 		Disk:                spec.disk,
-		BillingTypeId:       -1, // hourly
+		BillingTypeId:       1, // monthly
 		AdditionalBandwidth: spec.additionalBandwidth,
 		UseCredit:           true,
 	}
@@ -494,9 +494,9 @@ type heficedQuote struct {
 			} `json:"raw"`
 			Pricing struct {
 				Raw struct {
-					Vcpu   int `json:"vcpu"`
-					Memory int `json:"memory"`
-					Disk   int `json:"disk"`
+					Vcpu   float32 `json:"vcpu"`
+					Memory float32 `json:"memory"`
+					Disk   float32 `json:"disk"`
 				} `json:"raw"`
 			} `json:"pricing"`
 		} `json:"configuration"`
