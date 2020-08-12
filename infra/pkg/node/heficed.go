@@ -189,8 +189,9 @@ func toHeficedOrder(spec *heficedAlacart, templateID, region string) *heficedOrd
 		Vcpu:                spec.vcpus,
 		Memory:              spec.memory,
 		Disk:                spec.disk,
-		BillingTypeId:       1, // monthly
+		BillingTypeId:       -1, // hourly
 		AdditionalBandwidth: spec.additionalBandwidth,
+		UseCredit:           true,
 	}
 }
 
@@ -250,21 +251,22 @@ func (d *HeficedDriver) Create(ctx context.Context, req *CreateRequest) (*Node, 
 	}
 
 	order.SSHKeyID = sshKeyID
-	path = fmt.Sprintf("%s/%s/kronoscloud/instances", heficedAPIEndpoint, d.tenantID)
+	path = fmt.Sprintf("%s%s/kronoscloud/instances", heficedAPIEndpoint, d.tenantID)
 
 	var out heficedOrderResp
-	if err := d.post(ctx, fmt.Sprintf("%s/instances/order", path), order, &out); err != nil {
-		return nil, err
+	if err := d.post(ctx, fmt.Sprintf("%s/order", path), order, &out); err != nil {
+		return nil, fmt.Errorf("post failed with: %v", err)
 	}
 
 	checkTick := time.NewTicker(5 * time.Second)
+	path = fmt.Sprintf("%s/%d", path, out.Items[0].InstanceID)
 	for {
 		select {
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-checkTick.C:
 			var resp heficedInstance
-			if err := d.get(ctx, fmt.Sprintf("%s/%s", path, out.ID), &resp); err != nil {
+			if err := d.get(ctx, path, &resp); err != nil {
 				return nil, err
 			}
 			if resp.Status == "running" {
@@ -326,17 +328,15 @@ func (d *HeficedDriver) findOrAddSSHKey(ctx context.Context, public string) (str
 		return "", err
 	}
 
-	pk, err := ssh.ParsePublicKey([]byte(public))
+	pk, _, _, _, err := ssh.ParseAuthorizedKey([]byte(public))
 	if err != nil {
 		return "", err
 	}
 
 	f := ssh.FingerprintLegacyMD5(pk)
 	for _, x := range keys.Data {
-		for _, y := range x {
-			if y.FingerPrint == f {
-				return y.ID, nil
-			}
+		if x.FingerPrint == f {
+			return x.ID, nil
 		}
 	}
 
@@ -392,7 +392,7 @@ func (d *HeficedDriver) get(ctx context.Context, path string, output interface{}
 	}
 
 	if err := json.Unmarshal(body, output); err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal body: %s %v", string(body), err)
 	}
 	return nil
 }
@@ -411,12 +411,12 @@ func (d *HeficedDriver) post(ctx context.Context, path string, input, output int
 	if resp.StatusCode != http.StatusOK {
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to read error body: %s %v", resp.Body, err)
 		}
 
 		var out heficedErr
 		if err := json.Unmarshal(body, &out); err != nil {
-			return err
+			return fmt.Errorf("failed to unmarshal error body: %q %v", body, err)
 		}
 		return fmt.Errorf("request failed with: %+v", out)
 	}
@@ -427,17 +427,17 @@ func (d *HeficedDriver) post(ctx context.Context, path string, input, output int
 
 	body, err := ioutil.ReadAll(resp.Body)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to read body: %s %v", resp.Body, err)
 	}
 
 	if err := json.Unmarshal(body, &output); err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal body: %s %v", resp.Body, err)
 	}
 	return nil
 }
 
 type heficedSSHKeys struct {
-	Data [][]struct {
+	Data []struct {
 		ID          string `json:"id"`
 		Label       string `json:"label"`
 		FingerPrint string `json:"fingerPrint"`
@@ -478,6 +478,7 @@ type heficedOrder struct {
 	Disk                int    `json:"disk"`
 	BillingTypeId       int    `json:"billingTypeId"`
 	AdditionalBandwidth int    `json:"additionalBandwidth"`
+	UseCredit           bool   `json:"useCredit"`
 }
 
 type heficedQuote struct {
@@ -516,40 +517,39 @@ type heficedErr struct {
 }
 
 type heficedOrderResp struct {
-	ID           int `json:"id"`
-	DateCreated  int `json:"dateCreated"`
-	DateDue      int `json:"dateDue"`
-	DatePaid     int `json:"datePaid"`
-	Credit       int `json:"credit"`
+	ID           int     `json:"id"`
+	DateCreated  int     `json:"dateCreated"`
+	DateDue      int     `json:"dateDue"`
+	DatePaid     int     `json:"datePaid"`
+	Credit       float32 `json:"credit"`
 	Transactions []struct {
-		ID            int    `json:"id"`
-		PaymentMethod string `json:"paymentMethod"`
-		Date          int    `json:"date"`
-		Description   string `json:"description"`
-		In            int    `json:"in"`
-		Out           int    `json:"out"`
-		Fees          int    `json:"fees"`
-		Ref           string `json:"ref"`
-		InvoiceID     int    `json:"invoiceId"`
+		ID            int     `json:"id"`
+		PaymentMethod string  `json:"paymentMethod"`
+		Date          int     `json:"date"`
+		Description   string  `json:"description"`
+		In            int     `json:"in"`
+		Out           int     `json:"out"`
+		Fees          float32 `json:"fees"`
+		Ref           string  `json:"ref"`
+		InvoiceID     int     `json:"invoiceId"`
 	} `json:"transactions"`
 	Items []struct {
-		Total         int    `json:"total"`
-		Description   string `json:"description"`
-		InstanceID    int    `json:"instanceId"`
-		Configuration []struct {
-		} `json:"configuration"`
-		PeriodStart int `json:"periodStart"`
-		PeriodEnd   int `json:"periodEnd"`
+		Total         float32     `json:"total"`
+		Description   string      `json:"description"`
+		InstanceID    int         `json:"instanceId"`
+		PeriodStart   bool        `json:"periodStart"`
+		PeriodEnd     bool        `json:"periodEnd"`
+		Configuration interface{} `json:"configuration"`
 	} `json:"items"`
-	Currency       string `json:"currency"`
-	Total          int    `json:"total"`
-	Subtotal       int    `json:"subtotal"`
-	Tax            int    `json:"tax"`
-	Taxrate        int    `json:"taxrate"`
-	LeftToPay      int    `json:"leftToPay"`
-	Status         string `json:"status"`
-	AsyncTaskIds   []int  `json:"asyncTaskIds"`
-	UsageBasedRate int    `json:"usageBasedRate"`
+	Currency       string  `json:"currency"`
+	Total          float32 `json:"total"`
+	Subtotal       float32 `json:"subtotal"`
+	Tax            float32 `json:"tax"`
+	Taxrate        float32 `json:"taxrate"`
+	LeftToPay      float32 `json:"leftToPay"`
+	Status         string  `json:"status"`
+	AsyncTaskIds   []int   `json:"asyncTaskIds"`
+	UsageBasedRate float32 `json:"usageBasedRate"`
 }
 
 type heficedInstancesResp struct {
@@ -570,29 +570,21 @@ type heficedInstance struct {
 		Continent string `json:"continent"`
 	} `json:"location"`
 	Template struct {
-		ID             string `json:"id"`
-		Created        int    `json:"created"`
-		Size           int    `json:"size"`
-		Version        string `json:"version"`
-		Name           string `json:"name"`
-		LocationID     string `json:"locationId"`
-		InstanceTypeID string `json:"instanceTypeId"`
+		ID   string  `json:"id"`
+		Size float32 `json:"size"`
+		Name string  `json:"name"`
 	} `json:"template"`
 	Iso     interface{} `json:"iso"`
 	Network struct {
 		V4 struct {
 			Ipaddress     string   `json:"ipaddress"`
-			Netmask       string   `json:"netmask"`
 			Gateway       string   `json:"gateway"`
 			AdditionalIps []string `json:"additionalIps"`
-			Resolvers     []string `json:"resolvers"`
 		} `json:"v4"`
 		V6 struct {
 			Ipaddress     string   `json:"ipaddress"`
-			Netmask       string   `json:"netmask"`
 			Gateway       string   `json:"gateway"`
 			AdditionalIps []string `json:"additionalIps"`
-			Resolvers     []string `json:"resolvers"`
 		} `json:"v6"`
 	} `json:"network"`
 	Billing struct {
@@ -601,18 +593,11 @@ type heficedInstance struct {
 			ID   int    `json:"id"`
 			Name string `json:"name"`
 		} `json:"type"`
-		Status              string `json:"status"`
-		HourlySpendingRate  int    `json:"hourlySpendingRate"`
-		Price               int    `json:"price"`
-		StartDate           int    `json:"startDate"`
-		EndDate             int    `json:"endDate"`
-		SLA                 int    `json:"sla"`
-		CancellationRequest struct {
-			Type        string `json:"type"`
-			Created     int    `json:"created"`
-			Termination int    `json:"termination"`
-			Reason      string `json:"reason"`
-		} `json:"cancellationRequest"`
+		Status             string  `json:"status"`
+		HourlySpendingRate float32 `json:"hourlySpendingRate"`
+		Price              float32 `json:"price"`
+		StartDate          int     `json:"startDate"`
+		EndDate            int     `json:"endDate"`
 	} `json:"billing"`
 	Vcpu            int    `json:"vcpu"`
 	Memory          int    `json:"memory"`
