@@ -22,7 +22,7 @@ local kp =
         }
       ],
       prometheus+:: {
-        namespaces+: ['default'],
+        namespaces+: ['default', 'atmon'],
       },
     },
 

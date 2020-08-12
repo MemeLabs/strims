@@ -12,6 +12,7 @@ import (
 
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"go.uber.org/zap"
 )
 
 var opt = exporterOptions{
@@ -31,7 +32,12 @@ func init() {
 func main() {
 	flag.Parse()
 
-	e := newExporter(opt)
+	logger, err := zap.NewProduction()
+	if err != nil {
+		panic(err)
+	}
+
+	e := newExporter(logger, opt)
 	go e.ScrapeSizes()
 
 	prometheus.MustRegister(e)
@@ -50,8 +56,9 @@ type exporterOptions struct {
 	ServerName    string
 }
 
-func newExporter(opt exporterOptions) *exporter {
+func newExporter(logger *zap.Logger, opt exporterOptions) *exporter {
 	return &exporter{
+		logger:        logger,
 		regionSizes:   map[string]int{},
 		regions:       opt.Regions,
 		urlFormat:     fmt.Sprintf("https://%s:%s@%%s%%d.%s:%d/stats;csv;norefresh", opt.Username, opt.Password, opt.Domain, opt.StatsPort),
@@ -66,13 +73,15 @@ func newExporter(opt exporterOptions) *exporter {
 			Namespace: opt.Namespace,
 			Name:      "total_errors",
 		}),
-		sessionsTotal: newMetric(opt.Namespace, "bytes_in_total", "Total number of sessions.", prometheus.CounterValue, nil),
+		sessionsTotal: newMetric(opt.Namespace, "sessions_total", "Total number of sessions.", prometheus.CounterValue, nil),
 		bytesInTotal:  newMetric(opt.Namespace, "bytes_in_total", "Current total of incoming bytes.", prometheus.CounterValue, nil),
-		bytesOutTotal: newMetric(opt.Namespace, "bytes_in_total", "Current total of outgoing bytes.", prometheus.CounterValue, nil),
+		bytesOutTotal: newMetric(opt.Namespace, "bytes_out_total", "Current total of outgoing bytes.", prometheus.CounterValue, nil),
 	}
 }
 
 type exporter struct {
+	logger *zap.Logger
+
 	collectMu     sync.Mutex
 	regionSizesMu sync.Mutex
 	regionSizes   map[string]int
@@ -109,10 +118,12 @@ type metricInfo struct {
 }
 
 func (e *exporter) ScrapeSizes() {
-	for range time.NewTicker(time.Minute).C {
+	t := time.NewTicker(time.Minute)
+	for {
 		for _, r := range e.regions {
 			go e.scrapeRegionSize(r)
 		}
+		<-t.C
 	}
 }
 
@@ -149,14 +160,23 @@ func (e *exporter) Collect(ch chan<- prometheus.Metric) {
 	e.collectMu.Lock()
 	defer e.collectMu.Unlock()
 
+	e.logger.Info("began collecting metrics")
+	start := time.Now()
+
 	var wg sync.WaitGroup
 	e.regionSizesMu.Lock()
 	for region, size := range e.regionSizes {
-		for i := 1; i <= size; i++ {
+		for i := 1; i < size; i++ {
 			wg.Add(1)
 			go func(region string, index int) {
 				e.totalScrapes.Inc()
 				if err := e.scrape(ch, region, index); err != nil {
+					e.logger.Error(
+						"scrape failed",
+						zap.String("region", region),
+						zap.Int("index", index),
+						zap.Error(err),
+					)
 					e.totalErrors.Inc()
 				}
 				wg.Done()
@@ -165,6 +185,8 @@ func (e *exporter) Collect(ch chan<- prometheus.Metric) {
 	}
 	e.regionSizesMu.Unlock()
 	wg.Wait()
+
+	e.logger.Info("finished collecting metrics", zap.Duration("duration", time.Since(start)))
 
 	ch <- e.totalScrapes
 	ch <- e.totalErrors
