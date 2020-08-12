@@ -33,22 +33,22 @@ var heficedRegions = []*Region{
 	{
 		Name:   "uk-lon1",
 		City:   "London, United Kingdom",
-		LatLng: s2.LatLngFromDegrees(51.5074, 0.1278),
+		LatLng: s2.LatLngFromDegrees(51.5074, -0.1278),
 	},
 	{
 		Name:   "us-chi1",
 		City:   "Chicago, IL, US",
-		LatLng: s2.LatLngFromDegrees(41.8781, 87.6298),
+		LatLng: s2.LatLngFromDegrees(41.8781, -87.6298),
 	},
 	{
 		Name:   "us-lax1",
 		City:   "Los Angeles, CA, US",
-		LatLng: s2.LatLngFromDegrees(34.0522, 118.2437),
+		LatLng: s2.LatLngFromDegrees(34.0522, -118.2437),
 	},
 	{
 		Name:   "za-jhb1",
 		City:   "Johannesburg, South Africa",
-		LatLng: s2.LatLngFromDegrees(26.2041, 28.0473),
+		LatLng: s2.LatLngFromDegrees(\26.2041, 28.0473),
 	},
 }
 
