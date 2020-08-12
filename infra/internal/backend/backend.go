@@ -215,7 +215,7 @@ func (b *Backend) SSHIdentityFile() string {
 
 // SSHPublicKey ...
 func (b *Backend) SSHPublicKey() string {
-	d, err := ioutil.ReadFile(b.sshIdentityFile)
+	d, err := ioutil.ReadFile(b.sshIdentityFile + ".pub")
 	if err != nil {
 		b.Log.Fatal("error reading ssh public key", zap.Error(err))
 	}

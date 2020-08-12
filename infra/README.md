@@ -34,5 +34,5 @@ Providers:
     ClientSecret: xxxxxxxxxxxx
     TenantID: xxxxxx-xxxx-xxxx-xxxx-xxxxxxxxx
 SSH:
-  IdentityFile: /root/.ssh/id_ecdsa_example.pub
+  IdentityFile: /root/.ssh/id_ecdsa_example
 ```
