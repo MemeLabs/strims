@@ -48,7 +48,7 @@ var heficedRegions = []*Region{
 	{
 		Name:   "za-jhb1",
 		City:   "Johannesburg, South Africa",
-		LatLng: s2.LatLngFromDegrees(\26.2041, 28.0473),
+		LatLng: s2.LatLngFromDegrees(-26.2041, 28.0473),
 	},
 }
 
