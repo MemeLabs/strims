@@ -70,6 +70,7 @@ var heficedSpecsAlacart = []*heficedAlacart{
 
 // HeficedDriver is a node driver which implements the Driver interface for
 // the Heficed provider. More information can be found in the API docs.
+// https://api.heficed.com/docs/swagger.html
 type HeficedDriver struct {
 	client   *http.Client
 	tenantID string
