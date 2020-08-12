@@ -4,7 +4,7 @@ on:
   push:
     paths:
       - '.github/workflows/atmon-build.yaml'
-      - 'infra/cmd/atmon'
+      - 'infra/cmd/atmon/**'
       - 'go.mod'
       - 'go.sum'
     branches: [ master ]
