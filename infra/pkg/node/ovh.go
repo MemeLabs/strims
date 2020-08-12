@@ -56,7 +56,7 @@ var ovhRegions = []*Region{
 	{
 		Name:   "BHS5",
 		City:   "Beauharnois, Quebec, Canada",
-		LatLng: s2.LatLngFromDegrees(45.3151, 73.8779),
+		LatLng: s2.LatLngFromDegrees(45.3151, -73.8779),
 	},
 	{
 		Name:   "WAW1",
@@ -66,7 +66,7 @@ var ovhRegions = []*Region{
 	{
 		Name:   "SYD1",
 		City:   "Sydney, Australia",
-		LatLng: s2.LatLngFromDegrees(33.8688, 151.2093),
+		LatLng: s2.LatLngFromDegrees(-33.8688, 151.2093),
 	},
 	{
 		Name:   "SGP1",
@@ -107,7 +107,6 @@ func (m ovhPriceMap) FindByCode(code string) float64 {
 	if !ok {
 		// TODO: handle differently
 		fmt.Printf("failed to find price code in map %q %+v\n", code, m)
-		panic(fmt.Sprintf("failed to find price code in map \"%s\"", code))
 		return 0
 	}
 

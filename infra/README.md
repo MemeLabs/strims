@@ -5,16 +5,29 @@ DB:
 FlakeStartTime: 2019-09-14T00:00:00Z
 Providers:
   digitalocean:
-    driver: DigitalOcean
+    Driver: DigitalOcean
     Token: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
   scaleway:
-    driver: Scaleway
+    Driver: Scaleway
     OrganizationID: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
     AccessKey: xxxxxxxxxxxxxxxxxxxx
     SecretKey: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
   hetzner:
-    driver: Hetzner
+    Driver: Hetzner
     Token: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  ovh:
+    Driver: OVH
+    AppKey: xxxxxxxxxxxxxxxx
+    AppSecret: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ConsumerKey: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ProjectID: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    Subsidiary: xx
+  dreamhost:
+    Driver: DreamHost
+    TenantID: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    TenantName: xxxxxxxxxx
+    Username: xxxxxxxx
+    Password: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 SSH:
   IdentityFile: /root/.ssh/id_ecdsa_example
 ```

@@ -191,9 +191,7 @@ func (d *DigitalOceanDriver) Create(ctx context.Context, req *CreateRequest) (*N
 			Slug: digitalOceanOS,
 		},
 		SSHKeys: []godo.DropletCreateSSHKey{
-			godo.DropletCreateSSHKey{
-				Fingerprint: key.Fingerprint,
-			},
+			{Fingerprint: key.Fingerprint},
 		},
 		IPv6: true,
 	})

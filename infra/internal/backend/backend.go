@@ -168,15 +168,6 @@ func New(cfg Config) (*Backend, error) {
 		}
 	}
 
-	/*
-		if cfg.Providers.Dreamhost != nil {
-			drivers["dreamhost"], err = node.NewDreamhostDriver(cfg.Providers.Dreamhost.IdentityEndpoint, cfg.Providers.Dreamhost.TokenID, cfg.Providers.Dreamhost.TenantID)
-			if err != nil {
-				return nil, err
-			}
-		}
-	*/
-
 	return &Backend{
 		Log:             log,
 		DB:              db,
