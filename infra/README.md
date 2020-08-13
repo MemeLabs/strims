@@ -28,6 +28,11 @@ Providers:
     TenantName: xxxxxxxxxx
     Username: xxxxxxxx
     Password: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+  heficed:
+    Driver: Heficed
+    ClientID: xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+    ClientSecret: xxxxxxxxxxxx
+    TenantID: xxxxxx-xxxx-xxxx-xxxx-xxxxxxxxx
 SSH:
   IdentityFile: /root/.ssh/id_ecdsa_example
 ```

@@ -24,6 +24,7 @@ require (
 	github.com/gobwas/ws v1.0.3 // indirect
 	github.com/golang/geo v0.0.0-20200319012246-673a6f80352d
 	github.com/golang/protobuf v1.4.2
+	github.com/google/go-cmp v0.5.1 // indirect
 	github.com/gophercloud/gophercloud v0.12.0
 	github.com/gorilla/mux v1.7.4
 	github.com/gorilla/websocket v1.4.2
@@ -32,6 +33,7 @@ require (
 	github.com/kr/text v0.2.0 // indirect
 	github.com/lucas-clemente/quic-go v0.17.3 // indirect
 	github.com/marten-seemann/qtls v0.10.0 // indirect
+	github.com/mattn/go-runewidth v0.0.9 // indirect
 	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/mitchellh/mapstructure v1.3.3
 	github.com/nareix/joy5 v0.0.0-20200712071056-a55089207c88
@@ -64,8 +66,9 @@ require (
 	go.etcd.io/bbolt v1.3.5
 	go.uber.org/zap v1.15.0
 	golang.org/x/crypto v0.0.0-20200728195943-123391ffb6de
+	golang.org/x/oauth2 v0.0.0-20200107190931-bf48bf16ab8d
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
-	golang.org/x/sys v0.0.0-20200802091954-4b90ce9b60b3 // indirect
+	golang.org/x/sys v0.0.0-20200808120158-1030fc2bf1d9 // indirect
 	golang.org/x/text v0.3.3 // indirect
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
 	golang.org/x/tools v0.0.0-20200725200936-102e7d357031
@@ -74,7 +77,7 @@ require (
 	google.golang.org/protobuf v1.25.0
 	gopkg.in/check.v1 v1.0.0-20200227125254-8fa46927fb4f // indirect
 	gopkg.in/yaml.v2 v2.3.0
-	honnef.co/go/tools v0.0.1-2020.1.3 // indirect
+	honnef.co/go/tools v0.0.1-2020.1.4 // indirect
 	lukechampine.com/uint128 v1.0.0
 	mvdan.cc/xurls/v2 v2.2.0
 )

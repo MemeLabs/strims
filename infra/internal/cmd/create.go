@@ -35,8 +35,8 @@ var createCmd = &cobra.Command{
 
 		n, err := d.Create(cmd.Context(), &node.CreateRequest{
 			Name:   "test",
-			Region: "RegionOne",
-			SKU:    "100",
+			Region: "uk-lon1",
+			SKU:    "1210",
 			SSHKey: backend.SSHPublicKey(),
 		})
 		if err != nil {
