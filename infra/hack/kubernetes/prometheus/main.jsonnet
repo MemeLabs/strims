@@ -37,6 +37,41 @@ local kp =
       ],
     },
 
+    local persistentVolume(name, capacity, path) = {
+      apiVersion: 'v1',
+      kind: 'PersistentVolume',
+      metadata: {
+        name: name,
+        namespace: 'monitoring'
+      },
+      spec: {
+        capacity: {
+          storage: capacity
+        },
+        accessModes: ['ReadWriteOnce'],
+        persistentVolumeReclaimPolicy: 'Retain',
+        storageClassName: 'local-storage',
+        'local': {
+          path: path
+        },
+        nodeAffinity: {
+          required: {
+            nodeSelectorTerms: [
+              {
+                matchExpressions: [
+                  {
+                    key: 'kubernetes.io/hostname',
+                    operator: 'In',
+                    values: ['controller']
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      }
+    },
+
     alertmanager+:: {
       alertmanager+: {
         spec+: withTolerations() +
@@ -65,6 +100,12 @@ local kp =
           },
         },
       },
+
+      pv: persistentVolume(
+        'grafana-storage',
+        '5Gi',
+        '/mnt/disks/grafana',
+      ),
     },
 
     prometheus+:: {
@@ -85,6 +126,27 @@ local kp =
               pvc.mixin.spec.withStorageClassName('local-storage'),
           },
         },
+      },
+
+      pv: persistentVolume(
+        'prometheus-storage',
+        '100Gi',
+        '/mnt/disks/prometheus',
+      ),
+
+      clusterRole+: {
+        rules+:
+          local role = k.rbac.v1.role;
+          local policyRule = role.rulesType;
+          local rule = policyRule.new() +
+                        policyRule.withApiGroups(['']) +
+                        policyRule.withResources([
+                          'services',
+                          'endpoints',
+                          'pods',
+                        ]) +
+                        policyRule.withVerbs(['get', 'list', 'watch']);
+          [rule]
       },
     },
   };

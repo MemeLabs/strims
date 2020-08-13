@@ -18,6 +18,7 @@ import (
 var opt = exporterOptions{
 	Regions: []string{"sfo", "tor", "nyc", "lon", "ams", "fra", "blr", "sgp"},
 }
+var metricsAddr string
 
 func init() {
 	flag.StringVar(&opt.Namespace, "namespace", "", "prometheus namespace")
@@ -27,6 +28,8 @@ func init() {
 	flag.UintVar(&opt.StatsPort, "port", 8080, "haproxy stats port")
 	flag.IntVar(&opt.MaxRegionSize, "max-region-size", 50, "max hosts per region")
 	flag.StringVar(&opt.ServerName, "server-name", "external", "haproxy server name")
+	flag.IntVar(&opt.RequestTimeoutSeconds, "request-timeout-seconds", 10, "http request timeout in seconds")
+	flag.StringVar(&metricsAddr, "metrics-addr", ":2112", "metrics server listen address")
 }
 
 func main() {
@@ -42,18 +45,19 @@ func main() {
 
 	prometheus.MustRegister(e)
 	http.Handle("/metrics", promhttp.Handler())
-	http.ListenAndServe(":2112", nil)
+	http.ListenAndServe(metricsAddr, nil)
 }
 
 type exporterOptions struct {
-	Regions       []string
-	Namespace     string
-	Username      string
-	Password      string
-	Domain        string
-	StatsPort     uint
-	MaxRegionSize int
-	ServerName    string
+	Regions               []string
+	Namespace             string
+	Username              string
+	Password              string
+	Domain                string
+	StatsPort             uint
+	MaxRegionSize         int
+	ServerName            string
+	RequestTimeoutSeconds int
 }
 
 func newExporter(logger *zap.Logger, opt exporterOptions) *exporter {
@@ -73,9 +77,14 @@ func newExporter(logger *zap.Logger, opt exporterOptions) *exporter {
 			Namespace: opt.Namespace,
 			Name:      "total_errors",
 		}),
-		sessionsTotal: newMetric(opt.Namespace, "sessions_total", "Total number of sessions.", prometheus.CounterValue, nil),
-		bytesInTotal:  newMetric(opt.Namespace, "bytes_in_total", "Current total of incoming bytes.", prometheus.CounterValue, nil),
-		bytesOutTotal: newMetric(opt.Namespace, "bytes_out_total", "Current total of outgoing bytes.", prometheus.CounterValue, nil),
+		metrics: map[int]metricInfo{
+			7: newMetric(opt.Namespace, "sessions_total", "Total number of sessions.", prometheus.CounterValue, nil),
+			8: newMetric(opt.Namespace, "bytes_in_total", "Current total of incoming bytes.", prometheus.CounterValue, nil),
+			9: newMetric(opt.Namespace, "bytes_out_total", "Current total of outgoing bytes.", prometheus.CounterValue, nil),
+		},
+		client: http.Client{
+			Timeout: time.Duration(opt.RequestTimeoutSeconds) * time.Second,
+		},
 	}
 }
 
@@ -91,11 +100,11 @@ type exporter struct {
 	maxRegionSize int
 	serverName    string
 
-	totalScrapes  prometheus.Counter
-	totalErrors   prometheus.Counter
-	sessionsTotal metricInfo
-	bytesInTotal  metricInfo
-	bytesOutTotal metricInfo
+	totalScrapes prometheus.Counter
+	totalErrors  prometheus.Counter
+	metrics      map[int]metricInfo
+
+	client http.Client
 }
 
 var metricLabels = []string{"region", "index"}
@@ -135,7 +144,7 @@ func (e *exporter) scrapeRegionSize(region string) {
 	var size int
 	for i := 1; i <= e.maxRegionSize; i++ {
 		size = i
-		res, err := http.Head(e.formatURL(region, i))
+		res, err := e.client.Head(e.formatURL(region, i))
 		if err != nil || res.StatusCode != http.StatusOK {
 			break
 		}
@@ -150,9 +159,9 @@ func (e *exporter) scrapeRegionSize(region string) {
 func (e *exporter) Describe(ch chan<- *prometheus.Desc) {
 	ch <- e.totalScrapes.Desc()
 	ch <- e.totalErrors.Desc()
-	ch <- e.bytesInTotal.Desc
-	ch <- e.bytesOutTotal.Desc
-	ch <- e.sessionsTotal.Desc
+	for _, m := range e.metrics {
+		ch <- m.Desc
+	}
 }
 
 // Collect implements prometheus.Collector.
@@ -193,7 +202,7 @@ func (e *exporter) Collect(ch chan<- prometheus.Metric) {
 }
 
 func (e *exporter) scrape(ch chan<- prometheus.Metric, region string, index int) error {
-	res, err := http.Get(e.formatURL(region, index))
+	res, err := e.client.Get(e.formatURL(region, index))
 	if err != nil {
 		return err
 	}
@@ -210,23 +219,13 @@ func (e *exporter) scrape(ch chan<- prometheus.Metric, region string, index int)
 			continue
 		}
 		if records[i][0] == e.serverName {
-			sessionsTotal, err := strconv.ParseFloat(records[i][7], 64)
-			if err != nil {
-				return err
+			for c, m := range e.metrics {
+				value, err := strconv.ParseFloat(records[i][c], 64)
+				if err != nil {
+					return err
+				}
+				ch <- prometheus.MustNewConstMetric(m.Desc, m.Type, value, labels...)
 			}
-			bytesInTotal, err := strconv.ParseFloat(records[i][8], 64)
-			if err != nil {
-				return err
-			}
-			bytesOutTotal, err := strconv.ParseFloat(records[i][9], 64)
-			if err != nil {
-				return err
-			}
-
-			ch <- prometheus.MustNewConstMetric(e.sessionsTotal.Desc, e.sessionsTotal.Type, sessionsTotal, labels...)
-			ch <- prometheus.MustNewConstMetric(e.bytesInTotal.Desc, e.bytesInTotal.Type, bytesInTotal, labels...)
-			ch <- prometheus.MustNewConstMetric(e.bytesOutTotal.Desc, e.bytesOutTotal.Type, bytesOutTotal, labels...)
-
 			return nil
 		}
 	}

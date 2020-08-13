@@ -15,5 +15,4 @@ jb init
 ./build.sh
 kubectl create -f manifests/setup
 kubectl create -f manifests
-kubectl create -f ../monitoring-storage.yaml
 ```
