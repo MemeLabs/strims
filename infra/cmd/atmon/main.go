@@ -15,6 +15,12 @@ import (
 	"go.uber.org/zap"
 )
 
+// build args
+var (
+	GitSHA    string
+	BuildDate string
+)
+
 var opt = exporterOptions{
 	Regions: []string{"sfo", "tor", "nyc", "lon", "ams", "fra", "blr", "sgp"},
 }
@@ -28,7 +34,7 @@ func init() {
 	flag.UintVar(&opt.StatsPort, "port", 8080, "haproxy stats port")
 	flag.IntVar(&opt.MaxRegionSize, "max-region-size", 50, "max hosts per region")
 	flag.StringVar(&opt.ServerName, "server-name", "external", "haproxy server name")
-	flag.IntVar(&opt.RequestTimeoutSeconds, "request-timeout-seconds", 10, "http request timeout in seconds")
+	flag.DurationVar(&opt.ScrapeTimeout, "scrape-timeout", time.Second, "http request timeout duration")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":2112", "metrics server listen address")
 }
 
@@ -40,6 +46,8 @@ func main() {
 		panic(err)
 	}
 
+	logger.Info("starting atmon", zap.String("gitSHA", GitSHA), zap.String("buildDate", BuildDate))
+
 	e := newExporter(logger, opt)
 	go e.ScrapeSizes()
 
@@ -49,15 +57,15 @@ func main() {
 }
 
 type exporterOptions struct {
-	Regions               []string
-	Namespace             string
-	Username              string
-	Password              string
-	Domain                string
-	StatsPort             uint
-	MaxRegionSize         int
-	ServerName            string
-	RequestTimeoutSeconds int
+	Regions       []string
+	Namespace     string
+	Username      string
+	Password      string
+	Domain        string
+	StatsPort     uint
+	MaxRegionSize int
+	ServerName    string
+	ScrapeTimeout time.Duration
 }
 
 func newExporter(logger *zap.Logger, opt exporterOptions) *exporter {
@@ -83,7 +91,7 @@ func newExporter(logger *zap.Logger, opt exporterOptions) *exporter {
 			9: newMetric(opt.Namespace, "bytes_out_total", "Current total of outgoing bytes.", prometheus.CounterValue, nil),
 		},
 		client: http.Client{
-			Timeout: time.Duration(opt.RequestTimeoutSeconds) * time.Second,
+			Timeout: opt.ScrapeTimeout,
 		},
 	}
 }

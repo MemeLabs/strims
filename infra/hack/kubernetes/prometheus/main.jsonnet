@@ -72,27 +72,37 @@ local kp =
       }
     },
 
-    alertmanager+:: {
-      alertmanager+: {
-        spec+: withTolerations() +
-        {
-          replicas: 1,
-          nodeSelector: {
-            'kubernetes.io/hostname': 'controller',
+    local specNodeSelector = withTolerations() +
+    {
+      nodeSelector: {
+        'kubernetes.io/hostname': 'controller',
+      },
+    },
+    local deploymentNodeSelector = {
+      deployment+: {
+        spec+: {
+          template+: {
+            spec+: specNodeSelector
           },
         },
       },
     },
 
-    grafana+:: {
+    alertmanager+:: {
+      alertmanager+: {
+        spec+: specNodeSelector +
+        {
+          replicas: 1,
+        },
+      },
+    },
+
+    grafana+:: deploymentNodeSelector +
+    {
       deployment+: {
         spec+: {
           template+: {
-            spec+: withTolerations() +
-            {
-              nodeSelector: {
-                'kubernetes.io/hostname': 'controller',
-              },
+            spec+: {
               securityContext+: {
                 fsGroup: 2000,
               },
@@ -110,12 +120,9 @@ local kp =
 
     prometheus+:: {
       prometheus+: {
-        spec+: withTolerations() +
+        spec+: specNodeSelector +
         {
           replicas: 1,
-          nodeSelector: {
-            'kubernetes.io/hostname': 'controller',
-          },
           retention: '30d',
           storage: {
             volumeClaimTemplate:
@@ -149,6 +156,10 @@ local kp =
           [rule]
       },
     },
+
+    prometheusAdapter+:: deploymentNodeSelector,
+    kubeStateMetrics+:: deploymentNodeSelector,
+    prometheusOperator+:: deploymentNodeSelector,
   };
 
 { ['setup/0namespace-' + name]: kp.kubePrometheus[name] for name in std.objectFields(kp.kubePrometheus) } +

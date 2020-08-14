@@ -32,6 +32,7 @@ spec:
         - '--username=$(username)'
         - '--password=$(password)'
         - '--domain=angelthump.com'
+        - '--scrape-timeout=500ms'
         env:
         - name: username
           valueFrom:
@@ -58,3 +59,4 @@ spec:
       app: atmon
   podMetricsEndpoints:
   - port: metrics
+    scrapeTimeout: 1s

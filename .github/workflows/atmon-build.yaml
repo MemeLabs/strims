@@ -22,6 +22,12 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
       run: docker login https://docker.pkg.github.com -u ${username} -p ${password}
     - name: Build image
-      run: docker build -f infra/cmd/atmon/Dockerfile . -t docker.pkg.github.com/slugalisk/go-ppspp/atmon:latest
+      run: |
+        docker build \
+          -t docker.pkg.github.com/slugalisk/go-ppspp/atmon:latest \
+          --build-arg "GIT_SHA=$GITHUB_SHA" \
+          --build-arg "BUILD_DATE=$(date)" \
+          -f infra/cmd/atmon/Dockerfile .
+
     - name: Publish image
       run: docker push docker.pkg.github.com/slugalisk/go-ppspp/atmon:latest
