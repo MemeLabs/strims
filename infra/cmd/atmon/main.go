@@ -1,10 +1,12 @@
 package main
 
 import (
+	"context"
 	"encoding/csv"
 	"errors"
 	"flag"
 	"fmt"
+	"net"
 	"net/http"
 	"strconv"
 	"sync"
@@ -34,6 +36,7 @@ func init() {
 	flag.UintVar(&opt.StatsPort, "port", 8080, "haproxy stats port")
 	flag.IntVar(&opt.MaxRegionSize, "max-region-size", 50, "max hosts per region")
 	flag.StringVar(&opt.ServerName, "server-name", "external", "haproxy server name")
+	flag.StringVar(&opt.NameServer, "name-server", "", "dns name server")
 	flag.DurationVar(&opt.ScrapeTimeout, "scrape-timeout", time.Second, "http request timeout duration")
 	flag.StringVar(&metricsAddr, "metrics-addr", ":2112", "metrics server listen address")
 }
@@ -65,6 +68,7 @@ type exporterOptions struct {
 	StatsPort     uint
 	MaxRegionSize int
 	ServerName    string
+	NameServer    string
 	ScrapeTimeout time.Duration
 }
 
@@ -73,6 +77,7 @@ func newExporter(logger *zap.Logger, opt exporterOptions) *exporter {
 		logger:        logger,
 		regionSizes:   map[string]int{},
 		regions:       opt.Regions,
+		domainFormat:  fmt.Sprintf("%%s%%d.%s", opt.Domain),
 		urlFormat:     fmt.Sprintf("https://%s:%s@%%s%%d.%s:%d/stats;csv;norefresh", opt.Username, opt.Password, opt.Domain, opt.StatsPort),
 		maxRegionSize: opt.MaxRegionSize,
 		serverName:    opt.ServerName,
@@ -90,7 +95,14 @@ func newExporter(logger *zap.Logger, opt exporterOptions) *exporter {
 			8: newMetric(opt.Namespace, "bytes_in_total", "Current total of incoming bytes.", prometheus.CounterValue, nil),
 			9: newMetric(opt.Namespace, "bytes_out_total", "Current total of outgoing bytes.", prometheus.CounterValue, nil),
 		},
-		client: http.Client{
+		dnsResolver: net.Resolver{
+			PreferGo: true,
+			Dial: func(ctx context.Context, network, address string) (net.Conn, error) {
+				d := net.Dialer{}
+				return d.DialContext(ctx, "udp", net.JoinHostPort(opt.NameServer, "53"))
+			},
+		},
+		httpClient: http.Client{
 			Timeout: opt.ScrapeTimeout,
 		},
 	}
@@ -104,6 +116,7 @@ type exporter struct {
 	regionSizes   map[string]int
 
 	regions       []string
+	domainFormat  string
 	urlFormat     string
 	maxRegionSize int
 	serverName    string
@@ -112,7 +125,8 @@ type exporter struct {
 	totalErrors  prometheus.Counter
 	metrics      map[int]metricInfo
 
-	client http.Client
+	dnsResolver net.Resolver
+	httpClient  http.Client
 }
 
 var metricLabels = []string{"region", "index"}
@@ -144,16 +158,13 @@ func (e *exporter) ScrapeSizes() {
 	}
 }
 
-func (e *exporter) formatURL(region string, index int) string {
-	return fmt.Sprintf(e.urlFormat, region, index)
-}
-
 func (e *exporter) scrapeRegionSize(region string) {
 	var size int
 	for i := 1; i <= e.maxRegionSize; i++ {
 		size = i
-		res, err := e.client.Head(e.formatURL(region, i))
-		if err != nil || res.StatusCode != http.StatusOK {
+		domain := fmt.Sprintf(e.domainFormat, region, i)
+		ips, err := e.dnsResolver.LookupIPAddr(context.Background(), domain)
+		if err != nil || len(ips) == 0 {
 			break
 		}
 	}
@@ -210,7 +221,7 @@ func (e *exporter) Collect(ch chan<- prometheus.Metric) {
 }
 
 func (e *exporter) scrape(ch chan<- prometheus.Metric, region string, index int) error {
-	res, err := e.client.Get(e.formatURL(region, index))
+	res, err := e.httpClient.Get(fmt.Sprintf(e.urlFormat, region, index))
 	if err != nil {
 		return err
 	}
