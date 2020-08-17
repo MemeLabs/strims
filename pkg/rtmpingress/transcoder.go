@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
-const transcoderAddr = "localhost:0"
+const transcoderAddr = "127.0.0.1:0"
 
 func NewTranscoder(logger *zap.Logger) *Transcoder {
 	return &Transcoder{
@@ -57,6 +57,8 @@ func (h *Transcoder) listen() (err error) {
 
 func (h *Transcoder) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	// noop
+	// defer r.Body.Close()
+	// io.Copy(ioutil.Discard, r.Body)
 }
 
 func (h *Transcoder) handleInit(w http.ResponseWriter, r *http.Request) {
@@ -64,6 +66,7 @@ func (h *Transcoder) handleInit(w http.ResponseWriter, r *http.Request) {
 	twi, ok := h.writers.Load(transcoderKey{params["key"], params["variant"]})
 	if !ok {
 		http.NotFound(w, r)
+		h.logger.Debug("init segment received for unknown stream")
 		return
 	}
 
@@ -75,12 +78,15 @@ func (h *Transcoder) handleInit(w http.ResponseWriter, r *http.Request) {
 	b, err := ioutil.ReadAll(r.Body)
 	if err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
+		h.logger.Debug("error reading init segment", zap.Error(err))
 		return
 	}
 
 	tw.init = make([]byte, len(b)+2)
 	binary.BigEndian.PutUint16(tw.init, uint16(len(b)))
 	copy(tw.init[2:], b)
+
+	h.logger.Debug("read init segment", zap.Int("length", len(b)))
 }
 
 func (h *Transcoder) handleSegment(w http.ResponseWriter, r *http.Request) {
@@ -153,6 +159,9 @@ func (h *Transcoder) Transcode(srcURI, key, variant string, w WriteFlushCloser) 
 	cmd := exec.Command(bin, buildArgs(srcURI, h.lis.Addr().String(), key, variant)...)
 	defer h.close(k, cmd)
 
+	h.logger.Debug("starting ffmpeg", zap.Stringer("cmd", cmd))
+	// relayStdio(cmd)
+
 	if err := cmd.Run(); err != nil {
 		return err
 	}
@@ -223,6 +232,9 @@ func buildArgs(srcURI, addr, key, variant string) []string {
 		"-hls_init_time", "1",
 		"-hls_time", "1",
 		"-hls_segment_type", "fmp4",
+		// TODO: support legacy ffmpeg?
+		// "-hls_fmp4_init_filename", fmt.Sprintf("http://%s/%s/%s/init.mp4", addr, key, variant),
+		"-hls_fmp4_init_filename", "init.mp4",
 		"-hls_segment_filename", fmt.Sprintf("http://%s/%s/%s/%%d.m4s", addr, key, variant),
 		"-hls_flags", "+program_date_time+append_list+omit_endlist",
 		"-method", "POST",

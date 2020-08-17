@@ -22,10 +22,10 @@ var directorySalt = []byte("directory")
 // Directory ...
 type Directory interface {
 	Close()
-	Publish(listing *pb.DirectoryListing) error
-	Unpublish(key []byte) error
-	Join(listingID uint64) error
-	Part(listingID uint64) error
+	Publish(ctx context.Context, listing *pb.DirectoryListing) error
+	Unpublish(ctx context.Context, key []byte) error
+	Join(ctx context.Context, listingID uint64) error
+	Part(ctx context.Context, listingID uint64) error
 	Events() <-chan *pb.DirectoryServerEvent
 }
 
@@ -105,31 +105,31 @@ func (s *DirectoryServer) Close() {
 }
 
 // Publish ...
-func (s *DirectoryServer) Publish(listing *pb.DirectoryListing) error {
+func (s *DirectoryServer) Publish(ctx context.Context, listing *pb.DirectoryListing) error {
 	s.directoryLock.RLock()
 	defer s.directoryLock.RUnlock()
-	return s.directory.Publish(listing)
+	return s.directory.Publish(ctx, listing)
 }
 
 // Unpublish ...
-func (s *DirectoryServer) Unpublish(key []byte) error {
+func (s *DirectoryServer) Unpublish(ctx context.Context, key []byte) error {
 	s.directoryLock.RLock()
 	defer s.directoryLock.RUnlock()
-	return s.directory.Unpublish(key)
+	return s.directory.Unpublish(ctx, key)
 }
 
 // Join ...
-func (s *DirectoryServer) Join(listingID uint64) error {
+func (s *DirectoryServer) Join(ctx context.Context, listingID uint64) error {
 	s.directoryLock.RLock()
 	defer s.directoryLock.RUnlock()
-	return s.directory.Join(listingID)
+	return s.directory.Join(ctx, listingID)
 }
 
 // Part ...
-func (s *DirectoryServer) Part(listingID uint64) error {
+func (s *DirectoryServer) Part(ctx context.Context, listingID uint64) error {
 	s.directoryLock.RLock()
 	defer s.directoryLock.RUnlock()
-	return s.directory.Part(listingID)
+	return s.directory.Part(ctx, listingID)
 }
 
 // Events ...
@@ -177,9 +177,9 @@ func (s *directoryServer) Events() <-chan *pb.DirectoryServerEvent {
 	return s.events
 }
 
-func (s *directoryServer) send(event *pb.DirectoryServerEvent) error {
+func (s *directoryServer) send(ctx context.Context, event *pb.DirectoryServerEvent) error {
 	s.events <- event
-	return sendProto(s.ps, event)
+	return sendProto(ctx, s.ps, event)
 }
 
 func (s *directoryServer) transformDirectoryMessages(ps *PubSubServer) {
@@ -196,25 +196,26 @@ func (s *directoryServer) transformDirectoryMessages(ps *PubSubServer) {
 				continue
 			}
 
+			ctx := context.Background()
 			switch b := e.Body.(type) {
 			case *pb.DirectoryClientEvent_Publish_:
 				if verifyPublish(b.Publish) {
-					if err := s.Publish(b.Publish.Listing); err != nil {
+					if err := s.Publish(ctx, b.Publish.Listing); err != nil {
 						s.logger.Debug("handling publish failed", zap.Error(err))
 					}
 				}
 			case *pb.DirectoryClientEvent_Unpublish_:
 				if verifyUnpublish(b.Unpublish) {
-					if err := s.Unpublish(b.Unpublish.Key); err != nil {
+					if err := s.Unpublish(ctx, b.Unpublish.Key); err != nil {
 						s.logger.Debug("handling unpublish failed", zap.Error(err))
 					}
 				}
 			case *pb.DirectoryClientEvent_Join_:
-				if err := s.Join(b.Join.ListingId); err != nil {
+				if err := s.Join(ctx, b.Join.ListingId); err != nil {
 					s.logger.Debug("handling join failed", zap.Error(err))
 				}
 			case *pb.DirectoryClientEvent_Part_:
-				if err := s.Part(b.Part.ListingId); err != nil {
+				if err := s.Part(ctx, b.Part.ListingId); err != nil {
 					s.logger.Debug("handling part failed", zap.Error(err))
 				}
 			}
@@ -231,7 +232,7 @@ func verifyUnpublish(publish *pb.DirectoryClientEvent_Unpublish) bool {
 }
 
 func (s *directoryServer) ping(t time.Time) error {
-	return s.send(&pb.DirectoryServerEvent{
+	return s.send(context.Background(), &pb.DirectoryServerEvent{
 		Body: &pb.DirectoryServerEvent_Ping_{
 			Ping: &pb.DirectoryServerEvent_Ping{
 				Time: t.Unix(),
@@ -241,7 +242,7 @@ func (s *directoryServer) ping(t time.Time) error {
 }
 
 // Publish ...
-func (s *directoryServer) Publish(listing *pb.DirectoryListing) error {
+func (s *directoryServer) Publish(ctx context.Context, listing *pb.DirectoryListing) error {
 	// TODO: verify signature...
 
 	s.listingsLock.Lock()
@@ -257,7 +258,7 @@ func (s *directoryServer) Publish(listing *pb.DirectoryListing) error {
 
 	s.listings.Insert(listing.Key, listing)
 
-	return s.send(&pb.DirectoryServerEvent{
+	return s.send(ctx, &pb.DirectoryServerEvent{
 		Body: &pb.DirectoryServerEvent_Publish_{
 			Publish: &pb.DirectoryServerEvent_Publish{
 				Listing: listing,
@@ -267,7 +268,7 @@ func (s *directoryServer) Publish(listing *pb.DirectoryListing) error {
 }
 
 // Unpublish ...
-func (s *directoryServer) Unpublish(key []byte) error {
+func (s *directoryServer) Unpublish(ctx context.Context, key []byte) error {
 	// TODO: signature
 
 	s.listingsLock.Lock()
@@ -278,7 +279,7 @@ func (s *directoryServer) Unpublish(key []byte) error {
 		return nil
 	}
 
-	return s.send(&pb.DirectoryServerEvent{
+	return s.send(ctx, &pb.DirectoryServerEvent{
 		Body: &pb.DirectoryServerEvent_Unpublish_{
 			Unpublish: &pb.DirectoryServerEvent_Unpublish{
 				ListingId: listing.Id,
@@ -288,12 +289,12 @@ func (s *directoryServer) Unpublish(key []byte) error {
 }
 
 // Join ...
-func (s *directoryServer) Join(listingID uint64) error {
+func (s *directoryServer) Join(ctx context.Context, listingID uint64) error {
 	return nil
 }
 
 // Part ...
-func (s *directoryServer) Part(listingID uint64) error {
+func (s *directoryServer) Part(ctx context.Context, listingID uint64) error {
 	return nil
 }
 
@@ -365,8 +366,8 @@ func (c *DirectoryClient) Close() {
 }
 
 // Publish ...
-func (c *DirectoryClient) Publish(listing *pb.DirectoryListing) error {
-	return sendProto(c.ps, &pb.DirectoryClientEvent{
+func (c *DirectoryClient) Publish(ctx context.Context, listing *pb.DirectoryListing) error {
+	return sendProto(ctx, c.ps, &pb.DirectoryClientEvent{
 		Body: &pb.DirectoryClientEvent_Publish_{
 			Publish: &pb.DirectoryClientEvent_Publish{
 				Listing: listing,
@@ -376,8 +377,8 @@ func (c *DirectoryClient) Publish(listing *pb.DirectoryListing) error {
 }
 
 // Unpublish ...
-func (c *DirectoryClient) Unpublish(key []byte) error {
-	return sendProto(c.ps, &pb.DirectoryClientEvent{
+func (c *DirectoryClient) Unpublish(ctx context.Context, key []byte) error {
+	return sendProto(ctx, c.ps, &pb.DirectoryClientEvent{
 		Body: &pb.DirectoryClientEvent_Unpublish_{
 			Unpublish: &pb.DirectoryClientEvent_Unpublish{
 				Key: key,
@@ -387,8 +388,8 @@ func (c *DirectoryClient) Unpublish(key []byte) error {
 }
 
 // Join ...
-func (c *DirectoryClient) Join(listingID uint64) error {
-	return sendProto(c.ps, &pb.DirectoryClientEvent{
+func (c *DirectoryClient) Join(ctx context.Context, listingID uint64) error {
+	return sendProto(ctx, c.ps, &pb.DirectoryClientEvent{
 		Body: &pb.DirectoryClientEvent_Join_{
 			Join: &pb.DirectoryClientEvent_Join{
 				ListingId: listingID,
@@ -398,8 +399,8 @@ func (c *DirectoryClient) Join(listingID uint64) error {
 }
 
 // Part ...
-func (c *DirectoryClient) Part(listingID uint64) error {
-	return sendProto(c.ps, &pb.DirectoryClientEvent{
+func (c *DirectoryClient) Part(ctx context.Context, listingID uint64) error {
+	return sendProto(ctx, c.ps, &pb.DirectoryClientEvent{
 		Body: &pb.DirectoryClientEvent_Part_{
 			Part: &pb.DirectoryClientEvent_Part{
 				ListingId: listingID,
@@ -424,10 +425,10 @@ func (c *DirectoryClient) readDirectoryEvents(ps *PubSubClient) {
 }
 
 type pubSub interface {
-	Send(key string, b []byte) error
+	Send(ctx context.Context, key string, b []byte) error
 }
 
-func sendProto(ps pubSub, m proto.Message) error {
+func sendProto(ctx context.Context, ps pubSub, m proto.Message) error {
 	b := pool.Get(uint16(proto.Size(m)))
 	defer pool.Put(b)
 
@@ -436,5 +437,5 @@ func sendProto(ps pubSub, m proto.Message) error {
 		return err
 	}
 
-	return ps.Send("", *b)
+	return ps.Send(ctx, "", *b)
 }

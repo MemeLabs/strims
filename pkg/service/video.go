@@ -192,7 +192,7 @@ func (t *VideoSwarm) PublishSwarm(svc *NetworkServices) error {
 		Title:    "test",
 		Key:      t.key,
 	}
-	if err := svc.Directory.Publish(listing); err != nil {
+	if err := svc.Directory.Publish(t.ctx, listing); err != nil {
 		return err
 	}
 

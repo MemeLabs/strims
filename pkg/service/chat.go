@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"sync"
 	"time"
 
@@ -78,7 +79,7 @@ func (s *ChatServer) transformChatMessages(ps *PubSubServer) {
 			continue
 		}
 
-		if err := ps.Send("", b); err != nil {
+		if err := ps.Send(context.TODO(), "", b); err != nil {
 			s.logger.Error("failed to write to swarm", zap.Error(err))
 		}
 	}
@@ -134,7 +135,7 @@ func (c *ChatClient) Send(msg *pb.ChatClientEvent_Message) error {
 		return err
 	}
 
-	return c.ps.Send("", b)
+	return c.ps.Send(context.TODO(), "", b)
 }
 
 // Events ...

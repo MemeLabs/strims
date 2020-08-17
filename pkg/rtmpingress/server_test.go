@@ -7,14 +7,12 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"os"
 	"os/exec"
 	"path"
 	"testing"
 	"time"
 
-	"github.com/nareix/joy5/format/rtmp"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -47,7 +45,7 @@ func TestServerTranscodesMultipleStreams(t *testing.T) {
 	z := NewTranscoder(logger)
 	rtmp := Server{
 		Addr: rtmpServerAddr,
-		HandleStream: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) {
+		HandleStream: func(a *StreamAddr, c *Conn) {
 			for _, tc := range tcs {
 				go func(variant string, tw *tw) {
 					if err := z.Transcode(a.URI, a.Key, variant, tw); err != nil {
@@ -56,7 +54,7 @@ func TestServerTranscodesMultipleStreams(t *testing.T) {
 				}(tc.variant, tc.tw)
 			}
 		},
-		CheckOrigin: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) bool {
+		CheckOrigin: func(a *StreamAddr, c *Conn) bool {
 			return true
 		},
 	}
@@ -96,14 +94,14 @@ func TestServerClosesStreamOnCheckOriginReject(t *testing.T) {
 	z := NewTranscoder(logger)
 	rtmp := Server{
 		Addr: rtmpServerAddr,
-		HandleStream: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) {
+		HandleStream: func(a *StreamAddr, c *Conn) {
 			go func() {
 				if err := z.Transcode(a.URI, a.Key, "source", newTw()); err != nil {
 					log.Println(err)
 				}
 			}()
 		},
-		CheckOrigin: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) bool {
+		CheckOrigin: func(a *StreamAddr, c *Conn) bool {
 			return false
 		},
 	}
@@ -132,7 +130,7 @@ func TestServerAcceptsMultipleStreams(t *testing.T) {
 	x := NewTranscoder(logger)
 	rtmp := Server{
 		Addr: rtmpServerAddr,
-		HandleStream: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) {
+		HandleStream: func(a *StreamAddr, c *Conn) {
 			handleCalled = true
 			z := newTw()
 			go func() {
@@ -142,7 +140,7 @@ func TestServerAcceptsMultipleStreams(t *testing.T) {
 			}()
 			tsfolders = append(tsfolders, z.path)
 		},
-		CheckOrigin: func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) bool {
+		CheckOrigin: func(a *StreamAddr, c *Conn) bool {
 			checkOriginCalled = true
 			return true
 		},

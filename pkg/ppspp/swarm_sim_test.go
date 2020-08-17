@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math/rand"
 	"os"
 	"strconv"
 	"strings"
@@ -81,6 +82,7 @@ func TestSwarmSim(t *testing.T) {
 	}
 
 	type client struct {
+		id        []byte
 		city      ppspptest.City
 		bandwidth *ppspptest.ConnThrottle
 		swarm     *Swarm
@@ -89,9 +91,12 @@ func TestSwarmSim(t *testing.T) {
 	}
 
 	newClient := func(p testPeer) *client {
+		clientID := make([]byte, 64)
+		rand.Read(clientID)
 		swarm, err := NewSwarm(id, options)
 		assert.NoError(t, err, "swarm constructor failed")
 		return &client{
+			id:        clientID,
 			city:      p.city,
 			bandwidth: ppspptest.NewConnThrottle(p.downloadRate, p.uploadRate),
 			swarm:     swarm,
@@ -125,8 +130,8 @@ func TestSwarmSim(t *testing.T) {
 
 	for i := 0; i < len(clients); i++ {
 		for j := i + 1; j < len(clients); j++ {
-			iPeer := NewPeer()
-			jPeer := NewPeer()
+			iPeer := NewPeer(clients[i].id)
+			jPeer := NewPeer(clients[j].id)
 
 			clients[i].scheduler.AddPeer(ctx, iPeer)
 			clients[j].scheduler.AddPeer(ctx, jPeer)
@@ -145,9 +150,9 @@ func TestSwarmSim(t *testing.T) {
 			clients[i].conns[j] = imConn
 			clients[j].conns[i] = jmConn
 
-			iChan, err := OpenChannel(iPeer, clients[i].swarm, imConn)
+			iChan, err := OpenChannel(logger, iPeer, clients[i].swarm, imConn)
 			assert.NoError(t, err, "channel open failed")
-			jChan, err := OpenChannel(jPeer, clients[j].swarm, jmConn)
+			jChan, err := OpenChannel(logger, jPeer, clients[j].swarm, jmConn)
 			assert.NoError(t, err, "channel open failed")
 
 			go ppspptest.ReadChannelConn(imConn, iChan)

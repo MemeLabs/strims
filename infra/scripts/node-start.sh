@@ -32,6 +32,7 @@ ufw allow out on wg0
 
 hostname $node_name
 echo "$node_name" > /etc/hostname
+# TODO: add /etc/hosts entries for 127.0.0.1 and ::1
 
 mkdir -p /etc/systemd/system/docker.service.d
 mkdir -p /etc/docker

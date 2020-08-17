@@ -3,6 +3,7 @@ package rtmpingress
 import (
 	"fmt"
 	"net"
+	"sync"
 	"time"
 
 	"github.com/nareix/joy5/format/rtmp"
@@ -21,8 +22,8 @@ type StreamAddr struct {
 // Server ...
 type Server struct {
 	Addr         string
-	CheckOrigin  func(a *StreamAddr, c *rtmp.Conn, nc net.Conn) bool
-	HandleStream func(a *StreamAddr, c *rtmp.Conn, nc net.Conn)
+	CheckOrigin  func(a *StreamAddr, c *Conn) bool
+	HandleStream func(a *StreamAddr, c *Conn)
 	Logger       *zap.Logger
 
 	streams  streams
@@ -46,13 +47,15 @@ func (s *Server) handleConn(c *rtmp.Conn, nc net.Conn) {
 		return
 	}
 
+	ic := NewConn(nc)
+	defer ic.Close()
+
 	a := &StreamAddr{
 		Key: k,
 		URI: fmt.Sprintf(rtmpURIPattern, s.Addr, k),
 	}
 
-	if s.CheckOrigin != nil && !s.CheckOrigin(a, c, nc) {
-		nc.Close()
+	if s.CheckOrigin != nil && !s.CheckOrigin(a, ic) {
 		return
 	}
 
@@ -60,7 +63,7 @@ func (s *Server) handleConn(c *rtmp.Conn, nc net.Conn) {
 	defer remove()
 
 	if c.Publishing {
-		go s.HandleStream(a, c, nc)
+		go s.HandleStream(a, ic)
 
 		stream.setPub(c)
 	} else {
@@ -95,4 +98,33 @@ func (s *Server) Listen() error {
 		}
 		go srv.HandleNetConn(nc)
 	}
+}
+
+// NewConn ...
+func NewConn(nc net.Conn) *Conn {
+	return &Conn{
+		Conn:  nc,
+		close: make(chan struct{}),
+	}
+}
+
+// Conn ...
+type Conn struct {
+	net.Conn
+	close     chan struct{}
+	closeOnce sync.Once
+}
+
+// Close ...
+func (c *Conn) Close() (err error) {
+	c.closeOnce.Do(func() {
+		err = c.Conn.Close()
+		close(c.close)
+	})
+	return
+}
+
+// CloseNotify ...
+func (c *Conn) CloseNotify() <-chan struct{} {
+	return c.close
 }

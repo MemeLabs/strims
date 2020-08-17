@@ -4,7 +4,6 @@ import (
 	"errors"
 	"flag"
 	"log"
-	"net"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -15,19 +14,47 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
-	"github.com/nareix/joy5/format/rtmp"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
 
-var addr = flag.String("addr", "0.0.0.0:8082", "bootstrap server listen address")
+var (
+	profileDir  string
+	addr        string
+	metricsAddr string
+	rtmpAddr    string
+	debugAddr   string
+)
+
+func init() {
+	homeDir, err := os.UserHomeDir()
+	if err != nil {
+		log.Fatalf("failed to locate home directory: %s", err)
+	}
+
+	flag.StringVar(&profileDir, "profile-dir", homeDir, "profile db location")
+	flag.StringVar(&addr, "addr", ":8082", "bootstrap server listen address")
+	flag.StringVar(&metricsAddr, "metrics-addr", ":1971", "metrics server listen address")
+	flag.StringVar(&rtmpAddr, "rtmp-addr", ":1935", "rtmp server listen address")
+	flag.StringVar(&debugAddr, "debug-addr", ":6060", "debug server listen address")
+}
 
 func main() {
 	flag.Parse()
 	log.SetFlags(log.LstdFlags | log.Lshortfile | log.Lmicroseconds)
 
-	go func() {
-		log.Println(http.ListenAndServe("localhost:6060", nil))
-	}()
+	if debugAddr != "" {
+		go func() {
+			log.Println(http.ListenAndServe(debugAddr, nil))
+		}()
+	}
+
+	if metricsAddr != "" {
+		go func() {
+			http.Handle("/metrics", promhttp.Handler())
+			http.ListenAndServe(metricsAddr, nil)
+		}()
+	}
 
 	profileStore, err := initProfileStore()
 	if err != nil {
@@ -48,7 +75,7 @@ func main() {
 		logger,
 		profile.Key,
 		vpn.WithNetworkBroker(vpn.NewNetworkBroker(logger)),
-		vpn.WithInterface(vpn.NewWSInterface(logger, *addr)),
+		vpn.WithInterface(vpn.NewWSInterface(logger, addr)),
 		vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger))),
 	)
 	if err != nil {
@@ -72,22 +99,24 @@ func main() {
 
 	_ = bootstrapService
 
-	test(logger, profileStore, networkController)
+	if rtmpAddr != "" {
+		runRTMPServer(logger, profileStore, networkController)
+	}
 
 	select {}
 }
 
-func test(logger *zap.Logger, profileStore *dao.ProfileStore, ctl *service.NetworkController) {
+func runRTMPServer(logger *zap.Logger, profileStore *dao.ProfileStore, ctl *service.NetworkController) {
 	x := rtmpingress.NewTranscoder(logger)
 	rtmp := rtmpingress.Server{
-		Addr: "0.0.0.0:1935",
-		HandleStream: func(a *rtmpingress.StreamAddr, c *rtmp.Conn, nc net.Conn) {
+		Addr: rtmpAddr,
+		HandleStream: func(a *rtmpingress.StreamAddr, c *rtmpingress.Conn) {
 			logger.Debug("rtmp stream opened", zap.String("key", a.Key))
 
 			v, err := service.NewVideoServer()
 			if err != nil {
 				logger.Debug("starting video server failed", zap.Error(err))
-				if err := nc.Close(); err != nil {
+				if err := c.Close(); err != nil {
 					logger.Debug("closing rtmp net con failed", zap.Error(err))
 				}
 				return
@@ -105,21 +134,24 @@ func test(logger *zap.Logger, profileStore *dao.ProfileStore, ctl *service.Netwo
 
 				v.Stop()
 
-				if err := nc.Close(); err != nil {
+				if err := c.Close(); err != nil {
 					logger.Debug("closing rtmp net con failed", zap.Error(err))
 				}
 				return
 			}
 
 			for _, membership := range memberships {
-				svc, ok := ctl.NetworkServices(dao.GetRootCert(membership.Certificate).Key)
-				if !ok {
-					logger.Debug("publishing video swarm failed", zap.Error(errors.New("unknown network")))
-				}
+				membership := membership
+				go func() {
+					svc, ok := ctl.NetworkServices(dao.GetRootCert(membership.Certificate).Key)
+					if !ok {
+						logger.Debug("publishing video swarm failed", zap.Error(errors.New("unknown network")))
+					}
 
-				if err := v.PublishSwarm(svc); err != nil {
-					logger.Debug("publishing video swarm failed", zap.Error(err))
-				}
+					if err := v.PublishSwarm(svc); err != nil {
+						logger.Debug("publishing video swarm failed", zap.Error(err))
+					}
+				}()
 			}
 
 			go func() {
@@ -137,11 +169,7 @@ func test(logger *zap.Logger, profileStore *dao.ProfileStore, ctl *service.Netwo
 }
 
 func initProfileStore() (*dao.ProfileStore, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		log.Fatalf("failed to locate home directory: %s", err)
-	}
-	kv, err := bboltkv.NewStore(path.Join(homeDir, ".strims"))
+	kv, err := bboltkv.NewStore(path.Join(profileDir, ".strims"))
 	if err != nil {
 		log.Fatalf("failed to open db: %s", err)
 	}

@@ -26,7 +26,7 @@ const minPingInterval = time.Second * 10
 // Peer ...
 type Peer struct {
 	sync.Mutex
-
+	id                  []byte
 	ledbat              *ledbat.Controller
 	chunkRate           ma.Simple
 	lastChunkTime       time.Time
@@ -40,8 +40,9 @@ type Peer struct {
 }
 
 // NewPeer ...
-func NewPeer() *Peer {
+func NewPeer(id []byte) *Peer {
 	return &Peer{
+		id:           id,
 		ledbat:       ledbat.New(),
 		chunkRate:    ma.NewSimple(500, 10*time.Millisecond),
 		rttSampleBin: binmap.None,
@@ -51,7 +52,7 @@ func NewPeer() *Peer {
 
 func (p *Peer) addChannel(s *Swarm, c *channelWriter) {
 	p.Lock()
-	p.Unlock()
+	defer p.Unlock()
 
 	p.channels[s] = c
 }
@@ -68,7 +69,7 @@ func (p *Peer) removeChannel(s *Swarm) *channelWriter {
 
 func (p *Peer) addDelaySample(sample time.Duration, chunkSize int) {
 	p.Lock()
-	p.Unlock()
+	defer p.Unlock()
 
 	p.ledbat.AddDelaySample(sample, chunkSize)
 }

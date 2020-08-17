@@ -44,7 +44,7 @@ func newSwarmPeer(peer *vpn.Peer) *swarmPeer {
 
 	return &swarmPeer{
 		peer:       peer,
-		swarmPeer:  ppspp.NewPeer(),
+		swarmPeer:  ppspp.NewPeer(peer.Certificate.Key),
 		rw:         rw,
 		swarmPorts: map[string]*swarmPeerSwarmItem{},
 	}
@@ -112,7 +112,7 @@ func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
 		)
 
 		w := vpn.NewFrameWriter(p.peer.Link, remotePort, p.peer.Link.MTU())
-		ch, err := ppspp.OpenChannel(p.swarmPeer, s.swarm, w)
+		ch, err := ppspp.OpenChannel(s.logger, p.swarmPeer, s.swarm, w)
 		if err != nil {
 			return
 		}

@@ -119,7 +119,7 @@ func (s *PubSubServer) Messages() <-chan *pb.PubSubEvent_Message {
 }
 
 // Send ...
-func (s *PubSubServer) Send(key string, body []byte) error {
+func (s *PubSubServer) Send(ctx context.Context, key string, body []byte) error {
 	n, err := s.send(&pb.PubSubEvent{
 		Body: &pb.PubSubEvent_Message_{
 			Message: &pb.PubSubEvent_Message{
@@ -282,13 +282,17 @@ func (c *PubSubClient) Messages() <-chan *pb.PubSubEvent_Message {
 }
 
 // Send ...
-func (c *PubSubClient) Send(key string, body []byte) error {
+func (c *PubSubClient) Send(ctx context.Context, key string, body []byte) error {
 	select {
 	case <-c.addrReady:
 	case <-c.ctx.Done():
+	case <-ctx.Done():
 	}
 	if c.ctx.Err() != nil {
 		return c.ctx.Err()
+	}
+	if ctx.Err() != nil {
+		return ctx.Err()
 	}
 
 	b, err := proto.Marshal(&pb.PubSubEvent{

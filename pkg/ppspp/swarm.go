@@ -101,6 +101,12 @@ type swarmBins struct {
 	lastTime      time.Time
 }
 
+func (s *swarmBins) ResetRequested(b binmap.Bin) {
+	s.Lock()
+	defer s.Unlock()
+	s.Requested.Reset(b)
+}
+
 func (s *swarmBins) AddAvailable(b binmap.Bin) {
 	s.Lock()
 	defer s.Unlock()

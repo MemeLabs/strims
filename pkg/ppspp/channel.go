@@ -1,25 +1,27 @@
 package ppspp
 
 import (
+	"encoding/hex"
 	"errors"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
+	"go.uber.org/zap"
 )
 
 var channelMessageCount = promauto.NewCounterVec(prometheus.CounterOpts{
-	Name: "strims_ppspp_message_count",
+	Name: "strims_ppspp_channel",
 	Help: "The total number of ppspp messages read per channel",
-}, []string{"channel_id", "direction", "type"})
+}, []string{"swarm_id", "peer_id", "direction", "type"})
 
 var (
 	errNoVersionOption                    = errors.New("handshake missing VersionOption")
@@ -51,10 +53,10 @@ type Channel interface {
 }
 
 // OpenChannel ...
-func OpenChannel(p *Peer, s *Swarm, conn WriteFlushCloser) (*ChannelReader, error) {
+func OpenChannel(logger *zap.Logger, p *Peer, s *Swarm, conn WriteFlushCloser) (*ChannelReader, error) {
 	c := newChannel()
-	cw := newChannelWriter(newChannelWriterMetrics(c), c, conn)
-	cr := newChannelReader(newChannelReaderMetrics(c), c, p, s)
+	cw := newChannelWriter(logger, newChannelWriterMetrics(s, p), c, conn)
+	cr := newChannelReader(logger, newChannelReaderMetrics(s, p), c, p, s)
 
 	if _, err := cw.WriteHandshake(newHandshake(s)); err != nil {
 		return nil, err
@@ -72,11 +74,10 @@ func OpenChannel(p *Peer, s *Swarm, conn WriteFlushCloser) (*ChannelReader, erro
 // CloseChannel ...
 func CloseChannel(p *Peer, s *Swarm) {
 	p.removeChannel(s)
-	cs := s.removeChannel(p)
-	for _, c := range cs {
-		deleteChannelWriterMetrics(c)
-		deleteChannelReaderMetrics(c)
-	}
+	s.removeChannel(p)
+
+	deleteChannelWriterMetrics(s, p)
+	deleteChannelReaderMetrics(s, p)
 }
 
 // newchannel ...
@@ -231,7 +232,7 @@ func newHandshake(swarm *Swarm) codec.Handshake {
 	return h
 }
 
-func newChannelWriter(metrics channelWriterMetrics, channel *channel, conn WriteFlushCloser) *channelWriter {
+func newChannelWriter(logger *zap.Logger, metrics channelWriterMetrics, channel *channel, conn WriteFlushCloser) *channelWriter {
 	return &channelWriter{
 		channel: channel,
 		w:       codec.NewWriter(conn, conn.MTU()),
@@ -275,7 +276,7 @@ func (c *channelWriter) WriteHave(m codec.Have) (int, error) {
 
 func (c *channelWriter) WriteData(m codec.Data) (int, error) {
 	c.metrics.DataCount.Inc()
-	c.metrics.DataChunkCount.Add(float64(m.Address.Bin().BaseLength()))
+	c.metrics.ChunkCount.Add(float64(m.Address.Bin().BaseLength()))
 	c.dirty = true
 	return c.w.WriteData(m)
 }
@@ -316,7 +317,7 @@ func (c *channelWriter) WriteCancel(m codec.Cancel) (int, error) {
 	return c.w.WriteCancel(m)
 }
 
-func newChannelReader(metrics channelReaderMetrics, channel *channel, peer *Peer, swarm *Swarm) *ChannelReader {
+func newChannelReader(logger *zap.Logger, metrics channelReaderMetrics, channel *channel, peer *Peer, swarm *Swarm) *ChannelReader {
 	return &ChannelReader{
 		channel: channel,
 		r: codec.Reader{
@@ -324,6 +325,7 @@ func newChannelReader(metrics channelReaderMetrics, channel *channel, peer *Peer
 			IntegrityHashSize:      swarm.merkleHashTreeFunction().HashSize(),
 			IntegritySignatureSize: swarm.liveSignatureAlgorithm().SignatureSize(),
 			Handler: &channelMessageHandler{
+				logger:   logger,
 				swarm:    swarm,
 				peer:     peer,
 				channel:  channel,
@@ -361,6 +363,7 @@ func (c *ChannelReader) Done() <-chan struct{} {
 }
 
 type channelMessageHandler struct {
+	logger   *zap.Logger
 	swarm    *Swarm
 	peer     *Peer
 	channel  *channel
@@ -449,11 +452,20 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 
 func (c *channelMessageHandler) HandleData(m codec.Data) {
 	c.metrics.DataCount.Inc()
-	c.metrics.DataChunkCount.Add(float64(m.Address.Bin().BaseLength()))
+	c.metrics.ChunkCount.Add(float64(m.Address.Bin().BaseLength()))
 
 	if v := c.verifier.ChunkVerifier(m.Address.Bin()); v != nil {
-		if verified, _ := v.Verify(m.Address.Bin(), m.Data); !verified {
+		if verified, err := v.Verify(m.Address.Bin(), m.Data); !verified {
 			c.metrics.InvalidDataCount.Inc()
+			c.metrics.InvalidChunkCount.Add(float64(m.Address.Bin().BaseLength()))
+			c.swarm.bins.ResetRequested(m.Address.Bin())
+			c.logger.Debug(
+				"invalid data",
+				logutil.ByteHex("peer", c.peer.id),
+				zap.Stringer("swarm", c.swarm.id),
+				zap.Uint64("bin", uint64(m.Address.Bin())),
+				zap.Error(err),
+			)
 			return
 		}
 	}
@@ -540,32 +552,37 @@ func (c *channelMessageHandler) HandlePong(m codec.Pong) {
 	c.peer.addRTTSample(c.channel.id, binmap.Bin(m.Nonce.Value), 0)
 }
 
-func newChannelReaderMetrics(channel *channel) channelReaderMetrics {
-	id := strconv.FormatUint(channel.id, 10)
+func newChannelReaderMetrics(s *Swarm, p *Peer) channelReaderMetrics {
+	peerID := hex.EncodeToString(p.id)
+	swarmID := s.id.String()
 	direction := "in"
 
 	return channelReaderMetrics{
-		channelMetrics:   newChannelMetrics(channel, direction),
-		InvalidDataCount: channelMessageCount.WithLabelValues(id, direction, "invalid_data"),
+		channelMetrics:    newChannelMetrics(s, p, direction),
+		InvalidDataCount:  channelMessageCount.WithLabelValues(swarmID, peerID, direction, "invalid_data"),
+		InvalidChunkCount: channelMessageCount.WithLabelValues(swarmID, peerID, direction, "invalid_chunk"),
 	}
 }
 
 type channelReaderMetrics struct {
 	channelMetrics
-	InvalidDataCount prometheus.Counter
+	InvalidDataCount  prometheus.Counter
+	InvalidChunkCount prometheus.Counter
 }
 
-func deleteChannelReaderMetrics(channel *channel) {
-	id := strconv.FormatUint(channel.id, 10)
+func deleteChannelReaderMetrics(s *Swarm, p *Peer) {
+	peerID := hex.EncodeToString(p.id)
+	swarmID := s.id.String()
 	direction := "in"
 
-	deleteChannelMetrics(channel, direction)
-	channelMessageCount.DeleteLabelValues(id, direction, "invalid_data")
+	deleteChannelMetrics(s, p, direction)
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "invalid_data")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "invalid_chunk")
 }
 
-func newChannelWriterMetrics(channel *channel) channelWriterMetrics {
+func newChannelWriterMetrics(s *Swarm, p *Peer) channelWriterMetrics {
 	return channelWriterMetrics{
-		channelMetrics: newChannelMetrics(channel, "out"),
+		channelMetrics: newChannelMetrics(s, p, "out"),
 	}
 }
 
@@ -573,33 +590,35 @@ type channelWriterMetrics struct {
 	channelMetrics
 }
 
-func deleteChannelWriterMetrics(channel *channel) {
-	deleteChannelMetrics(channel, "out")
+func deleteChannelWriterMetrics(s *Swarm, p *Peer) {
+	deleteChannelMetrics(s, p, "out")
 }
 
-func newChannelMetrics(channel *channel, direction string) channelMetrics {
-	id := strconv.FormatUint(channel.id, 10)
+func newChannelMetrics(s *Swarm, p *Peer, direction string) channelMetrics {
+	peerID := hex.EncodeToString(p.id)
+	swarmID := s.id.String()
+
 	return channelMetrics{
-		HandshakeCount:       channelMessageCount.WithLabelValues(id, direction, "handshake"),
-		DataCount:            channelMessageCount.WithLabelValues(id, direction, "data"),
-		DataChunkCount:       channelMessageCount.WithLabelValues(id, direction, "data_chunk"),
-		IntegrityCount:       channelMessageCount.WithLabelValues(id, direction, "integrity"),
-		SignedIntegrityCount: channelMessageCount.WithLabelValues(id, direction, "signed_integrity"),
-		AckCount:             channelMessageCount.WithLabelValues(id, direction, "ack"),
-		HaveCount:            channelMessageCount.WithLabelValues(id, direction, "have"),
-		RequestCount:         channelMessageCount.WithLabelValues(id, direction, "request"),
-		CancelCount:          channelMessageCount.WithLabelValues(id, direction, "cancel"),
-		ChokeCount:           channelMessageCount.WithLabelValues(id, direction, "choke"),
-		UnchokeCount:         channelMessageCount.WithLabelValues(id, direction, "unchoke"),
-		PingCount:            channelMessageCount.WithLabelValues(id, direction, "ping"),
-		PongCount:            channelMessageCount.WithLabelValues(id, direction, "pong"),
+		HandshakeCount:       channelMessageCount.WithLabelValues(swarmID, peerID, direction, "handshake_message"),
+		DataCount:            channelMessageCount.WithLabelValues(swarmID, peerID, direction, "data_message"),
+		ChunkCount:           channelMessageCount.WithLabelValues(swarmID, peerID, direction, "chunk"),
+		IntegrityCount:       channelMessageCount.WithLabelValues(swarmID, peerID, direction, "integrity_message"),
+		SignedIntegrityCount: channelMessageCount.WithLabelValues(swarmID, peerID, direction, "signed_integrity_message"),
+		AckCount:             channelMessageCount.WithLabelValues(swarmID, peerID, direction, "ack_message"),
+		HaveCount:            channelMessageCount.WithLabelValues(swarmID, peerID, direction, "have_message"),
+		RequestCount:         channelMessageCount.WithLabelValues(swarmID, peerID, direction, "request_message"),
+		CancelCount:          channelMessageCount.WithLabelValues(swarmID, peerID, direction, "cancel_message"),
+		ChokeCount:           channelMessageCount.WithLabelValues(swarmID, peerID, direction, "choke_message"),
+		UnchokeCount:         channelMessageCount.WithLabelValues(swarmID, peerID, direction, "unchoke_message"),
+		PingCount:            channelMessageCount.WithLabelValues(swarmID, peerID, direction, "ping_message"),
+		PongCount:            channelMessageCount.WithLabelValues(swarmID, peerID, direction, "pong_message"),
 	}
 }
 
 type channelMetrics struct {
 	HandshakeCount       prometheus.Counter
 	DataCount            prometheus.Counter
-	DataChunkCount       prometheus.Counter
+	ChunkCount           prometheus.Counter
 	IntegrityCount       prometheus.Counter
 	SignedIntegrityCount prometheus.Counter
 	AckCount             prometheus.Counter
@@ -612,19 +631,21 @@ type channelMetrics struct {
 	PongCount            prometheus.Counter
 }
 
-func deleteChannelMetrics(channel *channel, direction string) {
-	id := strconv.FormatUint(channel.id, 10)
-	channelMessageCount.DeleteLabelValues(id, direction, "handshake")
-	channelMessageCount.DeleteLabelValues(id, direction, "data")
-	channelMessageCount.DeleteLabelValues(id, direction, "data_chunk")
-	channelMessageCount.DeleteLabelValues(id, direction, "integrity")
-	channelMessageCount.DeleteLabelValues(id, direction, "signed_integrity")
-	channelMessageCount.DeleteLabelValues(id, direction, "ack")
-	channelMessageCount.DeleteLabelValues(id, direction, "have")
-	channelMessageCount.DeleteLabelValues(id, direction, "request")
-	channelMessageCount.DeleteLabelValues(id, direction, "cancel")
-	channelMessageCount.DeleteLabelValues(id, direction, "choke")
-	channelMessageCount.DeleteLabelValues(id, direction, "unchoke")
-	channelMessageCount.DeleteLabelValues(id, direction, "ping")
-	channelMessageCount.DeleteLabelValues(id, direction, "pong")
+func deleteChannelMetrics(s *Swarm, p *Peer, direction string) {
+	peerID := hex.EncodeToString(p.id)
+	swarmID := s.id.String()
+
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "handshake_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "data_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "chunk")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "integrity_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "signed_integrity_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "ack_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "have_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "request_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "cancel_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "choke_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "unchoke_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "ping_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "pong_message")
 }
