@@ -47,7 +47,7 @@ func GetNetworks(s kv.Store) (v []*pb.Network, err error) {
 
 // NewNetwork ...
 func NewNetwork(name string) (*pb.Network, error) {
-	id, err := generateSnowflake()
+	id, err := GenerateSnowflake()
 	if err != nil {
 		return nil, err
 	}

@@ -122,7 +122,7 @@ func NewProfile(name string) (p *pb.Profile, err error) {
 		return nil, err
 	}
 
-	p.Id, err = generateSnowflake()
+	p.Id, err = GenerateSnowflake()
 	if err != nil {
 		return nil, err
 	}

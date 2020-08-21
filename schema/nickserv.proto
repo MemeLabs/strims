@@ -11,14 +11,12 @@ message ServerConfig {
 
 message NickServRecord {
   uint64 id = 1;
-  bytes hash = 2;
-  bytes key = 3;
-  bytes host_id = 4;
-  string name = 5;
-  uint32 remaining_name_change_quota = 6;
-  uint64 updated_timestamp = 7;
-  uint64 created_timestamp = 8;
-  repeated string roles = 9;
+  bytes key = 2;
+  string nick = 3;
+  uint32 remaining_name_change_quota = 4;
+  uint64 updated_timestamp = 5;
+  uint64 created_timestamp = 6;
+  repeated string roles = 7;
 }
 
 message NickServToken {
@@ -38,21 +36,27 @@ message NickServRPCCommand {
   }
 
   message Retrieve {
-    string nick = 1;
   }
 
   message Update {
-    string nick = 1;
-    oneof param {
+    message Roles {
+      repeated string roles = 1;
+    }
+
+    message ChangeNick {
+      string old_nick = 1;
       string new_nick = 2;
-      uint32 name_change_quota = 3;
-      string roles = 4;
+
+    }
+
+     oneof param {
+      ChangeNick nick = 1;
+      uint32 name_change_quota = 2;
+      Roles roles = 3;
     }
   }
 
-  message Delete {
-    string nick = 1;
-  }
+  message Delete {}
 
   oneof body {
     Create create = 5;
@@ -65,16 +69,12 @@ message NickServRPCCommand {
 message NickServRPCResponse {
   uint64 request_id = 1;
 
-  message Error {
-    string msg = 1;
-  }
-
   message Update {}
   
   message Delete {}
 
   oneof body {
-    Error error = 2;
+    string error  = 2;
     Update update = 3;
     Delete delete = 4;
     NickServToken create = 5;
