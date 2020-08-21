@@ -47,7 +47,7 @@ func GetChatServers(s kv.Store) (v []*pb.ChatServer, err error) {
 
 // NewChatServer ...
 func NewChatServer(networkKey []byte, chatRoom *pb.ChatRoom) (*pb.ChatServer, error) {
-	id, err := generateSnowflake()
+	id, err := GenerateSnowflake()
 	if err != nil {
 		return nil, err
 	}

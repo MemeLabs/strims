@@ -100,7 +100,7 @@ func NewNetworkMembershipFromCSR(networkName string, networkCert *pb.Certificate
 
 // NewNetworkMembershipFromCertificate ...
 func NewNetworkMembershipFromCertificate(networkName string, cert *pb.Certificate) (*pb.NetworkMembership, error) {
-	id, err := generateSnowflake()
+	id, err := GenerateSnowflake()
 	if err != nil {
 		return nil, err
 	}

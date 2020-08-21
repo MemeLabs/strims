@@ -53,7 +53,11 @@ func (m *MessageHeader) Unmarshal(b []byte) (n int, err error) {
 
 const messageTrailerLen = 84
 
-// MessageTrailer ...
+// Trailers represents the messages path
+// index 0 is the sender and subsequent indexes are hops
+type Trailers []MessageTrailer
+
+// MessageTrailer represents a node in the message path
 type MessageTrailer struct {
 	HostID    kademlia.ID
 	Signature []byte
@@ -83,9 +87,6 @@ func (m *MessageTrailer) Unmarshal(b []byte) (n int, err error) {
 	m.Signature = b[20:]
 	return messageTrailerLen, nil
 }
-
-// Trailers ...
-type Trailers []MessageTrailer
 
 // Contains ...
 func (t Trailers) Contains(hostID kademlia.ID) bool {
