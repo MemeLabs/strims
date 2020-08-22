@@ -1,6 +1,7 @@
 syntax = "proto3";
 
 option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+option swift_prefix = "PB";
 
 import "google/protobuf/any.proto";
 

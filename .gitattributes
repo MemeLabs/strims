@@ -5,3 +5,7 @@ vendor linguist-vendored
 go.sum linguist-generated
 package-lock.json linguist-generated
 infra/internal/models/* linguist-generated
+ios/App/App/ProtoBuf/* linguist-generated
+ios/App/App.xcodeproj/** linguist-generated
+ios/App/App/Info.plist linguist-generated
+ios/App/Bridge.framework linguist-generated
