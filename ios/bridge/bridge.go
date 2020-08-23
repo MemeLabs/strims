@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"log"
 	"os"
@@ -25,20 +26,20 @@ type SwiftSide interface {
 }
 
 // NewGoSide ...
-func NewGoSide(s SwiftSide) *GoSide {
+func NewGoSide(s SwiftSide) (*GoSide, error) {
 	logger, err := zap.NewDevelopment()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
 	homeDir, err := os.UserHomeDir()
 	if err != nil {
-		logger.Fatal("failed to locate home directory", zap.Error(err))
+		return nil, fmt.Errorf("failed to locate home directory: %w", err)
 	}
 
 	kv, err := bboltkv.NewStore(path.Join(homeDir, ".strims"))
 	if err != nil {
-		logger.Fatal("failed to open db", zap.Error(err))
+		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
 	svc, err := service.New(service.Options{
@@ -51,16 +52,14 @@ func NewGoSide(s SwiftSide) *GoSide {
 		},
 	})
 	if err != nil {
-		log.Fatalf("error creating service: %s", err)
+		return nil, fmt.Errorf("error creating service: %w", err)
 	}
 
 	inReader, inWriter := io.Pipe()
 
 	go rpc.NewHost(logger, svc).Handle(context.Background(), &swiftSideWriter{s}, inReader)
 
-	return &GoSide{
-		w: inWriter,
-	}
+	return &GoSide{inWriter}, nil
 }
 
 type swiftSideWriter struct {
@@ -78,8 +77,7 @@ type GoSide struct {
 }
 
 // Write ...
-func (g *GoSide) Write(b []byte) {
-	if _, err := g.w.Write(b); err != nil {
-		panic(err)
-	}
+func (g *GoSide) Write(b []byte) error {
+	_, err := g.w.Write(b)
+	return err
 }

@@ -87,25 +87,29 @@ struct ContentView: View {
         }
         
         let handleStartVPN: () -> Void = {
-            let vpn = client.startVPN()
-            vpn.delegate = { event, eventType in
-                switch (eventType) {
-                case RPCEvent.data:
-                    do {
-                        let json = try event?.jsonString()
-                        print("vpn event: \(json!)")
-                    } catch {}
-                case RPCEvent.close:
-                    print("vpn event stream closed")
-                default:
-                    print("vpn rpc error")
+            do {
+                let vpn = try client.startVPN()
+                vpn.delegate = { event, eventType in
+                    switch (eventType) {
+                    case RPCEvent.data:
+                        do {
+                            let json = try event?.jsonString()
+                            print("vpn event: \(json!)")
+                        } catch {}
+                    case RPCEvent.close:
+                        print("vpn event stream closed")
+                    default:
+                        print("vpn rpc error")
+                    }
                 }
+            } catch {
+                print("starting vpn failed \(error)")
             }
         }
 
         let rootCert: (PBCertificate) -> PBCertificate = { cert in
             var root = cert
-            if case .parent(let parent)? = root.parentOneof {
+            while case .parent(let parent)? = root.parentOneof {
                 root = parent
             }
             return root
@@ -121,32 +125,38 @@ struct ContentView: View {
                         $0.networkKey = rootCert(membership.certificate).key
                     })
                 } as [Promise<PBPublishSwarmResponse>])
+            }.catch(only: RPCClientError.self) { error in
+                print("publishing swarm failed \(error.message)")
             }.catch { error in
                 print("publishing swarm failed \(error.localizedDescription)")
             }
         }
         
         let handleJoinVideoSwarm: () -> Void = {
-            let client = client.openVideoClient()
-            client.delegate = { event, eventType in
-                switch (eventType) {
-                case RPCEvent.data:
-                    if let body = event?.body {
-                        switch (body) {
-                        case .open(let open):
-                            print("open: \(open.id)")
-                            publishSwarm(open.id)
-                        case .data(let data):
-                            print("video data: \(data.data.count) bytes")
-                        case .close:
-                            print("close")
+            do {
+                let client = try client.openVideoClient()
+                client.delegate = { event, eventType in
+                    switch (eventType) {
+                    case RPCEvent.data:
+                        if let body = event?.body {
+                            switch (body) {
+                            case .open(let open):
+                                print("open: \(open.id)")
+                                publishSwarm(open.id)
+                            case .data(let data):
+                                print("video data: \(data.data.count) bytes")
+                            case .close:
+                                print("close")
+                            }
                         }
+                    case RPCEvent.close:
+                        print("vpn event stream closed")
+                    default:
+                        print("vpn rpc error")
                     }
-                case RPCEvent.close:
-                    print("vpn event stream closed")
-                default:
-                    print("vpn rpc error")
                 }
+            } catch {
+                print("joining video swarm failed \(error)")
             }
         }
         

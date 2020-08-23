@@ -84,8 +84,8 @@ class FrontendRPCClient: RPCClient {
         return self.callUnary("getChatServers", arg)
     }
 
-    public func startVPN(_ arg: PBStartVPNRequest = PBStartVPNRequest()) -> RPCResponseStream<PBNetworkEvent> {
-        return self.callStreaming("startVPN", arg)
+    public func startVPN(_ arg: PBStartVPNRequest = PBStartVPNRequest()) throws -> RPCResponseStream<PBNetworkEvent> {
+        return try self.callStreaming("startVPN", arg)
     }
     public func stopVPN(_ arg: PBStopVPNRequest = PBStopVPNRequest()) -> Promise<PBStopVPNResponse> {
         return self.callUnary("stopVPN", arg)
@@ -97,8 +97,8 @@ class FrontendRPCClient: RPCClient {
     public func leaveSwarm(_ arg: PBLeaveSwarmRequest = PBLeaveSwarmRequest()) -> Promise<PBLeaveSwarmResponse> {
         return self.callUnary("leaveSwarm", arg)
     }
-    public func getIngressStreams(_ arg: PBGetIngressStreamsRequest = PBGetIngressStreamsRequest()) -> RPCResponseStream<PBGetIngressStreamsResponse> {
-        return self.callStreaming("getIngressStreams", arg)
+    public func getIngressStreams(_ arg: PBGetIngressStreamsRequest = PBGetIngressStreamsRequest()) throws -> RPCResponseStream<PBGetIngressStreamsResponse> {
+        return try self.callStreaming("getIngressStreams", arg)
     }
     public func startHLSIngress(_ arg: PBStartHLSIngressRequest = PBStartHLSIngressRequest()) -> Promise<PBStartHLSIngressResponse> {
         return self.callUnary("startHLSIngress", arg)
@@ -124,17 +124,17 @@ class FrontendRPCClient: RPCClient {
     public func pprof(_ arg: PBPProfRequest = PBPProfRequest()) -> Promise<PBPProfResponse> {
         return self.callUnary("pProf", arg)
     }
-    public func openChatServer(_ arg: PBOpenChatServerRequest = PBOpenChatServerRequest()) -> RPCResponseStream<PBChatServerEvent> {
-        return self.callStreaming("openChatServer", arg)
+    public func openChatServer(_ arg: PBOpenChatServerRequest = PBOpenChatServerRequest()) throws -> RPCResponseStream<PBChatServerEvent> {
+        return try self.callStreaming("openChatServer", arg)
     }
-    public func openChatClient(_ arg: PBOpenChatClientRequest = PBOpenChatClientRequest()) -> RPCResponseStream<PBChatClientEvent> {
-        return self.callStreaming("openChatClient", arg)
+    public func openChatClient(_ arg: PBOpenChatClientRequest = PBOpenChatClientRequest()) throws -> RPCResponseStream<PBChatClientEvent> {
+        return try self.callStreaming("openChatClient", arg)
     }
-    public func callChatClient(_ arg: PBCallChatClientRequest = PBCallChatClientRequest()) {
-        self.call("callChatClient", arg)
+    public func callChatClient(_ arg: PBCallChatClientRequest = PBCallChatClientRequest()) throws {
+        try self.call("callChatClient", arg)
     }
-    public func openVideoClient(_ arg: PBVideoClientOpenRequest = PBVideoClientOpenRequest()) -> RPCResponseStream<PBVideoClientEvent> {
-        return self.callStreaming("openVideoClient", arg)
+    public func openVideoClient(_ arg: PBVideoClientOpenRequest = PBVideoClientOpenRequest()) throws -> RPCResponseStream<PBVideoClientEvent> {
+        return try self.callStreaming("openVideoClient", arg)
     }
     public func openVideoServer(_ arg: PBVideoServerOpenRequest = PBVideoServerOpenRequest()) -> Promise<PBVideoServerOpenResponse> {
         return self.callUnary("openVideoServer", arg)

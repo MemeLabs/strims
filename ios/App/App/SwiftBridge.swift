@@ -12,14 +12,18 @@ import Bridge
 class SwiftBridge: NSObject, BridgeSwiftSideProtocol {
     public var onData: (_: Data?) -> Void = {_ in}
     public var g: BridgeGoSide?
+    public var error: NSError?
     
     override init() {
         super.init()
-        self.g = BridgeNewGoSide(self)!
+        self.g = BridgeNewGoSide(self, &self.error)
     }
     
-    public func write(_ b: Data?) {
-        self.g!.write(b)
+    public func write(_ b: Data?) throws {
+        if let error = self.error {
+            throw error
+        }
+        try self.g!.write(b)
     }
     
     public func emitError(_ msg: String?) {
@@ -27,7 +31,6 @@ class SwiftBridge: NSObject, BridgeSwiftSideProtocol {
     }
     
     public func emitData(_ b: Data?) {
-        print("received bytes: " + String(b!.count))
         self.onData(b)
     }
 }

@@ -10,10 +10,6 @@ import Foundation
 import SwiftProtobuf
 import PromiseKit
 
-//enum RPCClientError: Error {
-//    case runtimeError(String)
-//}
-
 struct RPCClientError: Error {
     let message: String
 
@@ -76,8 +72,11 @@ class RPCClient {
 //            let json = try call.jsonString()
 //            print("received rpc data: \(json)")
             
-            let callback = self.callbacks[call.parentID]
-            callback?(call)
+            if let callback = self.callbacks[call.parentID] {
+                callback(call)
+            } else {
+                throw RPCClientError("missing callback")
+            }
         } catch {
             print("error: \(error)")
         }
@@ -104,18 +103,14 @@ class RPCClient {
         try BinaryDelimited.serialize(message: call, to: stream)
         stream.close()
         
-        self.g.write(stream.data!)
+        try self.g.write(stream.data!)
     }
     
-    public func call<T: Message>(_ method: String, _ arg: T) {
-        DispatchQueue.global(qos: .default).async {
-            do {
-                try self.call(method, arg, self.getNextCallID())
-            } catch {}
-        }
+    public func call<T: Message>(_ method: String, _ arg: T) throws {
+        try self.call(method, arg, self.getNextCallID())
     }
     
-    public func callStreaming<T: Message, R: Message>(_ method: String, _ arg: T) -> RPCResponseStream<R> {
+    public func callStreaming<T: Message, R: Message>(_ method: String, _ arg: T) throws -> RPCResponseStream<R> {
         let callID = self.getNextCallID()
     
         let stream = RPCResponseStream<R>({
@@ -146,13 +141,12 @@ class RPCClient {
             }
         }
         
-        DispatchQueue.global(qos: .default).async {
-            do {
-                try self.call(method, arg, callID)
-            } catch {
-                self.callbacks.removeValue(forKey: callID)
-                stream.delegate(nil, RPCEvent.requestError)
-            }
+        do {
+            try self.call(method, arg, callID)
+        } catch {
+            self.callbacks.removeValue(forKey: callID)
+            stream.delegate(nil, RPCEvent.requestError)
+            throw error
         }
         
         return stream
