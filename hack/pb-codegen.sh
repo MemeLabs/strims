@@ -10,7 +10,7 @@ SCHEMA_DIR="schema"
 JS_DIR="src/lib/pb"
 GO_DIR="pkg/pb"
 SWIFT_DIR="ios/App/App/ProtoBuf"
-JAVA_DIR="android/app/src/main/java/gg/strims/ppspp/proto"
+JAVA_DIR="android/app/src/main/java/"
 
 npx pbjs \
     -t static-module \
