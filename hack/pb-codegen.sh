@@ -9,7 +9,7 @@ cd "$(dirname $BASE)/.."
 SCHEMA_DIR="schema"
 JS_DIR="src/lib/pb"
 GO_DIR="pkg/pb"
-JAVA_DIR="android/app/src/main/java/gg/strims/ppspp/proto"
+JAVA_DIR="android/app/src/main/java/"
 
 npx pbjs \
     -t static-module \
