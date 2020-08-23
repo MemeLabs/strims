@@ -5,3 +5,5 @@ vendor linguist-vendored
 go.sum linguist-generated
 package-lock.json linguist-generated
 infra/internal/models/* linguist-generated
+android/app/src/main/java/gg/strims/ppspp/proto/* linguist-generated
+android/.idea/** linguist-generated

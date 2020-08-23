@@ -9,6 +9,7 @@ cd "$(dirname $BASE)/.."
 SCHEMA_DIR="schema"
 JS_DIR="src/lib/pb"
 GO_DIR="pkg/pb"
+JAVA_DIR="android/app/src/main/java/gg/strims/ppspp/proto"
 
 npx pbjs \
     -t static-module \
@@ -26,6 +27,11 @@ bash ./hack/ts-codegen.sh
 protoc \
     --go_out $GO_DIR \
     --go_opt=paths=source_relative \
+    -I $SCHEMA_DIR \
+    rpc.proto api.proto
+
+protoc \
+    --java_out $JAVA_DIR \
     -I $SCHEMA_DIR \
     rpc.proto api.proto
 
