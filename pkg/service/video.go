@@ -7,10 +7,13 @@ import (
 	"io"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
+	"go.uber.org/zap"
 )
 
 func testKey() *pb.Key {
@@ -30,7 +33,7 @@ type SwarmPublisher interface {
 }
 
 // NewVideoServer ...
-func NewVideoServer() (*VideoServer, error) {
+func NewVideoServer(logger *zap.Logger) (*VideoServer, error) {
 	key := testKey()
 
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
@@ -55,10 +58,11 @@ func NewVideoServer() (*VideoServer, error) {
 
 	return &VideoServer{
 		VideoSwarm: VideoSwarm{
-			ctx:   ctx,
-			close: cancel,
-			key:   key.Public,
-			s:     w.Swarm(),
+			logger: logger,
+			ctx:    ctx,
+			close:  cancel,
+			key:    key.Public,
+			s:      w.Swarm(),
 		},
 		w: cw,
 	}, nil
@@ -169,6 +173,7 @@ func (c *VideoClient) SendEvents(ch chan *pb.VideoClientEvent) {
 
 // VideoSwarm ...
 type VideoSwarm struct {
+	logger    *zap.Logger
 	ctx       context.Context
 	close     context.CancelFunc
 	closeOnce sync.Once
@@ -195,16 +200,28 @@ func (t *VideoSwarm) PublishSwarm(svc *NetworkServices) error {
 	if err := svc.Directory.Publish(t.ctx, listing); err != nil {
 		return err
 	}
+	t.logger.Info("published video swarm", logutil.ByteHex("key", t.key))
 
 	t.svc = append(t.svc, svc)
 
 	return nil
 }
 
+func (t *VideoSwarm) unpublishSwarm(svc *NetworkServices) {
+	svc.Swarms.CloseSwarm(t.s.ID())
+
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	if err := svc.Directory.Unpublish(ctx, t.key); err != nil {
+		t.logger.Info("failed to unpublish swarm", zap.Error(err))
+	}
+}
+
 // Stop ...
 func (t *VideoSwarm) Stop() {
 	t.close()
 	for _, svc := range t.svc {
-		svc.Swarms.CloseSwarm(t.s.ID())
+		go t.unpublishSwarm(svc)
 	}
 }

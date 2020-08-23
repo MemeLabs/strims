@@ -590,7 +590,7 @@ func (s *Frontend) OpenVideoServer(ctx context.Context, r *pb.VideoServerOpenReq
 
 	s.logger.Debug("start swarm...")
 
-	v, err := NewVideoServer()
+	v, err := NewVideoServer(s.logger)
 	if err != nil {
 		return nil, err
 	}

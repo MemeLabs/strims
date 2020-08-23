@@ -77,7 +77,7 @@ export const MainLayout = ({ children }: { children: any }) => {
           <Link to="/" className="main_layout__primary_nav__link">
             Streams
           </Link>
-          <Link to="/" className="main_layout__primary_nav__link">
+          <Link to="/broadcast" className="main_layout__primary_nav__link">
             Broadcast
           </Link>
         </div>

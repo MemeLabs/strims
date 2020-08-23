@@ -4,6 +4,7 @@ import { Route, Switch } from "react-router-dom";
 import { PrivateRoute } from "../components/PrivateRoute";
 import BootstrapClientsPage from "../pages/BootstrapClients";
 import ChatServersPage from "../pages/ChatServers";
+import Directory from "../pages/Directory";
 import HomePage from "../pages/Home";
 import LoginPage from "../pages/Login";
 import NetworkMembershipsPage from "../pages/NetworkMemberships";
@@ -21,6 +22,7 @@ const Router = () => {
       <PrivateRoute path="/memberships" exact component={NetworkMembershipsPage} />
       <PrivateRoute path="/bootstrap-clients" exact component={BootstrapClientsPage} />
       <PrivateRoute path="/chat-servers" exact component={ChatServersPage} />
+      <PrivateRoute path="/broadcast" exact component={Directory} />
       <Route component={NotFoundPage} />
     </Switch>
   );

@@ -113,7 +113,7 @@ func runRTMPServer(logger *zap.Logger, profileStore *dao.ProfileStore, ctl *serv
 		HandleStream: func(a *rtmpingress.StreamAddr, c *rtmpingress.Conn) {
 			logger.Debug("rtmp stream opened", zap.String("key", a.Key))
 
-			v, err := service.NewVideoServer()
+			v, err := service.NewVideoServer(logger)
 			if err != nil {
 				logger.Debug("starting video server failed", zap.Error(err))
 				if err := c.Close(); err != nil {
