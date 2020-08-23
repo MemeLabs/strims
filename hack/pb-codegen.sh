@@ -10,6 +10,7 @@ SCHEMA_DIR="schema"
 JS_DIR="src/lib/pb"
 GO_DIR="pkg/pb"
 SWIFT_DIR="ios/App/App/ProtoBuf"
+JAVA_DIR="android/app/src/main/java/gg/strims/ppspp/proto"
 
 npx pbjs \
     -t static-module \
@@ -37,5 +38,10 @@ protoc \
     rpc.proto api.proto
 
 bash ./hack/swift-codegen.sh
+
+protoc \
+    --java_out $JAVA_DIR \
+    -I $SCHEMA_DIR \
+    rpc.proto api.proto
 
 popd > /dev/null
