@@ -82,7 +82,7 @@ func (v *SignAllSwarmVerifier) storeSignature(b binmap.Bin, ts time.Time, sig []
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
-	if b > v.head {
+	if b >= v.head {
 		v.head = b + 2
 		if v.head > v.size {
 			v.tail = v.head - v.size
