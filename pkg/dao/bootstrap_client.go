@@ -46,7 +46,7 @@ func GetBootstrapClients(s kv.Store) (v []*pb.BootstrapClient, err error) {
 }
 
 // NewWebSocketBootstrapClient ...
-func NewWebSocketBootstrapClient(url string) (*pb.BootstrapClient, error) {
+func NewWebSocketBootstrapClient(url string, insecureSkipVerifyTLS bool) (*pb.BootstrapClient, error) {
 	id, err := generateSnowflake()
 	if err != nil {
 		return nil, err
@@ -56,7 +56,8 @@ func NewWebSocketBootstrapClient(url string) (*pb.BootstrapClient, error) {
 		Id: id,
 		ClientOptions: &pb.BootstrapClient_WebsocketOptions{
 			WebsocketOptions: &pb.BootstrapClientWebSocketOptions{
-				Url: url,
+				Url:                   url,
+				InsecureSkipVerifyTls: insecureSkipVerifyTLS,
 			},
 		},
 	}, nil

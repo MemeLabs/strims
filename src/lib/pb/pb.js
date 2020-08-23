@@ -35411,6 +35411,7 @@ export const BootstrapClientWebSocketOptions = $root.BootstrapClientWebSocketOpt
      * @exports IBootstrapClientWebSocketOptions
      * @interface IBootstrapClientWebSocketOptions
      * @property {string|null} [url] BootstrapClientWebSocketOptions url
+     * @property {boolean|null} [insecureSkipVerifyTls] BootstrapClientWebSocketOptions insecureSkipVerifyTls
      */
 
     /**
@@ -35435,6 +35436,14 @@ export const BootstrapClientWebSocketOptions = $root.BootstrapClientWebSocketOpt
      * @instance
      */
     BootstrapClientWebSocketOptions.prototype.url = "";
+
+    /**
+     * BootstrapClientWebSocketOptions insecureSkipVerifyTls.
+     * @member {boolean} insecureSkipVerifyTls
+     * @memberof BootstrapClientWebSocketOptions
+     * @instance
+     */
+    BootstrapClientWebSocketOptions.prototype.insecureSkipVerifyTls = false;
 
     /**
      * Creates a new BootstrapClientWebSocketOptions instance using the specified properties.
@@ -35462,6 +35471,8 @@ export const BootstrapClientWebSocketOptions = $root.BootstrapClientWebSocketOpt
             writer = $Writer.create();
         if (message.url != null && Object.hasOwnProperty.call(message, "url"))
             writer.uint32(/* id 1, wireType 2 =*/10).string(message.url);
+        if (message.insecureSkipVerifyTls != null && Object.hasOwnProperty.call(message, "insecureSkipVerifyTls"))
+            writer.uint32(/* id 2, wireType 0 =*/16).bool(message.insecureSkipVerifyTls);
         return writer;
     };
 
@@ -35498,6 +35509,9 @@ export const BootstrapClientWebSocketOptions = $root.BootstrapClientWebSocketOpt
             switch (tag >>> 3) {
             case 1:
                 message.url = reader.string();
+                break;
+            case 2:
+                message.insecureSkipVerifyTls = reader.bool();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -35537,6 +35551,9 @@ export const BootstrapClientWebSocketOptions = $root.BootstrapClientWebSocketOpt
         if (message.url != null && message.hasOwnProperty("url"))
             if (!$util.isString(message.url))
                 return "url: string expected";
+        if (message.insecureSkipVerifyTls != null && message.hasOwnProperty("insecureSkipVerifyTls"))
+            if (typeof message.insecureSkipVerifyTls !== "boolean")
+                return "insecureSkipVerifyTls: boolean expected";
         return null;
     };
 
@@ -35554,6 +35571,8 @@ export const BootstrapClientWebSocketOptions = $root.BootstrapClientWebSocketOpt
         let message = new $root.BootstrapClientWebSocketOptions();
         if (object.url != null)
             message.url = String(object.url);
+        if (object.insecureSkipVerifyTls != null)
+            message.insecureSkipVerifyTls = Boolean(object.insecureSkipVerifyTls);
         return message;
     };
 
@@ -35570,10 +35589,14 @@ export const BootstrapClientWebSocketOptions = $root.BootstrapClientWebSocketOpt
         if (!options)
             options = {};
         let object = {};
-        if (options.defaults)
+        if (options.defaults) {
             object.url = "";
+            object.insecureSkipVerifyTls = false;
+        }
         if (message.url != null && message.hasOwnProperty("url"))
             object.url = message.url;
+        if (message.insecureSkipVerifyTls != null && message.hasOwnProperty("insecureSkipVerifyTls"))
+            object.insecureSkipVerifyTls = message.insecureSkipVerifyTls;
         return object;
     };
 

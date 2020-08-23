@@ -73,8 +73,8 @@ class RPCClient {
         do {
             let call = try BinaryDelimited.parse(messageType: PBCall.self, from: stream)
             
-            let json = try call.jsonString()
-            print("received rpc data: \(json)")
+//            let json = try call.jsonString()
+//            print("received rpc data: \(json)")
             
             let callback = self.callbacks[call.parentID]
             callback?(call)

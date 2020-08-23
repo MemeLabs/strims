@@ -668,6 +668,7 @@ message BootstrapClient {
 
 message BootstrapClientWebSocketOptions {
   string url = 1;
+  bool insecure_skip_verify_tls = 2;
 }
 
 message Profile {

@@ -314,7 +314,7 @@ func (s *Frontend) CreateBootstrapClient(ctx context.Context, r *pb.CreateBootst
 	var err error
 	switch v := r.GetClientOptions().(type) {
 	case *pb.CreateBootstrapClientRequest_WebsocketOptions:
-		client, err = dao.NewWebSocketBootstrapClient(v.WebsocketOptions.Url)
+		client, err = dao.NewWebSocketBootstrapClient(v.WebsocketOptions.Url, v.WebsocketOptions.InsecureSkipVerifyTls)
 	}
 	if err != nil {
 		return nil, err

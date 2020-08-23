@@ -3,6 +3,7 @@
 package vpn
 
 import (
+	"crypto/tls"
 	"errors"
 	"io"
 	"net/http"
@@ -140,7 +141,12 @@ func (f *wsInterface) Close() error {
 }
 
 func (f *wsInterface) Dial(h *Host, addr InterfaceAddr) error {
-	c, _, err := websocket.DefaultDialer.Dial(addr.(WebSocketAddr).String(), http.Header{})
+	d := &websocket.Dialer{
+		TLSClientConfig: &tls.Config{
+			InsecureSkipVerify: addr.(WebSocketAddr).InsecureSkipVerifyTLS,
+		},
+	}
+	c, _, err := d.Dial(addr.(WebSocketAddr).URL, http.Header{})
 	if err != nil {
 		return err
 	}

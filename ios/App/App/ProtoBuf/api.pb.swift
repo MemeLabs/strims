@@ -2477,6 +2477,8 @@ public struct PBVideoClientOpenRequest {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  public var emitData: Bool = false
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2766,7 +2768,7 @@ public struct PBGetIngressStreamsResponse {
   public init() {}
 }
 
-public struct PBStartHLSIngressRequest {
+public struct PBStartRTMPIngressRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2776,7 +2778,7 @@ public struct PBStartHLSIngressRequest {
   public init() {}
 }
 
-public struct PBStartHLSIngressResponse {
+public struct PBStartRTMPIngressResponse {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -2791,6 +2793,10 @@ public struct PBStartHLSEgressRequest {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  public var videoID: UInt64 = 0
+
+  public var address: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2801,6 +2807,10 @@ public struct PBStartHLSEgressResponse {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  public var id: UInt64 = 0
+
+  public var url: String = String()
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -2810,6 +2820,8 @@ public struct PBStopHLSEgressRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
+
+  public var id: UInt64 = 0
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -3292,6 +3304,8 @@ public struct PBBootstrapClientWebSocketOptions {
   // methods supported on all messages.
 
   public var url: String = String()
+
+  public var insecureSkipVerifyTls: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -8098,18 +8112,28 @@ extension PBVideoServerWriteResponse: SwiftProtobuf.Message, SwiftProtobuf._Mess
 
 extension PBVideoClientOpenRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = "VideoClientOpenRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .standard(proto: "emit_data"),
+  ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let _ = try decoder.nextFieldNumber() {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      switch fieldNumber {
+      case 1: try decoder.decodeSingularBoolField(value: &self.emitData)
+      default: break
+      }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.emitData != false {
+      try visitor.visitSingularBoolField(value: self.emitData, fieldNumber: 1)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: PBVideoClientOpenRequest, rhs: PBVideoClientOpenRequest) -> Bool {
+    if lhs.emitData != rhs.emitData {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8621,8 +8645,8 @@ extension PBGetIngressStreamsResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
   }
 }
 
-extension PBStartHLSIngressRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "StartHLSIngressRequest"
+extension PBStartRTMPIngressRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "StartRTMPIngressRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -8634,14 +8658,14 @@ extension PBStartHLSIngressRequest: SwiftProtobuf.Message, SwiftProtobuf._Messag
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBStartHLSIngressRequest, rhs: PBStartHLSIngressRequest) -> Bool {
+  public static func ==(lhs: PBStartRTMPIngressRequest, rhs: PBStartRTMPIngressRequest) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBStartHLSIngressResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "StartHLSIngressResponse"
+extension PBStartRTMPIngressResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "StartRTMPIngressResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -8653,7 +8677,7 @@ extension PBStartHLSIngressResponse: SwiftProtobuf.Message, SwiftProtobuf._Messa
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBStartHLSIngressResponse, rhs: PBStartHLSIngressResponse) -> Bool {
+  public static func ==(lhs: PBStartRTMPIngressResponse, rhs: PBStartRTMPIngressResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8661,18 +8685,34 @@ extension PBStartHLSIngressResponse: SwiftProtobuf.Message, SwiftProtobuf._Messa
 
 extension PBStartHLSEgressRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = "StartHLSEgressRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .standard(proto: "video_id"),
+    2: .same(proto: "address"),
+  ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let _ = try decoder.nextFieldNumber() {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      switch fieldNumber {
+      case 1: try decoder.decodeSingularUInt64Field(value: &self.videoID)
+      case 2: try decoder.decodeSingularStringField(value: &self.address)
+      default: break
+      }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.videoID != 0 {
+      try visitor.visitSingularUInt64Field(value: self.videoID, fieldNumber: 1)
+    }
+    if !self.address.isEmpty {
+      try visitor.visitSingularStringField(value: self.address, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: PBStartHLSEgressRequest, rhs: PBStartHLSEgressRequest) -> Bool {
+    if lhs.videoID != rhs.videoID {return false}
+    if lhs.address != rhs.address {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8680,18 +8720,34 @@ extension PBStartHLSEgressRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
 
 extension PBStartHLSEgressResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = "StartHLSEgressResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .same(proto: "id"),
+    2: .same(proto: "url"),
+  ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let _ = try decoder.nextFieldNumber() {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      switch fieldNumber {
+      case 1: try decoder.decodeSingularUInt64Field(value: &self.id)
+      case 2: try decoder.decodeSingularStringField(value: &self.url)
+      default: break
+      }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.id != 0 {
+      try visitor.visitSingularUInt64Field(value: self.id, fieldNumber: 1)
+    }
+    if !self.url.isEmpty {
+      try visitor.visitSingularStringField(value: self.url, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: PBStartHLSEgressResponse, rhs: PBStartHLSEgressResponse) -> Bool {
+    if lhs.id != rhs.id {return false}
+    if lhs.url != rhs.url {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -8699,18 +8755,28 @@ extension PBStartHLSEgressResponse: SwiftProtobuf.Message, SwiftProtobuf._Messag
 
 extension PBStopHLSEgressRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = "StopHLSEgressRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .same(proto: "id"),
+  ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let _ = try decoder.nextFieldNumber() {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      switch fieldNumber {
+      case 1: try decoder.decodeSingularUInt64Field(value: &self.id)
+      default: break
+      }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.id != 0 {
+      try visitor.visitSingularUInt64Field(value: self.id, fieldNumber: 1)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: PBStopHLSEgressRequest, rhs: PBStopHLSEgressRequest) -> Bool {
+    if lhs.id != rhs.id {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -9638,12 +9704,14 @@ extension PBBootstrapClientWebSocketOptions: SwiftProtobuf.Message, SwiftProtobu
   public static let protoMessageName: String = "BootstrapClientWebSocketOptions"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "url"),
+    2: .standard(proto: "insecure_skip_verify_tls"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       switch fieldNumber {
       case 1: try decoder.decodeSingularStringField(value: &self.url)
+      case 2: try decoder.decodeSingularBoolField(value: &self.insecureSkipVerifyTls)
       default: break
       }
     }
@@ -9653,11 +9721,15 @@ extension PBBootstrapClientWebSocketOptions: SwiftProtobuf.Message, SwiftProtobu
     if !self.url.isEmpty {
       try visitor.visitSingularStringField(value: self.url, fieldNumber: 1)
     }
+    if self.insecureSkipVerifyTls != false {
+      try visitor.visitSingularBoolField(value: self.insecureSkipVerifyTls, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: PBBootstrapClientWebSocketOptions, rhs: PBBootstrapClientWebSocketOptions) -> Bool {
     if lhs.url != rhs.url {return false}
+    if lhs.insecureSkipVerifyTls != rhs.insecureSkipVerifyTls {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

@@ -267,7 +267,11 @@ func StartBootstrapClients(logger *zap.Logger, host *vpn.Host, store *dao.Profil
 		switch o := o.ClientOptions.(type) {
 		case *pb.BootstrapClient_WebsocketOptions:
 			go func() {
-				if err := host.Dial(vpn.WebSocketAddr(o.WebsocketOptions.Url)); err != nil {
+				err := host.Dial(vpn.WebSocketAddr{
+					URL:                   o.WebsocketOptions.Url,
+					InsecureSkipVerifyTLS: o.WebsocketOptions.InsecureSkipVerifyTls,
+				})
+				if err != nil {
 					logger.Debug("websocket botstrap client dial failed", zap.Error(err))
 				}
 			}()

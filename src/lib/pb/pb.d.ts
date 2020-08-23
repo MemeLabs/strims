@@ -15636,6 +15636,9 @@ export interface IBootstrapClientWebSocketOptions {
 
     /** BootstrapClientWebSocketOptions url */
     url?: (string|null);
+
+    /** BootstrapClientWebSocketOptions insecureSkipVerifyTls */
+    insecureSkipVerifyTls?: (boolean|null);
 }
 
 /** Represents a BootstrapClientWebSocketOptions. */
@@ -15649,6 +15652,9 @@ export class BootstrapClientWebSocketOptions implements IBootstrapClientWebSocke
 
     /** BootstrapClientWebSocketOptions url. */
     public url: string;
+
+    /** BootstrapClientWebSocketOptions insecureSkipVerifyTls. */
+    public insecureSkipVerifyTls: boolean;
 
     /**
      * Creates a new BootstrapClientWebSocketOptions instance using the specified properties.
