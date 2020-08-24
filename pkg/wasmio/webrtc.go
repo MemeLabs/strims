@@ -32,7 +32,7 @@ func NewWebRTCProxy(bridge js.Value) *WebRTCProxy {
 
 	proxy := jsObject.New()
 	proxy.Set("onicecandidate", p.funcs.Register(js.FuncOf(p.onICECandidate)))
-	proxy.Set("oniceconnectionstatechange", p.funcs.Register(js.FuncOf(p.onICEConnectionStateChange)))
+	proxy.Set("onconnectionstatechange", p.funcs.Register(js.FuncOf(p.onConnectionStateChange)))
 	proxy.Set("onicegatheringstatechange", p.funcs.Register(js.FuncOf(p.onICEGatheringStateChange)))
 	proxy.Set("onsignalingstatechange", p.funcs.Register(js.FuncOf(p.onSignalingStateChange)))
 	proxy.Set("oncreateoffer", p.funcs.Register(js.FuncOf(p.onCreateOffer)))
@@ -45,16 +45,16 @@ func NewWebRTCProxy(bridge js.Value) *WebRTCProxy {
 
 // WebRTCProxy ...
 type WebRTCProxy struct {
-	proxy              js.Value
-	funcs              Funcs
-	answers            chan interface{}
-	offers             chan interface{}
-	iceCandidates      chan *ICECandidateInit
-	iceConnectionState string
-	iceGatheringState  string
-	signalingState     string
-	dataChannelIDs     map[string]int
-	dataChannelChs     []chan struct{}
+	proxy             js.Value
+	funcs             Funcs
+	answers           chan interface{}
+	offers            chan interface{}
+	iceCandidates     chan *ICECandidateInit
+	connectionState   string
+	iceGatheringState string
+	signalingState    string
+	dataChannelIDs    map[string]int
+	dataChannelChs    []chan struct{}
 }
 
 // CreateOffer ...
@@ -115,9 +115,9 @@ func (p *WebRTCProxy) ICECandidates() <-chan *ICECandidateInit {
 	return p.iceCandidates
 }
 
-// ICEConnectionState ...
-func (p *WebRTCProxy) ICEConnectionState() string {
-	return p.iceConnectionState
+// ConnectionState ...
+func (p *WebRTCProxy) ConnectionState() string {
+	return p.connectionState
 }
 
 // ICEGatheringState ...
@@ -153,9 +153,9 @@ func (p *WebRTCProxy) onICECandidate(this js.Value, args []js.Value) interface{}
 	return nil
 }
 
-func (p *WebRTCProxy) onICEConnectionStateChange(this js.Value, args []js.Value) interface{} {
-	// log.Println("ice connection state", args[0].String())
-	p.iceConnectionState = args[0].String()
+func (p *WebRTCProxy) onConnectionStateChange(this js.Value, args []js.Value) interface{} {
+	// log.Println("connection state", args[0].String())
+	p.connectionState = args[0].String()
 	return nil
 }
 

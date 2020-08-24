@@ -10,7 +10,7 @@ const EVENT_TYPE_DATA = 3;
 const EVENT_TYPE_ERROR = 4;
 const EVENT_TYPE_CLOSE = 5;
 const EVENT_TYPE_ICE_CANDIDATE = 6;
-const EVENT_TYPE_ICE_CONNECTION_STATE_CHANGE = 7;
+const EVENT_TYPE_CONNECTION_STATE_CHANGE = 7;
 const EVENT_TYPE_ICE_GATHERING_STATE_CHANGE = 8;
 const EVENT_TYPE_SIGNALING_STATE_CHANGE = 9;
 const EVENT_TYPE_CREATE_OFFER = 10;
@@ -33,7 +33,7 @@ const eventTypeNames = {
   4: "EVENT_TYPE_ERROR",
   5: "EVENT_TYPE_CLOSE",
   6: "EVENT_TYPE_ICE_CANDIDATE",
-  7: "EVENT_TYPE_ICE_CONNECTION_STATE_CHANGE",
+  7: "EVENT_TYPE_CONNECTION_STATE_CHANGE",
   8: "EVENT_TYPE_ICE_GATHERING_STATE_CHANGE",
   9: "EVENT_TYPE_SIGNALING_STATE_CHANGE",
   10: "EVENT_TYPE_CREATE_OFFER",
@@ -170,7 +170,7 @@ export class WindowBridge extends EventEmitter {
 
       peerConnection.ondatachannel = null;
       peerConnection.onicecandidate = null;
-      peerConnection.oniceconnectionstatechange = null;
+      peerConnection.onconnectionstatechange = null;
       peerConnection.onicegatheringstatechange = null;
       peerConnection.onsignalingstatechange = null;
       peerConnection.close();
@@ -185,10 +185,10 @@ export class WindowBridge extends EventEmitter {
         candidate: JSON.stringify(e.candidate),
       });
 
-    peerConnection.oniceconnectionstatechange = () => {
+    peerConnection.onconnectionstatechange = () => {
       const state = peerConnection.iceConnectionState;
       port.postMessage({
-        type: EVENT_TYPE_ICE_CONNECTION_STATE_CHANGE,
+        type: EVENT_TYPE_CONNECTION_STATE_CHANGE,
         state,
       });
 
@@ -353,7 +353,7 @@ export interface WebSocketProxy {
 
 export interface WebRTCProxy {
   onicecandidate(candidate: string): void;
-  oniceconnectionstatechange(state: string): void;
+  onconnectionstatechange(state: string): void;
   onicegatheringstatechange(state: string): void;
   onsignalingstatechange(state: string): void;
   oncreateoffer(error: string, description: string): void;
@@ -409,8 +409,8 @@ export class WorkerBridge {
         case EVENT_TYPE_ICE_CANDIDATE:
           proxy.onicecandidate(data.candidate);
           break;
-        case EVENT_TYPE_ICE_CONNECTION_STATE_CHANGE:
-          proxy.oniceconnectionstatechange(data.state);
+        case EVENT_TYPE_CONNECTION_STATE_CHANGE:
+          proxy.onconnectionstatechange(data.state);
           break;
         case EVENT_TYPE_ICE_GATHERING_STATE_CHANGE:
           proxy.onicegatheringstatechange(data.state);
