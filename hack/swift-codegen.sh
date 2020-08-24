@@ -13,9 +13,9 @@ echo "// swift-format-ignore-file" >>${FILE}
 echo "import SwiftProtobuf" >>${FILE}
 echo "func registerAnyTypes() {" >>${FILE}
 
-awk '/^message/ { { printf "    Google_Protobuf_Any.register(messageType: PB%s.self)\n", $2, $2}; }' \
+awk '/^message/ { { printf "  Google_Protobuf_Any.register(messageType: PB%s.self)\n", $2, $2}; }' \
 	../schema/rpc.proto >>${FILE}
-awk '/^message/ { { printf "    Google_Protobuf_Any.register(messageType: PB%s.self)\n", $2, $2}; }' \
+awk '/^message/ { { printf "  Google_Protobuf_Any.register(messageType: PB%s.self)\n", $2, $2}; }' \
 	../schema/api.proto >>${FILE}
 
 echo "}" >>${FILE}

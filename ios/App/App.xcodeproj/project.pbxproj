@@ -7,6 +7,7 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		DAF0EBED24F3505D00646F22 /* .swift-format in Resources */ = {isa = PBXBuildFile; fileRef = DAF0EBEC24F3505D00646F22 /* .swift-format */; };
 		DAF7E56D24EF8291009443E9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF7E56C24EF8291009443E9 /* AppDelegate.swift */; };
 		DAF7E56F24EF8291009443E9 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF7E56E24EF8291009443E9 /* SceneDelegate.swift */; };
 		DAF7E57224EF8291009443E9 /* App.xcdatamodeld in Sources */ = {isa = PBXBuildFile; fileRef = DAF7E57024EF8291009443E9 /* App.xcdatamodeld */; };
@@ -26,6 +27,7 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		DAF0EBEC24F3505D00646F22 /* .swift-format */ = {isa = PBXFileReference; lastKnownFileType = text; path = ".swift-format"; sourceTree = "<group>"; };
 		DAF7E56924EF8291009443E9 /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DAF7E56C24EF8291009443E9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
 		DAF7E56E24EF8291009443E9 /* SceneDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SceneDelegate.swift; sourceTree = "<group>"; };
@@ -61,11 +63,14 @@
 		DAF7E56024EF8291009443E9 = {
 			isa = PBXGroup;
 			children = (
+				DAF0EBEC24F3505D00646F22 /* .swift-format */,
 				DAF7E56B24EF8291009443E9 /* App */,
 				DAF7E56A24EF8291009443E9 /* Products */,
 				DAF7E58324EF84D4009443E9 /* Bridge.framework */,
 			);
+			indentWidth = 2;
 			sourceTree = "<group>";
+			tabWidth = 2;
 		};
 		DAF7E56A24EF8291009443E9 /* Products */ = {
 			isa = PBXGroup;
@@ -122,6 +127,7 @@
 				DAF7E56524EF8291009443E9 /* Sources */,
 				DAF7E56624EF8291009443E9 /* Frameworks */,
 				DAF7E56724EF8291009443E9 /* Resources */,
+				DAF0EBEB24F3474C00646F22 /* ShellScript */,
 			);
 			buildRules = (
 			);
@@ -180,11 +186,32 @@
 			files = (
 				DAF7E57C24EF8293009443E9 /* LaunchScreen.storyboard in Resources */,
 				DAF7E57924EF8293009443E9 /* Preview Assets.xcassets in Resources */,
+				DAF0EBED24F3505D00646F22 /* .swift-format in Resources */,
 				DAF7E57624EF8293009443E9 /* Assets.xcassets in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXResourcesBuildPhase section */
+
+/* Begin PBXShellScriptBuildPhase section */
+		DAF0EBEB24F3474C00646F22 /* ShellScript */ = {
+			isa = PBXShellScriptBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			inputFileListPaths = (
+			);
+			inputPaths = (
+			);
+			outputFileListPaths = (
+			);
+			outputPaths = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+			shellPath = /bin/sh;
+			shellScript = "if which swift-format >/dev/null; then\n    swift-format -m format -ri .\nelse\n    echo \"error: swift-format not installed, install it with homebrew or download it from https://github.com/apple/swift-format\"\n    exit 1\nfi\n";
+		};
+/* End PBXShellScriptBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
 		DAF7E56524EF8291009443E9 /* Sources */ = {
