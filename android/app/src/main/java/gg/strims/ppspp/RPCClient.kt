@@ -26,21 +26,20 @@ class RPCResponseStream<T : Message>(val close: () -> Unit) {
     var delegate: (T?, RPCEvent) -> Unit = { _: T?, _: RPCEvent -> }
 }
 
-open class RPCClient {
+open class RPCClient(filepath: String) {
     companion object {
         const val TAG = "RPCClient"
-        const val callbackMethod = "_CALLBACK"
+
+        // const val callbackMethod = "_CALLBACK"
         const val cancelMethod = "_CANCEL"
         const val anyURLPrefix = "strims.gg/"
     }
-
 
     val executor: ExecutorService = Executors.newCachedThreadPool()
 
     private var nextCallID: Long = 0
     var callbacks: MutableMap<Long, (Rpc.Call) -> Unit> = mutableMapOf()
-    private var g: AndroidBridge =
-        AndroidBridge(TODO("pass location into client or get it from somewhere"))
+    private var g: AndroidBridge = AndroidBridge(filepath)
 
     init {
         this.g.onData = { b: ByteArray? -> this.handleCallback(b) }

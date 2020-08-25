@@ -3,7 +3,7 @@ package gg.strims.ppspp
 import gg.strims.ppspp.proto.Api.*
 import java.util.concurrent.Future
 
-class FrontendRPCClient : RPCClient() {
+class FrontendRPCClient(filepath: String) : RPCClient(filepath) {
 
     fun createProfile(
         arg: CreateProfileRequest = CreateProfileRequest.newBuilder().build()
