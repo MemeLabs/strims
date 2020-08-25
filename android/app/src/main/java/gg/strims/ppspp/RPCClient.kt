@@ -30,8 +30,8 @@ class RPCClient() {
     companion object {
         val TAG = "RPCClient"
         val callbackMethod = "_CALLBACK"
-        val cancelMethod = "_CANCEL"
-        val anyURLPrefix = "strims.gg/"
+        const val cancelMethod = "_CANCEL"
+        const val anyURLPrefix = "strims.gg/"
     }
 
     val executor: ExecutorService = Executors.newCachedThreadPool()
@@ -49,7 +49,6 @@ class RPCClient() {
         try {
             // parse call
             val call = Rpc.Call.parseDelimitedFrom(stream)
-            this.callbacks[call.parentId]?
             this.callbacks[call.parentId]?.let {
                 it(call)
             } ?: throw RPCClientError("missing callback")
@@ -73,8 +72,9 @@ class RPCClient() {
             .setMethod(method)
             .build()
 
+
         val stream = ByteArrayOutputStream()
-        call.writeTo(stream)
+        call.writeDelimitedTo(stream)
         stream.close()
 
         this.g.write(stream.toByteArray())
