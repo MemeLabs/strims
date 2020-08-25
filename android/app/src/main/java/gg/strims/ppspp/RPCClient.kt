@@ -26,7 +26,7 @@ class RPCResponseStream<T : Message>(val close: () -> Unit) {
     var delegate: (T?, RPCEvent) -> Unit = { _: T?, _: RPCEvent -> }
 }
 
-class RPCClient {
+open class RPCClient {
     companion object {
         const val TAG = "RPCClient"
         const val callbackMethod = "_CALLBACK"
@@ -39,7 +39,8 @@ class RPCClient {
 
     private var nextCallID: Long = 0
     var callbacks: MutableMap<Long, (Rpc.Call) -> Unit> = mutableMapOf()
-    private var g: AndroidBridge = AndroidBridge("")
+    private var g: AndroidBridge =
+        AndroidBridge(TODO("pass location into client or get it from somewhere"))
 
     init {
         this.g.onData = { b: ByteArray? -> this.handleCallback(b) }
