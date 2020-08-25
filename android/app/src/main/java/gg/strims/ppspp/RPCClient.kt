@@ -8,6 +8,7 @@ import java.util.*
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
+import java.util.concurrent.Semaphore
 import kotlin.concurrent.timerTask
 
 class RPCClientError(message: String) : Exception(message)
@@ -21,18 +22,18 @@ data class RPCEvent(val rawValue: Int) : BitSet() {
     }
 }
 
-class RPCResponseStream<T : Message>(close: () -> Unit) {
-    public val close: () -> Unit = close
-    public var delegate: (T?, RPCEvent) -> Unit = { _: T?, _: RPCEvent -> }
+class RPCResponseStream<T : Message>(val close: () -> Unit) {
+    var delegate: (T?, RPCEvent) -> Unit = { _: T?, _: RPCEvent -> }
 }
 
-class RPCClient() {
+class RPCClient {
     companion object {
-        val TAG = "RPCClient"
-        val callbackMethod = "_CALLBACK"
+        const val TAG = "RPCClient"
+        const val callbackMethod = "_CALLBACK"
         const val cancelMethod = "_CANCEL"
         const val anyURLPrefix = "strims.gg/"
     }
+
 
     val executor: ExecutorService = Executors.newCachedThreadPool()
 
@@ -144,16 +145,21 @@ class RPCClient() {
 
     inline fun <T : Message, reified R : Message> callUnary(method: String, arg: T): Future<R> {
         val callId = getNextCallID()
-
         return executor.submit<R> {
+            // set timeout
             val timer = Timer()
+            val s = Semaphore(1)
+            var ex: Throwable? = null
             timer.schedule(timerTask {
                 callbacks.remove(callId)
-                throw RPCClientError("call timeout")
+                ex = RPCClientError("call timeout")
+                s.release()
             }, 5L * 1000) // five seconds
 
 
-            // TODO: can't return from inside nested call back
+            // prepare callback
+            var result: R? = null
+            s.acquire()
             callbacks[callId] = {
                 callbacks.remove(callId)
                 timer.cancel()
@@ -161,18 +167,33 @@ class RPCClient() {
                     com.google.protobuf.Any.newBuilder().setTypeUrl(it.argument.typeUrl).build()
                 when {
                     message.`is`(R::class.java) -> {
-                        val result = message.unpack(R::class.java)
+                        result = message.unpack(R::class.java)
                     }
                     message.`is`(Rpc.Error::class.java) -> {
                         val error = message.unpack(Rpc.Error::class.java)
-                        throw RPCClientError(error.message)
+                        ex = RPCClientError(error.message)
                     }
                     else -> {
-                        throw RPCClientError("unexpected response type ${message.typeUrl}")
+                        ex = RPCClientError("unexpected response type ${message.typeUrl}")
                     }
                 }
+                s.release()
             }
-            return@submit null
+
+            // call method
+            try {
+                call(method, arg, callId)
+            } catch (e: Exception) {
+                callbacks.remove(callId)
+                throw e
+            }
+
+            // wait for response
+            s.acquire()
+            if (ex != null) {
+                throw ex as Throwable
+            }
+            return@submit result
         }
     }
 }
