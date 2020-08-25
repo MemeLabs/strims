@@ -1,22 +1,25 @@
 package gg.strims.ppspp
 
-import android.content.Context
 import bridge.AndroidSide
 import bridge.Bridge
 import bridge.GoSide
+import java.lang.Exception
 
 class AndroidBridge(location: String) : AndroidSide {
-    var goSide : GoSide = Bridge.newGoSide(this, location)
+    public var onData: (_: ByteArray?) -> Unit = {_: ByteArray? -> }
+    public var g : GoSide = Bridge.newGoSide(this, location)
+    public var error: Throwable? = null
 
     fun write(b: ByteArray) {
-        goSide.write(b)
-    }
-
-    override fun emitData(b: ByteArray?) {
-        TODO("Not yet implemented")
+        this.error?.let { throw it }
+        g.write(b)!!
     }
 
     override fun emitError(msg: String?) {
-        TODO("Not yet implemented")
+        print("error: " + msg!!)
+    }
+
+    override fun emitData(b: ByteArray?) {
+        this.onData(b)
     }
 }
