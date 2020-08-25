@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"path"
 
@@ -37,7 +38,7 @@ func NewGoSide(s SwiftSide) (*GoSide, error) {
 		return nil, fmt.Errorf("failed to locate home directory: %w", err)
 	}
 
-	kv, err := bboltkv.NewStore(path.Join(homeDir, ".strims"))
+	kv, err := bboltkv.NewStore(path.Join(homeDir, "Documents", ".strims"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
@@ -58,6 +59,8 @@ func NewGoSide(s SwiftSide) (*GoSide, error) {
 	inReader, inWriter := io.Pipe()
 
 	go rpc.NewHost(logger, svc).Handle(context.Background(), &swiftSideWriter{s}, inReader)
+
+	go runHTTPProxyThing()
 
 	return &GoSide{inWriter}, nil
 }
@@ -80,4 +83,21 @@ type GoSide struct {
 func (g *GoSide) Write(b []byte) error {
 	_, err := g.w.Write(b)
 	return err
+}
+
+func runHTTPProxyThing() {
+	s := &http.Server{
+		Addr: "127.0.0.1:8003",
+		Handler: http.HandlerFunc(func(res http.ResponseWriter, req *http.Request) {
+			subres, err := http.Get(fmt.Sprintf("http://192.168.0.111:8000%s", req.URL.Path))
+			if err != nil {
+				panic(err)
+			}
+			res.Header().Add("content-type", subres.Header.Get("content-type"))
+			res.Header().Add("content-length", subres.Header.Get("content-length"))
+			io.Copy(res, subres.Body)
+			subres.Body.Close()
+		}),
+	}
+	s.ListenAndServe()
 }

@@ -6,10 +6,272 @@
 //  Copyright © 2020 MemeLabs. All rights reserved.
 //
 
+import AVFoundation
+import CryptoKit
 import PromiseKit
 import SwiftUI
 
+class SegmentPlaylist {
+  public var index: Int = 0
+  public var queue: [SegmentBuffer] = []
+  public var current: SegmentBuffer = SegmentBuffer(0)
+
+  func append(data: Data) {
+    current.append(data)
+  }
+
+  func flush() {
+    queue.append(current)
+    index += 1
+    current = SegmentBuffer(index)
+  }
+
+  func next() -> SegmentBuffer? {
+    return queue[0]
+  }
+
+  func advance() {
+    if !queue.isEmpty {
+      queue.remove(at: 0)
+    }
+  }
+
+  func indexRange() -> Range<Int> {
+    return index - queue.count..<index
+  }
+}
+
+class SegmentBuffer {
+  public let index: Int
+  public var data: Data = Data()
+
+  init(_ index: Int) {
+    self.index = index
+  }
+
+  func append(_ data: Data) {
+    self.data.append(data)
+  }
+
+  private func headerCount() -> Int {
+    print(Int(data[0]) << 8 + Int(data[1]))
+    return Int(data[0]) << 8 + Int(data[1])
+  }
+
+  func initData() -> Data {
+    return data.subdata(in: 2..<headerCount() + 2)
+  }
+
+  func segmentData() -> Data {
+    return data.subdata(in: headerCount() + 2..<data.count)
+  }
+}
+
+class PlayerUIView: UIView, AVAssetResourceLoaderDelegate {
+  private var player: AVPlayer?
+  private let playerLayer = AVPlayerLayer()
+  private var playlist: SegmentPlaylist = SegmentPlaylist()
+
+  override init(frame: CGRect) {
+    super.init(frame: frame)
+    setupPlayer()
+  }
+
+  required init?(coder aDecoder: NSCoder) {
+    super.init(coder: aDecoder)
+  }
+
+  public func setupDelegateThing(_ test: RPCResponseStream<PBVideoClientEvent>) {
+    test.delegate = { event, eventType in
+      switch eventType {
+      case RPCEvent.data:
+        if let body = event?.body {
+          switch (body) {
+          case .open(let open):
+            print("open: \(open.id)")
+          case .data(let data):
+            DispatchQueue.main.sync {
+              self.playlist.append(data: data.data)
+              if data.flush {
+                print("flush segment...")
+                self.playlist.flush()
+                self.setupPlayer()
+                print(self.player!.error)
+                self.player!.play()
+              }
+            }
+          case .close:
+            print("close")
+          }
+        }
+      case RPCEvent.close:
+        print("vpn event stream closed")
+      default:
+        print("vpn rpc error")
+      }
+    }
+  }
+
+  func setupPlayer() {
+    if let _ = player {
+      return
+    }
+
+    //    let url = URL(string: "asdf://strims.gg/index.m3u8")!
+    //    let url = URL(string: "http://192.168.0.111:8000/index.m3u8")!
+    let url = URL(string: "http://127.0.0.1:8003/index.m3u8")!
+    let asset = AVURLAsset(url: url, options: nil)
+    asset.resourceLoader.setDelegate(self, queue: DispatchQueue.global(qos: .default))
+    let item = AVPlayerItem(asset: asset)
+    player = AVPlayer(playerItem: item)
+    player!.play()
+    playerLayer.player = player
+    layer.addSublayer(playerLayer)
+  }
+
+  override func layoutSubviews() {
+    super.layoutSubviews()
+    playerLayer.frame = bounds
+  }
+
+  func resourceLoader(
+    _ resourceLoader: AVAssetResourceLoader,
+    shouldWaitForLoadingOfRequestedResource loadingRequest: AVAssetResourceLoadingRequest
+  ) -> Bool {
+    print("resourceLoader")
+    guard let url = loadingRequest.request.url else { return false }
+
+    switch url.path {
+    case "/index.m3u8":
+      return handlePlaylistRequest(loadingRequest)
+    case "/init.mp4":
+      return handleInitRequest(loadingRequest)
+    default:
+      return handleSegmentRequest(loadingRequest)
+    }
+  }
+
+  func handlePlaylistRequest(_ loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
+    var playlist = ""
+
+    playlist += "#EXTM3U\n"
+    playlist += "#EXT-X-VERSION:7\n"
+    playlist += "#EXT-X-TARGETDURATION:1\n"
+    playlist += "#EXT-X-MEDIA-SEQUENCE:\(self.playlist.indexRange().min()!)\n"
+    playlist += "#EXT-X-MAP:URI=\"init.mp4\"\n"
+
+    for i in self.playlist.indexRange() {
+      playlist += "#EXTINF:1\n"
+      playlist += "\(i).m4s\n"
+    }
+
+    print(playlist)
+
+    if let infoRequest = loadingRequest.contentInformationRequest {
+      print("read info request thing...")
+      infoRequest.contentType = "public.m3u-playlist"
+      infoRequest.contentLength = Int64(playlist.count)
+      infoRequest.isByteRangeAccessSupported = false
+      //      infoRequest.renewalDate = Date()
+    }
+
+    if let dataRequest = loadingRequest.dataRequest {
+      print("read data request")
+      dataRequest.respond(with: playlist.data(using: .ascii)!)
+    }
+    loadingRequest.finishLoading()
+
+    return true
+  }
+
+  func handleInitRequest(_ loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
+    print("handleInitRequest")
+    guard let segment = playlist.next() else { return false }
+    print("segment: \(segment.data.count)")
+    return handleDataRequest(loadingRequest, segment.initData(), "public.mpeg-4")
+  }
+
+  //  func handleSegmentRequest(_ loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
+  //    print("handleSegmentRequest")
+  //    guard let segment = playlist.next() else { return false }
+  //    print("segment: \(segment.data.count)")
+  //    playlist.advance()
+  //    return handleDataRequest(loadingRequest, segment.segmentData(), "public.mpeg-4")
+  //  }
+
+  func handleSegmentRequest(_ loadingRequest: AVAssetResourceLoadingRequest) -> Bool {
+    let url = URL(string: "http://192.168.0.111:8000/2.m4s")!
+
+    //          if let infoRequest = loadingRequest.contentInformationRequest {
+    //            print("read info request thing...")
+    //            print(infoRequest)
+    //            infoRequest.contentType = "public.mpeg-4"
+    //            infoRequest.contentLength = Int64(data!.count)
+    //            infoRequest.isByteRangeAccessSupported = false
+    //            print(infoRequest)
+    //          }
+
+    print("setting redirect thing")
+    loadingRequest.redirect = URLRequest(url: url)
+
+    //          if let dataRequest = loadingRequest.dataRequest {
+    //            print("read data request \(data!.count)")
+    //            print(dataRequest)
+    //            dataRequest.respond(with: data!)
+    //          }
+    //        loadingRequest.finishLoading()
+    print(loadingRequest)
+
+    return true
+  }
+
+  func handleDataRequest(
+    _ loadingRequest: AVAssetResourceLoadingRequest,
+    _ data: Data,
+    _ contentType: String
+  ) -> Bool {
+    let hash = SHA256.hash(data: data)
+    let hex = hash.map { String(format: "%02hhx", $0) }.joined()
+    print("handleDataRequest: \(data.count) \(hex)")
+
+    if let infoRequest = loadingRequest.contentInformationRequest {
+      print("read info request thing...")
+      print(infoRequest)
+      infoRequest.contentType = contentType
+      infoRequest.contentLength = Int64(data.count)
+      infoRequest.isByteRangeAccessSupported = false
+      print(infoRequest)
+    }
+
+    if let dataRequest = loadingRequest.dataRequest {
+      print("read data request \(data.count)")
+      print(dataRequest)
+      dataRequest.respond(with: data)
+    }
+    //    loadingRequest.finishLoading()
+    print(loadingRequest)
+
+    return true
+  }
+}
+
+struct PlayerView: UIViewRepresentable {
+  @Binding var test: RPCResponseStream<PBVideoClientEvent>?
+
+  func updateUIView(_ uiView: PlayerUIView, context: UIViewRepresentableContext<PlayerView>) {
+    if let thing = self.test {
+      uiView.setupDelegateThing(thing)
+    }
+  }
+
+  func makeUIView(context: Context) -> PlayerUIView {
+    return PlayerUIView(frame: .zero)
+  }
+}
+
 struct ContentView: View {
+  @State private var test: RPCResponseStream<PBVideoClientEvent>?
+
   var body: some View {
     let client = FrontendRPCClient()
 
@@ -162,6 +424,7 @@ struct ContentView: View {
               case .open(let open):
                 print("open: \(open.id)")
                 publishSwarm(open.id)
+                self.test = client
               case .data(let data):
                 print("video data: \(data.data.count) bytes")
               case .close:
@@ -181,6 +444,7 @@ struct ContentView: View {
     }
 
     return VStack {
+      PlayerView(test: $test)
       Button(action: handleCreateProfile) {
         Text("create profile")
       }
