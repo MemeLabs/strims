@@ -1,15 +1,18 @@
 package gg.strims.ppspp
 
+import android.util.Log
+import com.google.protobuf.Message
+import gg.strims.ppspp.proto.Rpc
 import java.io.ByteArrayOutputStream
 import java.util.*
+import java.util.concurrent.ExecutorService
+import java.util.concurrent.Executors
 import java.util.concurrent.Future
-import kotlin.Exception
+import kotlin.concurrent.timerTask
 
-import com.google.protobuf.*
+class RPCClientError(message: String) : Exception(message)
 
-class RPCClientError(message: String): Exception(message)
-
-data class RPCEvent(val rawValue: Int): BitSet() {
+data class RPCEvent(val rawValue: Int) : BitSet() {
     companion object {
         val data: RPCEvent = RPCEvent(rawValue = 1 shl 0)
         val close: RPCEvent = RPCEvent(rawValue = 1 shl 1)
@@ -18,80 +21,119 @@ data class RPCEvent(val rawValue: Int): BitSet() {
     }
 }
 
-class RPCResponseStream<T: Message>(close: () -> Unit) {
+class RPCResponseStream<T : Message>(close: () -> Unit) {
     public val close: () -> Unit = close
     public var delegate: (T?, RPCEvent) -> Unit = { _: T?, _: RPCEvent -> }
 }
 
-class RPCClient {
+class RPCClient() {
     companion object {
-        private val callbackMethod = "_CALLBACK"
-        private val cancelMethod = "_CANCEL"
-        private val anyURLPrefix = "strims.gg/"
+        val TAG = "RPCClient"
+        val callbackMethod = "_CALLBACK"
+        val cancelMethod = "_CANCEL"
+        val anyURLPrefix = "strims.gg/"
     }
-    private var nextCallID: ULong = 0u
-    private var callbacks: MutableMap<ULong, (PBCall) -> Unit> = mutableMapOf()
+
+    val executor: ExecutorService = Executors.newCachedThreadPool()
+
+    private var nextCallID: Long = 0
+    var callbacks: MutableMap<Long, (Rpc.Call) -> Unit> = mutableMapOf()
     private var g: AndroidBridge = AndroidBridge("")
 
-    constructor() {
-        this.g.onData = {b: ByteArray? -> this.handleCallback(b)}
+    init {
+        this.g.onData = { b: ByteArray? -> this.handleCallback(b) }
     }
 
     private fun handleCallback(b: ByteArray?) {
         val stream = b!!.inputStream()
         try {
             // parse call
-            val call = TODO()
-            this.callbacks[call]?.let {
+            val call = Rpc.Call.parseDelimitedFrom(stream)
+            this.callbacks[call.parentId]?
+            this.callbacks[call.parentId]?.let {
                 it(call)
             } ?: throw RPCClientError("missing callback")
-        }
-        catch (e: Exception) {
-            print("error: $e")
+        } catch (e: Exception) {
+            Log.e(TAG, "could not parse message", e)
         }
     }
 
-    private fun getNextCallID(): ULong {
-        this.nextCallID += 1u
+    fun getNextCallID(): Long {
+        this.nextCallID += 1
         return this.nextCallID
     }
 
-    private fun <T: Message>call(method: String, arg: T, callID: ULong, parentID: ULong = 0u) {
-        val arg = TODO()
-        val call = TODO()
+    fun <T : Message> call(method: String, arg: T, callID: Long, parentID: Long = 0) {
+        val packed = com.google.protobuf.Any.pack(arg, anyURLPrefix)
+
+        val call = Rpc.Call.newBuilder()
+            .setParentId(parentID)
+            .setId(callID)
+            .setArgument(packed)
+            .setMethod(method)
+            .build()
 
         val stream = ByteArrayOutputStream()
-
+        call.writeTo(stream)
         stream.close()
 
         this.g.write(stream.toByteArray())
     }
 
-    public fun <T: Message, R: Message>call(method: String, arg: T) {
+    fun <T : Message> call(method: String, arg: T) {
         this.call(method, arg, this.getNextCallID())
     }
 
-    public fun <T: Message, R: Message>callStreaming(method: String, arg: T): RPCResponseStream<R> {
+    // inline required to get refined type information, see https://stackoverflow.com/a/46870546/5698680
+    inline fun <T : Message, reified R : Message> callStreaming(
+        method: String,
+        arg: T
+    ): RPCResponseStream<R> {
         val callID = this.getNextCallID()
         val stream = RPCResponseStream<R> {
             this.callbacks.remove(callID)
             try {
-                this.call(RPCClient.cancelMethod, PBCancel(), this.getNextCallID(), callID)
+                this.call(
+                    cancelMethod,
+                    Rpc.Cancel.getDefaultInstance(),
+                    this.getNextCallID(),
+                    callID
+                )
             } catch (e: Exception) {
+                Log.e(TAG, "failed to send call", e)
             }
         }
 
-        this.callbacks[callID]?.let {
+        this.callbacks[callID] = {
             try {
-
-            } catch(e: Exception) {
+                val message =
+                    com.google.protobuf.Any.newBuilder().setTypeUrl(it.argument.typeUrl).build()
+                when {
+                    message.`is`(R::class.java) -> {
+                        val unpacked = message.unpack(R::class.java)
+                        stream.delegate(unpacked, RPCEvent.data)
+                    }
+                    message.`is`(Rpc.Close::class.java) -> {
+                        callbacks.remove(callID)
+                        stream.delegate(null, RPCEvent.close)
+                    }
+                    message.`is`(Rpc.Error::class.java) -> {
+                        callbacks.remove(callID)
+                        stream.delegate(null, RPCEvent.responseError)
+                    }
+                    else -> { // error
+                        callbacks.remove(callID)
+                        stream.delegate(null, RPCEvent.responseError)
+                    }
+                }
+            } catch (e: Exception) {
                 stream.delegate(null, RPCEvent.responseError)
             }
         }
 
         try {
             this.call(method, arg, callID)
-        } catch(e: Exception) {
+        } catch (e: Exception) {
             this.callbacks.remove(callID)
             stream.delegate(null, RPCEvent.requestError)
             throw e
@@ -100,8 +142,37 @@ class RPCClient {
         return stream
     }
 
-    public fun <T: Message, R: Message>callUnary(method: String, arg: T): Future<R> {
-        TODO("learn futures")
+    inline fun <T : Message, reified R : Message> callUnary(method: String, arg: T): Future<R> {
+        val callId = getNextCallID()
+
+        return executor.submit<R> {
+            val timer = Timer()
+            timer.schedule(timerTask {
+                callbacks.remove(callId)
+                throw RPCClientError("call timeout")
+            }, 5L * 1000) // five seconds
+
+
+            // TODO: can't return from inside nested call back
+            callbacks[callId] = {
+                callbacks.remove(callId)
+                timer.cancel()
+                val message =
+                    com.google.protobuf.Any.newBuilder().setTypeUrl(it.argument.typeUrl).build()
+                when {
+                    message.`is`(R::class.java) -> {
+                        val result = message.unpack(R::class.java)
+                    }
+                    message.`is`(Rpc.Error::class.java) -> {
+                        val error = message.unpack(Rpc.Error::class.java)
+                        throw RPCClientError(error.message)
+                    }
+                    else -> {
+                        throw RPCClientError("unexpected response type ${message.typeUrl}")
+                    }
+                }
+            }
+            return@submit null
+        }
     }
 }
-
