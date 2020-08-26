@@ -1,3 +1,9 @@
 <resources>
     <string name="app_name">ppspp</string>
+    <string name="createProfileBtn">Create Profile</string>
+    <string name="loginBtn">Login</string>
+    <string name="createClient">Create Client</string>
+    <string name="inviteCertBtn">Button</string>
+    <string name="createNetBtn">Create Network</string>
+    <string name="startVpnBtn">Start VPN</string>
 </resources>

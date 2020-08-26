@@ -73,7 +73,6 @@ open class RPCClient(filepath: String) {
             .setMethod(method)
             .build()
 
-
         val stream = ByteArrayOutputStream()
         call.writeDelimitedTo(stream)
         stream.close()
@@ -107,18 +106,16 @@ open class RPCClient(filepath: String) {
 
         this.callbacks[callID] = {
             try {
-                val message =
-                    com.google.protobuf.Any.newBuilder().setTypeUrl(it.argument.typeUrl).build()
                 when {
-                    message.`is`(R::class.java) -> {
-                        val unpacked = message.unpack(R::class.java)
+                    it.argument.`is`(R::class.java) -> {
+                        val unpacked = it.argument.unpack(R::class.java)
                         stream.delegate(unpacked, RPCEvent.data)
                     }
-                    message.`is`(Rpc.Close::class.java) -> {
+                    it.argument.`is`(Rpc.Close::class.java) -> {
                         callbacks.remove(callID)
                         stream.delegate(null, RPCEvent.close)
                     }
-                    message.`is`(Rpc.Error::class.java) -> {
+                    it.argument.`is`(Rpc.Error::class.java) -> {
                         callbacks.remove(callID)
                         stream.delegate(null, RPCEvent.responseError)
                     }
@@ -163,18 +160,17 @@ open class RPCClient(filepath: String) {
             callbacks[callId] = {
                 callbacks.remove(callId)
                 timer.cancel()
-                val message =
-                    com.google.protobuf.Any.newBuilder().setTypeUrl(it.argument.typeUrl).build()
                 when {
-                    message.`is`(R::class.java) -> {
-                        result = message.unpack(R::class.java)
+                    it.argument.`is`(R::class.java) -> {
+                        result = it.argument.unpack(R::class.java)
+                        Log.i(TAG, result.toString())
                     }
-                    message.`is`(Rpc.Error::class.java) -> {
-                        val error = message.unpack(Rpc.Error::class.java)
+                    it.argument.`is`(Rpc.Error::class.java) -> {
+                        val error = it.argument.unpack(Rpc.Error::class.java)
                         ex = RPCClientError(error.message)
                     }
                     else -> {
-                        ex = RPCClientError("unexpected response type ${message.typeUrl}")
+                        ex = RPCClientError("unexpected response type ${it.argument.typeUrl}")
                     }
                 }
                 s.release()

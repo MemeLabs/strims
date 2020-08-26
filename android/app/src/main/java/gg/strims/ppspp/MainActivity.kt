@@ -2,34 +2,129 @@ package gg.strims.ppspp
 
 import android.os.Bundle
 import android.util.Log
+import android.view.LayoutInflater
+import android.view.ViewGroup
+import android.widget.Button
+import android.widget.EditText
+import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import gg.strims.ppspp.proto.Api
 
 class MainActivity : AppCompatActivity() {
-    private val TAG = "strims"
+    private val TAG = "MainActivity"
+    private lateinit var recyclerView: RecyclerView
+    private lateinit var viewAdapter: RecyclerView.Adapter<*>
+    private lateinit var viewManager: RecyclerView.LayoutManager
+    private val stdOut = mutableListOf<String>()
 
-    fun FrontendRPCClient.handleCreateProfile(): Any = try {
-        val resp = this.createProfile(
-            Api.CreateProfileRequest.newBuilder().setName("test").setPassword("test").build()
-        ).get()!!
-        Log.i(TAG, "profile: ${resp.profile}")
-    } catch (e: RPCClientError) {
-        Log.e(TAG, "creating profile failed: $e")
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
+
+
+        viewManager = LinearLayoutManager(this)
+        viewAdapter = LogListAdapter(stdOut)
+
+        recyclerView = findViewById<RecyclerView>(R.id.stdOut).apply {
+            setHasFixedSize(true)
+            layoutManager = viewManager
+            adapter = viewAdapter
+        }
+
+        val client = FrontendRPCClient(filesDir.canonicalPath)
+
+        val createClientBtn = findViewById<Button>(R.id.createClientBtn)
+        createClientBtn.setOnClickListener {
+            client.handleCreateBootstrapClient()
+        }
+
+        val createProfileBtn = findViewById<Button>(R.id.createProfileBtn)
+        createProfileBtn.setOnClickListener {
+            val username = findViewById<EditText>(R.id.usernameField).text.toString()
+            val password = findViewById<EditText>(R.id.passwordField).text.toString()
+            client.handleCreateProfile(password, username)
+        }
+
+        val loginBtn = findViewById<Button>(R.id.loginBtn)
+        loginBtn.setOnClickListener {
+            val username = findViewById<EditText>(R.id.usernameField).text.toString()
+            val password = findViewById<EditText>(R.id.passwordField).text.toString()
+            client.handleLogin(password, username)
+        }
     }
 
-    private fun FrontendRPCClient.handleLogin(): Any = try {
+    class LogListAdapter(private val data: List<String>) :
+        RecyclerView.Adapter<LogListAdapter.MyViewHolder>() {
+
+        // Provide a reference to the views for each data item
+        // Complex data items may need more than one view per item, and
+        // you provide access to all the views for a data item in a view holder.
+        // Each data item is just a string in this case that is shown in a TextView.
+        class MyViewHolder(val textView: TextView) : RecyclerView.ViewHolder(textView)
+
+
+        // Create new views (invoked by the layout manager)
+        override fun onCreateViewHolder(
+            parent: ViewGroup,
+            viewType: Int
+        ): MyViewHolder {
+            // create a new view
+            val textView = LayoutInflater.from(parent.context)
+                .inflate(R.layout.log_output, parent, false) as TextView
+
+            return MyViewHolder(textView)
+        }
+
+        // Replace the contents of a view (invoked by the layout manager)
+        override fun onBindViewHolder(holder: MyViewHolder, position: Int) {
+            // - get element from your dataset at this position
+            // - replace the contents of the view with that element
+            holder.textView.text = data[position]
+        }
+
+        // Return the size of your dataset (invoked by the layout manager)
+        override fun getItemCount() = data.size
+    }
+
+
+    fun FrontendRPCClient.handleCreateProfile(pw: String, username: String): Any = try {
+        val resp = this.createProfile(
+            Api.CreateProfileRequest.newBuilder().setName(username).setPassword(pw).build()
+        ).get()!!
+        Log.i(TAG, "profile: ${resp.profile}")
+        stdOut.add("profile: ${resp.profile}")
+    } catch (e: Exception) {
+        stdOut.add("creating profile failed: $e")
+        Log.e(TAG, "creating profile failed: $e")
+    } finally {
+        viewAdapter.notifyItemInserted(stdOut.size - 1)
+    }
+
+    private fun FrontendRPCClient.handleLogin(pw: String, username: String): Any = try {
         val profilesResp = this.getProfiles(Api.GetProfilesRequest.newBuilder().build()).get()!!
         try {
             val profileResp = this.loadProfile(
-                Api.LoadProfileRequest.newBuilder().setId(profilesResp.profilesList[0].id)
-                    .setName("test").setPassword("test").build()
+                Api.LoadProfileRequest.newBuilder()
+                    .setId(profilesResp.profilesList
+                        .filter { p -> p.name == username }
+                        .map { p -> p.id }
+                        .first())
+                    .setName(username).setPassword(pw).build()
             ).get()!!
-            Log.i(TAG, "profile: ${profileResp.profile}")
-        } catch (e: RPCClientError) {
+            stdOut.add("profile: ${profileResp.profile}")
+            Log.i(TAG, "logged in: ${profileResp.profile}")
+        } catch (e: Exception) {
+            stdOut.add("loading profile failed: $e")
             Log.e(TAG, "loading profile failed: $e")
         }
-    } catch (e: RPCClientError) {
+    } catch (e: Exception) {
+        stdOut.add("loading profiles failed: $e")
         Log.e(TAG, "loading profiles failed: $e")
+    } finally {
+        viewAdapter.notifyItemInserted(stdOut.size - 1)
     }
 
     private fun FrontendRPCClient.handleCreateBootstrapClient(): Any = try {
@@ -39,9 +134,13 @@ class MainActivity : AppCompatActivity() {
                     .setUrl("ws://localhost:8080/test-bootstrap").build()
             ).build()
         ).get()!!
+        stdOut.add("bootstrap client: ${resp.bootstrapClient}")
         Log.i(TAG, "bootstrap client: ${resp.bootstrapClient}")
-    } catch (e: RPCClientError) {
-        Log.e(TAG, "creating bootstrap client failed: $e")
+    } catch (e: Exception) {
+        stdOut.add("creating bootstrap client failed: $e")
+        Log.e(TAG, "creating bootstrap client failed", e)
+    } finally {
+        viewAdapter.notifyItemInserted(stdOut.size - 1)
     }
 
     private fun FrontendRPCClient.handleLoadInviteCert(): Any = try {
@@ -51,7 +150,7 @@ class MainActivity : AppCompatActivity() {
                 .build()
         ).get()!!
         Log.i(TAG, "membership: ${resp.membership}")
-    } catch (e: RPCClientError) {
+    } catch (e: Exception) {
         Log.e(TAG, "creating network failed: $e")
     }
 
@@ -59,7 +158,7 @@ class MainActivity : AppCompatActivity() {
         val resp = this.createNetwork(Api.CreateNetworkRequest.newBuilder().setName("test").build())
             .get()!!
         Log.i(TAG, "network: ${resp.network}")
-    } catch (e: RPCClientError) {
+    } catch (e: Exception) {
         Log.e(TAG, "creating network failed: $e")
     }
 
@@ -72,7 +171,7 @@ class MainActivity : AppCompatActivity() {
                 else -> Log.e(TAG, "vpn rpc error")
             }
         }
-    } catch (e: RPCClientError) {
+    } catch (e: Exception) {
         Log.e(TAG, "starting vpn failed: $e")
     }
 
@@ -93,7 +192,7 @@ class MainActivity : AppCompatActivity() {
                     .build()
             ).get()!!
         }
-    } catch (e: RPCClientError) {
+    } catch (e: Exception) {
         Log.e(TAG, "publishing swarm failed: $e")
     }
 
@@ -120,15 +219,7 @@ class MainActivity : AppCompatActivity() {
                 else -> Log.e(TAG, "vpn rpc error")
             }
         }
-    } catch (e: RPCClientError) {
+    } catch (e: Exception) {
         Log.e(TAG, "joining video swarm failed: $e")
-    }
-
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
-
-        val client = FrontendRPCClient(filesDir.canonicalPath)
-        client.handleLogin()
     }
 }
