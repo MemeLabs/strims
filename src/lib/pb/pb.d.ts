@@ -11067,6 +11067,9 @@ export class VideoServerWriteResponse implements IVideoServerWriteResponse {
 
 /** Properties of a VideoClientOpenRequest. */
 export interface IVideoClientOpenRequest {
+
+    /** VideoClientOpenRequest emitData */
+    emitData?: (boolean|null);
 }
 
 /** Represents a VideoClientOpenRequest. */
@@ -11077,6 +11080,9 @@ export class VideoClientOpenRequest implements IVideoClientOpenRequest {
      * @param [properties] Properties to set
      */
     constructor(properties?: IVideoClientOpenRequest);
+
+    /** VideoClientOpenRequest emitData. */
+    public emitData: boolean;
 
     /**
      * Creates a new VideoClientOpenRequest instance using the specified properties.
@@ -12763,169 +12769,169 @@ export class GetIngressStreamsResponse implements IGetIngressStreamsResponse {
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a StartHLSIngressRequest. */
-export interface IStartHLSIngressRequest {
+/** Properties of a StartRTMPIngressRequest. */
+export interface IStartRTMPIngressRequest {
 }
 
-/** Represents a StartHLSIngressRequest. */
-export class StartHLSIngressRequest implements IStartHLSIngressRequest {
+/** Represents a StartRTMPIngressRequest. */
+export class StartRTMPIngressRequest implements IStartRTMPIngressRequest {
 
     /**
-     * Constructs a new StartHLSIngressRequest.
+     * Constructs a new StartRTMPIngressRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IStartHLSIngressRequest);
+    constructor(properties?: IStartRTMPIngressRequest);
 
     /**
-     * Creates a new StartHLSIngressRequest instance using the specified properties.
+     * Creates a new StartRTMPIngressRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns StartHLSIngressRequest instance
+     * @returns StartRTMPIngressRequest instance
      */
-    public static create(properties?: IStartHLSIngressRequest): StartHLSIngressRequest;
+    public static create(properties?: IStartRTMPIngressRequest): StartRTMPIngressRequest;
 
     /**
-     * Encodes the specified StartHLSIngressRequest message. Does not implicitly {@link StartHLSIngressRequest.verify|verify} messages.
-     * @param message StartHLSIngressRequest message or plain object to encode
+     * Encodes the specified StartRTMPIngressRequest message. Does not implicitly {@link StartRTMPIngressRequest.verify|verify} messages.
+     * @param message StartRTMPIngressRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IStartHLSIngressRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IStartRTMPIngressRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified StartHLSIngressRequest message, length delimited. Does not implicitly {@link StartHLSIngressRequest.verify|verify} messages.
-     * @param message StartHLSIngressRequest message or plain object to encode
+     * Encodes the specified StartRTMPIngressRequest message, length delimited. Does not implicitly {@link StartRTMPIngressRequest.verify|verify} messages.
+     * @param message StartRTMPIngressRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IStartHLSIngressRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IStartRTMPIngressRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a StartHLSIngressRequest message from the specified reader or buffer.
+     * Decodes a StartRTMPIngressRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns StartHLSIngressRequest
+     * @returns StartRTMPIngressRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): StartHLSIngressRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): StartRTMPIngressRequest;
 
     /**
-     * Decodes a StartHLSIngressRequest message from the specified reader or buffer, length delimited.
+     * Decodes a StartRTMPIngressRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns StartHLSIngressRequest
+     * @returns StartRTMPIngressRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): StartHLSIngressRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): StartRTMPIngressRequest;
 
     /**
-     * Verifies a StartHLSIngressRequest message.
+     * Verifies a StartRTMPIngressRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a StartHLSIngressRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a StartRTMPIngressRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns StartHLSIngressRequest
+     * @returns StartRTMPIngressRequest
      */
-    public static fromObject(object: { [k: string]: any }): StartHLSIngressRequest;
+    public static fromObject(object: { [k: string]: any }): StartRTMPIngressRequest;
 
     /**
-     * Creates a plain object from a StartHLSIngressRequest message. Also converts values to other types if specified.
-     * @param message StartHLSIngressRequest
+     * Creates a plain object from a StartRTMPIngressRequest message. Also converts values to other types if specified.
+     * @param message StartRTMPIngressRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: StartHLSIngressRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: StartRTMPIngressRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this StartHLSIngressRequest to JSON.
+     * Converts this StartRTMPIngressRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a StartHLSIngressResponse. */
-export interface IStartHLSIngressResponse {
+/** Properties of a StartRTMPIngressResponse. */
+export interface IStartRTMPIngressResponse {
 }
 
-/** Represents a StartHLSIngressResponse. */
-export class StartHLSIngressResponse implements IStartHLSIngressResponse {
+/** Represents a StartRTMPIngressResponse. */
+export class StartRTMPIngressResponse implements IStartRTMPIngressResponse {
 
     /**
-     * Constructs a new StartHLSIngressResponse.
+     * Constructs a new StartRTMPIngressResponse.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IStartHLSIngressResponse);
+    constructor(properties?: IStartRTMPIngressResponse);
 
     /**
-     * Creates a new StartHLSIngressResponse instance using the specified properties.
+     * Creates a new StartRTMPIngressResponse instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns StartHLSIngressResponse instance
+     * @returns StartRTMPIngressResponse instance
      */
-    public static create(properties?: IStartHLSIngressResponse): StartHLSIngressResponse;
+    public static create(properties?: IStartRTMPIngressResponse): StartRTMPIngressResponse;
 
     /**
-     * Encodes the specified StartHLSIngressResponse message. Does not implicitly {@link StartHLSIngressResponse.verify|verify} messages.
-     * @param message StartHLSIngressResponse message or plain object to encode
+     * Encodes the specified StartRTMPIngressResponse message. Does not implicitly {@link StartRTMPIngressResponse.verify|verify} messages.
+     * @param message StartRTMPIngressResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IStartHLSIngressResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IStartRTMPIngressResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified StartHLSIngressResponse message, length delimited. Does not implicitly {@link StartHLSIngressResponse.verify|verify} messages.
-     * @param message StartHLSIngressResponse message or plain object to encode
+     * Encodes the specified StartRTMPIngressResponse message, length delimited. Does not implicitly {@link StartRTMPIngressResponse.verify|verify} messages.
+     * @param message StartRTMPIngressResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IStartHLSIngressResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IStartRTMPIngressResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a StartHLSIngressResponse message from the specified reader or buffer.
+     * Decodes a StartRTMPIngressResponse message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns StartHLSIngressResponse
+     * @returns StartRTMPIngressResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): StartHLSIngressResponse;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): StartRTMPIngressResponse;
 
     /**
-     * Decodes a StartHLSIngressResponse message from the specified reader or buffer, length delimited.
+     * Decodes a StartRTMPIngressResponse message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns StartHLSIngressResponse
+     * @returns StartRTMPIngressResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): StartHLSIngressResponse;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): StartRTMPIngressResponse;
 
     /**
-     * Verifies a StartHLSIngressResponse message.
+     * Verifies a StartRTMPIngressResponse message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a StartHLSIngressResponse message from a plain object. Also converts values to their respective internal types.
+     * Creates a StartRTMPIngressResponse message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns StartHLSIngressResponse
+     * @returns StartRTMPIngressResponse
      */
-    public static fromObject(object: { [k: string]: any }): StartHLSIngressResponse;
+    public static fromObject(object: { [k: string]: any }): StartRTMPIngressResponse;
 
     /**
-     * Creates a plain object from a StartHLSIngressResponse message. Also converts values to other types if specified.
-     * @param message StartHLSIngressResponse
+     * Creates a plain object from a StartRTMPIngressResponse message. Also converts values to other types if specified.
+     * @param message StartRTMPIngressResponse
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: StartHLSIngressResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: StartRTMPIngressResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this StartHLSIngressResponse to JSON.
+     * Converts this StartRTMPIngressResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -12933,6 +12939,12 @@ export class StartHLSIngressResponse implements IStartHLSIngressResponse {
 
 /** Properties of a StartHLSEgressRequest. */
 export interface IStartHLSEgressRequest {
+
+    /** StartHLSEgressRequest videoId */
+    videoId?: (number|null);
+
+    /** StartHLSEgressRequest address */
+    address?: (string|null);
 }
 
 /** Represents a StartHLSEgressRequest. */
@@ -12943,6 +12955,12 @@ export class StartHLSEgressRequest implements IStartHLSEgressRequest {
      * @param [properties] Properties to set
      */
     constructor(properties?: IStartHLSEgressRequest);
+
+    /** StartHLSEgressRequest videoId. */
+    public videoId: number;
+
+    /** StartHLSEgressRequest address. */
+    public address: string;
 
     /**
      * Creates a new StartHLSEgressRequest instance using the specified properties.
@@ -13017,6 +13035,12 @@ export class StartHLSEgressRequest implements IStartHLSEgressRequest {
 
 /** Properties of a StartHLSEgressResponse. */
 export interface IStartHLSEgressResponse {
+
+    /** StartHLSEgressResponse id */
+    id?: (number|null);
+
+    /** StartHLSEgressResponse url */
+    url?: (string|null);
 }
 
 /** Represents a StartHLSEgressResponse. */
@@ -13027,6 +13051,12 @@ export class StartHLSEgressResponse implements IStartHLSEgressResponse {
      * @param [properties] Properties to set
      */
     constructor(properties?: IStartHLSEgressResponse);
+
+    /** StartHLSEgressResponse id. */
+    public id: number;
+
+    /** StartHLSEgressResponse url. */
+    public url: string;
 
     /**
      * Creates a new StartHLSEgressResponse instance using the specified properties.
@@ -13101,6 +13131,9 @@ export class StartHLSEgressResponse implements IStartHLSEgressResponse {
 
 /** Properties of a StopHLSEgressRequest. */
 export interface IStopHLSEgressRequest {
+
+    /** StopHLSEgressRequest id */
+    id?: (number|null);
 }
 
 /** Represents a StopHLSEgressRequest. */
@@ -13111,6 +13144,9 @@ export class StopHLSEgressRequest implements IStopHLSEgressRequest {
      * @param [properties] Properties to set
      */
     constructor(properties?: IStopHLSEgressRequest);
+
+    /** StopHLSEgressRequest id. */
+    public id: number;
 
     /**
      * Creates a new StopHLSEgressRequest instance using the specified properties.

@@ -470,7 +470,9 @@ message VideoServerWriteRequest {
 }
 message VideoServerWriteResponse {}
 
-message VideoClientOpenRequest {}
+message VideoClientOpenRequest {
+  bool emit_data = 1;
+}
 
 message VideoClientEvent {
   message Data {
@@ -531,11 +533,19 @@ message GetIngressStreamsRequest {}
 message GetIngressStreamsResponse {
   string swarm_uri = 1;
 }
-message StartHLSIngressRequest {}
-message StartHLSIngressResponse {}
-message StartHLSEgressRequest {}
-message StartHLSEgressResponse {}
-message StopHLSEgressRequest {}
+message StartRTMPIngressRequest {}
+message StartRTMPIngressResponse {}
+message StartHLSEgressRequest {
+  uint64 video_id = 1;
+  string address = 2;
+}
+message StartHLSEgressResponse {
+  uint64 id = 1;
+  string url = 2;
+}
+message StopHLSEgressRequest {
+  uint64 id = 1;
+}
 message StopHLSEgressResponse {}
 message MonitorSwarmsRequest {}
 

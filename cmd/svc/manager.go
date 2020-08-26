@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"log"
 	"net/http"
-	"os"
 	"path"
 
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
@@ -17,18 +16,17 @@ import (
 )
 
 func newManager(logger *zap.Logger) (*manager, error) {
-	homeDir, err := os.UserHomeDir()
-	if err != nil {
-		return nil, fmt.Errorf("failed to locate home directory: %s", err)
-	}
-	store, err := bboltkv.NewStore(path.Join(homeDir, ".strims"))
+	store, err := bboltkv.NewStore(path.Join(profileDir, ".strims"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %s", err)
 	}
 	svc, err := service.New(service.Options{
-		Store: store,
+		Store:  store,
+		Logger: logger,
 		VPNOptions: []vpn.HostOption{
-			vpn.WithInterface(vpn.NewWSInterface(logger, "0.0.0.0:8082")),
+			vpn.WithNetworkBroker(vpn.NewNetworkBroker(logger)),
+			vpn.WithInterface(vpn.NewWSInterface(logger, addr)),
+			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger))),
 		},
 	})
 	if err != nil {

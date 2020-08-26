@@ -576,7 +576,9 @@ func (s *Frontend) OpenVideoClient(ctx context.Context, r *pb.VideoClientOpenReq
 		},
 	}
 
-	go v.SendEvents(ch)
+	if r.EmitData {
+		go v.SendEvents(ch)
+	}
 
 	return ch, nil
 }

@@ -114,7 +114,7 @@ const HomePage = () => {
 
     const timeShifted = 0;
 
-    const clientEvents = client.openVideoClient();
+    const clientEvents = client.openVideoClient({ emitData: true });
     clientEvents.on("data", (v) => {
       switch (v.body) {
         case "open":

@@ -3,6 +3,7 @@ package service
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"io"
 	"log"
@@ -10,6 +11,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
+	"github.com/MemeLabs/go-ppspp/pkg/hls"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
@@ -167,6 +169,79 @@ func (c *VideoClient) SendEvents(ch chan *pb.VideoClientEvent) {
 					Flush: flush,
 				},
 			},
+		}
+	}
+}
+
+// SendStream ...
+func (c *VideoClient) SendStream(ctx context.Context, stream *hls.Stream) error {
+	r := c.s.Reader()
+	log.Println("got swarm reader", r.Offset())
+	cr, err := chunkstream.NewReaderSize(r, int64(r.Offset()), chunkstream.MaxSize)
+	if err != nil {
+		return err
+	}
+	log.Println("opened chunkstream reader")
+
+	// TODO: hack - discard first fragment
+	{
+		var b bytes.Buffer
+		if _, err := io.Copy(&b, cr); err != nil {
+			return err
+		}
+		b.Reset()
+	}
+
+	log.Println("finished discarding chunk fragment")
+
+	var headerRead, headerWritten bool
+	var b [32 * 1024]byte
+	w := stream.NextWriter()
+	for {
+		var n int
+		var flush bool
+		for {
+			nn, err := cr.Read(b[n:])
+			if err != nil && err != io.EOF {
+				return err
+			}
+
+			n += nn
+			flush = err == io.EOF
+
+			if n == len(b) || flush {
+				break
+			}
+		}
+
+		p := b[:]
+		if !headerRead {
+			headerLen := binary.BigEndian.Uint16(p)
+			if !headerWritten {
+				iw := stream.InitWriter()
+				if _, err := iw.Write(p[2 : headerLen+2]); err != nil {
+					return err
+				}
+				if err := iw.Close(); err != nil {
+					return err
+				}
+				headerWritten = true
+			}
+			p = p[headerLen+2:]
+			headerRead = true
+		}
+
+		if _, err := w.Write(p); err != nil {
+			return err
+		}
+
+		if flush {
+			w = stream.NextWriter()
+			headerRead = false
+		}
+
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 	}
 }

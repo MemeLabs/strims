@@ -25200,6 +25200,7 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
      * Properties of a VideoClientOpenRequest.
      * @exports IVideoClientOpenRequest
      * @interface IVideoClientOpenRequest
+     * @property {boolean|null} [emitData] VideoClientOpenRequest emitData
      */
 
     /**
@@ -25216,6 +25217,14 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
+
+    /**
+     * VideoClientOpenRequest emitData.
+     * @member {boolean} emitData
+     * @memberof VideoClientOpenRequest
+     * @instance
+     */
+    VideoClientOpenRequest.prototype.emitData = false;
 
     /**
      * Creates a new VideoClientOpenRequest instance using the specified properties.
@@ -25241,6 +25250,8 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
     VideoClientOpenRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
+        if (message.emitData != null && Object.hasOwnProperty.call(message, "emitData"))
+            writer.uint32(/* id 1, wireType 0 =*/8).bool(message.emitData);
         return writer;
     };
 
@@ -25275,6 +25286,9 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
+            case 1:
+                message.emitData = reader.bool();
+                break;
             default:
                 reader.skipType(tag & 7);
                 break;
@@ -25310,6 +25324,9 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
     VideoClientOpenRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
+        if (message.emitData != null && message.hasOwnProperty("emitData"))
+            if (typeof message.emitData !== "boolean")
+                return "emitData: boolean expected";
         return null;
     };
 
@@ -25324,7 +25341,10 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
     VideoClientOpenRequest.fromObject = function fromObject(object) {
         if (object instanceof $root.VideoClientOpenRequest)
             return object;
-        return new $root.VideoClientOpenRequest();
+        let message = new $root.VideoClientOpenRequest();
+        if (object.emitData != null)
+            message.emitData = Boolean(object.emitData);
+        return message;
     };
 
     /**
@@ -25336,8 +25356,15 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    VideoClientOpenRequest.toObject = function toObject() {
-        return {};
+    VideoClientOpenRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.emitData = false;
+        if (message.emitData != null && message.hasOwnProperty("emitData"))
+            object.emitData = message.emitData;
+        return object;
     };
 
     /**
@@ -28739,23 +28766,23 @@ export const GetIngressStreamsResponse = $root.GetIngressStreamsResponse = (() =
     return GetIngressStreamsResponse;
 })();
 
-export const StartHLSIngressRequest = $root.StartHLSIngressRequest = (() => {
+export const StartRTMPIngressRequest = $root.StartRTMPIngressRequest = (() => {
 
     /**
-     * Properties of a StartHLSIngressRequest.
-     * @exports IStartHLSIngressRequest
-     * @interface IStartHLSIngressRequest
+     * Properties of a StartRTMPIngressRequest.
+     * @exports IStartRTMPIngressRequest
+     * @interface IStartRTMPIngressRequest
      */
 
     /**
-     * Constructs a new StartHLSIngressRequest.
-     * @exports StartHLSIngressRequest
-     * @classdesc Represents a StartHLSIngressRequest.
-     * @implements IStartHLSIngressRequest
+     * Constructs a new StartRTMPIngressRequest.
+     * @exports StartRTMPIngressRequest
+     * @classdesc Represents a StartRTMPIngressRequest.
+     * @implements IStartRTMPIngressRequest
      * @constructor
-     * @param {IStartHLSIngressRequest=} [properties] Properties to set
+     * @param {IStartRTMPIngressRequest=} [properties] Properties to set
      */
-    function StartHLSIngressRequest(properties) {
+    function StartRTMPIngressRequest(properties) {
         if (properties)
             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
@@ -28763,60 +28790,60 @@ export const StartHLSIngressRequest = $root.StartHLSIngressRequest = (() => {
     }
 
     /**
-     * Creates a new StartHLSIngressRequest instance using the specified properties.
+     * Creates a new StartRTMPIngressRequest instance using the specified properties.
      * @function create
-     * @memberof StartHLSIngressRequest
+     * @memberof StartRTMPIngressRequest
      * @static
-     * @param {IStartHLSIngressRequest=} [properties] Properties to set
-     * @returns {StartHLSIngressRequest} StartHLSIngressRequest instance
+     * @param {IStartRTMPIngressRequest=} [properties] Properties to set
+     * @returns {StartRTMPIngressRequest} StartRTMPIngressRequest instance
      */
-    StartHLSIngressRequest.create = function create(properties) {
-        return new StartHLSIngressRequest(properties);
+    StartRTMPIngressRequest.create = function create(properties) {
+        return new StartRTMPIngressRequest(properties);
     };
 
     /**
-     * Encodes the specified StartHLSIngressRequest message. Does not implicitly {@link StartHLSIngressRequest.verify|verify} messages.
+     * Encodes the specified StartRTMPIngressRequest message. Does not implicitly {@link StartRTMPIngressRequest.verify|verify} messages.
      * @function encode
-     * @memberof StartHLSIngressRequest
+     * @memberof StartRTMPIngressRequest
      * @static
-     * @param {IStartHLSIngressRequest} message StartHLSIngressRequest message or plain object to encode
+     * @param {IStartRTMPIngressRequest} message StartRTMPIngressRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    StartHLSIngressRequest.encode = function encode(message, writer) {
+    StartRTMPIngressRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
         return writer;
     };
 
     /**
-     * Encodes the specified StartHLSIngressRequest message, length delimited. Does not implicitly {@link StartHLSIngressRequest.verify|verify} messages.
+     * Encodes the specified StartRTMPIngressRequest message, length delimited. Does not implicitly {@link StartRTMPIngressRequest.verify|verify} messages.
      * @function encodeDelimited
-     * @memberof StartHLSIngressRequest
+     * @memberof StartRTMPIngressRequest
      * @static
-     * @param {IStartHLSIngressRequest} message StartHLSIngressRequest message or plain object to encode
+     * @param {IStartRTMPIngressRequest} message StartRTMPIngressRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    StartHLSIngressRequest.encodeDelimited = function encodeDelimited(message, writer) {
+    StartRTMPIngressRequest.encodeDelimited = function encodeDelimited(message, writer) {
         return this.encode(message, writer).ldelim();
     };
 
     /**
-     * Decodes a StartHLSIngressRequest message from the specified reader or buffer.
+     * Decodes a StartRTMPIngressRequest message from the specified reader or buffer.
      * @function decode
-     * @memberof StartHLSIngressRequest
+     * @memberof StartRTMPIngressRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @param {number} [length] Message length if known beforehand
-     * @returns {StartHLSIngressRequest} StartHLSIngressRequest
+     * @returns {StartRTMPIngressRequest} StartRTMPIngressRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    StartHLSIngressRequest.decode = function decode(reader, length) {
+    StartRTMPIngressRequest.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.StartHLSIngressRequest();
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.StartRTMPIngressRequest();
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
@@ -28829,93 +28856,93 @@ export const StartHLSIngressRequest = $root.StartHLSIngressRequest = (() => {
     };
 
     /**
-     * Decodes a StartHLSIngressRequest message from the specified reader or buffer, length delimited.
+     * Decodes a StartRTMPIngressRequest message from the specified reader or buffer, length delimited.
      * @function decodeDelimited
-     * @memberof StartHLSIngressRequest
+     * @memberof StartRTMPIngressRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {StartHLSIngressRequest} StartHLSIngressRequest
+     * @returns {StartRTMPIngressRequest} StartRTMPIngressRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    StartHLSIngressRequest.decodeDelimited = function decodeDelimited(reader) {
+    StartRTMPIngressRequest.decodeDelimited = function decodeDelimited(reader) {
         if (!(reader instanceof $Reader))
             reader = new $Reader(reader);
         return this.decode(reader, reader.uint32());
     };
 
     /**
-     * Verifies a StartHLSIngressRequest message.
+     * Verifies a StartRTMPIngressRequest message.
      * @function verify
-     * @memberof StartHLSIngressRequest
+     * @memberof StartRTMPIngressRequest
      * @static
      * @param {Object.<string,*>} message Plain object to verify
      * @returns {string|null} `null` if valid, otherwise the reason why it is not
      */
-    StartHLSIngressRequest.verify = function verify(message) {
+    StartRTMPIngressRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
         return null;
     };
 
     /**
-     * Creates a StartHLSIngressRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a StartRTMPIngressRequest message from a plain object. Also converts values to their respective internal types.
      * @function fromObject
-     * @memberof StartHLSIngressRequest
+     * @memberof StartRTMPIngressRequest
      * @static
      * @param {Object.<string,*>} object Plain object
-     * @returns {StartHLSIngressRequest} StartHLSIngressRequest
+     * @returns {StartRTMPIngressRequest} StartRTMPIngressRequest
      */
-    StartHLSIngressRequest.fromObject = function fromObject(object) {
-        if (object instanceof $root.StartHLSIngressRequest)
+    StartRTMPIngressRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.StartRTMPIngressRequest)
             return object;
-        return new $root.StartHLSIngressRequest();
+        return new $root.StartRTMPIngressRequest();
     };
 
     /**
-     * Creates a plain object from a StartHLSIngressRequest message. Also converts values to other types if specified.
+     * Creates a plain object from a StartRTMPIngressRequest message. Also converts values to other types if specified.
      * @function toObject
-     * @memberof StartHLSIngressRequest
+     * @memberof StartRTMPIngressRequest
      * @static
-     * @param {StartHLSIngressRequest} message StartHLSIngressRequest
+     * @param {StartRTMPIngressRequest} message StartRTMPIngressRequest
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    StartHLSIngressRequest.toObject = function toObject() {
+    StartRTMPIngressRequest.toObject = function toObject() {
         return {};
     };
 
     /**
-     * Converts this StartHLSIngressRequest to JSON.
+     * Converts this StartRTMPIngressRequest to JSON.
      * @function toJSON
-     * @memberof StartHLSIngressRequest
+     * @memberof StartRTMPIngressRequest
      * @instance
      * @returns {Object.<string,*>} JSON object
      */
-    StartHLSIngressRequest.prototype.toJSON = function toJSON() {
+    StartRTMPIngressRequest.prototype.toJSON = function toJSON() {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
 
-    return StartHLSIngressRequest;
+    return StartRTMPIngressRequest;
 })();
 
-export const StartHLSIngressResponse = $root.StartHLSIngressResponse = (() => {
+export const StartRTMPIngressResponse = $root.StartRTMPIngressResponse = (() => {
 
     /**
-     * Properties of a StartHLSIngressResponse.
-     * @exports IStartHLSIngressResponse
-     * @interface IStartHLSIngressResponse
+     * Properties of a StartRTMPIngressResponse.
+     * @exports IStartRTMPIngressResponse
+     * @interface IStartRTMPIngressResponse
      */
 
     /**
-     * Constructs a new StartHLSIngressResponse.
-     * @exports StartHLSIngressResponse
-     * @classdesc Represents a StartHLSIngressResponse.
-     * @implements IStartHLSIngressResponse
+     * Constructs a new StartRTMPIngressResponse.
+     * @exports StartRTMPIngressResponse
+     * @classdesc Represents a StartRTMPIngressResponse.
+     * @implements IStartRTMPIngressResponse
      * @constructor
-     * @param {IStartHLSIngressResponse=} [properties] Properties to set
+     * @param {IStartRTMPIngressResponse=} [properties] Properties to set
      */
-    function StartHLSIngressResponse(properties) {
+    function StartRTMPIngressResponse(properties) {
         if (properties)
             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
@@ -28923,60 +28950,60 @@ export const StartHLSIngressResponse = $root.StartHLSIngressResponse = (() => {
     }
 
     /**
-     * Creates a new StartHLSIngressResponse instance using the specified properties.
+     * Creates a new StartRTMPIngressResponse instance using the specified properties.
      * @function create
-     * @memberof StartHLSIngressResponse
+     * @memberof StartRTMPIngressResponse
      * @static
-     * @param {IStartHLSIngressResponse=} [properties] Properties to set
-     * @returns {StartHLSIngressResponse} StartHLSIngressResponse instance
+     * @param {IStartRTMPIngressResponse=} [properties] Properties to set
+     * @returns {StartRTMPIngressResponse} StartRTMPIngressResponse instance
      */
-    StartHLSIngressResponse.create = function create(properties) {
-        return new StartHLSIngressResponse(properties);
+    StartRTMPIngressResponse.create = function create(properties) {
+        return new StartRTMPIngressResponse(properties);
     };
 
     /**
-     * Encodes the specified StartHLSIngressResponse message. Does not implicitly {@link StartHLSIngressResponse.verify|verify} messages.
+     * Encodes the specified StartRTMPIngressResponse message. Does not implicitly {@link StartRTMPIngressResponse.verify|verify} messages.
      * @function encode
-     * @memberof StartHLSIngressResponse
+     * @memberof StartRTMPIngressResponse
      * @static
-     * @param {IStartHLSIngressResponse} message StartHLSIngressResponse message or plain object to encode
+     * @param {IStartRTMPIngressResponse} message StartRTMPIngressResponse message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    StartHLSIngressResponse.encode = function encode(message, writer) {
+    StartRTMPIngressResponse.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
         return writer;
     };
 
     /**
-     * Encodes the specified StartHLSIngressResponse message, length delimited. Does not implicitly {@link StartHLSIngressResponse.verify|verify} messages.
+     * Encodes the specified StartRTMPIngressResponse message, length delimited. Does not implicitly {@link StartRTMPIngressResponse.verify|verify} messages.
      * @function encodeDelimited
-     * @memberof StartHLSIngressResponse
+     * @memberof StartRTMPIngressResponse
      * @static
-     * @param {IStartHLSIngressResponse} message StartHLSIngressResponse message or plain object to encode
+     * @param {IStartRTMPIngressResponse} message StartRTMPIngressResponse message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    StartHLSIngressResponse.encodeDelimited = function encodeDelimited(message, writer) {
+    StartRTMPIngressResponse.encodeDelimited = function encodeDelimited(message, writer) {
         return this.encode(message, writer).ldelim();
     };
 
     /**
-     * Decodes a StartHLSIngressResponse message from the specified reader or buffer.
+     * Decodes a StartRTMPIngressResponse message from the specified reader or buffer.
      * @function decode
-     * @memberof StartHLSIngressResponse
+     * @memberof StartRTMPIngressResponse
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @param {number} [length] Message length if known beforehand
-     * @returns {StartHLSIngressResponse} StartHLSIngressResponse
+     * @returns {StartRTMPIngressResponse} StartRTMPIngressResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    StartHLSIngressResponse.decode = function decode(reader, length) {
+    StartRTMPIngressResponse.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.StartHLSIngressResponse();
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.StartRTMPIngressResponse();
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
@@ -28989,74 +29016,74 @@ export const StartHLSIngressResponse = $root.StartHLSIngressResponse = (() => {
     };
 
     /**
-     * Decodes a StartHLSIngressResponse message from the specified reader or buffer, length delimited.
+     * Decodes a StartRTMPIngressResponse message from the specified reader or buffer, length delimited.
      * @function decodeDelimited
-     * @memberof StartHLSIngressResponse
+     * @memberof StartRTMPIngressResponse
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {StartHLSIngressResponse} StartHLSIngressResponse
+     * @returns {StartRTMPIngressResponse} StartRTMPIngressResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    StartHLSIngressResponse.decodeDelimited = function decodeDelimited(reader) {
+    StartRTMPIngressResponse.decodeDelimited = function decodeDelimited(reader) {
         if (!(reader instanceof $Reader))
             reader = new $Reader(reader);
         return this.decode(reader, reader.uint32());
     };
 
     /**
-     * Verifies a StartHLSIngressResponse message.
+     * Verifies a StartRTMPIngressResponse message.
      * @function verify
-     * @memberof StartHLSIngressResponse
+     * @memberof StartRTMPIngressResponse
      * @static
      * @param {Object.<string,*>} message Plain object to verify
      * @returns {string|null} `null` if valid, otherwise the reason why it is not
      */
-    StartHLSIngressResponse.verify = function verify(message) {
+    StartRTMPIngressResponse.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
         return null;
     };
 
     /**
-     * Creates a StartHLSIngressResponse message from a plain object. Also converts values to their respective internal types.
+     * Creates a StartRTMPIngressResponse message from a plain object. Also converts values to their respective internal types.
      * @function fromObject
-     * @memberof StartHLSIngressResponse
+     * @memberof StartRTMPIngressResponse
      * @static
      * @param {Object.<string,*>} object Plain object
-     * @returns {StartHLSIngressResponse} StartHLSIngressResponse
+     * @returns {StartRTMPIngressResponse} StartRTMPIngressResponse
      */
-    StartHLSIngressResponse.fromObject = function fromObject(object) {
-        if (object instanceof $root.StartHLSIngressResponse)
+    StartRTMPIngressResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.StartRTMPIngressResponse)
             return object;
-        return new $root.StartHLSIngressResponse();
+        return new $root.StartRTMPIngressResponse();
     };
 
     /**
-     * Creates a plain object from a StartHLSIngressResponse message. Also converts values to other types if specified.
+     * Creates a plain object from a StartRTMPIngressResponse message. Also converts values to other types if specified.
      * @function toObject
-     * @memberof StartHLSIngressResponse
+     * @memberof StartRTMPIngressResponse
      * @static
-     * @param {StartHLSIngressResponse} message StartHLSIngressResponse
+     * @param {StartRTMPIngressResponse} message StartRTMPIngressResponse
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    StartHLSIngressResponse.toObject = function toObject() {
+    StartRTMPIngressResponse.toObject = function toObject() {
         return {};
     };
 
     /**
-     * Converts this StartHLSIngressResponse to JSON.
+     * Converts this StartRTMPIngressResponse to JSON.
      * @function toJSON
-     * @memberof StartHLSIngressResponse
+     * @memberof StartRTMPIngressResponse
      * @instance
      * @returns {Object.<string,*>} JSON object
      */
-    StartHLSIngressResponse.prototype.toJSON = function toJSON() {
+    StartRTMPIngressResponse.prototype.toJSON = function toJSON() {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
 
-    return StartHLSIngressResponse;
+    return StartRTMPIngressResponse;
 })();
 
 export const StartHLSEgressRequest = $root.StartHLSEgressRequest = (() => {
@@ -29065,6 +29092,8 @@ export const StartHLSEgressRequest = $root.StartHLSEgressRequest = (() => {
      * Properties of a StartHLSEgressRequest.
      * @exports IStartHLSEgressRequest
      * @interface IStartHLSEgressRequest
+     * @property {number|null} [videoId] StartHLSEgressRequest videoId
+     * @property {string|null} [address] StartHLSEgressRequest address
      */
 
     /**
@@ -29081,6 +29110,22 @@ export const StartHLSEgressRequest = $root.StartHLSEgressRequest = (() => {
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
+
+    /**
+     * StartHLSEgressRequest videoId.
+     * @member {number} videoId
+     * @memberof StartHLSEgressRequest
+     * @instance
+     */
+    StartHLSEgressRequest.prototype.videoId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * StartHLSEgressRequest address.
+     * @member {string} address
+     * @memberof StartHLSEgressRequest
+     * @instance
+     */
+    StartHLSEgressRequest.prototype.address = "";
 
     /**
      * Creates a new StartHLSEgressRequest instance using the specified properties.
@@ -29106,6 +29151,10 @@ export const StartHLSEgressRequest = $root.StartHLSEgressRequest = (() => {
     StartHLSEgressRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
+        if (message.videoId != null && Object.hasOwnProperty.call(message, "videoId"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.videoId);
+        if (message.address != null && Object.hasOwnProperty.call(message, "address"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.address);
         return writer;
     };
 
@@ -29140,6 +29189,12 @@ export const StartHLSEgressRequest = $root.StartHLSEgressRequest = (() => {
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
+            case 1:
+                message.videoId = reader.uint64();
+                break;
+            case 2:
+                message.address = reader.string();
+                break;
             default:
                 reader.skipType(tag & 7);
                 break;
@@ -29175,6 +29230,12 @@ export const StartHLSEgressRequest = $root.StartHLSEgressRequest = (() => {
     StartHLSEgressRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
+        if (message.videoId != null && message.hasOwnProperty("videoId"))
+            if (!$util.isInteger(message.videoId) && !(message.videoId && $util.isInteger(message.videoId.low) && $util.isInteger(message.videoId.high)))
+                return "videoId: integer|Long expected";
+        if (message.address != null && message.hasOwnProperty("address"))
+            if (!$util.isString(message.address))
+                return "address: string expected";
         return null;
     };
 
@@ -29189,7 +29250,19 @@ export const StartHLSEgressRequest = $root.StartHLSEgressRequest = (() => {
     StartHLSEgressRequest.fromObject = function fromObject(object) {
         if (object instanceof $root.StartHLSEgressRequest)
             return object;
-        return new $root.StartHLSEgressRequest();
+        let message = new $root.StartHLSEgressRequest();
+        if (object.videoId != null)
+            if ($util.Long)
+                (message.videoId = $util.Long.fromValue(object.videoId)).unsigned = true;
+            else if (typeof object.videoId === "string")
+                message.videoId = parseInt(object.videoId, 10);
+            else if (typeof object.videoId === "number")
+                message.videoId = object.videoId;
+            else if (typeof object.videoId === "object")
+                message.videoId = new $util.LongBits(object.videoId.low >>> 0, object.videoId.high >>> 0).toNumber(true);
+        if (object.address != null)
+            message.address = String(object.address);
+        return message;
     };
 
     /**
@@ -29201,8 +29274,26 @@ export const StartHLSEgressRequest = $root.StartHLSEgressRequest = (() => {
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    StartHLSEgressRequest.toObject = function toObject() {
-        return {};
+    StartHLSEgressRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.videoId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.videoId = options.longs === String ? "0" : 0;
+            object.address = "";
+        }
+        if (message.videoId != null && message.hasOwnProperty("videoId"))
+            if (typeof message.videoId === "number")
+                object.videoId = options.longs === String ? String(message.videoId) : message.videoId;
+            else
+                object.videoId = options.longs === String ? $util.Long.prototype.toString.call(message.videoId) : options.longs === Number ? new $util.LongBits(message.videoId.low >>> 0, message.videoId.high >>> 0).toNumber(true) : message.videoId;
+        if (message.address != null && message.hasOwnProperty("address"))
+            object.address = message.address;
+        return object;
     };
 
     /**
@@ -29225,6 +29316,8 @@ export const StartHLSEgressResponse = $root.StartHLSEgressResponse = (() => {
      * Properties of a StartHLSEgressResponse.
      * @exports IStartHLSEgressResponse
      * @interface IStartHLSEgressResponse
+     * @property {number|null} [id] StartHLSEgressResponse id
+     * @property {string|null} [url] StartHLSEgressResponse url
      */
 
     /**
@@ -29241,6 +29334,22 @@ export const StartHLSEgressResponse = $root.StartHLSEgressResponse = (() => {
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
+
+    /**
+     * StartHLSEgressResponse id.
+     * @member {number} id
+     * @memberof StartHLSEgressResponse
+     * @instance
+     */
+    StartHLSEgressResponse.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * StartHLSEgressResponse url.
+     * @member {string} url
+     * @memberof StartHLSEgressResponse
+     * @instance
+     */
+    StartHLSEgressResponse.prototype.url = "";
 
     /**
      * Creates a new StartHLSEgressResponse instance using the specified properties.
@@ -29266,6 +29375,10 @@ export const StartHLSEgressResponse = $root.StartHLSEgressResponse = (() => {
     StartHLSEgressResponse.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        if (message.url != null && Object.hasOwnProperty.call(message, "url"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.url);
         return writer;
     };
 
@@ -29300,6 +29413,12 @@ export const StartHLSEgressResponse = $root.StartHLSEgressResponse = (() => {
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
+            case 2:
+                message.url = reader.string();
+                break;
             default:
                 reader.skipType(tag & 7);
                 break;
@@ -29335,6 +29454,12 @@ export const StartHLSEgressResponse = $root.StartHLSEgressResponse = (() => {
     StartHLSEgressResponse.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        if (message.url != null && message.hasOwnProperty("url"))
+            if (!$util.isString(message.url))
+                return "url: string expected";
         return null;
     };
 
@@ -29349,7 +29474,19 @@ export const StartHLSEgressResponse = $root.StartHLSEgressResponse = (() => {
     StartHLSEgressResponse.fromObject = function fromObject(object) {
         if (object instanceof $root.StartHLSEgressResponse)
             return object;
-        return new $root.StartHLSEgressResponse();
+        let message = new $root.StartHLSEgressResponse();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        if (object.url != null)
+            message.url = String(object.url);
+        return message;
     };
 
     /**
@@ -29361,8 +29498,26 @@ export const StartHLSEgressResponse = $root.StartHLSEgressResponse = (() => {
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    StartHLSEgressResponse.toObject = function toObject() {
-        return {};
+    StartHLSEgressResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+            object.url = "";
+        }
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        if (message.url != null && message.hasOwnProperty("url"))
+            object.url = message.url;
+        return object;
     };
 
     /**
@@ -29385,6 +29540,7 @@ export const StopHLSEgressRequest = $root.StopHLSEgressRequest = (() => {
      * Properties of a StopHLSEgressRequest.
      * @exports IStopHLSEgressRequest
      * @interface IStopHLSEgressRequest
+     * @property {number|null} [id] StopHLSEgressRequest id
      */
 
     /**
@@ -29401,6 +29557,14 @@ export const StopHLSEgressRequest = $root.StopHLSEgressRequest = (() => {
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
+
+    /**
+     * StopHLSEgressRequest id.
+     * @member {number} id
+     * @memberof StopHLSEgressRequest
+     * @instance
+     */
+    StopHLSEgressRequest.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
      * Creates a new StopHLSEgressRequest instance using the specified properties.
@@ -29426,6 +29590,8 @@ export const StopHLSEgressRequest = $root.StopHLSEgressRequest = (() => {
     StopHLSEgressRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
         return writer;
     };
 
@@ -29460,6 +29626,9 @@ export const StopHLSEgressRequest = $root.StopHLSEgressRequest = (() => {
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
             default:
                 reader.skipType(tag & 7);
                 break;
@@ -29495,6 +29664,9 @@ export const StopHLSEgressRequest = $root.StopHLSEgressRequest = (() => {
     StopHLSEgressRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
         return null;
     };
 
@@ -29509,7 +29681,17 @@ export const StopHLSEgressRequest = $root.StopHLSEgressRequest = (() => {
     StopHLSEgressRequest.fromObject = function fromObject(object) {
         if (object instanceof $root.StopHLSEgressRequest)
             return object;
-        return new $root.StopHLSEgressRequest();
+        let message = new $root.StopHLSEgressRequest();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        return message;
     };
 
     /**
@@ -29521,8 +29703,22 @@ export const StopHLSEgressRequest = $root.StopHLSEgressRequest = (() => {
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    StopHLSEgressRequest.toObject = function toObject() {
-        return {};
+    StopHLSEgressRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        return object;
     };
 
     /**

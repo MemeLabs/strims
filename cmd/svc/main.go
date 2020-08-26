@@ -56,17 +56,24 @@ func main() {
 		}()
 	}
 
+	logger, err := zap.NewDevelopment()
+	if err != nil {
+		panic(err)
+	}
+
+	// t, err := newManager(logger)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// t.Run()
+	// return
+
 	profileStore, err := initProfileStore()
 	if err != nil {
 		panic(err)
 	}
 
 	profile, err := dao.GetProfile(profileStore)
-	if err != nil {
-		panic(err)
-	}
-
-	logger, err := zap.NewDevelopment()
 	if err != nil {
 		panic(err)
 	}
