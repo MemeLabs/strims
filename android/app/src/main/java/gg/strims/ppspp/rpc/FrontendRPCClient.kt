@@ -1,4 +1,4 @@
-package gg.strims.ppspp
+package gg.strims.ppspp.rpc
 
 import gg.strims.ppspp.proto.Api.*
 import java.util.concurrent.Future

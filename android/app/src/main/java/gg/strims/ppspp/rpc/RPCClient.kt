@@ -1,4 +1,4 @@
-package gg.strims.ppspp
+package gg.strims.ppspp.rpc
 
 import android.util.Log
 import com.google.protobuf.Message
