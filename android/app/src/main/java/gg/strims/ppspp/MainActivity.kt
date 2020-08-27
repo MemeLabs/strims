@@ -171,6 +171,7 @@ class MainActivity : AppCompatActivity() {
                 else -> Log.e(TAG, "vpn rpc error")
             }
         }
+        Log.i(TAG, "started vpn")
     } catch (e: Exception) {
         Log.e(TAG, "starting vpn failed: $e")
     }
@@ -219,6 +220,7 @@ class MainActivity : AppCompatActivity() {
                 else -> Log.e(TAG, "vpn rpc error")
             }
         }
+        Log.i(TAG, "video client open")
     } catch (e: Exception) {
         Log.e(TAG, "joining video swarm failed: $e")
     }
