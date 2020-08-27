@@ -98,14 +98,17 @@ export default class Client extends RPCHost {
   public getIngressStreams(v: pb.IGetIngressStreamsRequest = new pb.GetIngressStreamsRequest()): GenericReadable<pb.GetIngressStreamsResponse> {
     return this.expectMany(this.call("getIngressStreams", new pb.GetIngressStreamsRequest(v)));
   }
-  public startHLSIngress(v: pb.IStartHLSIngressRequest = new pb.StartHLSIngressRequest()): Promise<pb.StartHLSIngressResponse> {
-    return this.expectOne(this.call("startHLSIngress", new pb.StartHLSIngressRequest(v)));
+  public startRTMPIngress(v: pb.IStartRTMPIngressRequest = new pb.StartRTMPIngressRequest()): Promise<pb.StartRTMPIngressResponse> {
+    return this.expectOne(this.call("startRTMPIngress", new pb.StartRTMPIngressRequest(v)));
   }
-  public stopHLSIngress(v: pb.IStartHLSIngressRequest = new pb.StartHLSIngressRequest()): Promise<pb.StartHLSIngressResponse> {
-    return this.expectOne(this.call("stopHLSIngress", new pb.StartHLSIngressRequest(v)));
+  public stopRTMPIngress(v: pb.IStartRTMPIngressRequest = new pb.StartRTMPIngressRequest()): Promise<pb.StartRTMPIngressResponse> {
+    return this.expectOne(this.call("stopRTMPIngress", new pb.StartRTMPIngressRequest(v)));
   }
-  public startHLSEgress(v: pb.IStopHLSEgressRequest = new pb.StopHLSEgressRequest()): Promise<pb.StopHLSEgressResponse> {
-    return this.expectOne(this.call("startHLSEgress", new pb.StopHLSEgressRequest(v)));
+  public startHLSEgress(v: pb.IStartHLSEgressRequest = new pb.StartHLSEgressRequest()): Promise<pb.StartHLSEgressResponse> {
+    return this.expectOne(this.call("startHLSEgress", new pb.StartHLSEgressRequest(v)));
+  }
+  public stopHLSEgress(v: pb.IStopHLSEgressRequest = new pb.StopHLSEgressRequest()): Promise<pb.StopHLSEgressResponse> {
+    return this.expectOne(this.call("stopHLSEgress", new pb.StopHLSEgressRequest(v)));
   }
   public startSwarm(v: pb.IStartSwarmRequest = new pb.StartSwarmRequest()): Promise<pb.StartSwarmResponse> {
     return this.expectOne(this.call("startSwarm", new pb.StartSwarmRequest(v)));

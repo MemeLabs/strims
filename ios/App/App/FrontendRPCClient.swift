@@ -101,14 +101,17 @@ class FrontendRPCClient: RPCClient {
   public func getIngressStreams(_ arg: PBGetIngressStreamsRequest = PBGetIngressStreamsRequest()) throws -> RPCResponseStream<PBGetIngressStreamsResponse> {
     return try self.callStreaming("getIngressStreams", arg)
   }
-  public func startHLSIngress(_ arg: PBStartHLSIngressRequest = PBStartHLSIngressRequest()) -> Promise<PBStartHLSIngressResponse> {
-    return self.callUnary("startHLSIngress", arg)
+  public func startRTMPIngress(_ arg: PBStartRTMPIngressRequest = PBStartRTMPIngressRequest()) -> Promise<PBStartRTMPIngressResponse> {
+    return self.callUnary("startRTMPIngress", arg)
   }
-  public func stopHLSIngress(_ arg: PBStartHLSIngressRequest = PBStartHLSIngressRequest()) -> Promise<PBStartHLSIngressResponse> {
-    return self.callUnary("stopHLSIngress", arg)
+  public func stopRTMPIngress(_ arg: PBStartRTMPIngressRequest = PBStartRTMPIngressRequest()) -> Promise<PBStartRTMPIngressResponse> {
+    return self.callUnary("stopRTMPIngress", arg)
   }
-  public func startHLSEgress(_ arg: PBStopHLSEgressRequest = PBStopHLSEgressRequest()) -> Promise<PBStopHLSEgressResponse> {
+  public func startHLSEgress(_ arg: PBStartHLSEgressRequest = PBStartHLSEgressRequest()) -> Promise<PBStartHLSEgressResponse> {
     return self.callUnary("startHLSEgress", arg)
+  }
+  public func stopHLSEgress(_ arg: PBStopHLSEgressRequest = PBStopHLSEgressRequest()) -> Promise<PBStopHLSEgressResponse> {
+    return self.callUnary("stopHLSEgress", arg)
   }
   public func startSwarm(_ arg: PBStartSwarmRequest = PBStartSwarmRequest()) -> Promise<PBStartSwarmResponse> {
     return self.callUnary("startSwarm", arg)

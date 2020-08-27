@@ -77,10 +77,8 @@ func (s *Service) handleSegment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	w.Header().Set("Content-Type", "video/mp4")
+	w.Header().Set("Content-Type", "video/iso.segment")
 	w.WriteHeader(200)
-
-	// TODO: write deadline to prevent reading from recycled segments
 
 	io.Copy(w, cr)
 }
@@ -125,12 +123,12 @@ func (s *Service) handlePlaylist(w http.ResponseWriter, r *http.Request) {
 	var b bytes.Buffer
 	b.WriteString("#EXTM3U\n")
 	b.WriteString("#EXT-X-VERSION:7\n")
-	b.WriteString(fmt.Sprintf("#EXT-X-MEDIA-SEQUENCE:%s\n", strconv.FormatUint(high, 10)))
 	b.WriteString("#EXT-X-TARGETDURATION:1\n")
-	b.WriteString(`#EXT-X-MAP:URI="init.mp4"\n`)
+	b.WriteString(fmt.Sprintf("#EXT-X-MEDIA-SEQUENCE:%s\n", strconv.FormatUint(low, 10)))
+	b.WriteString(fmt.Sprintf("#EXT-X-MAP:URI=\"/hls/%s/init.mp4\"\n", params["name"]))
 
 	for i := low; i < high; i++ {
-		b.WriteString(fmt.Sprintf("#EXTINF:1.000,%s\n", params["name"]))
+		b.WriteString(fmt.Sprintf("#EXTINF:1,\n"))
 		b.WriteString(fmt.Sprintf("/hls/%s/%s.m4s\n", params["name"], strconv.FormatUint(i, 10)))
 	}
 

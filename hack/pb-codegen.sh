@@ -36,4 +36,6 @@ protoc \
     -I $SCHEMA_DIR \
     rpc.proto api.proto
 
+bash ./hack/swift-codegen.sh
+
 popd > /dev/null

@@ -559,7 +559,7 @@ func (s *Frontend) OpenVideoClient(ctx context.Context, r *pb.VideoClientOpenReq
 
 	s.logger.Debug("start swarm...")
 
-	v, err := NewVideoClient()
+	v, err := NewVideoClient(s.logger)
 	if err != nil {
 		return nil, err
 	}

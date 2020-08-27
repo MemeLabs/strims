@@ -37,7 +37,11 @@ func (s *Frontend) StartHLSEgress(ctx context.Context, r *pb.StartHLSEgressReque
 	}
 
 	stream := hls.NewStream(hls.DefaultStreamOptions)
-	go t.SendStream(context.TODO(), stream)
+	go func() {
+		if err := t.SendStream(context.TODO(), stream); err != nil {
+			s.logger.Debug("sending stream to hls egress failed", zap.Error(err))
+		}
+	}()
 
 	svc := hls.NewService()
 	svc.InsertChannel(&hls.Channel{
@@ -69,7 +73,7 @@ func (s *Frontend) StartHLSEgress(ctx context.Context, r *pb.StartHLSEgressReque
 
 	return &pb.StartHLSEgressResponse{
 		Id:  id,
-		Url: fmt.Sprintf("http://%s/live/index.m3u8", lis.Addr().String()),
+		Url: fmt.Sprintf("http://%s/hls/live/index.m3u8", lis.Addr().String()),
 	}, nil
 }
 

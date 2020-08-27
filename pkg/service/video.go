@@ -87,7 +87,7 @@ func (t *VideoServer) Flush() error {
 }
 
 // NewVideoClient ...
-func NewVideoClient() (*VideoClient, error) {
+func NewVideoClient(logger *zap.Logger) (*VideoClient, error) {
 	key := testKey()
 
 	s, err := ppspp.NewSwarm(
@@ -106,10 +106,11 @@ func NewVideoClient() (*VideoClient, error) {
 
 	return &VideoClient{
 		VideoSwarm: VideoSwarm{
-			ctx:   ctx,
-			close: cancel,
-			key:   key.Public,
-			s:     s,
+			logger: logger,
+			ctx:    ctx,
+			close:  cancel,
+			key:    key.Public,
+			s:      s,
 		},
 	}, nil
 }
@@ -214,7 +215,7 @@ func (c *VideoClient) SendStream(ctx context.Context, stream *hls.Stream) error 
 			}
 		}
 
-		p := b[:]
+		p := b[:n]
 		if !headerRead {
 			headerLen := binary.BigEndian.Uint16(p)
 			if !headerWritten {
@@ -236,6 +237,9 @@ func (c *VideoClient) SendStream(ctx context.Context, stream *hls.Stream) error 
 		}
 
 		if flush {
+			if err := w.Close(); err != nil {
+				return err
+			}
 			w = stream.NextWriter()
 			headerRead = false
 		}
