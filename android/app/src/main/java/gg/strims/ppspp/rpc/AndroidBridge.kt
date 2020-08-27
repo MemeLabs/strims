@@ -1,4 +1,4 @@
-package gg.strims.ppspp
+package gg.strims.ppspp.rpc
 
 import bridge.AndroidSide
 import bridge.Bridge

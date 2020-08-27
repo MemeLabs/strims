@@ -11,6 +11,8 @@ import androidx.appcompat.app.AppCompatActivity
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import gg.strims.ppspp.proto.Api
+import gg.strims.ppspp.rpc.FrontendRPCClient
+import gg.strims.ppspp.rpc.RPCEvent
 
 class MainActivity : AppCompatActivity() {
     private val TAG = "MainActivity"
