@@ -12,6 +12,11 @@ object Libs {
 
     const val material = "com.google.android.material:material:1.1.0"
 
+    object Proto {
+        private const val version = "3.13.0"
+        const val googleProto = "com.google.protobuf:protobuf-java-util:$version"
+    }
+
     object Kotlin {
         private const val version = "1.4.0"
         const val stdlib = "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$version"
@@ -32,13 +37,14 @@ object Libs {
 
         object Compose {
             const val snapshot = ""
-            const val version = "1.0.0-alpha01"
+            private const val version = "1.0.0-alpha01"
 
             const val core = "androidx.compose.ui:ui:$version"
             const val foundation = "androidx.compose.foundation:foundation:$version"
             const val layout = "androidx.compose.foundation:foundation-layout:$version"
             const val material = "androidx.compose.material:material:$version"
-            const val materialIconsExtended = "androidx.compose.material:material-icons-extended:$version"
+            const val materialIconsExtended =
+                "androidx.compose.material:material-icons-extended:$version"
             const val runtime = "androidx.compose.runtime:runtime:$version"
             const val runtimeLivedata = "androidx.compose.runtime:runtime-livedata:$version"
             const val tooling = "androidx.ui:ui-tooling:$version"
