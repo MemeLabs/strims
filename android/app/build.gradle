@@ -34,6 +34,7 @@ android {
     kotlinOptions {
         jvmTarget = '1.8'
         allWarningsAsErrors = true
+        useIR = true
     }
 
     buildFeatures {
@@ -48,6 +49,10 @@ android {
 }
 
 dependencies {
+    implementation name: 'bridge', ext: 'aar'
+
+    implementation Libs.Proto.googleProto
+
     implementation Libs.Kotlin.stdlib
     implementation Libs.Coroutines.android
 
@@ -64,6 +69,7 @@ dependencies {
     implementation Libs.AndroidX.Compose.runtime
     implementation Libs.AndroidX.Compose.runtimeLivedata
 
+    testImplementation Libs.junit
     androidTestImplementation Libs.junit
     androidTestImplementation Libs.AndroidX.Test.core
     androidTestImplementation Libs.AndroidX.Test.espressoCore
