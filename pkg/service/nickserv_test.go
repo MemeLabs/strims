@@ -70,11 +70,11 @@ func TestStore(t *testing.T) {
 	}
 
 	// insert record
-	err := store.Insert(record)
+	record, err := store.Insert(record)
 	assert.NoError(t, err)
 
 	// ensure that record was inserted correctly
-	r := store.nicks["bob"].Record()
+	r := store.nicks["bob"].record
 	assert.NotNil(t, r)
 	assert.Equal(t, record, r)
 
@@ -89,7 +89,7 @@ func TestStore(t *testing.T) {
 	}
 
 	// update record
-	err = store.Update(newRecord, record.Nick)
+	err = store.Update(newRecord)
 	assert.NoError(t, err)
 
 	// should the previously returned pointers point to newRecord?
