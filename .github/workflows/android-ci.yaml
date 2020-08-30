@@ -19,31 +19,10 @@ jobs:
         uses: actions/setup-go@v2
         with:
           go-version: '^1.14'
-      - name: set up gomobile env
-        env:
-          SDK_VERSION: sdk-tools-linux-3859397
-          ANDROID_BUILD_TOOLS_VERSION: 27.0.3
-          ANDROID_PLATFORM_VERSION: "android-28"
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y unzip
-          mkdir ~/android
-          export ANDROID_HOME="$HOME/android"
-          export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin
-          ls $ANDROID_HOME/tools/bin
-          wget -O tools.zip https://dl.google.com/android/repository/${SDK_VERSION}.zip && \
-          unzip tools.zip && rm tools.zip && \
-          chmod a+x -R $ANDROID_HOME && \
-          mkdir -p ~/.android && \
-          touch ~/.android/repositories.cfg && \
-          echo y | sdkmanager "platform-tools" && \
-          echo y | sdkmanager "build-tools;$ANDROID_BUILD_TOOLS_VERSION" && \
-          echo y | sdkmanager "platforms;$ANDROID_PLATFORM_VERSION" && \
-          echo y | sdkmanager "ndk-bundle"
+      - name: Install NDK
+        run: echo "y" | sudo /usr/local/lib/android/sdk/tools/bin/sdkmanager \
+               --install "ndk-bundle" --sdk_root=${ANDROID_SDK_ROOT}
       - name: Build Go bridge
-        env:
-          ANDROID_HOME: "/github/home/android"
-          PATH: "$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin"
         run: |
           go get golang.org/x/mobile/cmd/gomobile
           go mod download
