@@ -7,7 +7,7 @@ on:
 
 jobs:
   main:
-    name: Test & Build Debug
+    name: Lint & Build Debug
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -35,7 +35,7 @@ jobs:
           gomobile init
           mkdir ./android/app/libs
           gomobile bind -o ./android/app/libs/bridge.aar -target=android ./android/bridge
-      - name: Unit tests
+      - name: Lint
         working-directory: ./android
         run: bash ./gradlew lint
       - name: Build Debug APK
