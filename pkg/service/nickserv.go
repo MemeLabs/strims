@@ -39,7 +39,7 @@ var (
 const clientTimeout = 10 * time.Second
 
 // TODO: tests
-// TODO: get profile store from frontend service
+// TODO: get nickserv public key
 
 func NewNickServ(svc *NetworkServices, salt []byte, kvStore kv.RWStore, nickservID uint64) (*NickServ, error) {
 	cfg, err := dao.GetNickservConfig(kvStore, nickservID) // TODO: nickserv id
@@ -67,9 +67,9 @@ func NewNickServ(svc *NetworkServices, salt []byte, kvStore kv.RWStore, nickserv
 		return nil, err
 	}
 
-	rolesMap := make(map[string]bool)
+	rolesMap := make(map[string]struct{})
 	for _, role := range cfg.Roles {
-		rolesMap[role] = true
+		rolesMap[role] = struct{}{}
 	}
 
 	store, err := NewNickServStore(kvStore, nickservID)
@@ -105,7 +105,7 @@ type NickServ struct {
 	closeOnce       sync.Once
 	svc             *NetworkServices
 	store           *NickServStore
-	roles           map[string]bool
+	roles           map[string]struct{}
 	tokenTTL        time.Duration
 	nameChangeQuota uint32 // smaller?
 }
@@ -629,9 +629,10 @@ func (c *NickServClient) Command(ctx context.Context, msg *pb.NickServRPCCommand
 	return c.awaitResponse(ctx, rid)
 }
 
-func VerifyNickServToken(token *pb.NickServToken) (bool, error) {
+func VerifyNickToken(token *pb.NickServToken) (bool, error) {
 	tokenBytes, _ := serializeNickToken(token)
-	if len(token.Key) != ed25519.PublicKeySize {
+	// TODO: get signer public key
+	if len([]byte{}) != ed25519.PublicKeySize {
 		return false, dao.ErrInvalidKeyLength
 	}
 	return ed25519.Verify(token.Key, tokenBytes, token.Signature), nil
