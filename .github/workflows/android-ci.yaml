@@ -20,8 +20,14 @@ jobs:
         with:
           go-version: '^1.14'
       - name: Install NDK
+        env:
+          ANDROID_BUILD_TOOLS_VERSION: 27.0.3
+          ANDROID_PLATFORM_VERSION: "android-28"
         run: |
-          echo "y" | sudo /usr/local/lib/android/sdk/tools/bin/sdkmanager "ndk" --sdk_root=${ANDROID_SDK_ROOT}
+          echo "y" | sudo /usr/local/lib/android/sdk/tools/bin/sdkmanager "platform-tools"
+          echo "y" | sudo /usr/local/lib/android/sdk/tools/bin/sdkmanager "build-tools;$ANDROID_BUILD_TOOLS_VERSION"
+          echo "y" | sudo /usr/local/lib/android/sdk/tools/bin/sdkmanager "platforms;$ANDROID_PLATFORM_VERSION"
+          echo "y" | sudo /usr/local/lib/android/sdk/tools/bin/sdkmanager "ndk-bundle"
       - name: Build Go bridge
         run: |
           go get golang.org/x/mobile/cmd/gomobile
