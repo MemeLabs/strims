@@ -63,7 +63,7 @@ func TestStore(t *testing.T) {
 
 	key := []byte{0xBE, 0xEF}
 
-	record := &pb.NickServRecord{
+	record := &pb.NickservNick{
 		Id:   1,
 		Nick: "bob",
 		Key:  key,
@@ -82,14 +82,14 @@ func TestStore(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, record, r2)
 
-	newRecord := &pb.NickServRecord{
+	newRecord := &pb.NickservNick{
 		Id:   2,
 		Nick: "brady",
 		Key:  key,
 	}
 
 	// update record
-	err = store.Update(newRecord)
+	newRecord, err = store.Update(newRecord)
 	assert.NoError(t, err)
 
 	// should the previously returned pointers point to newRecord?

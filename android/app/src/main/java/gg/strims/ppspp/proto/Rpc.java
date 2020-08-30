@@ -20,36 +20,30 @@ public final class Rpc {
 
     /**
      * <code>uint64 id = 1;</code>
-     * @return The id.
      */
     long getId();
 
     /**
      * <code>uint64 parent_id = 2;</code>
-     * @return The parentId.
      */
     long getParentId();
 
     /**
      * <code>string method = 3;</code>
-     * @return The method.
      */
     java.lang.String getMethod();
     /**
      * <code>string method = 3;</code>
-     * @return The bytes for method.
      */
     com.google.protobuf.ByteString
         getMethodBytes();
 
     /**
      * <code>.google.protobuf.Any argument = 4;</code>
-     * @return Whether the argument field is set.
      */
     boolean hasArgument();
     /**
      * <code>.google.protobuf.Any argument = 4;</code>
-     * @return The argument.
      */
     com.google.protobuf.Any getArgument();
     /**
@@ -60,7 +54,7 @@ public final class Rpc {
   /**
    * Protobuf type {@code Call}
    */
-  public static final class Call extends
+  public  static final class Call extends
       com.google.protobuf.GeneratedMessageV3 implements
       // @@protoc_insertion_point(message_implements:Call)
       CallOrBuilder {
@@ -70,14 +64,9 @@ public final class Rpc {
       super(builder);
     }
     private Call() {
+      id_ = 0L;
+      parentId_ = 0L;
       method_ = "";
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Call();
     }
 
     @java.lang.Override
@@ -93,6 +82,7 @@ public final class Rpc {
       if (extensionRegistry == null) {
         throw new java.lang.NullPointerException();
       }
+      int mutable_bitField0_ = 0;
       com.google.protobuf.UnknownFieldSet.Builder unknownFields =
           com.google.protobuf.UnknownFieldSet.newBuilder();
       try {
@@ -133,7 +123,7 @@ public final class Rpc {
               break;
             }
             default: {
-              if (!parseUnknownField(
+              if (!parseUnknownFieldProto3(
                   input, unknownFields, extensionRegistry, tag)) {
                 done = true;
               }
@@ -168,9 +158,7 @@ public final class Rpc {
     private long id_;
     /**
      * <code>uint64 id = 1;</code>
-     * @return The id.
      */
-    @java.lang.Override
     public long getId() {
       return id_;
     }
@@ -179,9 +167,7 @@ public final class Rpc {
     private long parentId_;
     /**
      * <code>uint64 parent_id = 2;</code>
-     * @return The parentId.
      */
-    @java.lang.Override
     public long getParentId() {
       return parentId_;
     }
@@ -190,9 +176,7 @@ public final class Rpc {
     private volatile java.lang.Object method_;
     /**
      * <code>string method = 3;</code>
-     * @return The method.
      */
-    @java.lang.Override
     public java.lang.String getMethod() {
       java.lang.Object ref = method_;
       if (ref instanceof java.lang.String) {
@@ -207,9 +191,7 @@ public final class Rpc {
     }
     /**
      * <code>string method = 3;</code>
-     * @return The bytes for method.
      */
-    @java.lang.Override
     public com.google.protobuf.ByteString
         getMethodBytes() {
       java.lang.Object ref = method_;
@@ -228,24 +210,19 @@ public final class Rpc {
     private com.google.protobuf.Any argument_;
     /**
      * <code>.google.protobuf.Any argument = 4;</code>
-     * @return Whether the argument field is set.
      */
-    @java.lang.Override
     public boolean hasArgument() {
       return argument_ != null;
     }
     /**
      * <code>.google.protobuf.Any argument = 4;</code>
-     * @return The argument.
      */
-    @java.lang.Override
     public com.google.protobuf.Any getArgument() {
       return argument_ == null ? com.google.protobuf.Any.getDefaultInstance() : argument_;
     }
     /**
      * <code>.google.protobuf.Any argument = 4;</code>
      */
-    @java.lang.Override
     public com.google.protobuf.AnyOrBuilder getArgumentOrBuilder() {
       return getArgument();
     }
@@ -315,19 +292,20 @@ public final class Rpc {
       }
       gg.strims.ppspp.proto.Rpc.Call other = (gg.strims.ppspp.proto.Rpc.Call) obj;
 
-      if (getId()
-          != other.getId()) return false;
-      if (getParentId()
-          != other.getParentId()) return false;
-      if (!getMethod()
-          .equals(other.getMethod())) return false;
-      if (hasArgument() != other.hasArgument()) return false;
+      boolean result = true;
+      result = result && (getId()
+          == other.getId());
+      result = result && (getParentId()
+          == other.getParentId());
+      result = result && getMethod()
+          .equals(other.getMethod());
+      result = result && (hasArgument() == other.hasArgument());
       if (hasArgument()) {
-        if (!getArgument()
-            .equals(other.getArgument())) return false;
+        result = result && getArgument()
+            .equals(other.getArgument());
       }
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
+      result = result && unknownFields.equals(other.unknownFields);
+      return result;
     }
 
     @java.lang.Override
@@ -534,35 +512,35 @@ public final class Rpc {
 
       @java.lang.Override
       public Builder clone() {
-        return super.clone();
+        return (Builder) super.clone();
       }
       @java.lang.Override
       public Builder setField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return super.setField(field, value);
+        return (Builder) super.setField(field, value);
       }
       @java.lang.Override
       public Builder clearField(
           com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
+        return (Builder) super.clearField(field);
       }
       @java.lang.Override
       public Builder clearOneof(
           com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
+        return (Builder) super.clearOneof(oneof);
       }
       @java.lang.Override
       public Builder setRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
+        return (Builder) super.setRepeatedField(field, index, value);
       }
       @java.lang.Override
       public Builder addRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return super.addRepeatedField(field, value);
+        return (Builder) super.addRepeatedField(field, value);
       }
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -621,16 +599,12 @@ public final class Rpc {
       private long id_ ;
       /**
        * <code>uint64 id = 1;</code>
-       * @return The id.
        */
-      @java.lang.Override
       public long getId() {
         return id_;
       }
       /**
        * <code>uint64 id = 1;</code>
-       * @param value The id to set.
-       * @return This builder for chaining.
        */
       public Builder setId(long value) {
         
@@ -640,7 +614,6 @@ public final class Rpc {
       }
       /**
        * <code>uint64 id = 1;</code>
-       * @return This builder for chaining.
        */
       public Builder clearId() {
         
@@ -652,16 +625,12 @@ public final class Rpc {
       private long parentId_ ;
       /**
        * <code>uint64 parent_id = 2;</code>
-       * @return The parentId.
        */
-      @java.lang.Override
       public long getParentId() {
         return parentId_;
       }
       /**
        * <code>uint64 parent_id = 2;</code>
-       * @param value The parentId to set.
-       * @return This builder for chaining.
        */
       public Builder setParentId(long value) {
         
@@ -671,7 +640,6 @@ public final class Rpc {
       }
       /**
        * <code>uint64 parent_id = 2;</code>
-       * @return This builder for chaining.
        */
       public Builder clearParentId() {
         
@@ -683,7 +651,6 @@ public final class Rpc {
       private java.lang.Object method_ = "";
       /**
        * <code>string method = 3;</code>
-       * @return The method.
        */
       public java.lang.String getMethod() {
         java.lang.Object ref = method_;
@@ -699,7 +666,6 @@ public final class Rpc {
       }
       /**
        * <code>string method = 3;</code>
-       * @return The bytes for method.
        */
       public com.google.protobuf.ByteString
           getMethodBytes() {
@@ -716,8 +682,6 @@ public final class Rpc {
       }
       /**
        * <code>string method = 3;</code>
-       * @param value The method to set.
-       * @return This builder for chaining.
        */
       public Builder setMethod(
           java.lang.String value) {
@@ -731,7 +695,6 @@ public final class Rpc {
       }
       /**
        * <code>string method = 3;</code>
-       * @return This builder for chaining.
        */
       public Builder clearMethod() {
         
@@ -741,8 +704,6 @@ public final class Rpc {
       }
       /**
        * <code>string method = 3;</code>
-       * @param value The bytes for method to set.
-       * @return This builder for chaining.
        */
       public Builder setMethodBytes(
           com.google.protobuf.ByteString value) {
@@ -756,19 +717,17 @@ public final class Rpc {
         return this;
       }
 
-      private com.google.protobuf.Any argument_;
+      private com.google.protobuf.Any argument_ = null;
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.protobuf.Any, com.google.protobuf.Any.Builder, com.google.protobuf.AnyOrBuilder> argumentBuilder_;
       /**
        * <code>.google.protobuf.Any argument = 4;</code>
-       * @return Whether the argument field is set.
        */
       public boolean hasArgument() {
         return argumentBuilder_ != null || argument_ != null;
       }
       /**
        * <code>.google.protobuf.Any argument = 4;</code>
-       * @return The argument.
        */
       public com.google.protobuf.Any getArgument() {
         if (argumentBuilder_ == null) {
@@ -877,7 +836,7 @@ public final class Rpc {
       @java.lang.Override
       public final Builder setUnknownFields(
           final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
+        return super.setUnknownFieldsProto3(unknownFields);
       }
 
       @java.lang.Override
@@ -933,12 +892,10 @@ public final class Rpc {
 
     /**
      * <code>string message = 1;</code>
-     * @return The message.
      */
     java.lang.String getMessage();
     /**
      * <code>string message = 1;</code>
-     * @return The bytes for message.
      */
     com.google.protobuf.ByteString
         getMessageBytes();
@@ -946,7 +903,7 @@ public final class Rpc {
   /**
    * Protobuf type {@code Error}
    */
-  public static final class Error extends
+  public  static final class Error extends
       com.google.protobuf.GeneratedMessageV3 implements
       // @@protoc_insertion_point(message_implements:Error)
       ErrorOrBuilder {
@@ -957,13 +914,6 @@ public final class Rpc {
     }
     private Error() {
       message_ = "";
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Error();
     }
 
     @java.lang.Override
@@ -979,6 +929,7 @@ public final class Rpc {
       if (extensionRegistry == null) {
         throw new java.lang.NullPointerException();
       }
+      int mutable_bitField0_ = 0;
       com.google.protobuf.UnknownFieldSet.Builder unknownFields =
           com.google.protobuf.UnknownFieldSet.newBuilder();
       try {
@@ -996,7 +947,7 @@ public final class Rpc {
               break;
             }
             default: {
-              if (!parseUnknownField(
+              if (!parseUnknownFieldProto3(
                   input, unknownFields, extensionRegistry, tag)) {
                 done = true;
               }
@@ -1031,9 +982,7 @@ public final class Rpc {
     private volatile java.lang.Object message_;
     /**
      * <code>string message = 1;</code>
-     * @return The message.
      */
-    @java.lang.Override
     public java.lang.String getMessage() {
       java.lang.Object ref = message_;
       if (ref instanceof java.lang.String) {
@@ -1048,9 +997,7 @@ public final class Rpc {
     }
     /**
      * <code>string message = 1;</code>
-     * @return The bytes for message.
      */
-    @java.lang.Override
     public com.google.protobuf.ByteString
         getMessageBytes() {
       java.lang.Object ref = message_;
@@ -1109,10 +1056,11 @@ public final class Rpc {
       }
       gg.strims.ppspp.proto.Rpc.Error other = (gg.strims.ppspp.proto.Rpc.Error) obj;
 
-      if (!getMessage()
-          .equals(other.getMessage())) return false;
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
+      boolean result = true;
+      result = result && getMessage()
+          .equals(other.getMessage());
+      result = result && unknownFields.equals(other.unknownFields);
+      return result;
     }
 
     @java.lang.Override
@@ -1292,35 +1240,35 @@ public final class Rpc {
 
       @java.lang.Override
       public Builder clone() {
-        return super.clone();
+        return (Builder) super.clone();
       }
       @java.lang.Override
       public Builder setField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return super.setField(field, value);
+        return (Builder) super.setField(field, value);
       }
       @java.lang.Override
       public Builder clearField(
           com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
+        return (Builder) super.clearField(field);
       }
       @java.lang.Override
       public Builder clearOneof(
           com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
+        return (Builder) super.clearOneof(oneof);
       }
       @java.lang.Override
       public Builder setRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
+        return (Builder) super.setRepeatedField(field, index, value);
       }
       @java.lang.Override
       public Builder addRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return super.addRepeatedField(field, value);
+        return (Builder) super.addRepeatedField(field, value);
       }
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -1370,7 +1318,6 @@ public final class Rpc {
       private java.lang.Object message_ = "";
       /**
        * <code>string message = 1;</code>
-       * @return The message.
        */
       public java.lang.String getMessage() {
         java.lang.Object ref = message_;
@@ -1386,7 +1333,6 @@ public final class Rpc {
       }
       /**
        * <code>string message = 1;</code>
-       * @return The bytes for message.
        */
       public com.google.protobuf.ByteString
           getMessageBytes() {
@@ -1403,8 +1349,6 @@ public final class Rpc {
       }
       /**
        * <code>string message = 1;</code>
-       * @param value The message to set.
-       * @return This builder for chaining.
        */
       public Builder setMessage(
           java.lang.String value) {
@@ -1418,7 +1362,6 @@ public final class Rpc {
       }
       /**
        * <code>string message = 1;</code>
-       * @return This builder for chaining.
        */
       public Builder clearMessage() {
         
@@ -1428,8 +1371,6 @@ public final class Rpc {
       }
       /**
        * <code>string message = 1;</code>
-       * @param value The bytes for message to set.
-       * @return This builder for chaining.
        */
       public Builder setMessageBytes(
           com.google.protobuf.ByteString value) {
@@ -1445,7 +1386,7 @@ public final class Rpc {
       @java.lang.Override
       public final Builder setUnknownFields(
           final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
+        return super.setUnknownFieldsProto3(unknownFields);
       }
 
       @java.lang.Override
@@ -1502,7 +1443,7 @@ public final class Rpc {
   /**
    * Protobuf type {@code Cancel}
    */
-  public static final class Cancel extends
+  public  static final class Cancel extends
       com.google.protobuf.GeneratedMessageV3 implements
       // @@protoc_insertion_point(message_implements:Cancel)
       CancelOrBuilder {
@@ -1512,13 +1453,6 @@ public final class Rpc {
       super(builder);
     }
     private Cancel() {
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Cancel();
     }
 
     @java.lang.Override
@@ -1545,7 +1479,7 @@ public final class Rpc {
               done = true;
               break;
             default: {
-              if (!parseUnknownField(
+              if (!parseUnknownFieldProto3(
                   input, unknownFields, extensionRegistry, tag)) {
                 done = true;
               }
@@ -1614,8 +1548,9 @@ public final class Rpc {
       }
       gg.strims.ppspp.proto.Rpc.Cancel other = (gg.strims.ppspp.proto.Rpc.Cancel) obj;
 
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
+      boolean result = true;
+      result = result && unknownFields.equals(other.unknownFields);
+      return result;
     }
 
     @java.lang.Override
@@ -1790,35 +1725,35 @@ public final class Rpc {
 
       @java.lang.Override
       public Builder clone() {
-        return super.clone();
+        return (Builder) super.clone();
       }
       @java.lang.Override
       public Builder setField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return super.setField(field, value);
+        return (Builder) super.setField(field, value);
       }
       @java.lang.Override
       public Builder clearField(
           com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
+        return (Builder) super.clearField(field);
       }
       @java.lang.Override
       public Builder clearOneof(
           com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
+        return (Builder) super.clearOneof(oneof);
       }
       @java.lang.Override
       public Builder setRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
+        return (Builder) super.setRepeatedField(field, index, value);
       }
       @java.lang.Override
       public Builder addRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return super.addRepeatedField(field, value);
+        return (Builder) super.addRepeatedField(field, value);
       }
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -1863,7 +1798,7 @@ public final class Rpc {
       @java.lang.Override
       public final Builder setUnknownFields(
           final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
+        return super.setUnknownFieldsProto3(unknownFields);
       }
 
       @java.lang.Override
@@ -1920,7 +1855,7 @@ public final class Rpc {
   /**
    * Protobuf type {@code Undefined}
    */
-  public static final class Undefined extends
+  public  static final class Undefined extends
       com.google.protobuf.GeneratedMessageV3 implements
       // @@protoc_insertion_point(message_implements:Undefined)
       UndefinedOrBuilder {
@@ -1930,13 +1865,6 @@ public final class Rpc {
       super(builder);
     }
     private Undefined() {
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Undefined();
     }
 
     @java.lang.Override
@@ -1963,7 +1891,7 @@ public final class Rpc {
               done = true;
               break;
             default: {
-              if (!parseUnknownField(
+              if (!parseUnknownFieldProto3(
                   input, unknownFields, extensionRegistry, tag)) {
                 done = true;
               }
@@ -2032,8 +1960,9 @@ public final class Rpc {
       }
       gg.strims.ppspp.proto.Rpc.Undefined other = (gg.strims.ppspp.proto.Rpc.Undefined) obj;
 
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
+      boolean result = true;
+      result = result && unknownFields.equals(other.unknownFields);
+      return result;
     }
 
     @java.lang.Override
@@ -2208,35 +2137,35 @@ public final class Rpc {
 
       @java.lang.Override
       public Builder clone() {
-        return super.clone();
+        return (Builder) super.clone();
       }
       @java.lang.Override
       public Builder setField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return super.setField(field, value);
+        return (Builder) super.setField(field, value);
       }
       @java.lang.Override
       public Builder clearField(
           com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
+        return (Builder) super.clearField(field);
       }
       @java.lang.Override
       public Builder clearOneof(
           com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
+        return (Builder) super.clearOneof(oneof);
       }
       @java.lang.Override
       public Builder setRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
+        return (Builder) super.setRepeatedField(field, index, value);
       }
       @java.lang.Override
       public Builder addRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return super.addRepeatedField(field, value);
+        return (Builder) super.addRepeatedField(field, value);
       }
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -2281,7 +2210,7 @@ public final class Rpc {
       @java.lang.Override
       public final Builder setUnknownFields(
           final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
+        return super.setUnknownFieldsProto3(unknownFields);
       }
 
       @java.lang.Override
@@ -2338,7 +2267,7 @@ public final class Rpc {
   /**
    * Protobuf type {@code Close}
    */
-  public static final class Close extends
+  public  static final class Close extends
       com.google.protobuf.GeneratedMessageV3 implements
       // @@protoc_insertion_point(message_implements:Close)
       CloseOrBuilder {
@@ -2348,13 +2277,6 @@ public final class Rpc {
       super(builder);
     }
     private Close() {
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Close();
     }
 
     @java.lang.Override
@@ -2381,7 +2303,7 @@ public final class Rpc {
               done = true;
               break;
             default: {
-              if (!parseUnknownField(
+              if (!parseUnknownFieldProto3(
                   input, unknownFields, extensionRegistry, tag)) {
                 done = true;
               }
@@ -2450,8 +2372,9 @@ public final class Rpc {
       }
       gg.strims.ppspp.proto.Rpc.Close other = (gg.strims.ppspp.proto.Rpc.Close) obj;
 
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
+      boolean result = true;
+      result = result && unknownFields.equals(other.unknownFields);
+      return result;
     }
 
     @java.lang.Override
@@ -2626,35 +2549,35 @@ public final class Rpc {
 
       @java.lang.Override
       public Builder clone() {
-        return super.clone();
+        return (Builder) super.clone();
       }
       @java.lang.Override
       public Builder setField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return super.setField(field, value);
+        return (Builder) super.setField(field, value);
       }
       @java.lang.Override
       public Builder clearField(
           com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
+        return (Builder) super.clearField(field);
       }
       @java.lang.Override
       public Builder clearOneof(
           com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
+        return (Builder) super.clearOneof(oneof);
       }
       @java.lang.Override
       public Builder setRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
+        return (Builder) super.setRepeatedField(field, index, value);
       }
       @java.lang.Override
       public Builder addRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return super.addRepeatedField(field, value);
+        return (Builder) super.addRepeatedField(field, value);
       }
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -2699,7 +2622,7 @@ public final class Rpc {
       @java.lang.Override
       public final Builder setUnknownFields(
           final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
+        return super.setUnknownFieldsProto3(unknownFields);
       }
 
       @java.lang.Override
@@ -2791,11 +2714,19 @@ public final class Rpc {
       "rims.ppspp.protoZ&github.com/MemeLabs/go" +
       "-ppspp/pkg/pb;pb\272\002\002PBb\006proto3"
     };
-    descriptor = com.google.protobuf.Descriptors.FileDescriptor
+    com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
+        new com.google.protobuf.Descriptors.FileDescriptor.    InternalDescriptorAssigner() {
+          public com.google.protobuf.ExtensionRegistry assignDescriptors(
+              com.google.protobuf.Descriptors.FileDescriptor root) {
+            descriptor = root;
+            return null;
+          }
+        };
+    com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
         new com.google.protobuf.Descriptors.FileDescriptor[] {
           com.google.protobuf.AnyProto.getDescriptor(),
-        });
+        }, assigner);
     internal_static_Call_descriptor =
       getDescriptor().getMessageTypes().get(0);
     internal_static_Call_fieldAccessorTable = new
