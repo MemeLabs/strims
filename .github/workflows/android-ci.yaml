@@ -24,12 +24,12 @@ jobs:
           SDK_VERSION: sdk-tools-linux-3859397
           ANDROID_BUILD_TOOLS_VERSION: 27.0.3
           ANDROID_PLATFORM_VERSION: "android-28"
-          ANDROID_HOME: "/github/home/android"
+          ANDROID_HOME: "$HOME/android"
         run: |
           sudo apt-get update
           sudo apt-get install -y unzip
-          mkdir $ANDROID_HOME
-
+          mkdir ~/android
+          export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin
           wget -O tools.zip https://dl.google.com/android/repository/${SDK_VERSION}.zip && \
           unzip tools.zip && rm tools.zip && \
           chmod a+x -R $ANDROID_HOME && \
