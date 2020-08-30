@@ -17,9 +17,17 @@ public final class Nickserv {
       com.google.protobuf.MessageOrBuilder {
 
     /**
-     * <code>bytes key = 1;</code>
+     * <code>.Key key = 1;</code>
      */
-    com.google.protobuf.ByteString getKey();
+    boolean hasKey();
+    /**
+     * <code>.Key key = 1;</code>
+     */
+    gg.strims.ppspp.proto.Api.Key getKey();
+    /**
+     * <code>.Key key = 1;</code>
+     */
+    gg.strims.ppspp.proto.Api.KeyOrBuilder getKeyOrBuilder();
 
     /**
      * <code>uint32 name_change_quota = 2;</code>
@@ -27,9 +35,17 @@ public final class Nickserv {
     int getNameChangeQuota();
 
     /**
-     * <code>uint64 token_ttl = 3;</code>
+     * <code>.google.protobuf.Duration token_ttl = 3;</code>
      */
-    long getTokenTtl();
+    boolean hasTokenTtl();
+    /**
+     * <code>.google.protobuf.Duration token_ttl = 3;</code>
+     */
+    com.google.protobuf.Duration getTokenTtl();
+    /**
+     * <code>.google.protobuf.Duration token_ttl = 3;</code>
+     */
+    com.google.protobuf.DurationOrBuilder getTokenTtlOrBuilder();
 
     /**
      * <code>repeated string roles = 4;</code>
@@ -63,9 +79,7 @@ public final class Nickserv {
       super(builder);
     }
     private ServerConfig() {
-      key_ = com.google.protobuf.ByteString.EMPTY;
       nameChangeQuota_ = 0;
-      tokenTtl_ = 0L;
       roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
     }
 
@@ -94,8 +108,16 @@ public final class Nickserv {
               done = true;
               break;
             case 10: {
+              gg.strims.ppspp.proto.Api.Key.Builder subBuilder = null;
+              if (key_ != null) {
+                subBuilder = key_.toBuilder();
+              }
+              key_ = input.readMessage(gg.strims.ppspp.proto.Api.Key.parser(), extensionRegistry);
+              if (subBuilder != null) {
+                subBuilder.mergeFrom(key_);
+                key_ = subBuilder.buildPartial();
+              }
 
-              key_ = input.readBytes();
               break;
             }
             case 16: {
@@ -103,9 +125,17 @@ public final class Nickserv {
               nameChangeQuota_ = input.readUInt32();
               break;
             }
-            case 24: {
+            case 26: {
+              com.google.protobuf.Duration.Builder subBuilder = null;
+              if (tokenTtl_ != null) {
+                subBuilder = tokenTtl_.toBuilder();
+              }
+              tokenTtl_ = input.readMessage(com.google.protobuf.Duration.parser(), extensionRegistry);
+              if (subBuilder != null) {
+                subBuilder.mergeFrom(tokenTtl_);
+                tokenTtl_ = subBuilder.buildPartial();
+              }
 
-              tokenTtl_ = input.readUInt64();
               break;
             }
             case 34: {
@@ -154,12 +184,24 @@ public final class Nickserv {
 
     private int bitField0_;
     public static final int KEY_FIELD_NUMBER = 1;
-    private com.google.protobuf.ByteString key_;
+    private gg.strims.ppspp.proto.Api.Key key_;
     /**
-     * <code>bytes key = 1;</code>
+     * <code>.Key key = 1;</code>
      */
-    public com.google.protobuf.ByteString getKey() {
-      return key_;
+    public boolean hasKey() {
+      return key_ != null;
+    }
+    /**
+     * <code>.Key key = 1;</code>
+     */
+    public gg.strims.ppspp.proto.Api.Key getKey() {
+      return key_ == null ? gg.strims.ppspp.proto.Api.Key.getDefaultInstance() : key_;
+    }
+    /**
+     * <code>.Key key = 1;</code>
+     */
+    public gg.strims.ppspp.proto.Api.KeyOrBuilder getKeyOrBuilder() {
+      return getKey();
     }
 
     public static final int NAME_CHANGE_QUOTA_FIELD_NUMBER = 2;
@@ -172,12 +214,24 @@ public final class Nickserv {
     }
 
     public static final int TOKEN_TTL_FIELD_NUMBER = 3;
-    private long tokenTtl_;
+    private com.google.protobuf.Duration tokenTtl_;
     /**
-     * <code>uint64 token_ttl = 3;</code>
+     * <code>.google.protobuf.Duration token_ttl = 3;</code>
      */
-    public long getTokenTtl() {
-      return tokenTtl_;
+    public boolean hasTokenTtl() {
+      return tokenTtl_ != null;
+    }
+    /**
+     * <code>.google.protobuf.Duration token_ttl = 3;</code>
+     */
+    public com.google.protobuf.Duration getTokenTtl() {
+      return tokenTtl_ == null ? com.google.protobuf.Duration.getDefaultInstance() : tokenTtl_;
+    }
+    /**
+     * <code>.google.protobuf.Duration token_ttl = 3;</code>
+     */
+    public com.google.protobuf.DurationOrBuilder getTokenTtlOrBuilder() {
+      return getTokenTtl();
     }
 
     public static final int ROLES_FIELD_NUMBER = 4;
@@ -223,14 +277,14 @@ public final class Nickserv {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
-      if (!key_.isEmpty()) {
-        output.writeBytes(1, key_);
+      if (key_ != null) {
+        output.writeMessage(1, getKey());
       }
       if (nameChangeQuota_ != 0) {
         output.writeUInt32(2, nameChangeQuota_);
       }
-      if (tokenTtl_ != 0L) {
-        output.writeUInt64(3, tokenTtl_);
+      if (tokenTtl_ != null) {
+        output.writeMessage(3, getTokenTtl());
       }
       for (int i = 0; i < roles_.size(); i++) {
         com.google.protobuf.GeneratedMessageV3.writeString(output, 4, roles_.getRaw(i));
@@ -244,17 +298,17 @@ public final class Nickserv {
       if (size != -1) return size;
 
       size = 0;
-      if (!key_.isEmpty()) {
+      if (key_ != null) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(1, key_);
+          .computeMessageSize(1, getKey());
       }
       if (nameChangeQuota_ != 0) {
         size += com.google.protobuf.CodedOutputStream
           .computeUInt32Size(2, nameChangeQuota_);
       }
-      if (tokenTtl_ != 0L) {
+      if (tokenTtl_ != null) {
         size += com.google.protobuf.CodedOutputStream
-          .computeUInt64Size(3, tokenTtl_);
+          .computeMessageSize(3, getTokenTtl());
       }
       {
         int dataSize = 0;
@@ -280,12 +334,18 @@ public final class Nickserv {
       Nickserv.ServerConfig other = (Nickserv.ServerConfig) obj;
 
       boolean result = true;
-      result = result && getKey()
-          .equals(other.getKey());
+      result = result && (hasKey() == other.hasKey());
+      if (hasKey()) {
+        result = result && getKey()
+            .equals(other.getKey());
+      }
       result = result && (getNameChangeQuota()
           == other.getNameChangeQuota());
-      result = result && (getTokenTtl()
-          == other.getTokenTtl());
+      result = result && (hasTokenTtl() == other.hasTokenTtl());
+      if (hasTokenTtl()) {
+        result = result && getTokenTtl()
+            .equals(other.getTokenTtl());
+      }
       result = result && getRolesList()
           .equals(other.getRolesList());
       result = result && unknownFields.equals(other.unknownFields);
@@ -299,13 +359,16 @@ public final class Nickserv {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptor().hashCode();
-      hash = (37 * hash) + KEY_FIELD_NUMBER;
-      hash = (53 * hash) + getKey().hashCode();
+      if (hasKey()) {
+        hash = (37 * hash) + KEY_FIELD_NUMBER;
+        hash = (53 * hash) + getKey().hashCode();
+      }
       hash = (37 * hash) + NAME_CHANGE_QUOTA_FIELD_NUMBER;
       hash = (53 * hash) + getNameChangeQuota();
-      hash = (37 * hash) + TOKEN_TTL_FIELD_NUMBER;
-      hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
-          getTokenTtl());
+      if (hasTokenTtl()) {
+        hash = (37 * hash) + TOKEN_TTL_FIELD_NUMBER;
+        hash = (53 * hash) + getTokenTtl().hashCode();
+      }
       if (getRolesCount() > 0) {
         hash = (37 * hash) + ROLES_FIELD_NUMBER;
         hash = (53 * hash) + getRolesList().hashCode();
@@ -443,12 +506,20 @@ public final class Nickserv {
       @java.lang.Override
       public Builder clear() {
         super.clear();
-        key_ = com.google.protobuf.ByteString.EMPTY;
-
+        if (keyBuilder_ == null) {
+          key_ = null;
+        } else {
+          key_ = null;
+          keyBuilder_ = null;
+        }
         nameChangeQuota_ = 0;
 
-        tokenTtl_ = 0L;
-
+        if (tokenTtlBuilder_ == null) {
+          tokenTtl_ = null;
+        } else {
+          tokenTtl_ = null;
+          tokenTtlBuilder_ = null;
+        }
         roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
         bitField0_ = (bitField0_ & ~0x00000008);
         return this;
@@ -479,9 +550,17 @@ public final class Nickserv {
         Nickserv.ServerConfig result = new Nickserv.ServerConfig(this);
         int from_bitField0_ = bitField0_;
         int to_bitField0_ = 0;
-        result.key_ = key_;
+        if (keyBuilder_ == null) {
+          result.key_ = key_;
+        } else {
+          result.key_ = keyBuilder_.build();
+        }
         result.nameChangeQuota_ = nameChangeQuota_;
-        result.tokenTtl_ = tokenTtl_;
+        if (tokenTtlBuilder_ == null) {
+          result.tokenTtl_ = tokenTtl_;
+        } else {
+          result.tokenTtl_ = tokenTtlBuilder_.build();
+        }
         if (((bitField0_ & 0x00000008) == 0x00000008)) {
           roles_ = roles_.getUnmodifiableView();
           bitField0_ = (bitField0_ & ~0x00000008);
@@ -536,14 +615,14 @@ public final class Nickserv {
 
       public Builder mergeFrom(Nickserv.ServerConfig other) {
         if (other == Nickserv.ServerConfig.getDefaultInstance()) return this;
-        if (other.getKey() != com.google.protobuf.ByteString.EMPTY) {
-          setKey(other.getKey());
+        if (other.hasKey()) {
+          mergeKey(other.getKey());
         }
         if (other.getNameChangeQuota() != 0) {
           setNameChangeQuota(other.getNameChangeQuota());
         }
-        if (other.getTokenTtl() != 0L) {
-          setTokenTtl(other.getTokenTtl());
+        if (other.hasTokenTtl()) {
+          mergeTokenTtl(other.getTokenTtl());
         }
         if (!other.roles_.isEmpty()) {
           if (roles_.isEmpty()) {
@@ -585,33 +664,121 @@ public final class Nickserv {
       }
       private int bitField0_;
 
-      private com.google.protobuf.ByteString key_ = com.google.protobuf.ByteString.EMPTY;
+      private gg.strims.ppspp.proto.Api.Key key_ = null;
+      private com.google.protobuf.SingleFieldBuilderV3<
+          gg.strims.ppspp.proto.Api.Key, gg.strims.ppspp.proto.Api.Key.Builder, gg.strims.ppspp.proto.Api.KeyOrBuilder> keyBuilder_;
       /**
-       * <code>bytes key = 1;</code>
+       * <code>.Key key = 1;</code>
        */
-      public com.google.protobuf.ByteString getKey() {
-        return key_;
+      public boolean hasKey() {
+        return keyBuilder_ != null || key_ != null;
       }
       /**
-       * <code>bytes key = 1;</code>
+       * <code>.Key key = 1;</code>
        */
-      public Builder setKey(com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
-        key_ = value;
-        onChanged();
+      public gg.strims.ppspp.proto.Api.Key getKey() {
+        if (keyBuilder_ == null) {
+          return key_ == null ? gg.strims.ppspp.proto.Api.Key.getDefaultInstance() : key_;
+        } else {
+          return keyBuilder_.getMessage();
+        }
+      }
+      /**
+       * <code>.Key key = 1;</code>
+       */
+      public Builder setKey(gg.strims.ppspp.proto.Api.Key value) {
+        if (keyBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          key_ = value;
+          onChanged();
+        } else {
+          keyBuilder_.setMessage(value);
+        }
+
         return this;
       }
       /**
-       * <code>bytes key = 1;</code>
+       * <code>.Key key = 1;</code>
+       */
+      public Builder setKey(
+          gg.strims.ppspp.proto.Api.Key.Builder builderForValue) {
+        if (keyBuilder_ == null) {
+          key_ = builderForValue.build();
+          onChanged();
+        } else {
+          keyBuilder_.setMessage(builderForValue.build());
+        }
+
+        return this;
+      }
+      /**
+       * <code>.Key key = 1;</code>
+       */
+      public Builder mergeKey(gg.strims.ppspp.proto.Api.Key value) {
+        if (keyBuilder_ == null) {
+          if (key_ != null) {
+            key_ =
+              gg.strims.ppspp.proto.Api.Key.newBuilder(key_).mergeFrom(value).buildPartial();
+          } else {
+            key_ = value;
+          }
+          onChanged();
+        } else {
+          keyBuilder_.mergeFrom(value);
+        }
+
+        return this;
+      }
+      /**
+       * <code>.Key key = 1;</code>
        */
       public Builder clearKey() {
-        
-        key_ = getDefaultInstance().getKey();
-        onChanged();
+        if (keyBuilder_ == null) {
+          key_ = null;
+          onChanged();
+        } else {
+          key_ = null;
+          keyBuilder_ = null;
+        }
+
         return this;
+      }
+      /**
+       * <code>.Key key = 1;</code>
+       */
+      public gg.strims.ppspp.proto.Api.Key.Builder getKeyBuilder() {
+        
+        onChanged();
+        return getKeyFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.Key key = 1;</code>
+       */
+      public gg.strims.ppspp.proto.Api.KeyOrBuilder getKeyOrBuilder() {
+        if (keyBuilder_ != null) {
+          return keyBuilder_.getMessageOrBuilder();
+        } else {
+          return key_ == null ?
+              gg.strims.ppspp.proto.Api.Key.getDefaultInstance() : key_;
+        }
+      }
+      /**
+       * <code>.Key key = 1;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          gg.strims.ppspp.proto.Api.Key, gg.strims.ppspp.proto.Api.Key.Builder, gg.strims.ppspp.proto.Api.KeyOrBuilder> 
+          getKeyFieldBuilder() {
+        if (keyBuilder_ == null) {
+          keyBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              gg.strims.ppspp.proto.Api.Key, gg.strims.ppspp.proto.Api.Key.Builder, gg.strims.ppspp.proto.Api.KeyOrBuilder>(
+                  getKey(),
+                  getParentForChildren(),
+                  isClean());
+          key_ = null;
+        }
+        return keyBuilder_;
       }
 
       private int nameChangeQuota_ ;
@@ -640,30 +807,121 @@ public final class Nickserv {
         return this;
       }
 
-      private long tokenTtl_ ;
+      private com.google.protobuf.Duration tokenTtl_ = null;
+      private com.google.protobuf.SingleFieldBuilderV3<
+          com.google.protobuf.Duration, com.google.protobuf.Duration.Builder, com.google.protobuf.DurationOrBuilder> tokenTtlBuilder_;
       /**
-       * <code>uint64 token_ttl = 3;</code>
+       * <code>.google.protobuf.Duration token_ttl = 3;</code>
        */
-      public long getTokenTtl() {
-        return tokenTtl_;
+      public boolean hasTokenTtl() {
+        return tokenTtlBuilder_ != null || tokenTtl_ != null;
       }
       /**
-       * <code>uint64 token_ttl = 3;</code>
+       * <code>.google.protobuf.Duration token_ttl = 3;</code>
        */
-      public Builder setTokenTtl(long value) {
-        
-        tokenTtl_ = value;
-        onChanged();
+      public com.google.protobuf.Duration getTokenTtl() {
+        if (tokenTtlBuilder_ == null) {
+          return tokenTtl_ == null ? com.google.protobuf.Duration.getDefaultInstance() : tokenTtl_;
+        } else {
+          return tokenTtlBuilder_.getMessage();
+        }
+      }
+      /**
+       * <code>.google.protobuf.Duration token_ttl = 3;</code>
+       */
+      public Builder setTokenTtl(com.google.protobuf.Duration value) {
+        if (tokenTtlBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          tokenTtl_ = value;
+          onChanged();
+        } else {
+          tokenTtlBuilder_.setMessage(value);
+        }
+
         return this;
       }
       /**
-       * <code>uint64 token_ttl = 3;</code>
+       * <code>.google.protobuf.Duration token_ttl = 3;</code>
+       */
+      public Builder setTokenTtl(
+          com.google.protobuf.Duration.Builder builderForValue) {
+        if (tokenTtlBuilder_ == null) {
+          tokenTtl_ = builderForValue.build();
+          onChanged();
+        } else {
+          tokenTtlBuilder_.setMessage(builderForValue.build());
+        }
+
+        return this;
+      }
+      /**
+       * <code>.google.protobuf.Duration token_ttl = 3;</code>
+       */
+      public Builder mergeTokenTtl(com.google.protobuf.Duration value) {
+        if (tokenTtlBuilder_ == null) {
+          if (tokenTtl_ != null) {
+            tokenTtl_ =
+              com.google.protobuf.Duration.newBuilder(tokenTtl_).mergeFrom(value).buildPartial();
+          } else {
+            tokenTtl_ = value;
+          }
+          onChanged();
+        } else {
+          tokenTtlBuilder_.mergeFrom(value);
+        }
+
+        return this;
+      }
+      /**
+       * <code>.google.protobuf.Duration token_ttl = 3;</code>
        */
       public Builder clearTokenTtl() {
-        
-        tokenTtl_ = 0L;
-        onChanged();
+        if (tokenTtlBuilder_ == null) {
+          tokenTtl_ = null;
+          onChanged();
+        } else {
+          tokenTtl_ = null;
+          tokenTtlBuilder_ = null;
+        }
+
         return this;
+      }
+      /**
+       * <code>.google.protobuf.Duration token_ttl = 3;</code>
+       */
+      public com.google.protobuf.Duration.Builder getTokenTtlBuilder() {
+        
+        onChanged();
+        return getTokenTtlFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.google.protobuf.Duration token_ttl = 3;</code>
+       */
+      public com.google.protobuf.DurationOrBuilder getTokenTtlOrBuilder() {
+        if (tokenTtlBuilder_ != null) {
+          return tokenTtlBuilder_.getMessageOrBuilder();
+        } else {
+          return tokenTtl_ == null ?
+              com.google.protobuf.Duration.getDefaultInstance() : tokenTtl_;
+        }
+      }
+      /**
+       * <code>.google.protobuf.Duration token_ttl = 3;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          com.google.protobuf.Duration, com.google.protobuf.Duration.Builder, com.google.protobuf.DurationOrBuilder> 
+          getTokenTtlFieldBuilder() {
+        if (tokenTtlBuilder_ == null) {
+          tokenTtlBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              com.google.protobuf.Duration, com.google.protobuf.Duration.Builder, com.google.protobuf.DurationOrBuilder>(
+                  getTokenTtl(),
+                  getParentForChildren(),
+                  isClean());
+          tokenTtl_ = null;
+        }
+        return tokenTtlBuilder_;
       }
 
       private com.google.protobuf.LazyStringList roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
@@ -812,8 +1070,8 @@ public final class Nickserv {
 
   }
 
-  public interface NickServRecordOrBuilder extends
-      // @@protoc_insertion_point(interface_extends:NickServRecord)
+  public interface NickservNickOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:NickservNick)
       com.google.protobuf.MessageOrBuilder {
 
     /**
@@ -871,18 +1129,18 @@ public final class Nickserv {
         getRolesBytes(int index);
   }
   /**
-   * Protobuf type {@code NickServRecord}
+   * Protobuf type {@code NickservNick}
    */
-  public  static final class NickServRecord extends
+  public  static final class NickservNick extends
       com.google.protobuf.GeneratedMessageV3 implements
-      // @@protoc_insertion_point(message_implements:NickServRecord)
-      NickServRecordOrBuilder {
+      // @@protoc_insertion_point(message_implements:NickservNick)
+      NickservNickOrBuilder {
   private static final long serialVersionUID = 0L;
-    // Use NickServRecord.newBuilder() to construct.
-    private NickServRecord(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+    // Use NickservNick.newBuilder() to construct.
+    private NickservNick(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
       super(builder);
     }
-    private NickServRecord() {
+    private NickservNick() {
       id_ = 0L;
       key_ = com.google.protobuf.ByteString.EMPTY;
       nick_ = "";
@@ -897,7 +1155,7 @@ public final class Nickserv {
     getUnknownFields() {
       return this.unknownFields;
     }
-    private NickServRecord(
+    private NickservNick(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
@@ -980,15 +1238,15 @@ public final class Nickserv {
     }
     public static final com.google.protobuf.Descriptors.Descriptor
         getDescriptor() {
-      return Nickserv.internal_static_NickServRecord_descriptor;
+      return Nickserv.internal_static_NickservNick_descriptor;
     }
 
     @java.lang.Override
     protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
         internalGetFieldAccessorTable() {
-      return Nickserv.internal_static_NickServRecord_fieldAccessorTable
+      return Nickserv.internal_static_NickservNick_fieldAccessorTable
           .ensureFieldAccessorsInitialized(
-              Nickserv.NickServRecord.class, Nickserv.NickServRecord.Builder.class);
+              Nickserv.NickservNick.class, Nickserv.NickservNick.Builder.class);
     }
 
     private int bitField0_;
@@ -1185,10 +1443,10 @@ public final class Nickserv {
       if (obj == this) {
        return true;
       }
-      if (!(obj instanceof Nickserv.NickServRecord)) {
+      if (!(obj instanceof Nickserv.NickservNick)) {
         return super.equals(obj);
       }
-      Nickserv.NickServRecord other = (Nickserv.NickServRecord) obj;
+      Nickserv.NickservNick other = (Nickserv.NickservNick) obj;
 
       boolean result = true;
       result = result && (getId()
@@ -1240,69 +1498,69 @@ public final class Nickserv {
       return hash;
     }
 
-    public static Nickserv.NickServRecord parseFrom(
+    public static Nickserv.NickservNick parseFrom(
         java.nio.ByteBuffer data)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data);
     }
-    public static Nickserv.NickServRecord parseFrom(
+    public static Nickserv.NickservNick parseFrom(
         java.nio.ByteBuffer data,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data, extensionRegistry);
     }
-    public static Nickserv.NickServRecord parseFrom(
+    public static Nickserv.NickservNick parseFrom(
         com.google.protobuf.ByteString data)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data);
     }
-    public static Nickserv.NickServRecord parseFrom(
+    public static Nickserv.NickservNick parseFrom(
         com.google.protobuf.ByteString data,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data, extensionRegistry);
     }
-    public static Nickserv.NickServRecord parseFrom(byte[] data)
+    public static Nickserv.NickservNick parseFrom(byte[] data)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data);
     }
-    public static Nickserv.NickServRecord parseFrom(
+    public static Nickserv.NickservNick parseFrom(
         byte[] data,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws com.google.protobuf.InvalidProtocolBufferException {
       return PARSER.parseFrom(data, extensionRegistry);
     }
-    public static Nickserv.NickServRecord parseFrom(java.io.InputStream input)
+    public static Nickserv.NickservNick parseFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input);
     }
-    public static Nickserv.NickServRecord parseFrom(
+    public static Nickserv.NickservNick parseFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input, extensionRegistry);
     }
-    public static Nickserv.NickServRecord parseDelimitedFrom(java.io.InputStream input)
+    public static Nickserv.NickservNick parseDelimitedFrom(java.io.InputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input);
     }
-    public static Nickserv.NickServRecord parseDelimitedFrom(
+    public static Nickserv.NickservNick parseDelimitedFrom(
         java.io.InputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
     }
-    public static Nickserv.NickServRecord parseFrom(
+    public static Nickserv.NickservNick parseFrom(
         com.google.protobuf.CodedInputStream input)
         throws java.io.IOException {
       return com.google.protobuf.GeneratedMessageV3
           .parseWithIOException(PARSER, input);
     }
-    public static Nickserv.NickServRecord parseFrom(
+    public static Nickserv.NickservNick parseFrom(
         com.google.protobuf.CodedInputStream input,
         com.google.protobuf.ExtensionRegistryLite extensionRegistry)
         throws java.io.IOException {
@@ -1315,7 +1573,7 @@ public final class Nickserv {
     public static Builder newBuilder() {
       return DEFAULT_INSTANCE.toBuilder();
     }
-    public static Builder newBuilder(Nickserv.NickServRecord prototype) {
+    public static Builder newBuilder(Nickserv.NickservNick prototype) {
       return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
     }
     @java.lang.Override
@@ -1331,26 +1589,26 @@ public final class Nickserv {
       return builder;
     }
     /**
-     * Protobuf type {@code NickServRecord}
+     * Protobuf type {@code NickservNick}
      */
     public static final class Builder extends
         com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
-        // @@protoc_insertion_point(builder_implements:NickServRecord)
-        Nickserv.NickServRecordOrBuilder {
+        // @@protoc_insertion_point(builder_implements:NickservNick)
+        Nickserv.NickservNickOrBuilder {
       public static final com.google.protobuf.Descriptors.Descriptor
           getDescriptor() {
-        return Nickserv.internal_static_NickServRecord_descriptor;
+        return Nickserv.internal_static_NickservNick_descriptor;
       }
 
       @java.lang.Override
       protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
           internalGetFieldAccessorTable() {
-        return Nickserv.internal_static_NickServRecord_fieldAccessorTable
+        return Nickserv.internal_static_NickservNick_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
-                Nickserv.NickServRecord.class, Nickserv.NickServRecord.Builder.class);
+                Nickserv.NickservNick.class, Nickserv.NickservNick.Builder.class);
       }
 
-      // Construct using Nickserv.NickServRecord.newBuilder()
+      // Construct using Nickserv.NickservNick.newBuilder()
       private Builder() {
         maybeForceBuilderInitialization();
       }
@@ -1388,17 +1646,17 @@ public final class Nickserv {
       @java.lang.Override
       public com.google.protobuf.Descriptors.Descriptor
           getDescriptorForType() {
-        return Nickserv.internal_static_NickServRecord_descriptor;
+        return Nickserv.internal_static_NickservNick_descriptor;
       }
 
       @java.lang.Override
-      public Nickserv.NickServRecord getDefaultInstanceForType() {
-        return Nickserv.NickServRecord.getDefaultInstance();
+      public Nickserv.NickservNick getDefaultInstanceForType() {
+        return Nickserv.NickservNick.getDefaultInstance();
       }
 
       @java.lang.Override
-      public Nickserv.NickServRecord build() {
-        Nickserv.NickServRecord result = buildPartial();
+      public Nickserv.NickservNick build() {
+        Nickserv.NickservNick result = buildPartial();
         if (!result.isInitialized()) {
           throw newUninitializedMessageException(result);
         }
@@ -1406,8 +1664,8 @@ public final class Nickserv {
       }
 
       @java.lang.Override
-      public Nickserv.NickServRecord buildPartial() {
-        Nickserv.NickServRecord result = new Nickserv.NickServRecord(this);
+      public Nickserv.NickservNick buildPartial() {
+        Nickserv.NickservNick result = new Nickserv.NickservNick(this);
         int from_bitField0_ = bitField0_;
         int to_bitField0_ = 0;
         result.id_ = id_;
@@ -1460,16 +1718,16 @@ public final class Nickserv {
       }
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
-        if (other instanceof Nickserv.NickServRecord) {
-          return mergeFrom((Nickserv.NickServRecord)other);
+        if (other instanceof Nickserv.NickservNick) {
+          return mergeFrom((Nickserv.NickservNick)other);
         } else {
           super.mergeFrom(other);
           return this;
         }
       }
 
-      public Builder mergeFrom(Nickserv.NickServRecord other) {
-        if (other == Nickserv.NickServRecord.getDefaultInstance()) return this;
+      public Builder mergeFrom(Nickserv.NickservNick other) {
+        if (other == Nickserv.NickservNick.getDefaultInstance()) return this;
         if (other.getId() != 0L) {
           setId(other.getId());
         }
@@ -1514,11 +1772,11 @@ public final class Nickserv {
           com.google.protobuf.CodedInputStream input,
           com.google.protobuf.ExtensionRegistryLite extensionRegistry)
           throws java.io.IOException {
-        Nickserv.NickServRecord parsedMessage = null;
+        Nickserv.NickservNick parsedMessage = null;
         try {
           parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
         } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-          parsedMessage = (Nickserv.NickServRecord) e.getUnfinishedMessage();
+          parsedMessage = (Nickserv.NickservNick) e.getUnfinishedMessage();
           throw e.unwrapIOException();
         } finally {
           if (parsedMessage != null) {
@@ -1837,41 +2095,41 @@ public final class Nickserv {
       }
 
 
-      // @@protoc_insertion_point(builder_scope:NickServRecord)
+      // @@protoc_insertion_point(builder_scope:NickservNick)
     }
 
-    // @@protoc_insertion_point(class_scope:NickServRecord)
-    private static final Nickserv.NickServRecord DEFAULT_INSTANCE;
+    // @@protoc_insertion_point(class_scope:NickservNick)
+    private static final Nickserv.NickservNick DEFAULT_INSTANCE;
     static {
-      DEFAULT_INSTANCE = new Nickserv.NickServRecord();
+      DEFAULT_INSTANCE = new Nickserv.NickservNick();
     }
 
-    public static Nickserv.NickServRecord getDefaultInstance() {
+    public static Nickserv.NickservNick getDefaultInstance() {
       return DEFAULT_INSTANCE;
     }
 
-    private static final com.google.protobuf.Parser<NickServRecord>
-        PARSER = new com.google.protobuf.AbstractParser<NickServRecord>() {
+    private static final com.google.protobuf.Parser<NickservNick>
+        PARSER = new com.google.protobuf.AbstractParser<NickservNick>() {
       @java.lang.Override
-      public NickServRecord parsePartialFrom(
+      public NickservNick parsePartialFrom(
           com.google.protobuf.CodedInputStream input,
           com.google.protobuf.ExtensionRegistryLite extensionRegistry)
           throws com.google.protobuf.InvalidProtocolBufferException {
-        return new NickServRecord(input, extensionRegistry);
+        return new NickservNick(input, extensionRegistry);
       }
     };
 
-    public static com.google.protobuf.Parser<NickServRecord> parser() {
+    public static com.google.protobuf.Parser<NickservNick> parser() {
       return PARSER;
     }
 
     @java.lang.Override
-    public com.google.protobuf.Parser<NickServRecord> getParserForType() {
+    public com.google.protobuf.Parser<NickservNick> getParserForType() {
       return PARSER;
     }
 
     @java.lang.Override
-    public Nickserv.NickServRecord getDefaultInstanceForType() {
+    public Nickserv.NickservNick getDefaultInstanceForType() {
       return DEFAULT_INSTANCE;
     }
 
@@ -10366,10 +10624,10 @@ public final class Nickserv {
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
       internal_static_ServerConfig_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_NickServRecord_descriptor;
+    internal_static_NickservNick_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-      internal_static_NickServRecord_fieldAccessorTable;
+      internal_static_NickservNick_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_NickServToken_descriptor;
   private static final 
@@ -10434,37 +10692,39 @@ public final class Nickserv {
       descriptor;
   static {
     java.lang.String[] descriptorData = {
-      "\n\016nickserv.proto\"X\n\014ServerConfig\022\013\n\003key\030" +
-      "\001 \001(\014\022\031\n\021name_change_quota\030\002 \001(\r\022\021\n\ttoke" +
-      "n_ttl\030\003 \001(\004\022\r\n\005roles\030\004 \003(\t\"\241\001\n\016NickServR" +
-      "ecord\022\n\n\002id\030\001 \001(\004\022\013\n\003key\030\002 \001(\014\022\014\n\004nick\030\003" +
-      " \001(\t\022#\n\033remaining_name_change_quota\030\004 \001(" +
-      "\r\022\031\n\021updated_timestamp\030\005 \001(\004\022\031\n\021created_" +
-      "timestamp\030\006 \001(\004\022\r\n\005roles\030\007 \003(\t\"a\n\rNickSe" +
-      "rvToken\022\013\n\003key\030\001 \001(\014\022\014\n\004nick\030\002 \001(\t\022\023\n\013va" +
-      "lid_until\030\003 \001(\004\022\021\n\tsignature\030\004 \001(\014\022\r\n\005ro" +
-      "les\030\005 \003(\t\"\232\004\n\022NickServRPCCommand\022\022\n\nrequ" +
-      "est_id\030\001 \001(\004\022\031\n\021source_public_key\030\002 \001(\014\022" +
-      ",\n\006create\030\005 \001(\0132\032.NickServRPCCommand.Cre" +
-      "ateH\000\0220\n\010retrieve\030\006 \001(\0132\034.NickServRPCCom" +
-      "mand.RetrieveH\000\022,\n\006update\030\007 \001(\0132\032.NickSe" +
-      "rvRPCCommand.UpdateH\000\022,\n\006delete\030\010 \001(\0132\032." +
-      "NickServRPCCommand.DeleteH\000\032\026\n\006Create\022\014\n" +
-      "\004nick\030\001 \001(\t\032\n\n\010Retrieve\032\342\001\n\006Update\0225\n\004ni" +
-      "ck\030\001 \001(\0132%.NickServRPCCommand.Update.Cha" +
-      "ngeNickH\000\022\033\n\021name_change_quota\030\002 \001(\rH\000\0221" +
-      "\n\005roles\030\003 \001(\0132 .NickServRPCCommand.Updat" +
-      "e.RolesH\000\032\026\n\005Roles\022\r\n\005roles\030\001 \003(\t\0320\n\nCha" +
-      "ngeNick\022\020\n\010old_nick\030\001 \001(\t\022\020\n\010new_nick\030\002 " +
-      "\001(\tB\007\n\005param\032\010\n\006DeleteB\006\n\004body\"\372\001\n\023NickS" +
-      "ervRPCResponse\022\022\n\nrequest_id\030\001 \001(\004\022\017\n\005er" +
-      "ror\030\002 \001(\tH\000\022-\n\006update\030\003 \001(\0132\033.NickServRP" +
-      "CResponse.UpdateH\000\022-\n\006delete\030\004 \001(\0132\033.Nic" +
-      "kServRPCResponse.DeleteH\000\022 \n\006create\030\005 \001(" +
-      "\0132\016.NickServTokenH\000\022\"\n\010retrieve\030\006 \001(\0132\016." +
-      "NickServTokenH\000\032\010\n\006Update\032\010\n\006DeleteB\006\n\004b" +
-      "odyB(Z&github.com/MemeLabs/go-ppspp/pkg/" +
-      "pb;pbb\006proto3"
+      "\n\016nickserv.proto\032\tapi.proto\032\036google/prot" +
+      "obuf/duration.proto\"y\n\014ServerConfig\022\021\n\003k" +
+      "ey\030\001 \001(\0132\004.Key\022\031\n\021name_change_quota\030\002 \001(" +
+      "\r\022,\n\ttoken_ttl\030\003 \001(\0132\031.google.protobuf.D" +
+      "uration\022\r\n\005roles\030\004 \003(\t\"\237\001\n\014NickservNick\022" +
+      "\n\n\002id\030\001 \001(\004\022\013\n\003key\030\002 \001(\014\022\014\n\004nick\030\003 \001(\t\022#" +
+      "\n\033remaining_name_change_quota\030\004 \001(\r\022\031\n\021u" +
+      "pdated_timestamp\030\005 \001(\004\022\031\n\021created_timest" +
+      "amp\030\006 \001(\004\022\r\n\005roles\030\007 \003(\t\"a\n\rNickServToke" +
+      "n\022\013\n\003key\030\001 \001(\014\022\014\n\004nick\030\002 \001(\t\022\023\n\013valid_un" +
+      "til\030\003 \001(\004\022\021\n\tsignature\030\004 \001(\014\022\r\n\005roles\030\005 " +
+      "\003(\t\"\232\004\n\022NickServRPCCommand\022\022\n\nrequest_id" +
+      "\030\001 \001(\004\022\031\n\021source_public_key\030\002 \001(\014\022,\n\006cre" +
+      "ate\030\005 \001(\0132\032.NickServRPCCommand.CreateH\000\022" +
+      "0\n\010retrieve\030\006 \001(\0132\034.NickServRPCCommand.R" +
+      "etrieveH\000\022,\n\006update\030\007 \001(\0132\032.NickServRPCC" +
+      "ommand.UpdateH\000\022,\n\006delete\030\010 \001(\0132\032.NickSe" +
+      "rvRPCCommand.DeleteH\000\032\026\n\006Create\022\014\n\004nick\030" +
+      "\001 \001(\t\032\n\n\010Retrieve\032\342\001\n\006Update\0225\n\004nick\030\001 \001" +
+      "(\0132%.NickServRPCCommand.Update.ChangeNic" +
+      "kH\000\022\033\n\021name_change_quota\030\002 \001(\rH\000\0221\n\005role" +
+      "s\030\003 \001(\0132 .NickServRPCCommand.Update.Role" +
+      "sH\000\032\026\n\005Roles\022\r\n\005roles\030\001 \003(\t\0320\n\nChangeNic" +
+      "k\022\020\n\010old_nick\030\001 \001(\t\022\020\n\010new_nick\030\002 \001(\tB\007\n" +
+      "\005param\032\010\n\006DeleteB\006\n\004body\"\372\001\n\023NickServRPC" +
+      "Response\022\022\n\nrequest_id\030\001 \001(\004\022\017\n\005error\030\002 " +
+      "\001(\tH\000\022-\n\006update\030\003 \001(\0132\033.NickServRPCRespo" +
+      "nse.UpdateH\000\022-\n\006delete\030\004 \001(\0132\033.NickServR" +
+      "PCResponse.DeleteH\000\022 \n\006create\030\005 \001(\0132\016.Ni" +
+      "ckServTokenH\000\022\"\n\010retrieve\030\006 \001(\0132\016.NickSe" +
+      "rvTokenH\000\032\010\n\006Update\032\010\n\006DeleteB\006\n\004bodyB(Z" +
+      "&github.com/MemeLabs/go-ppspp/pkg/pb;pbb" +
+      "\006proto3"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
         new com.google.protobuf.Descriptors.FileDescriptor.    InternalDescriptorAssigner() {
@@ -10477,6 +10737,8 @@ public final class Nickserv {
     com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
         new com.google.protobuf.Descriptors.FileDescriptor[] {
+          gg.strims.ppspp.proto.Api.getDescriptor(),
+          com.google.protobuf.DurationProto.getDescriptor(),
         }, assigner);
     internal_static_ServerConfig_descriptor =
       getDescriptor().getMessageTypes().get(0);
@@ -10484,11 +10746,11 @@ public final class Nickserv {
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_ServerConfig_descriptor,
         new java.lang.String[] { "Key", "NameChangeQuota", "TokenTtl", "Roles", });
-    internal_static_NickServRecord_descriptor =
+    internal_static_NickservNick_descriptor =
       getDescriptor().getMessageTypes().get(1);
-    internal_static_NickServRecord_fieldAccessorTable = new
+    internal_static_NickservNick_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
-        internal_static_NickServRecord_descriptor,
+        internal_static_NickservNick_descriptor,
         new java.lang.String[] { "Id", "Key", "Nick", "RemainingNameChangeQuota", "UpdatedTimestamp", "CreatedTimestamp", "Roles", });
     internal_static_NickServToken_descriptor =
       getDescriptor().getMessageTypes().get(2);
@@ -10556,6 +10818,8 @@ public final class Nickserv {
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_NickServRPCResponse_Delete_descriptor,
         new java.lang.String[] { });
+    gg.strims.ppspp.proto.Api.getDescriptor();
+    com.google.protobuf.DurationProto.getDescriptor();
   }
 
   // @@protoc_insertion_point(outer_class_scope)

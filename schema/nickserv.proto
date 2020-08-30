@@ -2,14 +2,17 @@ syntax = "proto3";
 
 option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
 
+import "api.proto";
+import "google/protobuf/duration.proto";
+
 message ServerConfig {
-  bytes key = 1;
+  Key key = 1;
   uint32 name_change_quota = 2;
-  uint64 token_ttl = 3;
+  google.protobuf.Duration token_ttl = 3;
   repeated string roles = 4;
 }
 
-message NickServRecord {
+message NickservNick {
   uint64 id = 1;
   bytes key = 2;
   string nick = 3;

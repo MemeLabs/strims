@@ -5,7 +5,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"encoding/binary"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -47,11 +46,6 @@ func NewNickServ(svc *NetworkServices, salt []byte, kvStore kv.RWStore, nickserv
 		return nil, err
 	}
 
-	key := &pb.Key{}
-	if err := json.Unmarshal(cfg.Key, &key); err != nil {
-		return nil, err
-	}
-
 	port, err := svc.Network.ReservePort()
 	if err != nil {
 		return nil, err
@@ -66,7 +60,7 @@ func NewNickServ(svc *NetworkServices, salt []byte, kvStore kv.RWStore, nickserv
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
-	_, err = svc.HashTable.Set(ctx, key, salt, b)
+	_, err = svc.HashTable.Set(ctx, cfg.Key, salt, b)
 	if err != nil {
 		cancel()
 		return nil, err
@@ -88,7 +82,7 @@ func NewNickServ(svc *NetworkServices, salt []byte, kvStore kv.RWStore, nickserv
 		close:           cancel,
 		svc:             svc,
 		roles:           rolesMap,
-		tokenTTL:        cfg.TokenTtl,
+		tokenTTL:        cfg.TokenTtl.AsDuration(),
 		nameChangeQuota: cfg.NameChangeQuota,
 		store:           store,
 	}
@@ -104,29 +98,6 @@ func NewNickServ(svc *NetworkServices, salt []byte, kvStore kv.RWStore, nickserv
 	return s, nil
 }
 
-func NewNickServStore(kvStore kv.RWStore, nickservID uint64) (*NickServStore, error) {
-	store := &NickServStore{
-		id:      nickservID,
-		nicks:   make(map[string]*nickServItem),
-		records: llrb.New(),
-		kv:      kvStore,
-	}
-
-	records, err := dao.GetAllNickRecords(kvStore, nickservID)
-	if err != nil {
-		return nil, fmt.Errorf("could not retrieve existring nickserv records: %w", err)
-	}
-
-	// pupulate in memory stores from disk
-	for _, record := range records {
-		item := newNickServItem(record)
-		store.nicks[record.Nick] = item
-		store.records.ReplaceOrInsert(item)
-	}
-
-	return store, nil
-}
-
 type NickServ struct {
 	logger          *zap.Logger
 	close           context.CancelFunc
@@ -134,18 +105,8 @@ type NickServ struct {
 	svc             *NetworkServices
 	store           *NickServStore
 	roles           map[string]bool
-	tokenTTL        uint64
+	tokenTTL        time.Duration
 	nameChangeQuota uint32 // smaller?
-}
-
-type NickServStore struct {
-	// public key -> record
-	records *llrb.LLRB
-	// nick -> record
-	nicks map[string]*nickServItem
-	kv    kv.RWStore
-	id    uint64
-	sync.Mutex
 }
 
 func (s *NickServ) Close() {
@@ -214,7 +175,7 @@ func (s *NickServ) Send(msg proto.Message, dstID kademlia.ID, dstPort, srcPort u
 }
 
 func (s *NickServ) handleCreate(key []byte, msg *pb.NickServRPCCommand_Create) (*pb.NickServRPCResponse, error) {
-	r := &pb.NickServRecord{
+	r := &pb.NickservNick{
 		Key:                      key,
 		Nick:                     msg.Nick,
 		RemainingNameChangeQuota: defaultNameChangeQuota,
@@ -226,6 +187,19 @@ func (s *NickServ) handleCreate(key []byte, msg *pb.NickServRPCCommand_Create) (
 		return nil, err
 	}
 
+	token, err := s.toSignedToken(r)
+	if err != nil {
+		return nil, err
+	}
+
+	return &pb.NickServRPCResponse{
+		Body: &pb.NickServRPCResponse_Create{
+			Create: token,
+		},
+	}, nil
+}
+
+func (s *NickServ) toSignedToken(r *pb.NickservNick) (*pb.NickServToken, error) {
 	token := &pb.NickServToken{
 		Key:        r.Key,
 		Nick:       r.Nick,
@@ -233,47 +207,33 @@ func (s *NickServ) handleCreate(key []byte, msg *pb.NickServRPCCommand_Create) (
 		ValidUntil: s.validUntil(),
 	}
 
-	s.logRecord(r, token.ValidUntil)
+	s.logger.Debug("retrieved nick token",
+		zap.Uint64("id", r.Id),
+		zap.Binary("publicKey", r.Key),
+		zap.String("nick", r.Nick),
+		zap.Strings("roles", r.Roles),
+		zap.Uint64("validUntil", token.ValidUntil),
+	)
 
-	err = signNickToken(token, s.svc.Host.Key())
-	if err != nil {
-		return nil, err
-	}
-
-	resp := &pb.NickServRPCResponse{
-		Body: &pb.NickServRPCResponse_Create{
-			Create: token,
-		},
-	}
-
-	return resp, nil
+	err := signNickToken(token, s.svc.Host.Key())
+	return token, err
 }
 
 func (s *NickServ) handleRetrieve(key []byte) (*pb.NickServRPCResponse, error) {
-	item, err := s.store.Retrieve(key)
+	record, err := s.store.Retrieve(key)
 	if err != nil {
 		return nil, err
 	}
 
-	token := &pb.NickServToken{
-		Key:        item.Key,
-		Nick:       item.Nick,
-		Roles:      item.Roles,
-		ValidUntil: s.validUntil(),
-	}
-
-	err = signNickToken(token, s.svc.Host.Key())
+	token, err := s.toSignedToken(record)
 	if err != nil {
 		return nil, err
 	}
 
-	body := &pb.NickServRPCResponse_Retrieve{
-		Retrieve: token,
-	}
-
-	s.logRecord(item, token.ValidUntil)
 	return &pb.NickServRPCResponse{
-		Body: body,
+		Body: &pb.NickServRPCResponse_Retrieve{
+			Retrieve: token,
+		},
 	}, nil
 }
 
@@ -306,7 +266,7 @@ func (s *NickServ) handleUpdate(key []byte, msg *pb.NickServRPCCommand_Update) (
 
 		record.Nick = t.Nick.NewNick
 		record.RemainingNameChangeQuota--
-		err = s.store.Update(record)
+		_, err = s.store.Update(record)
 		if err != nil {
 			return nil, err
 		}
@@ -321,23 +281,11 @@ func (s *NickServ) handleUpdate(key []byte, msg *pb.NickServRPCCommand_Update) (
 		return nil, ErrUnimplemented
 	}
 
-	record.UpdatedTimestamp = uint64(time.Now().UTC().Unix())
-
 	return &pb.NickServRPCResponse{
 		Body: &pb.NickServRPCResponse_Update_{
 			Update: &pb.NickServRPCResponse_Update{},
 		},
 	}, nil
-}
-
-func (s *NickServ) logRecord(record *pb.NickServRecord, validUntil uint64) {
-	s.logger.Debug("retrieved nick token",
-		zap.Uint64("id", record.Id),
-		zap.Binary("publicKey", record.Key),
-		zap.String("nick", record.Nick),
-		zap.Strings("roles", record.Roles),
-		zap.Uint64("validUntil", validUntil),
-	)
 }
 
 func (s *NickServ) handleDelete(key []byte) (*pb.NickServRPCResponse, error) {
@@ -365,14 +313,46 @@ func (s *NickServ) validUntil() uint64 {
 
 // Less implements llrb.Item
 func (p *nickServItem) Less(oi llrb.Item) bool {
-
 	if o, ok := oi.(*nickServItem); ok {
 		return bytes.Compare(p.key, o.key) == -1
 	}
 	return !oi.Less(p)
 }
 
-func (s *NickServStore) Insert(r *pb.NickServRecord) (*pb.NickServRecord, error) {
+type NickServStore struct {
+	// public key -> record
+	records *llrb.LLRB
+	// nick -> record
+	nicks map[string]*nickServItem
+	kv    kv.RWStore
+	id    uint64
+	sync.Mutex
+}
+
+func NewNickServStore(kvStore kv.RWStore, nickservID uint64) (*NickServStore, error) {
+	store := &NickServStore{
+		id:      nickservID,
+		nicks:   make(map[string]*nickServItem),
+		records: llrb.New(),
+		kv:      kvStore,
+	}
+
+	records, err := dao.GetAllNickRecords(kvStore, nickservID)
+	if err != nil {
+		return nil, fmt.Errorf("could not retrieve existring nickserv records: %w", err)
+	}
+
+	// pupulate in memory stores from disk
+	for _, record := range records {
+		item := newNickServItem(record)
+		store.nicks[record.Nick] = item
+		store.records.ReplaceOrInsert(item)
+	}
+
+	return store, nil
+}
+
+func (s *NickServStore) Insert(r *pb.NickservNick) (*pb.NickservNick, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -380,14 +360,20 @@ func (s *NickServStore) Insert(r *pb.NickServRecord) (*pb.NickServRecord, error)
 	if err != nil {
 		return nil, err
 	}
-
 	now := uint64(time.Now().UTC().Unix())
-	r.Id = id
-	r.CreatedTimestamp = now
-	r.UpdatedTimestamp = now
 
-	item := newNickServItem(r)
-	_, ok := s.nicks[strings.ToLower(r.Nick)]
+	record := &pb.NickservNick{
+		CreatedTimestamp:         now,
+		UpdatedTimestamp:         now,
+		Id:                       id,
+		Key:                      r.Key,
+		Nick:                     r.Nick,
+		RemainingNameChangeQuota: r.RemainingNameChangeQuota,
+		Roles:                    r.Roles,
+	}
+
+	item := newNickServItem(record)
+	_, ok := s.nicks[strings.ToLower(record.Nick)]
 	if ok {
 		return nil, ErrNameAlreadyTaken
 	}
@@ -396,14 +382,14 @@ func (s *NickServStore) Insert(r *pb.NickServRecord) (*pb.NickServRecord, error)
 		return nil, ErrAlreadyExists
 	}
 
-	err = dao.UpsertNickRecord(s.kv, r, s.id)
+	err = dao.UpsertNickRecord(s.kv, record, s.id)
 	if err != nil {
 		return nil, err
 	}
 
 	s.records.ReplaceOrInsert(item)
-	s.nicks[strings.ToLower(r.Nick)] = item
-	return r, nil
+	s.nicks[strings.ToLower(record.Nick)] = item
+	return proto.Clone(record).(*pb.NickservNick), nil
 }
 
 func (s *NickServStore) Delete(key []byte) error {
@@ -425,35 +411,41 @@ func (s *NickServStore) Delete(key []byte) error {
 	return nil
 }
 
-func (s *NickServStore) Update(r *pb.NickServRecord) error {
+func (s *NickServStore) Update(newRecord *pb.NickservNick) (*pb.NickservNick, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	_, ok := s.nicks[strings.ToLower(r.Nick)]
+	_, ok := s.nicks[strings.ToLower(newRecord.Nick)]
 	if ok {
-		return ErrNameAlreadyTaken
+		return nil, ErrNameAlreadyTaken
 	}
 
-	prev, ok := s.records.Get(&nickServItem{key: r.Key}).(*nickServItem)
+	prev, ok := s.records.Get(&nickServItem{key: newRecord.Key}).(*nickServItem)
 	if !ok {
-		return ErrNotFound
+		return nil, ErrNotFound
 	}
 
-	err := dao.UpsertNickRecord(s.kv, r, s.id)
+	record := prev.record
+	oldNick := record.Nick
+	record.UpdatedTimestamp = uint64(time.Now().UTC().Unix())
+	record.Nick = newRecord.Nick
+	record.RemainingNameChangeQuota = newRecord.RemainingNameChangeQuota
+	record.Roles = newRecord.Roles
+
+	err := dao.UpsertNickRecord(s.kv, record, s.id)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	// update nick index if required
-	if prev.record.Nick != r.Nick {
-		delete(s.nicks, strings.ToLower(prev.record.Nick))
-		s.nicks[strings.ToLower(r.Nick)] = prev
+	if oldNick != record.Nick {
+		delete(s.nicks, strings.ToLower(oldNick))
+		s.nicks[strings.ToLower(record.Nick)] = prev
 	}
-	prev.record = r
-	return nil
+	return proto.Clone(record).(*pb.NickservNick), nil
 }
 
-func (s *NickServStore) Retrieve(key []byte) (*pb.NickServRecord, error) {
+func (s *NickServStore) Retrieve(key []byte) (*pb.NickservNick, error) {
 	s.Lock()
 	defer s.Unlock()
 	item := s.records.Get(&nickServItem{key: key})
@@ -462,23 +454,15 @@ func (s *NickServStore) Retrieve(key []byte) (*pb.NickServRecord, error) {
 		return nil, ErrNotFound
 	}
 	old := item.(*nickServItem).record
-	return &pb.NickServRecord{
-		CreatedTimestamp:         old.CreatedTimestamp,
-		Id:                       old.Id,
-		Key:                      old.Key,
-		Nick:                     old.Nick,
-		RemainingNameChangeQuota: old.RemainingNameChangeQuota,
-		Roles:                    old.Roles,
-		UpdatedTimestamp:         old.UpdatedTimestamp,
-	}, nil
+	return proto.Clone(old).(*pb.NickservNick), nil
 }
 
 type nickServItem struct {
 	key    []byte
-	record *pb.NickServRecord
+	record *pb.NickservNick
 }
 
-func newNickServItem(r *pb.NickServRecord) *nickServItem {
+func newNickServItem(r *pb.NickservNick) *nickServItem {
 	return &nickServItem{
 		key:    r.Key,
 		record: r,
@@ -497,9 +481,7 @@ func serializeNickToken(token *pb.NickServToken) ([]byte, int) {
 	n := copy(b, token.Key)
 	n += copy(b[n:], []byte(token.Nick))
 
-	sort.Slice(token.Roles, func(i, j int) bool {
-		return token.Roles[i] < token.Roles[j]
-	})
+	sort.Strings(token.Roles)
 	for _, role := range token.Roles {
 		n += copy(b[n:], []byte(role))
 	}
