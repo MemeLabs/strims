@@ -7,7 +7,7 @@ on:
 jobs:
   main:
     name: Test & Build Debug
-    runs-on: ubuntu-18.04
+    runs-on: ubuntu-latest
     container: docker.pkg.github.com/jbpratt/gomobile-android/gomobile-android:latest
     steps:
       - uses: actions/checkout@v1
@@ -17,7 +17,6 @@ jobs:
           java-version: 1.8
       - name: Build Go bridge
         run: |
-          cd /go/src/x
           go mod download
           gomobile init
           mkdir ./android/app/libs
