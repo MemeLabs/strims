@@ -33,7 +33,6 @@ jobs:
           wget -O tools.zip https://dl.google.com/android/repository/${SDK_VERSION}.zip && \
           unzip tools.zip && rm tools.zip && \
           chmod a+x -R $ANDROID_HOME && \
-          chown -R root:root $ANDROID_HOME
           mkdir -p ~/.android && \
           touch ~/.android/repositories.cfg && \
           echo y | sdkmanager "platform-tools" && \
