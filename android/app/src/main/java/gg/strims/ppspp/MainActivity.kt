@@ -42,7 +42,7 @@ private const val TAG = "ppspp"
 
 class MainActivity : AppCompatActivity() {
     private var host = "10.0.2.2:0"
-    private var addr = "10.0.2.2:8080"
+    private var addr = "10.0.2.2:8082"
     private var videoUrl: MutableState<String> = mutableStateOf("")
     var isSignedIn: MutableState<Boolean> = mutableStateOf(false)
     var inSwarm: MutableState<Boolean> = mutableStateOf(false)
@@ -162,11 +162,11 @@ class MainActivity : AppCompatActivity() {
         return root
     }
 
-    private fun FrontendRPCClient.publishSwarm() = try {
+    private fun FrontendRPCClient.publishSwarm(id: Long) = try {
         val memberships = this.getNetworkMemberships().get()!!
         memberships.networkMembershipsList.map {
             this.publishSwarm(
-                PublishSwarmRequest.newBuilder().setId(it.id)
+                PublishSwarmRequest.newBuilder().setId(id)
                     .setNetworkKey(rootCert(it.certificate).key)
                     .build()
             ).get()!!
@@ -192,7 +192,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun FrontendRPCClient.handleJoinVideoSwarm(): Any = try {
-        val client = this.openVideoClient()
+        val client =
+            this.openVideoClient(VideoClientOpenRequest.newBuilder().build())
         client.delegate = { event: VideoClientEvent?, eventType: RPCEvent ->
             Log.i(TAG, eventType.toString())
             when (eventType) {
@@ -201,11 +202,8 @@ class MainActivity : AppCompatActivity() {
                         when (it) {
                             VideoClientEvent.BodyCase.OPEN -> {
                                 Log.i(TAG, "open: ${event.open.id}")
-                                this.publishSwarm(
-                                    PublishSwarmRequest.newBuilder().setId(event.open.id)
-                                        .build()
-                                )
-                                // this.startHLSEgress(event.open.id)
+                                this.publishSwarm(event.open.id)
+                                this.startHLSEgress(event.open.id)
                             }
                             VideoClientEvent.BodyCase.DATA -> {
                                 Log.i(TAG, "video data: ${event.data.data.count()}")
@@ -231,11 +229,11 @@ class MainActivity : AppCompatActivity() {
         Column(Modifier.padding(4.dp)) {
             val usernameState = remember { UsernameState() }
             if (usernameState.text.isEmpty()) {
-                usernameState.text = getRandomString(10)
+                usernameState.text = "majora"
             }
             val passwordState = remember { PasswordState() }
             if (passwordState.text.isEmpty()) {
-                passwordState.text = getRandomString(10)
+                passwordState.text = "autumn"
             }
             profileInput(usernameState, passwordState)
             Row {
@@ -261,7 +259,7 @@ class MainActivity : AppCompatActivity() {
     fun MockButtons(client: FrontendRPCClient) {
         Column(Modifier.padding(16.dp).fillMaxWidth()) {
             MockButton("Create bootstrap client") { client.handleCreateBootstrapClient() }
-            MockButton("Load invite cert") { client.handleLoadInviteCert("") }
+            MockButton("Load invite cert") { client.handleLoadInviteCert("EoADCmYIARJAV8Wik5atNRhHG6q3pLsjG/lBtLLHzqTx0DAM5ZRcM3YQ22BWfAKSO1yTWG1eS2DxK/bVtW9N9xfx3FqXDa0hkhogENtgVnwCkjtck1htXktg8Sv21bVvTfcX8dxalw2tIZISjwIKIBDbYFZ8ApI7XJNYbV5LYPEr9tW1b033F/HcWpcNrSGSEAEYBiCY+av6BSiY7tD6BTIQeKqBCFl2lUO7SkUeGazEijpACq5jjd+OquKU2o8wPvy6ICyyYYpCFKScYx78ofZGq4uMSRf3q2DNsv4ckHp6dpSVIXIN8Y5MOvT4OWBl6YprDUKGAQogsCzueUWDAn2eWw99uFRr8YND7wwiY48Yske2MtCQCh4QARgEIPv4q/oFKPvGtZgGMhDYxi/f9+1ac7iQbWZRkDJXOkAc20513mQ2AJCaJde7+ox/oI4vn9vqZVTUSJQvSK3q+QlkYVwnUD9bwenolByGpkO3Yd7B5Nz8X76irNAbX4IGIgR0ZXN0") }
             MockButton("Create network") { client.handleCreateNetwork() }
             MockButton("Start vpn") { client.handleStartVPN() }
             MockButton("Join video swarm") { client.handleJoinVideoSwarm() }
@@ -299,6 +297,7 @@ class MainActivity : AppCompatActivity() {
         val exoPlayer = remember {
             SimpleExoPlayer.Builder(context).build()
         }
+        Log.i(TAG, uri)
 
         val dataSourceFactory: DataSource.Factory =
             DefaultDataSourceFactory(context, Util.getUserAgent(context, context.packageName))
