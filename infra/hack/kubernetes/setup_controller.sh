@@ -74,8 +74,8 @@ mkdir -p $HOME/.kube
 sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
-kubectl apply -f kube-flannel.yaml
-kubectl apply -f local-storage.yaml
+kubectl apply -f /mnt/kube-flannel.yaml
+kubectl apply -f /mnt/local-storage.yaml
 
 # monitoring storage pv mounts
 mkdir -p /mnt/disks/grafana
