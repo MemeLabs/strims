@@ -5,8 +5,11 @@ on:
     branches: [ master ]
   pull_request:
     paths:
-      - "!android/**"
-      - "!ios/**"
+      - "pkg/**"
+      - "infra/**"
+      - "integration/**"
+      - "hack/**"
+      - "cmd/**"
 
 jobs:
   build:
