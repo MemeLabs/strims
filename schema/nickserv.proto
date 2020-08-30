@@ -4,6 +4,7 @@ option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
 
 import "api.proto";
 import "google/protobuf/duration.proto";
+import "google/protobuf/timestamp.proto";
 
 message ServerConfig {
   Key key = 1;
@@ -25,7 +26,7 @@ message NickservNick {
 message NickServToken {
   bytes key = 1;
   string nick = 2;
-  uint64 valid_until = 3;
+  google.protobuf.Timestamp valid_until = 3;
   bytes signature = 4;
   repeated string roles = 5;
 }

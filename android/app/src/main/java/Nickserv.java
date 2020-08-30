@@ -2155,9 +2155,17 @@ public final class Nickserv {
         getNickBytes();
 
     /**
-     * <code>uint64 valid_until = 3;</code>
+     * <code>.google.protobuf.Timestamp valid_until = 3;</code>
      */
-    long getValidUntil();
+    boolean hasValidUntil();
+    /**
+     * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+     */
+    com.google.protobuf.Timestamp getValidUntil();
+    /**
+     * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+     */
+    com.google.protobuf.TimestampOrBuilder getValidUntilOrBuilder();
 
     /**
      * <code>bytes signature = 4;</code>
@@ -2198,7 +2206,6 @@ public final class Nickserv {
     private NickServToken() {
       key_ = com.google.protobuf.ByteString.EMPTY;
       nick_ = "";
-      validUntil_ = 0L;
       signature_ = com.google.protobuf.ByteString.EMPTY;
       roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
     }
@@ -2238,9 +2245,17 @@ public final class Nickserv {
               nick_ = s;
               break;
             }
-            case 24: {
+            case 26: {
+              com.google.protobuf.Timestamp.Builder subBuilder = null;
+              if (validUntil_ != null) {
+                subBuilder = validUntil_.toBuilder();
+              }
+              validUntil_ = input.readMessage(com.google.protobuf.Timestamp.parser(), extensionRegistry);
+              if (subBuilder != null) {
+                subBuilder.mergeFrom(validUntil_);
+                validUntil_ = subBuilder.buildPartial();
+              }
 
-              validUntil_ = input.readUInt64();
               break;
             }
             case 34: {
@@ -2337,12 +2352,24 @@ public final class Nickserv {
     }
 
     public static final int VALID_UNTIL_FIELD_NUMBER = 3;
-    private long validUntil_;
+    private com.google.protobuf.Timestamp validUntil_;
     /**
-     * <code>uint64 valid_until = 3;</code>
+     * <code>.google.protobuf.Timestamp valid_until = 3;</code>
      */
-    public long getValidUntil() {
-      return validUntil_;
+    public boolean hasValidUntil() {
+      return validUntil_ != null;
+    }
+    /**
+     * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+     */
+    public com.google.protobuf.Timestamp getValidUntil() {
+      return validUntil_ == null ? com.google.protobuf.Timestamp.getDefaultInstance() : validUntil_;
+    }
+    /**
+     * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+     */
+    public com.google.protobuf.TimestampOrBuilder getValidUntilOrBuilder() {
+      return getValidUntil();
     }
 
     public static final int SIGNATURE_FIELD_NUMBER = 4;
@@ -2403,8 +2430,8 @@ public final class Nickserv {
       if (!getNickBytes().isEmpty()) {
         com.google.protobuf.GeneratedMessageV3.writeString(output, 2, nick_);
       }
-      if (validUntil_ != 0L) {
-        output.writeUInt64(3, validUntil_);
+      if (validUntil_ != null) {
+        output.writeMessage(3, getValidUntil());
       }
       if (!signature_.isEmpty()) {
         output.writeBytes(4, signature_);
@@ -2428,9 +2455,9 @@ public final class Nickserv {
       if (!getNickBytes().isEmpty()) {
         size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, nick_);
       }
-      if (validUntil_ != 0L) {
+      if (validUntil_ != null) {
         size += com.google.protobuf.CodedOutputStream
-          .computeUInt64Size(3, validUntil_);
+          .computeMessageSize(3, getValidUntil());
       }
       if (!signature_.isEmpty()) {
         size += com.google.protobuf.CodedOutputStream
@@ -2464,8 +2491,11 @@ public final class Nickserv {
           .equals(other.getKey());
       result = result && getNick()
           .equals(other.getNick());
-      result = result && (getValidUntil()
-          == other.getValidUntil());
+      result = result && (hasValidUntil() == other.hasValidUntil());
+      if (hasValidUntil()) {
+        result = result && getValidUntil()
+            .equals(other.getValidUntil());
+      }
       result = result && getSignature()
           .equals(other.getSignature());
       result = result && getRolesList()
@@ -2485,9 +2515,10 @@ public final class Nickserv {
       hash = (53 * hash) + getKey().hashCode();
       hash = (37 * hash) + NICK_FIELD_NUMBER;
       hash = (53 * hash) + getNick().hashCode();
-      hash = (37 * hash) + VALID_UNTIL_FIELD_NUMBER;
-      hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
-          getValidUntil());
+      if (hasValidUntil()) {
+        hash = (37 * hash) + VALID_UNTIL_FIELD_NUMBER;
+        hash = (53 * hash) + getValidUntil().hashCode();
+      }
       hash = (37 * hash) + SIGNATURE_FIELD_NUMBER;
       hash = (53 * hash) + getSignature().hashCode();
       if (getRolesCount() > 0) {
@@ -2631,8 +2662,12 @@ public final class Nickserv {
 
         nick_ = "";
 
-        validUntil_ = 0L;
-
+        if (validUntilBuilder_ == null) {
+          validUntil_ = null;
+        } else {
+          validUntil_ = null;
+          validUntilBuilder_ = null;
+        }
         signature_ = com.google.protobuf.ByteString.EMPTY;
 
         roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
@@ -2667,7 +2702,11 @@ public final class Nickserv {
         int to_bitField0_ = 0;
         result.key_ = key_;
         result.nick_ = nick_;
-        result.validUntil_ = validUntil_;
+        if (validUntilBuilder_ == null) {
+          result.validUntil_ = validUntil_;
+        } else {
+          result.validUntil_ = validUntilBuilder_.build();
+        }
         result.signature_ = signature_;
         if (((bitField0_ & 0x00000010) == 0x00000010)) {
           roles_ = roles_.getUnmodifiableView();
@@ -2730,8 +2769,8 @@ public final class Nickserv {
           nick_ = other.nick_;
           onChanged();
         }
-        if (other.getValidUntil() != 0L) {
-          setValidUntil(other.getValidUntil());
+        if (other.hasValidUntil()) {
+          mergeValidUntil(other.getValidUntil());
         }
         if (other.getSignature() != com.google.protobuf.ByteString.EMPTY) {
           setSignature(other.getSignature());
@@ -2874,30 +2913,121 @@ public final class Nickserv {
         return this;
       }
 
-      private long validUntil_ ;
+      private com.google.protobuf.Timestamp validUntil_ = null;
+      private com.google.protobuf.SingleFieldBuilderV3<
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> validUntilBuilder_;
       /**
-       * <code>uint64 valid_until = 3;</code>
+       * <code>.google.protobuf.Timestamp valid_until = 3;</code>
        */
-      public long getValidUntil() {
-        return validUntil_;
+      public boolean hasValidUntil() {
+        return validUntilBuilder_ != null || validUntil_ != null;
       }
       /**
-       * <code>uint64 valid_until = 3;</code>
+       * <code>.google.protobuf.Timestamp valid_until = 3;</code>
        */
-      public Builder setValidUntil(long value) {
-        
-        validUntil_ = value;
-        onChanged();
+      public com.google.protobuf.Timestamp getValidUntil() {
+        if (validUntilBuilder_ == null) {
+          return validUntil_ == null ? com.google.protobuf.Timestamp.getDefaultInstance() : validUntil_;
+        } else {
+          return validUntilBuilder_.getMessage();
+        }
+      }
+      /**
+       * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+       */
+      public Builder setValidUntil(com.google.protobuf.Timestamp value) {
+        if (validUntilBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          validUntil_ = value;
+          onChanged();
+        } else {
+          validUntilBuilder_.setMessage(value);
+        }
+
         return this;
       }
       /**
-       * <code>uint64 valid_until = 3;</code>
+       * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+       */
+      public Builder setValidUntil(
+          com.google.protobuf.Timestamp.Builder builderForValue) {
+        if (validUntilBuilder_ == null) {
+          validUntil_ = builderForValue.build();
+          onChanged();
+        } else {
+          validUntilBuilder_.setMessage(builderForValue.build());
+        }
+
+        return this;
+      }
+      /**
+       * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+       */
+      public Builder mergeValidUntil(com.google.protobuf.Timestamp value) {
+        if (validUntilBuilder_ == null) {
+          if (validUntil_ != null) {
+            validUntil_ =
+              com.google.protobuf.Timestamp.newBuilder(validUntil_).mergeFrom(value).buildPartial();
+          } else {
+            validUntil_ = value;
+          }
+          onChanged();
+        } else {
+          validUntilBuilder_.mergeFrom(value);
+        }
+
+        return this;
+      }
+      /**
+       * <code>.google.protobuf.Timestamp valid_until = 3;</code>
        */
       public Builder clearValidUntil() {
-        
-        validUntil_ = 0L;
-        onChanged();
+        if (validUntilBuilder_ == null) {
+          validUntil_ = null;
+          onChanged();
+        } else {
+          validUntil_ = null;
+          validUntilBuilder_ = null;
+        }
+
         return this;
+      }
+      /**
+       * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+       */
+      public com.google.protobuf.Timestamp.Builder getValidUntilBuilder() {
+        
+        onChanged();
+        return getValidUntilFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+       */
+      public com.google.protobuf.TimestampOrBuilder getValidUntilOrBuilder() {
+        if (validUntilBuilder_ != null) {
+          return validUntilBuilder_.getMessageOrBuilder();
+        } else {
+          return validUntil_ == null ?
+              com.google.protobuf.Timestamp.getDefaultInstance() : validUntil_;
+        }
+      }
+      /**
+       * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> 
+          getValidUntilFieldBuilder() {
+        if (validUntilBuilder_ == null) {
+          validUntilBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder>(
+                  getValidUntil(),
+                  getParentForChildren(),
+                  isClean());
+          validUntil_ = null;
+        }
+        return validUntilBuilder_;
       }
 
       private com.google.protobuf.ByteString signature_ = com.google.protobuf.ByteString.EMPTY;
@@ -10693,38 +10823,39 @@ public final class Nickserv {
   static {
     java.lang.String[] descriptorData = {
       "\n\016nickserv.proto\032\tapi.proto\032\036google/prot" +
-      "obuf/duration.proto\"y\n\014ServerConfig\022\021\n\003k" +
-      "ey\030\001 \001(\0132\004.Key\022\031\n\021name_change_quota\030\002 \001(" +
-      "\r\022,\n\ttoken_ttl\030\003 \001(\0132\031.google.protobuf.D" +
-      "uration\022\r\n\005roles\030\004 \003(\t\"\237\001\n\014NickservNick\022" +
-      "\n\n\002id\030\001 \001(\004\022\013\n\003key\030\002 \001(\014\022\014\n\004nick\030\003 \001(\t\022#" +
-      "\n\033remaining_name_change_quota\030\004 \001(\r\022\031\n\021u" +
-      "pdated_timestamp\030\005 \001(\004\022\031\n\021created_timest" +
-      "amp\030\006 \001(\004\022\r\n\005roles\030\007 \003(\t\"a\n\rNickServToke" +
-      "n\022\013\n\003key\030\001 \001(\014\022\014\n\004nick\030\002 \001(\t\022\023\n\013valid_un" +
-      "til\030\003 \001(\004\022\021\n\tsignature\030\004 \001(\014\022\r\n\005roles\030\005 " +
-      "\003(\t\"\232\004\n\022NickServRPCCommand\022\022\n\nrequest_id" +
-      "\030\001 \001(\004\022\031\n\021source_public_key\030\002 \001(\014\022,\n\006cre" +
-      "ate\030\005 \001(\0132\032.NickServRPCCommand.CreateH\000\022" +
-      "0\n\010retrieve\030\006 \001(\0132\034.NickServRPCCommand.R" +
-      "etrieveH\000\022,\n\006update\030\007 \001(\0132\032.NickServRPCC" +
-      "ommand.UpdateH\000\022,\n\006delete\030\010 \001(\0132\032.NickSe" +
-      "rvRPCCommand.DeleteH\000\032\026\n\006Create\022\014\n\004nick\030" +
-      "\001 \001(\t\032\n\n\010Retrieve\032\342\001\n\006Update\0225\n\004nick\030\001 \001" +
-      "(\0132%.NickServRPCCommand.Update.ChangeNic" +
-      "kH\000\022\033\n\021name_change_quota\030\002 \001(\rH\000\0221\n\005role" +
-      "s\030\003 \001(\0132 .NickServRPCCommand.Update.Role" +
-      "sH\000\032\026\n\005Roles\022\r\n\005roles\030\001 \003(\t\0320\n\nChangeNic" +
-      "k\022\020\n\010old_nick\030\001 \001(\t\022\020\n\010new_nick\030\002 \001(\tB\007\n" +
-      "\005param\032\010\n\006DeleteB\006\n\004body\"\372\001\n\023NickServRPC" +
-      "Response\022\022\n\nrequest_id\030\001 \001(\004\022\017\n\005error\030\002 " +
-      "\001(\tH\000\022-\n\006update\030\003 \001(\0132\033.NickServRPCRespo" +
-      "nse.UpdateH\000\022-\n\006delete\030\004 \001(\0132\033.NickServR" +
-      "PCResponse.DeleteH\000\022 \n\006create\030\005 \001(\0132\016.Ni" +
-      "ckServTokenH\000\022\"\n\010retrieve\030\006 \001(\0132\016.NickSe" +
-      "rvTokenH\000\032\010\n\006Update\032\010\n\006DeleteB\006\n\004bodyB(Z" +
-      "&github.com/MemeLabs/go-ppspp/pkg/pb;pbb" +
-      "\006proto3"
+      "obuf/duration.proto\032\037google/protobuf/tim" +
+      "estamp.proto\"y\n\014ServerConfig\022\021\n\003key\030\001 \001(" +
+      "\0132\004.Key\022\031\n\021name_change_quota\030\002 \001(\r\022,\n\tto" +
+      "ken_ttl\030\003 \001(\0132\031.google.protobuf.Duration" +
+      "\022\r\n\005roles\030\004 \003(\t\"\237\001\n\014NickservNick\022\n\n\002id\030\001" +
+      " \001(\004\022\013\n\003key\030\002 \001(\014\022\014\n\004nick\030\003 \001(\t\022#\n\033remai" +
+      "ning_name_change_quota\030\004 \001(\r\022\031\n\021updated_" +
+      "timestamp\030\005 \001(\004\022\031\n\021created_timestamp\030\006 \001" +
+      "(\004\022\r\n\005roles\030\007 \003(\t\"}\n\rNickServToken\022\013\n\003ke" +
+      "y\030\001 \001(\014\022\014\n\004nick\030\002 \001(\t\022/\n\013valid_until\030\003 \001" +
+      "(\0132\032.google.protobuf.Timestamp\022\021\n\tsignat" +
+      "ure\030\004 \001(\014\022\r\n\005roles\030\005 \003(\t\"\232\004\n\022NickServRPC" +
+      "Command\022\022\n\nrequest_id\030\001 \001(\004\022\031\n\021source_pu" +
+      "blic_key\030\002 \001(\014\022,\n\006create\030\005 \001(\0132\032.NickSer" +
+      "vRPCCommand.CreateH\000\0220\n\010retrieve\030\006 \001(\0132\034" +
+      ".NickServRPCCommand.RetrieveH\000\022,\n\006update" +
+      "\030\007 \001(\0132\032.NickServRPCCommand.UpdateH\000\022,\n\006" +
+      "delete\030\010 \001(\0132\032.NickServRPCCommand.Delete" +
+      "H\000\032\026\n\006Create\022\014\n\004nick\030\001 \001(\t\032\n\n\010Retrieve\032\342" +
+      "\001\n\006Update\0225\n\004nick\030\001 \001(\0132%.NickServRPCCom" +
+      "mand.Update.ChangeNickH\000\022\033\n\021name_change_" +
+      "quota\030\002 \001(\rH\000\0221\n\005roles\030\003 \001(\0132 .NickServR" +
+      "PCCommand.Update.RolesH\000\032\026\n\005Roles\022\r\n\005rol" +
+      "es\030\001 \003(\t\0320\n\nChangeNick\022\020\n\010old_nick\030\001 \001(\t" +
+      "\022\020\n\010new_nick\030\002 \001(\tB\007\n\005param\032\010\n\006DeleteB\006\n" +
+      "\004body\"\372\001\n\023NickServRPCResponse\022\022\n\nrequest" +
+      "_id\030\001 \001(\004\022\017\n\005error\030\002 \001(\tH\000\022-\n\006update\030\003 \001" +
+      "(\0132\033.NickServRPCResponse.UpdateH\000\022-\n\006del" +
+      "ete\030\004 \001(\0132\033.NickServRPCResponse.DeleteH\000" +
+      "\022 \n\006create\030\005 \001(\0132\016.NickServTokenH\000\022\"\n\010re" +
+      "trieve\030\006 \001(\0132\016.NickServTokenH\000\032\010\n\006Update" +
+      "\032\010\n\006DeleteB\006\n\004bodyB(Z&github.com/MemeLab" +
+      "s/go-ppspp/pkg/pb;pbb\006proto3"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
         new com.google.protobuf.Descriptors.FileDescriptor.    InternalDescriptorAssigner() {
@@ -10739,6 +10870,7 @@ public final class Nickserv {
         new com.google.protobuf.Descriptors.FileDescriptor[] {
           gg.strims.ppspp.proto.Api.getDescriptor(),
           com.google.protobuf.DurationProto.getDescriptor(),
+          com.google.protobuf.TimestampProto.getDescriptor(),
         }, assigner);
     internal_static_ServerConfig_descriptor =
       getDescriptor().getMessageTypes().get(0);
@@ -10820,6 +10952,7 @@ public final class Nickserv {
         new java.lang.String[] { });
     gg.strims.ppspp.proto.Api.getDescriptor();
     com.google.protobuf.DurationProto.getDescriptor();
+    com.google.protobuf.TimestampProto.getDescriptor();
   }
 
   // @@protoc_insertion_point(outer_class_scope)

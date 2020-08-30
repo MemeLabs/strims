@@ -19,6 +19,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/golang/protobuf/ptypes"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -200,11 +201,15 @@ func (s *NickServ) handleCreate(key []byte, msg *pb.NickServRPCCommand_Create) (
 }
 
 func (s *NickServ) toSignedToken(r *pb.NickservNick) (*pb.NickServToken, error) {
+	until, err := ptypes.TimestampProto(s.validUntil())
+	if err != nil {
+		return nil, err
+	}
 	token := &pb.NickServToken{
 		Key:        r.Key,
 		Nick:       r.Nick,
 		Roles:      []string{}, // TODO
-		ValidUntil: s.validUntil(),
+		ValidUntil: until,
 	}
 
 	s.logger.Debug("retrieved nick token",
@@ -212,10 +217,10 @@ func (s *NickServ) toSignedToken(r *pb.NickservNick) (*pb.NickServToken, error) 
 		zap.Binary("publicKey", r.Key),
 		zap.String("nick", r.Nick),
 		zap.Strings("roles", r.Roles),
-		zap.Uint64("validUntil", token.ValidUntil),
+		zap.Time("validUntil", token.ValidUntil.AsTime()),
 	)
 
-	err := signNickToken(token, s.svc.Host.Key())
+	err = signNickToken(token, s.svc.Host.Key())
 	return token, err
 }
 
@@ -307,8 +312,8 @@ func (s *NickServ) handleDelete(key []byte) (*pb.NickServRPCResponse, error) {
 	}, err
 }
 
-func (s *NickServ) validUntil() uint64 {
-	return uint64(time.Now().UTC().Unix()) + s.tokenTTL
+func (s *NickServ) validUntil() time.Time {
+	return time.Now().Add(s.tokenTTL)
 }
 
 // Less implements llrb.Item
@@ -485,7 +490,7 @@ func serializeNickToken(token *pb.NickServToken) ([]byte, int) {
 	for _, role := range token.Roles {
 		n += copy(b[n:], []byte(role))
 	}
-	binary.BigEndian.PutUint64(b[n:], token.ValidUntil)
+	binary.BigEndian.PutUint64(b[n:], uint64(token.ValidUntil.AsTime().UTC().Unix()))
 	n += 8
 
 	return b, n
