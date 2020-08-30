@@ -30,6 +30,7 @@ jobs:
           mkdir ~/android
           export ANDROID_HOME="$HOME/android"
           export PATH=$PATH:$ANDROID_HOME/tools:$ANDROID_HOME/tools/bin
+          ls $ANDROID_HOME/tools/bin
           wget -O tools.zip https://dl.google.com/android/repository/${SDK_VERSION}.zip && \
           unzip tools.zip && rm tools.zip && \
           chmod a+x -R $ANDROID_HOME && \
