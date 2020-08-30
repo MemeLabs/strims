@@ -151,9 +151,22 @@ class FrontendRPCClient(filepath: String) : RPCClient(filepath) {
         this.callStreaming("getIngressStreams", arg)
 
     fun startHLSEgress(
+        arg: StartHLSEgressRequest = StartHLSEgressRequest.newBuilder().build()
+    ): Future<StartHLSEgressResponse> =
+        this.callUnary("startHLSEgress", arg)
+
+    fun stopHLSEgress(
         arg: StopHLSEgressRequest = StopHLSEgressRequest.newBuilder().build()
     ): Future<StopHLSEgressResponse> =
         this.callUnary("startHLSEgress", arg)
+
+    fun startRTMPIngress(
+        arg: StartRTMPIngressRequest = StartRTMPIngressRequest.newBuilder().build()
+    ): Future<StartRTMPIngressResponse> = this.callUnary("startRTMPIngress", arg)
+
+    fun stopRTMPIngress(
+        arg: StartRTMPIngressRequest = StartRTMPIngressRequest.newBuilder().build()
+    ): Future<StartRTMPIngressResponse> = this.callUnary("stopRTMPIngress", arg)
 
     fun startSwarm(
         arg: StartSwarmRequest = StartSwarmRequest.newBuilder().build()

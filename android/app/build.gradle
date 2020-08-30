@@ -13,7 +13,7 @@ android {
         minSdkVersion 21
         targetSdkVersion 30
         versionCode 1
-        versionName '1.0'
+        versionName '0.0.0'
         testInstrumentationRunner 'androidx.test.runner.AndroidJUnitRunner'
 
         vectorDrawables.useSupportLibrary = true
@@ -52,6 +52,8 @@ dependencies {
     implementation name: 'bridge', ext: 'aar'
 
     implementation Libs.Proto.googleProto
+
+    implementation Libs.Player.exoPlayer
 
     implementation Libs.Kotlin.stdlib
     implementation Libs.Coroutines.android

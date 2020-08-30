@@ -8,4 +8,5 @@
     <string name="startVpnBtn">Start VPN</string>
     <string name="title_activity_main2">My Compose App</string>
     <string name="title_activity_main">home</string>
+    <string name="title_activity_video_player">Video Player</string>
 </resources>

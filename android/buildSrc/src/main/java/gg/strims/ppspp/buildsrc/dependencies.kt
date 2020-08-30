@@ -17,6 +17,11 @@ object Libs {
         const val googleProto = "com.google.protobuf:protobuf-java-util:$version"
     }
 
+    object Player {
+        private const val version = "2.11.8"
+        const val exoPlayer = "com.google.android.exoplayer:exoplayer:$version"
+    }
+
     object Kotlin {
         private const val version = "1.4.0"
         const val stdlib = "org.jetbrains.kotlin:kotlin-stdlib-jdk8:$version"
