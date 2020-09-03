@@ -31,7 +31,9 @@ import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory
 import com.google.android.exoplayer2.util.Util
 import gg.strims.ppspp.profile.PasswordState
 import gg.strims.ppspp.profile.UsernameState
-import gg.strims.ppspp.proto.Api.*
+import gg.strims.ppspp.proto.ProfileOuterClass.*
+import gg.strims.ppspp.proto.Video.*
+import gg.strims.ppspp.proto.Vpn.*
 import gg.strims.ppspp.rpc.FrontendRPCClient
 import gg.strims.ppspp.rpc.RPCEvent
 import gg.strims.ppspp.ui.PpsppTheme
