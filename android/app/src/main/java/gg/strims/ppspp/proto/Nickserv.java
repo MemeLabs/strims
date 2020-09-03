@@ -25,11 +25,11 @@ public final class Nickserv {
     /**
      * <code>.Key key = 1;</code>
      */
-    gg.strims.ppspp.proto.Api.Key getKey();
+    gg.strims.ppspp.proto.ProfileOuterClass.Key getKey();
     /**
      * <code>.Key key = 1;</code>
      */
-    gg.strims.ppspp.proto.Api.KeyOrBuilder getKeyOrBuilder();
+    gg.strims.ppspp.proto.ProfileOuterClass.KeyOrBuilder getKeyOrBuilder();
 
     /**
      * <code>uint32 name_change_quota = 2;</code>
@@ -110,11 +110,11 @@ public final class Nickserv {
               done = true;
               break;
             case 10: {
-              gg.strims.ppspp.proto.Api.Key.Builder subBuilder = null;
+              gg.strims.ppspp.proto.ProfileOuterClass.Key.Builder subBuilder = null;
               if (key_ != null) {
                 subBuilder = key_.toBuilder();
               }
-              key_ = input.readMessage(gg.strims.ppspp.proto.Api.Key.parser(), extensionRegistry);
+              key_ = input.readMessage(gg.strims.ppspp.proto.ProfileOuterClass.Key.parser(), extensionRegistry);
               if (subBuilder != null) {
                 subBuilder.mergeFrom(key_);
                 key_ = subBuilder.buildPartial();
@@ -186,7 +186,7 @@ public final class Nickserv {
 
     private int bitField0_;
     public static final int KEY_FIELD_NUMBER = 1;
-    private gg.strims.ppspp.proto.Api.Key key_;
+    private gg.strims.ppspp.proto.ProfileOuterClass.Key key_;
     /**
      * <code>.Key key = 1;</code>
      */
@@ -196,13 +196,13 @@ public final class Nickserv {
     /**
      * <code>.Key key = 1;</code>
      */
-    public gg.strims.ppspp.proto.Api.Key getKey() {
-      return key_ == null ? gg.strims.ppspp.proto.Api.Key.getDefaultInstance() : key_;
+    public gg.strims.ppspp.proto.ProfileOuterClass.Key getKey() {
+      return key_ == null ? gg.strims.ppspp.proto.ProfileOuterClass.Key.getDefaultInstance() : key_;
     }
     /**
      * <code>.Key key = 1;</code>
      */
-    public gg.strims.ppspp.proto.Api.KeyOrBuilder getKeyOrBuilder() {
+    public gg.strims.ppspp.proto.ProfileOuterClass.KeyOrBuilder getKeyOrBuilder() {
       return getKey();
     }
 
@@ -666,9 +666,9 @@ public final class Nickserv {
       }
       private int bitField0_;
 
-      private gg.strims.ppspp.proto.Api.Key key_ = null;
+      private gg.strims.ppspp.proto.ProfileOuterClass.Key key_ = null;
       private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Api.Key, gg.strims.ppspp.proto.Api.Key.Builder, gg.strims.ppspp.proto.Api.KeyOrBuilder> keyBuilder_;
+          gg.strims.ppspp.proto.ProfileOuterClass.Key, gg.strims.ppspp.proto.ProfileOuterClass.Key.Builder, gg.strims.ppspp.proto.ProfileOuterClass.KeyOrBuilder> keyBuilder_;
       /**
        * <code>.Key key = 1;</code>
        */
@@ -678,9 +678,9 @@ public final class Nickserv {
       /**
        * <code>.Key key = 1;</code>
        */
-      public gg.strims.ppspp.proto.Api.Key getKey() {
+      public gg.strims.ppspp.proto.ProfileOuterClass.Key getKey() {
         if (keyBuilder_ == null) {
-          return key_ == null ? gg.strims.ppspp.proto.Api.Key.getDefaultInstance() : key_;
+          return key_ == null ? gg.strims.ppspp.proto.ProfileOuterClass.Key.getDefaultInstance() : key_;
         } else {
           return keyBuilder_.getMessage();
         }
@@ -688,7 +688,7 @@ public final class Nickserv {
       /**
        * <code>.Key key = 1;</code>
        */
-      public Builder setKey(gg.strims.ppspp.proto.Api.Key value) {
+      public Builder setKey(gg.strims.ppspp.proto.ProfileOuterClass.Key value) {
         if (keyBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -705,7 +705,7 @@ public final class Nickserv {
        * <code>.Key key = 1;</code>
        */
       public Builder setKey(
-          gg.strims.ppspp.proto.Api.Key.Builder builderForValue) {
+          gg.strims.ppspp.proto.ProfileOuterClass.Key.Builder builderForValue) {
         if (keyBuilder_ == null) {
           key_ = builderForValue.build();
           onChanged();
@@ -718,11 +718,11 @@ public final class Nickserv {
       /**
        * <code>.Key key = 1;</code>
        */
-      public Builder mergeKey(gg.strims.ppspp.proto.Api.Key value) {
+      public Builder mergeKey(gg.strims.ppspp.proto.ProfileOuterClass.Key value) {
         if (keyBuilder_ == null) {
           if (key_ != null) {
             key_ =
-              gg.strims.ppspp.proto.Api.Key.newBuilder(key_).mergeFrom(value).buildPartial();
+              gg.strims.ppspp.proto.ProfileOuterClass.Key.newBuilder(key_).mergeFrom(value).buildPartial();
           } else {
             key_ = value;
           }
@@ -750,7 +750,7 @@ public final class Nickserv {
       /**
        * <code>.Key key = 1;</code>
        */
-      public gg.strims.ppspp.proto.Api.Key.Builder getKeyBuilder() {
+      public gg.strims.ppspp.proto.ProfileOuterClass.Key.Builder getKeyBuilder() {
         
         onChanged();
         return getKeyFieldBuilder().getBuilder();
@@ -758,23 +758,23 @@ public final class Nickserv {
       /**
        * <code>.Key key = 1;</code>
        */
-      public gg.strims.ppspp.proto.Api.KeyOrBuilder getKeyOrBuilder() {
+      public gg.strims.ppspp.proto.ProfileOuterClass.KeyOrBuilder getKeyOrBuilder() {
         if (keyBuilder_ != null) {
           return keyBuilder_.getMessageOrBuilder();
         } else {
           return key_ == null ?
-              gg.strims.ppspp.proto.Api.Key.getDefaultInstance() : key_;
+              gg.strims.ppspp.proto.ProfileOuterClass.Key.getDefaultInstance() : key_;
         }
       }
       /**
        * <code>.Key key = 1;</code>
        */
       private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Api.Key, gg.strims.ppspp.proto.Api.Key.Builder, gg.strims.ppspp.proto.Api.KeyOrBuilder> 
+          gg.strims.ppspp.proto.ProfileOuterClass.Key, gg.strims.ppspp.proto.ProfileOuterClass.Key.Builder, gg.strims.ppspp.proto.ProfileOuterClass.KeyOrBuilder> 
           getKeyFieldBuilder() {
         if (keyBuilder_ == null) {
           keyBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
-              gg.strims.ppspp.proto.Api.Key, gg.strims.ppspp.proto.Api.Key.Builder, gg.strims.ppspp.proto.Api.KeyOrBuilder>(
+              gg.strims.ppspp.proto.ProfileOuterClass.Key, gg.strims.ppspp.proto.ProfileOuterClass.Key.Builder, gg.strims.ppspp.proto.ProfileOuterClass.KeyOrBuilder>(
                   getKey(),
                   getParentForChildren(),
                   isClean());
@@ -10824,41 +10824,41 @@ public final class Nickserv {
       descriptor;
   static {
     java.lang.String[] descriptorData = {
-      "\n\016nickserv.proto\032\tapi.proto\032\036google/prot" +
-      "obuf/duration.proto\032\037google/protobuf/tim" +
-      "estamp.proto\"y\n\014ServerConfig\022\021\n\003key\030\001 \001(" +
-      "\0132\004.Key\022\031\n\021name_change_quota\030\002 \001(\r\022,\n\tto" +
-      "ken_ttl\030\003 \001(\0132\031.google.protobuf.Duration" +
-      "\022\r\n\005roles\030\004 \003(\t\"\237\001\n\014NickservNick\022\n\n\002id\030\001" +
-      " \001(\004\022\013\n\003key\030\002 \001(\014\022\014\n\004nick\030\003 \001(\t\022#\n\033remai" +
-      "ning_name_change_quota\030\004 \001(\r\022\031\n\021updated_" +
-      "timestamp\030\005 \001(\004\022\031\n\021created_timestamp\030\006 \001" +
-      "(\004\022\r\n\005roles\030\007 \003(\t\"}\n\rNickServToken\022\013\n\003ke" +
-      "y\030\001 \001(\014\022\014\n\004nick\030\002 \001(\t\022/\n\013valid_until\030\003 \001" +
-      "(\0132\032.google.protobuf.Timestamp\022\021\n\tsignat" +
-      "ure\030\004 \001(\014\022\r\n\005roles\030\005 \003(\t\"\232\004\n\022NickServRPC" +
-      "Command\022\022\n\nrequest_id\030\001 \001(\004\022\031\n\021source_pu" +
-      "blic_key\030\002 \001(\014\022,\n\006create\030\005 \001(\0132\032.NickSer" +
-      "vRPCCommand.CreateH\000\0220\n\010retrieve\030\006 \001(\0132\034" +
-      ".NickServRPCCommand.RetrieveH\000\022,\n\006update" +
-      "\030\007 \001(\0132\032.NickServRPCCommand.UpdateH\000\022,\n\006" +
-      "delete\030\010 \001(\0132\032.NickServRPCCommand.Delete" +
-      "H\000\032\026\n\006Create\022\014\n\004nick\030\001 \001(\t\032\n\n\010Retrieve\032\342" +
-      "\001\n\006Update\0225\n\004nick\030\001 \001(\0132%.NickServRPCCom" +
-      "mand.Update.ChangeNickH\000\022\033\n\021name_change_" +
-      "quota\030\002 \001(\rH\000\0221\n\005roles\030\003 \001(\0132 .NickServR" +
-      "PCCommand.Update.RolesH\000\032\026\n\005Roles\022\r\n\005rol" +
-      "es\030\001 \003(\t\0320\n\nChangeNick\022\020\n\010old_nick\030\001 \001(\t" +
-      "\022\020\n\010new_nick\030\002 \001(\tB\007\n\005param\032\010\n\006DeleteB\006\n" +
-      "\004body\"\372\001\n\023NickServRPCResponse\022\022\n\nrequest" +
-      "_id\030\001 \001(\004\022\017\n\005error\030\002 \001(\tH\000\022-\n\006update\030\003 \001" +
-      "(\0132\033.NickServRPCResponse.UpdateH\000\022-\n\006del" +
-      "ete\030\004 \001(\0132\033.NickServRPCResponse.DeleteH\000" +
-      "\022 \n\006create\030\005 \001(\0132\016.NickServTokenH\000\022\"\n\010re" +
-      "trieve\030\006 \001(\0132\016.NickServTokenH\000\032\010\n\006Update" +
-      "\032\010\n\006DeleteB\006\n\004bodyBD\n\025gg.strims.ppspp.pr" +
-      "otoZ&github.com/MemeLabs/go-ppspp/pkg/pb" +
-      ";pb\272\002\002PBb\006proto3"
+      "\n\016nickserv.proto\032\rprofile.proto\032\036google/" +
+      "protobuf/duration.proto\032\037google/protobuf" +
+      "/timestamp.proto\"y\n\014ServerConfig\022\021\n\003key\030" +
+      "\001 \001(\0132\004.Key\022\031\n\021name_change_quota\030\002 \001(\r\022," +
+      "\n\ttoken_ttl\030\003 \001(\0132\031.google.protobuf.Dura" +
+      "tion\022\r\n\005roles\030\004 \003(\t\"\237\001\n\014NickservNick\022\n\n\002" +
+      "id\030\001 \001(\004\022\013\n\003key\030\002 \001(\014\022\014\n\004nick\030\003 \001(\t\022#\n\033r" +
+      "emaining_name_change_quota\030\004 \001(\r\022\031\n\021upda" +
+      "ted_timestamp\030\005 \001(\004\022\031\n\021created_timestamp" +
+      "\030\006 \001(\004\022\r\n\005roles\030\007 \003(\t\"}\n\rNickServToken\022\013" +
+      "\n\003key\030\001 \001(\014\022\014\n\004nick\030\002 \001(\t\022/\n\013valid_until" +
+      "\030\003 \001(\0132\032.google.protobuf.Timestamp\022\021\n\tsi" +
+      "gnature\030\004 \001(\014\022\r\n\005roles\030\005 \003(\t\"\232\004\n\022NickSer" +
+      "vRPCCommand\022\022\n\nrequest_id\030\001 \001(\004\022\031\n\021sourc" +
+      "e_public_key\030\002 \001(\014\022,\n\006create\030\005 \001(\0132\032.Nic" +
+      "kServRPCCommand.CreateH\000\0220\n\010retrieve\030\006 \001" +
+      "(\0132\034.NickServRPCCommand.RetrieveH\000\022,\n\006up" +
+      "date\030\007 \001(\0132\032.NickServRPCCommand.UpdateH\000" +
+      "\022,\n\006delete\030\010 \001(\0132\032.NickServRPCCommand.De" +
+      "leteH\000\032\026\n\006Create\022\014\n\004nick\030\001 \001(\t\032\n\n\010Retrie" +
+      "ve\032\342\001\n\006Update\0225\n\004nick\030\001 \001(\0132%.NickServRP" +
+      "CCommand.Update.ChangeNickH\000\022\033\n\021name_cha" +
+      "nge_quota\030\002 \001(\rH\000\0221\n\005roles\030\003 \001(\0132 .NickS" +
+      "ervRPCCommand.Update.RolesH\000\032\026\n\005Roles\022\r\n" +
+      "\005roles\030\001 \003(\t\0320\n\nChangeNick\022\020\n\010old_nick\030\001" +
+      " \001(\t\022\020\n\010new_nick\030\002 \001(\tB\007\n\005param\032\010\n\006Delet" +
+      "eB\006\n\004body\"\372\001\n\023NickServRPCResponse\022\022\n\nreq" +
+      "uest_id\030\001 \001(\004\022\017\n\005error\030\002 \001(\tH\000\022-\n\006update" +
+      "\030\003 \001(\0132\033.NickServRPCResponse.UpdateH\000\022-\n" +
+      "\006delete\030\004 \001(\0132\033.NickServRPCResponse.Dele" +
+      "teH\000\022 \n\006create\030\005 \001(\0132\016.NickServTokenH\000\022\"" +
+      "\n\010retrieve\030\006 \001(\0132\016.NickServTokenH\000\032\010\n\006Up" +
+      "date\032\010\n\006DeleteB\006\n\004bodyBD\n\025gg.strims.ppsp" +
+      "p.protoZ&github.com/MemeLabs/go-ppspp/pk" +
+      "g/pb;pb\272\002\002PBb\006proto3"
     };
     com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
         new com.google.protobuf.Descriptors.FileDescriptor.    InternalDescriptorAssigner() {
@@ -10871,7 +10871,7 @@ public final class Nickserv {
     com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
         new com.google.protobuf.Descriptors.FileDescriptor[] {
-          gg.strims.ppspp.proto.Api.getDescriptor(),
+          gg.strims.ppspp.proto.ProfileOuterClass.getDescriptor(),
           com.google.protobuf.DurationProto.getDescriptor(),
           com.google.protobuf.TimestampProto.getDescriptor(),
         }, assigner);
@@ -10953,7 +10953,7 @@ public final class Nickserv {
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_NickServRPCResponse_Delete_descriptor,
         new java.lang.String[] { });
-    gg.strims.ppspp.proto.Api.getDescriptor();
+    gg.strims.ppspp.proto.ProfileOuterClass.getDescriptor();
     com.google.protobuf.DurationProto.getDescriptor();
     com.google.protobuf.TimestampProto.getDescriptor();
   }

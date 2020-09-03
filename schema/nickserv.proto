@@ -4,7 +4,7 @@ option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
 option java_package = "gg.strims.ppspp.proto";
 option swift_prefix = "PB";
 
-import "api.proto";
+import "profile.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
