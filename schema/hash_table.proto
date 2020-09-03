@@ -1,0 +1,40 @@
+syntax = "proto3";
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+option java_package = "gg.strims.ppspp.proto";
+option swift_prefix = "PB";
+
+message HashTableMessage {
+  message Record {
+    bytes key = 1;
+    bytes salt = 2;
+    bytes value = 3;
+    int64 timestamp = 4;
+    bytes signature = 5;
+  }
+
+  message Publish {
+    Record record = 1;
+  }
+
+  message Unpublish {
+    Record record = 1;
+  }
+
+  message GetRequest {
+    uint64 request_id = 1;
+    bytes hash = 2;
+  }
+
+  message GetResponse {
+    uint64 request_id = 1;
+    Record record = 2;
+  }
+
+  oneof body {
+    Publish publish = 1;
+    Unpublish unpublish = 2;
+    GetRequest get_request = 3;
+    GetResponse get_response = 4;
+  }
+}

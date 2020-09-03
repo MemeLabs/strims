@@ -1,0 +1,41 @@
+syntax = "proto3";
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+option java_package = "gg.strims.ppspp.proto";
+option swift_prefix = "PB";
+
+message PeerIndexMessage {
+  message Record {
+    bytes hash = 1;
+    bytes key = 2;
+    bytes host_id = 3;
+    uint32 port = 4;
+    int64 timestamp = 5;
+    bytes signature = 6;
+  }
+
+  message Publish {
+    Record record = 1;
+  }
+
+  message Unpublish {
+    Record record = 1;
+  }
+
+  message SearchRequest {
+    uint64 request_id = 1;
+    bytes hash = 2;
+  }
+
+  message SearchResponse {
+    uint64 request_id = 1;
+    repeated Record records = 2;
+  }
+
+  oneof body {
+    Publish publish = 1;
+    Unpublish unpublish = 2;
+    SearchRequest search_request = 3;
+    SearchResponse search_response = 4;
+  }
+}

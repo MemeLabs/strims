@@ -1,0 +1,223 @@
+syntax = "proto3";
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+option java_package = "gg.strims.ppspp.proto";
+option swift_prefix = "PB";
+
+import "profile.proto";
+
+message StartVPNRequest {
+  bool enable_bootstrap_publishing = 1;
+}
+message StartVPNResponse {}
+message StopVPNRequest {}
+message StopVPNResponse {}
+
+message NetworkEvent {
+  message NetworkOpen {
+    uint64 network_id = 1;
+    bytes network_key = 2;
+  }
+
+  message NetworkClose {
+    uint64 network_id = 1;
+  }
+
+  oneof body {
+    NetworkOpen network_open = 1;
+    NetworkClose network_close = 2;
+  }
+}
+
+message NetworkAddress {
+  bytes host_id = 1;
+  uint32 port = 2;
+}
+
+// ---
+
+message PeerInit {
+  uint32 protocol_version = 1;
+  Certificate certificate = 2;
+  bytes iv = 3;
+  bytes host_id = 4;
+}
+
+message NetworkHandshake {
+  message Init {
+    int32 key_count = 1;
+    uint32 discriminator = 2;
+  }
+
+  message NetworkBinding {
+    uint32 port = 1;
+    Certificate certificate = 2;
+  }
+
+  message NetworkBindings {
+    uint32 discriminator = 1;
+    repeated NetworkBinding network_bindings = 2;
+  }
+
+  oneof body {
+    Init init = 1;
+    NetworkBindings network_bindings = 2;
+  }
+}
+
+message BrokerPeerRequest {
+  int32 conn_mtu = 1;
+}
+
+message BrokerPeerEvent {
+  message Open {
+    uint64 peer_id = 1;
+  }
+
+  message Data {
+    bytes data = 1;
+  }
+
+  message InitRequired {
+    bytes data = 1;
+  }
+
+  message Keys {
+    repeated bytes keys = 1;
+  }
+
+  oneof body {
+    Open open = 1;
+    Data data = 2;
+    InitRequired init_required = 3;
+    Keys keys = 4;
+  }
+}
+
+message BrokerPeerInitRequest {
+  uint64 peer_id = 1;
+  uint32 discriminator = 2;
+  repeated bytes keys = 3;
+}
+
+message BrokerPeerDataRequest {
+  uint64 peer_id = 1;
+  bytes data = 2;
+}
+
+message BootstrapClient {
+  uint64 id = 1;
+  oneof client_options {
+    BootstrapClientWebSocketOptions websocket_options = 2;
+  }
+}
+
+message BootstrapClientWebSocketOptions {
+  string url = 1;
+  bool insecure_skip_verify_tls = 2;
+}
+
+message CreateBootstrapClientRequest {
+  oneof client_options {
+    BootstrapClientWebSocketOptions websocket_options = 1;
+  }
+}
+message CreateBootstrapClientResponse {
+  BootstrapClient bootstrap_client = 1;
+}
+message UpdateBootstrapClientRequest {
+  uint64 id = 1;
+  oneof client_options {
+    BootstrapClientWebSocketOptions websocket_options = 2;
+  }
+}
+message UpdateBootstrapClientResponse {
+  BootstrapClient bootstrap_client = 1;
+}
+message DeleteBootstrapClientRequest {
+  uint64 id = 1;
+}
+message DeleteBootstrapClientResponse {}
+message GetBootstrapClientRequest {
+  uint64 id = 1;
+}
+message GetBootstrapClientResponse {
+  BootstrapClient bootstrap_client = 1;
+}
+message GetBootstrapClientsRequest {}
+message GetBootstrapClientsResponse {
+  repeated BootstrapClient bootstrap_clients = 1;
+}
+message GetBootstrapPeersRequest {}
+message GetBootstrapPeersResponse {
+  repeated BootstrapPeer peers = 1;
+}
+
+message BootstrapPeer {
+  bytes host_id = 1;
+  string label = 2;
+}
+
+message BootstrapServiceMessage {
+  message BrokerOffer {}
+
+  message PublishRequest {
+    string name = 1;
+    Certificate certificate = 2;
+  }
+
+  message PublishResponse {
+    oneof body {
+      string error = 1;
+    }
+  }
+
+  oneof body {
+    BrokerOffer broker_offer = 1;
+    PublishRequest publish_request = 2;
+    PublishResponse publish_response = 3;
+  }
+}
+
+message PublishNetworkToBootstrapPeerRequest {
+  bytes host_id = 1;
+  Network network = 2;
+}
+message PublishNetworkToBootstrapPeerResponse {}
+
+message PeerExchangeMessage {
+  message Request {
+    uint32 count = 1;
+  }
+
+  message Response {
+    repeated bytes ids = 1;
+  }
+
+  message Offer {
+    uint64 mediation_id = 1;
+    bytes data = 2;
+  }
+
+  message Answer {
+    uint64 mediation_id = 1;
+    bytes data = 2;
+  }
+
+  message IceCandidate {
+    uint64 mediation_id = 1;
+    uint64 index = 2;
+    bytes data = 3;
+  }
+
+  message CallbackRequest {}
+
+  oneof body {
+    Request request = 1;
+    Response response = 2;
+    Offer offer = 3;
+    Answer answer = 4;
+    IceCandidate ice_candidate = 5;
+    CallbackRequest callback_request = 6;
+  }
+}
