@@ -1,0 +1,96 @@
+syntax = "proto3";
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+option java_package = "gg.strims.ppspp.proto";
+option swift_prefix = "PB";
+
+message GetDirectoryEventsRequest {
+  bytes network_key = 1;
+}
+
+message TestDirectoryPublishRequest {
+  bytes network_key = 1;
+}
+message TestDirectoryPublishResponse {}
+
+message DirectoryListing {
+  bytes key = 1;
+  string mime_type = 2;
+  string title = 3;
+  string description = 4;
+  repeated string tags = 5;
+  bytes extra = 6;
+}
+
+message DirectoryServerEvent {
+  message Publish {
+    DirectoryListing listing = 1;
+  }
+
+  message Unpublish {
+    bytes key = 1;
+  }
+
+  message ViewerChange {
+    bytes key = 1;
+    uint32 count = 2;
+  }
+
+  message Ping {
+    int64 time = 1;
+  }
+
+  oneof body {
+    Publish publish = 1;
+    Unpublish unpublish = 2;
+    ViewerChange open = 3;
+    Ping ping = 4;
+  }
+}
+
+message CallDirectoryServerRequest {
+  message RemoveListing {
+    bytes key = 1;
+  }
+
+  bytes network_key = 1;
+  oneof body {
+    RemoveListing listing = 2;
+  }
+}
+
+message OpenDirectoryClientRequest {
+  bytes network_key = 1;
+  bytes server_key = 2;
+}
+
+message DirectoryClientEvent {
+  message Publish {
+    DirectoryListing listing = 1;
+    bytes signature = 2;
+  }
+
+  message Unpublish {
+    bytes key = 1;
+  }
+
+  message Join {
+    bytes key = 1;
+  }
+
+  message Part {
+    bytes key = 1;
+  }
+
+  message Ping {
+    int64 time = 1;
+  }
+
+  oneof body {
+    Publish publish = 1;
+    Unpublish unpublish = 2;
+    Join join = 3;
+    Part part = 4;
+    Ping ping = 5;
+  }
+}

@@ -1,0 +1,226 @@
+syntax = "proto3";
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+option java_package = "gg.strims.ppspp.proto";
+option swift_prefix = "PB";
+
+message CreateProfileRequest {
+  string name = 1;
+  string password = 2;
+}
+message CreateProfileResponse {
+  string session_id = 1;
+  Profile profile = 2;
+}
+message UpdateProfileRequest {
+  string name = 1;
+  string password = 2;
+}
+message UpdateProfileResponse {
+  Profile profile = 1;
+}
+message DeleteProfileRequest {
+  uint64 id = 1;
+}
+message DeleteProfileResponse {}
+message LoadProfileRequest {
+  uint64 id = 1;
+  string name = 2;
+  string password = 3;
+}
+message LoadProfileResponse {
+  string session_id = 1;
+  Profile profile = 2;
+}
+message GetProfileRequest {
+  string session_id = 1;
+}
+message GetProfileResponse {
+  Profile profile = 2;
+}
+message GetProfilesRequest {}
+message GetProfilesResponse {
+  repeated ProfileSummary profiles = 1;
+}
+message LoadSessionRequest {
+  string session_id = 1;
+}
+message LoadSessionResponse {
+  string session_id = 1;
+  Profile profile = 2;
+}
+
+message CreateNetworkRequest {
+  string name = 1;
+}
+message CreateNetworkResponse {
+  Network network = 1;
+}
+message UpdateNetworkRequest {
+  uint64 id = 1;
+  string name = 2;
+}
+message UpdateNetworkResponse {
+  Network network = 1;
+}
+message DeleteNetworkRequest {
+  uint64 id = 1;
+}
+message DeleteNetworkResponse {}
+message GetNetworkRequest {
+  uint64 id = 1;
+}
+message GetNetworkResponse {
+  Network network = 1;
+}
+message GetNetworksRequest {}
+message GetNetworksResponse {
+  repeated Network networks = 1;
+}
+
+message GetNetworkMembershipsRequest {}
+message GetNetworkMembershipsResponse {
+  repeated NetworkMembership network_memberships = 1;
+}
+message DeleteNetworkMembershipRequest {
+  uint64 id = 1;
+}
+message DeleteNetworkMembershipResponse {}
+
+message StorageKey {
+  KDFType kdf_type = 1;
+  oneof kdf_options {
+    PBKDF2Options pbkdf2_options = 2;
+  }
+
+  message PBKDF2Options {
+    uint32 iterations = 1;
+    uint32 key_size = 2;
+    bytes salt = 3;
+  }
+}
+
+message Key {
+  KeyType type = 1;
+  bytes private = 2;
+  bytes public = 3;
+}
+
+message CertificateRequest {
+  bytes key = 1;
+  KeyType key_type = 2;
+  uint32 key_usage = 3;
+  bytes signature = 4;
+}
+
+message Certificate {
+  bytes key = 1;
+  KeyType key_type = 2;
+  uint32 key_usage = 3;
+  uint64 not_before = 4;
+  uint64 not_after = 5;
+  bytes serial_number = 6;
+  bytes signature = 7;
+  oneof parent_oneof {
+    Certificate parent = 8;
+  }
+}
+
+message Profile {
+  uint64 id = 1;
+  string name = 2;
+  bytes secret = 3;
+  Key key = 4;
+  repeated Network networks = 5;
+  repeated NetworkMembership network_memberships = 6;
+}
+
+message ProfileSummary {
+  uint64 id = 1;
+  string name = 2;
+}
+
+message Network {
+  uint64 id = 1;
+  string name = 2;
+  Key key = 3;
+  Certificate certificate = 4;
+}
+
+message NetworkMembership {
+  uint64 id = 1;
+  uint64 created_at = 2;
+  string name = 3;
+  Certificate ca_certificate = 4;
+  Certificate certificate = 5;
+  uint64 last_seen_at = 6;
+}
+
+enum KDFType {
+  KDF_TYPE_UNDEFINED = 0;
+  KDF_TYPE_PBKDF2_SHA256 = 1;
+}
+
+enum KeyType {
+  KEY_TYPE_UNDEFINED = 0;
+  KEY_TYPE_ED25519 = 1;
+  KEY_TYPE_X25519 = 2;
+}
+
+enum KeyUsage {
+  KEY_USAGE_UNDEFINED = 0;
+  // PEER allows bearer to connect with members of the signator's network
+  KEY_USAGE_PEER = 1;
+  // BOOTSTRAP allows the bearer to connect to a network's signators. Invites
+  // including transient keys with bootstrap certs allow new members to request
+  // peer certs.
+  KEY_USAGE_BOOTSTRAP= 2;
+  // SIGN allows the bearer to sign certificates.
+  KEY_USAGE_SIGN = 4;
+  // BROKER allows the bearer to negotiate connections between a network's
+  // members.
+  KEY_USAGE_BROKER = 8;
+  // ENCIPHERMENT allows the key to be used for encrypting messages.
+  KEY_USAGE_ENCIPHERMENT = 16;
+}
+
+message CreateNetworkInvitationRequest {
+  Key signing_key = 1;
+  Certificate signing_cert = 2;
+  string network_name = 3;
+}
+
+message CreateNetworkInvitationResponse {
+  Invitation invitation = 1;
+  string invitation_b64 = 2;
+  bytes invitation_bytes = 3;
+}
+
+message Invitation {
+  uint32 version = 1;
+  bytes data = 2;
+}
+
+message InvitationV0 {
+  Key key = 1;
+  Certificate certificate = 2;
+  string network_name = 4;
+}
+
+message CreateNetworkMembershipFromInvitationRequest {
+  oneof invitation {
+    string invitation_b64 = 1;
+    bytes invitation_bytes = 2;
+  }
+}
+
+message CreateNetworkMembershipFromInvitationResponse {
+  NetworkMembership membership = 1;
+}
+
+// ---
+
+message Mutex {
+  int64 eol = 1;
+  bytes token = 2;
+}

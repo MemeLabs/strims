@@ -12,36 +12,38 @@ GO_DIR="pkg/pb"
 SWIFT_DIR="ios/App/App/ProtoBuf"
 JAVA_DIR="android/app/src/main/java/"
 
+SOURCES="$(ls $SCHEMA_DIR)"
+REL_SOURCES="$(find $SCHEMA_DIR -type f)"
+
+hack/ts-preprocess.sh $REL_SOURCES /tmp/pbjstemp.proto
 npx pbjs \
     -t static-module \
     -w es6 \
     --force-number \
     -o "${JS_DIR}/pb.js" \
-    -p $SCHEMA_DIR \
-    rpc.proto api.proto
+    /tmp/pbjstemp.proto
 npx pbts \
     -o "${JS_DIR}/pb.d.ts" \
     "${JS_DIR}/pb.js"
-
-bash ./hack/ts-codegen.sh
+bash ./hack/ts-codegen.sh $REL_SOURCES
 
 protoc \
     --go_out $GO_DIR \
     --go_opt=paths=source_relative \
     -I $SCHEMA_DIR \
-    rpc.proto api.proto
+    $SOURCES
 
 protoc \
     --swift_out $SWIFT_DIR \
     --swift_opt Visibility=Public \
     -I $SCHEMA_DIR \
-    rpc.proto api.proto
+    $SOURCES
 
-bash ./hack/swift-codegen.sh
+bash ./hack/swift-codegen.sh $REL_SOURCES
 
 protoc \
     --java_out $JAVA_DIR \
     -I $SCHEMA_DIR \
-    rpc.proto api.proto
+    $SOURCES
 
 popd > /dev/null
