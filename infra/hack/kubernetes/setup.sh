@@ -57,7 +57,6 @@ set -e
 
 cp setup_controller.sh $mount_path
 cp kube-flannel.yaml $mount_path
-cp local-storage.yaml $mount_path
 lxc exec strims-k8s -- bash /mnt/setup_controller.sh
 
 # install nginx

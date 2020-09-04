@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Secret
+metadata:
+  name: grafana-admin
+  namespace: monitoring
+type: Opaque
+stringData:
+  admin-user: ${grafana_user}
+  admin-password: ${grafana_password}
+
+
+
+
+
+  

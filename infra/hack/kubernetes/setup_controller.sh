@@ -38,7 +38,7 @@ curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 echo 'deb https://apt.kubernetes.io/ kubernetes-xenial main' | tee /etc/apt/sources.list.d/kubernetes.list
 add-apt-repository  'deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable'
 apt-get update
-apt-get install -y docker-ce=5:19.03.12~3-0~ubuntu-focal kubelet=1.18.6-00 kubeadm=1.18.6-00
+apt-get install -y pwgen docker-ce=5:19.03.12~3-0~ubuntu-focal kubelet=1.18.6-00 kubeadm=1.18.6-00
 sudo apt-mark hold docker-ce kubelet kubeadm
 
 sudo cat > /tmp/kubeadm.yaml <<EOF
@@ -75,12 +75,7 @@ sudo cp -i /etc/kubernetes/admin.conf $HOME/.kube/config
 sudo chown $(id -u):$(id -g) $HOME/.kube/config
 
 kubectl apply -f /mnt/kube-flannel.yaml
-kubectl apply -f /mnt/local-storage.yaml
 
-# monitoring storage pv mounts
-mkdir -p /mnt/disks/grafana
-mkdir -p /mnt/disks/prometheus
-chgrp 2000 /mnt/disks/*
-chmod g+w /mnt/disks/*
+kubectl apply -f https://raw.githubusercontent.com/rancher/local-path-provisioner/master/deploy/local-path-storage.yaml
 
 popd > /dev/null
