@@ -1,4 +1,4 @@
-I wasn't really sure why you used ### notes
+### notes
 
 #### deploying
 in `infra/hack/kubernetes/monitoring` run
@@ -19,12 +19,12 @@ add an entry to /etc/hosts
 ```
 replacing node ip with the ip address of the node that's hosting the ingress
 
-```
+#
 access grafana at http://strims.monitoring.local/grafana/
-```
-```
+
+#
 access prometheus at http://strims.monitoring.local/prometheus
-```
+
 
 #### dashboard login duration
 
