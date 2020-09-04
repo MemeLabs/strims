@@ -13,13 +13,11 @@ echo "Admin User:" $(kubectl get secret -n monitoring grafana-admin -o jsonpath=
 echo "Admin Password:" $(kubectl get secret -n monitoring grafana-admin -o jsonpath="{.data.admin-password}" | base64 --decode)
 ```
 
-add an entry for 
+add an entry to /etc/hosts
 ```
 <node ip> strims.monitoring.local 
 ```
-to /etc/hosts
-
-<node ip> being the ip address of the node that's hosting the ingress
+replacing node ip with the ip address of the node that's hosting the ingress
 
 access grafana at http://strims.monitoring.local/grafana/
 access prometheus at http://strims.monitoring.local/prometheus
