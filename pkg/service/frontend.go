@@ -550,6 +550,74 @@ func (s *Frontend) StopVPN(ctx context.Context, r *pb.StopVPNRequest) (*pb.StopV
 	return &pb.StopVPNResponse{}, nil
 }
 
+// GetDirectoryEvents ...
+func (s *Frontend) GetDirectoryEvents(ctx context.Context, r *pb.GetDirectoryEventsRequest) (chan *pb.DirectoryServerEvent, error) {
+	session := rpc.ContextSession(ctx)
+	if session.Anonymous() {
+		return nil, ErrAuthenticationRequired
+	}
+
+	ctl, err := s.getNetworkController(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: this should return an ErrNetworkNotFound...
+	svc, ok := ctl.NetworkServices(r.NetworkKey)
+	if !ok {
+		return nil, errors.New("unknown network")
+	}
+
+	ch := make(chan *pb.DirectoryServerEvent, 16)
+	svc.Directory.NotifyEvents(ch)
+
+	// TDOO: automatically remove closed channels from event.Observables
+	go func() {
+		<-ctx.Done()
+		s.logger.Debug("GetDirectoryEvents stream closed")
+		svc.Directory.StopNotifyingEvents(ch)
+	}()
+
+	return ch, nil
+}
+
+// TestDirectoryPublish ...
+func (s *Frontend) TestDirectoryPublish(ctx context.Context, r *pb.TestDirectoryPublishRequest) (*pb.TestDirectoryPublishResponse, error) {
+	session := rpc.ContextSession(ctx)
+	if session.Anonymous() {
+		return nil, ErrAuthenticationRequired
+	}
+
+	ctl, err := s.getNetworkController(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// TODO: this should return an ErrNetworkNotFound...
+	svc, ok := ctl.NetworkServices(r.NetworkKey)
+	if !ok {
+		return nil, errors.New("unknown network")
+	}
+
+	key, err := dao.GenerateKey()
+	if err != nil {
+		return nil, err
+	}
+
+	err = svc.Directory.Publish(ctx, &pb.DirectoryListing{
+		Key:         key.Public,
+		MimeType:    "text/plain",
+		Title:       "test",
+		Description: "test publication",
+		Tags:        []string{"foo", "bar", "baz"},
+	})
+	if err != nil {
+		s.logger.Debug("publishing listing failed", zap.Error(err))
+	}
+
+	return &pb.TestDirectoryPublishResponse{}, err
+}
+
 // OpenVideoClient ...
 func (s *Frontend) OpenVideoClient(ctx context.Context, r *pb.VideoClientOpenRequest) (<-chan *pb.VideoClientEvent, error) {
 	session := rpc.ContextSession(ctx)

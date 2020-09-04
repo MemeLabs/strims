@@ -85,14 +85,16 @@ func (p *swarmPeer) SwarmPorts(id ppspp.SwarmID) (uint16, uint16, bool) {
 
 func newSwarmSwarm(logger *zap.Logger, swarm *ppspp.Swarm) *swarmSwarm {
 	return &swarmSwarm{
-		logger: logger,
-		swarm:  swarm,
+		logger:       logger,
+		swarm:        swarm,
+		peerChannels: map[*swarmPeer]*ppspp.ChannelReader{},
 	}
 }
 
 type swarmSwarm struct {
-	logger *zap.Logger
-	swarm  *ppspp.Swarm
+	logger       *zap.Logger
+	swarm        *ppspp.Swarm
+	peerChannels map[*swarmPeer]*ppspp.ChannelReader
 }
 
 // TODO: prevent duplicate channels...
@@ -116,6 +118,7 @@ func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
 		if err != nil {
 			return
 		}
+		s.peerChannels[p] = ch
 
 		p.peer.SetHandler(localPort, func(p *vpn.Peer, f vpn.Frame) error {
 			_, err := ch.HandleMessage(f.Body)
@@ -145,7 +148,16 @@ func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
 }
 
 func (s *swarmSwarm) TryCloseChannel(p *swarmPeer) {
+	if ch, ok := s.peerChannels[p]; ok {
+		ch.Close()
+		delete(s.peerChannels, p)
+	}
+}
 
+func (s *swarmSwarm) Close() {
+	for _, ch := range s.peerChannels {
+		ch.Close()
+	}
 }
 
 // SwarmNetwork ...
@@ -239,6 +251,11 @@ func (t *swarmNetwork) sendOpen(s *swarmSwarm, p *swarmPeer) error {
 }
 
 func (t *swarmNetwork) CloseSwarm(id ppspp.SwarmID) {
+	si, ok := t.activeSwarms.Load(id.String())
+	if !ok {
+		return
+	}
+
 	t.logger.Debug(
 		"closing swarm",
 		zap.Stringer("swarm", id),
@@ -262,6 +279,7 @@ func (t *swarmNetwork) CloseSwarm(id ppspp.SwarmID) {
 		return true
 	})
 
+	si.(*swarmSwarm).Close()
 	t.activeSwarms.Delete(id.String())
 }
 

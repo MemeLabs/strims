@@ -37,7 +37,7 @@ REORDER_FILE='
   # in doing something more robust.
 
   if ($1 == "enum") {
-    in_enum=1;
+    in_enum = 1;
   }
 
   if (in_enum == 0) {
@@ -47,7 +47,7 @@ REORDER_FILE='
   }
 
   if ($1 == "}") {
-    in_enum=0;
+    in_enum = 0;
   }
 }
 END {

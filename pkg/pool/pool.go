@@ -1,7 +1,6 @@
 package pool
 
 import (
-	"log"
 	"math/bits"
 	"sync"
 )
@@ -41,7 +40,6 @@ func (p *Pool) Get(size uint16) (b *[]byte) {
 	}
 
 	if cap(*b) == 0 {
-		log.Println("got here...")
 		return p.Get(size)
 	}
 
@@ -51,9 +49,6 @@ func (p *Pool) Get(size uint16) (b *[]byte) {
 
 // Put ...
 func (p *Pool) Put(b *[]byte) {
-	if cap(*b) == 0 {
-		panic("found it")
-	}
 	if i := bits.LeadingZeros16(uint16(cap(*b))); i < p.n {
 		p.zones[i].Put(b)
 	} else {

@@ -243,7 +243,7 @@ func (e *networkEventEmitter) pump() {
 			continue
 		}
 
-		e.handleDirectoryEvent(i, v.Interface().(*pb.DirectoryServerEvent))
+		// e.handleDirectoryEvent(i, v.Interface().(*pb.DirectoryServerEvent))
 	}
 }
 
@@ -257,10 +257,10 @@ func (e *networkEventEmitter) handleOpen(svc *NetworkServices) {
 		},
 	}
 
-	e.cases = append(e.cases, reflect.SelectCase{
-		Dir:  reflect.SelectRecv,
-		Chan: reflect.ValueOf(svc.Directory.Events()),
-	})
+	// e.cases = append(e.cases, reflect.SelectCase{
+	// 	Dir:  reflect.SelectRecv,
+	// 	Chan: reflect.ValueOf(svc.Directory.Events()),
+	// })
 
 	e.ids = append(e.ids, e.nextID)
 	e.nextID++
@@ -275,23 +275,23 @@ func (e *networkEventEmitter) handleClose(i int) {
 		},
 	}
 
-	copy(e.cases[i:], e.cases[i+1:])
-	e.cases = e.cases[:len(e.cases)-1]
+	// copy(e.cases[i:], e.cases[i+1:])
+	// e.cases = e.cases[:len(e.cases)-1]
 
 	copy(e.ids[i:], e.ids[i+1:])
 	e.ids = e.ids[:len(e.ids)-1]
 }
 
-func (e *networkEventEmitter) handleDirectoryEvent(i int, event *pb.DirectoryServerEvent) {
-	e.events <- &pb.NetworkEvent{
-		Body: &pb.NetworkEvent_DirectoryEvent_{
-			DirectoryEvent: &pb.NetworkEvent_DirectoryEvent{
-				NetworkId: e.ids[i],
-				Event:     event,
-			},
-		},
-	}
-}
+// func (e *networkEventEmitter) handleDirectoryEvent(i int, event *pb.DirectoryServerEvent) {
+// 	e.events <- &pb.NetworkEvent{
+// 		Body: &pb.NetworkEvent_DirectoryEvent_{
+// 			DirectoryEvent: &pb.NetworkEvent_DirectoryEvent{
+// 				NetworkId: e.ids[i],
+// 				Event:     event,
+// 			},
+// 		},
+// 	}
+// }
 
 func (e *networkEventEmitter) EmitOpen(svc *NetworkServices) {
 	e.services <- svc

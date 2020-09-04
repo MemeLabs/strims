@@ -88,6 +88,12 @@ export default class Client extends RPCHost {
   public stopVPN(v: pb.IStopVPNRequest = new pb.StopVPNRequest()): Promise<pb.StopVPNResponse> {
     return this.expectOne(this.call("stopVPN", new pb.StopVPNRequest(v)));
   }
+  public getDirectoryEvents(v: pb.IGetDirectoryEventsRequest = new pb.GetDirectoryEventsRequest()): GenericReadable<pb.DirectoryServerEvent> {
+    return this.expectMany(this.call("getDirectoryEvents", new pb.GetDirectoryEventsRequest(v)));
+  }
+  public testDirectoryPublish(v: pb.ITestDirectoryPublishRequest = new pb.TestDirectoryPublishRequest()): Promise<pb.TestDirectoryPublishResponse> {
+    return this.expectOne(this.call("testDirectoryPublish", new pb.TestDirectoryPublishRequest(v)));
+  }
 
   public joinSwarm(v: pb.IJoinSwarmRequest = new pb.JoinSwarmRequest()): Promise<pb.JoinSwarmResponse> {
     return this.expectOne(this.call("joinSwarm", new pb.JoinSwarmRequest(v)));

@@ -12,12 +12,14 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/prefixstream"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -78,6 +80,7 @@ func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubSer
 	}
 
 	s := &PubSubServer{
+		logger:   svc.Host.Logger(),
 		close:    cancel,
 		messages: make(chan *pb.PubSubEvent_Message),
 		swarm:    w.Swarm(),
@@ -96,6 +99,7 @@ func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubSer
 
 // PubSubServer ...
 type PubSubServer struct {
+	logger    *zap.Logger
 	close     context.CancelFunc
 	closeOnce sync.Once
 	messages  chan *pb.PubSubEvent_Message
@@ -203,9 +207,6 @@ func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, err
 	}
 	svc.Swarms.OpenSwarm(swarm)
 
-	messages := make(chan *pb.PubSubEvent_Message)
-	go readPubSubEvents(swarm, messages)
-
 	ctx, cancel := context.WithCancel(context.Background())
 
 	err = svc.PeerIndex.Publish(ctx, key, salt, 0)
@@ -218,22 +219,29 @@ func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, err
 	newSwarmPeerManager(ctx, svc, getPeersGetter(ctx, svc, key, salt))
 
 	c := &PubSubClient{
+		logger:    svc.Host.Logger(),
 		ctx:       ctx,
 		close:     cancel,
 		svc:       svc,
 		swarm:     swarm,
 		addrReady: make(chan struct{}),
 		port:      port,
-		messages:  messages,
+		messages:  make(chan *pb.PubSubEvent_Message),
 	}
 
 	go c.syncAddr(svc, key, salt)
+	go func() {
+		if err := c.readPubSubEvents(); err != nil {
+			c.logger.Debug("pubsub read error", zap.Error(err))
+		}
+	}()
 
 	return c, nil
 }
 
 // PubSubClient ...
 type PubSubClient struct {
+	logger    *zap.Logger
 	ctx       context.Context
 	close     context.CancelFunc
 	closeOnce sync.Once
@@ -312,13 +320,15 @@ func (c *PubSubClient) Send(ctx context.Context, key string, body []byte) error 
 	return c.svc.Network.Send(addr.HostID, addr.Port, c.port, b)
 }
 
-func readPubSubEvents(swarm *ppspp.Swarm, messages chan *pb.PubSubEvent_Message) {
-	r := prefixstream.NewReader(swarm.Reader())
+func (c *PubSubClient) readPubSubEvents() error {
+	defer c.Close()
+
+	r := prefixstream.NewReader(c.swarm.Reader())
 	b := bytes.NewBuffer(nil)
 	for {
 		b.Reset()
 		if _, err := io.Copy(b, r); err != nil {
-			return
+			return err
 		}
 
 		var msg pb.PubSubEvent
@@ -328,20 +338,19 @@ func readPubSubEvents(swarm *ppspp.Swarm, messages chan *pb.PubSubEvent_Message)
 
 		switch b := msg.Body.(type) {
 		case *pb.PubSubEvent_Close_:
-			// TODO: this has to call c.Close()
-			close(messages)
-			return
+			return nil
 		case *pb.PubSubEvent_Message_:
-			messages <- b.Message
+			c.messages <- b.Message
 		}
 	}
 }
 
 func newSwarmPeerManager(ctx context.Context, svc *NetworkServices, sf PeerSearchFunc) *swarmPeerManager {
 	m := &swarmPeerManager{
-		ctx: ctx,
-		svc: svc,
-		sf:  sf,
+		logger: svc.Host.Logger(),
+		ctx:    ctx,
+		svc:    svc,
+		sf:     sf,
 	}
 
 	m.ticker = vpn.TickerFunc(ctx, 5*time.Minute, m.update)
@@ -350,6 +359,7 @@ func newSwarmPeerManager(ctx context.Context, svc *NetworkServices, sf PeerSearc
 }
 
 type swarmPeerManager struct {
+	logger *zap.Logger
 	ctx    context.Context
 	svc    *NetworkServices
 	sf     PeerSearchFunc
@@ -385,6 +395,13 @@ func getHostAddr(ctx context.Context, svc *NetworkServices, key, salt []byte) (*
 		return nil, err
 	}
 
+	svc.Host.Logger().Debug(
+		"found address for service",
+		logutil.ByteHex("key", key),
+		logutil.ByteHex("salt", salt),
+		logutil.ByteHex("hostID", addr.HostId),
+		zap.Uint32("port", addr.Port),
+	)
 	hostID, err := kademlia.UnmarshalID(addr.HostId)
 	if err != nil {
 		return nil, err

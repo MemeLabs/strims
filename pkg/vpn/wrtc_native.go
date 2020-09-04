@@ -13,19 +13,27 @@ import (
 	"go.uber.org/zap"
 )
 
-const wrtcEphemeralPortMin = 50000
-const wrtcEphemeralPortMax = 60000
+// WebRTCDialerOptions ...
+type WebRTCDialerOptions struct {
+	PortMin uint16
+	PortMax uint16
+}
 
 // NewWebRTCDialer ...
-func NewWebRTCDialer(logger *zap.Logger) *WebRTCDialer {
+func NewWebRTCDialer(logger *zap.Logger, o *WebRTCDialerOptions) *WebRTCDialer {
+	if o == nil {
+		o = &WebRTCDialerOptions{}
+	}
 	return &WebRTCDialer{
-		logger: logger,
+		logger:  logger,
+		options: o,
 	}
 }
 
 // WebRTCDialer ...
 type WebRTCDialer struct {
-	logger *zap.Logger
+	logger  *zap.Logger
+	options *WebRTCDialerOptions
 }
 
 // Dial ...
@@ -46,7 +54,7 @@ func (d WebRTCDialer) Dial(m WebRTCMediator) (Link, error) {
 	}
 
 	s := webrtc.SettingEngine{}
-	s.SetEphemeralUDPPortRange(wrtcEphemeralPortMin, wrtcEphemeralPortMin)
+	s.SetEphemeralUDPPortRange(d.options.PortMin, d.options.PortMax)
 	s.DetachDataChannels()
 	api := webrtc.NewAPI(webrtc.WithSettingEngine(s))
 

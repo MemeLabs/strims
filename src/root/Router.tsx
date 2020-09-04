@@ -2,6 +2,7 @@ import * as React from "react";
 import { Route, Switch } from "react-router-dom";
 
 import { PrivateRoute } from "../components/PrivateRoute";
+import Activity from "../pages/Activity";
 import BootstrapClientsPage from "../pages/BootstrapClients";
 import ChatServersPage from "../pages/ChatServers";
 import Directory from "../pages/Directory";
@@ -22,7 +23,8 @@ const Router = () => {
       <PrivateRoute path="/memberships" exact component={NetworkMembershipsPage} />
       <PrivateRoute path="/bootstrap-clients" exact component={BootstrapClientsPage} />
       <PrivateRoute path="/chat-servers" exact component={ChatServersPage} />
-      <PrivateRoute path="/broadcast" exact component={Directory} />
+      <PrivateRoute path="/directory/:networkKey" exact component={Directory} />
+      <PrivateRoute path="/activity" exact component={Activity} />
       <Route component={NotFoundPage} />
     </Switch>
   );

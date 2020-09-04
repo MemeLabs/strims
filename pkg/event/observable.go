@@ -27,3 +27,11 @@ func (o *Observable) Emit(v interface{}) {
 		return true
 	})
 }
+
+// Close ...
+func (o *Observable) Close() {
+	o.observers.Range(func(_ interface{}, chi interface{}) bool {
+		reflect.ValueOf(chi).Close()
+		return true
+	})
+}

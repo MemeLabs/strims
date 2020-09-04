@@ -49,7 +49,7 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 		VPNOptions: []vpn.HostOption{
 			vpn.WithNetworkBroker(vpn.NewNetworkBroker(d.logger)),
 			vpn.WithInterface(vpn.NewWSInterface(d.logger, o.VPNServerAddr)),
-			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(d.logger))),
+			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(d.logger, nil))),
 		},
 	})
 	if err != nil {

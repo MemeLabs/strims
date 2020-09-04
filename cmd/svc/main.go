@@ -19,11 +19,13 @@ import (
 )
 
 var (
-	profileDir  string
-	addr        string
-	metricsAddr string
-	rtmpAddr    string
-	debugAddr   string
+	profileDir    string
+	addr          string
+	metricsAddr   string
+	rtmpAddr      string
+	debugAddr     string
+	webRTCPortMin uint
+	webRTCPortMax uint
 )
 
 func init() {
@@ -37,6 +39,8 @@ func init() {
 	flag.StringVar(&metricsAddr, "metrics-addr", ":1971", "metrics server listen address")
 	flag.StringVar(&rtmpAddr, "rtmp-addr", ":1935", "rtmp server listen address")
 	flag.StringVar(&debugAddr, "debug-addr", ":6060", "debug server listen address")
+	flag.UintVar(&webRTCPortMin, "webrtc-port-min", 0, "webrtc ephemeral port range min")
+	flag.UintVar(&webRTCPortMax, "webrtc-port-max", 0, "webrtc ephemeral port range max")
 }
 
 func main() {
@@ -83,7 +87,13 @@ func main() {
 		profile.Key,
 		vpn.WithNetworkBroker(vpn.NewNetworkBroker(logger)),
 		vpn.WithInterface(vpn.NewWSInterface(logger, addr)),
-		vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger))),
+		vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(
+			logger,
+			&vpn.WebRTCDialerOptions{
+				PortMin: uint16(webRTCPortMin),
+				PortMax: uint16(webRTCPortMax),
+			},
+		))),
 	)
 	if err != nil {
 		panic(err)

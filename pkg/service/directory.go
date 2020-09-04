@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/event"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
@@ -24,9 +25,10 @@ type Directory interface {
 	Close()
 	Publish(ctx context.Context, listing *pb.DirectoryListing) error
 	Unpublish(ctx context.Context, key []byte) error
-	Join(ctx context.Context, listingID uint64) error
-	Part(ctx context.Context, listingID uint64) error
-	Events() <-chan *pb.DirectoryServerEvent
+	Join(ctx context.Context, key []byte) error
+	Part(ctx context.Context, key []byte) error
+	NotifyEvents(chan *pb.DirectoryServerEvent)
+	StopNotifyingEvents(chan *pb.DirectoryServerEvent)
 }
 
 // NewDirectoryServer ...
@@ -47,7 +49,6 @@ func NewDirectoryServer(logger *zap.Logger, lock *dao.Mutex, svc *NetworkService
 	}
 
 	go s.upgrade(ctx, svc, key)
-	go s.pumpEvents()
 
 	return s, nil
 }
@@ -73,23 +74,24 @@ func (s *DirectoryServer) upgrade(ctx context.Context, svc *NetworkServices, key
 	s.directoryLock.Lock()
 	defer s.directoryLock.Unlock()
 
-	s.directory.Close()
+	client := s.directory.(*DirectoryClient)
+	client.ps.Close()
 
-	server, err := newDirectoryServer(s.logger, svc, key)
+	ps, err := NewPubSubServer(svc, key, directorySalt)
 	if err != nil {
 		s.logger.Error("failed to start directory server", zap.Error(err))
 		s.Close()
 		return
 	}
 
-	s.directory = server
-	go s.pumpEvents()
-}
-
-func (s *DirectoryServer) pumpEvents() {
-	for event := range s.directory.Events() {
-		s.events <- event
+	server := &directoryServer{
+		directoryListingMap: client.directoryListingMap,
+		logger:              s.logger,
+		ps:                  ps,
 	}
+	go server.transformDirectoryMessages(ps)
+
+	s.directory = server
 }
 
 // Close ...
@@ -119,66 +121,45 @@ func (s *DirectoryServer) Unpublish(ctx context.Context, key []byte) error {
 }
 
 // Join ...
-func (s *DirectoryServer) Join(ctx context.Context, listingID uint64) error {
+func (s *DirectoryServer) Join(ctx context.Context, key []byte) error {
 	s.directoryLock.RLock()
 	defer s.directoryLock.RUnlock()
-	return s.directory.Join(ctx, listingID)
+	return s.directory.Join(ctx, key)
 }
 
 // Part ...
-func (s *DirectoryServer) Part(ctx context.Context, listingID uint64) error {
+func (s *DirectoryServer) Part(ctx context.Context, key []byte) error {
 	s.directoryLock.RLock()
 	defer s.directoryLock.RUnlock()
-	return s.directory.Part(ctx, listingID)
+	return s.directory.Part(ctx, key)
 }
 
-// Events ...
-func (s *DirectoryServer) Events() <-chan *pb.DirectoryServerEvent {
-	return s.events
+// NotifyEvents ...
+func (s *DirectoryServer) NotifyEvents(ch chan *pb.DirectoryServerEvent) {
+	s.directory.NotifyEvents(ch)
 }
 
-func newDirectoryServer(logger *zap.Logger, svc *NetworkServices, key *pb.Key) (*directoryServer, error) {
-	ps, err := NewPubSubServer(svc, key, directorySalt)
-	if err != nil {
-		return nil, err
-	}
-
-	s := &directoryServer{
-		logger: logger,
-		ps:     ps,
-		events: make(chan *pb.DirectoryServerEvent),
-	}
-
-	go s.transformDirectoryMessages(ps)
-
-	return s, nil
+// StopNotifyingEvents ...
+func (s *DirectoryServer) StopNotifyingEvents(ch chan *pb.DirectoryServerEvent) {
+	s.directory.StopNotifyingEvents(ch)
 }
 
 type directoryServer struct {
-	logger       *zap.Logger
-	closeOnce    sync.Once
-	ps           *PubSubServer
-	events       chan *pb.DirectoryServerEvent
-	listingsLock sync.Mutex
-	listings     directoryListingMap
-	nextID       uint64
+	*directoryListingMap
+	logger    *zap.Logger
+	closeOnce sync.Once
+	ps        *PubSubServer
 }
 
 // Close ...
 func (s *directoryServer) Close() {
 	s.closeOnce.Do(func() {
 		s.ps.Close()
-		close(s.events)
 	})
 }
 
-// Events ...
-func (s *directoryServer) Events() <-chan *pb.DirectoryServerEvent {
-	return s.events
-}
-
 func (s *directoryServer) send(ctx context.Context, event *pb.DirectoryServerEvent) error {
-	s.events <- event
+	s.events.Emit(event)
 	return sendProto(ctx, s.ps, event)
 }
 
@@ -211,12 +192,16 @@ func (s *directoryServer) transformDirectoryMessages(ps *PubSubServer) {
 					}
 				}
 			case *pb.DirectoryClientEvent_Join_:
-				if err := s.Join(ctx, b.Join.ListingId); err != nil {
+				if err := s.Join(ctx, b.Join.Key); err != nil {
 					s.logger.Debug("handling join failed", zap.Error(err))
 				}
 			case *pb.DirectoryClientEvent_Part_:
-				if err := s.Part(ctx, b.Part.ListingId); err != nil {
+				if err := s.Part(ctx, b.Part.Key); err != nil {
 					s.logger.Debug("handling part failed", zap.Error(err))
+				}
+			case *pb.DirectoryClientEvent_Ping_:
+				if err := s.Ping(ctx); err != nil {
+					s.logger.Debug("handling ping failed", zap.Error(err))
 				}
 			}
 		}
@@ -245,18 +230,9 @@ func (s *directoryServer) ping(t time.Time) error {
 func (s *directoryServer) Publish(ctx context.Context, listing *pb.DirectoryListing) error {
 	// TODO: verify signature...
 
-	s.listingsLock.Lock()
-	defer s.listingsLock.Unlock()
+	s.logger.Debug("received publish", logutil.ByteHex("key", listing.Key))
 
-	old, ok := s.listings.Get(listing.Key)
-	if ok {
-		listing.Id = old.Id
-	} else {
-		s.nextID++
-		listing.Id = s.nextID
-	}
-
-	s.listings.Insert(listing.Key, listing)
+	s.Insert(listing.Key, listing)
 
 	return s.send(ctx, &pb.DirectoryServerEvent{
 		Body: &pb.DirectoryServerEvent_Publish_{
@@ -271,50 +247,88 @@ func (s *directoryServer) Publish(ctx context.Context, listing *pb.DirectoryList
 func (s *directoryServer) Unpublish(ctx context.Context, key []byte) error {
 	// TODO: signature
 
-	s.listingsLock.Lock()
-	defer s.listingsLock.Unlock()
+	s.logger.Debug("received unpublish", logutil.ByteHex("key", key))
 
-	listing, ok := s.listings.Get(key)
+	listing, ok := s.Get(key)
 	if !ok {
 		return nil
 	}
+	s.Delete(key)
 
 	return s.send(ctx, &pb.DirectoryServerEvent{
 		Body: &pb.DirectoryServerEvent_Unpublish_{
 			Unpublish: &pb.DirectoryServerEvent_Unpublish{
-				ListingId: listing.Id,
+				Key: listing.Key,
 			},
 		},
 	})
 }
 
 // Join ...
-func (s *directoryServer) Join(ctx context.Context, listingID uint64) error {
+func (s *directoryServer) Join(ctx context.Context, key []byte) error {
 	return nil
 }
 
 // Part ...
-func (s *directoryServer) Part(ctx context.Context, listingID uint64) error {
+func (s *directoryServer) Part(ctx context.Context, key []byte) error {
+	return nil
+}
+
+// Ping ...
+func (s *directoryServer) Ping(ctx context.Context) error {
 	return nil
 }
 
 type directoryListingMap struct {
-	m llrb.LLRB
+	lock   sync.Mutex
+	m      llrb.LLRB
+	events event.Observable
 }
 
 func (m *directoryListingMap) Insert(k []byte, v *pb.DirectoryListing) {
-	m.m.InsertNoReplace(directoryListingMapItem{k, v})
+	m.lock.Lock()
+	defer m.lock.Unlock()
+	m.m.ReplaceOrInsert(directoryListingMapItem{k, v})
 }
 
 func (m *directoryListingMap) Delete(k []byte) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
 	m.m.Delete(directoryListingMapItem{k, nil})
 }
 
 func (m *directoryListingMap) Get(k []byte) (*pb.DirectoryListing, bool) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
 	if it := m.m.Get(directoryListingMapItem{k, nil}); it != nil {
 		return it.(directoryListingMapItem).v, true
 	}
 	return nil, false
+}
+
+// NotifyEvents ...
+func (m *directoryListingMap) NotifyEvents(ch chan *pb.DirectoryServerEvent) {
+	m.lock.Lock()
+	defer m.lock.Unlock()
+
+	m.m.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
+		ch <- &pb.DirectoryServerEvent{
+			Body: &pb.DirectoryServerEvent_Publish_{
+				Publish: &pb.DirectoryServerEvent_Publish{
+					Listing: i.(directoryListingMapItem).v,
+				},
+			},
+		}
+		return true
+	})
+
+	m.events.Notify(ch)
+}
+
+// StopNotifyingEvents ...
+func (m *directoryListingMap) StopNotifyingEvents(ch chan *pb.DirectoryServerEvent) {
+	m.events.StopNotifying(ch)
 }
 
 type directoryListingMapItem struct {
@@ -339,9 +353,9 @@ func NewDirectoryClient(logger *zap.Logger, svc *NetworkServices, key []byte) (*
 	logger.Debug("starting directory client", logutil.ByteHex("network", svc.Network.CAKey()))
 
 	c := &DirectoryClient{
-		logger: logger,
-		ps:     ps,
-		events: make(chan *pb.DirectoryServerEvent),
+		directoryListingMap: new(directoryListingMap),
+		logger:              logger,
+		ps:                  ps,
 	}
 
 	go c.readDirectoryEvents(ps)
@@ -351,17 +365,17 @@ func NewDirectoryClient(logger *zap.Logger, svc *NetworkServices, key []byte) (*
 
 // DirectoryClient ...
 type DirectoryClient struct {
+	*directoryListingMap
 	logger    *zap.Logger
 	closeOnce sync.Once
 	ps        *PubSubClient
-	events    chan *pb.DirectoryServerEvent
 }
 
 // Close ...
 func (c *DirectoryClient) Close() {
 	c.closeOnce.Do(func() {
 		c.ps.Close()
-		close(c.events)
+		c.events.Close()
 	})
 }
 
@@ -388,39 +402,49 @@ func (c *DirectoryClient) Unpublish(ctx context.Context, key []byte) error {
 }
 
 // Join ...
-func (c *DirectoryClient) Join(ctx context.Context, listingID uint64) error {
+func (c *DirectoryClient) Join(ctx context.Context, key []byte) error {
 	return sendProto(ctx, c.ps, &pb.DirectoryClientEvent{
 		Body: &pb.DirectoryClientEvent_Join_{
 			Join: &pb.DirectoryClientEvent_Join{
-				ListingId: listingID,
+				Key: key,
 			},
 		},
 	})
 }
 
 // Part ...
-func (c *DirectoryClient) Part(ctx context.Context, listingID uint64) error {
+func (c *DirectoryClient) Part(ctx context.Context, key []byte) error {
 	return sendProto(ctx, c.ps, &pb.DirectoryClientEvent{
 		Body: &pb.DirectoryClientEvent_Part_{
 			Part: &pb.DirectoryClientEvent_Part{
-				ListingId: listingID,
+				Key: key,
 			},
 		},
 	})
 }
 
-// Events ...
-func (c *DirectoryClient) Events() <-chan *pb.DirectoryServerEvent {
-	return c.events
-}
-
 func (c *DirectoryClient) readDirectoryEvents(ps *PubSubClient) {
+
 	for m := range ps.Messages() {
 		e := &pb.DirectoryServerEvent{}
 		if err := proto.Unmarshal(m.Body, e); err != nil {
+			c.logger.Debug("failed to decode directory event", zap.Error(err))
 			continue
 		}
-		c.events <- e
+
+		c.handleDirectoryEvent(e)
+		c.events.Emit(e)
+	}
+}
+
+func (c *DirectoryClient) handleDirectoryEvent(e *pb.DirectoryServerEvent) {
+	switch b := e.Body.(type) {
+	case *pb.DirectoryServerEvent_Publish_:
+		c.logger.Debug("received publish", logutil.ByteHex("key", b.Publish.Listing.Key))
+		c.Insert(b.Publish.Listing.Key, b.Publish.Listing)
+	case *pb.DirectoryServerEvent_Unpublish_:
+		c.logger.Debug("received unpublish", logutil.ByteHex("key", b.Unpublish.Key))
+		c.Delete(b.Unpublish.Key)
 	}
 }
 

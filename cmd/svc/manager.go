@@ -26,7 +26,7 @@ func newManager(logger *zap.Logger) (*manager, error) {
 		VPNOptions: []vpn.HostOption{
 			vpn.WithNetworkBroker(vpn.NewNetworkBroker(logger)),
 			vpn.WithInterface(vpn.NewWSInterface(logger, addr)),
-			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger))),
+			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger, nil))),
 		},
 	})
 	if err != nil {

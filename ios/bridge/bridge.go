@@ -48,7 +48,7 @@ func NewGoSide(s SwiftSide) (*GoSide, error) {
 		VPNOptions: []vpn.HostOption{
 			vpn.WithNetworkBroker(vpn.NewNetworkBroker(logger)),
 			vpn.WithInterface(vpn.NewWSInterface(logger, "")),
-			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger))),
+			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger, nil))),
 		},
 	})
 	if err != nil {

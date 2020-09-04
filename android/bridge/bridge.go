@@ -62,7 +62,7 @@ func NewGoSide(s AndroidSide, appFileLocation string) (*GoSide, error) {
 		VPNOptions: []vpn.HostOption{
 			vpn.WithNetworkBroker(vpn.NewNetworkBroker(l)),
 			vpn.WithInterface(vpn.NewWSInterface(l, "")),
-			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(l))),
+			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(l, nil))),
 		},
 	})
 	if err != nil {

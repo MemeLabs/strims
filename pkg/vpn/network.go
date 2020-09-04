@@ -545,6 +545,16 @@ func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
 
 func (n *Network) handleMessage(m *Message) error {
 	if m.Header.DstID.Equals(n.host.ID()) {
+		var src []byte
+		if len(m.Trailers) != 0 {
+			src = m.Trailers[0].HostID.Bytes(nil)
+		}
+		n.logger.Debug(
+			"received message",
+			logutil.ByteHex("src", src),
+			zap.Uint16("srcPort", m.Header.SrcPort),
+			zap.Uint16("dstPort", m.Header.DstPort),
+		)
 		_, err := n.callHandler(m)
 		return err
 	}
@@ -594,7 +604,6 @@ func (n *Network) sendMessage(m *Message) error {
 		l := li.(*networkLink)
 
 		if m.Trailers.Contains(l.ID()) {
-			// log.Println("skipping host found in trailers")
 			continue
 		}
 
@@ -603,7 +612,6 @@ func (n *Network) sendMessage(m *Message) error {
 		}
 
 		if m.Header.DstID.Equals(l.ID()) {
-			// log.Println("found the to peer, done forwarding", l)
 			break
 		}
 
