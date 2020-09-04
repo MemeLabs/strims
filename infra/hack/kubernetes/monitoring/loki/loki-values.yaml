@@ -26,3 +26,13 @@ config:
     table_manager:
       retention_deletes_enabled: true
       retention_period: 168h #7 day retention period
+
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - controller      
