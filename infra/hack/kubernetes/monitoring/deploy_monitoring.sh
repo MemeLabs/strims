@@ -19,8 +19,13 @@ unset grafana_user
 unset grafana_password
 
 #install
+#https://github.com/helm/charts/tree/master/stable/prometheus-operator
 sudo helm install prometheus-operator -n monitoring stable/prometheus-operator -f prometheus/prom-operator-values.yaml
+
+#https://github.com/grafana/loki/tree/master/production/helm/loki
 sudo helm install loki -n monitoring -f loki/loki-values.yaml loki/loki
+
+#https://github.com/grafana/loki/tree/master/production/helm/promtail
 sudo helm install loki-promtail -n monitoring --set 'loki.serviceName=loki' loki/promtail
 
 
