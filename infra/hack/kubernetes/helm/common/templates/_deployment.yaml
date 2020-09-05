@@ -1,13 +1,13 @@
-{{- define "common.deployment" -}}
+{{- define "common-lib.deployment" -}}
 apiVersion: apps/v1
 kind: {{ .Values.kind }}
-{{ tpl ( include "common.deployment-metadata" . ) . }}
+{{ tpl ( include "common-lib.deployment-metadata" . ) . }}
 spec:
   replicas: {{ .Values.replicaCount }}
   selector:
     matchLabels:
       app: {{ .Release.Name }}
-  {{- tpl ( include "common.deployment-spec-template" . ) . }}
+  {{- tpl ( include "common-lib.deployment-spec-template" . ) . }}
     spec:
       restartPolicy: Always
     {{- with .Values.affinity }}
@@ -15,29 +15,29 @@ spec:
 {{ toYaml . | indent 8 }}
     {{- end }}
       {{- if .Values.podSecurityContext }}
-        podSecurityContext:
-            {{- range $key, $val := .Values.podSecurityContext }}
-            {{ $key }}: {{ $val }}
-            {{- end }}
+      securityContext:
+        {{- range $key, $val := .Values.podSecurityContext }}
+        {{ $key }}: {{ $val }}
+        {{- end }}
       {{- end }}      
       containers:
       - name: {{ .Release.Name }}
         imagePullPolicy: {{ .Values.image.pullPolicy }} 
-        image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.managedTag }}"
         {{- if .Values.args }}
         args:
           {{- range .Values.args }}
           - {{ . | quote }}
           {{- end }}
         {{- end }}   
-        {{- tpl ( include "common.deployment-httpProbe" . ) . }}
-        {{- tpl ( include "common.deployment-tcpProbe" . ) . }}
-        {{- tpl ( include "common.deployment-execProbe" . ) . }}
-        {{- tpl ( include "common.deployment-env" . ) . }}
-        {{- tpl ( include "common.deployment-resources" . ) . }}
-        {{- tpl ( include "common.deployment-ports" . ) . }}
+        {{- tpl ( include "common-lib.deployment-httpProbe" . ) . }}
+        {{- tpl ( include "common-lib.deployment-tcpProbe" . ) . }}
+        {{- tpl ( include "common-lib.deployment-execProbe" . ) . }}
+        {{- tpl ( include "common-lib.deployment-env" . ) . }}
+        {{- tpl ( include "common-lib.deployment-resources" . ) . }}
+        {{- tpl ( include "common-lib.deployment-ports" . ) . }}
         volumeMounts:
-          {{- tpl ( include "common.deployment-mountedSecrets-volumeMount" . ) . }}
+          {{- tpl ( include "common-lib.deployment-mountedSecrets-volumeMount" . ) . }}
         {{- if .Values.containerSecurityContext }}
         securityContext:
             {{- range $key, $val := .Values.containerSecurityContext }}
@@ -49,10 +49,10 @@ spec:
         - name: {{ .Values.imagePullSecret }}
       {{- end }}       
       volumes: 
-      {{- tpl ( include "common.deployment-mountedSecrets-volume" . ) . }}
+      {{- tpl ( include "common-lib.deployment-mountedSecrets-volume" . ) . }}
 
-{{- template "common.service" . -}}
-{{- template "common.ingress" . -}}
-{{- template "common.localStorage-pvc" . -}}
+{{- template "common-lib.service" . -}}
+{{- template "common-lib.ingress" . -}}
+{{- template "common-lib.localStorage-pvc" . -}}
 
 {{- end }}
