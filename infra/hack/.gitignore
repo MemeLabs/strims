@@ -1,1 +1,3 @@
 dev.sqlite
+Chart.lock
+*charts/common-*.tgz
