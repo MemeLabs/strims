@@ -160,3 +160,18 @@ affinity: {}
 #     "helm.sh/resource-policy": "keep"
 
 persistence: {}
+
+
+
+
+# extraVolumeMounts:
+#   - mountPath: /tmp
+#     name: tmp
+extraVolumeMounts: {}
+
+
+# extraVolumes:
+#   - name: tmp
+#     emptyDir: {}    
+extraVolumes: {}
+
