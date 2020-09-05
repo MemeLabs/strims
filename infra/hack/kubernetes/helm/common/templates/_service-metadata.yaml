@@ -1,0 +1,5 @@
+{{- define "common.service-metadata" -}}
+metadata:
+  name: {{ .Release.Name }}-service
+  namespace: {{ .Release.Namespace }}
+{{- end }}

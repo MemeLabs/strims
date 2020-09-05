@@ -1,0 +1,9 @@
+{{- define "common.deployment-ports" -}}
+  {{- if .Values.service }}
+        ports:
+      {{- range $key, $value := .Values.service.ports }}
+          - name: {{ $key }}
+            containerPort: {{ $value.port }}
+      {{- end }}
+  {{- end }}
+{{- end }}

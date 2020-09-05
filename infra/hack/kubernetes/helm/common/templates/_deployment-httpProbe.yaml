@@ -1,0 +1,16 @@
+{{ define "common.deployment-httpProbe" }}
+  {{- if .Values.httpProbe }}
+        readinessProbe:
+          httpGet:
+            path: {{ .Values.httpProbe.readyPath }}
+            port: {{ .Values.httpProbe.port }}
+          initialDelaySeconds: {{ .Values.httpProbe.delay }}
+          periodSeconds: {{ .Values.httpProbe.period }}
+        livenessProbe:
+          httpGet:
+            path: {{ .Values.httpProbe.livePath }}
+            port: {{ .Values.httpProbe.port }}
+          initialDelaySeconds: {{ .Values.httpProbe.delay }}
+          periodSeconds: {{ .Values.httpProbe.period }}          
+  {{- end }}          
+{{- end }}

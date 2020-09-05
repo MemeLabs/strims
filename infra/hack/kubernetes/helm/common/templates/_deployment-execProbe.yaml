@@ -1,0 +1,20 @@
+{{ define "common.deployment-execProbe" }}
+  {{- if .Values.execProbe }}
+        readinessProbe:
+          exec:
+            command:
+            {{ range .Values.execProbe.command -}}
+            - {{ . | quote }}
+            {{ end }}
+          initialDelaySeconds: {{ .Values.execProbe.delay }}
+          periodSeconds: {{ .Values.execProbe.period }}
+        livenessProbe:
+          exec:
+            command:
+            {{ range .Values.execProbe.command -}}
+            - {{ . | quote }}
+            {{ end }}
+          initialDelaySeconds: {{ .Values.execProbe.delay }}
+          periodSeconds: {{ .Values.execProbe.period }}          
+  {{- end }}             
+{{- end }}
