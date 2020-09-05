@@ -1,7 +1,7 @@
 ## Style Guide
 Replace any variables enclosed in <variables>
 
-For example: `helm install nginx -n \<my namespace\>` becomes `helm install nginx -n develop`
+For example: `helm install nginx -n <my namespace>` becomes `helm install nginx -n develop`
 
 ## Installing coturn
 ```
