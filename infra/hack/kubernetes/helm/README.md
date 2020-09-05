@@ -1,5 +1,5 @@
 ## Style Guide
-Replace any variables enclosed in <variables>
+Replace any variables enclosed in `<variable>`
 
 For example: `helm install nginx -n <my namespace>` becomes `helm install nginx -n develop`
 
