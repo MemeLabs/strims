@@ -52,11 +52,15 @@ mountedSecrets: {}
 
 # ingress:
 #   enabled: true
-#   portName: my-port
 #   path: "/somepath"
 #   rewrite: "/somepath/$1"
 #   annotations:
 #     "abc.com/annotation": "true"
+#   domain: myaddress.com
+#   tls:
+#     hosts:
+#     - myaddress.com
+#     secretName: my-tls-secret
 ingress: {}
 
 
