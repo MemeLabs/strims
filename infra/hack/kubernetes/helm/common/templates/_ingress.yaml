@@ -20,7 +20,7 @@ spec:
       paths:
       - backend:
           serviceName: {{ .Release.Name }}-service
-          servicePort: http
+          servicePort: {{ .Values.ingress.portName }}
         path: {{ .Values.ingress.path }}
   {{- if .Values.ingress.tls }}
   tls:

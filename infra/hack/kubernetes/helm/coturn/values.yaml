@@ -50,6 +50,7 @@ mountedSecrets: {}
 
 # ingress:
 #   enabled: true
+#   portName: my-port
 #   path: "/somepath"
 #   rewrite: "/somepath/$1"
 #   annotations:
