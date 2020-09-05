@@ -53,6 +53,7 @@ mountedSecrets: {}
 # ingress:
 #   enabled: true
 #   path: "/somepath"
+#   portName: my-port
 #   rewrite: "/somepath/$1"
 #   annotations:
 #     "abc.com/annotation": "true"
