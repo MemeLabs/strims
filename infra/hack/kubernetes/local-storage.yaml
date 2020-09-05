@@ -1,9 +1,0 @@
-# https://kubernetes.io/blog/2019/04/04/kubernetes-1.14-local-persistent-volumes-ga/
-kind: StorageClass
-apiVersion: storage.k8s.io/v1
-metadata:
-  name: local-storage
-  annotations:
-    storageclass.kubernetes.io/is-default-class: "true"
-provisioner: kubernetes.io/no-provisioner
-volumeBindingMode: WaitForFirstConsumer

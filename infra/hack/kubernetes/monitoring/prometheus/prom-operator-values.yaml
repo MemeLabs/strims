@@ -1,0 +1,89 @@
+alertmanager:
+  enabled: false
+
+kube-state-metrics:
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: kubernetes.io/hostname
+            operator: In
+            values:
+            - controller
+
+prometheusOperator:
+  affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+              - controller
+
+prometheus:
+  prometheusSpec:
+    affinity:
+      nodeAffinity:
+        requiredDuringSchedulingIgnoredDuringExecution:
+          nodeSelectorTerms:
+          - matchExpressions:
+            - key: kubernetes.io/hostname
+              operator: In
+              values:
+              - controller
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: local-path
+          accessModes: ["ReadWriteOnce"]
+          resources:
+            requests:
+              storage: 10Gi #storage requests don't actually do anything when using storage provisioned on a node locally
+    routePrefix: /prometheus
+    externalUrl: 'http://strims.monitoring.local/prometheus'
+  ingress:
+    enabled: true
+    hosts:
+      - strims.monitoring.local
+    path: "/prometheus"
+
+grafana:
+  admin:
+    existingSecret: grafana-admin
+
+  persistence:
+    storageClassName: local-path
+    enabled: true
+    size: 10Gi
+
+  ingress:
+    hosts:
+      - strims.monitoring.local
+    enabled: true
+    annotations:
+      nginx.ingress.kubernetes.io/rewrite-target: /$1
+    path: "/grafana/(.*)"
+
+  grafana.ini:
+    server:
+      root_url: http://strims.monitoring.local/grafana/
+      serve_from_sub_path: true
+      domain: strims.monitoring.local
+  additionalDataSources:
+  - name: Loki
+    type: loki
+    url: http://loki:3100/
+    access: proxy
+
+  affinity:
+    nodeAffinity:
+      requiredDuringSchedulingIgnoredDuringExecution:
+        nodeSelectorTerms:
+        - matchExpressions:
+          - key: kubernetes.io/hostname
+            operator: In
+            values:
+            - controller
