@@ -8,12 +8,14 @@ image:
   name: coturn
   tag: "4.5.1.3"
 
+
 # args:
 #   - "--arg1"
 #   - "--arg2"
 #   - "/myArg/"
 args:
   - "--stun-only"
+
 
 # env:
 #   myvar: "myvalue"
@@ -76,6 +78,7 @@ service:
       port: 3478
       protocol: UDP
 
+
 # tcpProbe:
 #   port: 80
 #   period: 15
@@ -109,11 +112,17 @@ execProbe: {}
 tier: backend
 
 
-# securityContext:
+# containerSecurityContext:
 #   readOnlyRootFilesystem: true
 #   allowPrivilegeEscalation: false
-securityContext: {}
+containerSecurityContext: {}
 
+
+# podSecurityContext:
+#   fsGroup: 999
+#   runAsUser: 999
+#   runAsGroup: 999
+podSecurityContext: {}
 
 # affinity:
 #   nodeAffinity:

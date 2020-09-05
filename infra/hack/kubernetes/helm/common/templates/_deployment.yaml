@@ -14,6 +14,12 @@ spec:
       affinity:
 {{ toYaml . | indent 8 }}
     {{- end }}
+      {{- if .Values.podSecurityContext }}
+        podSecurityContext:
+            {{- range $key, $val := .Values.podSecurityContext }}
+            {{ $key }}: {{ $val }}
+            {{- end }}
+      {{- end }}      
       containers:
       - name: {{ .Release.Name }}
         imagePullPolicy: {{ .Values.image.pullPolicy }} 
@@ -32,9 +38,9 @@ spec:
         {{- tpl ( include "common.deployment-ports" . ) . }}
         volumeMounts:
           {{- tpl ( include "common.deployment-mountedSecrets-volumeMount" . ) . }}
-        {{- if .Values.securityContext }}
+        {{- if .Values.containerSecurityContext }}
         securityContext:
-            {{- range $key, $val := .Values.securityContext }}
+            {{- range $key, $val := .Values.containerSecurityContext }}
             {{ $key }}: {{ $val }}
             {{- end }}
         {{- end }}  
