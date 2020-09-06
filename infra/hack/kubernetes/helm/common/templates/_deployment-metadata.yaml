@@ -1,0 +1,8 @@
+{{- define "common.deployment-metadata" -}}
+metadata:
+  name: {{ .Release.Name }}-pod
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: {{ .Release.Name }}
+    tier: {{ .Values.tier }}
+{{- end }}

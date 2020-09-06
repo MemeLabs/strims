@@ -1,0 +1,11 @@
+{{- define "common.deployment-spec-template" }}
+  template:
+    metadata:
+      labels:
+    {{- if .Values.extraLabels }}
+      {{- range $key, $val := .Values.extraLabels }}
+        {{ $key }}: {{ $val | quote }}
+      {{- end }}
+    {{- end }}
+        app: {{ .Release.Name }}
+{{- end }}

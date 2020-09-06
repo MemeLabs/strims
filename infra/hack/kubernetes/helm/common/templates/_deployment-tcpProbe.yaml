@@ -1,0 +1,14 @@
+{{ define "common.deployment-tcpProbe" -}}
+  {{- if .Values.tcpProbe }}
+        readinessProbe:
+          tcpSocket:
+            port: {{ .Values.tcpProbe.port }}
+          initialDelaySeconds: {{ .Values.tcpProbe.delay }}
+          periodSeconds: {{ .Values.tcpProbe.period }}
+        livenessProbe:
+          tcpSocket:
+            port: {{ .Values.tcpProbe.port }}
+          initialDelaySeconds: {{ .Values.tcpProbe.delay }}
+          periodSeconds: {{ .Values.tcpProbe.period }}          
+  {{- end }}
+{{- end }}

@@ -1,0 +1,9 @@
+{{- define "common.deployment-env" -}}
+  {{- if .Values.env }}
+        env:
+      {{- range $key, $val := .Values.env }}
+        - name: {{ $key }}
+          value: {{ $val | quote }}
+      {{- end }}
+  {{- end }}
+{{- end }}

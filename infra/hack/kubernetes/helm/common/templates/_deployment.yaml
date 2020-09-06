@@ -1,0 +1,72 @@
+{{- define "common.deployment" -}}
+apiVersion: apps/v1
+kind: {{ .Values.kind }}
+{{ tpl ( include "common.deployment-metadata" . ) . }}
+spec:
+
+  replicas: {{ .Values.replicaCount }}
+  selector:
+    matchLabels:
+      app: {{ .Release.Name }}
+  {{- tpl ( include "common.deployment-spec-template" . ) . }}
+    spec:
+      {{- if .Values.hostNetwork }}
+      hostNetwork: true
+      {{- end }}  
+      restartPolicy: Always
+    {{- with .Values.affinity }}
+      affinity:
+{{ toYaml . | indent 8 }}
+    {{- end }}
+      {{- if .Values.podSecurityContext }}
+      securityContext:
+        {{- range $key, $val := .Values.podSecurityContext }}
+        {{ $key }}: {{ $val }}
+        {{- end }}
+      {{- end }}      
+      containers:
+      - name: {{ .Release.Name }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }} 
+        image: "{{ .Values.image.registry }}/{{ .Values.image.name }}:{{ .Values.image.tag }}"
+        {{- if .Values.args }}
+        args:
+          {{- range .Values.args }}
+          - {{ . | quote }}
+          {{- end }}
+        {{- end }}   
+        {{- tpl ( include "common.deployment-httpProbe" . ) . }}
+        {{- tpl ( include "common.deployment-tcpProbe" . ) . }}
+        {{- tpl ( include "common.deployment-execProbe" . ) . }}
+        {{- tpl ( include "common.deployment-env" . ) . }}
+        {{- tpl ( include "common.deployment-resources" . ) . }}
+        {{- tpl ( include "common.deployment-ports" . ) . }}
+        volumeMounts:
+{{- if .Values.extraVolumeMounts }}
+{{- with .Values.extraVolumeMounts }}
+{{ toYaml . | indent 10 }}
+{{- end }}
+{{- end }} 
+          {{- tpl ( include "common.deployment-mountedSecrets-volumeMount" . ) . }}
+        {{- if .Values.containerSecurityContext }}
+        securityContext:
+            {{- range $key, $val := .Values.containerSecurityContext }}
+            {{ $key }}: {{ $val }}
+            {{- end }}
+        {{- end }}  
+      {{- if .Values.imagePullSecret }}
+      imagePullSecrets:
+        - name: {{ .Values.imagePullSecret }}
+      {{- end }}       
+      volumes: 
+{{- if .Values.extraVolumes }}
+{{- with .Values.extraVolumes }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+{{- end }}
+      {{- tpl ( include "common.deployment-mountedSecrets-volume" . ) . }}
+
+{{- template "common.service" . -}}
+{{- template "common.ingress" . -}}
+{{- template "common.localStorage-pvc" . -}}
+
+{{- end }}

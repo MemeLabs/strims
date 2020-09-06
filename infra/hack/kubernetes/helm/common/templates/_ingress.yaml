@@ -1,0 +1,34 @@
+{{- define "common.ingress" -}}
+{{- if .Values.ingress.enabled }}
+---
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: {{ .Release.Name }}-ingress
+  namespace: {{ .Release.Namespace }}
+  annotations:
+{{- if .Values.ingress.annotations }}
+{{ toYaml .Values.ingress.annotations | indent 4 }}
+{{- end }}
+{{- if .Values.ingress.rewrite }}
+    nginx.ingress.kubernetes.io/rewrite-target: {{ .Values.ingress.rewrite }}
+{{- end }}
+spec:
+  rules:
+  - host: {{ .Values.ingress.domain }}
+    http:
+      paths:
+      - backend:
+          serviceName: {{ .Release.Name }}-service
+          servicePort: {{ .Values.ingress.portName }}
+        path: {{ .Values.ingress.path }}
+  {{- if .Values.ingress.tls }}
+  tls:
+  - hosts: 
+  {{- range .Values.ingress.tls.hosts }}
+    - {{ . }}
+  {{- end }}
+    secretName: {{ .Values.ingress.tls.secretName }}
+  {{- end }}
+{{- end -}}  
+{{- end -}}
