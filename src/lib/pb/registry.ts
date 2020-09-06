@@ -19,8 +19,3 @@ export const anyValueType = (msg: pb.google.protobuf.IAny): protobuf.Type => {
 export const typeName = (type: any): string => {
   return messageTypeNames.get(type);
 };
-
-registerType("Error", pb.Error);
-registerType("Close", pb.Close);
-registerType("Cancel", pb.Cancel);
-registerType("Undefined", pb.Undefined);

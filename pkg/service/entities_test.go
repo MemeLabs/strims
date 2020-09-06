@@ -25,47 +25,47 @@ var cases = []entityTest{
 		name:  "emote",
 		input: "test PEPE test",
 		entities: &pb.MessageEntities{
-			Emotes: []*pb.Emote{{Name: "PEPE", Bounds: &pb.Bounds{Start: 5, End: 9}}},
+			Emotes: []*pb.MessageEntities_Emote{{Name: "PEPE", Bounds: &pb.MessageEntities_Bounds{Start: 5, End: 9}}},
 		},
 	},
 	{
 		name:  "link",
 		input: "strims.gg",
 		entities: &pb.MessageEntities{
-			Links: []*pb.Link{{Url: "strims.gg", Bounds: &pb.Bounds{Start: 0, End: 9}}},
+			Links: []*pb.MessageEntities_Link{{Url: "strims.gg", Bounds: &pb.MessageEntities_Bounds{Start: 0, End: 9}}},
 		},
 	},
 	{
 		name:  "spoiler",
 		input: "spoiler ||dumbledore was gay all along||",
 		entities: &pb.MessageEntities{
-			Spoilers: []*pb.Spoiler{{Bounds: &pb.Bounds{Start: 8, End: 40}}},
+			Spoilers: []*pb.MessageEntities_Spoiler{{Bounds: &pb.MessageEntities_Bounds{Start: 8, End: 40}}},
 		},
 	},
 	{
 		name:  "greentext",
 		input: ">implying greentext doesn't work",
 		entities: &pb.MessageEntities{
-			GreenText: &pb.GenericEntity{Bounds: &pb.Bounds{Start: 0, End: 32}},
+			GreenText: &pb.MessageEntities_GenericEntity{Bounds: &pb.MessageEntities_Bounds{Start: 0, End: 32}},
 		},
 	},
 	{
 		name:  "self",
 		input: "/me dies",
 		entities: &pb.MessageEntities{
-			SelfMessage: &pb.GenericEntity{Bounds: &pb.Bounds{Start: 4, End: 8}},
+			SelfMessage: &pb.MessageEntities_GenericEntity{Bounds: &pb.MessageEntities_Bounds{Start: 4, End: 8}},
 		},
 	},
 	{
 		name:  "tag",
 		input: "nsfw loud weeb nsfl google.com",
 		entities: &pb.MessageEntities{
-			Links: []*pb.Link{{Url: "google.com", Bounds: &pb.Bounds{Start: 20, End: 30}}},
-			Tags: []*pb.Tag{
-				{Name: "nsfw", Bounds: &pb.Bounds{Start: 0, End: 4}},
-				{Name: "loud", Bounds: &pb.Bounds{Start: 5, End: 9}},
-				{Name: "weeb", Bounds: &pb.Bounds{Start: 10, End: 14}},
-				{Name: "nsfl", Bounds: &pb.Bounds{Start: 15, End: 19}},
+			Links: []*pb.MessageEntities_Link{{Url: "google.com", Bounds: &pb.MessageEntities_Bounds{Start: 20, End: 30}}},
+			Tags: []*pb.MessageEntities_Tag{
+				{Name: "nsfw", Bounds: &pb.MessageEntities_Bounds{Start: 0, End: 4}},
+				{Name: "loud", Bounds: &pb.MessageEntities_Bounds{Start: 5, End: 9}},
+				{Name: "weeb", Bounds: &pb.MessageEntities_Bounds{Start: 10, End: 14}},
+				{Name: "nsfl", Bounds: &pb.MessageEntities_Bounds{Start: 15, End: 19}},
 			},
 		},
 	},
@@ -73,7 +73,7 @@ var cases = []entityTest{
 		name:  "code",
 		input: "`hacker mode activated`",
 		entities: &pb.MessageEntities{
-			CodeBlocks: []*pb.CodeBlock{{Bounds: &pb.Bounds{Start: 0, End: 23}}},
+			CodeBlocks: []*pb.MessageEntities_CodeBlock{{Bounds: &pb.MessageEntities_Bounds{Start: 0, End: 23}}},
 		},
 	},
 	{
@@ -81,7 +81,7 @@ var cases = []entityTest{
 		name:  "entity in link",
 		input: "strims.gg/weeb",
 		entities: &pb.MessageEntities{
-			Links: []*pb.Link{{Url: "strims.gg/weeb", Bounds: &pb.Bounds{Start: 0, End: 14}}},
+			Links: []*pb.MessageEntities_Link{{Url: "strims.gg/weeb", Bounds: &pb.MessageEntities_Bounds{Start: 0, End: 14}}},
 		},
 	},
 }

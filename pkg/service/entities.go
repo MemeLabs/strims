@@ -46,9 +46,9 @@ func (x *EntityExtractor) Extract(msg string) *pb.MessageEntities {
 	e := &pb.MessageEntities{}
 
 	for _, b := range x.urls.FindAllStringIndex(msg, -1) {
-		e.Links = append(e.Links, &pb.Link{
+		e.Links = append(e.Links, &pb.MessageEntities_Link{
 			Url:    msg[b[0]:b[1]],
-			Bounds: &pb.Bounds{Start: int64(b[0]), End: int64(b[1])},
+			Bounds: &pb.MessageEntities_Bounds{Start: int64(b[0]), End: int64(b[1])},
 		})
 	}
 
@@ -61,20 +61,20 @@ func (x *EntityExtractor) Extract(msg string) *pb.MessageEntities {
 func addEntitiesFromSpan(e *pb.MessageEntities, span *parser.Span) {
 	switch span.Type {
 	case parser.SpanCode:
-		e.CodeBlocks = append(e.CodeBlocks, &pb.CodeBlock{
-			Bounds: &pb.Bounds{Start: int64(span.Pos()), End: int64(span.End())},
+		e.CodeBlocks = append(e.CodeBlocks, &pb.MessageEntities_CodeBlock{
+			Bounds: &pb.MessageEntities_Bounds{Start: int64(span.Pos()), End: int64(span.End())},
 		})
 	case parser.SpanSpoiler:
-		e.Spoilers = append(e.Spoilers, &pb.Spoiler{
-			Bounds: &pb.Bounds{Start: int64(span.Pos()), End: int64(span.End())},
+		e.Spoilers = append(e.Spoilers, &pb.MessageEntities_Spoiler{
+			Bounds: &pb.MessageEntities_Bounds{Start: int64(span.Pos()), End: int64(span.End())},
 		})
 	case parser.SpanGreentext:
-		e.GreenText = &pb.GenericEntity{
-			Bounds: &pb.Bounds{Start: int64(span.Pos()), End: int64(span.End())},
+		e.GreenText = &pb.MessageEntities_GenericEntity{
+			Bounds: &pb.MessageEntities_Bounds{Start: int64(span.Pos()), End: int64(span.End())},
 		}
 	case parser.SpanMe:
-		e.SelfMessage = &pb.GenericEntity{
-			Bounds: &pb.Bounds{Start: int64(span.Pos()), End: int64(span.End())},
+		e.SelfMessage = &pb.MessageEntities_GenericEntity{
+			Bounds: &pb.MessageEntities_Bounds{Start: int64(span.Pos()), End: int64(span.End())},
 		}
 	}
 
@@ -93,20 +93,20 @@ func addEntitiesFromNode(e *pb.MessageEntities, node parser.Node) {
 
 	switch n := node.(type) {
 	case *parser.Emote:
-		e.Emotes = append(e.Emotes, &pb.Emote{
+		e.Emotes = append(e.Emotes, &pb.MessageEntities_Emote{
 			Name:      n.Name,
 			Modifiers: n.Modifiers,
-			Bounds:    &pb.Bounds{Start: int64(n.Pos()), End: int64(n.End())},
+			Bounds:    &pb.MessageEntities_Bounds{Start: int64(n.Pos()), End: int64(n.End())},
 		})
 	case *parser.Nick:
-		e.Nicks = append(e.Nicks, &pb.Nick{
+		e.Nicks = append(e.Nicks, &pb.MessageEntities_Nick{
 			Nick:   n.Nick,
-			Bounds: &pb.Bounds{Start: int64(n.Pos()), End: int64(n.End())},
+			Bounds: &pb.MessageEntities_Bounds{Start: int64(n.Pos()), End: int64(n.End())},
 		})
 	case *parser.Tag:
-		e.Tags = append(e.Tags, &pb.Tag{
+		e.Tags = append(e.Tags, &pb.MessageEntities_Tag{
 			Name:   n.Name,
-			Bounds: &pb.Bounds{Start: int64(n.Pos()), End: int64(n.End())},
+			Bounds: &pb.MessageEntities_Bounds{Start: int64(n.Pos()), End: int64(n.End())},
 		})
 	case *parser.Span:
 		addEntitiesFromSpan(e, n)

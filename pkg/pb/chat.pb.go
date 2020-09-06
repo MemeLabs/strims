@@ -974,14 +974,14 @@ type MessageEntities struct {
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	Links       []*Link        `protobuf:"bytes,1,rep,name=links,proto3" json:"links,omitempty"`
-	Emotes      []*Emote       `protobuf:"bytes,2,rep,name=emotes,proto3" json:"emotes,omitempty"`
-	Nicks       []*Nick        `protobuf:"bytes,3,rep,name=nicks,proto3" json:"nicks,omitempty"`
-	Tags        []*Tag         `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
-	CodeBlocks  []*CodeBlock   `protobuf:"bytes,5,rep,name=code_blocks,json=codeBlocks,proto3" json:"code_blocks,omitempty"`
-	Spoilers    []*Spoiler     `protobuf:"bytes,6,rep,name=spoilers,proto3" json:"spoilers,omitempty"`
-	GreenText   *GenericEntity `protobuf:"bytes,7,opt,name=green_text,json=greenText,proto3" json:"green_text,omitempty"`
-	SelfMessage *GenericEntity `protobuf:"bytes,8,opt,name=self_message,json=selfMessage,proto3" json:"self_message,omitempty"`
+	Links       []*MessageEntities_Link        `protobuf:"bytes,1,rep,name=links,proto3" json:"links,omitempty"`
+	Emotes      []*MessageEntities_Emote       `protobuf:"bytes,2,rep,name=emotes,proto3" json:"emotes,omitempty"`
+	Nicks       []*MessageEntities_Nick        `protobuf:"bytes,3,rep,name=nicks,proto3" json:"nicks,omitempty"`
+	Tags        []*MessageEntities_Tag         `protobuf:"bytes,4,rep,name=tags,proto3" json:"tags,omitempty"`
+	CodeBlocks  []*MessageEntities_CodeBlock   `protobuf:"bytes,5,rep,name=code_blocks,json=codeBlocks,proto3" json:"code_blocks,omitempty"`
+	Spoilers    []*MessageEntities_Spoiler     `protobuf:"bytes,6,rep,name=spoilers,proto3" json:"spoilers,omitempty"`
+	GreenText   *MessageEntities_GenericEntity `protobuf:"bytes,7,opt,name=green_text,json=greenText,proto3" json:"green_text,omitempty"`
+	SelfMessage *MessageEntities_GenericEntity `protobuf:"bytes,8,opt,name=self_message,json=selfMessage,proto3" json:"self_message,omitempty"`
 }
 
 func (x *MessageEntities) Reset() {
@@ -1016,490 +1016,58 @@ func (*MessageEntities) Descriptor() ([]byte, []int) {
 	return file_chat_proto_rawDescGZIP(), []int{17}
 }
 
-func (x *MessageEntities) GetLinks() []*Link {
+func (x *MessageEntities) GetLinks() []*MessageEntities_Link {
 	if x != nil {
 		return x.Links
 	}
 	return nil
 }
 
-func (x *MessageEntities) GetEmotes() []*Emote {
+func (x *MessageEntities) GetEmotes() []*MessageEntities_Emote {
 	if x != nil {
 		return x.Emotes
 	}
 	return nil
 }
 
-func (x *MessageEntities) GetNicks() []*Nick {
+func (x *MessageEntities) GetNicks() []*MessageEntities_Nick {
 	if x != nil {
 		return x.Nicks
 	}
 	return nil
 }
 
-func (x *MessageEntities) GetTags() []*Tag {
+func (x *MessageEntities) GetTags() []*MessageEntities_Tag {
 	if x != nil {
 		return x.Tags
 	}
 	return nil
 }
 
-func (x *MessageEntities) GetCodeBlocks() []*CodeBlock {
+func (x *MessageEntities) GetCodeBlocks() []*MessageEntities_CodeBlock {
 	if x != nil {
 		return x.CodeBlocks
 	}
 	return nil
 }
 
-func (x *MessageEntities) GetSpoilers() []*Spoiler {
+func (x *MessageEntities) GetSpoilers() []*MessageEntities_Spoiler {
 	if x != nil {
 		return x.Spoilers
 	}
 	return nil
 }
 
-func (x *MessageEntities) GetGreenText() *GenericEntity {
+func (x *MessageEntities) GetGreenText() *MessageEntities_GenericEntity {
 	if x != nil {
 		return x.GreenText
 	}
 	return nil
 }
 
-func (x *MessageEntities) GetSelfMessage() *GenericEntity {
+func (x *MessageEntities) GetSelfMessage() *MessageEntities_GenericEntity {
 	if x != nil {
 		return x.SelfMessage
-	}
-	return nil
-}
-
-type Bounds struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Start int64 `protobuf:"varint,1,opt,name=start,proto3" json:"start,omitempty"`
-	End   int64 `protobuf:"varint,2,opt,name=end,proto3" json:"end,omitempty"`
-}
-
-func (x *Bounds) Reset() {
-	*x = Bounds{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[18]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *Bounds) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Bounds) ProtoMessage() {}
-
-func (x *Bounds) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[18]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Bounds.ProtoReflect.Descriptor instead.
-func (*Bounds) Descriptor() ([]byte, []int) {
-	return file_chat_proto_rawDescGZIP(), []int{18}
-}
-
-func (x *Bounds) GetStart() int64 {
-	if x != nil {
-		return x.Start
-	}
-	return 0
-}
-
-func (x *Bounds) GetEnd() int64 {
-	if x != nil {
-		return x.End
-	}
-	return 0
-}
-
-type Link struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Bounds *Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
-	Url    string  `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
-}
-
-func (x *Link) Reset() {
-	*x = Link{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[19]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *Link) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Link) ProtoMessage() {}
-
-func (x *Link) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[19]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Link.ProtoReflect.Descriptor instead.
-func (*Link) Descriptor() ([]byte, []int) {
-	return file_chat_proto_rawDescGZIP(), []int{19}
-}
-
-func (x *Link) GetBounds() *Bounds {
-	if x != nil {
-		return x.Bounds
-	}
-	return nil
-}
-
-func (x *Link) GetUrl() string {
-	if x != nil {
-		return x.Url
-	}
-	return ""
-}
-
-type Emote struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Bounds    *Bounds  `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
-	Name      string   `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Modifiers []string `protobuf:"bytes,3,rep,name=modifiers,proto3" json:"modifiers,omitempty"`
-	Combo     int64    `protobuf:"varint,4,opt,name=combo,proto3" json:"combo,omitempty"`
-}
-
-func (x *Emote) Reset() {
-	*x = Emote{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[20]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *Emote) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Emote) ProtoMessage() {}
-
-func (x *Emote) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[20]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Emote.ProtoReflect.Descriptor instead.
-func (*Emote) Descriptor() ([]byte, []int) {
-	return file_chat_proto_rawDescGZIP(), []int{20}
-}
-
-func (x *Emote) GetBounds() *Bounds {
-	if x != nil {
-		return x.Bounds
-	}
-	return nil
-}
-
-func (x *Emote) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *Emote) GetModifiers() []string {
-	if x != nil {
-		return x.Modifiers
-	}
-	return nil
-}
-
-func (x *Emote) GetCombo() int64 {
-	if x != nil {
-		return x.Combo
-	}
-	return 0
-}
-
-type Nick struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Bounds *Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
-	Nick   string  `protobuf:"bytes,2,opt,name=nick,proto3" json:"nick,omitempty"`
-}
-
-func (x *Nick) Reset() {
-	*x = Nick{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[21]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *Nick) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Nick) ProtoMessage() {}
-
-func (x *Nick) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[21]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Nick.ProtoReflect.Descriptor instead.
-func (*Nick) Descriptor() ([]byte, []int) {
-	return file_chat_proto_rawDescGZIP(), []int{21}
-}
-
-func (x *Nick) GetBounds() *Bounds {
-	if x != nil {
-		return x.Bounds
-	}
-	return nil
-}
-
-func (x *Nick) GetNick() string {
-	if x != nil {
-		return x.Nick
-	}
-	return ""
-}
-
-type Tag struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Bounds *Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
-	Name   string  `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-}
-
-func (x *Tag) Reset() {
-	*x = Tag{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[22]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *Tag) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Tag) ProtoMessage() {}
-
-func (x *Tag) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[22]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Tag.ProtoReflect.Descriptor instead.
-func (*Tag) Descriptor() ([]byte, []int) {
-	return file_chat_proto_rawDescGZIP(), []int{22}
-}
-
-func (x *Tag) GetBounds() *Bounds {
-	if x != nil {
-		return x.Bounds
-	}
-	return nil
-}
-
-func (x *Tag) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-type CodeBlock struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Bounds *Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
-}
-
-func (x *CodeBlock) Reset() {
-	*x = CodeBlock{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[23]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *CodeBlock) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CodeBlock) ProtoMessage() {}
-
-func (x *CodeBlock) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[23]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CodeBlock.ProtoReflect.Descriptor instead.
-func (*CodeBlock) Descriptor() ([]byte, []int) {
-	return file_chat_proto_rawDescGZIP(), []int{23}
-}
-
-func (x *CodeBlock) GetBounds() *Bounds {
-	if x != nil {
-		return x.Bounds
-	}
-	return nil
-}
-
-type Spoiler struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Bounds *Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
-}
-
-func (x *Spoiler) Reset() {
-	*x = Spoiler{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[24]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *Spoiler) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*Spoiler) ProtoMessage() {}
-
-func (x *Spoiler) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[24]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use Spoiler.ProtoReflect.Descriptor instead.
-func (*Spoiler) Descriptor() ([]byte, []int) {
-	return file_chat_proto_rawDescGZIP(), []int{24}
-}
-
-func (x *Spoiler) GetBounds() *Bounds {
-	if x != nil {
-		return x.Bounds
-	}
-	return nil
-}
-
-type GenericEntity struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Bounds *Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
-}
-
-func (x *GenericEntity) Reset() {
-	*x = GenericEntity{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[25]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *GenericEntity) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GenericEntity) ProtoMessage() {}
-
-func (x *GenericEntity) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[25]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GenericEntity.ProtoReflect.Descriptor instead.
-func (*GenericEntity) Descriptor() ([]byte, []int) {
-	return file_chat_proto_rawDescGZIP(), []int{25}
-}
-
-func (x *GenericEntity) GetBounds() *Bounds {
-	if x != nil {
-		return x.Bounds
 	}
 	return nil
 }
@@ -1519,7 +1087,7 @@ type CallChatClientRequest struct {
 func (x *CallChatClientRequest) Reset() {
 	*x = CallChatClientRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[26]
+		mi := &file_chat_proto_msgTypes[18]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1532,7 +1100,7 @@ func (x *CallChatClientRequest) String() string {
 func (*CallChatClientRequest) ProtoMessage() {}
 
 func (x *CallChatClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[26]
+	mi := &file_chat_proto_msgTypes[18]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1545,7 +1113,7 @@ func (x *CallChatClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallChatClientRequest.ProtoReflect.Descriptor instead.
 func (*CallChatClientRequest) Descriptor() ([]byte, []int) {
-	return file_chat_proto_rawDescGZIP(), []int{26}
+	return file_chat_proto_rawDescGZIP(), []int{18}
 }
 
 func (x *CallChatClientRequest) GetClientId() uint64 {
@@ -1603,7 +1171,7 @@ type ChatServerEvent_Open struct {
 func (x *ChatServerEvent_Open) Reset() {
 	*x = ChatServerEvent_Open{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[27]
+		mi := &file_chat_proto_msgTypes[19]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1616,7 +1184,7 @@ func (x *ChatServerEvent_Open) String() string {
 func (*ChatServerEvent_Open) ProtoMessage() {}
 
 func (x *ChatServerEvent_Open) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[27]
+	mi := &file_chat_proto_msgTypes[19]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1648,7 +1216,7 @@ type ChatServerEvent_Close struct {
 func (x *ChatServerEvent_Close) Reset() {
 	*x = ChatServerEvent_Close{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[28]
+		mi := &file_chat_proto_msgTypes[20]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1661,7 +1229,7 @@ func (x *ChatServerEvent_Close) String() string {
 func (*ChatServerEvent_Close) ProtoMessage() {}
 
 func (x *ChatServerEvent_Close) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[28]
+	mi := &file_chat_proto_msgTypes[20]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1686,7 +1254,7 @@ type CallChatServerRequest_Close struct {
 func (x *CallChatServerRequest_Close) Reset() {
 	*x = CallChatServerRequest_Close{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[29]
+		mi := &file_chat_proto_msgTypes[21]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1699,7 +1267,7 @@ func (x *CallChatServerRequest_Close) String() string {
 func (*CallChatServerRequest_Close) ProtoMessage() {}
 
 func (x *CallChatServerRequest_Close) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[29]
+	mi := &file_chat_proto_msgTypes[21]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1726,7 +1294,7 @@ type ChatClientEvent_Open struct {
 func (x *ChatClientEvent_Open) Reset() {
 	*x = ChatClientEvent_Open{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[30]
+		mi := &file_chat_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1739,7 +1307,7 @@ func (x *ChatClientEvent_Open) String() string {
 func (*ChatClientEvent_Open) ProtoMessage() {}
 
 func (x *ChatClientEvent_Open) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[30]
+	mi := &file_chat_proto_msgTypes[22]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1769,14 +1337,15 @@ type ChatClientEvent_Message struct {
 
 	SentTime   int64            `protobuf:"varint,1,opt,name=sent_time,json=sentTime,proto3" json:"sent_time,omitempty"`
 	ServerTime int64            `protobuf:"varint,2,opt,name=server_time,json=serverTime,proto3" json:"server_time,omitempty"`
-	Body       string           `protobuf:"bytes,3,opt,name=body,proto3" json:"body,omitempty"`
-	Entities   *MessageEntities `protobuf:"bytes,4,opt,name=entities,proto3" json:"entities,omitempty"`
+	Nick       string           `protobuf:"bytes,3,opt,name=nick,proto3" json:"nick,omitempty"`
+	Body       string           `protobuf:"bytes,4,opt,name=body,proto3" json:"body,omitempty"`
+	Entities   *MessageEntities `protobuf:"bytes,5,opt,name=entities,proto3" json:"entities,omitempty"`
 }
 
 func (x *ChatClientEvent_Message) Reset() {
 	*x = ChatClientEvent_Message{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[31]
+		mi := &file_chat_proto_msgTypes[23]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1789,7 +1358,7 @@ func (x *ChatClientEvent_Message) String() string {
 func (*ChatClientEvent_Message) ProtoMessage() {}
 
 func (x *ChatClientEvent_Message) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[31]
+	mi := &file_chat_proto_msgTypes[23]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1819,6 +1388,13 @@ func (x *ChatClientEvent_Message) GetServerTime() int64 {
 	return 0
 }
 
+func (x *ChatClientEvent_Message) GetNick() string {
+	if x != nil {
+		return x.Nick
+	}
+	return ""
+}
+
 func (x *ChatClientEvent_Message) GetBody() string {
 	if x != nil {
 		return x.Body
@@ -1842,7 +1418,7 @@ type ChatClientEvent_Close struct {
 func (x *ChatClientEvent_Close) Reset() {
 	*x = ChatClientEvent_Close{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[32]
+		mi := &file_chat_proto_msgTypes[24]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1855,7 +1431,7 @@ func (x *ChatClientEvent_Close) String() string {
 func (*ChatClientEvent_Close) ProtoMessage() {}
 
 func (x *ChatClientEvent_Close) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[32]
+	mi := &file_chat_proto_msgTypes[24]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1869,6 +1445,438 @@ func (x *ChatClientEvent_Close) ProtoReflect() protoreflect.Message {
 // Deprecated: Use ChatClientEvent_Close.ProtoReflect.Descriptor instead.
 func (*ChatClientEvent_Close) Descriptor() ([]byte, []int) {
 	return file_chat_proto_rawDescGZIP(), []int{14, 2}
+}
+
+type MessageEntities_Bounds struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Start int64 `protobuf:"varint,1,opt,name=start,proto3" json:"start,omitempty"`
+	End   int64 `protobuf:"varint,2,opt,name=end,proto3" json:"end,omitempty"`
+}
+
+func (x *MessageEntities_Bounds) Reset() {
+	*x = MessageEntities_Bounds{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_proto_msgTypes[25]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MessageEntities_Bounds) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageEntities_Bounds) ProtoMessage() {}
+
+func (x *MessageEntities_Bounds) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_proto_msgTypes[25]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageEntities_Bounds.ProtoReflect.Descriptor instead.
+func (*MessageEntities_Bounds) Descriptor() ([]byte, []int) {
+	return file_chat_proto_rawDescGZIP(), []int{17, 0}
+}
+
+func (x *MessageEntities_Bounds) GetStart() int64 {
+	if x != nil {
+		return x.Start
+	}
+	return 0
+}
+
+func (x *MessageEntities_Bounds) GetEnd() int64 {
+	if x != nil {
+		return x.End
+	}
+	return 0
+}
+
+type MessageEntities_Link struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Bounds *MessageEntities_Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
+	Url    string                  `protobuf:"bytes,2,opt,name=url,proto3" json:"url,omitempty"`
+}
+
+func (x *MessageEntities_Link) Reset() {
+	*x = MessageEntities_Link{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_proto_msgTypes[26]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MessageEntities_Link) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageEntities_Link) ProtoMessage() {}
+
+func (x *MessageEntities_Link) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_proto_msgTypes[26]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageEntities_Link.ProtoReflect.Descriptor instead.
+func (*MessageEntities_Link) Descriptor() ([]byte, []int) {
+	return file_chat_proto_rawDescGZIP(), []int{17, 1}
+}
+
+func (x *MessageEntities_Link) GetBounds() *MessageEntities_Bounds {
+	if x != nil {
+		return x.Bounds
+	}
+	return nil
+}
+
+func (x *MessageEntities_Link) GetUrl() string {
+	if x != nil {
+		return x.Url
+	}
+	return ""
+}
+
+type MessageEntities_Emote struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Bounds    *MessageEntities_Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
+	Name      string                  `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Modifiers []string                `protobuf:"bytes,3,rep,name=modifiers,proto3" json:"modifiers,omitempty"`
+	Combo     int64                   `protobuf:"varint,4,opt,name=combo,proto3" json:"combo,omitempty"`
+}
+
+func (x *MessageEntities_Emote) Reset() {
+	*x = MessageEntities_Emote{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_proto_msgTypes[27]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MessageEntities_Emote) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageEntities_Emote) ProtoMessage() {}
+
+func (x *MessageEntities_Emote) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_proto_msgTypes[27]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageEntities_Emote.ProtoReflect.Descriptor instead.
+func (*MessageEntities_Emote) Descriptor() ([]byte, []int) {
+	return file_chat_proto_rawDescGZIP(), []int{17, 2}
+}
+
+func (x *MessageEntities_Emote) GetBounds() *MessageEntities_Bounds {
+	if x != nil {
+		return x.Bounds
+	}
+	return nil
+}
+
+func (x *MessageEntities_Emote) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+func (x *MessageEntities_Emote) GetModifiers() []string {
+	if x != nil {
+		return x.Modifiers
+	}
+	return nil
+}
+
+func (x *MessageEntities_Emote) GetCombo() int64 {
+	if x != nil {
+		return x.Combo
+	}
+	return 0
+}
+
+type MessageEntities_Nick struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Bounds *MessageEntities_Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
+	Nick   string                  `protobuf:"bytes,2,opt,name=nick,proto3" json:"nick,omitempty"`
+}
+
+func (x *MessageEntities_Nick) Reset() {
+	*x = MessageEntities_Nick{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_proto_msgTypes[28]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MessageEntities_Nick) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageEntities_Nick) ProtoMessage() {}
+
+func (x *MessageEntities_Nick) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_proto_msgTypes[28]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageEntities_Nick.ProtoReflect.Descriptor instead.
+func (*MessageEntities_Nick) Descriptor() ([]byte, []int) {
+	return file_chat_proto_rawDescGZIP(), []int{17, 3}
+}
+
+func (x *MessageEntities_Nick) GetBounds() *MessageEntities_Bounds {
+	if x != nil {
+		return x.Bounds
+	}
+	return nil
+}
+
+func (x *MessageEntities_Nick) GetNick() string {
+	if x != nil {
+		return x.Nick
+	}
+	return ""
+}
+
+type MessageEntities_Tag struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Bounds *MessageEntities_Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
+	Name   string                  `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+}
+
+func (x *MessageEntities_Tag) Reset() {
+	*x = MessageEntities_Tag{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_proto_msgTypes[29]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MessageEntities_Tag) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageEntities_Tag) ProtoMessage() {}
+
+func (x *MessageEntities_Tag) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_proto_msgTypes[29]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageEntities_Tag.ProtoReflect.Descriptor instead.
+func (*MessageEntities_Tag) Descriptor() ([]byte, []int) {
+	return file_chat_proto_rawDescGZIP(), []int{17, 4}
+}
+
+func (x *MessageEntities_Tag) GetBounds() *MessageEntities_Bounds {
+	if x != nil {
+		return x.Bounds
+	}
+	return nil
+}
+
+func (x *MessageEntities_Tag) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type MessageEntities_CodeBlock struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Bounds *MessageEntities_Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
+}
+
+func (x *MessageEntities_CodeBlock) Reset() {
+	*x = MessageEntities_CodeBlock{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_proto_msgTypes[30]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MessageEntities_CodeBlock) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageEntities_CodeBlock) ProtoMessage() {}
+
+func (x *MessageEntities_CodeBlock) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_proto_msgTypes[30]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageEntities_CodeBlock.ProtoReflect.Descriptor instead.
+func (*MessageEntities_CodeBlock) Descriptor() ([]byte, []int) {
+	return file_chat_proto_rawDescGZIP(), []int{17, 5}
+}
+
+func (x *MessageEntities_CodeBlock) GetBounds() *MessageEntities_Bounds {
+	if x != nil {
+		return x.Bounds
+	}
+	return nil
+}
+
+type MessageEntities_Spoiler struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Bounds *MessageEntities_Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
+}
+
+func (x *MessageEntities_Spoiler) Reset() {
+	*x = MessageEntities_Spoiler{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_proto_msgTypes[31]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MessageEntities_Spoiler) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageEntities_Spoiler) ProtoMessage() {}
+
+func (x *MessageEntities_Spoiler) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_proto_msgTypes[31]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageEntities_Spoiler.ProtoReflect.Descriptor instead.
+func (*MessageEntities_Spoiler) Descriptor() ([]byte, []int) {
+	return file_chat_proto_rawDescGZIP(), []int{17, 6}
+}
+
+func (x *MessageEntities_Spoiler) GetBounds() *MessageEntities_Bounds {
+	if x != nil {
+		return x.Bounds
+	}
+	return nil
+}
+
+type MessageEntities_GenericEntity struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Bounds *MessageEntities_Bounds `protobuf:"bytes,1,opt,name=bounds,proto3" json:"bounds,omitempty"`
+}
+
+func (x *MessageEntities_GenericEntity) Reset() {
+	*x = MessageEntities_GenericEntity{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_proto_msgTypes[32]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *MessageEntities_GenericEntity) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*MessageEntities_GenericEntity) ProtoMessage() {}
+
+func (x *MessageEntities_GenericEntity) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_proto_msgTypes[32]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use MessageEntities_GenericEntity.ProtoReflect.Descriptor instead.
+func (*MessageEntities_GenericEntity) Descriptor() ([]byte, []int) {
+	return file_chat_proto_rawDescGZIP(), []int{17, 7}
+}
+
+func (x *MessageEntities_GenericEntity) GetBounds() *MessageEntities_Bounds {
+	if x != nil {
+		return x.Bounds
+	}
+	return nil
 }
 
 type CallChatClientRequest_Message struct {
@@ -1909,7 +1917,7 @@ func (x *CallChatClientRequest_Message) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallChatClientRequest_Message.ProtoReflect.Descriptor instead.
 func (*CallChatClientRequest_Message) Descriptor() ([]byte, []int) {
-	return file_chat_proto_rawDescGZIP(), []int{26, 0}
+	return file_chat_proto_rawDescGZIP(), []int{18, 0}
 }
 
 func (x *CallChatClientRequest_Message) GetTime() int64 {
@@ -1961,7 +1969,7 @@ func (x *CallChatClientRequest_Close) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CallChatClientRequest_Close.ProtoReflect.Descriptor instead.
 func (*CallChatClientRequest_Close) Descriptor() ([]byte, []int) {
-	return file_chat_proto_rawDescGZIP(), []int{26, 1}
+	return file_chat_proto_rawDescGZIP(), []int{18, 1}
 }
 
 var File_chat_proto protoreflect.FileDescriptor
@@ -2036,7 +2044,7 @@ var file_chat_proto_rawDesc = []byte{
 	0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01,
 	0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x1d,
 	0x0a, 0x0a, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01,
-	0x28, 0x0c, 0x52, 0x09, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x22, 0xe6, 0x02,
+	0x28, 0x0c, 0x52, 0x09, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x22, 0xfa, 0x02,
 	0x0a, 0x0f, 0x43, 0x68, 0x61, 0x74, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x45, 0x76, 0x65, 0x6e,
 	0x74, 0x12, 0x2b, 0x0a, 0x04, 0x6f, 0x70, 0x65, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32,
 	0x15, 0x2e, 0x43, 0x68, 0x61, 0x74, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x45, 0x76, 0x65, 0x6e,
@@ -2049,97 +2057,113 @@ var file_chat_proto_rawDesc = []byte{
 	0x45, 0x76, 0x65, 0x6e, 0x74, 0x2e, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x48, 0x00, 0x52, 0x05, 0x63,
 	0x6c, 0x6f, 0x73, 0x65, 0x1a, 0x23, 0x0a, 0x04, 0x4f, 0x70, 0x65, 0x6e, 0x12, 0x1b, 0x0a, 0x09,
 	0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52,
-	0x08, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x1a, 0x89, 0x01, 0x0a, 0x07, 0x4d, 0x65,
+	0x08, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x1a, 0x9d, 0x01, 0x0a, 0x07, 0x4d, 0x65,
 	0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x1b, 0x0a, 0x09, 0x73, 0x65, 0x6e, 0x74, 0x5f, 0x74, 0x69,
 	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x08, 0x73, 0x65, 0x6e, 0x74, 0x54, 0x69,
 	0x6d, 0x65, 0x12, 0x1f, 0x0a, 0x0b, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x5f, 0x74, 0x69, 0x6d,
 	0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52, 0x0a, 0x73, 0x65, 0x72, 0x76, 0x65, 0x72, 0x54,
-	0x69, 0x6d, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x18, 0x03, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x12, 0x2c, 0x0a, 0x08, 0x65, 0x6e, 0x74, 0x69, 0x74,
-	0x69, 0x65, 0x73, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x10, 0x2e, 0x4d, 0x65, 0x73, 0x73,
-	0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x52, 0x08, 0x65, 0x6e, 0x74,
-	0x69, 0x74, 0x69, 0x65, 0x73, 0x1a, 0x07, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x42, 0x06,
-	0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0x1e, 0x0a, 0x08, 0x43, 0x68, 0x61, 0x74, 0x52, 0x6f,
-	0x6f, 0x6d, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
-	0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x7d, 0x0a, 0x0a, 0x43, 0x68, 0x61, 0x74, 0x53, 0x65,
-	0x72, 0x76, 0x65, 0x72, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04,
-	0x52, 0x02, 0x69, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x5f,
-	0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65, 0x74, 0x77, 0x6f,
-	0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x16, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x03, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x04, 0x2e, 0x4b, 0x65, 0x79, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x26, 0x0a,
-	0x09, 0x63, 0x68, 0x61, 0x74, 0x5f, 0x72, 0x6f, 0x6f, 0x6d, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b,
-	0x32, 0x09, 0x2e, 0x43, 0x68, 0x61, 0x74, 0x52, 0x6f, 0x6f, 0x6d, 0x52, 0x08, 0x63, 0x68, 0x61,
-	0x74, 0x52, 0x6f, 0x6f, 0x6d, 0x22, 0xba, 0x02, 0x0a, 0x0f, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67,
-	0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x12, 0x1b, 0x0a, 0x05, 0x6c, 0x69, 0x6e,
-	0x6b, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x05, 0x2e, 0x4c, 0x69, 0x6e, 0x6b, 0x52,
-	0x05, 0x6c, 0x69, 0x6e, 0x6b, 0x73, 0x12, 0x1e, 0x0a, 0x06, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x73,
-	0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x06, 0x2e, 0x45, 0x6d, 0x6f, 0x74, 0x65, 0x52, 0x06,
-	0x65, 0x6d, 0x6f, 0x74, 0x65, 0x73, 0x12, 0x1b, 0x0a, 0x05, 0x6e, 0x69, 0x63, 0x6b, 0x73, 0x18,
-	0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x05, 0x2e, 0x4e, 0x69, 0x63, 0x6b, 0x52, 0x05, 0x6e, 0x69,
-	0x63, 0x6b, 0x73, 0x12, 0x18, 0x0a, 0x04, 0x74, 0x61, 0x67, 0x73, 0x18, 0x04, 0x20, 0x03, 0x28,
-	0x0b, 0x32, 0x04, 0x2e, 0x54, 0x61, 0x67, 0x52, 0x04, 0x74, 0x61, 0x67, 0x73, 0x12, 0x2b, 0x0a,
-	0x0b, 0x63, 0x6f, 0x64, 0x65, 0x5f, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x73, 0x18, 0x05, 0x20, 0x03,
-	0x28, 0x0b, 0x32, 0x0a, 0x2e, 0x43, 0x6f, 0x64, 0x65, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x52, 0x0a,
-	0x63, 0x6f, 0x64, 0x65, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x73, 0x12, 0x24, 0x0a, 0x08, 0x73, 0x70,
-	0x6f, 0x69, 0x6c, 0x65, 0x72, 0x73, 0x18, 0x06, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x08, 0x2e, 0x53,
-	0x70, 0x6f, 0x69, 0x6c, 0x65, 0x72, 0x52, 0x08, 0x73, 0x70, 0x6f, 0x69, 0x6c, 0x65, 0x72, 0x73,
-	0x12, 0x2d, 0x0a, 0x0a, 0x67, 0x72, 0x65, 0x65, 0x6e, 0x5f, 0x74, 0x65, 0x78, 0x74, 0x18, 0x07,
-	0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x47, 0x65, 0x6e, 0x65, 0x72, 0x69, 0x63, 0x45, 0x6e,
-	0x74, 0x69, 0x74, 0x79, 0x52, 0x09, 0x67, 0x72, 0x65, 0x65, 0x6e, 0x54, 0x65, 0x78, 0x74, 0x12,
-	0x31, 0x0a, 0x0c, 0x73, 0x65, 0x6c, 0x66, 0x5f, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18,
-	0x08, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0e, 0x2e, 0x47, 0x65, 0x6e, 0x65, 0x72, 0x69, 0x63, 0x45,
-	0x6e, 0x74, 0x69, 0x74, 0x79, 0x52, 0x0b, 0x73, 0x65, 0x6c, 0x66, 0x4d, 0x65, 0x73, 0x73, 0x61,
-	0x67, 0x65, 0x22, 0x30, 0x0a, 0x06, 0x42, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x12, 0x14, 0x0a, 0x05,
-	0x73, 0x74, 0x61, 0x72, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x05, 0x73, 0x74, 0x61,
-	0x72, 0x74, 0x12, 0x10, 0x0a, 0x03, 0x65, 0x6e, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x03, 0x52,
-	0x03, 0x65, 0x6e, 0x64, 0x22, 0x39, 0x0a, 0x04, 0x4c, 0x69, 0x6e, 0x6b, 0x12, 0x1f, 0x0a, 0x06,
-	0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x07, 0x2e, 0x42,
-	0x6f, 0x75, 0x6e, 0x64, 0x73, 0x52, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x12, 0x10, 0x0a,
-	0x03, 0x75, 0x72, 0x6c, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03, 0x75, 0x72, 0x6c, 0x22,
-	0x70, 0x0a, 0x05, 0x45, 0x6d, 0x6f, 0x74, 0x65, 0x12, 0x1f, 0x0a, 0x06, 0x62, 0x6f, 0x75, 0x6e,
-	0x64, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x07, 0x2e, 0x42, 0x6f, 0x75, 0x6e, 0x64,
-	0x73, 0x52, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d,
-	0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x1c, 0x0a,
-	0x09, 0x6d, 0x6f, 0x64, 0x69, 0x66, 0x69, 0x65, 0x72, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x09,
-	0x52, 0x09, 0x6d, 0x6f, 0x64, 0x69, 0x66, 0x69, 0x65, 0x72, 0x73, 0x12, 0x14, 0x0a, 0x05, 0x63,
-	0x6f, 0x6d, 0x62, 0x6f, 0x18, 0x04, 0x20, 0x01, 0x28, 0x03, 0x52, 0x05, 0x63, 0x6f, 0x6d, 0x62,
-	0x6f, 0x22, 0x3b, 0x0a, 0x04, 0x4e, 0x69, 0x63, 0x6b, 0x12, 0x1f, 0x0a, 0x06, 0x62, 0x6f, 0x75,
-	0x6e, 0x64, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x07, 0x2e, 0x42, 0x6f, 0x75, 0x6e,
-	0x64, 0x73, 0x52, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x69,
-	0x63, 0x6b, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x22, 0x3a,
-	0x0a, 0x03, 0x54, 0x61, 0x67, 0x12, 0x1f, 0x0a, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x07, 0x2e, 0x42, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x52, 0x06,
-	0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x2c, 0x0a, 0x09, 0x43, 0x6f,
-	0x64, 0x65, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x12, 0x1f, 0x0a, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64,
-	0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x07, 0x2e, 0x42, 0x6f, 0x75, 0x6e, 0x64, 0x73,
-	0x52, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x22, 0x2a, 0x0a, 0x07, 0x53, 0x70, 0x6f, 0x69,
-	0x6c, 0x65, 0x72, 0x12, 0x1f, 0x0a, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x0b, 0x32, 0x07, 0x2e, 0x42, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x52, 0x06, 0x62, 0x6f,
-	0x75, 0x6e, 0x64, 0x73, 0x22, 0x30, 0x0a, 0x0d, 0x47, 0x65, 0x6e, 0x65, 0x72, 0x69, 0x63, 0x45,
-	0x6e, 0x74, 0x69, 0x74, 0x79, 0x12, 0x1f, 0x0a, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x07, 0x2e, 0x42, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x52, 0x06,
-	0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x22, 0xea, 0x01, 0x0a, 0x15, 0x43, 0x61, 0x6c, 0x6c, 0x43,
-	0x68, 0x61, 0x74, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x12, 0x1b, 0x0a, 0x09, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x04, 0x52, 0x08, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x49, 0x64, 0x12, 0x3a, 0x0a,
-	0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1e,
-	0x2e, 0x43, 0x61, 0x6c, 0x6c, 0x43, 0x68, 0x61, 0x74, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x48, 0x00,
-	0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x34, 0x0a, 0x05, 0x63, 0x6c, 0x6f,
-	0x73, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c, 0x2e, 0x43, 0x61, 0x6c, 0x6c, 0x43,
-	0x68, 0x61, 0x74, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x2e, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x48, 0x00, 0x52, 0x05, 0x63, 0x6c, 0x6f, 0x73, 0x65, 0x1a,
-	0x31, 0x0a, 0x07, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x69,
-	0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x04, 0x74, 0x69, 0x6d, 0x65, 0x12, 0x12,
-	0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x62, 0x6f,
-	0x64, 0x79, 0x1a, 0x07, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x42, 0x06, 0x0a, 0x04, 0x62,
-	0x6f, 0x64, 0x79, 0x42, 0x44, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73,
-	0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x5a, 0x26, 0x67, 0x69,
-	0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61, 0x62,
-	0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70,
-	0x62, 0x3b, 0x70, 0x62, 0xba, 0x02, 0x02, 0x50, 0x42, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f,
-	0x33,
+	0x69, 0x6d, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x18, 0x03, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x12, 0x12, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x18,
+	0x04, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x12, 0x2c, 0x0a, 0x08, 0x65,
+	0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x10, 0x2e,
+	0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x52,
+	0x08, 0x65, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x1a, 0x07, 0x0a, 0x05, 0x43, 0x6c, 0x6f,
+	0x73, 0x65, 0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0x1e, 0x0a, 0x08, 0x43, 0x68,
+	0x61, 0x74, 0x52, 0x6f, 0x6f, 0x6d, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x7d, 0x0a, 0x0a, 0x43, 0x68,
+	0x61, 0x74, 0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77,
+	0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e,
+	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x16, 0x0a, 0x03, 0x6b, 0x65, 0x79,
+	0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x04, 0x2e, 0x4b, 0x65, 0x79, 0x52, 0x03, 0x6b, 0x65,
+	0x79, 0x12, 0x26, 0x0a, 0x09, 0x63, 0x68, 0x61, 0x74, 0x5f, 0x72, 0x6f, 0x6f, 0x6d, 0x18, 0x04,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x09, 0x2e, 0x43, 0x68, 0x61, 0x74, 0x52, 0x6f, 0x6f, 0x6d, 0x52,
+	0x08, 0x63, 0x68, 0x61, 0x74, 0x52, 0x6f, 0x6f, 0x6d, 0x22, 0x8f, 0x08, 0x0a, 0x0f, 0x4d, 0x65,
+	0x73, 0x73, 0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x12, 0x2b, 0x0a,
+	0x05, 0x6c, 0x69, 0x6e, 0x6b, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x15, 0x2e, 0x4d,
+	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x4c,
+	0x69, 0x6e, 0x6b, 0x52, 0x05, 0x6c, 0x69, 0x6e, 0x6b, 0x73, 0x12, 0x2e, 0x0a, 0x06, 0x65, 0x6d,
+	0x6f, 0x74, 0x65, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x16, 0x2e, 0x4d, 0x65, 0x73,
+	0x73, 0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x45, 0x6d, 0x6f,
+	0x74, 0x65, 0x52, 0x06, 0x65, 0x6d, 0x6f, 0x74, 0x65, 0x73, 0x12, 0x2b, 0x0a, 0x05, 0x6e, 0x69,
+	0x63, 0x6b, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x15, 0x2e, 0x4d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x4e, 0x69, 0x63, 0x6b,
+	0x52, 0x05, 0x6e, 0x69, 0x63, 0x6b, 0x73, 0x12, 0x28, 0x0a, 0x04, 0x74, 0x61, 0x67, 0x73, 0x18,
+	0x04, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x14, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x45,
+	0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x54, 0x61, 0x67, 0x52, 0x04, 0x74, 0x61, 0x67,
+	0x73, 0x12, 0x3b, 0x0a, 0x0b, 0x63, 0x6f, 0x64, 0x65, 0x5f, 0x62, 0x6c, 0x6f, 0x63, 0x6b, 0x73,
+	0x18, 0x05, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65,
+	0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x43, 0x6f, 0x64, 0x65, 0x42, 0x6c, 0x6f,
+	0x63, 0x6b, 0x52, 0x0a, 0x63, 0x6f, 0x64, 0x65, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x73, 0x12, 0x34,
+	0x0a, 0x08, 0x73, 0x70, 0x6f, 0x69, 0x6c, 0x65, 0x72, 0x73, 0x18, 0x06, 0x20, 0x03, 0x28, 0x0b,
+	0x32, 0x18, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69,
+	0x65, 0x73, 0x2e, 0x53, 0x70, 0x6f, 0x69, 0x6c, 0x65, 0x72, 0x52, 0x08, 0x73, 0x70, 0x6f, 0x69,
+	0x6c, 0x65, 0x72, 0x73, 0x12, 0x3d, 0x0a, 0x0a, 0x67, 0x72, 0x65, 0x65, 0x6e, 0x5f, 0x74, 0x65,
+	0x78, 0x74, 0x18, 0x07, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1e, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x47, 0x65, 0x6e, 0x65, 0x72,
+	0x69, 0x63, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x52, 0x09, 0x67, 0x72, 0x65, 0x65, 0x6e, 0x54,
+	0x65, 0x78, 0x74, 0x12, 0x41, 0x0a, 0x0c, 0x73, 0x65, 0x6c, 0x66, 0x5f, 0x6d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x65, 0x18, 0x08, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1e, 0x2e, 0x4d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x47, 0x65, 0x6e, 0x65,
+	0x72, 0x69, 0x63, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x52, 0x0b, 0x73, 0x65, 0x6c, 0x66, 0x4d,
+	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x1a, 0x30, 0x0a, 0x06, 0x42, 0x6f, 0x75, 0x6e, 0x64, 0x73,
+	0x12, 0x14, 0x0a, 0x05, 0x73, 0x74, 0x61, 0x72, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52,
+	0x05, 0x73, 0x74, 0x61, 0x72, 0x74, 0x12, 0x10, 0x0a, 0x03, 0x65, 0x6e, 0x64, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x03, 0x52, 0x03, 0x65, 0x6e, 0x64, 0x1a, 0x49, 0x0a, 0x04, 0x4c, 0x69, 0x6e, 0x6b,
+	0x12, 0x2f, 0x0a, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x17, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69,
+	0x65, 0x73, 0x2e, 0x42, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x52, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64,
+	0x73, 0x12, 0x10, 0x0a, 0x03, 0x75, 0x72, 0x6c, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x03,
+	0x75, 0x72, 0x6c, 0x1a, 0x80, 0x01, 0x0a, 0x05, 0x45, 0x6d, 0x6f, 0x74, 0x65, 0x12, 0x2f, 0x0a,
+	0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e,
+	0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x2e,
+	0x42, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x52, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x12, 0x12,
+	0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61,
+	0x6d, 0x65, 0x12, 0x1c, 0x0a, 0x09, 0x6d, 0x6f, 0x64, 0x69, 0x66, 0x69, 0x65, 0x72, 0x73, 0x18,
+	0x03, 0x20, 0x03, 0x28, 0x09, 0x52, 0x09, 0x6d, 0x6f, 0x64, 0x69, 0x66, 0x69, 0x65, 0x72, 0x73,
+	0x12, 0x14, 0x0a, 0x05, 0x63, 0x6f, 0x6d, 0x62, 0x6f, 0x18, 0x04, 0x20, 0x01, 0x28, 0x03, 0x52,
+	0x05, 0x63, 0x6f, 0x6d, 0x62, 0x6f, 0x1a, 0x4b, 0x0a, 0x04, 0x4e, 0x69, 0x63, 0x6b, 0x12, 0x2f,
+	0x0a, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17,
+	0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73,
+	0x2e, 0x42, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x52, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x12,
+	0x12, 0x0a, 0x04, 0x6e, 0x69, 0x63, 0x6b, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e,
+	0x69, 0x63, 0x6b, 0x1a, 0x4a, 0x0a, 0x03, 0x54, 0x61, 0x67, 0x12, 0x2f, 0x0a, 0x06, 0x62, 0x6f,
+	0x75, 0x6e, 0x64, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x4d, 0x65, 0x73,
+	0x73, 0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x42, 0x6f, 0x75,
+	0x6e, 0x64, 0x73, 0x52, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x12, 0x12, 0x0a, 0x04, 0x6e,
+	0x61, 0x6d, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x1a,
+	0x3c, 0x0a, 0x09, 0x43, 0x6f, 0x64, 0x65, 0x42, 0x6c, 0x6f, 0x63, 0x6b, 0x12, 0x2f, 0x0a, 0x06,
+	0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x4d,
+	0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x42,
+	0x6f, 0x75, 0x6e, 0x64, 0x73, 0x52, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x1a, 0x3a, 0x0a,
+	0x07, 0x53, 0x70, 0x6f, 0x69, 0x6c, 0x65, 0x72, 0x12, 0x2f, 0x0a, 0x06, 0x62, 0x6f, 0x75, 0x6e,
+	0x64, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x4d, 0x65, 0x73, 0x73, 0x61,
+	0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x42, 0x6f, 0x75, 0x6e, 0x64,
+	0x73, 0x52, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x1a, 0x40, 0x0a, 0x0d, 0x47, 0x65, 0x6e,
+	0x65, 0x72, 0x69, 0x63, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x79, 0x12, 0x2f, 0x0a, 0x06, 0x62, 0x6f,
+	0x75, 0x6e, 0x64, 0x73, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x17, 0x2e, 0x4d, 0x65, 0x73,
+	0x73, 0x61, 0x67, 0x65, 0x45, 0x6e, 0x74, 0x69, 0x74, 0x69, 0x65, 0x73, 0x2e, 0x42, 0x6f, 0x75,
+	0x6e, 0x64, 0x73, 0x52, 0x06, 0x62, 0x6f, 0x75, 0x6e, 0x64, 0x73, 0x22, 0xea, 0x01, 0x0a, 0x15,
+	0x43, 0x61, 0x6c, 0x6c, 0x43, 0x68, 0x61, 0x74, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1b, 0x0a, 0x09, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x5f,
+	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x08, 0x63, 0x6c, 0x69, 0x65, 0x6e, 0x74,
+	0x49, 0x64, 0x12, 0x3a, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x0b, 0x32, 0x1e, 0x2e, 0x43, 0x61, 0x6c, 0x6c, 0x43, 0x68, 0x61, 0x74, 0x43, 0x6c,
+	0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x4d, 0x65, 0x73, 0x73,
+	0x61, 0x67, 0x65, 0x48, 0x00, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x34,
+	0x0a, 0x05, 0x63, 0x6c, 0x6f, 0x73, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1c, 0x2e,
+	0x43, 0x61, 0x6c, 0x6c, 0x43, 0x68, 0x61, 0x74, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x48, 0x00, 0x52, 0x05, 0x63,
+	0x6c, 0x6f, 0x73, 0x65, 0x1a, 0x31, 0x0a, 0x07, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12,
+	0x12, 0x0a, 0x04, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x04, 0x74,
+	0x69, 0x6d, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28,
+	0x09, 0x52, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x1a, 0x07, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65,
+	0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x42, 0x44, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73,
+	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65,
+	0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f,
+	0x70, 0x6b, 0x67, 0x2f, 0x70, 0x62, 0x3b, 0x70, 0x62, 0xba, 0x02, 0x02, 0x50, 0x42, 0x62, 0x06,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -2174,21 +2198,21 @@ var file_chat_proto_goTypes = []interface{}{
 	(*ChatRoom)(nil),                      // 15: ChatRoom
 	(*ChatServer)(nil),                    // 16: ChatServer
 	(*MessageEntities)(nil),               // 17: MessageEntities
-	(*Bounds)(nil),                        // 18: Bounds
-	(*Link)(nil),                          // 19: Link
-	(*Emote)(nil),                         // 20: Emote
-	(*Nick)(nil),                          // 21: Nick
-	(*Tag)(nil),                           // 22: Tag
-	(*CodeBlock)(nil),                     // 23: CodeBlock
-	(*Spoiler)(nil),                       // 24: Spoiler
-	(*GenericEntity)(nil),                 // 25: GenericEntity
-	(*CallChatClientRequest)(nil),         // 26: CallChatClientRequest
-	(*ChatServerEvent_Open)(nil),          // 27: ChatServerEvent.Open
-	(*ChatServerEvent_Close)(nil),         // 28: ChatServerEvent.Close
-	(*CallChatServerRequest_Close)(nil),   // 29: CallChatServerRequest.Close
-	(*ChatClientEvent_Open)(nil),          // 30: ChatClientEvent.Open
-	(*ChatClientEvent_Message)(nil),       // 31: ChatClientEvent.Message
-	(*ChatClientEvent_Close)(nil),         // 32: ChatClientEvent.Close
+	(*CallChatClientRequest)(nil),         // 18: CallChatClientRequest
+	(*ChatServerEvent_Open)(nil),          // 19: ChatServerEvent.Open
+	(*ChatServerEvent_Close)(nil),         // 20: ChatServerEvent.Close
+	(*CallChatServerRequest_Close)(nil),   // 21: CallChatServerRequest.Close
+	(*ChatClientEvent_Open)(nil),          // 22: ChatClientEvent.Open
+	(*ChatClientEvent_Message)(nil),       // 23: ChatClientEvent.Message
+	(*ChatClientEvent_Close)(nil),         // 24: ChatClientEvent.Close
+	(*MessageEntities_Bounds)(nil),        // 25: MessageEntities.Bounds
+	(*MessageEntities_Link)(nil),          // 26: MessageEntities.Link
+	(*MessageEntities_Emote)(nil),         // 27: MessageEntities.Emote
+	(*MessageEntities_Nick)(nil),          // 28: MessageEntities.Nick
+	(*MessageEntities_Tag)(nil),           // 29: MessageEntities.Tag
+	(*MessageEntities_CodeBlock)(nil),     // 30: MessageEntities.CodeBlock
+	(*MessageEntities_Spoiler)(nil),       // 31: MessageEntities.Spoiler
+	(*MessageEntities_GenericEntity)(nil), // 32: MessageEntities.GenericEntity
 	(*CallChatClientRequest_Message)(nil), // 33: CallChatClientRequest.Message
 	(*CallChatClientRequest_Close)(nil),   // 34: CallChatClientRequest.Close
 	(*Key)(nil),                           // 35: Key
@@ -2201,32 +2225,32 @@ var file_chat_proto_depIdxs = []int32{
 	16, // 4: GetChatServerResponse.chat_server:type_name -> ChatServer
 	16, // 5: GetChatServersResponse.chat_servers:type_name -> ChatServer
 	16, // 6: OpenChatServerRequest.server:type_name -> ChatServer
-	27, // 7: ChatServerEvent.open:type_name -> ChatServerEvent.Open
-	28, // 8: ChatServerEvent.close:type_name -> ChatServerEvent.Close
-	29, // 9: CallChatServerRequest.close:type_name -> CallChatServerRequest.Close
-	30, // 10: ChatClientEvent.open:type_name -> ChatClientEvent.Open
-	31, // 11: ChatClientEvent.message:type_name -> ChatClientEvent.Message
-	32, // 12: ChatClientEvent.close:type_name -> ChatClientEvent.Close
+	19, // 7: ChatServerEvent.open:type_name -> ChatServerEvent.Open
+	20, // 8: ChatServerEvent.close:type_name -> ChatServerEvent.Close
+	21, // 9: CallChatServerRequest.close:type_name -> CallChatServerRequest.Close
+	22, // 10: ChatClientEvent.open:type_name -> ChatClientEvent.Open
+	23, // 11: ChatClientEvent.message:type_name -> ChatClientEvent.Message
+	24, // 12: ChatClientEvent.close:type_name -> ChatClientEvent.Close
 	35, // 13: ChatServer.key:type_name -> Key
 	15, // 14: ChatServer.chat_room:type_name -> ChatRoom
-	19, // 15: MessageEntities.links:type_name -> Link
-	20, // 16: MessageEntities.emotes:type_name -> Emote
-	21, // 17: MessageEntities.nicks:type_name -> Nick
-	22, // 18: MessageEntities.tags:type_name -> Tag
-	23, // 19: MessageEntities.code_blocks:type_name -> CodeBlock
-	24, // 20: MessageEntities.spoilers:type_name -> Spoiler
-	25, // 21: MessageEntities.green_text:type_name -> GenericEntity
-	25, // 22: MessageEntities.self_message:type_name -> GenericEntity
-	18, // 23: Link.bounds:type_name -> Bounds
-	18, // 24: Emote.bounds:type_name -> Bounds
-	18, // 25: Nick.bounds:type_name -> Bounds
-	18, // 26: Tag.bounds:type_name -> Bounds
-	18, // 27: CodeBlock.bounds:type_name -> Bounds
-	18, // 28: Spoiler.bounds:type_name -> Bounds
-	18, // 29: GenericEntity.bounds:type_name -> Bounds
-	33, // 30: CallChatClientRequest.message:type_name -> CallChatClientRequest.Message
-	34, // 31: CallChatClientRequest.close:type_name -> CallChatClientRequest.Close
-	17, // 32: ChatClientEvent.Message.entities:type_name -> MessageEntities
+	26, // 15: MessageEntities.links:type_name -> MessageEntities.Link
+	27, // 16: MessageEntities.emotes:type_name -> MessageEntities.Emote
+	28, // 17: MessageEntities.nicks:type_name -> MessageEntities.Nick
+	29, // 18: MessageEntities.tags:type_name -> MessageEntities.Tag
+	30, // 19: MessageEntities.code_blocks:type_name -> MessageEntities.CodeBlock
+	31, // 20: MessageEntities.spoilers:type_name -> MessageEntities.Spoiler
+	32, // 21: MessageEntities.green_text:type_name -> MessageEntities.GenericEntity
+	32, // 22: MessageEntities.self_message:type_name -> MessageEntities.GenericEntity
+	33, // 23: CallChatClientRequest.message:type_name -> CallChatClientRequest.Message
+	34, // 24: CallChatClientRequest.close:type_name -> CallChatClientRequest.Close
+	17, // 25: ChatClientEvent.Message.entities:type_name -> MessageEntities
+	25, // 26: MessageEntities.Link.bounds:type_name -> MessageEntities.Bounds
+	25, // 27: MessageEntities.Emote.bounds:type_name -> MessageEntities.Bounds
+	25, // 28: MessageEntities.Nick.bounds:type_name -> MessageEntities.Bounds
+	25, // 29: MessageEntities.Tag.bounds:type_name -> MessageEntities.Bounds
+	25, // 30: MessageEntities.CodeBlock.bounds:type_name -> MessageEntities.Bounds
+	25, // 31: MessageEntities.Spoiler.bounds:type_name -> MessageEntities.Bounds
+	25, // 32: MessageEntities.GenericEntity.bounds:type_name -> MessageEntities.Bounds
 	33, // [33:33] is the sub-list for method output_type
 	33, // [33:33] is the sub-list for method input_type
 	33, // [33:33] is the sub-list for extension type_name
@@ -2458,102 +2482,6 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Bounds); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_chat_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Link); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_chat_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Emote); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_chat_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Nick); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_chat_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Tag); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_chat_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CodeBlock); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_chat_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*Spoiler); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_chat_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GenericEntity); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_chat_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CallChatClientRequest); i {
 			case 0:
 				return &v.state
@@ -2565,7 +2493,7 @@ func file_chat_proto_init() {
 				return nil
 			}
 		}
-		file_chat_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
+		file_chat_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ChatServerEvent_Open); i {
 			case 0:
 				return &v.state
@@ -2577,7 +2505,7 @@ func file_chat_proto_init() {
 				return nil
 			}
 		}
-		file_chat_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
+		file_chat_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ChatServerEvent_Close); i {
 			case 0:
 				return &v.state
@@ -2589,7 +2517,7 @@ func file_chat_proto_init() {
 				return nil
 			}
 		}
-		file_chat_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
+		file_chat_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CallChatServerRequest_Close); i {
 			case 0:
 				return &v.state
@@ -2601,7 +2529,7 @@ func file_chat_proto_init() {
 				return nil
 			}
 		}
-		file_chat_proto_msgTypes[30].Exporter = func(v interface{}, i int) interface{} {
+		file_chat_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ChatClientEvent_Open); i {
 			case 0:
 				return &v.state
@@ -2613,7 +2541,7 @@ func file_chat_proto_init() {
 				return nil
 			}
 		}
-		file_chat_proto_msgTypes[31].Exporter = func(v interface{}, i int) interface{} {
+		file_chat_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ChatClientEvent_Message); i {
 			case 0:
 				return &v.state
@@ -2625,8 +2553,104 @@ func file_chat_proto_init() {
 				return nil
 			}
 		}
-		file_chat_proto_msgTypes[32].Exporter = func(v interface{}, i int) interface{} {
+		file_chat_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*ChatClientEvent_Close); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MessageEntities_Bounds); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MessageEntities_Link); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MessageEntities_Emote); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MessageEntities_Nick); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MessageEntities_Tag); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_proto_msgTypes[30].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MessageEntities_CodeBlock); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_proto_msgTypes[31].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MessageEntities_Spoiler); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_proto_msgTypes[32].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*MessageEntities_GenericEntity); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2674,7 +2698,7 @@ func file_chat_proto_init() {
 		(*ChatClientEvent_Message_)(nil),
 		(*ChatClientEvent_Close_)(nil),
 	}
-	file_chat_proto_msgTypes[26].OneofWrappers = []interface{}{
+	file_chat_proto_msgTypes[18].OneofWrappers = []interface{}{
 		(*CallChatClientRequest_Message_)(nil),
 		(*CallChatClientRequest_Close_)(nil),
 	}

@@ -5,6 +5,7 @@ import { PrivateRoute } from "../components/PrivateRoute";
 import Activity from "../pages/Activity";
 import BootstrapClientsPage from "../pages/BootstrapClients";
 import ChatServersPage from "../pages/ChatServers";
+import ChatTest from "../pages/ChatTest";
 import Directory from "../pages/Directory";
 import HomePage from "../pages/Home";
 import LoginPage from "../pages/Login";
@@ -25,6 +26,7 @@ const Router = () => {
       <PrivateRoute path="/chat-servers" exact component={ChatServersPage} />
       <PrivateRoute path="/directory/:networkKey" exact component={Directory} />
       <PrivateRoute path="/activity" exact component={Activity} />
+      <PrivateRoute path="/chat-test" exact component={ChatTest} />
       <Route component={NotFoundPage} />
     </Switch>
   );
