@@ -155,8 +155,15 @@ podSecurityContext: {}
 #           values:
 #           - S1
 #       topologyKey: failure-domain.beta.kubernetes.io/zone
-affinity: {}          
-
+affinity:
+  nodeAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      nodeSelectorTerms:
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - controller      
 # persistence:
 #   enabled: true
 #   storageClassName: local-path
