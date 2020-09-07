@@ -4,13 +4,13 @@
     "sourceMap": true,
     "noImplicitAny": false,
     "module": "commonjs",
-    "target": "es2018",
+    "target": "es2019",
     "jsx": "react",
     "allowJs": true,
     "moduleResolution": "node",
     "esModuleInterop": true,
     "allowSyntheticDefaultImports": true,
-    "lib": ["dom", "es6", "es2018", "esnext.asynciterable"]
+    "lib": ["dom", "es6", "es2019", "esnext.asynciterable"]
   },
   "include": [
     ".eslintrc.js",

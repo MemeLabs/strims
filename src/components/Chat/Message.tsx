@@ -18,19 +18,9 @@ const Link: FunctionComponent<LinkProps> = ({ children, entity }) => (
 interface EmoteProps {
   entity: MessageEntities.IEmote;
 }
-const Emote: FunctionComponent<EmoteProps> = ({ children, entity }) =>
-  (entity.modifiers || []).reduce(
-    (emote, modifier) => (
-      <span
-        className={clsx([
-          "chat_message__emote_container",
-          `chat_message__emote_container--emote_${entity.name}`,
-          `chat_message__emote_container--${modifier}`,
-        ])}
-      >
-        {emote}
-      </span>
-    ),
+const Emote: FunctionComponent<EmoteProps> = ({ children, entity }) => {
+  // TODO: optionally disable emotes/modifiers
+  let emote = (
     <span
       title={children.toString()}
       className={clsx(["chat_message__emote", `chat_message__emote--${entity.name}`])}
@@ -38,6 +28,26 @@ const Emote: FunctionComponent<EmoteProps> = ({ children, entity }) =>
       {children}
     </span>
   );
+
+  if (entity.modifiers) {
+    emote = entity.modifiers.reduce(
+      (emote, modifier) => (
+        <span
+          className={clsx([
+            "chat_message__emote_container",
+            `chat_message__emote_container--emote_${entity.name}`,
+            `chat_message__emote_container--${modifier}`,
+          ])}
+        >
+          {emote}
+        </span>
+      ),
+      emote
+    );
+  }
+
+  return emote;
+};
 
 interface NickProps {
   entity: MessageEntities.INick;
@@ -85,6 +95,7 @@ const CodeBlock: FunctionComponent<CodeBlockProps> = ({ children }) => (
 interface GreenTextProps {
   entity: MessageEntities.IGenericEntity;
 }
+// TODO: optionally disable
 const GreenText: FunctionComponent<GreenTextProps> = ({ children }) => (
   <span className="chat_message__greentext">{children}</span>
 );
