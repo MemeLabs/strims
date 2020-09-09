@@ -1,8 +1,9 @@
 import clsx from "clsx";
+import filterObj from "filter-obj";
 import Prism from "prismjs";
 import React, { KeyboardEvent, useCallback, useMemo, useState } from "react";
 import { FunctionComponent } from "react";
-import { Editor, Node, Range, Text, Transforms, createEditor } from "slate";
+import { Editor, Node, NodeEntry, Path, Point, Range, Text, Transforms, createEditor } from "slate";
 import { Editable, Slate, useFocused, useSelected, withReact } from "slate-react";
 import urlRegex from "url-regex-safe";
 
@@ -10,133 +11,155 @@ import { emotes, modifiers } from "./test-emotes";
 import users from "./test-users";
 
 const tags = ["nsfw", "weeb", "nsfl", "loud"];
+const commands = [
+  "help",
+  "emotes",
+  "me",
+  "message",
+  "msg",
+  "ignore",
+  "unignore",
+  "highlight",
+  "unhighlight",
+  "maxlines",
+  "mute",
+  "unmute",
+  "subonly",
+  "ban",
+  "unban",
+  "timestampformat",
+  "tag",
+  "untag",
+  "exit",
+  "hideemote",
+  "unhideemote",
+];
+
+type SearchState =
+  | { enabled: false }
+  | {
+      enabled: true;
+      debounceDelay: number;
+      queryMode: "substring" | "prefix";
+      sources: string[][];
+      query: string;
+      target: Range;
+      modifierContext: string | undefined;
+      modifierTarget: Range;
+    };
 
 interface ComposerProps {}
 
 const Composer: FunctionComponent<ComposerProps> = (props) => {
-  const [target, setTarget] = useState<Range | undefined>();
   const [index, setIndex] = useState(0);
-  const [search, setSearch] = useState("");
+  const [search, setSearch] = useState<SearchState>({ enabled: false });
   const editor = useMemo(() => withReact(createEditor()), []);
   const [value, setValue] = useState([
     {
       type: "paragraph",
-      children: [{ text: "|| test \\|| test" }],
+      children: [{ text: "" }],
     },
   ] as Node[]);
 
   const emoteNames = useMemo(() => emotes.map(({ name }) => name), [emotes]);
   const nicks = useMemo(() => users.map(({ nick }) => nick), [users]);
   const matches = useMemo(() => {
-    if (!search) {
+    if (!search.enabled) {
       return [];
     }
 
-    // TODO: prioritize recently used
-    const query = search.toLowerCase();
-    const match = (t: string) => t.toLowerCase().startsWith(query);
-    return [
-      ...emoteNames.filter(match),
-      ...nicks.filter(match),
-      ...tags.filter(match),
-      ...modifiers.filter(match),
-    ].slice(0, 10);
-  }, [emoteNames, search]);
+    console.log(search);
+    const query = search.query.toLowerCase();
+    const test =
+      search.queryMode === "prefix"
+        ? (term: string) => term.toLowerCase().startsWith(query)
+        : (term: string) => term.toLowerCase().indexOf(query) !== -1;
+
+    return search.sources
+      .map((s) => s.filter(test))
+      .flat()
+      .slice(0, 10);
+  }, [search]);
 
   const renderLeaf = useCallback((props) => <Leaf {...props} />, []);
 
-  const language = useMemo(() => {
-    const nestableEntities = {
-      code: {
-        pattern: /`(\\`|[^`])*(`|$)/,
-        greedy: true,
-      },
-      emote: new RegExp(`(${emoteNames.join("|")})(:(${modifiers.join("|")}))*`),
-      nick: new RegExp(nicks.join("|")),
-      tag: new RegExp(tags.join("|")),
-      url: urlRegex(),
-    };
-    const entities = {
-      spoiler: {
-        pattern: /\|\|(\\\||\|(?!\|)|[^|])*(\|\||$)/,
-        inside: nestableEntities,
-      },
-      ...nestableEntities,
-    };
-    return {
-      greentext: {
-        pattern: /^>.*/,
-        greedy: true,
-        inside: entities,
-      },
-      self: {
-        pattern: /^\/me .*/,
-        greedy: true,
-        inside: entities,
-      },
-      ...entities,
-    };
-  }, [emoteNames, modifiers, nicks, tags]);
+  const grammar = useMemo(() => getGrammar(emoteNames, modifiers, nicks, tags), [
+    emoteNames,
+    modifiers,
+    nicks,
+    tags,
+  ]);
 
-  const decorate = useCallback(([node, path]) => {
-    const ranges = [];
-
-    if (!Text.isText(node)) {
-      return ranges;
-    }
-
-    const appendRanges = (token: string | Prism.Token, start: number = 0) => {
-      if (typeof token === "string") {
-        return token.length;
-      }
-
-      const content = Array.isArray(token.content) ? token.content : [token.content];
-      const length: number = content.reduce((l: number, t) => l + appendRanges(t, start + l), 0);
-
-      ranges.push({
-        [token.type]: true,
-        anchor: { path, offset: start },
-        focus: { path, offset: start + length },
-      });
-
-      return length;
-    };
-
-    const tokens = Prism.tokenize(node.text, language);
-    tokens.reduce((l: number, t) => l + appendRanges(t, l), 0);
-
-    return ranges;
-  }, []);
+  const decorate = useCallback(
+    ([node, path]: NodeEntry<Node>) =>
+      Text.isText(node) ? getRanges(node.text, path, grammar) : [],
+    [grammar]
+  );
 
   const onChange = (newValue) => {
     setValue(newValue);
+
     const { selection } = editor;
-
-    if (selection && Range.isCollapsed(selection)) {
-      const [cursor] = Range.edges(selection);
-      const wordStart = Editor.before(editor, cursor, { unit: "word" });
-      const wordEnd = wordStart && Editor.after(editor, wordStart, { unit: "word" });
-      const wordRange = wordEnd && Editor.range(editor, wordStart, wordEnd);
-      const text = wordRange && Editor.string(editor, wordRange);
-
-      // TODO: context aware autocomplete for modifiers
-      const prevNode = wordRange && Editor.previous(editor, { at: wordRange });
-
-      console.log({ text, prevNode });
-
-      if (text) {
-        setSearch(text);
-        setTarget(wordRange);
-        return;
-      }
+    const [node, path] = Editor.node(editor, selection);
+    if (!selection || !Range.isCollapsed(selection) || !Text.isText(node)) {
+      setSearch({ enabled: false });
+      return;
     }
 
-    setTarget(null);
+    const { text } = node;
+    const { offset } = Range.start(selection);
+    const [, contiguousContext, prefix, delim, punct, queryStart] =
+      /(\w(?=::|@))?((\s*(:|@|^\/)?)?(\w*))$/.exec(text.substring(0, offset)) || [];
+    const [queryEnd] = /^\w+/.exec(text.substring(offset)) || [];
+    const query = (queryStart || "") + (queryEnd || "");
+
+    const targetStart = { path, offset: offset - (queryStart?.length || 0) - (punct?.length || 0) };
+    const targetEnd = { path, offset: offset + (queryEnd?.length || 0) };
+    const target = Editor.range(editor, targetStart, targetEnd);
+
+    const contextRanges = getRanges(text, path, filterObj(grammar, ["code", "emote", "url"]));
+
+    const contextEnd = delim && { path, offset: offset - prefix.length };
+    const modifierContextRange =
+      contextEnd && contextRanges.find((r) => r.emote && Range.includes(r, contextEnd));
+    const modifierContext = modifierContextRange && Editor.string(editor, modifierContextRange);
+    const modifierTarget = modifierContextRange && Editor.range(editor, contextEnd, targetEnd);
+
+    const invalidContext =
+      (contiguousContext && !modifierContext) ||
+      contextRanges.some((r) => (r.code || r.url) && Range.includes(r, selection));
+
+    const sources = [];
+    if (punct === ":") {
+      if (modifierContext) {
+        sources.push(modifiers);
+      }
+      if (!contiguousContext) {
+        sources.push(emoteNames);
+      }
+    } else if (punct === "@") {
+      sources.push(nicks);
+    } else if (punct === "/") {
+      sources.push(commands);
+    } else {
+      sources.push(emoteNames, nicks, tags);
+    }
+
+    setSearch({
+      enabled: !invalidContext && !!(punct || query) && sources.length > 0,
+      debounceDelay: punct ? 0 : 100,
+      queryMode: punct ? "substring" : "prefix",
+      sources,
+      query,
+      target,
+      modifierContext,
+      modifierTarget,
+    });
   };
 
   const onKeyDown = useCallback(
     (event: KeyboardEvent<HTMLDivElement>) => {
-      if (!target) {
+      if (!search.enabled) {
         return;
       }
 
@@ -157,27 +180,35 @@ const Composer: FunctionComponent<ComposerProps> = (props) => {
         case "Enter": {
           // TODO: tab multiple times to select autocomplete
           event.preventDefault();
-          Transforms.select(editor, target);
+          Transforms.select(editor, search.target);
           Transforms.insertText(editor, matches[index]);
           Transforms.move(editor);
-          setTarget(null);
+          setSearch({ enabled: false });
           break;
         }
         case "Escape": {
           event.preventDefault();
-          setTarget(null);
+          setSearch({ enabled: false });
           break;
         }
       }
     },
-    [index, search, target]
+    [index, search]
   );
 
   // console.log({ target, search, index });
 
   return (
     <div className="chat__composer">
-      {!!matches.length && <div className="chat__composer__autocomplete">{matches.join(", ")}</div>}
+      {search.enabled && matches.length > 0 && (
+        <div className="chat__composer__autocomplete">
+          <ul>
+            {matches.map((m, i) => (
+              <li key={i}>{m}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       <Slate editor={editor} value={value} onChange={onChange}>
         <Editable
           decorate={decorate}
@@ -191,6 +222,68 @@ const Composer: FunctionComponent<ComposerProps> = (props) => {
 };
 
 export default Composer;
+
+const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags: string[]) => {
+  const nestableEntities = {
+    code: {
+      pattern: /`(\\`|[^`])*(`|$)/,
+      greedy: true,
+    },
+    emote: {
+      pattern: new RegExp(`(\\W|^)((${emotes.join("|")})(:(${modifiers.join("|")}))*)(?=\\W|$)`),
+      lookbehind: true,
+    },
+    nick: {
+      pattern: new RegExp(`(\\W|^)(${nicks.join("|")})(?=\\W|$)`),
+      lookbehind: true,
+    },
+    tag: {
+      pattern: new RegExp(`(\\W|^)(${tags.join("|")})(?=\\W|$)`),
+      lookbehind: true,
+    },
+    url: urlRegex(),
+  };
+  const entities = {
+    spoiler: {
+      pattern: /\|\|(\\\||\|(?!\|)|[^|])*(\|\||$)/,
+      inside: nestableEntities,
+    },
+    ...nestableEntities,
+  };
+  return {
+    greentext: {
+      pattern: /^>.*/,
+      greedy: true,
+      inside: entities,
+    },
+    self: {
+      pattern: /^\/me .*/,
+      greedy: true,
+      inside: entities,
+    },
+    ...entities,
+  };
+};
+
+const getRanges = (text: string, path: Path, grammar: Prism.Grammar) => {
+  const ranges: Range[] = [];
+
+  const appendRanges = (tokens: (string | Prism.Token)[], start: number = 0) =>
+    tokens.reduce((offset, token) => {
+      if (typeof token !== "string") {
+        ranges.push({
+          [token.type]: true,
+          anchor: { path, offset: offset },
+          focus: { path, offset: offset + token.length },
+        });
+        appendRanges(Array.isArray(token.content) ? token.content : [token.content], offset);
+      }
+      return offset + token.length;
+    }, start);
+  appendRanges(Prism.tokenize(text, grammar));
+
+  return ranges;
+};
 
 const Leaf = ({ attributes, children, leaf }) => {
   return (

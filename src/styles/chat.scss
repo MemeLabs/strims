@@ -23,6 +23,14 @@
     border: 1px solid $slate-500;
 
     &__span {
+      &--self {
+        font-style: italic;
+      }
+
+      &--greentext {
+        color: green;
+      }
+
       &--code {
         color: gray;
         font-family: monospace;
@@ -47,21 +55,20 @@
       &--nick {
         color: skyblue;
       }
-
-      &--self {
-        font-style: italic;
-      }
-
-      &--greentext {
-        color: green;
-      }
     }
 
     &__autocomplete {
       position: absolute;
-      transform: translate(0, -35px);
-      padding: 3px 3px 2px;
-      background: $slate-100;
+
+      ul {
+        position: absolute;
+        background: black;
+        bottom: 20px;
+        display: block;
+        list-style: none;
+        margin: 0;
+        padding: 10px;
+      }
     }
   }
 }
