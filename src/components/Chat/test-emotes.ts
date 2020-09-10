@@ -1,4 +1,4 @@
-interface EmoteVersion {
+export interface EmoteVersion {
   url?: string;
   path: string;
   animated: boolean;
@@ -9,7 +9,7 @@ interface EmoteVersion {
   size: "1x" | "2x" | "4x";
 }
 
-interface Emote {
+export interface Emote {
   name: string;
   versions: EmoteVersion[];
 }
@@ -3653,15 +3653,17 @@ emotes.forEach((emote) =>
 );
 
 export const modifiers = [
-  "mirror",
+  "fast",
   "flip",
-  "rain",
-  "snow",
-  "rustle",
-  "worth",
+  "hyper",
+  "lag",
   "love",
+  "mirror",
+  "rain",
+  "rustle",
+  "slow",
+  "snow",
   "spin",
   "wide",
-  "lag",
-  "hyper",
+  "worth",
 ];

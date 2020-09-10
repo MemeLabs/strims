@@ -7,6 +7,7 @@ import Message from "../components/Chat/Message";
 import emotes from "../components/Chat/test-emotes";
 import history from "../components/Chat/test-history";
 import { MainLayout } from "../components/MainLayout";
+import { Provider } from "../contexts/Chat";
 
 const ChatTest = () => {
   return (
@@ -19,14 +20,16 @@ const ChatTest = () => {
         <header className="home_page__subheader"></header>
         <header className="home_page__chat__promo"></header>
         <div className="home_page__chat chat">
-          <div className="chat__messages">
-            {history.map((m, i) => (
-              <Message message={m} key={i} />
-            ))}
-          </div>
-          <div className="chat__footer">
-            <Composer />
-          </div>
+          <Provider>
+            <div className="chat__messages">
+              {history.map((m, i) => (
+                <Message message={m} key={i} />
+              ))}
+            </div>
+            <div className="chat__footer">
+              <Composer />
+            </div>
+          </Provider>
         </div>
       </aside>
     </MainLayout>

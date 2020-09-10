@@ -4,62 +4,40 @@ import { FunctionComponent } from "react";
 import { ReactNode } from "react";
 
 import { ChatClientEvent, MessageEntities } from "../../lib/pb";
+import Emote from "./Emote";
 
 // TODO: in app links
-interface LinkProps {
+interface MessageLinkProps {
   entity: MessageEntities.ILink;
 }
-const Link: FunctionComponent<LinkProps> = ({ children, entity }) => (
+const MessageLink: FunctionComponent<MessageLinkProps> = ({ children, entity }) => (
   <a className="chat_message__link" target="_blank" rel="nofollow" href={entity.url}>
     {children}
   </a>
 );
 
-interface EmoteProps {
+interface MessageEmoteProps {
   entity: MessageEntities.IEmote;
 }
-const Emote: FunctionComponent<EmoteProps> = ({ children, entity }) => {
-  // TODO: optionally disable emotes/modifiers
-  let emote = (
-    <span
-      title={children.toString()}
-      className={clsx(["chat_message__emote", `chat_message__emote--${entity.name}`])}
-    >
-      {children}
-    </span>
-  );
+const MessageEmote: FunctionComponent<MessageEmoteProps> = ({ children, entity }) => (
+  <Emote name={entity.name} modifiers={entity.modifiers}>
+    {children}
+  </Emote>
+);
 
-  if (entity.modifiers) {
-    emote = entity.modifiers.reduce(
-      (emote, modifier) => (
-        <span
-          className={clsx([
-            "chat_message__emote_container",
-            `chat_message__emote_container--emote_${entity.name}`,
-            `chat_message__emote_container--${modifier}`,
-          ])}
-        >
-          {emote}
-        </span>
-      ),
-      emote
-    );
-  }
-
-  return emote;
-};
-
-interface NickProps {
+interface MessageNickProps {
   entity: MessageEntities.INick;
 }
-const Nick: FunctionComponent<NickProps> = ({ children }) => (
+const MessageNick: FunctionComponent<MessageNickProps> = ({ children }) => (
   <span className="chat_message__nick">{children}</span>
 );
 
-interface TagProps {
+interface MessageTagProps {
   entity: MessageEntities.ITag;
 }
-const Tag: FunctionComponent<TagProps> = ({ children }) => <span className="tag">{children}</span>;
+const MessageTag: FunctionComponent<MessageTagProps> = ({ children }) => (
+  <span className="tag">{children}</span>
+);
 
 // TODO: extract spoiler body bounds in parser
 const spoilerPrefix = /^[|\s]+/;
@@ -68,10 +46,10 @@ const spoilerSuffix = /[|\s]+$/;
 const trimSpoiler = (node: React.ReactNode, rx: RegExp) =>
   typeof node === "string" ? node.replace(rx, "") : node;
 
-interface SpoilerProps {
+interface MessageSpoilerProps {
   entity: MessageEntities.ISpoiler;
 }
-const Spoiler: FunctionComponent<SpoilerProps> = ({ children: childrenNode }) => {
+const MessageSpoiler: FunctionComponent<MessageSpoilerProps> = ({ children: childrenNode }) => {
   const children = React.Children.toArray(childrenNode);
   const prefix = trimSpoiler(children.shift(), spoilerPrefix);
   const suffix = trimSpoiler(children.pop(), spoilerSuffix);
@@ -85,29 +63,29 @@ const Spoiler: FunctionComponent<SpoilerProps> = ({ children: childrenNode }) =>
   );
 };
 
-interface CodeBlockProps {
+interface MessageCodeBlockProps {
   entity: MessageEntities.ICodeBlock;
 }
-const CodeBlock: FunctionComponent<CodeBlockProps> = ({ children }) => (
+const MessageCodeBlock: FunctionComponent<MessageCodeBlockProps> = ({ children }) => (
   <span className="chat_message__code">{children}</span>
 );
 
-interface GreenTextProps {
+interface MessageGreenTextProps {
   entity: MessageEntities.IGenericEntity;
 }
 // TODO: optionally disable
-const GreenText: FunctionComponent<GreenTextProps> = ({ children }) => (
+const MessageGreenText: FunctionComponent<MessageGreenTextProps> = ({ children }) => (
   <span className="chat_message__greentext">{children}</span>
 );
 
 type EntityComponent =
-  | typeof Link
-  | typeof Emote
-  | typeof Nick
-  | typeof Tag
-  | typeof Spoiler
-  | typeof CodeBlock
-  | typeof GreenText;
+  | typeof MessageLink
+  | typeof MessageEmote
+  | typeof MessageNick
+  | typeof MessageTag
+  | typeof MessageSpoiler
+  | typeof MessageCodeBlock
+  | typeof MessageGreenText;
 
 class MessageFormatter {
   private bounds: number[];
@@ -180,7 +158,7 @@ const Message: FunctionComponent<MessageProps> = ({ message }) => {
 
 const ComboMessage: FunctionComponent<MessageProps> = ({ message: { body, entities } }) => {
   const formatter = new MessageFormatter(body);
-  entities.emotes.forEach((entity) => formatter.insertEntity(Emote, entity));
+  entities.emotes.forEach((entity) => formatter.insertEntity(MessageEmote, entity));
 
   return (
     <div className={clsx(["chat__message", "chat__message--emote"])}>
@@ -199,14 +177,14 @@ const StandardMessage: FunctionComponent<MessageProps> = ({
   message: { nick, serverTime, body, entities },
 }) => {
   const formatter = new MessageFormatter(body);
-  entities.codeBlocks.forEach((entity) => formatter.insertEntity(CodeBlock, entity));
-  entities.links.forEach((entity) => formatter.insertEntity(Link, entity));
-  entities.emotes.forEach((entity) => formatter.insertEntity(Emote, entity));
-  entities.nicks.forEach((entity) => formatter.insertEntity(Nick, entity));
-  entities.tags.forEach((entity) => formatter.insertEntity(Tag, entity));
-  entities.spoilers.forEach((entity) => formatter.insertEntity(Spoiler, entity));
+  entities.codeBlocks.forEach((entity) => formatter.insertEntity(MessageCodeBlock, entity));
+  entities.links.forEach((entity) => formatter.insertEntity(MessageLink, entity));
+  entities.emotes.forEach((entity) => formatter.insertEntity(MessageEmote, entity));
+  entities.nicks.forEach((entity) => formatter.insertEntity(MessageNick, entity));
+  entities.tags.forEach((entity) => formatter.insertEntity(MessageTag, entity));
+  entities.spoilers.forEach((entity) => formatter.insertEntity(MessageSpoiler, entity));
   if (entities.greenText) {
-    formatter.insertEntity(GreenText, entities.greenText);
+    formatter.insertEntity(MessageGreenText, entities.greenText);
   }
 
   const classNames = clsx([
