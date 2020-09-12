@@ -1,8 +1,11 @@
+import { PassThrough } from "stream";
+
+import { Readable as GenericReadable } from "../../lib/api/stream";
 import { ChatClientEvent, MessageEntities } from "../../lib/pb";
 
 const history = [
   'MSG {"nick":"guwapguwapguwap","features":[],"timestamp":1599345629214,"data":"Ph4t3 I sentence you to 10 years in body shaming jail PepoBan","entities":{"emotes":[{"name":"PepoBan","bounds":{"start":54,"end":61}}],"nicks":[{"nick":"Ph4t3","bounds":{"start":0,"end":5}}]}}',
-  'MSG {"nick":"Xymos","features":[],"timestamp":1599345636022,"data":"soMuchForSubtlety Jbpratt sounds like a valid reason SHRUG:fast","entities":{"emotes":[{"name":"SHRUG","bounds":{"start":53,"end":58}}]}}',
+  'MSG {"nick":"Xymos","features":[],"timestamp":1599345636022,"data":"soMuchForSubtlety Jbpratt sounds like a valid reason SHRUG:fast","entities":{"emotes":[{"name":"SHRUG","bounds":{"start":53,"end":63},"modifiers":["fast"]}]}}',
   'MSG {"nick":"SoMuchForSubtlety","features":[],"timestamp":1599345648052,"data":"jbpratt  and the documentation is completely shit too PepeLaugh","entities":{"emotes":[{"name":"PepeLaugh","bounds":{"start":54,"end":63}}],"nicks":[{"nick":"jbpratt","bounds":{"start":0,"end":7}}]}}',
   'MSG {"nick":"jbpratt","features":[],"timestamp":1599345650707,"data":"Xymos UWOTM8 does it","entities":{"emotes":[{"name":"UWOTM8","bounds":{"start":6,"end":12}}],"nicks":[{"nick":"Xymos","bounds":{"start":0,"end":5}}]}}',
   'MSG {"nick":"Xymos","features":[],"timestamp":1599345658816,"data":"Jbpratt to kys","entities":{}}',
@@ -204,13 +207,13 @@ const history = [
   'MSG {"nick":"Of_Odin","features":[],"timestamp":1599348632094,"data":"namemannen an hour isn\'t pretty fast PeepoWeird","entities":{"emotes":[{"name":"PeepoWeird","bounds":{"start":37,"end":47}}],"nicks":[{"nick":"namemannen","bounds":{"start":0,"end":10}}]}}',
   'MSG {"nick":"blankspaceblank","features":[],"timestamp":1599348637324,"data":"Of_Odin some frozen types are good but you need to know which","entities":{"nicks":[{"nick":"Of_Odin","bounds":{"start":0,"end":7}}]}}',
   'MSG {"nick":"namemannen","features":[],"timestamp":1599348640375,"data":"Of_Odin fair enough FeelsBadMan","entities":{"emotes":[{"name":"FeelsBadMan","bounds":{"start":20,"end":31}}],"nicks":[{"nick":"Of_Odin","bounds":{"start":0,"end":7}}]}}',
-  'MSG {"nick":"Pistolfied","features":[],"timestamp":1599348653039,"data":"BabyRage it was a deflection BabyRage PepeLaugh:fast","entities":{"emotes":[{"name":"BabyRage","bounds":{"start":0,"end":8}},{"name":"BabyRage","bounds":{"start":29,"end":37}},{"name":"PepeLaugh","bounds":{"start":38,"end":47}}]}}',
+  'MSG {"nick":"Pistolfied","features":[],"timestamp":1599348653039,"data":"BabyRage it was a deflection BabyRage PepeLaugh:fast","entities":{"emotes":[{"name":"BabyRage","bounds":{"start":0,"end":8}},{"name":"BabyRage","bounds":{"start":29,"end":37}},{"name":"PepeLaugh","bounds":{"start":38,"end":52},"modifiers":["fast"]}]}}',
   'MSG {"nick":"Pistolfied","features":[],"timestamp":1599348670801,"data":"guy just threw it off the court PepeLaugh","entities":{"emotes":[{"name":"PepeLaugh","bounds":{"start":32,"end":41}}]}}',
   'MSG {"nick":"globburt","features":[],"timestamp":1599348677972,"data":"Siakam PepeMods","entities":{"emotes":[{"name":"PepeMods","bounds":{"start":7,"end":15}}]}}',
   'MSG {"nick":"Of_Odin","features":[],"timestamp":1599348685383,"data":"fucking wish I could find an empty bottle to spray some water on the bottom","entities":{}}',
   'MSG {"nick":"Versicarius","features":[],"timestamp":1599348685578,"data":"Xymos billyWeird","entities":{"emotes":[{"name":"billyWeird","bounds":{"start":6,"end":16}}],"nicks":[{"nick":"Xymos","bounds":{"start":0,"end":5}}]}}',
   'MSG {"nick":"Pistolfied","features":[],"timestamp":1599348689153,"data":"PepeMods","entities":{"emotes":[{"name":"PepeMods","bounds":{"start":0,"end":8}}]}}',
-  'MSG {"nick":"Xymos","features":[],"timestamp":1599348691496,"data":"versicarius WHAT billyWeird:fast","entities":{"emotes":[{"name":"billyWeird","bounds":{"start":17,"end":27}}]}}',
+  'MSG {"nick":"Xymos","features":[],"timestamp":1599348691496,"data":"versicarius WHAT billyWeird:fast","entities":{"emotes":[{"name":"billyWeird","bounds":{"start":17,"end":32},"modifiers":["fast"]}]}}',
   'MSG {"nick":"Abudhabbi","features":[],"timestamp":1599348712687,"data":"TSM GODMAN","entities":{"emotes":[{"name":"GODMAN","bounds":{"start":4,"end":10}}]}}',
   'MSG {"nick":"Versicarius","features":[],"timestamp":1599348717418,"data":"Xymos 🛏","entities":{"nicks":[{"nick":"Xymos","bounds":{"start":0,"end":5}}]}}',
   'MSG {"nick":"Fatal","features":[],"timestamp":1599348806107,"data":"uhh","entities":{}}',
@@ -253,8 +256,7 @@ const history = [
   'MSG {"nick":"trekxx","features":[],"timestamp":1599349465397,"data":"raptors playing like dogshit","entities":{}}',
 ];
 
-export default history
-  .filter((v) => v.startsWith("MSG"))
+export const messages = history
   .map((v) => JSON.parse(v.substr(4)))
   .map(
     ({ nick, timestamp, data, entities }) =>
@@ -263,6 +265,17 @@ export default history
         sentTime: timestamp,
         serverTime: timestamp,
         body: data,
-        entities: new MessageEntities(entities),
+        entities: MessageEntities.create(entities),
       })
   ) as ChatClientEvent.IMessage[];
+
+export default (() => {
+  const events: GenericReadable<ChatClientEvent.IMessage> = new PassThrough({
+    objectMode: true,
+  }) as any;
+
+  let i = 0;
+  setInterval(() => events.push(messages[i++ % history.length]), 1000);
+
+  return events;
+})();

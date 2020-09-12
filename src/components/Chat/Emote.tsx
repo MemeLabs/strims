@@ -26,7 +26,7 @@ const Emote: FunctionComponent<EmoteProps> = ({ children, name, modifiers, ...pr
 
   if (modifiers && modifiers.length > 0) {
     emote = modifiers.reduce(
-      (emote, modifier) => (
+      (emote, modifier, i) => (
         <span
           className={clsx(
             "chat__emote_container",

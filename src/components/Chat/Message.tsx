@@ -11,7 +11,7 @@ interface MessageLinkProps {
   entity: MessageEntities.ILink;
 }
 const MessageLink: FunctionComponent<MessageLinkProps> = ({ children, entity }) => (
-  <a className="chat_message__link" target="_blank" rel="nofollow" href={entity.url}>
+  <a className="chat__message__link" target="_blank" rel="nofollow" href={entity.url}>
     {children}
   </a>
 );
@@ -29,7 +29,7 @@ interface MessageNickProps {
   entity: MessageEntities.INick;
 }
 const MessageNick: FunctionComponent<MessageNickProps> = ({ children }) => (
-  <span className="chat_message__nick">{children}</span>
+  <span className="chat__message__nick">{children}</span>
 );
 
 interface MessageTagProps {
@@ -53,9 +53,18 @@ const MessageSpoiler: FunctionComponent<MessageSpoilerProps> = ({ children: chil
   const children = React.Children.toArray(childrenNode);
   const prefix = trimSpoiler(children.shift(), spoilerPrefix);
   const suffix = trimSpoiler(children.pop(), spoilerSuffix);
+  const [hidden, setHidden] = React.useState(true);
+
+  const handleClick = React.useCallback(() => setHidden((v) => !v), []);
 
   return (
-    <span className="chat_message__spoiler">
+    <span
+      className={clsx({
+        "chat__message__spoiler": true,
+        "chat__message__spoiler--hidden": hidden,
+      })}
+      onClick={handleClick}
+    >
       {prefix}
       {children}
       {suffix}
@@ -67,7 +76,7 @@ interface MessageCodeBlockProps {
   entity: MessageEntities.ICodeBlock;
 }
 const MessageCodeBlock: FunctionComponent<MessageCodeBlockProps> = ({ children }) => (
-  <span className="chat_message__code">{children}</span>
+  <span className="chat__message__code">{children}</span>
 );
 
 interface MessageGreenTextProps {
@@ -75,7 +84,7 @@ interface MessageGreenTextProps {
 }
 // TODO: optionally disable
 const MessageGreenText: FunctionComponent<MessageGreenTextProps> = ({ children }) => (
-  <span className="chat_message__greentext">{children}</span>
+  <span className="chat__message__greentext">{children}</span>
 );
 
 type EntityComponent =
@@ -143,25 +152,29 @@ class MessageFormatter {
   }
 }
 
-interface MessageProps {
+interface MessageProps extends React.HTMLProps<HTMLDivElement> {
   message: ChatClientEvent.IMessage;
 }
 
-const Message: FunctionComponent<MessageProps> = ({ message }) => {
-  const { emotes } = message.entities;
+const Message: FunctionComponent<MessageProps> = (props) => {
+  const { emotes } = props.message.entities;
   return emotes?.length === 1 && emotes[0].combo ? (
-    <ComboMessage message={message} />
+    <ComboMessage {...props} />
   ) : (
-    <StandardMessage message={message} />
+    <StandardMessage {...props} />
   );
 };
 
-const ComboMessage: FunctionComponent<MessageProps> = ({ message: { body, entities } }) => {
+const ComboMessage: FunctionComponent<MessageProps> = ({
+  message: { body, entities },
+  className,
+  ...props
+}) => {
   const formatter = new MessageFormatter(body);
   entities.emotes.forEach((entity) => formatter.insertEntity(MessageEmote, entity));
 
   return (
-    <div className={clsx(["chat__message", "chat__message--emote"])}>
+    <div {...props} className={clsx(["chat__message", "chat__message--emote", className])}>
       <span className="body">
         {formatter.body}
         <i className="count">{entities.emotes[0].combo}</i>
@@ -175,6 +188,8 @@ const ComboMessage: FunctionComponent<MessageProps> = ({ message: { body, entiti
 
 const StandardMessage: FunctionComponent<MessageProps> = ({
   message: { nick, serverTime, body, entities },
+  className,
+  ...props
 }) => {
   const formatter = new MessageFormatter(body);
   entities.codeBlocks.forEach((entity) => formatter.insertEntity(MessageCodeBlock, entity));
@@ -191,17 +206,19 @@ const StandardMessage: FunctionComponent<MessageProps> = ({
     "chat__message",
     entities.selfMessage && "chat__message--self",
     ...entities.tags.map(({ name }) => `chat__message--tag_${name}`),
+    className,
   ]);
 
   const time = new Date(serverTime);
 
   return (
-    <div className={classNames}>
-      <time className="time" title={time.toLocaleString()}>
+    <div {...props} className={classNames}>
+      <time className="chat__message__time" title={time.toLocaleString()}>
         {time.toLocaleTimeString()}
       </time>
-      <span className="nick">{nick}</span>
-      <span className="body">{formatter.body}</span>
+      <span className="chat__message__author">{nick}</span>
+      <span className="chat__message__colon">{": "}</span>
+      <span className="chat__message__body">{formatter.body}</span>
     </div>
   );
 };

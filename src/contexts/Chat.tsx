@@ -4,10 +4,11 @@ import * as React from "react";
 import { useEffect } from "react";
 
 import { Emote, emotes } from "../components/Chat/test-emotes";
+import stream, { messages } from "../components/Chat/test-history";
 import { ChatClientEvent } from "../lib/pb";
 
 interface State {
-  messages: ChatClientEvent.Message[];
+  messages: ChatClientEvent.IMessage[];
   styles: {
     [key: string]: StyleDeclarationValue;
   };
@@ -16,11 +17,15 @@ interface State {
 type Action =
   | {
       type: "MESSAGE_SCROLLBACK";
-      messages: ChatClientEvent.Message[];
+      messages: ChatClientEvent.IMessage[];
     }
   | {
       type: "LOAD_EMOTES";
       emotes: Emote[];
+    }
+  | {
+      type: "MESSAGE";
+      message: ChatClientEvent.IMessage;
     };
 
 const initialState: State = {
@@ -36,6 +41,11 @@ const chatReducer = (state: State, action: Action): State => {
       return {
         ...state,
         messages: action.messages,
+      };
+    case "MESSAGE":
+      return {
+        ...state,
+        messages: [...state.messages, action.message],
       };
     case "LOAD_EMOTES":
       reset();
@@ -57,6 +67,9 @@ const createEmoteStyles = (emotes: Emote[]) => {
       background: `url(${image.url})`,
       width: `${image.dimensions.width}px`,
       height: `${image.dimensions.height}px`,
+      // marginTop: `-${image.dimensions.height}px`,
+      marginTop: `calc(0.5em - ${image.dimensions.height / 2}px)`,
+      marginBottom: `calc(0.5em - ${image.dimensions.height / 2}px)`,
     };
   });
 
@@ -86,7 +99,14 @@ export const Provider = ({ children }: any) => {
 
   useEffect(() => {
     dispatch({ type: "LOAD_EMOTES", emotes });
+    dispatch({ type: "MESSAGE_SCROLLBACK", messages });
   }, [emotes]);
+
+  useEffect(() => {
+    const handleData = (message) => dispatch({ type: "MESSAGE", message });
+    stream.on("data", handleData);
+    return () => stream.off("data", handleData);
+  }, []);
 
   return (
     <ChatContext.Provider value={[state, dispatch]}>

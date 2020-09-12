@@ -4,10 +4,24 @@ import * as React from "react";
 
 import Composer from "../components/Chat/Composer";
 import Message from "../components/Chat/Message";
-import emotes from "../components/Chat/test-emotes";
-import history from "../components/Chat/test-history";
+import Scroller from "../components/Chat/Scroller";
 import { MainLayout } from "../components/MainLayout";
-import { Provider } from "../contexts/Chat";
+import { Provider, useChat } from "../contexts/Chat";
+
+const ChatThing = () => {
+  const [state] = useChat();
+
+  return (
+    <>
+      <div className="chat__messages">
+        <Scroller messages={state.messages} />
+      </div>
+      <div className="chat__footer">
+        <Composer />
+      </div>
+    </>
+  );
+};
 
 const ChatTest = () => {
   return (
@@ -21,14 +35,7 @@ const ChatTest = () => {
         <header className="home_page__chat__promo"></header>
         <div className="home_page__chat chat">
           <Provider>
-            <div className="chat__messages">
-              {history.map((m, i) => (
-                <Message message={m} key={i} />
-              ))}
-            </div>
-            <div className="chat__footer">
-              <Composer />
-            </div>
+            <ChatThing />
           </Provider>
         </div>
       </aside>

@@ -3,19 +3,138 @@
   flex-direction: column;
   flex: 1 1 500px;
   height: 0;
+  font-size: 0.9em;
+  line-height: 1.4em;
 
   &__messages {
     flex: 1 1;
-    overflow-y: auto;
     width: 420px;
+  }
+
+  &__message {
+    box-sizing: border-box;
     overflow-wrap: break-word;
+    padding: 3px 7px;
+
+    &__time {
+      white-space: nowrap;
+      margin-right: 3px;
+      display: none;
+    }
+
+    &__author {
+      border-radius: 3px;
+      padding: 1px 8px 1px 3px;
+      display: inline-block;
+      border: 1px solid;
+
+      @include color-scheme('dark') {
+        background: $slate-400;
+        border-color: $slate-500 $slate-200 $slate-200 $slate-500;
+      }
+      @include color-scheme('light') {
+        background: $gray-400;
+        border-color: $gray-500 $gray-200 $gray-200 $gray-500;
+      }
+    }
+
+    &__colon {
+      margin: 0 3px 0 -8px;
+    }
+
+    &__link {
+      color: #02C2FF;
+      position: relative;
+
+      &:hover {
+        text-decoration: underline;
+      }
+
+      &:visited {
+        color: #A66BE5;
+      }
+
+      @at-root .chat__message--tag_nsfw & {
+        border-bottom: 1px dashed red;
+      }
+
+      @at-root .chat__message--tag_nsfl & {
+        border-bottom: 1px dashed yellow;
+      }
+
+      @at-root .chat__message--tag_weeb & {
+        border-bottom: 1px dashed pink;
+      }
+
+      @at-root .chat__message--tag_loud & {
+        border-bottom: 1px dashed #02C2FF;
+      }
+    }
+
+    &__nick {
+      cursor: pointer;
+    }
+
+    &__spoiler {
+      cursor: pointer;
+      background: $slate-400;
+      padding: 0 3px;
+      transition: color .2s ease-in-out;
+
+      &>.chat__emote,
+      &>.chat__emote_container,
+      &>.chat__message__code,
+      &>.chat__message__link {
+        transition: opacity .2s ease-in-out;
+      }
+
+      &--hidden {
+        color: transparent;
+
+        &>.chat__emote,
+        &>.chat__emote_container,
+        &>.chat__message__code,
+        &>.chat__message__link {
+          opacity: 0;
+        }
+      }
+    }
+
+    &__code {
+      color: gray;
+      font-family: monospace;
+    }
+
+    &__greentext {
+      color: green;
+    }
+  }
+
+  &__scroller {
+    &__scrollbar_handle {
+      border-radius: 3px;
+      opacity: 0;
+      transition: opacity .2s ease-in-out 1s;
+
+      @include color-scheme('dark') {
+        background: rgba($white, 0.5);
+      }
+      @include color-scheme('light') {
+        background: rgba($slate-300, 0.5);
+      }
+
+      &--scrolling {
+        transition-delay: 0.1s;
+        opacity: 1;
+      }
+    }
   }
 
   &__emote {
     display: inline-block;
-    text-indent: -10000px;
+    margin: 0 3px;
     overflow: hidden;
-    margin: -5px 3px;
+    text-indent: -10000px;
   }
 
   &__emote_container {
@@ -40,11 +159,20 @@
   }
 
   &__composer {
-    background: $slate-300;
     margin: 5px;
     padding: 10px 5px;
     border-radius: 3px;
-    border: 1px solid $slate-500;
+    border-width: 1px;
+    border-style: solid;
+
+    @include color-scheme('dark') {
+      background: $slate-300;
+      border-color: $slate-500;
+    }
+    @include color-scheme('light') {
+      background: $gray-500;
+      border-color: $gray-300;
+    }
 
     &__span {
       &--self {
@@ -85,12 +213,19 @@
       position: absolute;
 
       &__list {
-        position: absolute;
-        background: black;
+        border-radius: 3px;
         bottom: 20px;
         display: block;
         margin: 0;
         padding: 10px;
+        position: absolute;
+
+        @include color-scheme('dark') {
+          background: $slate-200;
+        }
+        @include color-scheme('light') {
+          background: $gray-500;
+        }
       }
 
       &__item {
@@ -98,7 +233,12 @@
         border-radius: 3px;
 
         &--selected {
-          background: $slate-400;
+          @include color-scheme('dark') {
+            background: $slate-400;
+          }
+          @include color-scheme('light') {
+            background: $gray-300;
+          }
         }
       }
     }
