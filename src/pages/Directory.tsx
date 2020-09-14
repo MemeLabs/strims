@@ -2,7 +2,7 @@
 
 import { Base64 } from "js-base64";
 import * as React from "react";
-import { useParams } from "react-router-dom";
+import { Link, useParams } from "react-router-dom";
 
 import { MainLayout } from "../components/MainLayout";
 import { useClient, useLazyCall } from "../contexts/Api";
@@ -33,29 +33,30 @@ const directoryReducer = (listings: Listing[], action: DirectoryServerEvent): Li
   }
 };
 
+interface DirectoryParams {
+  networkKey: string;
+}
+
 const Directory = () => {
-  const { networkKey } = useParams();
+  const params = useParams<DirectoryParams>();
   const [{ colorScheme }, { setColorScheme }] = useTheme();
   const [{ profile }, { clearProfile }] = useProfile();
   const [listings, dispatch] = React.useReducer(directoryReducer, []);
-
   const client = useClient();
+
+  const networkKey = Base64.toUint8Array(params.networkKey);
 
   React.useEffect(() => {
     client.startVPN().on("data", (vpnEvent) => {
       if (vpnEvent.networkOpen) {
-        const events = client.getDirectoryEvents({
-          networkKey: Base64.toUint8Array(networkKey),
-        });
+        const events = client.getDirectoryEvents({ networkKey });
         events.on("data", dispatch);
       }
     });
   }, []);
 
   const handleTestClick = async () => {
-    const res = await client.testDirectoryPublish({
-      networkKey: Base64.toUint8Array(networkKey),
-    });
+    const res = await client.testDirectoryPublish({ networkKey });
     console.log(res);
   };
 
@@ -70,7 +71,9 @@ const Directory = () => {
             </button>
             {listings.map(({ key, listing }) => (
               <div key={key}>
-                <span>{listing.title}</span>
+                <Link to={`/player/${params.networkKey}/${key}`}>
+                  <span>{listing.title}</span>
+                </Link>
                 <span>{listing.tags}</span>
               </div>
             ))}

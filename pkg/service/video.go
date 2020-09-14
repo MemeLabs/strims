@@ -6,7 +6,6 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"io"
-	"log"
 	"sync"
 	"time"
 
@@ -47,7 +46,7 @@ func NewVideoServer(logger *zap.Logger) (*VideoServer, error) {
 		Key: key,
 	})
 	if err != nil {
-		log.Println("error creating writer", err)
+		logger.Debug("error creating writer", zap.Error(err))
 		return nil, err
 	}
 
@@ -87,11 +86,9 @@ func (t *VideoServer) Flush() error {
 }
 
 // NewVideoClient ...
-func NewVideoClient(logger *zap.Logger) (*VideoClient, error) {
-	key := testKey()
-
+func NewVideoClient(logger *zap.Logger, key []byte) (*VideoClient, error) {
 	s, err := ppspp.NewSwarm(
-		ppspp.NewSwarmID(key.Public),
+		ppspp.NewSwarmID(key),
 		// ppspp.NewDefaultSwarmOptions(),
 		ppspp.SwarmOptions{
 			LiveWindow: 1 << 15, // 32mb
@@ -109,7 +106,7 @@ func NewVideoClient(logger *zap.Logger) (*VideoClient, error) {
 			logger: logger,
 			ctx:    ctx,
 			close:  cancel,
-			key:    key.Public,
+			key:    key,
 			s:      s,
 		},
 	}, nil
@@ -123,12 +120,12 @@ type VideoClient struct {
 // SendEvents ...
 func (c *VideoClient) SendEvents(ch chan *pb.VideoClientEvent) {
 	r := c.s.Reader()
-	log.Println("got swarm reader", r.Offset())
+	c.logger.Debug("got swarm reader", zap.Uint64("offset", r.Offset()))
 	cr, err := chunkstream.NewReaderSize(r, int64(r.Offset()), chunkstream.MaxSize)
 	if err != nil {
 		panic(err)
 	}
-	log.Println("opened chunkstream reader")
+	c.logger.Debug("opened chunkstream reader")
 
 	// TODO: hack - discard first fragment
 	{
@@ -139,7 +136,7 @@ func (c *VideoClient) SendEvents(ch chan *pb.VideoClientEvent) {
 		b.Reset()
 	}
 
-	log.Println("finished discarding chunk fragment")
+	c.logger.Debug("finished discarding chunk fragment")
 
 	var seq int
 	var bufs [128][32 * 1024]byte
@@ -177,12 +174,12 @@ func (c *VideoClient) SendEvents(ch chan *pb.VideoClientEvent) {
 // SendStream ...
 func (c *VideoClient) SendStream(ctx context.Context, stream *hls.Stream) error {
 	r := c.s.Reader()
-	log.Println("got swarm reader", r.Offset())
+	c.logger.Debug("got swarm reader", zap.Uint64("offset", r.Offset()))
 	cr, err := chunkstream.NewReaderSize(r, int64(r.Offset()), chunkstream.MaxSize)
 	if err != nil {
 		return err
 	}
-	log.Println("opened chunkstream reader")
+	c.logger.Debug("opened chunkstream reader")
 
 	// TODO: hack - discard first fragment
 	{
@@ -193,7 +190,7 @@ func (c *VideoClient) SendStream(ctx context.Context, stream *hls.Stream) error 
 		b.Reset()
 	}
 
-	log.Println("finished discarding chunk fragment")
+	c.logger.Debug("finished discarding chunk fragment")
 
 	var headerRead, headerWritten bool
 	var b [32 * 1024]byte

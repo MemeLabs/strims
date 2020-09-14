@@ -15,13 +15,10 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
-
-const metadataTable = "default"
 
 // errors ...
 var (
@@ -29,28 +26,6 @@ var (
 	ErrAuthenticationRequired  = errors.New("method requires authentication")
 	ErrAlreadyJoinedNetwork    = errors.New("user already has a membership for that network")
 )
-
-// Options ...
-type Options struct {
-	Store      kv.BlobStore
-	Logger     *zap.Logger
-	VPNOptions []vpn.HostOption
-}
-
-// New ...
-func New(options Options) (*Frontend, error) {
-	metadata, err := dao.NewMetadataStore(options.Store)
-	if err != nil {
-		return nil, err
-	}
-
-	return &Frontend{
-		logger:     options.Logger,
-		store:      options.Store,
-		metadata:   metadata,
-		vpnOptions: options.VPNOptions,
-	}, nil
-}
 
 // Frontend ...
 type Frontend struct {
@@ -67,7 +42,7 @@ func (s *Frontend) CreateProfile(ctx context.Context, r *pb.CreateProfileRequest
 		return nil, err
 	}
 
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	session.Init(profile, store)
 
 	return &pb.CreateProfileResponse{
@@ -78,7 +53,7 @@ func (s *Frontend) CreateProfile(ctx context.Context, r *pb.CreateProfileRequest
 
 // DeleteProfile ...
 func (s *Frontend) DeleteProfile(ctx context.Context, r *pb.DeleteProfileRequest) (*pb.DeleteProfileResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -103,7 +78,7 @@ func (s *Frontend) LoadProfile(ctx context.Context, r *pb.LoadProfileRequest) (*
 		return nil, err
 	}
 
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	session.Init(profile, store)
 
 	return &pb.LoadProfileResponse{
@@ -114,7 +89,7 @@ func (s *Frontend) LoadProfile(ctx context.Context, r *pb.LoadProfileRequest) (*
 
 // LoadSession ...
 func (s *Frontend) LoadSession(ctx context.Context, r *pb.LoadSessionRequest) (*pb.LoadSessionResponse, error) {
-	id, storageKey, err := rpc.UnmarshalSessionID(r.SessionId)
+	id, storageKey, err := UnmarshalSessionID(r.SessionId)
 	if err != nil {
 		return nil, err
 	}
@@ -124,7 +99,7 @@ func (s *Frontend) LoadSession(ctx context.Context, r *pb.LoadSessionRequest) (*
 		return nil, err
 	}
 
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	session.Init(profile, store)
 
 	return &pb.LoadSessionResponse{
@@ -135,7 +110,7 @@ func (s *Frontend) LoadSession(ctx context.Context, r *pb.LoadSessionRequest) (*
 
 // GetProfile ...
 func (s *Frontend) GetProfile(ctx context.Context, r *pb.GetProfileRequest) (*pb.GetProfileResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -160,7 +135,7 @@ func (s *Frontend) GetProfiles(ctx context.Context, r *pb.GetProfilesRequest) (*
 
 // CreateNetwork ...
 func (s *Frontend) CreateNetwork(ctx context.Context, r *pb.CreateNetworkRequest) (*pb.CreateNetworkResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -200,7 +175,7 @@ func (s *Frontend) CreateNetwork(ctx context.Context, r *pb.CreateNetworkRequest
 
 // DeleteNetwork ...
 func (s *Frontend) DeleteNetwork(ctx context.Context, r *pb.DeleteNetworkRequest) (*pb.DeleteNetworkResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -234,7 +209,7 @@ func (s *Frontend) DeleteNetwork(ctx context.Context, r *pb.DeleteNetworkRequest
 
 // GetNetwork ...
 func (s *Frontend) GetNetwork(ctx context.Context, r *pb.GetNetworkRequest) (*pb.GetNetworkResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -248,7 +223,7 @@ func (s *Frontend) GetNetwork(ctx context.Context, r *pb.GetNetworkRequest) (*pb
 
 // GetNetworks ...
 func (s *Frontend) GetNetworks(ctx context.Context, r *pb.GetNetworksRequest) (*pb.GetNetworksResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -262,7 +237,7 @@ func (s *Frontend) GetNetworks(ctx context.Context, r *pb.GetNetworksRequest) (*
 
 // GetNetworkMemberships ...
 func (s *Frontend) GetNetworkMemberships(ctx context.Context, r *pb.GetNetworkMembershipsRequest) (*pb.GetNetworkMembershipsResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -276,7 +251,7 @@ func (s *Frontend) GetNetworkMemberships(ctx context.Context, r *pb.GetNetworkMe
 
 // DeleteNetworkMembership ...
 func (s *Frontend) DeleteNetworkMembership(ctx context.Context, r *pb.DeleteNetworkMembershipRequest) (*pb.DeleteNetworkMembershipResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -305,7 +280,7 @@ func (s *Frontend) DeleteNetworkMembership(ctx context.Context, r *pb.DeleteNetw
 
 // CreateBootstrapClient ...
 func (s *Frontend) CreateBootstrapClient(ctx context.Context, r *pb.CreateBootstrapClientRequest) (*pb.CreateBootstrapClientResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -335,7 +310,7 @@ func (s *Frontend) UpdateBootstrapClient(ctx context.Context, r *pb.UpdateBootst
 
 // DeleteBootstrapClient ...
 func (s *Frontend) DeleteBootstrapClient(ctx context.Context, r *pb.DeleteBootstrapClientRequest) (*pb.DeleteBootstrapClientResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -354,7 +329,7 @@ func (s *Frontend) GetBootstrapClient(ctx context.Context, r *pb.GetBootstrapCli
 
 // GetBootstrapClients ...
 func (s *Frontend) GetBootstrapClients(ctx context.Context, r *pb.GetBootstrapClientsRequest) (*pb.GetBootstrapClientsResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -406,7 +381,7 @@ func (s *Frontend) PublishNetworkToBootstrapPeer(ctx context.Context, r *pb.Publ
 
 // CreateChatServer ...
 func (s *Frontend) CreateChatServer(ctx context.Context, r *pb.CreateChatServerRequest) (*pb.CreateChatServerResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -431,7 +406,7 @@ func (s *Frontend) UpdateChatServer(ctx context.Context, r *pb.UpdateChatServerR
 
 // DeleteChatServer ...
 func (s *Frontend) DeleteChatServer(ctx context.Context, r *pb.DeleteChatServerRequest) (*pb.DeleteChatServerResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -450,7 +425,7 @@ func (s *Frontend) GetChatServer(ctx context.Context, r *pb.GetChatServerRequest
 
 // GetChatServers ...
 func (s *Frontend) GetChatServers(ctx context.Context, r *pb.GetChatServersRequest) (*pb.GetChatServersResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -490,7 +465,7 @@ type vpnData struct {
 
 // StartVPN ...
 func (s *Frontend) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (<-chan *pb.NetworkEvent, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -536,7 +511,7 @@ func (s *Frontend) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (<-chan 
 
 // StopVPN ...
 func (s *Frontend) StopVPN(ctx context.Context, r *pb.StopVPNRequest) (*pb.StopVPNResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -552,7 +527,7 @@ func (s *Frontend) StopVPN(ctx context.Context, r *pb.StopVPNRequest) (*pb.StopV
 
 // GetDirectoryEvents ...
 func (s *Frontend) GetDirectoryEvents(ctx context.Context, r *pb.GetDirectoryEventsRequest) (chan *pb.DirectoryServerEvent, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -583,7 +558,7 @@ func (s *Frontend) GetDirectoryEvents(ctx context.Context, r *pb.GetDirectoryEve
 
 // TestDirectoryPublish ...
 func (s *Frontend) TestDirectoryPublish(ctx context.Context, r *pb.TestDirectoryPublishRequest) (*pb.TestDirectoryPublishResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -620,14 +595,14 @@ func (s *Frontend) TestDirectoryPublish(ctx context.Context, r *pb.TestDirectory
 
 // OpenVideoClient ...
 func (s *Frontend) OpenVideoClient(ctx context.Context, r *pb.VideoClientOpenRequest) (<-chan *pb.VideoClientEvent, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
 
 	s.logger.Debug("start swarm...")
 
-	v, err := NewVideoClient(s.logger)
+	v, err := NewVideoClient(s.logger, r.SwarmKey)
 	if err != nil {
 		return nil, err
 	}
@@ -653,7 +628,7 @@ func (s *Frontend) OpenVideoClient(ctx context.Context, r *pb.VideoClientOpenReq
 
 // OpenVideoServer ...
 func (s *Frontend) OpenVideoServer(ctx context.Context, r *pb.VideoServerOpenRequest) (*pb.VideoServerOpenResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -672,7 +647,7 @@ func (s *Frontend) OpenVideoServer(ctx context.Context, r *pb.VideoServerOpenReq
 
 // WriteToVideoServer ...
 func (s *Frontend) WriteToVideoServer(ctx context.Context, r *pb.VideoServerWriteRequest) (*pb.VideoServerWriteResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -697,7 +672,7 @@ func (s *Frontend) WriteToVideoServer(ctx context.Context, r *pb.VideoServerWrit
 
 // PublishSwarm ...
 func (s *Frontend) PublishSwarm(ctx context.Context, r *pb.PublishSwarmRequest) (*pb.PublishSwarmResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -782,7 +757,7 @@ func (s *Frontend) OpenChatServer(ctx context.Context, r *pb.OpenChatServerReque
 		return nil, errors.New("unknown network")
 	}
 
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 
 	server, err := NewChatServer(s.logger, svc, r.Server.Key)
 	if err != nil {
@@ -817,7 +792,7 @@ func (s *Frontend) OpenChatServer(ctx context.Context, r *pb.OpenChatServerReque
 
 // CallChatServer ...
 func (s *Frontend) CallChatServer(ctx context.Context, r *pb.CallChatServerRequest) error {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return ErrAuthenticationRequired
 	}
@@ -851,7 +826,7 @@ func (s *Frontend) OpenChatClient(ctx context.Context, r *pb.OpenChatClientReque
 		return nil, errors.New("unknown network")
 	}
 
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 
 	client, err := NewChatClient(s.logger, svc, r.ServerKey)
 	if err != nil {
@@ -886,7 +861,7 @@ func (s *Frontend) OpenChatClient(ctx context.Context, r *pb.OpenChatClientReque
 
 // CallChatClient ...
 func (s *Frontend) CallChatClient(ctx context.Context, r *pb.CallChatClientRequest) error {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return ErrAuthenticationRequired
 	}
@@ -913,7 +888,7 @@ func (s *Frontend) CallChatClient(ctx context.Context, r *pb.CallChatClientReque
 
 // CreateNetworkInvitation ...
 func (s *Frontend) CreateNetworkInvitation(ctx context.Context, r *pb.CreateNetworkInvitationRequest) (*pb.CreateNetworkInvitationResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -965,7 +940,7 @@ func (s *Frontend) CreateNetworkInvitation(ctx context.Context, r *pb.CreateNetw
 
 // CreateNetworkMembershipFromInvitation ...
 func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r *pb.CreateNetworkMembershipFromInvitationRequest) (*pb.CreateNetworkMembershipFromInvitationResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -1033,7 +1008,7 @@ func (s *Frontend) CreateNetworkMembershipFromInvitation(ctx context.Context, r 
 // saveNetworkMembership saves a network membership.
 // it returns an error if the user is already has a valid membership for that network
 func (s *Frontend) saveNetworkMembership(ctx context.Context, membership *pb.NetworkMembership) error {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return ErrAuthenticationRequired
 	}
@@ -1065,7 +1040,7 @@ func (s *Frontend) startNetwork(ctx context.Context, membership *pb.NetworkMembe
 	if network == nil {
 		_, err = controller.StartNetwork(membership.Certificate, WithMemberServices(s.logger))
 	} else {
-		store := rpc.ContextSession(ctx).ProfileStore()
+		store := ContextSession(ctx).ProfileStore()
 		_, err = controller.StartNetwork(membership.Certificate, WithOwnerServices(s.logger, store, network))
 	}
 	return err
@@ -1074,7 +1049,7 @@ func (s *Frontend) startNetwork(ctx context.Context, membership *pb.NetworkMembe
 // loads the NetworkController fron the session store
 // TODO: move to (s *Session) getNetworkController ?
 func (s *Frontend) getNetworkController(ctx context.Context) (*NetworkController, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -1093,7 +1068,7 @@ func (s *Frontend) getNetworkController(ctx context.Context) (*NetworkController
 }
 
 func (s *Frontend) getBootstrapService(ctx context.Context) (*BootstrapService, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}

@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 
+import { Base64 } from "js-base64";
 import * as React from "react";
 
 import Composer from "../components/Chat/Composer";
@@ -9,15 +10,20 @@ import { MainLayout } from "../components/MainLayout";
 import { Provider, useChat } from "../contexts/Chat";
 
 const ChatThing = () => {
-  const [state] = useChat();
+  const [state, { sendMessage }] = useChat();
 
   return (
     <>
       <div className="chat__messages">
-        <Scroller messages={state.messages} />
+        <Scroller
+          renderMessage={({ index, style }) => (
+            <Message message={state.messages[index]} style={style} />
+          )}
+          messageCount={state.messages.length}
+        />
       </div>
       <div className="chat__footer">
-        <Composer />
+        <Composer onMessage={sendMessage} />
       </div>
     </>
   );
@@ -34,7 +40,10 @@ const ChatTest = () => {
         <header className="home_page__subheader"></header>
         <header className="home_page__chat__promo"></header>
         <div className="home_page__chat chat">
-          <Provider>
+          <Provider
+            networkKey={Base64.toUint8Array("HVmKdL3JUzXvjh3BQ8tFqFCvzPp7Wxe4ak2yWbjSj/c=")}
+            serverKey={Base64.toUint8Array("laBoCbsGwcjSZk5y6qN1NEYpCxnFJZEHmNIgzV64Sc4=")}
+          >
             <ChatThing />
           </Provider>
         </div>

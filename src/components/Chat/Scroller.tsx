@@ -1,6 +1,5 @@
 import clsx from "clsx";
-import React from "react";
-import { FunctionComponent } from "react";
+import React, { FunctionComponent, ReactNode } from "react";
 import { Scrollbars } from "react-custom-scrollbars";
 import {
   AutoSizer,
@@ -12,53 +11,66 @@ import {
   OnScrollParams,
 } from "react-virtualized";
 
-import { ChatClientEvent } from "../../lib/pb";
-import Message from "./Message";
-
-interface ScrollerProps {
-  messages: ChatClientEvent.IMessage[];
+export interface MessageProps {
+  style: React.CSSProperties;
+  index: number;
 }
 
-const Scroller: FunctionComponent<ScrollerProps> = ({ messages }) => {
+interface ScrollerProps {
+  renderMessage: (props: MessageProps) => ReactNode;
+  messageCount: number;
+  autoScrollThreshold?: number;
+  resizeDebounceTimeout?: number;
+}
+
+const Scroller: FunctionComponent<ScrollerProps> = (props) => {
   return (
     <AutoSizer>
-      {(dimensions: Dimensions) => <ScrollerContent {...dimensions} messages={messages} />}
+      {(dimensions: Dimensions) => <ScrollerContent {...dimensions} {...props} />}
     </AutoSizer>
   );
 };
 
-interface UnsafeList extends List {
+interface ListInternal {
   Grid: Grid & {
     _scrollingContainer: any;
     _onScroll: any;
   };
 }
 
-interface UnsafeScrollbars extends Scrollbars {
+interface ScrollbarsInternal {
   view: any;
 }
 
 const ScrollerContent: FunctionComponent<ScrollerProps & Dimensions> = ({
   height,
   width,
-  messages,
+  messageCount,
+  renderMessage,
+  autoScrollThreshold = 20,
+  resizeDebounceTimeout = 100,
 }) => {
-  const list = React.useRef<UnsafeList>();
-  const scrollbars = React.useRef<UnsafeScrollbars>();
+  const list = React.useRef<List & ListInternal>();
+  const scrollbars = React.useRef<Scrollbars & ScrollbarsInternal>();
   const cache = React.useMemo(() => new CellMeasurerCache({ fixedWidth: true }), []);
   const [autoScroll, setAutoScroll] = React.useState(true);
   const [scrolling, setScrolling] = React.useState(true);
+  const [resizing, setResizing] = React.useState(false);
 
   React.useEffect(() => {
     cache.clearAll();
     list.current?.recomputeRowHeights();
+
+    setResizing(true);
+    const id = setTimeout(() => setResizing(false), resizeDebounceTimeout);
+    return () => clearTimeout(id);
   }, [list, height, width]);
 
   React.useEffect(() => {
     if (autoScroll) {
-      list.current?.scrollToRow(messages.length - 1);
+      list.current?.scrollToRow(messageCount - 1);
     }
-  }, [list, messages, height, width]);
+  }, [autoScroll, list, messageCount]);
 
   React.useEffect(() => {
     if (list.current && scrollbars.current) {
@@ -71,8 +83,16 @@ const ScrollerContent: FunctionComponent<ScrollerProps & Dimensions> = ({
   const handleScrollStop = React.useCallback(() => setScrolling(false), []);
 
   const handleListScroll = React.useCallback(
-    (e: OnScrollParams) => setAutoScroll(e.scrollHeight - e.scrollTop - e.clientHeight < 20),
-    []
+    ({ scrollHeight, scrollTop, clientHeight }: OnScrollParams) => {
+      const thresholdExceeded = scrollHeight - scrollTop - clientHeight < autoScrollThreshold;
+      const enabled = resizing ? autoScroll : thresholdExceeded;
+
+      if (resizing && enabled) {
+        list.current?.scrollToRow(messageCount - 1);
+      }
+      setAutoScroll(enabled);
+    },
+    [autoScroll, list, messageCount, resizing]
   );
 
   const renderRow = React.useCallback(
@@ -85,10 +105,10 @@ const ScrollerContent: FunctionComponent<ScrollerProps & Dimensions> = ({
         rowIndex={index}
         width={width}
       >
-        <Message message={messages[index]} style={style} />
+        {renderMessage({ index, style })}
       </CellMeasurer>
     ),
-    [messages, width]
+    [renderMessage, cache, width]
   );
 
   const renderScrollThumb = React.useCallback(
@@ -120,7 +140,7 @@ const ScrollerContent: FunctionComponent<ScrollerProps & Dimensions> = ({
         style={{ overflowX: "visible", overflowY: "visible" }}
         deferredMeasurementCache={cache}
         rowHeight={cache.rowHeight}
-        rowCount={messages.length}
+        rowCount={messageCount}
         rowRenderer={renderRow}
         onScroll={handleListScroll}
       />

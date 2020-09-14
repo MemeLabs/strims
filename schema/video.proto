@@ -65,7 +65,8 @@ message VideoServerWriteRequest {
 message VideoServerWriteResponse {}
 
 message VideoClientOpenRequest {
-  bool emit_data = 1;
+  bytes swarm_key = 1;
+  bool emit_data = 2;
 }
 
 message VideoClientEvent {

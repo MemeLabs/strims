@@ -1,4 +1,4 @@
-package rpc
+package service
 
 import (
 	"context"
@@ -70,6 +70,7 @@ func (s *Session) Reset() {
 
 	s.profile = nil
 	s.store = nil
+	s.Values = sync.Map{}
 }
 
 // Init ...

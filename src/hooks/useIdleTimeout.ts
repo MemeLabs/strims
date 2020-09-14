@@ -14,7 +14,7 @@ const useIdleTimout = (timeout = 3000, initialState = true) => {
 
   const clearTimeout = () => setIdle(true);
 
-  return [idle, renewTimeout, clearTimeout];
+  return [idle, renewTimeout, clearTimeout] as [boolean, () => void, () => void];
 };
 
 export default useIdleTimout;

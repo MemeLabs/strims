@@ -2,7 +2,6 @@ import { Source } from "./source";
 
 const MIME_TYPE = "video/mp4;codecs=mp4a.40.5,avc1.64001F";
 
-// TODO: prune output buffer
 export class Decoder {
   public source: Source;
   private headerRead: boolean = false;

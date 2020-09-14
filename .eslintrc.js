@@ -2,7 +2,7 @@ module.exports = {
   env: {
     browser: true,
     node: true,
-    es6: true,
+    es2020: true,
   },
   extends: [
     "eslint:recommended",
@@ -20,6 +20,7 @@ module.exports = {
   rules: {
     "@typescript-eslint/explicit-module-boundary-types": "off",
     "@typescript-eslint/interface-name-prefix": "off",
+    "@typescript-eslint/no-empty-interface": "off",
     "@typescript-eslint/no-explicit-any": "off",
     "@typescript-eslint/no-floating-promises": "off",
     "@typescript-eslint/no-unsafe-assignment": "off",
@@ -31,6 +32,7 @@ module.exports = {
     "@typescript-eslint/no-misused-promises": "off",
     "@typescript-eslint/no-use-before-define": "off",
     "@typescript-eslint/unified-signatures": "off",
+    "jsdoc/newline-after-description": "off",
     "prefer-arrow/prefer-arrow-functions": "error",
     "complexity": "off",
     "max-classes-per-file": "off",

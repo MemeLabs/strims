@@ -26,15 +26,15 @@ type Host struct {
 	service interface{}
 }
 
-// Handle starts reading incoming calls
-func (h *Host) Handle(ctx context.Context, w io.Writer, r io.Reader) error {
-	ctx, cancel := context.WithCancel(contextWithSession(ctx, newSession()))
+// Listen starts reading incoming calls
+func (h *Host) Listen(ctx context.Context, rw io.ReadWriter) error {
+	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
-	c := &conn{w: w}
+	c := &conn{w: rw}
 
 	for {
-		m, err := readCall(r)
+		m, err := readCall(rw)
 		if err != nil {
 			return err
 		}

@@ -12,7 +12,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/hls"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
 	"go.uber.org/zap"
 )
@@ -25,7 +24,7 @@ type egress struct {
 
 // StartHLSEgress ...
 func (s *Frontend) StartHLSEgress(ctx context.Context, r *pb.StartHLSEgressRequest) (*pb.StartHLSEgressResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}
@@ -84,7 +83,7 @@ func (s *Frontend) StopHLSEgress(ctx context.Context, r *pb.StopHLSEgressRequest
 
 // StartRTMPIngress ...
 func (s *Frontend) StartRTMPIngress(ctx context.Context, r *pb.StartRTMPIngressRequest) (*pb.StartRTMPIngressResponse, error) {
-	session := rpc.ContextSession(ctx)
+	session := ContextSession(ctx)
 	if session.Anonymous() {
 		return nil, ErrAuthenticationRequired
 	}

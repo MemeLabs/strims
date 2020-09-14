@@ -1,0 +1,192 @@
+.logo_button {
+  width: 200px;
+  height: 200px;
+  transition: 200ms filter ease-in-out, 300ms opacity ease-in-out;
+
+  .background {
+    fill: #000
+  }
+
+  .network {
+    fill: #fff;
+
+    &.glow {
+      opacity: 0;
+    }
+  }
+
+  .button {
+    fill: #000;
+  }
+
+  .button {
+    fill: #000;
+    transition: 120ms transform ease-in;
+  }
+
+  &.exiting,
+  &.hidden {
+    opacity: 0;
+  }
+
+  &.flicker {
+    &, &:hover {
+      filter: blur(5px);
+    }
+
+    .network {
+      animation: flicker 7s linear infinite;
+    }
+  }
+
+  &.blur {
+    filter: blur(10px);
+  }
+
+  &.spin {
+    opacity: 0.9;
+    animation: spin 1.5s linear infinite;
+
+    .network {
+      opacity: 0.7;
+    }
+  }
+
+  &.pulse {
+    animation: pulse-opacity 2s linear infinite;
+
+    &.spin {
+      animation: spin 1.5s linear infinite, pulse-opacity 2s linear infinite;
+    }
+  }
+
+  &.error {
+    animation: none;
+    transform: rotate(-90deg) scale(0.8);
+    transition: opacity 0.8s ease-in-out, transform 0.8s ease-in-out;
+
+    .network {
+      transition: all 150ms ease-in-out;
+      animation: pulse-opacity 2s linear infinite;
+      fill: #b11623;
+      opacity: 0.8;
+    }
+  }
+
+  &.clickable {
+    cursor: pointer;
+
+    &:hover,
+    &:focus {
+      filter: blur(0);
+      animation: stop;
+
+      .network {
+        animation: none;
+      }
+    }
+
+    .button:hover,
+    .button:focus {
+      transform: scale(1.06) translate(-3%, -3%);
+    }
+
+    .button:active {
+      transition: 60ms transform ease-in;
+      transform: scale(0.94) translate(3%, 3%);
+    }
+  }
+}
+
+.logo_button_wrap {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  margin: -100px 0 0 -100px;
+
+  &.hidden {
+    display: none;
+  }
+}
+
+.logo_button_wrap.hovering {
+  &.disabled {
+    animation: shake-no 2s linear 1;
+  }
+
+  &:not(.disabled) {
+    animation: shake-yes 1.5s linear 1;
+  }
+}
+
+@keyframes pulse-opacity {
+  0% {
+    opacity: 0.3;
+  }
+  50% {
+    opacity: 0.2;
+  }
+  100% {
+    opacity: 0.3;
+  }
+}
+
+@keyframes flicker {
+  /*
+  we could do this with sass but it would probably break cache...
+
+  const frames = [];
+  for (let i = 0; i < 100; i += Math.random()) frames.push(i);
+  frames.map(v => `${Math.round(v * 100) / 100}% {opacity: ${Math.round(Math.random() * 0.3 * 100) / 100};}`).join(" ")
+  */
+  0% {opacity: 0.15;} 2.81% {opacity: 0.17;} 5.13% {opacity: 0.17;} 8.38% {opacity: 0.17;} 17.32% {opacity: 0.02;} 23.05% {opacity: 0.06;} 25.08% {opacity: 0.09;} 25.84% {opacity: 0.14;} 34.33% {opacity: 0.13;} 37.96% {opacity: 0.02;} 39.89% {opacity: 0.16;} 40.16% {opacity: 0.14;} 43.71% {opacity: 0.01;} 53.47% {opacity: 0.15;} 62.92% {opacity: 0.16;} 64.64% {opacity: 0.15;} 68.21% {opacity: 0.09;} 77.29% {opacity: 0.15;} 80.39% {opacity: 0.17;} 86.04% {opacity: 0.13;} 89.98% {opacity: 0.08;} 94.03% {opacity: 0.15;} 0% {opacity: 0.02;} 0.13% {opacity: 0.07;} 0.97% {opacity: 0.13;} 1.08% {opacity: 0.06;} 1.27% {opacity: 0.03;} 1.44% {opacity: 0.14;} 2.35% {opacity: 0.12;} 2.35% {opacity: 0.2;} 2.71% {opacity: 0.12;} 3.08% {opacity: 0.19;} 3.47% {opacity: 0.14;} 3.78% {opacity: 0.02;} 3.93% {opacity: 0.15;} 4.81% {opacity: 0.14;} 5.37% {opacity: 0.14;} 5.37% {opacity: 0.18;} 5.77% {opacity: 0.07;} 6.57% {opacity: 0.12;} 7.51% {opacity: 0.14;} 7.69% {opacity: 0.06;} 8.67% {opacity: 0.04;} 8.76% {opacity: 0.08;} 9.26% {opacity: 0.1;} 9.32% {opacity: 0.19;} 10.2% {opacity: 0.19;} 10.91% {opacity: 0.19;} 11.4% {opacity: 0.13;} 11.66% {opacity: 0.04;} 11.67% {opacity: 0.13;} 11.71% {opacity: 0.2;} 11.72% {opacity: 0.05;} 12.35% {opacity: 0.01;} 12.67% {opacity: 0.03;} 12.79% {opacity: 0.12;} 12.96% {opacity: 0.1;} 13.55% {opacity: 0.01;} 13.79% {opacity: 0.1;} 14.55% {opacity: 0.18;} 15.26% {opacity: 0.02;} 16.13% {opacity: 0.04;} 16.54% {opacity: 0.05;} 16.65% {opacity: 0.02;} 16.8% {opacity: 0.01;} 16.91% {opacity: 0.12;} 17.39% {opacity: 0.15;} 18.09% {opacity: 0.07;} 18.12% {opacity: 0.1;} 18.66% {opacity: 0.14;} 19.45% {opacity: 0.14;} 20.31% {opacity: 0.05;} 20.55% {opacity: 0.1;} 21.12% {opacity: 0;} 21.52% {opacity: 0.16;} 22.42% {opacity: 0.17;} 22.84% {opacity: 0.19;} 23.1% {opacity: 0.05;} 23.29% {opacity: 0.15;} 23.32% {opacity: 0;} 24.19% {opacity: 0.17;} 24.57% {opacity: 0.14;} 24.91% {opacity: 0.08;} 25.26% {opacity: 0.13;} 25.75% {opacity: 0;} 26.34% {opacity: 0.05;} 27.06% {opacity: 0.08;} 27.64% {opacity: 0.18;} 28.28% {opacity: 0.06;} 29.22% {opacity: 0.03;} 30.07% {opacity: 0.12;} 30.28% {opacity: 0.14;} 31.06% {opacity: 0.17;} 31.69% {opacity: 0.13;} 32.13% {opacity: 0.13;} 32.28% {opacity: 0.13;} 33.15% {opacity: 0.18;} 33.84% {opacity: 0.16;} 34% {opacity: 0.16;} 34.73% {opacity: 0.07;} 35.16% {opacity: 0.06;} 35.64% {opacity: 0.05;} 35.85% {opacity: 0.19;} 36.83% {opacity: 0.2;} 37.09% {opacity: 0.07;} 37.37% {opacity: 0.2;} 37.68% {opacity: 0.03;} 38.45% {opacity: 0.18;} 39.05% {opacity: 0.09;} 39.83% {opacity: 0.07;} 40.5% {opacity: 0.15;} 41.47% {opacity: 0.12;} 42.08% {opacity: 0.15;} 42.4% {opacity: 0.13;} 43.28% {opacity: 0.09;} 43.83% {opacity: 0.06;} 44.73% {opacity: 0.16;} 44.77% {opacity: 0.03;} 45.08% {opacity: 0.07;} 45.41% {opacity: 0.18;} 46.2% {opacity: 0.1;} 46.47% {opacity: 0.03;} 46.69% {opacity: 0.09;} 47.43% {opacity: 0.06;} 47.87% {opacity: 0.16;} 48.42% {opacity: 0.02;} 48.86% {opacity: 0.19;} 48.9% {opacity: 0.04;} 49.83% {opacity: 0.08;} 50.17% {opacity: 0.07;} 50.52% {opacity: 0.04;} 51.02% {opacity: 0.1;} 51.13% {opacity: 0.04;} 51.35% {opacity: 0.08;} 51.78% {opacity: 0.12;} 52.14% {opacity: 0.11;} 52.77% {opacity: 0.15;} 53.61% {opacity: 0.1;} 54.24% {opacity: 0.08;} 54.99% {opacity: 0.01;} 55.62% {opacity: 0.07;} 56.07% {opacity: 0.19;} 56.47% {opacity: 0.11;} 57.47% {opacity: 0.12;} 57.7% {opacity: 0.15;} 57.81% {opacity: 0.04;} 58.74% {opacity: 0.12;} 59.65% {opacity: 0.04;} 60.2% {opacity: 0.05;} 60.59% {opacity: 0.13;} 60.67% {opacity: 0.18;} 60.95% {opacity: 0.09;} 60.99% {opacity: 0.13;} 61.82% {opacity: 0.09;} 61.94% {opacity: 0.05;} 62.82% {opacity: 0.14;} 62.94% {opacity: 0.01;} 63.04% {opacity: 0.09;} 63.62% {opacity: 0.13;} 64.29% {opacity: 0.19;} 64.75% {opacity: 0.18;} 65.48% {opacity: 0.1;} 66.1% {opacity: 0.14;} 66.83% {opacity: 0.2;} 67.83% {opacity: 0.05;} 68.75% {opacity: 0.17;} 69.15% {opacity: 0.16;} 69.39% {opacity: 0.11;} 69.58% {opacity: 0.14;} 70.39% {opacity: 0.16;} 70.69% {opacity: 0.03;} 71.14% {opacity: 0.03;} 71.33% {opacity: 0.07;} 71.71% {opacity: 0.08;} 71.99% {opacity: 0.03;} 72.65% {opacity: 0.05;} 72.69% {opacity: 0.05;} 72.84% {opacity: 0.13;} 73.34% {opacity: 0.02;} 73.35% {opacity: 0.01;} 73.46% {opacity: 0.19;} 74.18% {opacity: 0.11;} 74.77% {opacity: 0.1;} 75.74% {opacity: 0.14;} 76.48% {opacity: 0.06;} 76.64% {opacity: 0.01;} 77.38% {opacity: 0.14;} 78.25% {opacity: 0.19;} 78.93% {opacity: 0.1;} 79.28% {opacity: 0.18;} 79.33% {opacity: 0;} 79.67% {opacity: 0.14;} 80.18% {opacity: 0.14;} 80.9% {opacity: 0.14;} 81.02% {opacity: 0.14;} 81.89% {opacity: 0.19;} 81.93% {opacity: 0.05;} 82.33% {opacity: 0.14;} 82.49% {opacity: 0.14;} 83.46% {opacity: 0.05;} 84.02% {opacity: 0.15;} 84.79% {opacity: 0.06;} 85.76% {opacity: 0.18;} 86.17% {opacity: 0.11;} 86.64% {opacity: 0.19;} 87.39% {opacity: 0;} 87.51% {opacity: 0.15;} 87.87% {opacity: 0.11;} 88.45% {opacity: 0.1;} 88.69% {opacity: 0.08;} 88.88% {opacity: 0;} 89.64% {opacity: 0.1;} 90.5% {opacity: 0.04;} 90.75% {opacity: 0.06;} 90.77% {opacity: 0;} 90.78% {opacity: 0.09;} 91.06% {opacity: 0.01;} 91.37% {opacity: 0.16;} 91.93% {opacity: 0.19;} 92.92% {opacity: 0.1;} 93.85% {opacity: 0.15;} 94.05% {opacity: 0.13;} 94.81% {opacity: 0.13;} 95.54% {opacity: 0.03;} 96.41% {opacity: 0.19;} 96.44% {opacity: 0.05;} 97.15% {opacity: 0.09;} 97.52% {opacity: 0;} 98.32% {opacity: 0.19;} 98.49% {opacity: 0.14;} 99.15% {opacity: 0.15;}
+
+  100% {
+    opacity: 0.6;
+  }
+}
+
+@keyframes spin {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes shake-yes {
+  10%, 90% {
+    transform: translate(0,-1px);
+  }
+
+  20%, 80% {
+    transform: translate(0, 2px);
+  }
+
+  30%, 50%, 70% {
+    transform: translate(0,-4px);
+  }
+
+  40%, 60% {
+    transform: translate(0, 4px);
+  }
+}
+
+@keyframes shake-no {
+  10%, 90% {
+    transform: translate(0,-1px);
+  }
+
+  20%, 80% {
+    transform: translate(2px, 0);
+  }
+
+  30%, 50%, 70% {
+    transform: translate(-4px, 0);
+  }
+
+  40%, 60% {
+    transform: translate(4px, 0);
+  }
+}

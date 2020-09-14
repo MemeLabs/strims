@@ -61,12 +61,12 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 	cr, cw := io.Pipe()
 
 	go func() {
-		if err := host.Handle(context.Background(), cw, hr); err != nil {
+		if err := host.Listen(context.Background(), readWriter{hr, cw}); err != nil {
 			log.Println("rpc host closed with error", err)
 		}
 	}()
 
-	client := rpc.NewClient(d.logger, hw, cr)
+	client := rpc.NewClient(d.logger, readWriter{cr, hw})
 	d.clients = append(d.clients, nativeDriverClient{file, client})
 	return client
 }
@@ -78,6 +78,11 @@ func (d *nativeDriver) Close() {
 			c.client.Close()
 		}
 	})
+}
+
+type readWriter struct {
+	io.Reader
+	io.Writer
 }
 
 func tempFile() string {

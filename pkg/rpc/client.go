@@ -10,17 +10,17 @@ import (
 )
 
 // NewClient ...
-func NewClient(logger *zap.Logger, w io.Writer, r io.Reader) *Client {
+func NewClient(logger *zap.Logger, rw io.ReadWriter) *Client {
 	ctx, cancel := context.WithCancel(context.Background())
 	c := &Client{
 		logger: logger,
 		ctx:    ctx,
 		cancel: cancel,
-		conn:   &conn{w: w},
+		conn:   &conn{w: rw},
 	}
 
 	go func() {
-		if err := c.readCalls(r); err != nil {
+		if err := c.readCalls(rw); err != nil {
 			c.Close()
 		}
 	}()

@@ -73,6 +73,10 @@
 
     &__nick {
       cursor: pointer;
+
+      &:hover {
+        text-decoration: underline;
+      }
     }
 
     &__spoiler {
@@ -106,7 +110,7 @@
     }
 
     &__greentext {
-      color: green;
+      color: #6CA528;
     }
   }
 
@@ -180,7 +184,7 @@
       }
 
       &--greentext {
-        color: green;
+        color: #6CA528;
       }
 
       &--code {

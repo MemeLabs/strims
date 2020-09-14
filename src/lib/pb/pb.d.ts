@@ -2132,6 +2132,9 @@ export class VideoServerWriteResponse implements IVideoServerWriteResponse {
 /** Properties of a VideoClientOpenRequest. */
 export interface IVideoClientOpenRequest {
 
+    /** VideoClientOpenRequest swarmKey */
+    swarmKey?: (Uint8Array|null);
+
     /** VideoClientOpenRequest emitData */
     emitData?: (boolean|null);
 }
@@ -2144,6 +2147,9 @@ export class VideoClientOpenRequest implements IVideoClientOpenRequest {
      * @param [properties] Properties to set
      */
     constructor(properties?: IVideoClientOpenRequest);
+
+    /** VideoClientOpenRequest swarmKey. */
+    public swarmKey: Uint8Array;
 
     /** VideoClientOpenRequest emitData. */
     public emitData: boolean;

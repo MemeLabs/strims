@@ -116,7 +116,7 @@ func TestNicks(t *testing.T) {
 	result = extractor.Extract(message)
 	assert.Equal(t, 1, len(result.Nicks))
 	assert.Equal(t, "bob", result.Nicks[0].Nick)
-	assert.Equal(t, &pb.Bounds{Start: 4, End: 7}, result.Nicks[0].Bounds)
+	assert.Equal(t, &pb.MessageEntities_Bounds{Start: 4, End: 7}, result.Nicks[0].Bounds)
 
 	extractor.RemoveNick("bob")
 	result = extractor.Extract(message)

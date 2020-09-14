@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/proto"
 )
 
+const pubSubChunkSize = 128
 const syncAddrRetryIvl = 5 * time.Second
 const syncAddrRefreshIvl = 10 * time.Minute
 
@@ -37,7 +38,7 @@ func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubSer
 		// SwarmOptions: ppspp.NewDefaultSwarmOptions(),
 		SwarmOptions: ppspp.SwarmOptions{
 			LiveWindow: 1 << 10, // 1MB
-			ChunkSize:  128,
+			ChunkSize:  pubSubChunkSize,
 			Integrity: integrity.VerifierOptions{
 				ProtectionMethod: integrity.ProtectionMethodSignAll,
 			},
@@ -124,7 +125,7 @@ func (s *PubSubServer) Messages() <-chan *pb.PubSubEvent_Message {
 
 // Send ...
 func (s *PubSubServer) Send(ctx context.Context, key string, body []byte) error {
-	n, err := s.send(&pb.PubSubEvent{
+	_, err := s.send(&pb.PubSubEvent{
 		Body: &pb.PubSubEvent_Message_{
 			Message: &pb.PubSubEvent_Message{
 				Time: time.Now().Unix(),
@@ -140,7 +141,7 @@ func (s *PubSubServer) Send(ctx context.Context, key string, body []byte) error 
 	_, err = s.send(&pb.PubSubEvent{
 		Body: &pb.PubSubEvent_Padding_{
 			Padding: &pb.PubSubEvent_Padding{
-				Body: make([]byte, 128-(n%128)),
+				Body: make([]byte, pubSubChunkSize),
 			},
 		},
 	})
@@ -196,7 +197,7 @@ func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, err
 		// ppspp.NewDefaultSwarmOptions(),
 		ppspp.SwarmOptions{
 			LiveWindow: 1 << 10, // 1MB
-			ChunkSize:  128,
+			ChunkSize:  pubSubChunkSize,
 			Integrity: integrity.VerifierOptions{
 				ProtectionMethod: integrity.ProtectionMethodSignAll,
 			},

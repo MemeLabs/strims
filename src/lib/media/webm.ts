@@ -94,7 +94,6 @@ export class Encoder {
   }
 }
 
-// TODO: prune output buffer
 export class Decoder {
   public source: Source;
   private headerRead: boolean = false;

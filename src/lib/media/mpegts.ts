@@ -1,11 +1,9 @@
 import muxjs from "mux.js";
 
 import { Source } from "./source";
-import WorkQueue from "./workqueue";
 
 const MIME_TYPE = "video/mp4;codecs=mp4a.40.5,avc1.64001F";
 
-// TODO: prune output buffer
 export class Decoder {
   public source: Source;
   private transmuxer: muxjs.mp4.Transmuxer;

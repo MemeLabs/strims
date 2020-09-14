@@ -83,7 +83,7 @@ func newLogger(bridge js.Value) *zap.Logger {
 func initDefault(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
 
-	svc, err := service.New(service.Options{
+	srv, err := service.New(service.Options{
 		Store:  wasmio.NewKVStore(bridge),
 		Logger: logger,
 		VPNOptions: []vpn.HostOption{
@@ -96,12 +96,12 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 		log.Fatalf("error creating service: %s", err)
 	}
 
-	rpc.NewHost(logger, svc).Handle(context.Background(), bus, bus)
+	srv.Listen(context.Background(), bus)
 }
 
 func initBroker(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
 	svc := vpn.NewBrokerService(logger)
 
-	rpc.NewHost(logger, svc).Handle(context.Background(), bus, bus)
+	rpc.NewHost(logger, svc).Listen(context.Background(), bus)
 }

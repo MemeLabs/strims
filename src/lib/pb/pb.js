@@ -4494,6 +4494,7 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
      * Properties of a VideoClientOpenRequest.
      * @exports IVideoClientOpenRequest
      * @interface IVideoClientOpenRequest
+     * @property {Uint8Array|null} [swarmKey] VideoClientOpenRequest swarmKey
      * @property {boolean|null} [emitData] VideoClientOpenRequest emitData
      */
 
@@ -4511,6 +4512,14 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
+
+    /**
+     * VideoClientOpenRequest swarmKey.
+     * @member {Uint8Array} swarmKey
+     * @memberof VideoClientOpenRequest
+     * @instance
+     */
+    VideoClientOpenRequest.prototype.swarmKey = $util.newBuffer([]);
 
     /**
      * VideoClientOpenRequest emitData.
@@ -4544,8 +4553,10 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
     VideoClientOpenRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
+        if (message.swarmKey != null && Object.hasOwnProperty.call(message, "swarmKey"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.swarmKey);
         if (message.emitData != null && Object.hasOwnProperty.call(message, "emitData"))
-            writer.uint32(/* id 1, wireType 0 =*/8).bool(message.emitData);
+            writer.uint32(/* id 2, wireType 0 =*/16).bool(message.emitData);
         return writer;
     };
 
@@ -4581,6 +4592,9 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
+                message.swarmKey = reader.bytes();
+                break;
+            case 2:
                 message.emitData = reader.bool();
                 break;
             default:
@@ -4618,6 +4632,9 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
     VideoClientOpenRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
+        if (message.swarmKey != null && message.hasOwnProperty("swarmKey"))
+            if (!(message.swarmKey && typeof message.swarmKey.length === "number" || $util.isString(message.swarmKey)))
+                return "swarmKey: buffer expected";
         if (message.emitData != null && message.hasOwnProperty("emitData"))
             if (typeof message.emitData !== "boolean")
                 return "emitData: boolean expected";
@@ -4636,6 +4653,11 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
         if (object instanceof $root.VideoClientOpenRequest)
             return object;
         let message = new $root.VideoClientOpenRequest();
+        if (object.swarmKey != null)
+            if (typeof object.swarmKey === "string")
+                $util.base64.decode(object.swarmKey, message.swarmKey = $util.newBuffer($util.base64.length(object.swarmKey)), 0);
+            else if (object.swarmKey.length)
+                message.swarmKey = object.swarmKey;
         if (object.emitData != null)
             message.emitData = Boolean(object.emitData);
         return message;
@@ -4654,8 +4676,18 @@ export const VideoClientOpenRequest = $root.VideoClientOpenRequest = (() => {
         if (!options)
             options = {};
         let object = {};
-        if (options.defaults)
+        if (options.defaults) {
+            if (options.bytes === String)
+                object.swarmKey = "";
+            else {
+                object.swarmKey = [];
+                if (options.bytes !== Array)
+                    object.swarmKey = $util.newBuffer(object.swarmKey);
+            }
             object.emitData = false;
+        }
+        if (message.swarmKey != null && message.hasOwnProperty("swarmKey"))
+            object.swarmKey = options.bytes === String ? $util.base64.encode(message.swarmKey, 0, message.swarmKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.swarmKey) : message.swarmKey;
         if (message.emitData != null && message.hasOwnProperty("emitData"))
             object.emitData = message.emitData;
         return object;

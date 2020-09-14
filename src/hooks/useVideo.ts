@@ -2,6 +2,19 @@ import { useRef, useState } from "react";
 
 import useReady from "./useReady";
 
+declare global {
+  interface Document {
+    pictureInPictureEnabled?: boolean;
+    pictureInPictureElement?: any;
+    exitPictureInPicture?: () => Promise<any>;
+  }
+
+  interface HTMLVideoElement {
+    disablePictureInPicture?: boolean;
+    requestPictureInPicture?: () => Promise<any>;
+  }
+}
+
 export const VideoReadyState = {
   // No information is available about the media resource.
   HAVE_NOTHING: 0,
@@ -19,8 +32,54 @@ export const VideoReadyState = {
   HAVE_ENOUGH_DATA: 4,
 };
 
-const useVideo = () => {
-  const ref = useRef();
+export interface VideoState {
+  readyState: number;
+  loaded: boolean;
+  playing: boolean;
+  paused: boolean;
+  ended: boolean;
+  waiting: boolean;
+  muted: boolean;
+  volume: number;
+  bufferStart: number;
+  bufferEnd: number;
+  duration: number;
+  currentTime: number;
+  seekableStart: number;
+  seekableEnd: number;
+  supportPiP: boolean;
+  pip: boolean;
+  src: string;
+}
+
+export interface VideoProps {
+  ref: React.MutableRefObject<HTMLVideoElement>;
+  onEnded: () => void;
+  onPause: () => void;
+  onPlaying: () => void;
+  onCanPlay: () => void;
+  onCanPlayThrough: () => void;
+  onVolumeChange: () => void;
+  onWaiting: () => void;
+  onDurationChange: () => void;
+  onLoadedMetadata: () => void;
+  onLoadedData: () => void;
+  onTimeUpdate: () => void;
+}
+
+export interface VideoControls {
+  mute: () => void;
+  unmute: () => void;
+  pause: () => void;
+  play: () => void;
+  setCurrentTime: (value: number) => void;
+  setVolume: (value: number) => void;
+  togglePiP: () => Promise<void>;
+  setSrc: (src: string) => void;
+}
+
+const useVideo = (): [VideoState, VideoProps, VideoControls] => {
+  const ref = useRef<HTMLVideoElement>();
   const [loaded, setLoaded] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [paused, setPaused] = useState(false);
@@ -87,7 +146,7 @@ const useVideo = () => {
     setReadyState(ref.current.readyState);
   };
 
-  const onLoadedMetadata = (e) => {
+  const onLoadedMetadata = () => {
     setReadyState(ref.current.readyState);
   };
 
@@ -168,8 +227,8 @@ const useVideo = () => {
     }
   };
 
-  const src = ref.current && ref.current.src;
-  const setSrc = (src) => ref.current && src && (ref.current.src = src);
+  const src = ref.current?.src;
+  const setSrc = (src: string) => ref.current && src && (ref.current.src = src);
 
   return [
     {
@@ -208,7 +267,7 @@ const useVideo = () => {
     {
       mute,
       unmute,
-      pause: () => ref.current && ref.current.pause(),
+      pause: () => ref.current?.pause(),
       play,
       setCurrentTime,
       setVolume,

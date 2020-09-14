@@ -160,7 +160,7 @@ func (t *testClientBridgeServer) handleRequest(w http.ResponseWriter, r *http.Re
 	}
 
 	rw := vpn.NewWSReadWriter(c)
-	client := rpc.NewClient(t.logger, rw, rw)
+	client := rpc.NewClient(t.logger, rw)
 
 	t.Clients <- client
 

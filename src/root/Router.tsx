@@ -12,6 +12,7 @@ import LoginPage from "../pages/Login";
 import NetworkMembershipsPage from "../pages/NetworkMemberships";
 import NetworksPage from "../pages/Networks";
 import NotFoundPage from "../pages/NotFound";
+import PlayerTest from "../pages/PlayerTest";
 import SignUpPage from "../pages/SignUp";
 
 const Router = () => {
@@ -25,6 +26,7 @@ const Router = () => {
       <PrivateRoute path="/bootstrap-clients" exact component={BootstrapClientsPage} />
       <PrivateRoute path="/chat-servers" exact component={ChatServersPage} />
       <PrivateRoute path="/directory/:networkKey" exact component={Directory} />
+      <PrivateRoute path="/player/:networkKey/:swarmKey" exact component={PlayerTest} />
       <PrivateRoute path="/activity" exact component={Activity} />
       <PrivateRoute path="/chat-test" exact component={ChatTest} />
       <Route component={NotFoundPage} />

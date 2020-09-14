@@ -110,7 +110,7 @@ const history = [
   'MSG {"nick":"Gehirnchirurg","features":[],"timestamp":1599347285958,"data":"PeepoHappy Nept","entities":{"emotes":[{"name":"PeepoHappy","bounds":{"start":0,"end":10}}],"nicks":[{"nick":"Nept","bounds":{"start":11,"end":15}}]}}',
   'MSG {"nick":"Nept","features":[],"timestamp":1599347290836,"data":"PeepoHappy","entities":{"emotes":[{"name":"PeepoHappy","bounds":{"start":0,"end":10}}]}}',
   'MSG {"nick":"Deadwing","features":[],"timestamp":1599347310554,"data":"Chehgo nope, but it\'s still a pretty big step in that affordability.","entities":{"nicks":[{"nick":"Chehgo","bounds":{"start":0,"end":6}}]}}',
-  'MSG {"nick":"Gehirnchirurg","features":[],"timestamp":1599347311233,"data":"\\u003etfw you will never get a shoutout from stalin\'s son FeelsBadMan","entities":{"emotes":[{"name":"FeelsBadMan","bounds":{"start":53,"end":64}}],"greentext":{"bounds":{"start":0,"end":64}}}}',
+  'MSG {"nick":"Gehirnchirurg","features":[],"timestamp":1599347311233,"data":"\\u003etfw you will never get a shoutout from stalin\'s son FeelsBadMan","entities":{"emotes":[{"name":"FeelsBadMan","bounds":{"start":53,"end":64}}],"greenText":{"bounds":{"start":0,"end":64}}}}',
   'MSG {"nick":"Deadwing","features":[],"timestamp":1599347327158,"data":"Chehgo at the very least we can watch streams of dank-looking games PeepoHappy","entities":{"emotes":[{"name":"PeepoHappy","bounds":{"start":68,"end":78}}],"nicks":[{"nick":"Chehgo","bounds":{"start":0,"end":6}}]}}',
   'MSG {"nick":"Chehgo","features":[],"timestamp":1599347349711,"data":"Deadwing not with youtube compression at least KEKW","entities":{"emotes":[{"name":"KEKW","bounds":{"start":47,"end":51}}],"nicks":[{"nick":"Deadwing","bounds":{"start":0,"end":8}}]}}',
   'MSG {"nick":"trekxx","features":[],"timestamp":1599347358576,"data":"why does taco fall not play?","entities":{}}',
@@ -154,7 +154,7 @@ const history = [
   'MSG {"nick":"Gehirnchirurg","features":[],"timestamp":1599347941270,"data":"Nept everything is going to be fine now FeelsOkayMan","entities":{"emotes":[{"name":"FeelsOkayMan","bounds":{"start":40,"end":52}}],"nicks":[{"nick":"Nept","bounds":{"start":0,"end":4}}]}}',
   'MSG {"nick":"Nept","features":[],"timestamp":1599347988647,"data":"the eyebrows on him tho PepeLaugh","entities":{"emotes":[{"name":"PepeLaugh","bounds":{"start":24,"end":33}}]}}',
   'MSG {"nick":"Chehgo","features":[],"timestamp":1599348064326,"data":"so something happened on my schools canvas shit, and apparently everyone got added to some first year course and people just spammed the discussion pages sending hundreds of emails to everyone. and my friend linked me one of the emails he got","entities":{}}',
-  'MSG {"nick":"Chehgo","features":[],"timestamp":1599348065611,"data":"\\u003eNeed 4 dps (pref ranged) and 2 heals for new world of warcraft expansion, no shamans or priests, must be able to raid 3 days a week, must have previous experience raiding at the highest level.\\n\\nNo gnomes allowed","entities":{"greentext":{"bounds":{"start":0,"end":212}}}}',
+  'MSG {"nick":"Chehgo","features":[],"timestamp":1599348065611,"data":"\\u003eNeed 4 dps (pref ranged) and 2 heals for new world of warcraft expansion, no shamans or priests, must be able to raid 3 days a week, must have previous experience raiding at the highest level.\\n\\nNo gnomes allowed","entities":{"greenText":{"bounds":{"start":0,"end":212}}}}',
   'MSG {"nick":"Ftwpala","features":[],"timestamp":1599348072705,"data":"/me looks at Nept \'s eyebrows SPY","entities":{"emotes":[{"name":"SPY","bounds":{"start":30,"end":33}}],"nicks":[{"nick":"Nept","bounds":{"start":13,"end":17}}],"me":{"bounds":{"start":4,"end":33}}}}',
   'MSG {"nick":"Chehgo","features":[],"timestamp":1599348076882,"data":"imagine sending that with your name attached on a course fucking page OMEGALUL","entities":{"emotes":[{"name":"OMEGALUL","bounds":{"start":70,"end":78}}]}}',
   'MSG {"nick":"arkzats","features":[],"timestamp":1599348088363,"data":"Chehgo OMEGALUL","entities":{"emotes":[{"name":"OMEGALUL","bounds":{"start":7,"end":15}}],"nicks":[{"nick":"Chehgo","bounds":{"start":0,"end":6}}]}}',
@@ -258,15 +258,14 @@ const history = [
 
 export const messages = history
   .map((v) => JSON.parse(v.substr(4)))
-  .map(
-    ({ nick, timestamp, data, entities }) =>
-      new ChatClientEvent.Message({
-        nick: nick,
-        sentTime: timestamp,
-        serverTime: timestamp,
-        body: data,
-        entities: MessageEntities.create(entities),
-      })
+  .map(({ nick, timestamp, data, entities }) =>
+    ChatClientEvent.Message.create({
+      nick: nick,
+      sentTime: timestamp,
+      serverTime: timestamp,
+      body: data,
+      entities: MessageEntities.create(entities),
+    })
   ) as ChatClientEvent.IMessage[];
 
 export default (() => {
@@ -275,7 +274,7 @@ export default (() => {
   }) as any;
 
   let i = 0;
-  setInterval(() => events.push(messages[i++ % history.length]), 1000);
+  setInterval(() => events.push(messages[i++ % history.length]), 10000);
 
   return events;
 })();

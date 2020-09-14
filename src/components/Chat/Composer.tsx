@@ -46,22 +46,11 @@ const commands = [
   "unhideemote",
 ];
 
-interface SearchState {
-  debounceDelay: number;
-  queryMode: "substring" | "prefix";
-  sources: SearchSource[][];
-  query: string;
-  target: Range;
-  suffixSpace: boolean;
-  modifierContext: string | undefined;
-  modifierTarget: Range;
-}
-
 interface ComposerProps {
-  suppress?: any;
+  onMessage: (message: string) => void;
 }
 
-const Composer: FunctionComponent<ComposerProps> = (props) => {
+const Composer: FunctionComponent<ComposerProps> = ({ onMessage }) => {
   const [index, setIndex] = useState(0);
   const [currentSearch, setSearch] = useState<SearchState | null>(null);
   const [lastSearch, setLastSearch] = useState<SearchState | null>(null);
@@ -125,7 +114,7 @@ const Composer: FunctionComponent<ComposerProps> = (props) => {
     (event: KeyboardEvent<HTMLDivElement>) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        console.log(`send message: "${ComposerEditor.text(editor)}"`);
+        onMessage(ComposerEditor.text(editor));
         ComposerEditor.clear(editor);
         return;
       }
@@ -379,6 +368,17 @@ const useSearchSources = (
   };
   return useMemo(() => sources, [nicks, tags, commands, emotes, modifiers]);
 };
+
+interface SearchState {
+  debounceDelay: number;
+  queryMode: "substring" | "prefix";
+  sources: SearchSource[][];
+  query: string;
+  target: Range;
+  suffixSpace: boolean;
+  modifierContext: string | undefined;
+  modifierTarget: Range;
+}
 
 const getSearchState = (
   editor: Editor,
