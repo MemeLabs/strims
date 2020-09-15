@@ -101,6 +101,7 @@ func TestNameChangeQuota(t *testing.T) {
 }
 
 func TestSignVerifyNickServToken(t *testing.T) {
+	t.Skip("unimplemented")
 	token := &pb.NickServToken{
 		Key:        []byte{0xDE, 0xAD},
 		Nick:       "foo",
