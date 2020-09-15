@@ -6,7 +6,13 @@ import * as fmp4 from "../lib/media/fmp4";
 import * as mpegts from "../lib/media/mpegts";
 import * as webm from "../lib/media/webm";
 
-export type MimeType = "video/fmp4" | "video/mpegts" | "video/webm";
+const decoders = {
+  "video/mp4": fmp4.Decoder,
+  "video/mpeg-ts": mpegts.Decoder,
+  "video/webm": webm.Decoder,
+};
+
+export type MimeType = keyof typeof decoders;
 
 export interface MediaSourceProps {
   networkKey: Uint8Array;
@@ -20,12 +26,9 @@ const useMediaSource = ({ networkKey, swarmKey, mimeType, videoRef }: MediaSourc
   const client = useClient();
 
   return useMemo(() => {
-    const Decoder = {
-      "video/fmp4": fmp4.Decoder,
-      "video/mpegts": mpegts.Decoder,
-      "video/webm": webm.Decoder,
-    }[mimeType];
+    const Decoder = decoders[mimeType];
     const decoder = new Decoder();
+    let started = false;
 
     const clientEvents = client.openVideoClient({
       swarmKey,
@@ -42,13 +45,11 @@ const useMediaSource = ({ networkKey, swarmKey, mimeType, videoRef }: MediaSourc
           if (e.data.flush) {
             decoder.flush();
 
-            const end = decoder.source.end();
-            const { currentTime } = videoRef.current;
-            if (currentTime < end - 10) {
-              videoRef.current.currentTime = end - 5;
+            const [start, end] = decoder.source.bounds();
+            if (!started && end - start >= 1) {
+              started = true;
+              videoRef.current.currentTime = end - 1;
               videoRef.current.play();
-
-              console.log("skipping", videoRef.current.currentTime);
             }
           }
       }

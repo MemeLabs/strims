@@ -30,7 +30,7 @@ const PlayerTest = () => {
             <VideoPlayer
               networkKey={Base64.toUint8Array(params.networkKey)}
               swarmKey={Base64.toUint8Array(params.swarmKey)}
-              mimeType="video/fmp4"
+              mimeType="video/mp4"
             />
           )}
         </section>

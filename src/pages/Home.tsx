@@ -1,5 +1,6 @@
 /* eslint-disable no-console */
 
+import { Base64 } from "js-base64";
 import * as React from "react";
 
 import { MainLayout } from "../components/MainLayout";
@@ -114,7 +115,10 @@ const HomePage = () => {
 
     const timeShifted = 0;
 
-    const clientEvents = client.openVideoClient({ emitData: true });
+    const clientEvents = client.openVideoClient({
+      swarmKey: Base64.toUint8Array("0uJfwk6ks1OwZaokGtXDnkEfeBWQjdESbqqGIIq1fjI="),
+      emitData: true,
+    });
     clientEvents.on("data", (v) => {
       switch (v.body) {
         case "open":
@@ -132,7 +136,7 @@ const HomePage = () => {
             //   videoRef.current.currentTime = 999999999999;
             // }
 
-            const end = decoder.source.end();
+            const [, end] = decoder.source.bounds();
             const { currentTime } = videoRef.current;
             if (currentTime < end - 10) {
               videoRef.current.currentTime = end - 5;

@@ -26,27 +26,13 @@ export class Source {
     this.sourceBufferTasks.insert(() => this.prune());
   }
 
-  public end(): number {
+  public bounds(): [number, number] {
     const { buffered } = this.sourceBuffer;
-
-    if (buffered.length === 0) {
-      return -1;
-    }
-
-    return buffered.end(buffered.length - 1);
+    return buffered.length === 0 ? [0, 0] : [buffered.start(0), buffered.end(buffered.length - 1)];
   }
 
   private prune() {
-    const { buffered } = this.sourceBuffer;
-
-    if (buffered.length === 0) {
-      this.sourceBufferTasks.runNext();
-      return;
-    }
-
-    const start = buffered.start(0);
-    const end = buffered.end(buffered.length - 1);
-    // console.log({ start, end });
+    const [start, end] = this.bounds();
 
     if (end - start <= 10) {
       this.sourceBufferTasks.runNext();

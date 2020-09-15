@@ -23,7 +23,7 @@
   width: 24px;
 
   svg {
-    transform: scale(6);
+    transform: scaleX(-6) scaleY(6);
     height: 24px;
     width: 24px;
   }
@@ -34,7 +34,7 @@
     transform: rotate(0deg);
   }
   100% {
-    transform: rotate(-360deg);
+    transform: rotate(360deg);
   }
 }
 

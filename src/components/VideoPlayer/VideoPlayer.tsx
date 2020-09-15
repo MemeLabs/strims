@@ -8,9 +8,9 @@ import useVideo from "../../hooks/useVideo";
 import LogoButton from "./LogoButton";
 import VideoControls from "./VideoControls";
 
-interface SwarmPlayerProps extends MediaSourceProps {
+type SwarmPlayerProps = Pick<MediaSourceProps, "networkKey" | "swarmKey" | "mimeType"> & {
   volumeStepSize?: number;
-}
+};
 
 const SwarmPlayer: FunctionComponent<SwarmPlayerProps> = ({
   networkKey,
