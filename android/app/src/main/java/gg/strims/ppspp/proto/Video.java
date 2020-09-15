@@ -11883,7 +11883,13 @@ public final class Video {
       com.google.protobuf.MessageOrBuilder {
 
     /**
-     * <code>bool emit_data = 1;</code>
+     * <code>bytes swarm_key = 1;</code>
+     * @return The swarmKey.
+     */
+    com.google.protobuf.ByteString getSwarmKey();
+
+    /**
+     * <code>bool emit_data = 2;</code>
      * @return The emitData.
      */
     boolean getEmitData();
@@ -11901,6 +11907,7 @@ public final class Video {
       super(builder);
     }
     private VideoClientOpenRequest() {
+      swarmKey_ = com.google.protobuf.ByteString.EMPTY;
     }
 
     @java.lang.Override
@@ -11933,7 +11940,12 @@ public final class Video {
             case 0:
               done = true;
               break;
-            case 8: {
+            case 10: {
+
+              swarmKey_ = input.readBytes();
+              break;
+            }
+            case 16: {
 
               emitData_ = input.readBool();
               break;
@@ -11970,10 +11982,21 @@ public final class Video {
               gg.strims.ppspp.proto.Video.VideoClientOpenRequest.class, gg.strims.ppspp.proto.Video.VideoClientOpenRequest.Builder.class);
     }
 
-    public static final int EMIT_DATA_FIELD_NUMBER = 1;
+    public static final int SWARM_KEY_FIELD_NUMBER = 1;
+    private com.google.protobuf.ByteString swarmKey_;
+    /**
+     * <code>bytes swarm_key = 1;</code>
+     * @return The swarmKey.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString getSwarmKey() {
+      return swarmKey_;
+    }
+
+    public static final int EMIT_DATA_FIELD_NUMBER = 2;
     private boolean emitData_;
     /**
-     * <code>bool emit_data = 1;</code>
+     * <code>bool emit_data = 2;</code>
      * @return The emitData.
      */
     @java.lang.Override
@@ -11995,8 +12018,11 @@ public final class Video {
     @java.lang.Override
     public void writeTo(com.google.protobuf.CodedOutputStream output)
                         throws java.io.IOException {
+      if (!swarmKey_.isEmpty()) {
+        output.writeBytes(1, swarmKey_);
+      }
       if (emitData_ != false) {
-        output.writeBool(1, emitData_);
+        output.writeBool(2, emitData_);
       }
       unknownFields.writeTo(output);
     }
@@ -12007,9 +12033,13 @@ public final class Video {
       if (size != -1) return size;
 
       size = 0;
+      if (!swarmKey_.isEmpty()) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(1, swarmKey_);
+      }
       if (emitData_ != false) {
         size += com.google.protobuf.CodedOutputStream
-          .computeBoolSize(1, emitData_);
+          .computeBoolSize(2, emitData_);
       }
       size += unknownFields.getSerializedSize();
       memoizedSize = size;
@@ -12026,6 +12056,8 @@ public final class Video {
       }
       gg.strims.ppspp.proto.Video.VideoClientOpenRequest other = (gg.strims.ppspp.proto.Video.VideoClientOpenRequest) obj;
 
+      if (!getSwarmKey()
+          .equals(other.getSwarmKey())) return false;
       if (getEmitData()
           != other.getEmitData()) return false;
       if (!unknownFields.equals(other.unknownFields)) return false;
@@ -12039,6 +12071,8 @@ public final class Video {
       }
       int hash = 41;
       hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + SWARM_KEY_FIELD_NUMBER;
+      hash = (53 * hash) + getSwarmKey().hashCode();
       hash = (37 * hash) + EMIT_DATA_FIELD_NUMBER;
       hash = (53 * hash) + com.google.protobuf.Internal.hashBoolean(
           getEmitData());
@@ -12175,6 +12209,8 @@ public final class Video {
       @java.lang.Override
       public Builder clear() {
         super.clear();
+        swarmKey_ = com.google.protobuf.ByteString.EMPTY;
+
         emitData_ = false;
 
         return this;
@@ -12203,6 +12239,7 @@ public final class Video {
       @java.lang.Override
       public gg.strims.ppspp.proto.Video.VideoClientOpenRequest buildPartial() {
         gg.strims.ppspp.proto.Video.VideoClientOpenRequest result = new gg.strims.ppspp.proto.Video.VideoClientOpenRequest(this);
+        result.swarmKey_ = swarmKey_;
         result.emitData_ = emitData_;
         onBuilt();
         return result;
@@ -12252,6 +12289,9 @@ public final class Video {
 
       public Builder mergeFrom(gg.strims.ppspp.proto.Video.VideoClientOpenRequest other) {
         if (other == gg.strims.ppspp.proto.Video.VideoClientOpenRequest.getDefaultInstance()) return this;
+        if (other.getSwarmKey() != com.google.protobuf.ByteString.EMPTY) {
+          setSwarmKey(other.getSwarmKey());
+        }
         if (other.getEmitData() != false) {
           setEmitData(other.getEmitData());
         }
@@ -12284,9 +12324,43 @@ public final class Video {
         return this;
       }
 
+      private com.google.protobuf.ByteString swarmKey_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>bytes swarm_key = 1;</code>
+       * @return The swarmKey.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString getSwarmKey() {
+        return swarmKey_;
+      }
+      /**
+       * <code>bytes swarm_key = 1;</code>
+       * @param value The swarmKey to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSwarmKey(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  
+        swarmKey_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>bytes swarm_key = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearSwarmKey() {
+        
+        swarmKey_ = getDefaultInstance().getSwarmKey();
+        onChanged();
+        return this;
+      }
+
       private boolean emitData_ ;
       /**
-       * <code>bool emit_data = 1;</code>
+       * <code>bool emit_data = 2;</code>
        * @return The emitData.
        */
       @java.lang.Override
@@ -12294,7 +12368,7 @@ public final class Video {
         return emitData_;
       }
       /**
-       * <code>bool emit_data = 1;</code>
+       * <code>bool emit_data = 2;</code>
        * @param value The emitData to set.
        * @return This builder for chaining.
        */
@@ -12305,7 +12379,7 @@ public final class Video {
         return this;
       }
       /**
-       * <code>bool emit_data = 1;</code>
+       * <code>bool emit_data = 2;</code>
        * @return This builder for chaining.
        */
       public Builder clearEmitData() {
@@ -19798,27 +19872,27 @@ public final class Video {
       "deoServerOpenRequest\"%\n\027VideoServerOpenR" +
       "esponse\022\n\n\002id\030\001 \001(\004\"B\n\027VideoServerWriteR" +
       "equest\022\n\n\002id\030\001 \001(\004\022\014\n\004data\030\002 \001(\014\022\r\n\005flus" +
-      "h\030\003 \001(\010\"\032\n\030VideoServerWriteResponse\"+\n\026V" +
-      "ideoClientOpenRequest\022\021\n\temit_data\030\001 \001(\010" +
-      "\"\326\001\n\020VideoClientEvent\022&\n\004data\030\001 \001(\0132\026.Vi" +
-      "deoClientEvent.DataH\000\022&\n\004open\030\002 \001(\0132\026.Vi" +
-      "deoClientEvent.OpenH\000\022(\n\005close\030\003 \001(\0132\027.V" +
-      "ideoClientEvent.CloseH\000\032#\n\004Data\022\014\n\004data\030" +
-      "\001 \001(\014\022\r\n\005flush\030\002 \001(\010\032\022\n\004Open\022\n\n\002id\030\001 \001(\004" +
-      "\032\007\n\005CloseB\006\n\004body\"\374\001\n\026VideoClientCallReq" +
-      "uest\022\n\n\002id\030\001 \001(\r\022,\n\004data\030\002 \001(\0132\034.VideoCl" +
-      "ientCallRequest.DataH\000\0227\n\nrun_client\030\003 \001" +
-      "(\0132!.VideoClientCallRequest.RunClientH\000\022" +
-      "7\n\nrun_server\030\004 \001(\0132!.VideoClientCallReq" +
-      "uest.RunServerH\000\032\024\n\004Data\022\014\n\004body\030\001 \001(\014\032\013" +
-      "\n\tRunServer\032\013\n\tRunClientB\006\n\004body\"\262\001\n\021Swa" +
-      "rmThingMessage\022\'\n\004open\030\001 \001(\0132\027.SwarmThin" +
-      "gMessage.OpenH\000\022)\n\005close\030\002 \001(\0132\030.SwarmTh" +
-      "ingMessage.CloseH\000\032&\n\004Open\022\020\n\010swarm_id\030\001" +
-      " \001(\014\022\014\n\004port\030\002 \001(\r\032\031\n\005Close\022\020\n\010swarm_id\030" +
-      "\001 \001(\014B\006\n\004bodyBD\n\025gg.strims.ppspp.protoZ&" +
-      "github.com/MemeLabs/go-ppspp/pkg/pb;pb\272\002" +
-      "\002PBb\006proto3"
+      "h\030\003 \001(\010\"\032\n\030VideoServerWriteResponse\">\n\026V" +
+      "ideoClientOpenRequest\022\021\n\tswarm_key\030\001 \001(\014" +
+      "\022\021\n\temit_data\030\002 \001(\010\"\326\001\n\020VideoClientEvent" +
+      "\022&\n\004data\030\001 \001(\0132\026.VideoClientEvent.DataH\000" +
+      "\022&\n\004open\030\002 \001(\0132\026.VideoClientEvent.OpenH\000" +
+      "\022(\n\005close\030\003 \001(\0132\027.VideoClientEvent.Close" +
+      "H\000\032#\n\004Data\022\014\n\004data\030\001 \001(\014\022\r\n\005flush\030\002 \001(\010\032" +
+      "\022\n\004Open\022\n\n\002id\030\001 \001(\004\032\007\n\005CloseB\006\n\004body\"\374\001\n" +
+      "\026VideoClientCallRequest\022\n\n\002id\030\001 \001(\r\022,\n\004d" +
+      "ata\030\002 \001(\0132\034.VideoClientCallRequest.DataH" +
+      "\000\0227\n\nrun_client\030\003 \001(\0132!.VideoClientCallR" +
+      "equest.RunClientH\000\0227\n\nrun_server\030\004 \001(\0132!" +
+      ".VideoClientCallRequest.RunServerH\000\032\024\n\004D" +
+      "ata\022\014\n\004body\030\001 \001(\014\032\013\n\tRunServer\032\013\n\tRunCli" +
+      "entB\006\n\004body\"\262\001\n\021SwarmThingMessage\022\'\n\004ope" +
+      "n\030\001 \001(\0132\027.SwarmThingMessage.OpenH\000\022)\n\005cl" +
+      "ose\030\002 \001(\0132\030.SwarmThingMessage.CloseH\000\032&\n" +
+      "\004Open\022\020\n\010swarm_id\030\001 \001(\014\022\014\n\004port\030\002 \001(\r\032\031\n" +
+      "\005Close\022\020\n\010swarm_id\030\001 \001(\014B\006\n\004bodyBD\n\025gg.s" +
+      "trims.ppspp.protoZ&github.com/MemeLabs/g" +
+      "o-ppspp/pkg/pb;pb\272\002\002PBb\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -19973,7 +20047,7 @@ public final class Video {
     internal_static_VideoClientOpenRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_VideoClientOpenRequest_descriptor,
-        new java.lang.String[] { "EmitData", });
+        new java.lang.String[] { "SwarmKey", "EmitData", });
     internal_static_VideoClientEvent_descriptor =
       getDescriptor().getMessageTypes().get(25);
     internal_static_VideoClientEvent_fieldAccessorTable = new

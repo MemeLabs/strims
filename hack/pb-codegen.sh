@@ -34,13 +34,16 @@ protoc \
     -I $SCHEMA_DIR \
     $SOURCES
 
-protoc \
-    --swift_out $SWIFT_DIR \
-    --swift_opt Visibility=Public \
-    -I $SCHEMA_DIR \
-    $SOURCES
+if command -v protoc-gen-swift &> /dev/null
+then
+    protoc \
+        --swift_out $SWIFT_DIR \
+        --swift_opt Visibility=Public \
+        -I $SCHEMA_DIR \
+        $SOURCES
 
-bash ./hack/swift-codegen.sh $REL_SOURCES
+    bash ./hack/swift-codegen.sh $REL_SOURCES
+fi
 
 protoc \
     --java_out $JAVA_DIR \

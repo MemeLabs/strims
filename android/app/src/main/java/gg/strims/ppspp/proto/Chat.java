@@ -10869,29 +10869,41 @@ public final class Chat {
       long getServerTime();
 
       /**
-       * <code>string body = 3;</code>
+       * <code>string nick = 3;</code>
+       * @return The nick.
+       */
+      java.lang.String getNick();
+      /**
+       * <code>string nick = 3;</code>
+       * @return The bytes for nick.
+       */
+      com.google.protobuf.ByteString
+          getNickBytes();
+
+      /**
+       * <code>string body = 4;</code>
        * @return The body.
        */
       java.lang.String getBody();
       /**
-       * <code>string body = 3;</code>
+       * <code>string body = 4;</code>
        * @return The bytes for body.
        */
       com.google.protobuf.ByteString
           getBodyBytes();
 
       /**
-       * <code>.MessageEntities entities = 4;</code>
+       * <code>.MessageEntities entities = 5;</code>
        * @return Whether the entities field is set.
        */
       boolean hasEntities();
       /**
-       * <code>.MessageEntities entities = 4;</code>
+       * <code>.MessageEntities entities = 5;</code>
        * @return The entities.
        */
       gg.strims.ppspp.proto.Chat.MessageEntities getEntities();
       /**
-       * <code>.MessageEntities entities = 4;</code>
+       * <code>.MessageEntities entities = 5;</code>
        */
       gg.strims.ppspp.proto.Chat.MessageEntitiesOrBuilder getEntitiesOrBuilder();
     }
@@ -10908,6 +10920,7 @@ public final class Chat {
         super(builder);
       }
       private Message() {
+        nick_ = "";
         body_ = "";
       }
 
@@ -10954,10 +10967,16 @@ public final class Chat {
               case 26: {
                 java.lang.String s = input.readStringRequireUtf8();
 
-                body_ = s;
+                nick_ = s;
                 break;
               }
               case 34: {
+                java.lang.String s = input.readStringRequireUtf8();
+
+                body_ = s;
+                break;
+              }
+              case 42: {
                 gg.strims.ppspp.proto.Chat.MessageEntities.Builder subBuilder = null;
                 if (entities_ != null) {
                   subBuilder = entities_.toBuilder();
@@ -11024,10 +11043,48 @@ public final class Chat {
         return serverTime_;
       }
 
-      public static final int BODY_FIELD_NUMBER = 3;
+      public static final int NICK_FIELD_NUMBER = 3;
+      private volatile java.lang.Object nick_;
+      /**
+       * <code>string nick = 3;</code>
+       * @return The nick.
+       */
+      @java.lang.Override
+      public java.lang.String getNick() {
+        java.lang.Object ref = nick_;
+        if (ref instanceof java.lang.String) {
+          return (java.lang.String) ref;
+        } else {
+          com.google.protobuf.ByteString bs = 
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          nick_ = s;
+          return s;
+        }
+      }
+      /**
+       * <code>string nick = 3;</code>
+       * @return The bytes for nick.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getNickBytes() {
+        java.lang.Object ref = nick_;
+        if (ref instanceof java.lang.String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          nick_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+
+      public static final int BODY_FIELD_NUMBER = 4;
       private volatile java.lang.Object body_;
       /**
-       * <code>string body = 3;</code>
+       * <code>string body = 4;</code>
        * @return The body.
        */
       @java.lang.Override
@@ -11044,7 +11101,7 @@ public final class Chat {
         }
       }
       /**
-       * <code>string body = 3;</code>
+       * <code>string body = 4;</code>
        * @return The bytes for body.
        */
       @java.lang.Override
@@ -11062,10 +11119,10 @@ public final class Chat {
         }
       }
 
-      public static final int ENTITIES_FIELD_NUMBER = 4;
+      public static final int ENTITIES_FIELD_NUMBER = 5;
       private gg.strims.ppspp.proto.Chat.MessageEntities entities_;
       /**
-       * <code>.MessageEntities entities = 4;</code>
+       * <code>.MessageEntities entities = 5;</code>
        * @return Whether the entities field is set.
        */
       @java.lang.Override
@@ -11073,7 +11130,7 @@ public final class Chat {
         return entities_ != null;
       }
       /**
-       * <code>.MessageEntities entities = 4;</code>
+       * <code>.MessageEntities entities = 5;</code>
        * @return The entities.
        */
       @java.lang.Override
@@ -11081,7 +11138,7 @@ public final class Chat {
         return entities_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.getDefaultInstance() : entities_;
       }
       /**
-       * <code>.MessageEntities entities = 4;</code>
+       * <code>.MessageEntities entities = 5;</code>
        */
       @java.lang.Override
       public gg.strims.ppspp.proto.Chat.MessageEntitiesOrBuilder getEntitiesOrBuilder() {
@@ -11108,11 +11165,14 @@ public final class Chat {
         if (serverTime_ != 0L) {
           output.writeInt64(2, serverTime_);
         }
+        if (!getNickBytes().isEmpty()) {
+          com.google.protobuf.GeneratedMessageV3.writeString(output, 3, nick_);
+        }
         if (!getBodyBytes().isEmpty()) {
-          com.google.protobuf.GeneratedMessageV3.writeString(output, 3, body_);
+          com.google.protobuf.GeneratedMessageV3.writeString(output, 4, body_);
         }
         if (entities_ != null) {
-          output.writeMessage(4, getEntities());
+          output.writeMessage(5, getEntities());
         }
         unknownFields.writeTo(output);
       }
@@ -11131,12 +11191,15 @@ public final class Chat {
           size += com.google.protobuf.CodedOutputStream
             .computeInt64Size(2, serverTime_);
         }
+        if (!getNickBytes().isEmpty()) {
+          size += com.google.protobuf.GeneratedMessageV3.computeStringSize(3, nick_);
+        }
         if (!getBodyBytes().isEmpty()) {
-          size += com.google.protobuf.GeneratedMessageV3.computeStringSize(3, body_);
+          size += com.google.protobuf.GeneratedMessageV3.computeStringSize(4, body_);
         }
         if (entities_ != null) {
           size += com.google.protobuf.CodedOutputStream
-            .computeMessageSize(4, getEntities());
+            .computeMessageSize(5, getEntities());
         }
         size += unknownFields.getSerializedSize();
         memoizedSize = size;
@@ -11157,6 +11220,8 @@ public final class Chat {
             != other.getSentTime()) return false;
         if (getServerTime()
             != other.getServerTime()) return false;
+        if (!getNick()
+            .equals(other.getNick())) return false;
         if (!getBody()
             .equals(other.getBody())) return false;
         if (hasEntities() != other.hasEntities()) return false;
@@ -11181,6 +11246,8 @@ public final class Chat {
         hash = (37 * hash) + SERVER_TIME_FIELD_NUMBER;
         hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
             getServerTime());
+        hash = (37 * hash) + NICK_FIELD_NUMBER;
+        hash = (53 * hash) + getNick().hashCode();
         hash = (37 * hash) + BODY_FIELD_NUMBER;
         hash = (53 * hash) + getBody().hashCode();
         if (hasEntities()) {
@@ -11324,6 +11391,8 @@ public final class Chat {
 
           serverTime_ = 0L;
 
+          nick_ = "";
+
           body_ = "";
 
           if (entitiesBuilder_ == null) {
@@ -11360,6 +11429,7 @@ public final class Chat {
           gg.strims.ppspp.proto.Chat.ChatClientEvent.Message result = new gg.strims.ppspp.proto.Chat.ChatClientEvent.Message(this);
           result.sentTime_ = sentTime_;
           result.serverTime_ = serverTime_;
+          result.nick_ = nick_;
           result.body_ = body_;
           if (entitiesBuilder_ == null) {
             result.entities_ = entities_;
@@ -11419,6 +11489,10 @@ public final class Chat {
           }
           if (other.getServerTime() != 0L) {
             setServerTime(other.getServerTime());
+          }
+          if (!other.getNick().isEmpty()) {
+            nick_ = other.nick_;
+            onChanged();
           }
           if (!other.getBody().isEmpty()) {
             body_ = other.body_;
@@ -11518,9 +11592,85 @@ public final class Chat {
           return this;
         }
 
+        private java.lang.Object nick_ = "";
+        /**
+         * <code>string nick = 3;</code>
+         * @return The nick.
+         */
+        public java.lang.String getNick() {
+          java.lang.Object ref = nick_;
+          if (!(ref instanceof java.lang.String)) {
+            com.google.protobuf.ByteString bs =
+                (com.google.protobuf.ByteString) ref;
+            java.lang.String s = bs.toStringUtf8();
+            nick_ = s;
+            return s;
+          } else {
+            return (java.lang.String) ref;
+          }
+        }
+        /**
+         * <code>string nick = 3;</code>
+         * @return The bytes for nick.
+         */
+        public com.google.protobuf.ByteString
+            getNickBytes() {
+          java.lang.Object ref = nick_;
+          if (ref instanceof String) {
+            com.google.protobuf.ByteString b = 
+                com.google.protobuf.ByteString.copyFromUtf8(
+                    (java.lang.String) ref);
+            nick_ = b;
+            return b;
+          } else {
+            return (com.google.protobuf.ByteString) ref;
+          }
+        }
+        /**
+         * <code>string nick = 3;</code>
+         * @param value The nick to set.
+         * @return This builder for chaining.
+         */
+        public Builder setNick(
+            java.lang.String value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  
+          nick_ = value;
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>string nick = 3;</code>
+         * @return This builder for chaining.
+         */
+        public Builder clearNick() {
+          
+          nick_ = getDefaultInstance().getNick();
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>string nick = 3;</code>
+         * @param value The bytes for nick to set.
+         * @return This builder for chaining.
+         */
+        public Builder setNickBytes(
+            com.google.protobuf.ByteString value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+          
+          nick_ = value;
+          onChanged();
+          return this;
+        }
+
         private java.lang.Object body_ = "";
         /**
-         * <code>string body = 3;</code>
+         * <code>string body = 4;</code>
          * @return The body.
          */
         public java.lang.String getBody() {
@@ -11536,7 +11686,7 @@ public final class Chat {
           }
         }
         /**
-         * <code>string body = 3;</code>
+         * <code>string body = 4;</code>
          * @return The bytes for body.
          */
         public com.google.protobuf.ByteString
@@ -11553,7 +11703,7 @@ public final class Chat {
           }
         }
         /**
-         * <code>string body = 3;</code>
+         * <code>string body = 4;</code>
          * @param value The body to set.
          * @return This builder for chaining.
          */
@@ -11568,7 +11718,7 @@ public final class Chat {
           return this;
         }
         /**
-         * <code>string body = 3;</code>
+         * <code>string body = 4;</code>
          * @return This builder for chaining.
          */
         public Builder clearBody() {
@@ -11578,7 +11728,7 @@ public final class Chat {
           return this;
         }
         /**
-         * <code>string body = 3;</code>
+         * <code>string body = 4;</code>
          * @param value The bytes for body to set.
          * @return This builder for chaining.
          */
@@ -11598,14 +11748,14 @@ public final class Chat {
         private com.google.protobuf.SingleFieldBuilderV3<
             gg.strims.ppspp.proto.Chat.MessageEntities, gg.strims.ppspp.proto.Chat.MessageEntities.Builder, gg.strims.ppspp.proto.Chat.MessageEntitiesOrBuilder> entitiesBuilder_;
         /**
-         * <code>.MessageEntities entities = 4;</code>
+         * <code>.MessageEntities entities = 5;</code>
          * @return Whether the entities field is set.
          */
         public boolean hasEntities() {
           return entitiesBuilder_ != null || entities_ != null;
         }
         /**
-         * <code>.MessageEntities entities = 4;</code>
+         * <code>.MessageEntities entities = 5;</code>
          * @return The entities.
          */
         public gg.strims.ppspp.proto.Chat.MessageEntities getEntities() {
@@ -11616,7 +11766,7 @@ public final class Chat {
           }
         }
         /**
-         * <code>.MessageEntities entities = 4;</code>
+         * <code>.MessageEntities entities = 5;</code>
          */
         public Builder setEntities(gg.strims.ppspp.proto.Chat.MessageEntities value) {
           if (entitiesBuilder_ == null) {
@@ -11632,7 +11782,7 @@ public final class Chat {
           return this;
         }
         /**
-         * <code>.MessageEntities entities = 4;</code>
+         * <code>.MessageEntities entities = 5;</code>
          */
         public Builder setEntities(
             gg.strims.ppspp.proto.Chat.MessageEntities.Builder builderForValue) {
@@ -11646,7 +11796,7 @@ public final class Chat {
           return this;
         }
         /**
-         * <code>.MessageEntities entities = 4;</code>
+         * <code>.MessageEntities entities = 5;</code>
          */
         public Builder mergeEntities(gg.strims.ppspp.proto.Chat.MessageEntities value) {
           if (entitiesBuilder_ == null) {
@@ -11664,7 +11814,7 @@ public final class Chat {
           return this;
         }
         /**
-         * <code>.MessageEntities entities = 4;</code>
+         * <code>.MessageEntities entities = 5;</code>
          */
         public Builder clearEntities() {
           if (entitiesBuilder_ == null) {
@@ -11678,7 +11828,7 @@ public final class Chat {
           return this;
         }
         /**
-         * <code>.MessageEntities entities = 4;</code>
+         * <code>.MessageEntities entities = 5;</code>
          */
         public gg.strims.ppspp.proto.Chat.MessageEntities.Builder getEntitiesBuilder() {
           
@@ -11686,7 +11836,7 @@ public final class Chat {
           return getEntitiesFieldBuilder().getBuilder();
         }
         /**
-         * <code>.MessageEntities entities = 4;</code>
+         * <code>.MessageEntities entities = 5;</code>
          */
         public gg.strims.ppspp.proto.Chat.MessageEntitiesOrBuilder getEntitiesOrBuilder() {
           if (entitiesBuilder_ != null) {
@@ -11697,7 +11847,7 @@ public final class Chat {
           }
         }
         /**
-         * <code>.MessageEntities entities = 4;</code>
+         * <code>.MessageEntities entities = 5;</code>
          */
         private com.google.protobuf.SingleFieldBuilderV3<
             gg.strims.ppspp.proto.Chat.MessageEntities, gg.strims.ppspp.proto.Chat.MessageEntities.Builder, gg.strims.ppspp.proto.Chat.MessageEntitiesOrBuilder> 
@@ -14731,178 +14881,178 @@ public final class Chat {
       com.google.protobuf.MessageOrBuilder {
 
     /**
-     * <code>repeated .Link links = 1;</code>
+     * <code>repeated .MessageEntities.Link links = 1;</code>
      */
-    java.util.List<gg.strims.ppspp.proto.Chat.Link> 
+    java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Link> 
         getLinksList();
     /**
-     * <code>repeated .Link links = 1;</code>
+     * <code>repeated .MessageEntities.Link links = 1;</code>
      */
-    gg.strims.ppspp.proto.Chat.Link getLinks(int index);
+    gg.strims.ppspp.proto.Chat.MessageEntities.Link getLinks(int index);
     /**
-     * <code>repeated .Link links = 1;</code>
+     * <code>repeated .MessageEntities.Link links = 1;</code>
      */
     int getLinksCount();
     /**
-     * <code>repeated .Link links = 1;</code>
+     * <code>repeated .MessageEntities.Link links = 1;</code>
      */
-    java.util.List<? extends gg.strims.ppspp.proto.Chat.LinkOrBuilder> 
+    java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.LinkOrBuilder> 
         getLinksOrBuilderList();
     /**
-     * <code>repeated .Link links = 1;</code>
+     * <code>repeated .MessageEntities.Link links = 1;</code>
      */
-    gg.strims.ppspp.proto.Chat.LinkOrBuilder getLinksOrBuilder(
+    gg.strims.ppspp.proto.Chat.MessageEntities.LinkOrBuilder getLinksOrBuilder(
         int index);
 
     /**
-     * <code>repeated .Emote emotes = 2;</code>
+     * <code>repeated .MessageEntities.Emote emotes = 2;</code>
      */
-    java.util.List<gg.strims.ppspp.proto.Chat.Emote> 
+    java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Emote> 
         getEmotesList();
     /**
-     * <code>repeated .Emote emotes = 2;</code>
+     * <code>repeated .MessageEntities.Emote emotes = 2;</code>
      */
-    gg.strims.ppspp.proto.Chat.Emote getEmotes(int index);
+    gg.strims.ppspp.proto.Chat.MessageEntities.Emote getEmotes(int index);
     /**
-     * <code>repeated .Emote emotes = 2;</code>
+     * <code>repeated .MessageEntities.Emote emotes = 2;</code>
      */
     int getEmotesCount();
     /**
-     * <code>repeated .Emote emotes = 2;</code>
+     * <code>repeated .MessageEntities.Emote emotes = 2;</code>
      */
-    java.util.List<? extends gg.strims.ppspp.proto.Chat.EmoteOrBuilder> 
+    java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.EmoteOrBuilder> 
         getEmotesOrBuilderList();
     /**
-     * <code>repeated .Emote emotes = 2;</code>
+     * <code>repeated .MessageEntities.Emote emotes = 2;</code>
      */
-    gg.strims.ppspp.proto.Chat.EmoteOrBuilder getEmotesOrBuilder(
+    gg.strims.ppspp.proto.Chat.MessageEntities.EmoteOrBuilder getEmotesOrBuilder(
         int index);
 
     /**
-     * <code>repeated .Nick nicks = 3;</code>
+     * <code>repeated .MessageEntities.Nick nicks = 3;</code>
      */
-    java.util.List<gg.strims.ppspp.proto.Chat.Nick> 
+    java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Nick> 
         getNicksList();
     /**
-     * <code>repeated .Nick nicks = 3;</code>
+     * <code>repeated .MessageEntities.Nick nicks = 3;</code>
      */
-    gg.strims.ppspp.proto.Chat.Nick getNicks(int index);
+    gg.strims.ppspp.proto.Chat.MessageEntities.Nick getNicks(int index);
     /**
-     * <code>repeated .Nick nicks = 3;</code>
+     * <code>repeated .MessageEntities.Nick nicks = 3;</code>
      */
     int getNicksCount();
     /**
-     * <code>repeated .Nick nicks = 3;</code>
+     * <code>repeated .MessageEntities.Nick nicks = 3;</code>
      */
-    java.util.List<? extends gg.strims.ppspp.proto.Chat.NickOrBuilder> 
+    java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.NickOrBuilder> 
         getNicksOrBuilderList();
     /**
-     * <code>repeated .Nick nicks = 3;</code>
+     * <code>repeated .MessageEntities.Nick nicks = 3;</code>
      */
-    gg.strims.ppspp.proto.Chat.NickOrBuilder getNicksOrBuilder(
+    gg.strims.ppspp.proto.Chat.MessageEntities.NickOrBuilder getNicksOrBuilder(
         int index);
 
     /**
-     * <code>repeated .Tag tags = 4;</code>
+     * <code>repeated .MessageEntities.Tag tags = 4;</code>
      */
-    java.util.List<gg.strims.ppspp.proto.Chat.Tag> 
+    java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Tag> 
         getTagsList();
     /**
-     * <code>repeated .Tag tags = 4;</code>
+     * <code>repeated .MessageEntities.Tag tags = 4;</code>
      */
-    gg.strims.ppspp.proto.Chat.Tag getTags(int index);
+    gg.strims.ppspp.proto.Chat.MessageEntities.Tag getTags(int index);
     /**
-     * <code>repeated .Tag tags = 4;</code>
+     * <code>repeated .MessageEntities.Tag tags = 4;</code>
      */
     int getTagsCount();
     /**
-     * <code>repeated .Tag tags = 4;</code>
+     * <code>repeated .MessageEntities.Tag tags = 4;</code>
      */
-    java.util.List<? extends gg.strims.ppspp.proto.Chat.TagOrBuilder> 
+    java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.TagOrBuilder> 
         getTagsOrBuilderList();
     /**
-     * <code>repeated .Tag tags = 4;</code>
+     * <code>repeated .MessageEntities.Tag tags = 4;</code>
      */
-    gg.strims.ppspp.proto.Chat.TagOrBuilder getTagsOrBuilder(
+    gg.strims.ppspp.proto.Chat.MessageEntities.TagOrBuilder getTagsOrBuilder(
         int index);
 
     /**
-     * <code>repeated .CodeBlock code_blocks = 5;</code>
+     * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
      */
-    java.util.List<gg.strims.ppspp.proto.Chat.CodeBlock> 
+    java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock> 
         getCodeBlocksList();
     /**
-     * <code>repeated .CodeBlock code_blocks = 5;</code>
+     * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
      */
-    gg.strims.ppspp.proto.Chat.CodeBlock getCodeBlocks(int index);
+    gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock getCodeBlocks(int index);
     /**
-     * <code>repeated .CodeBlock code_blocks = 5;</code>
+     * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
      */
     int getCodeBlocksCount();
     /**
-     * <code>repeated .CodeBlock code_blocks = 5;</code>
+     * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
      */
-    java.util.List<? extends gg.strims.ppspp.proto.Chat.CodeBlockOrBuilder> 
+    java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlockOrBuilder> 
         getCodeBlocksOrBuilderList();
     /**
-     * <code>repeated .CodeBlock code_blocks = 5;</code>
+     * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
      */
-    gg.strims.ppspp.proto.Chat.CodeBlockOrBuilder getCodeBlocksOrBuilder(
+    gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlockOrBuilder getCodeBlocksOrBuilder(
         int index);
 
     /**
-     * <code>repeated .Spoiler spoilers = 6;</code>
+     * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
      */
-    java.util.List<gg.strims.ppspp.proto.Chat.Spoiler> 
+    java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler> 
         getSpoilersList();
     /**
-     * <code>repeated .Spoiler spoilers = 6;</code>
+     * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
      */
-    gg.strims.ppspp.proto.Chat.Spoiler getSpoilers(int index);
+    gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler getSpoilers(int index);
     /**
-     * <code>repeated .Spoiler spoilers = 6;</code>
+     * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
      */
     int getSpoilersCount();
     /**
-     * <code>repeated .Spoiler spoilers = 6;</code>
+     * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
      */
-    java.util.List<? extends gg.strims.ppspp.proto.Chat.SpoilerOrBuilder> 
+    java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.SpoilerOrBuilder> 
         getSpoilersOrBuilderList();
     /**
-     * <code>repeated .Spoiler spoilers = 6;</code>
+     * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
      */
-    gg.strims.ppspp.proto.Chat.SpoilerOrBuilder getSpoilersOrBuilder(
+    gg.strims.ppspp.proto.Chat.MessageEntities.SpoilerOrBuilder getSpoilersOrBuilder(
         int index);
 
     /**
-     * <code>.GenericEntity green_text = 7;</code>
+     * <code>.MessageEntities.GenericEntity green_text = 7;</code>
      * @return Whether the greenText field is set.
      */
     boolean hasGreenText();
     /**
-     * <code>.GenericEntity green_text = 7;</code>
+     * <code>.MessageEntities.GenericEntity green_text = 7;</code>
      * @return The greenText.
      */
-    gg.strims.ppspp.proto.Chat.GenericEntity getGreenText();
+    gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity getGreenText();
     /**
-     * <code>.GenericEntity green_text = 7;</code>
+     * <code>.MessageEntities.GenericEntity green_text = 7;</code>
      */
-    gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder getGreenTextOrBuilder();
+    gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder getGreenTextOrBuilder();
 
     /**
-     * <code>.GenericEntity self_message = 8;</code>
+     * <code>.MessageEntities.GenericEntity self_message = 8;</code>
      * @return Whether the selfMessage field is set.
      */
     boolean hasSelfMessage();
     /**
-     * <code>.GenericEntity self_message = 8;</code>
+     * <code>.MessageEntities.GenericEntity self_message = 8;</code>
      * @return The selfMessage.
      */
-    gg.strims.ppspp.proto.Chat.GenericEntity getSelfMessage();
+    gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity getSelfMessage();
     /**
-     * <code>.GenericEntity self_message = 8;</code>
+     * <code>.MessageEntities.GenericEntity self_message = 8;</code>
      */
-    gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder getSelfMessageOrBuilder();
+    gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder getSelfMessageOrBuilder();
   }
   /**
    * Protobuf type {@code MessageEntities}
@@ -14958,64 +15108,64 @@ public final class Chat {
               break;
             case 10: {
               if (!((mutable_bitField0_ & 0x00000001) != 0)) {
-                links_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.Link>();
+                links_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.MessageEntities.Link>();
                 mutable_bitField0_ |= 0x00000001;
               }
               links_.add(
-                  input.readMessage(gg.strims.ppspp.proto.Chat.Link.parser(), extensionRegistry));
+                  input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.Link.parser(), extensionRegistry));
               break;
             }
             case 18: {
               if (!((mutable_bitField0_ & 0x00000002) != 0)) {
-                emotes_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.Emote>();
+                emotes_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.MessageEntities.Emote>();
                 mutable_bitField0_ |= 0x00000002;
               }
               emotes_.add(
-                  input.readMessage(gg.strims.ppspp.proto.Chat.Emote.parser(), extensionRegistry));
+                  input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.Emote.parser(), extensionRegistry));
               break;
             }
             case 26: {
               if (!((mutable_bitField0_ & 0x00000004) != 0)) {
-                nicks_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.Nick>();
+                nicks_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.MessageEntities.Nick>();
                 mutable_bitField0_ |= 0x00000004;
               }
               nicks_.add(
-                  input.readMessage(gg.strims.ppspp.proto.Chat.Nick.parser(), extensionRegistry));
+                  input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.Nick.parser(), extensionRegistry));
               break;
             }
             case 34: {
               if (!((mutable_bitField0_ & 0x00000008) != 0)) {
-                tags_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.Tag>();
+                tags_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.MessageEntities.Tag>();
                 mutable_bitField0_ |= 0x00000008;
               }
               tags_.add(
-                  input.readMessage(gg.strims.ppspp.proto.Chat.Tag.parser(), extensionRegistry));
+                  input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.Tag.parser(), extensionRegistry));
               break;
             }
             case 42: {
               if (!((mutable_bitField0_ & 0x00000010) != 0)) {
-                codeBlocks_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.CodeBlock>();
+                codeBlocks_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock>();
                 mutable_bitField0_ |= 0x00000010;
               }
               codeBlocks_.add(
-                  input.readMessage(gg.strims.ppspp.proto.Chat.CodeBlock.parser(), extensionRegistry));
+                  input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.parser(), extensionRegistry));
               break;
             }
             case 50: {
               if (!((mutable_bitField0_ & 0x00000020) != 0)) {
-                spoilers_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.Spoiler>();
+                spoilers_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler>();
                 mutable_bitField0_ |= 0x00000020;
               }
               spoilers_.add(
-                  input.readMessage(gg.strims.ppspp.proto.Chat.Spoiler.parser(), extensionRegistry));
+                  input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.parser(), extensionRegistry));
               break;
             }
             case 58: {
-              gg.strims.ppspp.proto.Chat.GenericEntity.Builder subBuilder = null;
+              gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder subBuilder = null;
               if (greenText_ != null) {
                 subBuilder = greenText_.toBuilder();
               }
-              greenText_ = input.readMessage(gg.strims.ppspp.proto.Chat.GenericEntity.parser(), extensionRegistry);
+              greenText_ = input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.parser(), extensionRegistry);
               if (subBuilder != null) {
                 subBuilder.mergeFrom(greenText_);
                 greenText_ = subBuilder.buildPartial();
@@ -15024,11 +15174,11 @@ public final class Chat {
               break;
             }
             case 66: {
-              gg.strims.ppspp.proto.Chat.GenericEntity.Builder subBuilder = null;
+              gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder subBuilder = null;
               if (selfMessage_ != null) {
                 subBuilder = selfMessage_.toBuilder();
               }
-              selfMessage_ = input.readMessage(gg.strims.ppspp.proto.Chat.GenericEntity.parser(), extensionRegistry);
+              selfMessage_ = input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.parser(), extensionRegistry);
               if (subBuilder != null) {
                 subBuilder.mergeFrom(selfMessage_);
                 selfMessage_ = subBuilder.buildPartial();
@@ -15086,250 +15236,6048 @@ public final class Chat {
               gg.strims.ppspp.proto.Chat.MessageEntities.class, gg.strims.ppspp.proto.Chat.MessageEntities.Builder.class);
     }
 
-    public static final int LINKS_FIELD_NUMBER = 1;
-    private java.util.List<gg.strims.ppspp.proto.Chat.Link> links_;
+    public interface BoundsOrBuilder extends
+        // @@protoc_insertion_point(interface_extends:MessageEntities.Bounds)
+        com.google.protobuf.MessageOrBuilder {
+
+      /**
+       * <code>int64 start = 1;</code>
+       * @return The start.
+       */
+      long getStart();
+
+      /**
+       * <code>int64 end = 2;</code>
+       * @return The end.
+       */
+      long getEnd();
+    }
     /**
-     * <code>repeated .Link links = 1;</code>
+     * Protobuf type {@code MessageEntities.Bounds}
+     */
+    public static final class Bounds extends
+        com.google.protobuf.GeneratedMessageV3 implements
+        // @@protoc_insertion_point(message_implements:MessageEntities.Bounds)
+        BoundsOrBuilder {
+    private static final long serialVersionUID = 0L;
+      // Use Bounds.newBuilder() to construct.
+      private Bounds(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+        super(builder);
+      }
+      private Bounds() {
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new Bounds();
+      }
+
+      @java.lang.Override
+      public final com.google.protobuf.UnknownFieldSet
+      getUnknownFields() {
+        return this.unknownFields;
+      }
+      private Bounds(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        this();
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+            com.google.protobuf.UnknownFieldSet.newBuilder();
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 8: {
+
+                start_ = input.readInt64();
+                break;
+              }
+              case 16: {
+
+                end_ = input.readInt64();
+                break;
+              }
+              default: {
+                if (!parseUnknownField(
+                    input, unknownFields, extensionRegistry, tag)) {
+                  done = true;
+                }
+                break;
+              }
+            }
+          }
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(this);
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(
+              e).setUnfinishedMessage(this);
+        } finally {
+          this.unknownFields = unknownFields.build();
+          makeExtensionsImmutable();
+        }
+      }
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Bounds_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Bounds_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.class, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder.class);
+      }
+
+      public static final int START_FIELD_NUMBER = 1;
+      private long start_;
+      /**
+       * <code>int64 start = 1;</code>
+       * @return The start.
+       */
+      @java.lang.Override
+      public long getStart() {
+        return start_;
+      }
+
+      public static final int END_FIELD_NUMBER = 2;
+      private long end_;
+      /**
+       * <code>int64 end = 2;</code>
+       * @return The end.
+       */
+      @java.lang.Override
+      public long getEnd() {
+        return end_;
+      }
+
+      private byte memoizedIsInitialized = -1;
+      @java.lang.Override
+      public final boolean isInitialized() {
+        byte isInitialized = memoizedIsInitialized;
+        if (isInitialized == 1) return true;
+        if (isInitialized == 0) return false;
+
+        memoizedIsInitialized = 1;
+        return true;
+      }
+
+      @java.lang.Override
+      public void writeTo(com.google.protobuf.CodedOutputStream output)
+                          throws java.io.IOException {
+        if (start_ != 0L) {
+          output.writeInt64(1, start_);
+        }
+        if (end_ != 0L) {
+          output.writeInt64(2, end_);
+        }
+        unknownFields.writeTo(output);
+      }
+
+      @java.lang.Override
+      public int getSerializedSize() {
+        int size = memoizedSize;
+        if (size != -1) return size;
+
+        size = 0;
+        if (start_ != 0L) {
+          size += com.google.protobuf.CodedOutputStream
+            .computeInt64Size(1, start_);
+        }
+        if (end_ != 0L) {
+          size += com.google.protobuf.CodedOutputStream
+            .computeInt64Size(2, end_);
+        }
+        size += unknownFields.getSerializedSize();
+        memoizedSize = size;
+        return size;
+      }
+
+      @java.lang.Override
+      public boolean equals(final java.lang.Object obj) {
+        if (obj == this) {
+         return true;
+        }
+        if (!(obj instanceof gg.strims.ppspp.proto.Chat.MessageEntities.Bounds)) {
+          return super.equals(obj);
+        }
+        gg.strims.ppspp.proto.Chat.MessageEntities.Bounds other = (gg.strims.ppspp.proto.Chat.MessageEntities.Bounds) obj;
+
+        if (getStart()
+            != other.getStart()) return false;
+        if (getEnd()
+            != other.getEnd()) return false;
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
+      }
+
+      @java.lang.Override
+      public int hashCode() {
+        if (memoizedHashCode != 0) {
+          return memoizedHashCode;
+        }
+        int hash = 41;
+        hash = (19 * hash) + getDescriptor().hashCode();
+        hash = (37 * hash) + START_FIELD_NUMBER;
+        hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
+            getStart());
+        hash = (37 * hash) + END_FIELD_NUMBER;
+        hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
+            getEnd());
+        hash = (29 * hash) + unknownFields.hashCode();
+        memoizedHashCode = hash;
+        return hash;
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parseFrom(
+          java.nio.ByteBuffer data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parseFrom(
+          java.nio.ByteBuffer data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parseFrom(
+          com.google.protobuf.ByteString data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parseFrom(
+          com.google.protobuf.ByteString data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parseFrom(byte[] data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parseFrom(
+          byte[] data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parseFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parseFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parseDelimitedFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parseDelimitedFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parseFrom(
+          com.google.protobuf.CodedInputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parseFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+
+      @java.lang.Override
+      public Builder newBuilderForType() { return newBuilder(); }
+      public static Builder newBuilder() {
+        return DEFAULT_INSTANCE.toBuilder();
+      }
+      public static Builder newBuilder(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds prototype) {
+        return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+      }
+      @java.lang.Override
+      public Builder toBuilder() {
+        return this == DEFAULT_INSTANCE
+            ? new Builder() : new Builder().mergeFrom(this);
+      }
+
+      @java.lang.Override
+      protected Builder newBuilderForType(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        Builder builder = new Builder(parent);
+        return builder;
+      }
+      /**
+       * Protobuf type {@code MessageEntities.Bounds}
+       */
+      public static final class Builder extends
+          com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+          // @@protoc_insertion_point(builder_implements:MessageEntities.Bounds)
+          gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder {
+        public static final com.google.protobuf.Descriptors.Descriptor
+            getDescriptor() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Bounds_descriptor;
+        }
+
+        @java.lang.Override
+        protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+            internalGetFieldAccessorTable() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Bounds_fieldAccessorTable
+              .ensureFieldAccessorsInitialized(
+                  gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.class, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder.class);
+        }
+
+        // Construct using gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.newBuilder()
+        private Builder() {
+          maybeForceBuilderInitialization();
+        }
+
+        private Builder(
+            com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          super(parent);
+          maybeForceBuilderInitialization();
+        }
+        private void maybeForceBuilderInitialization() {
+          if (com.google.protobuf.GeneratedMessageV3
+                  .alwaysUseFieldBuilders) {
+          }
+        }
+        @java.lang.Override
+        public Builder clear() {
+          super.clear();
+          start_ = 0L;
+
+          end_ = 0L;
+
+          return this;
+        }
+
+        @java.lang.Override
+        public com.google.protobuf.Descriptors.Descriptor
+            getDescriptorForType() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Bounds_descriptor;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getDefaultInstanceForType() {
+          return gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance();
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds build() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Bounds result = buildPartial();
+          if (!result.isInitialized()) {
+            throw newUninitializedMessageException(result);
+          }
+          return result;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds buildPartial() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Bounds result = new gg.strims.ppspp.proto.Chat.MessageEntities.Bounds(this);
+          result.start_ = start_;
+          result.end_ = end_;
+          onBuilt();
+          return result;
+        }
+
+        @java.lang.Override
+        public Builder clone() {
+          return super.clone();
+        }
+        @java.lang.Override
+        public Builder setField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.setField(field, value);
+        }
+        @java.lang.Override
+        public Builder clearField(
+            com.google.protobuf.Descriptors.FieldDescriptor field) {
+          return super.clearField(field);
+        }
+        @java.lang.Override
+        public Builder clearOneof(
+            com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+          return super.clearOneof(oneof);
+        }
+        @java.lang.Override
+        public Builder setRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            int index, java.lang.Object value) {
+          return super.setRepeatedField(field, index, value);
+        }
+        @java.lang.Override
+        public Builder addRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.addRepeatedField(field, value);
+        }
+        @java.lang.Override
+        public Builder mergeFrom(com.google.protobuf.Message other) {
+          if (other instanceof gg.strims.ppspp.proto.Chat.MessageEntities.Bounds) {
+            return mergeFrom((gg.strims.ppspp.proto.Chat.MessageEntities.Bounds)other);
+          } else {
+            super.mergeFrom(other);
+            return this;
+          }
+        }
+
+        public Builder mergeFrom(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds other) {
+          if (other == gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance()) return this;
+          if (other.getStart() != 0L) {
+            setStart(other.getStart());
+          }
+          if (other.getEnd() != 0L) {
+            setEnd(other.getEnd());
+          }
+          this.mergeUnknownFields(other.unknownFields);
+          onChanged();
+          return this;
+        }
+
+        @java.lang.Override
+        public final boolean isInitialized() {
+          return true;
+        }
+
+        @java.lang.Override
+        public Builder mergeFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws java.io.IOException {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Bounds parsedMessage = null;
+          try {
+            parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+          } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+            parsedMessage = (gg.strims.ppspp.proto.Chat.MessageEntities.Bounds) e.getUnfinishedMessage();
+            throw e.unwrapIOException();
+          } finally {
+            if (parsedMessage != null) {
+              mergeFrom(parsedMessage);
+            }
+          }
+          return this;
+        }
+
+        private long start_ ;
+        /**
+         * <code>int64 start = 1;</code>
+         * @return The start.
+         */
+        @java.lang.Override
+        public long getStart() {
+          return start_;
+        }
+        /**
+         * <code>int64 start = 1;</code>
+         * @param value The start to set.
+         * @return This builder for chaining.
+         */
+        public Builder setStart(long value) {
+          
+          start_ = value;
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>int64 start = 1;</code>
+         * @return This builder for chaining.
+         */
+        public Builder clearStart() {
+          
+          start_ = 0L;
+          onChanged();
+          return this;
+        }
+
+        private long end_ ;
+        /**
+         * <code>int64 end = 2;</code>
+         * @return The end.
+         */
+        @java.lang.Override
+        public long getEnd() {
+          return end_;
+        }
+        /**
+         * <code>int64 end = 2;</code>
+         * @param value The end to set.
+         * @return This builder for chaining.
+         */
+        public Builder setEnd(long value) {
+          
+          end_ = value;
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>int64 end = 2;</code>
+         * @return This builder for chaining.
+         */
+        public Builder clearEnd() {
+          
+          end_ = 0L;
+          onChanged();
+          return this;
+        }
+        @java.lang.Override
+        public final Builder setUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.setUnknownFields(unknownFields);
+        }
+
+        @java.lang.Override
+        public final Builder mergeUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.mergeUnknownFields(unknownFields);
+        }
+
+
+        // @@protoc_insertion_point(builder_scope:MessageEntities.Bounds)
+      }
+
+      // @@protoc_insertion_point(class_scope:MessageEntities.Bounds)
+      private static final gg.strims.ppspp.proto.Chat.MessageEntities.Bounds DEFAULT_INSTANCE;
+      static {
+        DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.MessageEntities.Bounds();
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getDefaultInstance() {
+        return DEFAULT_INSTANCE;
+      }
+
+      private static final com.google.protobuf.Parser<Bounds>
+          PARSER = new com.google.protobuf.AbstractParser<Bounds>() {
+        @java.lang.Override
+        public Bounds parsePartialFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws com.google.protobuf.InvalidProtocolBufferException {
+          return new Bounds(input, extensionRegistry);
+        }
+      };
+
+      public static com.google.protobuf.Parser<Bounds> parser() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Parser<Bounds> getParserForType() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getDefaultInstanceForType() {
+        return DEFAULT_INSTANCE;
+      }
+
+    }
+
+    public interface LinkOrBuilder extends
+        // @@protoc_insertion_point(interface_extends:MessageEntities.Link)
+        com.google.protobuf.MessageOrBuilder {
+
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      boolean hasBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder();
+
+      /**
+       * <code>string url = 2;</code>
+       * @return The url.
+       */
+      java.lang.String getUrl();
+      /**
+       * <code>string url = 2;</code>
+       * @return The bytes for url.
+       */
+      com.google.protobuf.ByteString
+          getUrlBytes();
+    }
+    /**
+     * Protobuf type {@code MessageEntities.Link}
+     */
+    public static final class Link extends
+        com.google.protobuf.GeneratedMessageV3 implements
+        // @@protoc_insertion_point(message_implements:MessageEntities.Link)
+        LinkOrBuilder {
+    private static final long serialVersionUID = 0L;
+      // Use Link.newBuilder() to construct.
+      private Link(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+        super(builder);
+      }
+      private Link() {
+        url_ = "";
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new Link();
+      }
+
+      @java.lang.Override
+      public final com.google.protobuf.UnknownFieldSet
+      getUnknownFields() {
+        return this.unknownFields;
+      }
+      private Link(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        this();
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+            com.google.protobuf.UnknownFieldSet.newBuilder();
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder subBuilder = null;
+                if (bounds_ != null) {
+                  subBuilder = bounds_.toBuilder();
+                }
+                bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.parser(), extensionRegistry);
+                if (subBuilder != null) {
+                  subBuilder.mergeFrom(bounds_);
+                  bounds_ = subBuilder.buildPartial();
+                }
+
+                break;
+              }
+              case 18: {
+                java.lang.String s = input.readStringRequireUtf8();
+
+                url_ = s;
+                break;
+              }
+              default: {
+                if (!parseUnknownField(
+                    input, unknownFields, extensionRegistry, tag)) {
+                  done = true;
+                }
+                break;
+              }
+            }
+          }
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(this);
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(
+              e).setUnfinishedMessage(this);
+        } finally {
+          this.unknownFields = unknownFields.build();
+          makeExtensionsImmutable();
+        }
+      }
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Link_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Link_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                gg.strims.ppspp.proto.Chat.MessageEntities.Link.class, gg.strims.ppspp.proto.Chat.MessageEntities.Link.Builder.class);
+      }
+
+      public static final int BOUNDS_FIELD_NUMBER = 1;
+      private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      @java.lang.Override
+      public boolean hasBounds() {
+        return bounds_ != null;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+        return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+        return getBounds();
+      }
+
+      public static final int URL_FIELD_NUMBER = 2;
+      private volatile java.lang.Object url_;
+      /**
+       * <code>string url = 2;</code>
+       * @return The url.
+       */
+      @java.lang.Override
+      public java.lang.String getUrl() {
+        java.lang.Object ref = url_;
+        if (ref instanceof java.lang.String) {
+          return (java.lang.String) ref;
+        } else {
+          com.google.protobuf.ByteString bs = 
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          url_ = s;
+          return s;
+        }
+      }
+      /**
+       * <code>string url = 2;</code>
+       * @return The bytes for url.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getUrlBytes() {
+        java.lang.Object ref = url_;
+        if (ref instanceof java.lang.String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          url_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+
+      private byte memoizedIsInitialized = -1;
+      @java.lang.Override
+      public final boolean isInitialized() {
+        byte isInitialized = memoizedIsInitialized;
+        if (isInitialized == 1) return true;
+        if (isInitialized == 0) return false;
+
+        memoizedIsInitialized = 1;
+        return true;
+      }
+
+      @java.lang.Override
+      public void writeTo(com.google.protobuf.CodedOutputStream output)
+                          throws java.io.IOException {
+        if (bounds_ != null) {
+          output.writeMessage(1, getBounds());
+        }
+        if (!getUrlBytes().isEmpty()) {
+          com.google.protobuf.GeneratedMessageV3.writeString(output, 2, url_);
+        }
+        unknownFields.writeTo(output);
+      }
+
+      @java.lang.Override
+      public int getSerializedSize() {
+        int size = memoizedSize;
+        if (size != -1) return size;
+
+        size = 0;
+        if (bounds_ != null) {
+          size += com.google.protobuf.CodedOutputStream
+            .computeMessageSize(1, getBounds());
+        }
+        if (!getUrlBytes().isEmpty()) {
+          size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, url_);
+        }
+        size += unknownFields.getSerializedSize();
+        memoizedSize = size;
+        return size;
+      }
+
+      @java.lang.Override
+      public boolean equals(final java.lang.Object obj) {
+        if (obj == this) {
+         return true;
+        }
+        if (!(obj instanceof gg.strims.ppspp.proto.Chat.MessageEntities.Link)) {
+          return super.equals(obj);
+        }
+        gg.strims.ppspp.proto.Chat.MessageEntities.Link other = (gg.strims.ppspp.proto.Chat.MessageEntities.Link) obj;
+
+        if (hasBounds() != other.hasBounds()) return false;
+        if (hasBounds()) {
+          if (!getBounds()
+              .equals(other.getBounds())) return false;
+        }
+        if (!getUrl()
+            .equals(other.getUrl())) return false;
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
+      }
+
+      @java.lang.Override
+      public int hashCode() {
+        if (memoizedHashCode != 0) {
+          return memoizedHashCode;
+        }
+        int hash = 41;
+        hash = (19 * hash) + getDescriptor().hashCode();
+        if (hasBounds()) {
+          hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
+          hash = (53 * hash) + getBounds().hashCode();
+        }
+        hash = (37 * hash) + URL_FIELD_NUMBER;
+        hash = (53 * hash) + getUrl().hashCode();
+        hash = (29 * hash) + unknownFields.hashCode();
+        memoizedHashCode = hash;
+        return hash;
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link parseFrom(
+          java.nio.ByteBuffer data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link parseFrom(
+          java.nio.ByteBuffer data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link parseFrom(
+          com.google.protobuf.ByteString data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link parseFrom(
+          com.google.protobuf.ByteString data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link parseFrom(byte[] data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link parseFrom(
+          byte[] data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link parseFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link parseFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link parseDelimitedFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link parseDelimitedFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link parseFrom(
+          com.google.protobuf.CodedInputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link parseFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+
+      @java.lang.Override
+      public Builder newBuilderForType() { return newBuilder(); }
+      public static Builder newBuilder() {
+        return DEFAULT_INSTANCE.toBuilder();
+      }
+      public static Builder newBuilder(gg.strims.ppspp.proto.Chat.MessageEntities.Link prototype) {
+        return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+      }
+      @java.lang.Override
+      public Builder toBuilder() {
+        return this == DEFAULT_INSTANCE
+            ? new Builder() : new Builder().mergeFrom(this);
+      }
+
+      @java.lang.Override
+      protected Builder newBuilderForType(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        Builder builder = new Builder(parent);
+        return builder;
+      }
+      /**
+       * Protobuf type {@code MessageEntities.Link}
+       */
+      public static final class Builder extends
+          com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+          // @@protoc_insertion_point(builder_implements:MessageEntities.Link)
+          gg.strims.ppspp.proto.Chat.MessageEntities.LinkOrBuilder {
+        public static final com.google.protobuf.Descriptors.Descriptor
+            getDescriptor() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Link_descriptor;
+        }
+
+        @java.lang.Override
+        protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+            internalGetFieldAccessorTable() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Link_fieldAccessorTable
+              .ensureFieldAccessorsInitialized(
+                  gg.strims.ppspp.proto.Chat.MessageEntities.Link.class, gg.strims.ppspp.proto.Chat.MessageEntities.Link.Builder.class);
+        }
+
+        // Construct using gg.strims.ppspp.proto.Chat.MessageEntities.Link.newBuilder()
+        private Builder() {
+          maybeForceBuilderInitialization();
+        }
+
+        private Builder(
+            com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          super(parent);
+          maybeForceBuilderInitialization();
+        }
+        private void maybeForceBuilderInitialization() {
+          if (com.google.protobuf.GeneratedMessageV3
+                  .alwaysUseFieldBuilders) {
+          }
+        }
+        @java.lang.Override
+        public Builder clear() {
+          super.clear();
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+          url_ = "";
+
+          return this;
+        }
+
+        @java.lang.Override
+        public com.google.protobuf.Descriptors.Descriptor
+            getDescriptorForType() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Link_descriptor;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Link getDefaultInstanceForType() {
+          return gg.strims.ppspp.proto.Chat.MessageEntities.Link.getDefaultInstance();
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Link build() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Link result = buildPartial();
+          if (!result.isInitialized()) {
+            throw newUninitializedMessageException(result);
+          }
+          return result;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Link buildPartial() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Link result = new gg.strims.ppspp.proto.Chat.MessageEntities.Link(this);
+          if (boundsBuilder_ == null) {
+            result.bounds_ = bounds_;
+          } else {
+            result.bounds_ = boundsBuilder_.build();
+          }
+          result.url_ = url_;
+          onBuilt();
+          return result;
+        }
+
+        @java.lang.Override
+        public Builder clone() {
+          return super.clone();
+        }
+        @java.lang.Override
+        public Builder setField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.setField(field, value);
+        }
+        @java.lang.Override
+        public Builder clearField(
+            com.google.protobuf.Descriptors.FieldDescriptor field) {
+          return super.clearField(field);
+        }
+        @java.lang.Override
+        public Builder clearOneof(
+            com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+          return super.clearOneof(oneof);
+        }
+        @java.lang.Override
+        public Builder setRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            int index, java.lang.Object value) {
+          return super.setRepeatedField(field, index, value);
+        }
+        @java.lang.Override
+        public Builder addRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.addRepeatedField(field, value);
+        }
+        @java.lang.Override
+        public Builder mergeFrom(com.google.protobuf.Message other) {
+          if (other instanceof gg.strims.ppspp.proto.Chat.MessageEntities.Link) {
+            return mergeFrom((gg.strims.ppspp.proto.Chat.MessageEntities.Link)other);
+          } else {
+            super.mergeFrom(other);
+            return this;
+          }
+        }
+
+        public Builder mergeFrom(gg.strims.ppspp.proto.Chat.MessageEntities.Link other) {
+          if (other == gg.strims.ppspp.proto.Chat.MessageEntities.Link.getDefaultInstance()) return this;
+          if (other.hasBounds()) {
+            mergeBounds(other.getBounds());
+          }
+          if (!other.getUrl().isEmpty()) {
+            url_ = other.url_;
+            onChanged();
+          }
+          this.mergeUnknownFields(other.unknownFields);
+          onChanged();
+          return this;
+        }
+
+        @java.lang.Override
+        public final boolean isInitialized() {
+          return true;
+        }
+
+        @java.lang.Override
+        public Builder mergeFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws java.io.IOException {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Link parsedMessage = null;
+          try {
+            parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+          } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+            parsedMessage = (gg.strims.ppspp.proto.Chat.MessageEntities.Link) e.getUnfinishedMessage();
+            throw e.unwrapIOException();
+          } finally {
+            if (parsedMessage != null) {
+              mergeFrom(parsedMessage);
+            }
+          }
+          return this;
+        }
+
+        private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> boundsBuilder_;
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return Whether the bounds field is set.
+         */
+        public boolean hasBounds() {
+          return boundsBuilder_ != null || bounds_ != null;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return The bounds.
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+          if (boundsBuilder_ == null) {
+            return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          } else {
+            return boundsBuilder_.getMessage();
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (value == null) {
+              throw new NullPointerException();
+            }
+            bounds_ = value;
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder builderForValue) {
+          if (boundsBuilder_ == null) {
+            bounds_ = builderForValue.build();
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(builderForValue.build());
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder mergeBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (bounds_ != null) {
+              bounds_ =
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
+            } else {
+              bounds_ = value;
+            }
+            onChanged();
+          } else {
+            boundsBuilder_.mergeFrom(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder clearBounds() {
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+            onChanged();
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder getBoundsBuilder() {
+          
+          onChanged();
+          return getBoundsFieldBuilder().getBuilder();
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+          if (boundsBuilder_ != null) {
+            return boundsBuilder_.getMessageOrBuilder();
+          } else {
+            return bounds_ == null ?
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> 
+            getBoundsFieldBuilder() {
+          if (boundsBuilder_ == null) {
+            boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder>(
+                    getBounds(),
+                    getParentForChildren(),
+                    isClean());
+            bounds_ = null;
+          }
+          return boundsBuilder_;
+        }
+
+        private java.lang.Object url_ = "";
+        /**
+         * <code>string url = 2;</code>
+         * @return The url.
+         */
+        public java.lang.String getUrl() {
+          java.lang.Object ref = url_;
+          if (!(ref instanceof java.lang.String)) {
+            com.google.protobuf.ByteString bs =
+                (com.google.protobuf.ByteString) ref;
+            java.lang.String s = bs.toStringUtf8();
+            url_ = s;
+            return s;
+          } else {
+            return (java.lang.String) ref;
+          }
+        }
+        /**
+         * <code>string url = 2;</code>
+         * @return The bytes for url.
+         */
+        public com.google.protobuf.ByteString
+            getUrlBytes() {
+          java.lang.Object ref = url_;
+          if (ref instanceof String) {
+            com.google.protobuf.ByteString b = 
+                com.google.protobuf.ByteString.copyFromUtf8(
+                    (java.lang.String) ref);
+            url_ = b;
+            return b;
+          } else {
+            return (com.google.protobuf.ByteString) ref;
+          }
+        }
+        /**
+         * <code>string url = 2;</code>
+         * @param value The url to set.
+         * @return This builder for chaining.
+         */
+        public Builder setUrl(
+            java.lang.String value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  
+          url_ = value;
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>string url = 2;</code>
+         * @return This builder for chaining.
+         */
+        public Builder clearUrl() {
+          
+          url_ = getDefaultInstance().getUrl();
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>string url = 2;</code>
+         * @param value The bytes for url to set.
+         * @return This builder for chaining.
+         */
+        public Builder setUrlBytes(
+            com.google.protobuf.ByteString value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+          
+          url_ = value;
+          onChanged();
+          return this;
+        }
+        @java.lang.Override
+        public final Builder setUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.setUnknownFields(unknownFields);
+        }
+
+        @java.lang.Override
+        public final Builder mergeUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.mergeUnknownFields(unknownFields);
+        }
+
+
+        // @@protoc_insertion_point(builder_scope:MessageEntities.Link)
+      }
+
+      // @@protoc_insertion_point(class_scope:MessageEntities.Link)
+      private static final gg.strims.ppspp.proto.Chat.MessageEntities.Link DEFAULT_INSTANCE;
+      static {
+        DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.MessageEntities.Link();
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Link getDefaultInstance() {
+        return DEFAULT_INSTANCE;
+      }
+
+      private static final com.google.protobuf.Parser<Link>
+          PARSER = new com.google.protobuf.AbstractParser<Link>() {
+        @java.lang.Override
+        public Link parsePartialFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws com.google.protobuf.InvalidProtocolBufferException {
+          return new Link(input, extensionRegistry);
+        }
+      };
+
+      public static com.google.protobuf.Parser<Link> parser() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Parser<Link> getParserForType() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Link getDefaultInstanceForType() {
+        return DEFAULT_INSTANCE;
+      }
+
+    }
+
+    public interface EmoteOrBuilder extends
+        // @@protoc_insertion_point(interface_extends:MessageEntities.Emote)
+        com.google.protobuf.MessageOrBuilder {
+
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      boolean hasBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder();
+
+      /**
+       * <code>string name = 2;</code>
+       * @return The name.
+       */
+      java.lang.String getName();
+      /**
+       * <code>string name = 2;</code>
+       * @return The bytes for name.
+       */
+      com.google.protobuf.ByteString
+          getNameBytes();
+
+      /**
+       * <code>repeated string modifiers = 3;</code>
+       * @return A list containing the modifiers.
+       */
+      java.util.List<java.lang.String>
+          getModifiersList();
+      /**
+       * <code>repeated string modifiers = 3;</code>
+       * @return The count of modifiers.
+       */
+      int getModifiersCount();
+      /**
+       * <code>repeated string modifiers = 3;</code>
+       * @param index The index of the element to return.
+       * @return The modifiers at the given index.
+       */
+      java.lang.String getModifiers(int index);
+      /**
+       * <code>repeated string modifiers = 3;</code>
+       * @param index The index of the value to return.
+       * @return The bytes of the modifiers at the given index.
+       */
+      com.google.protobuf.ByteString
+          getModifiersBytes(int index);
+
+      /**
+       * <code>int64 combo = 4;</code>
+       * @return The combo.
+       */
+      long getCombo();
+    }
+    /**
+     * Protobuf type {@code MessageEntities.Emote}
+     */
+    public static final class Emote extends
+        com.google.protobuf.GeneratedMessageV3 implements
+        // @@protoc_insertion_point(message_implements:MessageEntities.Emote)
+        EmoteOrBuilder {
+    private static final long serialVersionUID = 0L;
+      // Use Emote.newBuilder() to construct.
+      private Emote(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+        super(builder);
+      }
+      private Emote() {
+        name_ = "";
+        modifiers_ = com.google.protobuf.LazyStringArrayList.EMPTY;
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new Emote();
+      }
+
+      @java.lang.Override
+      public final com.google.protobuf.UnknownFieldSet
+      getUnknownFields() {
+        return this.unknownFields;
+      }
+      private Emote(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        this();
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        int mutable_bitField0_ = 0;
+        com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+            com.google.protobuf.UnknownFieldSet.newBuilder();
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder subBuilder = null;
+                if (bounds_ != null) {
+                  subBuilder = bounds_.toBuilder();
+                }
+                bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.parser(), extensionRegistry);
+                if (subBuilder != null) {
+                  subBuilder.mergeFrom(bounds_);
+                  bounds_ = subBuilder.buildPartial();
+                }
+
+                break;
+              }
+              case 18: {
+                java.lang.String s = input.readStringRequireUtf8();
+
+                name_ = s;
+                break;
+              }
+              case 26: {
+                java.lang.String s = input.readStringRequireUtf8();
+                if (!((mutable_bitField0_ & 0x00000001) != 0)) {
+                  modifiers_ = new com.google.protobuf.LazyStringArrayList();
+                  mutable_bitField0_ |= 0x00000001;
+                }
+                modifiers_.add(s);
+                break;
+              }
+              case 32: {
+
+                combo_ = input.readInt64();
+                break;
+              }
+              default: {
+                if (!parseUnknownField(
+                    input, unknownFields, extensionRegistry, tag)) {
+                  done = true;
+                }
+                break;
+              }
+            }
+          }
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(this);
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(
+              e).setUnfinishedMessage(this);
+        } finally {
+          if (((mutable_bitField0_ & 0x00000001) != 0)) {
+            modifiers_ = modifiers_.getUnmodifiableView();
+          }
+          this.unknownFields = unknownFields.build();
+          makeExtensionsImmutable();
+        }
+      }
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Emote_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Emote_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                gg.strims.ppspp.proto.Chat.MessageEntities.Emote.class, gg.strims.ppspp.proto.Chat.MessageEntities.Emote.Builder.class);
+      }
+
+      public static final int BOUNDS_FIELD_NUMBER = 1;
+      private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      @java.lang.Override
+      public boolean hasBounds() {
+        return bounds_ != null;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+        return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+        return getBounds();
+      }
+
+      public static final int NAME_FIELD_NUMBER = 2;
+      private volatile java.lang.Object name_;
+      /**
+       * <code>string name = 2;</code>
+       * @return The name.
+       */
+      @java.lang.Override
+      public java.lang.String getName() {
+        java.lang.Object ref = name_;
+        if (ref instanceof java.lang.String) {
+          return (java.lang.String) ref;
+        } else {
+          com.google.protobuf.ByteString bs = 
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          name_ = s;
+          return s;
+        }
+      }
+      /**
+       * <code>string name = 2;</code>
+       * @return The bytes for name.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getNameBytes() {
+        java.lang.Object ref = name_;
+        if (ref instanceof java.lang.String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          name_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+
+      public static final int MODIFIERS_FIELD_NUMBER = 3;
+      private com.google.protobuf.LazyStringList modifiers_;
+      /**
+       * <code>repeated string modifiers = 3;</code>
+       * @return A list containing the modifiers.
+       */
+      public com.google.protobuf.ProtocolStringList
+          getModifiersList() {
+        return modifiers_;
+      }
+      /**
+       * <code>repeated string modifiers = 3;</code>
+       * @return The count of modifiers.
+       */
+      public int getModifiersCount() {
+        return modifiers_.size();
+      }
+      /**
+       * <code>repeated string modifiers = 3;</code>
+       * @param index The index of the element to return.
+       * @return The modifiers at the given index.
+       */
+      public java.lang.String getModifiers(int index) {
+        return modifiers_.get(index);
+      }
+      /**
+       * <code>repeated string modifiers = 3;</code>
+       * @param index The index of the value to return.
+       * @return The bytes of the modifiers at the given index.
+       */
+      public com.google.protobuf.ByteString
+          getModifiersBytes(int index) {
+        return modifiers_.getByteString(index);
+      }
+
+      public static final int COMBO_FIELD_NUMBER = 4;
+      private long combo_;
+      /**
+       * <code>int64 combo = 4;</code>
+       * @return The combo.
+       */
+      @java.lang.Override
+      public long getCombo() {
+        return combo_;
+      }
+
+      private byte memoizedIsInitialized = -1;
+      @java.lang.Override
+      public final boolean isInitialized() {
+        byte isInitialized = memoizedIsInitialized;
+        if (isInitialized == 1) return true;
+        if (isInitialized == 0) return false;
+
+        memoizedIsInitialized = 1;
+        return true;
+      }
+
+      @java.lang.Override
+      public void writeTo(com.google.protobuf.CodedOutputStream output)
+                          throws java.io.IOException {
+        if (bounds_ != null) {
+          output.writeMessage(1, getBounds());
+        }
+        if (!getNameBytes().isEmpty()) {
+          com.google.protobuf.GeneratedMessageV3.writeString(output, 2, name_);
+        }
+        for (int i = 0; i < modifiers_.size(); i++) {
+          com.google.protobuf.GeneratedMessageV3.writeString(output, 3, modifiers_.getRaw(i));
+        }
+        if (combo_ != 0L) {
+          output.writeInt64(4, combo_);
+        }
+        unknownFields.writeTo(output);
+      }
+
+      @java.lang.Override
+      public int getSerializedSize() {
+        int size = memoizedSize;
+        if (size != -1) return size;
+
+        size = 0;
+        if (bounds_ != null) {
+          size += com.google.protobuf.CodedOutputStream
+            .computeMessageSize(1, getBounds());
+        }
+        if (!getNameBytes().isEmpty()) {
+          size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, name_);
+        }
+        {
+          int dataSize = 0;
+          for (int i = 0; i < modifiers_.size(); i++) {
+            dataSize += computeStringSizeNoTag(modifiers_.getRaw(i));
+          }
+          size += dataSize;
+          size += 1 * getModifiersList().size();
+        }
+        if (combo_ != 0L) {
+          size += com.google.protobuf.CodedOutputStream
+            .computeInt64Size(4, combo_);
+        }
+        size += unknownFields.getSerializedSize();
+        memoizedSize = size;
+        return size;
+      }
+
+      @java.lang.Override
+      public boolean equals(final java.lang.Object obj) {
+        if (obj == this) {
+         return true;
+        }
+        if (!(obj instanceof gg.strims.ppspp.proto.Chat.MessageEntities.Emote)) {
+          return super.equals(obj);
+        }
+        gg.strims.ppspp.proto.Chat.MessageEntities.Emote other = (gg.strims.ppspp.proto.Chat.MessageEntities.Emote) obj;
+
+        if (hasBounds() != other.hasBounds()) return false;
+        if (hasBounds()) {
+          if (!getBounds()
+              .equals(other.getBounds())) return false;
+        }
+        if (!getName()
+            .equals(other.getName())) return false;
+        if (!getModifiersList()
+            .equals(other.getModifiersList())) return false;
+        if (getCombo()
+            != other.getCombo()) return false;
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
+      }
+
+      @java.lang.Override
+      public int hashCode() {
+        if (memoizedHashCode != 0) {
+          return memoizedHashCode;
+        }
+        int hash = 41;
+        hash = (19 * hash) + getDescriptor().hashCode();
+        if (hasBounds()) {
+          hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
+          hash = (53 * hash) + getBounds().hashCode();
+        }
+        hash = (37 * hash) + NAME_FIELD_NUMBER;
+        hash = (53 * hash) + getName().hashCode();
+        if (getModifiersCount() > 0) {
+          hash = (37 * hash) + MODIFIERS_FIELD_NUMBER;
+          hash = (53 * hash) + getModifiersList().hashCode();
+        }
+        hash = (37 * hash) + COMBO_FIELD_NUMBER;
+        hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
+            getCombo());
+        hash = (29 * hash) + unknownFields.hashCode();
+        memoizedHashCode = hash;
+        return hash;
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote parseFrom(
+          java.nio.ByteBuffer data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote parseFrom(
+          java.nio.ByteBuffer data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote parseFrom(
+          com.google.protobuf.ByteString data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote parseFrom(
+          com.google.protobuf.ByteString data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote parseFrom(byte[] data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote parseFrom(
+          byte[] data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote parseFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote parseFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote parseDelimitedFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote parseDelimitedFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote parseFrom(
+          com.google.protobuf.CodedInputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote parseFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+
+      @java.lang.Override
+      public Builder newBuilderForType() { return newBuilder(); }
+      public static Builder newBuilder() {
+        return DEFAULT_INSTANCE.toBuilder();
+      }
+      public static Builder newBuilder(gg.strims.ppspp.proto.Chat.MessageEntities.Emote prototype) {
+        return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+      }
+      @java.lang.Override
+      public Builder toBuilder() {
+        return this == DEFAULT_INSTANCE
+            ? new Builder() : new Builder().mergeFrom(this);
+      }
+
+      @java.lang.Override
+      protected Builder newBuilderForType(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        Builder builder = new Builder(parent);
+        return builder;
+      }
+      /**
+       * Protobuf type {@code MessageEntities.Emote}
+       */
+      public static final class Builder extends
+          com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+          // @@protoc_insertion_point(builder_implements:MessageEntities.Emote)
+          gg.strims.ppspp.proto.Chat.MessageEntities.EmoteOrBuilder {
+        public static final com.google.protobuf.Descriptors.Descriptor
+            getDescriptor() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Emote_descriptor;
+        }
+
+        @java.lang.Override
+        protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+            internalGetFieldAccessorTable() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Emote_fieldAccessorTable
+              .ensureFieldAccessorsInitialized(
+                  gg.strims.ppspp.proto.Chat.MessageEntities.Emote.class, gg.strims.ppspp.proto.Chat.MessageEntities.Emote.Builder.class);
+        }
+
+        // Construct using gg.strims.ppspp.proto.Chat.MessageEntities.Emote.newBuilder()
+        private Builder() {
+          maybeForceBuilderInitialization();
+        }
+
+        private Builder(
+            com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          super(parent);
+          maybeForceBuilderInitialization();
+        }
+        private void maybeForceBuilderInitialization() {
+          if (com.google.protobuf.GeneratedMessageV3
+                  .alwaysUseFieldBuilders) {
+          }
+        }
+        @java.lang.Override
+        public Builder clear() {
+          super.clear();
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+          name_ = "";
+
+          modifiers_ = com.google.protobuf.LazyStringArrayList.EMPTY;
+          bitField0_ = (bitField0_ & ~0x00000001);
+          combo_ = 0L;
+
+          return this;
+        }
+
+        @java.lang.Override
+        public com.google.protobuf.Descriptors.Descriptor
+            getDescriptorForType() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Emote_descriptor;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Emote getDefaultInstanceForType() {
+          return gg.strims.ppspp.proto.Chat.MessageEntities.Emote.getDefaultInstance();
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Emote build() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Emote result = buildPartial();
+          if (!result.isInitialized()) {
+            throw newUninitializedMessageException(result);
+          }
+          return result;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Emote buildPartial() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Emote result = new gg.strims.ppspp.proto.Chat.MessageEntities.Emote(this);
+          int from_bitField0_ = bitField0_;
+          if (boundsBuilder_ == null) {
+            result.bounds_ = bounds_;
+          } else {
+            result.bounds_ = boundsBuilder_.build();
+          }
+          result.name_ = name_;
+          if (((bitField0_ & 0x00000001) != 0)) {
+            modifiers_ = modifiers_.getUnmodifiableView();
+            bitField0_ = (bitField0_ & ~0x00000001);
+          }
+          result.modifiers_ = modifiers_;
+          result.combo_ = combo_;
+          onBuilt();
+          return result;
+        }
+
+        @java.lang.Override
+        public Builder clone() {
+          return super.clone();
+        }
+        @java.lang.Override
+        public Builder setField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.setField(field, value);
+        }
+        @java.lang.Override
+        public Builder clearField(
+            com.google.protobuf.Descriptors.FieldDescriptor field) {
+          return super.clearField(field);
+        }
+        @java.lang.Override
+        public Builder clearOneof(
+            com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+          return super.clearOneof(oneof);
+        }
+        @java.lang.Override
+        public Builder setRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            int index, java.lang.Object value) {
+          return super.setRepeatedField(field, index, value);
+        }
+        @java.lang.Override
+        public Builder addRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.addRepeatedField(field, value);
+        }
+        @java.lang.Override
+        public Builder mergeFrom(com.google.protobuf.Message other) {
+          if (other instanceof gg.strims.ppspp.proto.Chat.MessageEntities.Emote) {
+            return mergeFrom((gg.strims.ppspp.proto.Chat.MessageEntities.Emote)other);
+          } else {
+            super.mergeFrom(other);
+            return this;
+          }
+        }
+
+        public Builder mergeFrom(gg.strims.ppspp.proto.Chat.MessageEntities.Emote other) {
+          if (other == gg.strims.ppspp.proto.Chat.MessageEntities.Emote.getDefaultInstance()) return this;
+          if (other.hasBounds()) {
+            mergeBounds(other.getBounds());
+          }
+          if (!other.getName().isEmpty()) {
+            name_ = other.name_;
+            onChanged();
+          }
+          if (!other.modifiers_.isEmpty()) {
+            if (modifiers_.isEmpty()) {
+              modifiers_ = other.modifiers_;
+              bitField0_ = (bitField0_ & ~0x00000001);
+            } else {
+              ensureModifiersIsMutable();
+              modifiers_.addAll(other.modifiers_);
+            }
+            onChanged();
+          }
+          if (other.getCombo() != 0L) {
+            setCombo(other.getCombo());
+          }
+          this.mergeUnknownFields(other.unknownFields);
+          onChanged();
+          return this;
+        }
+
+        @java.lang.Override
+        public final boolean isInitialized() {
+          return true;
+        }
+
+        @java.lang.Override
+        public Builder mergeFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws java.io.IOException {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Emote parsedMessage = null;
+          try {
+            parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+          } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+            parsedMessage = (gg.strims.ppspp.proto.Chat.MessageEntities.Emote) e.getUnfinishedMessage();
+            throw e.unwrapIOException();
+          } finally {
+            if (parsedMessage != null) {
+              mergeFrom(parsedMessage);
+            }
+          }
+          return this;
+        }
+        private int bitField0_;
+
+        private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> boundsBuilder_;
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return Whether the bounds field is set.
+         */
+        public boolean hasBounds() {
+          return boundsBuilder_ != null || bounds_ != null;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return The bounds.
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+          if (boundsBuilder_ == null) {
+            return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          } else {
+            return boundsBuilder_.getMessage();
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (value == null) {
+              throw new NullPointerException();
+            }
+            bounds_ = value;
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder builderForValue) {
+          if (boundsBuilder_ == null) {
+            bounds_ = builderForValue.build();
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(builderForValue.build());
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder mergeBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (bounds_ != null) {
+              bounds_ =
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
+            } else {
+              bounds_ = value;
+            }
+            onChanged();
+          } else {
+            boundsBuilder_.mergeFrom(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder clearBounds() {
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+            onChanged();
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder getBoundsBuilder() {
+          
+          onChanged();
+          return getBoundsFieldBuilder().getBuilder();
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+          if (boundsBuilder_ != null) {
+            return boundsBuilder_.getMessageOrBuilder();
+          } else {
+            return bounds_ == null ?
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> 
+            getBoundsFieldBuilder() {
+          if (boundsBuilder_ == null) {
+            boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder>(
+                    getBounds(),
+                    getParentForChildren(),
+                    isClean());
+            bounds_ = null;
+          }
+          return boundsBuilder_;
+        }
+
+        private java.lang.Object name_ = "";
+        /**
+         * <code>string name = 2;</code>
+         * @return The name.
+         */
+        public java.lang.String getName() {
+          java.lang.Object ref = name_;
+          if (!(ref instanceof java.lang.String)) {
+            com.google.protobuf.ByteString bs =
+                (com.google.protobuf.ByteString) ref;
+            java.lang.String s = bs.toStringUtf8();
+            name_ = s;
+            return s;
+          } else {
+            return (java.lang.String) ref;
+          }
+        }
+        /**
+         * <code>string name = 2;</code>
+         * @return The bytes for name.
+         */
+        public com.google.protobuf.ByteString
+            getNameBytes() {
+          java.lang.Object ref = name_;
+          if (ref instanceof String) {
+            com.google.protobuf.ByteString b = 
+                com.google.protobuf.ByteString.copyFromUtf8(
+                    (java.lang.String) ref);
+            name_ = b;
+            return b;
+          } else {
+            return (com.google.protobuf.ByteString) ref;
+          }
+        }
+        /**
+         * <code>string name = 2;</code>
+         * @param value The name to set.
+         * @return This builder for chaining.
+         */
+        public Builder setName(
+            java.lang.String value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  
+          name_ = value;
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>string name = 2;</code>
+         * @return This builder for chaining.
+         */
+        public Builder clearName() {
+          
+          name_ = getDefaultInstance().getName();
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>string name = 2;</code>
+         * @param value The bytes for name to set.
+         * @return This builder for chaining.
+         */
+        public Builder setNameBytes(
+            com.google.protobuf.ByteString value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+          
+          name_ = value;
+          onChanged();
+          return this;
+        }
+
+        private com.google.protobuf.LazyStringList modifiers_ = com.google.protobuf.LazyStringArrayList.EMPTY;
+        private void ensureModifiersIsMutable() {
+          if (!((bitField0_ & 0x00000001) != 0)) {
+            modifiers_ = new com.google.protobuf.LazyStringArrayList(modifiers_);
+            bitField0_ |= 0x00000001;
+           }
+        }
+        /**
+         * <code>repeated string modifiers = 3;</code>
+         * @return A list containing the modifiers.
+         */
+        public com.google.protobuf.ProtocolStringList
+            getModifiersList() {
+          return modifiers_.getUnmodifiableView();
+        }
+        /**
+         * <code>repeated string modifiers = 3;</code>
+         * @return The count of modifiers.
+         */
+        public int getModifiersCount() {
+          return modifiers_.size();
+        }
+        /**
+         * <code>repeated string modifiers = 3;</code>
+         * @param index The index of the element to return.
+         * @return The modifiers at the given index.
+         */
+        public java.lang.String getModifiers(int index) {
+          return modifiers_.get(index);
+        }
+        /**
+         * <code>repeated string modifiers = 3;</code>
+         * @param index The index of the value to return.
+         * @return The bytes of the modifiers at the given index.
+         */
+        public com.google.protobuf.ByteString
+            getModifiersBytes(int index) {
+          return modifiers_.getByteString(index);
+        }
+        /**
+         * <code>repeated string modifiers = 3;</code>
+         * @param index The index to set the value at.
+         * @param value The modifiers to set.
+         * @return This builder for chaining.
+         */
+        public Builder setModifiers(
+            int index, java.lang.String value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  ensureModifiersIsMutable();
+          modifiers_.set(index, value);
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>repeated string modifiers = 3;</code>
+         * @param value The modifiers to add.
+         * @return This builder for chaining.
+         */
+        public Builder addModifiers(
+            java.lang.String value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  ensureModifiersIsMutable();
+          modifiers_.add(value);
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>repeated string modifiers = 3;</code>
+         * @param values The modifiers to add.
+         * @return This builder for chaining.
+         */
+        public Builder addAllModifiers(
+            java.lang.Iterable<java.lang.String> values) {
+          ensureModifiersIsMutable();
+          com.google.protobuf.AbstractMessageLite.Builder.addAll(
+              values, modifiers_);
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>repeated string modifiers = 3;</code>
+         * @return This builder for chaining.
+         */
+        public Builder clearModifiers() {
+          modifiers_ = com.google.protobuf.LazyStringArrayList.EMPTY;
+          bitField0_ = (bitField0_ & ~0x00000001);
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>repeated string modifiers = 3;</code>
+         * @param value The bytes of the modifiers to add.
+         * @return This builder for chaining.
+         */
+        public Builder addModifiersBytes(
+            com.google.protobuf.ByteString value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+          ensureModifiersIsMutable();
+          modifiers_.add(value);
+          onChanged();
+          return this;
+        }
+
+        private long combo_ ;
+        /**
+         * <code>int64 combo = 4;</code>
+         * @return The combo.
+         */
+        @java.lang.Override
+        public long getCombo() {
+          return combo_;
+        }
+        /**
+         * <code>int64 combo = 4;</code>
+         * @param value The combo to set.
+         * @return This builder for chaining.
+         */
+        public Builder setCombo(long value) {
+          
+          combo_ = value;
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>int64 combo = 4;</code>
+         * @return This builder for chaining.
+         */
+        public Builder clearCombo() {
+          
+          combo_ = 0L;
+          onChanged();
+          return this;
+        }
+        @java.lang.Override
+        public final Builder setUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.setUnknownFields(unknownFields);
+        }
+
+        @java.lang.Override
+        public final Builder mergeUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.mergeUnknownFields(unknownFields);
+        }
+
+
+        // @@protoc_insertion_point(builder_scope:MessageEntities.Emote)
+      }
+
+      // @@protoc_insertion_point(class_scope:MessageEntities.Emote)
+      private static final gg.strims.ppspp.proto.Chat.MessageEntities.Emote DEFAULT_INSTANCE;
+      static {
+        DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.MessageEntities.Emote();
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Emote getDefaultInstance() {
+        return DEFAULT_INSTANCE;
+      }
+
+      private static final com.google.protobuf.Parser<Emote>
+          PARSER = new com.google.protobuf.AbstractParser<Emote>() {
+        @java.lang.Override
+        public Emote parsePartialFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws com.google.protobuf.InvalidProtocolBufferException {
+          return new Emote(input, extensionRegistry);
+        }
+      };
+
+      public static com.google.protobuf.Parser<Emote> parser() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Parser<Emote> getParserForType() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Emote getDefaultInstanceForType() {
+        return DEFAULT_INSTANCE;
+      }
+
+    }
+
+    public interface NickOrBuilder extends
+        // @@protoc_insertion_point(interface_extends:MessageEntities.Nick)
+        com.google.protobuf.MessageOrBuilder {
+
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      boolean hasBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder();
+
+      /**
+       * <code>string nick = 2;</code>
+       * @return The nick.
+       */
+      java.lang.String getNick();
+      /**
+       * <code>string nick = 2;</code>
+       * @return The bytes for nick.
+       */
+      com.google.protobuf.ByteString
+          getNickBytes();
+    }
+    /**
+     * Protobuf type {@code MessageEntities.Nick}
+     */
+    public static final class Nick extends
+        com.google.protobuf.GeneratedMessageV3 implements
+        // @@protoc_insertion_point(message_implements:MessageEntities.Nick)
+        NickOrBuilder {
+    private static final long serialVersionUID = 0L;
+      // Use Nick.newBuilder() to construct.
+      private Nick(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+        super(builder);
+      }
+      private Nick() {
+        nick_ = "";
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new Nick();
+      }
+
+      @java.lang.Override
+      public final com.google.protobuf.UnknownFieldSet
+      getUnknownFields() {
+        return this.unknownFields;
+      }
+      private Nick(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        this();
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+            com.google.protobuf.UnknownFieldSet.newBuilder();
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder subBuilder = null;
+                if (bounds_ != null) {
+                  subBuilder = bounds_.toBuilder();
+                }
+                bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.parser(), extensionRegistry);
+                if (subBuilder != null) {
+                  subBuilder.mergeFrom(bounds_);
+                  bounds_ = subBuilder.buildPartial();
+                }
+
+                break;
+              }
+              case 18: {
+                java.lang.String s = input.readStringRequireUtf8();
+
+                nick_ = s;
+                break;
+              }
+              default: {
+                if (!parseUnknownField(
+                    input, unknownFields, extensionRegistry, tag)) {
+                  done = true;
+                }
+                break;
+              }
+            }
+          }
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(this);
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(
+              e).setUnfinishedMessage(this);
+        } finally {
+          this.unknownFields = unknownFields.build();
+          makeExtensionsImmutable();
+        }
+      }
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Nick_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Nick_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                gg.strims.ppspp.proto.Chat.MessageEntities.Nick.class, gg.strims.ppspp.proto.Chat.MessageEntities.Nick.Builder.class);
+      }
+
+      public static final int BOUNDS_FIELD_NUMBER = 1;
+      private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      @java.lang.Override
+      public boolean hasBounds() {
+        return bounds_ != null;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+        return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+        return getBounds();
+      }
+
+      public static final int NICK_FIELD_NUMBER = 2;
+      private volatile java.lang.Object nick_;
+      /**
+       * <code>string nick = 2;</code>
+       * @return The nick.
+       */
+      @java.lang.Override
+      public java.lang.String getNick() {
+        java.lang.Object ref = nick_;
+        if (ref instanceof java.lang.String) {
+          return (java.lang.String) ref;
+        } else {
+          com.google.protobuf.ByteString bs = 
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          nick_ = s;
+          return s;
+        }
+      }
+      /**
+       * <code>string nick = 2;</code>
+       * @return The bytes for nick.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getNickBytes() {
+        java.lang.Object ref = nick_;
+        if (ref instanceof java.lang.String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          nick_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+
+      private byte memoizedIsInitialized = -1;
+      @java.lang.Override
+      public final boolean isInitialized() {
+        byte isInitialized = memoizedIsInitialized;
+        if (isInitialized == 1) return true;
+        if (isInitialized == 0) return false;
+
+        memoizedIsInitialized = 1;
+        return true;
+      }
+
+      @java.lang.Override
+      public void writeTo(com.google.protobuf.CodedOutputStream output)
+                          throws java.io.IOException {
+        if (bounds_ != null) {
+          output.writeMessage(1, getBounds());
+        }
+        if (!getNickBytes().isEmpty()) {
+          com.google.protobuf.GeneratedMessageV3.writeString(output, 2, nick_);
+        }
+        unknownFields.writeTo(output);
+      }
+
+      @java.lang.Override
+      public int getSerializedSize() {
+        int size = memoizedSize;
+        if (size != -1) return size;
+
+        size = 0;
+        if (bounds_ != null) {
+          size += com.google.protobuf.CodedOutputStream
+            .computeMessageSize(1, getBounds());
+        }
+        if (!getNickBytes().isEmpty()) {
+          size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, nick_);
+        }
+        size += unknownFields.getSerializedSize();
+        memoizedSize = size;
+        return size;
+      }
+
+      @java.lang.Override
+      public boolean equals(final java.lang.Object obj) {
+        if (obj == this) {
+         return true;
+        }
+        if (!(obj instanceof gg.strims.ppspp.proto.Chat.MessageEntities.Nick)) {
+          return super.equals(obj);
+        }
+        gg.strims.ppspp.proto.Chat.MessageEntities.Nick other = (gg.strims.ppspp.proto.Chat.MessageEntities.Nick) obj;
+
+        if (hasBounds() != other.hasBounds()) return false;
+        if (hasBounds()) {
+          if (!getBounds()
+              .equals(other.getBounds())) return false;
+        }
+        if (!getNick()
+            .equals(other.getNick())) return false;
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
+      }
+
+      @java.lang.Override
+      public int hashCode() {
+        if (memoizedHashCode != 0) {
+          return memoizedHashCode;
+        }
+        int hash = 41;
+        hash = (19 * hash) + getDescriptor().hashCode();
+        if (hasBounds()) {
+          hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
+          hash = (53 * hash) + getBounds().hashCode();
+        }
+        hash = (37 * hash) + NICK_FIELD_NUMBER;
+        hash = (53 * hash) + getNick().hashCode();
+        hash = (29 * hash) + unknownFields.hashCode();
+        memoizedHashCode = hash;
+        return hash;
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick parseFrom(
+          java.nio.ByteBuffer data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick parseFrom(
+          java.nio.ByteBuffer data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick parseFrom(
+          com.google.protobuf.ByteString data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick parseFrom(
+          com.google.protobuf.ByteString data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick parseFrom(byte[] data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick parseFrom(
+          byte[] data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick parseFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick parseFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick parseDelimitedFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick parseDelimitedFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick parseFrom(
+          com.google.protobuf.CodedInputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick parseFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+
+      @java.lang.Override
+      public Builder newBuilderForType() { return newBuilder(); }
+      public static Builder newBuilder() {
+        return DEFAULT_INSTANCE.toBuilder();
+      }
+      public static Builder newBuilder(gg.strims.ppspp.proto.Chat.MessageEntities.Nick prototype) {
+        return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+      }
+      @java.lang.Override
+      public Builder toBuilder() {
+        return this == DEFAULT_INSTANCE
+            ? new Builder() : new Builder().mergeFrom(this);
+      }
+
+      @java.lang.Override
+      protected Builder newBuilderForType(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        Builder builder = new Builder(parent);
+        return builder;
+      }
+      /**
+       * Protobuf type {@code MessageEntities.Nick}
+       */
+      public static final class Builder extends
+          com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+          // @@protoc_insertion_point(builder_implements:MessageEntities.Nick)
+          gg.strims.ppspp.proto.Chat.MessageEntities.NickOrBuilder {
+        public static final com.google.protobuf.Descriptors.Descriptor
+            getDescriptor() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Nick_descriptor;
+        }
+
+        @java.lang.Override
+        protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+            internalGetFieldAccessorTable() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Nick_fieldAccessorTable
+              .ensureFieldAccessorsInitialized(
+                  gg.strims.ppspp.proto.Chat.MessageEntities.Nick.class, gg.strims.ppspp.proto.Chat.MessageEntities.Nick.Builder.class);
+        }
+
+        // Construct using gg.strims.ppspp.proto.Chat.MessageEntities.Nick.newBuilder()
+        private Builder() {
+          maybeForceBuilderInitialization();
+        }
+
+        private Builder(
+            com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          super(parent);
+          maybeForceBuilderInitialization();
+        }
+        private void maybeForceBuilderInitialization() {
+          if (com.google.protobuf.GeneratedMessageV3
+                  .alwaysUseFieldBuilders) {
+          }
+        }
+        @java.lang.Override
+        public Builder clear() {
+          super.clear();
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+          nick_ = "";
+
+          return this;
+        }
+
+        @java.lang.Override
+        public com.google.protobuf.Descriptors.Descriptor
+            getDescriptorForType() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Nick_descriptor;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Nick getDefaultInstanceForType() {
+          return gg.strims.ppspp.proto.Chat.MessageEntities.Nick.getDefaultInstance();
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Nick build() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Nick result = buildPartial();
+          if (!result.isInitialized()) {
+            throw newUninitializedMessageException(result);
+          }
+          return result;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Nick buildPartial() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Nick result = new gg.strims.ppspp.proto.Chat.MessageEntities.Nick(this);
+          if (boundsBuilder_ == null) {
+            result.bounds_ = bounds_;
+          } else {
+            result.bounds_ = boundsBuilder_.build();
+          }
+          result.nick_ = nick_;
+          onBuilt();
+          return result;
+        }
+
+        @java.lang.Override
+        public Builder clone() {
+          return super.clone();
+        }
+        @java.lang.Override
+        public Builder setField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.setField(field, value);
+        }
+        @java.lang.Override
+        public Builder clearField(
+            com.google.protobuf.Descriptors.FieldDescriptor field) {
+          return super.clearField(field);
+        }
+        @java.lang.Override
+        public Builder clearOneof(
+            com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+          return super.clearOneof(oneof);
+        }
+        @java.lang.Override
+        public Builder setRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            int index, java.lang.Object value) {
+          return super.setRepeatedField(field, index, value);
+        }
+        @java.lang.Override
+        public Builder addRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.addRepeatedField(field, value);
+        }
+        @java.lang.Override
+        public Builder mergeFrom(com.google.protobuf.Message other) {
+          if (other instanceof gg.strims.ppspp.proto.Chat.MessageEntities.Nick) {
+            return mergeFrom((gg.strims.ppspp.proto.Chat.MessageEntities.Nick)other);
+          } else {
+            super.mergeFrom(other);
+            return this;
+          }
+        }
+
+        public Builder mergeFrom(gg.strims.ppspp.proto.Chat.MessageEntities.Nick other) {
+          if (other == gg.strims.ppspp.proto.Chat.MessageEntities.Nick.getDefaultInstance()) return this;
+          if (other.hasBounds()) {
+            mergeBounds(other.getBounds());
+          }
+          if (!other.getNick().isEmpty()) {
+            nick_ = other.nick_;
+            onChanged();
+          }
+          this.mergeUnknownFields(other.unknownFields);
+          onChanged();
+          return this;
+        }
+
+        @java.lang.Override
+        public final boolean isInitialized() {
+          return true;
+        }
+
+        @java.lang.Override
+        public Builder mergeFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws java.io.IOException {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Nick parsedMessage = null;
+          try {
+            parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+          } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+            parsedMessage = (gg.strims.ppspp.proto.Chat.MessageEntities.Nick) e.getUnfinishedMessage();
+            throw e.unwrapIOException();
+          } finally {
+            if (parsedMessage != null) {
+              mergeFrom(parsedMessage);
+            }
+          }
+          return this;
+        }
+
+        private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> boundsBuilder_;
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return Whether the bounds field is set.
+         */
+        public boolean hasBounds() {
+          return boundsBuilder_ != null || bounds_ != null;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return The bounds.
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+          if (boundsBuilder_ == null) {
+            return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          } else {
+            return boundsBuilder_.getMessage();
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (value == null) {
+              throw new NullPointerException();
+            }
+            bounds_ = value;
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder builderForValue) {
+          if (boundsBuilder_ == null) {
+            bounds_ = builderForValue.build();
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(builderForValue.build());
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder mergeBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (bounds_ != null) {
+              bounds_ =
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
+            } else {
+              bounds_ = value;
+            }
+            onChanged();
+          } else {
+            boundsBuilder_.mergeFrom(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder clearBounds() {
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+            onChanged();
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder getBoundsBuilder() {
+          
+          onChanged();
+          return getBoundsFieldBuilder().getBuilder();
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+          if (boundsBuilder_ != null) {
+            return boundsBuilder_.getMessageOrBuilder();
+          } else {
+            return bounds_ == null ?
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> 
+            getBoundsFieldBuilder() {
+          if (boundsBuilder_ == null) {
+            boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder>(
+                    getBounds(),
+                    getParentForChildren(),
+                    isClean());
+            bounds_ = null;
+          }
+          return boundsBuilder_;
+        }
+
+        private java.lang.Object nick_ = "";
+        /**
+         * <code>string nick = 2;</code>
+         * @return The nick.
+         */
+        public java.lang.String getNick() {
+          java.lang.Object ref = nick_;
+          if (!(ref instanceof java.lang.String)) {
+            com.google.protobuf.ByteString bs =
+                (com.google.protobuf.ByteString) ref;
+            java.lang.String s = bs.toStringUtf8();
+            nick_ = s;
+            return s;
+          } else {
+            return (java.lang.String) ref;
+          }
+        }
+        /**
+         * <code>string nick = 2;</code>
+         * @return The bytes for nick.
+         */
+        public com.google.protobuf.ByteString
+            getNickBytes() {
+          java.lang.Object ref = nick_;
+          if (ref instanceof String) {
+            com.google.protobuf.ByteString b = 
+                com.google.protobuf.ByteString.copyFromUtf8(
+                    (java.lang.String) ref);
+            nick_ = b;
+            return b;
+          } else {
+            return (com.google.protobuf.ByteString) ref;
+          }
+        }
+        /**
+         * <code>string nick = 2;</code>
+         * @param value The nick to set.
+         * @return This builder for chaining.
+         */
+        public Builder setNick(
+            java.lang.String value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  
+          nick_ = value;
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>string nick = 2;</code>
+         * @return This builder for chaining.
+         */
+        public Builder clearNick() {
+          
+          nick_ = getDefaultInstance().getNick();
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>string nick = 2;</code>
+         * @param value The bytes for nick to set.
+         * @return This builder for chaining.
+         */
+        public Builder setNickBytes(
+            com.google.protobuf.ByteString value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+          
+          nick_ = value;
+          onChanged();
+          return this;
+        }
+        @java.lang.Override
+        public final Builder setUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.setUnknownFields(unknownFields);
+        }
+
+        @java.lang.Override
+        public final Builder mergeUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.mergeUnknownFields(unknownFields);
+        }
+
+
+        // @@protoc_insertion_point(builder_scope:MessageEntities.Nick)
+      }
+
+      // @@protoc_insertion_point(class_scope:MessageEntities.Nick)
+      private static final gg.strims.ppspp.proto.Chat.MessageEntities.Nick DEFAULT_INSTANCE;
+      static {
+        DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.MessageEntities.Nick();
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Nick getDefaultInstance() {
+        return DEFAULT_INSTANCE;
+      }
+
+      private static final com.google.protobuf.Parser<Nick>
+          PARSER = new com.google.protobuf.AbstractParser<Nick>() {
+        @java.lang.Override
+        public Nick parsePartialFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws com.google.protobuf.InvalidProtocolBufferException {
+          return new Nick(input, extensionRegistry);
+        }
+      };
+
+      public static com.google.protobuf.Parser<Nick> parser() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Parser<Nick> getParserForType() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Nick getDefaultInstanceForType() {
+        return DEFAULT_INSTANCE;
+      }
+
+    }
+
+    public interface TagOrBuilder extends
+        // @@protoc_insertion_point(interface_extends:MessageEntities.Tag)
+        com.google.protobuf.MessageOrBuilder {
+
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      boolean hasBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder();
+
+      /**
+       * <code>string name = 2;</code>
+       * @return The name.
+       */
+      java.lang.String getName();
+      /**
+       * <code>string name = 2;</code>
+       * @return The bytes for name.
+       */
+      com.google.protobuf.ByteString
+          getNameBytes();
+    }
+    /**
+     * Protobuf type {@code MessageEntities.Tag}
+     */
+    public static final class Tag extends
+        com.google.protobuf.GeneratedMessageV3 implements
+        // @@protoc_insertion_point(message_implements:MessageEntities.Tag)
+        TagOrBuilder {
+    private static final long serialVersionUID = 0L;
+      // Use Tag.newBuilder() to construct.
+      private Tag(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+        super(builder);
+      }
+      private Tag() {
+        name_ = "";
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new Tag();
+      }
+
+      @java.lang.Override
+      public final com.google.protobuf.UnknownFieldSet
+      getUnknownFields() {
+        return this.unknownFields;
+      }
+      private Tag(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        this();
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+            com.google.protobuf.UnknownFieldSet.newBuilder();
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder subBuilder = null;
+                if (bounds_ != null) {
+                  subBuilder = bounds_.toBuilder();
+                }
+                bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.parser(), extensionRegistry);
+                if (subBuilder != null) {
+                  subBuilder.mergeFrom(bounds_);
+                  bounds_ = subBuilder.buildPartial();
+                }
+
+                break;
+              }
+              case 18: {
+                java.lang.String s = input.readStringRequireUtf8();
+
+                name_ = s;
+                break;
+              }
+              default: {
+                if (!parseUnknownField(
+                    input, unknownFields, extensionRegistry, tag)) {
+                  done = true;
+                }
+                break;
+              }
+            }
+          }
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(this);
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(
+              e).setUnfinishedMessage(this);
+        } finally {
+          this.unknownFields = unknownFields.build();
+          makeExtensionsImmutable();
+        }
+      }
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Tag_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Tag_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                gg.strims.ppspp.proto.Chat.MessageEntities.Tag.class, gg.strims.ppspp.proto.Chat.MessageEntities.Tag.Builder.class);
+      }
+
+      public static final int BOUNDS_FIELD_NUMBER = 1;
+      private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      @java.lang.Override
+      public boolean hasBounds() {
+        return bounds_ != null;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+        return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+        return getBounds();
+      }
+
+      public static final int NAME_FIELD_NUMBER = 2;
+      private volatile java.lang.Object name_;
+      /**
+       * <code>string name = 2;</code>
+       * @return The name.
+       */
+      @java.lang.Override
+      public java.lang.String getName() {
+        java.lang.Object ref = name_;
+        if (ref instanceof java.lang.String) {
+          return (java.lang.String) ref;
+        } else {
+          com.google.protobuf.ByteString bs = 
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          name_ = s;
+          return s;
+        }
+      }
+      /**
+       * <code>string name = 2;</code>
+       * @return The bytes for name.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString
+          getNameBytes() {
+        java.lang.Object ref = name_;
+        if (ref instanceof java.lang.String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          name_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+
+      private byte memoizedIsInitialized = -1;
+      @java.lang.Override
+      public final boolean isInitialized() {
+        byte isInitialized = memoizedIsInitialized;
+        if (isInitialized == 1) return true;
+        if (isInitialized == 0) return false;
+
+        memoizedIsInitialized = 1;
+        return true;
+      }
+
+      @java.lang.Override
+      public void writeTo(com.google.protobuf.CodedOutputStream output)
+                          throws java.io.IOException {
+        if (bounds_ != null) {
+          output.writeMessage(1, getBounds());
+        }
+        if (!getNameBytes().isEmpty()) {
+          com.google.protobuf.GeneratedMessageV3.writeString(output, 2, name_);
+        }
+        unknownFields.writeTo(output);
+      }
+
+      @java.lang.Override
+      public int getSerializedSize() {
+        int size = memoizedSize;
+        if (size != -1) return size;
+
+        size = 0;
+        if (bounds_ != null) {
+          size += com.google.protobuf.CodedOutputStream
+            .computeMessageSize(1, getBounds());
+        }
+        if (!getNameBytes().isEmpty()) {
+          size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, name_);
+        }
+        size += unknownFields.getSerializedSize();
+        memoizedSize = size;
+        return size;
+      }
+
+      @java.lang.Override
+      public boolean equals(final java.lang.Object obj) {
+        if (obj == this) {
+         return true;
+        }
+        if (!(obj instanceof gg.strims.ppspp.proto.Chat.MessageEntities.Tag)) {
+          return super.equals(obj);
+        }
+        gg.strims.ppspp.proto.Chat.MessageEntities.Tag other = (gg.strims.ppspp.proto.Chat.MessageEntities.Tag) obj;
+
+        if (hasBounds() != other.hasBounds()) return false;
+        if (hasBounds()) {
+          if (!getBounds()
+              .equals(other.getBounds())) return false;
+        }
+        if (!getName()
+            .equals(other.getName())) return false;
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
+      }
+
+      @java.lang.Override
+      public int hashCode() {
+        if (memoizedHashCode != 0) {
+          return memoizedHashCode;
+        }
+        int hash = 41;
+        hash = (19 * hash) + getDescriptor().hashCode();
+        if (hasBounds()) {
+          hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
+          hash = (53 * hash) + getBounds().hashCode();
+        }
+        hash = (37 * hash) + NAME_FIELD_NUMBER;
+        hash = (53 * hash) + getName().hashCode();
+        hash = (29 * hash) + unknownFields.hashCode();
+        memoizedHashCode = hash;
+        return hash;
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag parseFrom(
+          java.nio.ByteBuffer data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag parseFrom(
+          java.nio.ByteBuffer data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag parseFrom(
+          com.google.protobuf.ByteString data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag parseFrom(
+          com.google.protobuf.ByteString data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag parseFrom(byte[] data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag parseFrom(
+          byte[] data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag parseFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag parseFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag parseDelimitedFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag parseDelimitedFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag parseFrom(
+          com.google.protobuf.CodedInputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag parseFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+
+      @java.lang.Override
+      public Builder newBuilderForType() { return newBuilder(); }
+      public static Builder newBuilder() {
+        return DEFAULT_INSTANCE.toBuilder();
+      }
+      public static Builder newBuilder(gg.strims.ppspp.proto.Chat.MessageEntities.Tag prototype) {
+        return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+      }
+      @java.lang.Override
+      public Builder toBuilder() {
+        return this == DEFAULT_INSTANCE
+            ? new Builder() : new Builder().mergeFrom(this);
+      }
+
+      @java.lang.Override
+      protected Builder newBuilderForType(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        Builder builder = new Builder(parent);
+        return builder;
+      }
+      /**
+       * Protobuf type {@code MessageEntities.Tag}
+       */
+      public static final class Builder extends
+          com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+          // @@protoc_insertion_point(builder_implements:MessageEntities.Tag)
+          gg.strims.ppspp.proto.Chat.MessageEntities.TagOrBuilder {
+        public static final com.google.protobuf.Descriptors.Descriptor
+            getDescriptor() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Tag_descriptor;
+        }
+
+        @java.lang.Override
+        protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+            internalGetFieldAccessorTable() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Tag_fieldAccessorTable
+              .ensureFieldAccessorsInitialized(
+                  gg.strims.ppspp.proto.Chat.MessageEntities.Tag.class, gg.strims.ppspp.proto.Chat.MessageEntities.Tag.Builder.class);
+        }
+
+        // Construct using gg.strims.ppspp.proto.Chat.MessageEntities.Tag.newBuilder()
+        private Builder() {
+          maybeForceBuilderInitialization();
+        }
+
+        private Builder(
+            com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          super(parent);
+          maybeForceBuilderInitialization();
+        }
+        private void maybeForceBuilderInitialization() {
+          if (com.google.protobuf.GeneratedMessageV3
+                  .alwaysUseFieldBuilders) {
+          }
+        }
+        @java.lang.Override
+        public Builder clear() {
+          super.clear();
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+          name_ = "";
+
+          return this;
+        }
+
+        @java.lang.Override
+        public com.google.protobuf.Descriptors.Descriptor
+            getDescriptorForType() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Tag_descriptor;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Tag getDefaultInstanceForType() {
+          return gg.strims.ppspp.proto.Chat.MessageEntities.Tag.getDefaultInstance();
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Tag build() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Tag result = buildPartial();
+          if (!result.isInitialized()) {
+            throw newUninitializedMessageException(result);
+          }
+          return result;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Tag buildPartial() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Tag result = new gg.strims.ppspp.proto.Chat.MessageEntities.Tag(this);
+          if (boundsBuilder_ == null) {
+            result.bounds_ = bounds_;
+          } else {
+            result.bounds_ = boundsBuilder_.build();
+          }
+          result.name_ = name_;
+          onBuilt();
+          return result;
+        }
+
+        @java.lang.Override
+        public Builder clone() {
+          return super.clone();
+        }
+        @java.lang.Override
+        public Builder setField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.setField(field, value);
+        }
+        @java.lang.Override
+        public Builder clearField(
+            com.google.protobuf.Descriptors.FieldDescriptor field) {
+          return super.clearField(field);
+        }
+        @java.lang.Override
+        public Builder clearOneof(
+            com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+          return super.clearOneof(oneof);
+        }
+        @java.lang.Override
+        public Builder setRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            int index, java.lang.Object value) {
+          return super.setRepeatedField(field, index, value);
+        }
+        @java.lang.Override
+        public Builder addRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.addRepeatedField(field, value);
+        }
+        @java.lang.Override
+        public Builder mergeFrom(com.google.protobuf.Message other) {
+          if (other instanceof gg.strims.ppspp.proto.Chat.MessageEntities.Tag) {
+            return mergeFrom((gg.strims.ppspp.proto.Chat.MessageEntities.Tag)other);
+          } else {
+            super.mergeFrom(other);
+            return this;
+          }
+        }
+
+        public Builder mergeFrom(gg.strims.ppspp.proto.Chat.MessageEntities.Tag other) {
+          if (other == gg.strims.ppspp.proto.Chat.MessageEntities.Tag.getDefaultInstance()) return this;
+          if (other.hasBounds()) {
+            mergeBounds(other.getBounds());
+          }
+          if (!other.getName().isEmpty()) {
+            name_ = other.name_;
+            onChanged();
+          }
+          this.mergeUnknownFields(other.unknownFields);
+          onChanged();
+          return this;
+        }
+
+        @java.lang.Override
+        public final boolean isInitialized() {
+          return true;
+        }
+
+        @java.lang.Override
+        public Builder mergeFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws java.io.IOException {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Tag parsedMessage = null;
+          try {
+            parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+          } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+            parsedMessage = (gg.strims.ppspp.proto.Chat.MessageEntities.Tag) e.getUnfinishedMessage();
+            throw e.unwrapIOException();
+          } finally {
+            if (parsedMessage != null) {
+              mergeFrom(parsedMessage);
+            }
+          }
+          return this;
+        }
+
+        private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> boundsBuilder_;
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return Whether the bounds field is set.
+         */
+        public boolean hasBounds() {
+          return boundsBuilder_ != null || bounds_ != null;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return The bounds.
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+          if (boundsBuilder_ == null) {
+            return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          } else {
+            return boundsBuilder_.getMessage();
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (value == null) {
+              throw new NullPointerException();
+            }
+            bounds_ = value;
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder builderForValue) {
+          if (boundsBuilder_ == null) {
+            bounds_ = builderForValue.build();
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(builderForValue.build());
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder mergeBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (bounds_ != null) {
+              bounds_ =
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
+            } else {
+              bounds_ = value;
+            }
+            onChanged();
+          } else {
+            boundsBuilder_.mergeFrom(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder clearBounds() {
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+            onChanged();
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder getBoundsBuilder() {
+          
+          onChanged();
+          return getBoundsFieldBuilder().getBuilder();
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+          if (boundsBuilder_ != null) {
+            return boundsBuilder_.getMessageOrBuilder();
+          } else {
+            return bounds_ == null ?
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> 
+            getBoundsFieldBuilder() {
+          if (boundsBuilder_ == null) {
+            boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder>(
+                    getBounds(),
+                    getParentForChildren(),
+                    isClean());
+            bounds_ = null;
+          }
+          return boundsBuilder_;
+        }
+
+        private java.lang.Object name_ = "";
+        /**
+         * <code>string name = 2;</code>
+         * @return The name.
+         */
+        public java.lang.String getName() {
+          java.lang.Object ref = name_;
+          if (!(ref instanceof java.lang.String)) {
+            com.google.protobuf.ByteString bs =
+                (com.google.protobuf.ByteString) ref;
+            java.lang.String s = bs.toStringUtf8();
+            name_ = s;
+            return s;
+          } else {
+            return (java.lang.String) ref;
+          }
+        }
+        /**
+         * <code>string name = 2;</code>
+         * @return The bytes for name.
+         */
+        public com.google.protobuf.ByteString
+            getNameBytes() {
+          java.lang.Object ref = name_;
+          if (ref instanceof String) {
+            com.google.protobuf.ByteString b = 
+                com.google.protobuf.ByteString.copyFromUtf8(
+                    (java.lang.String) ref);
+            name_ = b;
+            return b;
+          } else {
+            return (com.google.protobuf.ByteString) ref;
+          }
+        }
+        /**
+         * <code>string name = 2;</code>
+         * @param value The name to set.
+         * @return This builder for chaining.
+         */
+        public Builder setName(
+            java.lang.String value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  
+          name_ = value;
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>string name = 2;</code>
+         * @return This builder for chaining.
+         */
+        public Builder clearName() {
+          
+          name_ = getDefaultInstance().getName();
+          onChanged();
+          return this;
+        }
+        /**
+         * <code>string name = 2;</code>
+         * @param value The bytes for name to set.
+         * @return This builder for chaining.
+         */
+        public Builder setNameBytes(
+            com.google.protobuf.ByteString value) {
+          if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+          
+          name_ = value;
+          onChanged();
+          return this;
+        }
+        @java.lang.Override
+        public final Builder setUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.setUnknownFields(unknownFields);
+        }
+
+        @java.lang.Override
+        public final Builder mergeUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.mergeUnknownFields(unknownFields);
+        }
+
+
+        // @@protoc_insertion_point(builder_scope:MessageEntities.Tag)
+      }
+
+      // @@protoc_insertion_point(class_scope:MessageEntities.Tag)
+      private static final gg.strims.ppspp.proto.Chat.MessageEntities.Tag DEFAULT_INSTANCE;
+      static {
+        DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.MessageEntities.Tag();
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Tag getDefaultInstance() {
+        return DEFAULT_INSTANCE;
+      }
+
+      private static final com.google.protobuf.Parser<Tag>
+          PARSER = new com.google.protobuf.AbstractParser<Tag>() {
+        @java.lang.Override
+        public Tag parsePartialFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws com.google.protobuf.InvalidProtocolBufferException {
+          return new Tag(input, extensionRegistry);
+        }
+      };
+
+      public static com.google.protobuf.Parser<Tag> parser() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Parser<Tag> getParserForType() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Tag getDefaultInstanceForType() {
+        return DEFAULT_INSTANCE;
+      }
+
+    }
+
+    public interface CodeBlockOrBuilder extends
+        // @@protoc_insertion_point(interface_extends:MessageEntities.CodeBlock)
+        com.google.protobuf.MessageOrBuilder {
+
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      boolean hasBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder();
+    }
+    /**
+     * Protobuf type {@code MessageEntities.CodeBlock}
+     */
+    public static final class CodeBlock extends
+        com.google.protobuf.GeneratedMessageV3 implements
+        // @@protoc_insertion_point(message_implements:MessageEntities.CodeBlock)
+        CodeBlockOrBuilder {
+    private static final long serialVersionUID = 0L;
+      // Use CodeBlock.newBuilder() to construct.
+      private CodeBlock(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+        super(builder);
+      }
+      private CodeBlock() {
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new CodeBlock();
+      }
+
+      @java.lang.Override
+      public final com.google.protobuf.UnknownFieldSet
+      getUnknownFields() {
+        return this.unknownFields;
+      }
+      private CodeBlock(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        this();
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+            com.google.protobuf.UnknownFieldSet.newBuilder();
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder subBuilder = null;
+                if (bounds_ != null) {
+                  subBuilder = bounds_.toBuilder();
+                }
+                bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.parser(), extensionRegistry);
+                if (subBuilder != null) {
+                  subBuilder.mergeFrom(bounds_);
+                  bounds_ = subBuilder.buildPartial();
+                }
+
+                break;
+              }
+              default: {
+                if (!parseUnknownField(
+                    input, unknownFields, extensionRegistry, tag)) {
+                  done = true;
+                }
+                break;
+              }
+            }
+          }
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(this);
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(
+              e).setUnfinishedMessage(this);
+        } finally {
+          this.unknownFields = unknownFields.build();
+          makeExtensionsImmutable();
+        }
+      }
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_CodeBlock_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_CodeBlock_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.class, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.Builder.class);
+      }
+
+      public static final int BOUNDS_FIELD_NUMBER = 1;
+      private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      @java.lang.Override
+      public boolean hasBounds() {
+        return bounds_ != null;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+        return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+        return getBounds();
+      }
+
+      private byte memoizedIsInitialized = -1;
+      @java.lang.Override
+      public final boolean isInitialized() {
+        byte isInitialized = memoizedIsInitialized;
+        if (isInitialized == 1) return true;
+        if (isInitialized == 0) return false;
+
+        memoizedIsInitialized = 1;
+        return true;
+      }
+
+      @java.lang.Override
+      public void writeTo(com.google.protobuf.CodedOutputStream output)
+                          throws java.io.IOException {
+        if (bounds_ != null) {
+          output.writeMessage(1, getBounds());
+        }
+        unknownFields.writeTo(output);
+      }
+
+      @java.lang.Override
+      public int getSerializedSize() {
+        int size = memoizedSize;
+        if (size != -1) return size;
+
+        size = 0;
+        if (bounds_ != null) {
+          size += com.google.protobuf.CodedOutputStream
+            .computeMessageSize(1, getBounds());
+        }
+        size += unknownFields.getSerializedSize();
+        memoizedSize = size;
+        return size;
+      }
+
+      @java.lang.Override
+      public boolean equals(final java.lang.Object obj) {
+        if (obj == this) {
+         return true;
+        }
+        if (!(obj instanceof gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock)) {
+          return super.equals(obj);
+        }
+        gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock other = (gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock) obj;
+
+        if (hasBounds() != other.hasBounds()) return false;
+        if (hasBounds()) {
+          if (!getBounds()
+              .equals(other.getBounds())) return false;
+        }
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
+      }
+
+      @java.lang.Override
+      public int hashCode() {
+        if (memoizedHashCode != 0) {
+          return memoizedHashCode;
+        }
+        int hash = 41;
+        hash = (19 * hash) + getDescriptor().hashCode();
+        if (hasBounds()) {
+          hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
+          hash = (53 * hash) + getBounds().hashCode();
+        }
+        hash = (29 * hash) + unknownFields.hashCode();
+        memoizedHashCode = hash;
+        return hash;
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parseFrom(
+          java.nio.ByteBuffer data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parseFrom(
+          java.nio.ByteBuffer data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parseFrom(
+          com.google.protobuf.ByteString data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parseFrom(
+          com.google.protobuf.ByteString data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parseFrom(byte[] data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parseFrom(
+          byte[] data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parseFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parseFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parseDelimitedFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parseDelimitedFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parseFrom(
+          com.google.protobuf.CodedInputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parseFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+
+      @java.lang.Override
+      public Builder newBuilderForType() { return newBuilder(); }
+      public static Builder newBuilder() {
+        return DEFAULT_INSTANCE.toBuilder();
+      }
+      public static Builder newBuilder(gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock prototype) {
+        return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+      }
+      @java.lang.Override
+      public Builder toBuilder() {
+        return this == DEFAULT_INSTANCE
+            ? new Builder() : new Builder().mergeFrom(this);
+      }
+
+      @java.lang.Override
+      protected Builder newBuilderForType(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        Builder builder = new Builder(parent);
+        return builder;
+      }
+      /**
+       * Protobuf type {@code MessageEntities.CodeBlock}
+       */
+      public static final class Builder extends
+          com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+          // @@protoc_insertion_point(builder_implements:MessageEntities.CodeBlock)
+          gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlockOrBuilder {
+        public static final com.google.protobuf.Descriptors.Descriptor
+            getDescriptor() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_CodeBlock_descriptor;
+        }
+
+        @java.lang.Override
+        protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+            internalGetFieldAccessorTable() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_CodeBlock_fieldAccessorTable
+              .ensureFieldAccessorsInitialized(
+                  gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.class, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.Builder.class);
+        }
+
+        // Construct using gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.newBuilder()
+        private Builder() {
+          maybeForceBuilderInitialization();
+        }
+
+        private Builder(
+            com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          super(parent);
+          maybeForceBuilderInitialization();
+        }
+        private void maybeForceBuilderInitialization() {
+          if (com.google.protobuf.GeneratedMessageV3
+                  .alwaysUseFieldBuilders) {
+          }
+        }
+        @java.lang.Override
+        public Builder clear() {
+          super.clear();
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+          return this;
+        }
+
+        @java.lang.Override
+        public com.google.protobuf.Descriptors.Descriptor
+            getDescriptorForType() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_CodeBlock_descriptor;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock getDefaultInstanceForType() {
+          return gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.getDefaultInstance();
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock build() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock result = buildPartial();
+          if (!result.isInitialized()) {
+            throw newUninitializedMessageException(result);
+          }
+          return result;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock buildPartial() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock result = new gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock(this);
+          if (boundsBuilder_ == null) {
+            result.bounds_ = bounds_;
+          } else {
+            result.bounds_ = boundsBuilder_.build();
+          }
+          onBuilt();
+          return result;
+        }
+
+        @java.lang.Override
+        public Builder clone() {
+          return super.clone();
+        }
+        @java.lang.Override
+        public Builder setField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.setField(field, value);
+        }
+        @java.lang.Override
+        public Builder clearField(
+            com.google.protobuf.Descriptors.FieldDescriptor field) {
+          return super.clearField(field);
+        }
+        @java.lang.Override
+        public Builder clearOneof(
+            com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+          return super.clearOneof(oneof);
+        }
+        @java.lang.Override
+        public Builder setRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            int index, java.lang.Object value) {
+          return super.setRepeatedField(field, index, value);
+        }
+        @java.lang.Override
+        public Builder addRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.addRepeatedField(field, value);
+        }
+        @java.lang.Override
+        public Builder mergeFrom(com.google.protobuf.Message other) {
+          if (other instanceof gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock) {
+            return mergeFrom((gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock)other);
+          } else {
+            super.mergeFrom(other);
+            return this;
+          }
+        }
+
+        public Builder mergeFrom(gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock other) {
+          if (other == gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.getDefaultInstance()) return this;
+          if (other.hasBounds()) {
+            mergeBounds(other.getBounds());
+          }
+          this.mergeUnknownFields(other.unknownFields);
+          onChanged();
+          return this;
+        }
+
+        @java.lang.Override
+        public final boolean isInitialized() {
+          return true;
+        }
+
+        @java.lang.Override
+        public Builder mergeFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws java.io.IOException {
+          gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock parsedMessage = null;
+          try {
+            parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+          } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+            parsedMessage = (gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock) e.getUnfinishedMessage();
+            throw e.unwrapIOException();
+          } finally {
+            if (parsedMessage != null) {
+              mergeFrom(parsedMessage);
+            }
+          }
+          return this;
+        }
+
+        private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> boundsBuilder_;
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return Whether the bounds field is set.
+         */
+        public boolean hasBounds() {
+          return boundsBuilder_ != null || bounds_ != null;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return The bounds.
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+          if (boundsBuilder_ == null) {
+            return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          } else {
+            return boundsBuilder_.getMessage();
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (value == null) {
+              throw new NullPointerException();
+            }
+            bounds_ = value;
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder builderForValue) {
+          if (boundsBuilder_ == null) {
+            bounds_ = builderForValue.build();
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(builderForValue.build());
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder mergeBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (bounds_ != null) {
+              bounds_ =
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
+            } else {
+              bounds_ = value;
+            }
+            onChanged();
+          } else {
+            boundsBuilder_.mergeFrom(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder clearBounds() {
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+            onChanged();
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder getBoundsBuilder() {
+          
+          onChanged();
+          return getBoundsFieldBuilder().getBuilder();
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+          if (boundsBuilder_ != null) {
+            return boundsBuilder_.getMessageOrBuilder();
+          } else {
+            return bounds_ == null ?
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> 
+            getBoundsFieldBuilder() {
+          if (boundsBuilder_ == null) {
+            boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder>(
+                    getBounds(),
+                    getParentForChildren(),
+                    isClean());
+            bounds_ = null;
+          }
+          return boundsBuilder_;
+        }
+        @java.lang.Override
+        public final Builder setUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.setUnknownFields(unknownFields);
+        }
+
+        @java.lang.Override
+        public final Builder mergeUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.mergeUnknownFields(unknownFields);
+        }
+
+
+        // @@protoc_insertion_point(builder_scope:MessageEntities.CodeBlock)
+      }
+
+      // @@protoc_insertion_point(class_scope:MessageEntities.CodeBlock)
+      private static final gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock DEFAULT_INSTANCE;
+      static {
+        DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock();
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock getDefaultInstance() {
+        return DEFAULT_INSTANCE;
+      }
+
+      private static final com.google.protobuf.Parser<CodeBlock>
+          PARSER = new com.google.protobuf.AbstractParser<CodeBlock>() {
+        @java.lang.Override
+        public CodeBlock parsePartialFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws com.google.protobuf.InvalidProtocolBufferException {
+          return new CodeBlock(input, extensionRegistry);
+        }
+      };
+
+      public static com.google.protobuf.Parser<CodeBlock> parser() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Parser<CodeBlock> getParserForType() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock getDefaultInstanceForType() {
+        return DEFAULT_INSTANCE;
+      }
+
+    }
+
+    public interface SpoilerOrBuilder extends
+        // @@protoc_insertion_point(interface_extends:MessageEntities.Spoiler)
+        com.google.protobuf.MessageOrBuilder {
+
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      boolean hasBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder();
+    }
+    /**
+     * Protobuf type {@code MessageEntities.Spoiler}
+     */
+    public static final class Spoiler extends
+        com.google.protobuf.GeneratedMessageV3 implements
+        // @@protoc_insertion_point(message_implements:MessageEntities.Spoiler)
+        SpoilerOrBuilder {
+    private static final long serialVersionUID = 0L;
+      // Use Spoiler.newBuilder() to construct.
+      private Spoiler(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+        super(builder);
+      }
+      private Spoiler() {
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new Spoiler();
+      }
+
+      @java.lang.Override
+      public final com.google.protobuf.UnknownFieldSet
+      getUnknownFields() {
+        return this.unknownFields;
+      }
+      private Spoiler(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        this();
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+            com.google.protobuf.UnknownFieldSet.newBuilder();
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder subBuilder = null;
+                if (bounds_ != null) {
+                  subBuilder = bounds_.toBuilder();
+                }
+                bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.parser(), extensionRegistry);
+                if (subBuilder != null) {
+                  subBuilder.mergeFrom(bounds_);
+                  bounds_ = subBuilder.buildPartial();
+                }
+
+                break;
+              }
+              default: {
+                if (!parseUnknownField(
+                    input, unknownFields, extensionRegistry, tag)) {
+                  done = true;
+                }
+                break;
+              }
+            }
+          }
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(this);
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(
+              e).setUnfinishedMessage(this);
+        } finally {
+          this.unknownFields = unknownFields.build();
+          makeExtensionsImmutable();
+        }
+      }
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Spoiler_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Spoiler_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.class, gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.Builder.class);
+      }
+
+      public static final int BOUNDS_FIELD_NUMBER = 1;
+      private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      @java.lang.Override
+      public boolean hasBounds() {
+        return bounds_ != null;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+        return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+        return getBounds();
+      }
+
+      private byte memoizedIsInitialized = -1;
+      @java.lang.Override
+      public final boolean isInitialized() {
+        byte isInitialized = memoizedIsInitialized;
+        if (isInitialized == 1) return true;
+        if (isInitialized == 0) return false;
+
+        memoizedIsInitialized = 1;
+        return true;
+      }
+
+      @java.lang.Override
+      public void writeTo(com.google.protobuf.CodedOutputStream output)
+                          throws java.io.IOException {
+        if (bounds_ != null) {
+          output.writeMessage(1, getBounds());
+        }
+        unknownFields.writeTo(output);
+      }
+
+      @java.lang.Override
+      public int getSerializedSize() {
+        int size = memoizedSize;
+        if (size != -1) return size;
+
+        size = 0;
+        if (bounds_ != null) {
+          size += com.google.protobuf.CodedOutputStream
+            .computeMessageSize(1, getBounds());
+        }
+        size += unknownFields.getSerializedSize();
+        memoizedSize = size;
+        return size;
+      }
+
+      @java.lang.Override
+      public boolean equals(final java.lang.Object obj) {
+        if (obj == this) {
+         return true;
+        }
+        if (!(obj instanceof gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler)) {
+          return super.equals(obj);
+        }
+        gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler other = (gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler) obj;
+
+        if (hasBounds() != other.hasBounds()) return false;
+        if (hasBounds()) {
+          if (!getBounds()
+              .equals(other.getBounds())) return false;
+        }
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
+      }
+
+      @java.lang.Override
+      public int hashCode() {
+        if (memoizedHashCode != 0) {
+          return memoizedHashCode;
+        }
+        int hash = 41;
+        hash = (19 * hash) + getDescriptor().hashCode();
+        if (hasBounds()) {
+          hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
+          hash = (53 * hash) + getBounds().hashCode();
+        }
+        hash = (29 * hash) + unknownFields.hashCode();
+        memoizedHashCode = hash;
+        return hash;
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parseFrom(
+          java.nio.ByteBuffer data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parseFrom(
+          java.nio.ByteBuffer data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parseFrom(
+          com.google.protobuf.ByteString data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parseFrom(
+          com.google.protobuf.ByteString data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parseFrom(byte[] data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parseFrom(
+          byte[] data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parseFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parseFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parseDelimitedFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parseDelimitedFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parseFrom(
+          com.google.protobuf.CodedInputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parseFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+
+      @java.lang.Override
+      public Builder newBuilderForType() { return newBuilder(); }
+      public static Builder newBuilder() {
+        return DEFAULT_INSTANCE.toBuilder();
+      }
+      public static Builder newBuilder(gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler prototype) {
+        return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+      }
+      @java.lang.Override
+      public Builder toBuilder() {
+        return this == DEFAULT_INSTANCE
+            ? new Builder() : new Builder().mergeFrom(this);
+      }
+
+      @java.lang.Override
+      protected Builder newBuilderForType(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        Builder builder = new Builder(parent);
+        return builder;
+      }
+      /**
+       * Protobuf type {@code MessageEntities.Spoiler}
+       */
+      public static final class Builder extends
+          com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+          // @@protoc_insertion_point(builder_implements:MessageEntities.Spoiler)
+          gg.strims.ppspp.proto.Chat.MessageEntities.SpoilerOrBuilder {
+        public static final com.google.protobuf.Descriptors.Descriptor
+            getDescriptor() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Spoiler_descriptor;
+        }
+
+        @java.lang.Override
+        protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+            internalGetFieldAccessorTable() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Spoiler_fieldAccessorTable
+              .ensureFieldAccessorsInitialized(
+                  gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.class, gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.Builder.class);
+        }
+
+        // Construct using gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.newBuilder()
+        private Builder() {
+          maybeForceBuilderInitialization();
+        }
+
+        private Builder(
+            com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          super(parent);
+          maybeForceBuilderInitialization();
+        }
+        private void maybeForceBuilderInitialization() {
+          if (com.google.protobuf.GeneratedMessageV3
+                  .alwaysUseFieldBuilders) {
+          }
+        }
+        @java.lang.Override
+        public Builder clear() {
+          super.clear();
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+          return this;
+        }
+
+        @java.lang.Override
+        public com.google.protobuf.Descriptors.Descriptor
+            getDescriptorForType() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_Spoiler_descriptor;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler getDefaultInstanceForType() {
+          return gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.getDefaultInstance();
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler build() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler result = buildPartial();
+          if (!result.isInitialized()) {
+            throw newUninitializedMessageException(result);
+          }
+          return result;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler buildPartial() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler result = new gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler(this);
+          if (boundsBuilder_ == null) {
+            result.bounds_ = bounds_;
+          } else {
+            result.bounds_ = boundsBuilder_.build();
+          }
+          onBuilt();
+          return result;
+        }
+
+        @java.lang.Override
+        public Builder clone() {
+          return super.clone();
+        }
+        @java.lang.Override
+        public Builder setField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.setField(field, value);
+        }
+        @java.lang.Override
+        public Builder clearField(
+            com.google.protobuf.Descriptors.FieldDescriptor field) {
+          return super.clearField(field);
+        }
+        @java.lang.Override
+        public Builder clearOneof(
+            com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+          return super.clearOneof(oneof);
+        }
+        @java.lang.Override
+        public Builder setRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            int index, java.lang.Object value) {
+          return super.setRepeatedField(field, index, value);
+        }
+        @java.lang.Override
+        public Builder addRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.addRepeatedField(field, value);
+        }
+        @java.lang.Override
+        public Builder mergeFrom(com.google.protobuf.Message other) {
+          if (other instanceof gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler) {
+            return mergeFrom((gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler)other);
+          } else {
+            super.mergeFrom(other);
+            return this;
+          }
+        }
+
+        public Builder mergeFrom(gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler other) {
+          if (other == gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.getDefaultInstance()) return this;
+          if (other.hasBounds()) {
+            mergeBounds(other.getBounds());
+          }
+          this.mergeUnknownFields(other.unknownFields);
+          onChanged();
+          return this;
+        }
+
+        @java.lang.Override
+        public final boolean isInitialized() {
+          return true;
+        }
+
+        @java.lang.Override
+        public Builder mergeFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws java.io.IOException {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler parsedMessage = null;
+          try {
+            parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+          } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+            parsedMessage = (gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler) e.getUnfinishedMessage();
+            throw e.unwrapIOException();
+          } finally {
+            if (parsedMessage != null) {
+              mergeFrom(parsedMessage);
+            }
+          }
+          return this;
+        }
+
+        private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> boundsBuilder_;
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return Whether the bounds field is set.
+         */
+        public boolean hasBounds() {
+          return boundsBuilder_ != null || bounds_ != null;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return The bounds.
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+          if (boundsBuilder_ == null) {
+            return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          } else {
+            return boundsBuilder_.getMessage();
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (value == null) {
+              throw new NullPointerException();
+            }
+            bounds_ = value;
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder builderForValue) {
+          if (boundsBuilder_ == null) {
+            bounds_ = builderForValue.build();
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(builderForValue.build());
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder mergeBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (bounds_ != null) {
+              bounds_ =
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
+            } else {
+              bounds_ = value;
+            }
+            onChanged();
+          } else {
+            boundsBuilder_.mergeFrom(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder clearBounds() {
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+            onChanged();
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder getBoundsBuilder() {
+          
+          onChanged();
+          return getBoundsFieldBuilder().getBuilder();
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+          if (boundsBuilder_ != null) {
+            return boundsBuilder_.getMessageOrBuilder();
+          } else {
+            return bounds_ == null ?
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> 
+            getBoundsFieldBuilder() {
+          if (boundsBuilder_ == null) {
+            boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder>(
+                    getBounds(),
+                    getParentForChildren(),
+                    isClean());
+            bounds_ = null;
+          }
+          return boundsBuilder_;
+        }
+        @java.lang.Override
+        public final Builder setUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.setUnknownFields(unknownFields);
+        }
+
+        @java.lang.Override
+        public final Builder mergeUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.mergeUnknownFields(unknownFields);
+        }
+
+
+        // @@protoc_insertion_point(builder_scope:MessageEntities.Spoiler)
+      }
+
+      // @@protoc_insertion_point(class_scope:MessageEntities.Spoiler)
+      private static final gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler DEFAULT_INSTANCE;
+      static {
+        DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler();
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler getDefaultInstance() {
+        return DEFAULT_INSTANCE;
+      }
+
+      private static final com.google.protobuf.Parser<Spoiler>
+          PARSER = new com.google.protobuf.AbstractParser<Spoiler>() {
+        @java.lang.Override
+        public Spoiler parsePartialFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws com.google.protobuf.InvalidProtocolBufferException {
+          return new Spoiler(input, extensionRegistry);
+        }
+      };
+
+      public static com.google.protobuf.Parser<Spoiler> parser() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Parser<Spoiler> getParserForType() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler getDefaultInstanceForType() {
+        return DEFAULT_INSTANCE;
+      }
+
+    }
+
+    public interface GenericEntityOrBuilder extends
+        // @@protoc_insertion_point(interface_extends:MessageEntities.GenericEntity)
+        com.google.protobuf.MessageOrBuilder {
+
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      boolean hasBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds();
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder();
+    }
+    /**
+     * Protobuf type {@code MessageEntities.GenericEntity}
+     */
+    public static final class GenericEntity extends
+        com.google.protobuf.GeneratedMessageV3 implements
+        // @@protoc_insertion_point(message_implements:MessageEntities.GenericEntity)
+        GenericEntityOrBuilder {
+    private static final long serialVersionUID = 0L;
+      // Use GenericEntity.newBuilder() to construct.
+      private GenericEntity(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+        super(builder);
+      }
+      private GenericEntity() {
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new GenericEntity();
+      }
+
+      @java.lang.Override
+      public final com.google.protobuf.UnknownFieldSet
+      getUnknownFields() {
+        return this.unknownFields;
+      }
+      private GenericEntity(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        this();
+        if (extensionRegistry == null) {
+          throw new java.lang.NullPointerException();
+        }
+        com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+            com.google.protobuf.UnknownFieldSet.newBuilder();
+        try {
+          boolean done = false;
+          while (!done) {
+            int tag = input.readTag();
+            switch (tag) {
+              case 0:
+                done = true;
+                break;
+              case 10: {
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder subBuilder = null;
+                if (bounds_ != null) {
+                  subBuilder = bounds_.toBuilder();
+                }
+                bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.parser(), extensionRegistry);
+                if (subBuilder != null) {
+                  subBuilder.mergeFrom(bounds_);
+                  bounds_ = subBuilder.buildPartial();
+                }
+
+                break;
+              }
+              default: {
+                if (!parseUnknownField(
+                    input, unknownFields, extensionRegistry, tag)) {
+                  done = true;
+                }
+                break;
+              }
+            }
+          }
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          throw e.setUnfinishedMessage(this);
+        } catch (java.io.IOException e) {
+          throw new com.google.protobuf.InvalidProtocolBufferException(
+              e).setUnfinishedMessage(this);
+        } finally {
+          this.unknownFields = unknownFields.build();
+          makeExtensionsImmutable();
+        }
+      }
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_GenericEntity_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_GenericEntity_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.class, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder.class);
+      }
+
+      public static final int BOUNDS_FIELD_NUMBER = 1;
+      private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return Whether the bounds field is set.
+       */
+      @java.lang.Override
+      public boolean hasBounds() {
+        return bounds_ != null;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       * @return The bounds.
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+        return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+      }
+      /**
+       * <code>.MessageEntities.Bounds bounds = 1;</code>
+       */
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+        return getBounds();
+      }
+
+      private byte memoizedIsInitialized = -1;
+      @java.lang.Override
+      public final boolean isInitialized() {
+        byte isInitialized = memoizedIsInitialized;
+        if (isInitialized == 1) return true;
+        if (isInitialized == 0) return false;
+
+        memoizedIsInitialized = 1;
+        return true;
+      }
+
+      @java.lang.Override
+      public void writeTo(com.google.protobuf.CodedOutputStream output)
+                          throws java.io.IOException {
+        if (bounds_ != null) {
+          output.writeMessage(1, getBounds());
+        }
+        unknownFields.writeTo(output);
+      }
+
+      @java.lang.Override
+      public int getSerializedSize() {
+        int size = memoizedSize;
+        if (size != -1) return size;
+
+        size = 0;
+        if (bounds_ != null) {
+          size += com.google.protobuf.CodedOutputStream
+            .computeMessageSize(1, getBounds());
+        }
+        size += unknownFields.getSerializedSize();
+        memoizedSize = size;
+        return size;
+      }
+
+      @java.lang.Override
+      public boolean equals(final java.lang.Object obj) {
+        if (obj == this) {
+         return true;
+        }
+        if (!(obj instanceof gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity)) {
+          return super.equals(obj);
+        }
+        gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity other = (gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity) obj;
+
+        if (hasBounds() != other.hasBounds()) return false;
+        if (hasBounds()) {
+          if (!getBounds()
+              .equals(other.getBounds())) return false;
+        }
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
+      }
+
+      @java.lang.Override
+      public int hashCode() {
+        if (memoizedHashCode != 0) {
+          return memoizedHashCode;
+        }
+        int hash = 41;
+        hash = (19 * hash) + getDescriptor().hashCode();
+        if (hasBounds()) {
+          hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
+          hash = (53 * hash) + getBounds().hashCode();
+        }
+        hash = (29 * hash) + unknownFields.hashCode();
+        memoizedHashCode = hash;
+        return hash;
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parseFrom(
+          java.nio.ByteBuffer data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parseFrom(
+          java.nio.ByteBuffer data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parseFrom(
+          com.google.protobuf.ByteString data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parseFrom(
+          com.google.protobuf.ByteString data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parseFrom(byte[] data)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parseFrom(
+          byte[] data,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return PARSER.parseFrom(data, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parseFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parseFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parseDelimitedFrom(java.io.InputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parseDelimitedFrom(
+          java.io.InputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parseFrom(
+          com.google.protobuf.CodedInputStream input)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input);
+      }
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parseFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        return com.google.protobuf.GeneratedMessageV3
+            .parseWithIOException(PARSER, input, extensionRegistry);
+      }
+
+      @java.lang.Override
+      public Builder newBuilderForType() { return newBuilder(); }
+      public static Builder newBuilder() {
+        return DEFAULT_INSTANCE.toBuilder();
+      }
+      public static Builder newBuilder(gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity prototype) {
+        return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+      }
+      @java.lang.Override
+      public Builder toBuilder() {
+        return this == DEFAULT_INSTANCE
+            ? new Builder() : new Builder().mergeFrom(this);
+      }
+
+      @java.lang.Override
+      protected Builder newBuilderForType(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        Builder builder = new Builder(parent);
+        return builder;
+      }
+      /**
+       * Protobuf type {@code MessageEntities.GenericEntity}
+       */
+      public static final class Builder extends
+          com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+          // @@protoc_insertion_point(builder_implements:MessageEntities.GenericEntity)
+          gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder {
+        public static final com.google.protobuf.Descriptors.Descriptor
+            getDescriptor() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_GenericEntity_descriptor;
+        }
+
+        @java.lang.Override
+        protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+            internalGetFieldAccessorTable() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_GenericEntity_fieldAccessorTable
+              .ensureFieldAccessorsInitialized(
+                  gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.class, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder.class);
+        }
+
+        // Construct using gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.newBuilder()
+        private Builder() {
+          maybeForceBuilderInitialization();
+        }
+
+        private Builder(
+            com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+          super(parent);
+          maybeForceBuilderInitialization();
+        }
+        private void maybeForceBuilderInitialization() {
+          if (com.google.protobuf.GeneratedMessageV3
+                  .alwaysUseFieldBuilders) {
+          }
+        }
+        @java.lang.Override
+        public Builder clear() {
+          super.clear();
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+          return this;
+        }
+
+        @java.lang.Override
+        public com.google.protobuf.Descriptors.Descriptor
+            getDescriptorForType() {
+          return gg.strims.ppspp.proto.Chat.internal_static_MessageEntities_GenericEntity_descriptor;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity getDefaultInstanceForType() {
+          return gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.getDefaultInstance();
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity build() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity result = buildPartial();
+          if (!result.isInitialized()) {
+            throw newUninitializedMessageException(result);
+          }
+          return result;
+        }
+
+        @java.lang.Override
+        public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity buildPartial() {
+          gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity result = new gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity(this);
+          if (boundsBuilder_ == null) {
+            result.bounds_ = bounds_;
+          } else {
+            result.bounds_ = boundsBuilder_.build();
+          }
+          onBuilt();
+          return result;
+        }
+
+        @java.lang.Override
+        public Builder clone() {
+          return super.clone();
+        }
+        @java.lang.Override
+        public Builder setField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.setField(field, value);
+        }
+        @java.lang.Override
+        public Builder clearField(
+            com.google.protobuf.Descriptors.FieldDescriptor field) {
+          return super.clearField(field);
+        }
+        @java.lang.Override
+        public Builder clearOneof(
+            com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+          return super.clearOneof(oneof);
+        }
+        @java.lang.Override
+        public Builder setRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            int index, java.lang.Object value) {
+          return super.setRepeatedField(field, index, value);
+        }
+        @java.lang.Override
+        public Builder addRepeatedField(
+            com.google.protobuf.Descriptors.FieldDescriptor field,
+            java.lang.Object value) {
+          return super.addRepeatedField(field, value);
+        }
+        @java.lang.Override
+        public Builder mergeFrom(com.google.protobuf.Message other) {
+          if (other instanceof gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity) {
+            return mergeFrom((gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity)other);
+          } else {
+            super.mergeFrom(other);
+            return this;
+          }
+        }
+
+        public Builder mergeFrom(gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity other) {
+          if (other == gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.getDefaultInstance()) return this;
+          if (other.hasBounds()) {
+            mergeBounds(other.getBounds());
+          }
+          this.mergeUnknownFields(other.unknownFields);
+          onChanged();
+          return this;
+        }
+
+        @java.lang.Override
+        public final boolean isInitialized() {
+          return true;
+        }
+
+        @java.lang.Override
+        public Builder mergeFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws java.io.IOException {
+          gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity parsedMessage = null;
+          try {
+            parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+          } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+            parsedMessage = (gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity) e.getUnfinishedMessage();
+            throw e.unwrapIOException();
+          } finally {
+            if (parsedMessage != null) {
+              mergeFrom(parsedMessage);
+            }
+          }
+          return this;
+        }
+
+        private gg.strims.ppspp.proto.Chat.MessageEntities.Bounds bounds_;
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> boundsBuilder_;
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return Whether the bounds field is set.
+         */
+        public boolean hasBounds() {
+          return boundsBuilder_ != null || bounds_ != null;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         * @return The bounds.
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds getBounds() {
+          if (boundsBuilder_ == null) {
+            return bounds_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          } else {
+            return boundsBuilder_.getMessage();
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (value == null) {
+              throw new NullPointerException();
+            }
+            bounds_ = value;
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder setBounds(
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder builderForValue) {
+          if (boundsBuilder_ == null) {
+            bounds_ = builderForValue.build();
+            onChanged();
+          } else {
+            boundsBuilder_.setMessage(builderForValue.build());
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder mergeBounds(gg.strims.ppspp.proto.Chat.MessageEntities.Bounds value) {
+          if (boundsBuilder_ == null) {
+            if (bounds_ != null) {
+              bounds_ =
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
+            } else {
+              bounds_ = value;
+            }
+            onChanged();
+          } else {
+            boundsBuilder_.mergeFrom(value);
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public Builder clearBounds() {
+          if (boundsBuilder_ == null) {
+            bounds_ = null;
+            onChanged();
+          } else {
+            bounds_ = null;
+            boundsBuilder_ = null;
+          }
+
+          return this;
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder getBoundsBuilder() {
+          
+          onChanged();
+          return getBoundsFieldBuilder().getBuilder();
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        public gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder getBoundsOrBuilder() {
+          if (boundsBuilder_ != null) {
+            return boundsBuilder_.getMessageOrBuilder();
+          } else {
+            return bounds_ == null ?
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.getDefaultInstance() : bounds_;
+          }
+        }
+        /**
+         * <code>.MessageEntities.Bounds bounds = 1;</code>
+         */
+        private com.google.protobuf.SingleFieldBuilderV3<
+            gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder> 
+            getBoundsFieldBuilder() {
+          if (boundsBuilder_ == null) {
+            boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+                gg.strims.ppspp.proto.Chat.MessageEntities.Bounds, gg.strims.ppspp.proto.Chat.MessageEntities.Bounds.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.BoundsOrBuilder>(
+                    getBounds(),
+                    getParentForChildren(),
+                    isClean());
+            bounds_ = null;
+          }
+          return boundsBuilder_;
+        }
+        @java.lang.Override
+        public final Builder setUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.setUnknownFields(unknownFields);
+        }
+
+        @java.lang.Override
+        public final Builder mergeUnknownFields(
+            final com.google.protobuf.UnknownFieldSet unknownFields) {
+          return super.mergeUnknownFields(unknownFields);
+        }
+
+
+        // @@protoc_insertion_point(builder_scope:MessageEntities.GenericEntity)
+      }
+
+      // @@protoc_insertion_point(class_scope:MessageEntities.GenericEntity)
+      private static final gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity DEFAULT_INSTANCE;
+      static {
+        DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity();
+      }
+
+      public static gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity getDefaultInstance() {
+        return DEFAULT_INSTANCE;
+      }
+
+      private static final com.google.protobuf.Parser<GenericEntity>
+          PARSER = new com.google.protobuf.AbstractParser<GenericEntity>() {
+        @java.lang.Override
+        public GenericEntity parsePartialFrom(
+            com.google.protobuf.CodedInputStream input,
+            com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+            throws com.google.protobuf.InvalidProtocolBufferException {
+          return new GenericEntity(input, extensionRegistry);
+        }
+      };
+
+      public static com.google.protobuf.Parser<GenericEntity> parser() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Parser<GenericEntity> getParserForType() {
+        return PARSER;
+      }
+
+      @java.lang.Override
+      public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity getDefaultInstanceForType() {
+        return DEFAULT_INSTANCE;
+      }
+
+    }
+
+    public static final int LINKS_FIELD_NUMBER = 1;
+    private java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Link> links_;
+    /**
+     * <code>repeated .MessageEntities.Link links = 1;</code>
      */
     @java.lang.Override
-    public java.util.List<gg.strims.ppspp.proto.Chat.Link> getLinksList() {
+    public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Link> getLinksList() {
       return links_;
     }
     /**
-     * <code>repeated .Link links = 1;</code>
+     * <code>repeated .MessageEntities.Link links = 1;</code>
      */
     @java.lang.Override
-    public java.util.List<? extends gg.strims.ppspp.proto.Chat.LinkOrBuilder> 
+    public java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.LinkOrBuilder> 
         getLinksOrBuilderList() {
       return links_;
     }
     /**
-     * <code>repeated .Link links = 1;</code>
+     * <code>repeated .MessageEntities.Link links = 1;</code>
      */
     @java.lang.Override
     public int getLinksCount() {
       return links_.size();
     }
     /**
-     * <code>repeated .Link links = 1;</code>
+     * <code>repeated .MessageEntities.Link links = 1;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Link getLinks(int index) {
+    public gg.strims.ppspp.proto.Chat.MessageEntities.Link getLinks(int index) {
       return links_.get(index);
     }
     /**
-     * <code>repeated .Link links = 1;</code>
+     * <code>repeated .MessageEntities.Link links = 1;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.LinkOrBuilder getLinksOrBuilder(
+    public gg.strims.ppspp.proto.Chat.MessageEntities.LinkOrBuilder getLinksOrBuilder(
         int index) {
       return links_.get(index);
     }
 
     public static final int EMOTES_FIELD_NUMBER = 2;
-    private java.util.List<gg.strims.ppspp.proto.Chat.Emote> emotes_;
+    private java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Emote> emotes_;
     /**
-     * <code>repeated .Emote emotes = 2;</code>
+     * <code>repeated .MessageEntities.Emote emotes = 2;</code>
      */
     @java.lang.Override
-    public java.util.List<gg.strims.ppspp.proto.Chat.Emote> getEmotesList() {
+    public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Emote> getEmotesList() {
       return emotes_;
     }
     /**
-     * <code>repeated .Emote emotes = 2;</code>
+     * <code>repeated .MessageEntities.Emote emotes = 2;</code>
      */
     @java.lang.Override
-    public java.util.List<? extends gg.strims.ppspp.proto.Chat.EmoteOrBuilder> 
+    public java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.EmoteOrBuilder> 
         getEmotesOrBuilderList() {
       return emotes_;
     }
     /**
-     * <code>repeated .Emote emotes = 2;</code>
+     * <code>repeated .MessageEntities.Emote emotes = 2;</code>
      */
     @java.lang.Override
     public int getEmotesCount() {
       return emotes_.size();
     }
     /**
-     * <code>repeated .Emote emotes = 2;</code>
+     * <code>repeated .MessageEntities.Emote emotes = 2;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Emote getEmotes(int index) {
+    public gg.strims.ppspp.proto.Chat.MessageEntities.Emote getEmotes(int index) {
       return emotes_.get(index);
     }
     /**
-     * <code>repeated .Emote emotes = 2;</code>
+     * <code>repeated .MessageEntities.Emote emotes = 2;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.EmoteOrBuilder getEmotesOrBuilder(
+    public gg.strims.ppspp.proto.Chat.MessageEntities.EmoteOrBuilder getEmotesOrBuilder(
         int index) {
       return emotes_.get(index);
     }
 
     public static final int NICKS_FIELD_NUMBER = 3;
-    private java.util.List<gg.strims.ppspp.proto.Chat.Nick> nicks_;
+    private java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Nick> nicks_;
     /**
-     * <code>repeated .Nick nicks = 3;</code>
+     * <code>repeated .MessageEntities.Nick nicks = 3;</code>
      */
     @java.lang.Override
-    public java.util.List<gg.strims.ppspp.proto.Chat.Nick> getNicksList() {
+    public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Nick> getNicksList() {
       return nicks_;
     }
     /**
-     * <code>repeated .Nick nicks = 3;</code>
+     * <code>repeated .MessageEntities.Nick nicks = 3;</code>
      */
     @java.lang.Override
-    public java.util.List<? extends gg.strims.ppspp.proto.Chat.NickOrBuilder> 
+    public java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.NickOrBuilder> 
         getNicksOrBuilderList() {
       return nicks_;
     }
     /**
-     * <code>repeated .Nick nicks = 3;</code>
+     * <code>repeated .MessageEntities.Nick nicks = 3;</code>
      */
     @java.lang.Override
     public int getNicksCount() {
       return nicks_.size();
     }
     /**
-     * <code>repeated .Nick nicks = 3;</code>
+     * <code>repeated .MessageEntities.Nick nicks = 3;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Nick getNicks(int index) {
+    public gg.strims.ppspp.proto.Chat.MessageEntities.Nick getNicks(int index) {
       return nicks_.get(index);
     }
     /**
-     * <code>repeated .Nick nicks = 3;</code>
+     * <code>repeated .MessageEntities.Nick nicks = 3;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.NickOrBuilder getNicksOrBuilder(
+    public gg.strims.ppspp.proto.Chat.MessageEntities.NickOrBuilder getNicksOrBuilder(
         int index) {
       return nicks_.get(index);
     }
 
     public static final int TAGS_FIELD_NUMBER = 4;
-    private java.util.List<gg.strims.ppspp.proto.Chat.Tag> tags_;
+    private java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Tag> tags_;
     /**
-     * <code>repeated .Tag tags = 4;</code>
+     * <code>repeated .MessageEntities.Tag tags = 4;</code>
      */
     @java.lang.Override
-    public java.util.List<gg.strims.ppspp.proto.Chat.Tag> getTagsList() {
+    public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Tag> getTagsList() {
       return tags_;
     }
     /**
-     * <code>repeated .Tag tags = 4;</code>
+     * <code>repeated .MessageEntities.Tag tags = 4;</code>
      */
     @java.lang.Override
-    public java.util.List<? extends gg.strims.ppspp.proto.Chat.TagOrBuilder> 
+    public java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.TagOrBuilder> 
         getTagsOrBuilderList() {
       return tags_;
     }
     /**
-     * <code>repeated .Tag tags = 4;</code>
+     * <code>repeated .MessageEntities.Tag tags = 4;</code>
      */
     @java.lang.Override
     public int getTagsCount() {
       return tags_.size();
     }
     /**
-     * <code>repeated .Tag tags = 4;</code>
+     * <code>repeated .MessageEntities.Tag tags = 4;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Tag getTags(int index) {
+    public gg.strims.ppspp.proto.Chat.MessageEntities.Tag getTags(int index) {
       return tags_.get(index);
     }
     /**
-     * <code>repeated .Tag tags = 4;</code>
+     * <code>repeated .MessageEntities.Tag tags = 4;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.TagOrBuilder getTagsOrBuilder(
+    public gg.strims.ppspp.proto.Chat.MessageEntities.TagOrBuilder getTagsOrBuilder(
         int index) {
       return tags_.get(index);
     }
 
     public static final int CODE_BLOCKS_FIELD_NUMBER = 5;
-    private java.util.List<gg.strims.ppspp.proto.Chat.CodeBlock> codeBlocks_;
+    private java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock> codeBlocks_;
     /**
-     * <code>repeated .CodeBlock code_blocks = 5;</code>
+     * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
      */
     @java.lang.Override
-    public java.util.List<gg.strims.ppspp.proto.Chat.CodeBlock> getCodeBlocksList() {
+    public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock> getCodeBlocksList() {
       return codeBlocks_;
     }
     /**
-     * <code>repeated .CodeBlock code_blocks = 5;</code>
+     * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
      */
     @java.lang.Override
-    public java.util.List<? extends gg.strims.ppspp.proto.Chat.CodeBlockOrBuilder> 
+    public java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlockOrBuilder> 
         getCodeBlocksOrBuilderList() {
       return codeBlocks_;
     }
     /**
-     * <code>repeated .CodeBlock code_blocks = 5;</code>
+     * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
      */
     @java.lang.Override
     public int getCodeBlocksCount() {
       return codeBlocks_.size();
     }
     /**
-     * <code>repeated .CodeBlock code_blocks = 5;</code>
+     * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.CodeBlock getCodeBlocks(int index) {
+    public gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock getCodeBlocks(int index) {
       return codeBlocks_.get(index);
     }
     /**
-     * <code>repeated .CodeBlock code_blocks = 5;</code>
+     * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.CodeBlockOrBuilder getCodeBlocksOrBuilder(
+    public gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlockOrBuilder getCodeBlocksOrBuilder(
         int index) {
       return codeBlocks_.get(index);
     }
 
     public static final int SPOILERS_FIELD_NUMBER = 6;
-    private java.util.List<gg.strims.ppspp.proto.Chat.Spoiler> spoilers_;
+    private java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler> spoilers_;
     /**
-     * <code>repeated .Spoiler spoilers = 6;</code>
+     * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
      */
     @java.lang.Override
-    public java.util.List<gg.strims.ppspp.proto.Chat.Spoiler> getSpoilersList() {
+    public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler> getSpoilersList() {
       return spoilers_;
     }
     /**
-     * <code>repeated .Spoiler spoilers = 6;</code>
+     * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
      */
     @java.lang.Override
-    public java.util.List<? extends gg.strims.ppspp.proto.Chat.SpoilerOrBuilder> 
+    public java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.SpoilerOrBuilder> 
         getSpoilersOrBuilderList() {
       return spoilers_;
     }
     /**
-     * <code>repeated .Spoiler spoilers = 6;</code>
+     * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
      */
     @java.lang.Override
     public int getSpoilersCount() {
       return spoilers_.size();
     }
     /**
-     * <code>repeated .Spoiler spoilers = 6;</code>
+     * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Spoiler getSpoilers(int index) {
+    public gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler getSpoilers(int index) {
       return spoilers_.get(index);
     }
     /**
-     * <code>repeated .Spoiler spoilers = 6;</code>
+     * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.SpoilerOrBuilder getSpoilersOrBuilder(
+    public gg.strims.ppspp.proto.Chat.MessageEntities.SpoilerOrBuilder getSpoilersOrBuilder(
         int index) {
       return spoilers_.get(index);
     }
 
     public static final int GREEN_TEXT_FIELD_NUMBER = 7;
-    private gg.strims.ppspp.proto.Chat.GenericEntity greenText_;
+    private gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity greenText_;
     /**
-     * <code>.GenericEntity green_text = 7;</code>
+     * <code>.MessageEntities.GenericEntity green_text = 7;</code>
      * @return Whether the greenText field is set.
      */
     @java.lang.Override
@@ -15337,25 +21285,25 @@ public final class Chat {
       return greenText_ != null;
     }
     /**
-     * <code>.GenericEntity green_text = 7;</code>
+     * <code>.MessageEntities.GenericEntity green_text = 7;</code>
      * @return The greenText.
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.GenericEntity getGreenText() {
-      return greenText_ == null ? gg.strims.ppspp.proto.Chat.GenericEntity.getDefaultInstance() : greenText_;
+    public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity getGreenText() {
+      return greenText_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.getDefaultInstance() : greenText_;
     }
     /**
-     * <code>.GenericEntity green_text = 7;</code>
+     * <code>.MessageEntities.GenericEntity green_text = 7;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder getGreenTextOrBuilder() {
+    public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder getGreenTextOrBuilder() {
       return getGreenText();
     }
 
     public static final int SELF_MESSAGE_FIELD_NUMBER = 8;
-    private gg.strims.ppspp.proto.Chat.GenericEntity selfMessage_;
+    private gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity selfMessage_;
     /**
-     * <code>.GenericEntity self_message = 8;</code>
+     * <code>.MessageEntities.GenericEntity self_message = 8;</code>
      * @return Whether the selfMessage field is set.
      */
     @java.lang.Override
@@ -15363,18 +21311,18 @@ public final class Chat {
       return selfMessage_ != null;
     }
     /**
-     * <code>.GenericEntity self_message = 8;</code>
+     * <code>.MessageEntities.GenericEntity self_message = 8;</code>
      * @return The selfMessage.
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.GenericEntity getSelfMessage() {
-      return selfMessage_ == null ? gg.strims.ppspp.proto.Chat.GenericEntity.getDefaultInstance() : selfMessage_;
+    public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity getSelfMessage() {
+      return selfMessage_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.getDefaultInstance() : selfMessage_;
     }
     /**
-     * <code>.GenericEntity self_message = 8;</code>
+     * <code>.MessageEntities.GenericEntity self_message = 8;</code>
      */
     @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder getSelfMessageOrBuilder() {
+    public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder getSelfMessageOrBuilder() {
       return getSelfMessage();
     }
 
@@ -16055,22 +22003,22 @@ public final class Chat {
       }
       private int bitField0_;
 
-      private java.util.List<gg.strims.ppspp.proto.Chat.Link> links_ =
+      private java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Link> links_ =
         java.util.Collections.emptyList();
       private void ensureLinksIsMutable() {
         if (!((bitField0_ & 0x00000001) != 0)) {
-          links_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.Link>(links_);
+          links_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.MessageEntities.Link>(links_);
           bitField0_ |= 0x00000001;
          }
       }
 
       private com.google.protobuf.RepeatedFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Link, gg.strims.ppspp.proto.Chat.Link.Builder, gg.strims.ppspp.proto.Chat.LinkOrBuilder> linksBuilder_;
+          gg.strims.ppspp.proto.Chat.MessageEntities.Link, gg.strims.ppspp.proto.Chat.MessageEntities.Link.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.LinkOrBuilder> linksBuilder_;
 
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
-      public java.util.List<gg.strims.ppspp.proto.Chat.Link> getLinksList() {
+      public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Link> getLinksList() {
         if (linksBuilder_ == null) {
           return java.util.Collections.unmodifiableList(links_);
         } else {
@@ -16078,7 +22026,7 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
       public int getLinksCount() {
         if (linksBuilder_ == null) {
@@ -16088,9 +22036,9 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Link getLinks(int index) {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Link getLinks(int index) {
         if (linksBuilder_ == null) {
           return links_.get(index);
         } else {
@@ -16098,10 +22046,10 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
       public Builder setLinks(
-          int index, gg.strims.ppspp.proto.Chat.Link value) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Link value) {
         if (linksBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -16115,10 +22063,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
       public Builder setLinks(
-          int index, gg.strims.ppspp.proto.Chat.Link.Builder builderForValue) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Link.Builder builderForValue) {
         if (linksBuilder_ == null) {
           ensureLinksIsMutable();
           links_.set(index, builderForValue.build());
@@ -16129,9 +22077,9 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
-      public Builder addLinks(gg.strims.ppspp.proto.Chat.Link value) {
+      public Builder addLinks(gg.strims.ppspp.proto.Chat.MessageEntities.Link value) {
         if (linksBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -16145,10 +22093,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
       public Builder addLinks(
-          int index, gg.strims.ppspp.proto.Chat.Link value) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Link value) {
         if (linksBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -16162,10 +22110,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
       public Builder addLinks(
-          gg.strims.ppspp.proto.Chat.Link.Builder builderForValue) {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Link.Builder builderForValue) {
         if (linksBuilder_ == null) {
           ensureLinksIsMutable();
           links_.add(builderForValue.build());
@@ -16176,10 +22124,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
       public Builder addLinks(
-          int index, gg.strims.ppspp.proto.Chat.Link.Builder builderForValue) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Link.Builder builderForValue) {
         if (linksBuilder_ == null) {
           ensureLinksIsMutable();
           links_.add(index, builderForValue.build());
@@ -16190,10 +22138,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
       public Builder addAllLinks(
-          java.lang.Iterable<? extends gg.strims.ppspp.proto.Chat.Link> values) {
+          java.lang.Iterable<? extends gg.strims.ppspp.proto.Chat.MessageEntities.Link> values) {
         if (linksBuilder_ == null) {
           ensureLinksIsMutable();
           com.google.protobuf.AbstractMessageLite.Builder.addAll(
@@ -16205,7 +22153,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
       public Builder clearLinks() {
         if (linksBuilder_ == null) {
@@ -16218,7 +22166,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
       public Builder removeLinks(int index) {
         if (linksBuilder_ == null) {
@@ -16231,16 +22179,16 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Link.Builder getLinksBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Link.Builder getLinksBuilder(
           int index) {
         return getLinksFieldBuilder().getBuilder(index);
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
-      public gg.strims.ppspp.proto.Chat.LinkOrBuilder getLinksOrBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.LinkOrBuilder getLinksOrBuilder(
           int index) {
         if (linksBuilder_ == null) {
           return links_.get(index);  } else {
@@ -16248,9 +22196,9 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
-      public java.util.List<? extends gg.strims.ppspp.proto.Chat.LinkOrBuilder> 
+      public java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.LinkOrBuilder> 
            getLinksOrBuilderList() {
         if (linksBuilder_ != null) {
           return linksBuilder_.getMessageOrBuilderList();
@@ -16259,33 +22207,33 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Link.Builder addLinksBuilder() {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Link.Builder addLinksBuilder() {
         return getLinksFieldBuilder().addBuilder(
-            gg.strims.ppspp.proto.Chat.Link.getDefaultInstance());
+            gg.strims.ppspp.proto.Chat.MessageEntities.Link.getDefaultInstance());
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Link.Builder addLinksBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Link.Builder addLinksBuilder(
           int index) {
         return getLinksFieldBuilder().addBuilder(
-            index, gg.strims.ppspp.proto.Chat.Link.getDefaultInstance());
+            index, gg.strims.ppspp.proto.Chat.MessageEntities.Link.getDefaultInstance());
       }
       /**
-       * <code>repeated .Link links = 1;</code>
+       * <code>repeated .MessageEntities.Link links = 1;</code>
        */
-      public java.util.List<gg.strims.ppspp.proto.Chat.Link.Builder> 
+      public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Link.Builder> 
            getLinksBuilderList() {
         return getLinksFieldBuilder().getBuilderList();
       }
       private com.google.protobuf.RepeatedFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Link, gg.strims.ppspp.proto.Chat.Link.Builder, gg.strims.ppspp.proto.Chat.LinkOrBuilder> 
+          gg.strims.ppspp.proto.Chat.MessageEntities.Link, gg.strims.ppspp.proto.Chat.MessageEntities.Link.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.LinkOrBuilder> 
           getLinksFieldBuilder() {
         if (linksBuilder_ == null) {
           linksBuilder_ = new com.google.protobuf.RepeatedFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.Link, gg.strims.ppspp.proto.Chat.Link.Builder, gg.strims.ppspp.proto.Chat.LinkOrBuilder>(
+              gg.strims.ppspp.proto.Chat.MessageEntities.Link, gg.strims.ppspp.proto.Chat.MessageEntities.Link.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.LinkOrBuilder>(
                   links_,
                   ((bitField0_ & 0x00000001) != 0),
                   getParentForChildren(),
@@ -16295,22 +22243,22 @@ public final class Chat {
         return linksBuilder_;
       }
 
-      private java.util.List<gg.strims.ppspp.proto.Chat.Emote> emotes_ =
+      private java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Emote> emotes_ =
         java.util.Collections.emptyList();
       private void ensureEmotesIsMutable() {
         if (!((bitField0_ & 0x00000002) != 0)) {
-          emotes_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.Emote>(emotes_);
+          emotes_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.MessageEntities.Emote>(emotes_);
           bitField0_ |= 0x00000002;
          }
       }
 
       private com.google.protobuf.RepeatedFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Emote, gg.strims.ppspp.proto.Chat.Emote.Builder, gg.strims.ppspp.proto.Chat.EmoteOrBuilder> emotesBuilder_;
+          gg.strims.ppspp.proto.Chat.MessageEntities.Emote, gg.strims.ppspp.proto.Chat.MessageEntities.Emote.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.EmoteOrBuilder> emotesBuilder_;
 
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
-      public java.util.List<gg.strims.ppspp.proto.Chat.Emote> getEmotesList() {
+      public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Emote> getEmotesList() {
         if (emotesBuilder_ == null) {
           return java.util.Collections.unmodifiableList(emotes_);
         } else {
@@ -16318,7 +22266,7 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
       public int getEmotesCount() {
         if (emotesBuilder_ == null) {
@@ -16328,9 +22276,9 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Emote getEmotes(int index) {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Emote getEmotes(int index) {
         if (emotesBuilder_ == null) {
           return emotes_.get(index);
         } else {
@@ -16338,10 +22286,10 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
       public Builder setEmotes(
-          int index, gg.strims.ppspp.proto.Chat.Emote value) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Emote value) {
         if (emotesBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -16355,10 +22303,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
       public Builder setEmotes(
-          int index, gg.strims.ppspp.proto.Chat.Emote.Builder builderForValue) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Emote.Builder builderForValue) {
         if (emotesBuilder_ == null) {
           ensureEmotesIsMutable();
           emotes_.set(index, builderForValue.build());
@@ -16369,9 +22317,9 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
-      public Builder addEmotes(gg.strims.ppspp.proto.Chat.Emote value) {
+      public Builder addEmotes(gg.strims.ppspp.proto.Chat.MessageEntities.Emote value) {
         if (emotesBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -16385,10 +22333,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
       public Builder addEmotes(
-          int index, gg.strims.ppspp.proto.Chat.Emote value) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Emote value) {
         if (emotesBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -16402,10 +22350,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
       public Builder addEmotes(
-          gg.strims.ppspp.proto.Chat.Emote.Builder builderForValue) {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Emote.Builder builderForValue) {
         if (emotesBuilder_ == null) {
           ensureEmotesIsMutable();
           emotes_.add(builderForValue.build());
@@ -16416,10 +22364,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
       public Builder addEmotes(
-          int index, gg.strims.ppspp.proto.Chat.Emote.Builder builderForValue) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Emote.Builder builderForValue) {
         if (emotesBuilder_ == null) {
           ensureEmotesIsMutable();
           emotes_.add(index, builderForValue.build());
@@ -16430,10 +22378,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
       public Builder addAllEmotes(
-          java.lang.Iterable<? extends gg.strims.ppspp.proto.Chat.Emote> values) {
+          java.lang.Iterable<? extends gg.strims.ppspp.proto.Chat.MessageEntities.Emote> values) {
         if (emotesBuilder_ == null) {
           ensureEmotesIsMutable();
           com.google.protobuf.AbstractMessageLite.Builder.addAll(
@@ -16445,7 +22393,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
       public Builder clearEmotes() {
         if (emotesBuilder_ == null) {
@@ -16458,7 +22406,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
       public Builder removeEmotes(int index) {
         if (emotesBuilder_ == null) {
@@ -16471,16 +22419,16 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Emote.Builder getEmotesBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Emote.Builder getEmotesBuilder(
           int index) {
         return getEmotesFieldBuilder().getBuilder(index);
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
-      public gg.strims.ppspp.proto.Chat.EmoteOrBuilder getEmotesOrBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.EmoteOrBuilder getEmotesOrBuilder(
           int index) {
         if (emotesBuilder_ == null) {
           return emotes_.get(index);  } else {
@@ -16488,9 +22436,9 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
-      public java.util.List<? extends gg.strims.ppspp.proto.Chat.EmoteOrBuilder> 
+      public java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.EmoteOrBuilder> 
            getEmotesOrBuilderList() {
         if (emotesBuilder_ != null) {
           return emotesBuilder_.getMessageOrBuilderList();
@@ -16499,33 +22447,33 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Emote.Builder addEmotesBuilder() {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Emote.Builder addEmotesBuilder() {
         return getEmotesFieldBuilder().addBuilder(
-            gg.strims.ppspp.proto.Chat.Emote.getDefaultInstance());
+            gg.strims.ppspp.proto.Chat.MessageEntities.Emote.getDefaultInstance());
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Emote.Builder addEmotesBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Emote.Builder addEmotesBuilder(
           int index) {
         return getEmotesFieldBuilder().addBuilder(
-            index, gg.strims.ppspp.proto.Chat.Emote.getDefaultInstance());
+            index, gg.strims.ppspp.proto.Chat.MessageEntities.Emote.getDefaultInstance());
       }
       /**
-       * <code>repeated .Emote emotes = 2;</code>
+       * <code>repeated .MessageEntities.Emote emotes = 2;</code>
        */
-      public java.util.List<gg.strims.ppspp.proto.Chat.Emote.Builder> 
+      public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Emote.Builder> 
            getEmotesBuilderList() {
         return getEmotesFieldBuilder().getBuilderList();
       }
       private com.google.protobuf.RepeatedFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Emote, gg.strims.ppspp.proto.Chat.Emote.Builder, gg.strims.ppspp.proto.Chat.EmoteOrBuilder> 
+          gg.strims.ppspp.proto.Chat.MessageEntities.Emote, gg.strims.ppspp.proto.Chat.MessageEntities.Emote.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.EmoteOrBuilder> 
           getEmotesFieldBuilder() {
         if (emotesBuilder_ == null) {
           emotesBuilder_ = new com.google.protobuf.RepeatedFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.Emote, gg.strims.ppspp.proto.Chat.Emote.Builder, gg.strims.ppspp.proto.Chat.EmoteOrBuilder>(
+              gg.strims.ppspp.proto.Chat.MessageEntities.Emote, gg.strims.ppspp.proto.Chat.MessageEntities.Emote.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.EmoteOrBuilder>(
                   emotes_,
                   ((bitField0_ & 0x00000002) != 0),
                   getParentForChildren(),
@@ -16535,22 +22483,22 @@ public final class Chat {
         return emotesBuilder_;
       }
 
-      private java.util.List<gg.strims.ppspp.proto.Chat.Nick> nicks_ =
+      private java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Nick> nicks_ =
         java.util.Collections.emptyList();
       private void ensureNicksIsMutable() {
         if (!((bitField0_ & 0x00000004) != 0)) {
-          nicks_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.Nick>(nicks_);
+          nicks_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.MessageEntities.Nick>(nicks_);
           bitField0_ |= 0x00000004;
          }
       }
 
       private com.google.protobuf.RepeatedFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Nick, gg.strims.ppspp.proto.Chat.Nick.Builder, gg.strims.ppspp.proto.Chat.NickOrBuilder> nicksBuilder_;
+          gg.strims.ppspp.proto.Chat.MessageEntities.Nick, gg.strims.ppspp.proto.Chat.MessageEntities.Nick.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.NickOrBuilder> nicksBuilder_;
 
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
-      public java.util.List<gg.strims.ppspp.proto.Chat.Nick> getNicksList() {
+      public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Nick> getNicksList() {
         if (nicksBuilder_ == null) {
           return java.util.Collections.unmodifiableList(nicks_);
         } else {
@@ -16558,7 +22506,7 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
       public int getNicksCount() {
         if (nicksBuilder_ == null) {
@@ -16568,9 +22516,9 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Nick getNicks(int index) {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Nick getNicks(int index) {
         if (nicksBuilder_ == null) {
           return nicks_.get(index);
         } else {
@@ -16578,10 +22526,10 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
       public Builder setNicks(
-          int index, gg.strims.ppspp.proto.Chat.Nick value) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Nick value) {
         if (nicksBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -16595,10 +22543,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
       public Builder setNicks(
-          int index, gg.strims.ppspp.proto.Chat.Nick.Builder builderForValue) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Nick.Builder builderForValue) {
         if (nicksBuilder_ == null) {
           ensureNicksIsMutable();
           nicks_.set(index, builderForValue.build());
@@ -16609,9 +22557,9 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
-      public Builder addNicks(gg.strims.ppspp.proto.Chat.Nick value) {
+      public Builder addNicks(gg.strims.ppspp.proto.Chat.MessageEntities.Nick value) {
         if (nicksBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -16625,10 +22573,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
       public Builder addNicks(
-          int index, gg.strims.ppspp.proto.Chat.Nick value) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Nick value) {
         if (nicksBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -16642,10 +22590,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
       public Builder addNicks(
-          gg.strims.ppspp.proto.Chat.Nick.Builder builderForValue) {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Nick.Builder builderForValue) {
         if (nicksBuilder_ == null) {
           ensureNicksIsMutable();
           nicks_.add(builderForValue.build());
@@ -16656,10 +22604,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
       public Builder addNicks(
-          int index, gg.strims.ppspp.proto.Chat.Nick.Builder builderForValue) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Nick.Builder builderForValue) {
         if (nicksBuilder_ == null) {
           ensureNicksIsMutable();
           nicks_.add(index, builderForValue.build());
@@ -16670,10 +22618,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
       public Builder addAllNicks(
-          java.lang.Iterable<? extends gg.strims.ppspp.proto.Chat.Nick> values) {
+          java.lang.Iterable<? extends gg.strims.ppspp.proto.Chat.MessageEntities.Nick> values) {
         if (nicksBuilder_ == null) {
           ensureNicksIsMutable();
           com.google.protobuf.AbstractMessageLite.Builder.addAll(
@@ -16685,7 +22633,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
       public Builder clearNicks() {
         if (nicksBuilder_ == null) {
@@ -16698,7 +22646,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
       public Builder removeNicks(int index) {
         if (nicksBuilder_ == null) {
@@ -16711,16 +22659,16 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Nick.Builder getNicksBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Nick.Builder getNicksBuilder(
           int index) {
         return getNicksFieldBuilder().getBuilder(index);
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
-      public gg.strims.ppspp.proto.Chat.NickOrBuilder getNicksOrBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.NickOrBuilder getNicksOrBuilder(
           int index) {
         if (nicksBuilder_ == null) {
           return nicks_.get(index);  } else {
@@ -16728,9 +22676,9 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
-      public java.util.List<? extends gg.strims.ppspp.proto.Chat.NickOrBuilder> 
+      public java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.NickOrBuilder> 
            getNicksOrBuilderList() {
         if (nicksBuilder_ != null) {
           return nicksBuilder_.getMessageOrBuilderList();
@@ -16739,33 +22687,33 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Nick.Builder addNicksBuilder() {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Nick.Builder addNicksBuilder() {
         return getNicksFieldBuilder().addBuilder(
-            gg.strims.ppspp.proto.Chat.Nick.getDefaultInstance());
+            gg.strims.ppspp.proto.Chat.MessageEntities.Nick.getDefaultInstance());
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Nick.Builder addNicksBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Nick.Builder addNicksBuilder(
           int index) {
         return getNicksFieldBuilder().addBuilder(
-            index, gg.strims.ppspp.proto.Chat.Nick.getDefaultInstance());
+            index, gg.strims.ppspp.proto.Chat.MessageEntities.Nick.getDefaultInstance());
       }
       /**
-       * <code>repeated .Nick nicks = 3;</code>
+       * <code>repeated .MessageEntities.Nick nicks = 3;</code>
        */
-      public java.util.List<gg.strims.ppspp.proto.Chat.Nick.Builder> 
+      public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Nick.Builder> 
            getNicksBuilderList() {
         return getNicksFieldBuilder().getBuilderList();
       }
       private com.google.protobuf.RepeatedFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Nick, gg.strims.ppspp.proto.Chat.Nick.Builder, gg.strims.ppspp.proto.Chat.NickOrBuilder> 
+          gg.strims.ppspp.proto.Chat.MessageEntities.Nick, gg.strims.ppspp.proto.Chat.MessageEntities.Nick.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.NickOrBuilder> 
           getNicksFieldBuilder() {
         if (nicksBuilder_ == null) {
           nicksBuilder_ = new com.google.protobuf.RepeatedFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.Nick, gg.strims.ppspp.proto.Chat.Nick.Builder, gg.strims.ppspp.proto.Chat.NickOrBuilder>(
+              gg.strims.ppspp.proto.Chat.MessageEntities.Nick, gg.strims.ppspp.proto.Chat.MessageEntities.Nick.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.NickOrBuilder>(
                   nicks_,
                   ((bitField0_ & 0x00000004) != 0),
                   getParentForChildren(),
@@ -16775,22 +22723,22 @@ public final class Chat {
         return nicksBuilder_;
       }
 
-      private java.util.List<gg.strims.ppspp.proto.Chat.Tag> tags_ =
+      private java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Tag> tags_ =
         java.util.Collections.emptyList();
       private void ensureTagsIsMutable() {
         if (!((bitField0_ & 0x00000008) != 0)) {
-          tags_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.Tag>(tags_);
+          tags_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.MessageEntities.Tag>(tags_);
           bitField0_ |= 0x00000008;
          }
       }
 
       private com.google.protobuf.RepeatedFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Tag, gg.strims.ppspp.proto.Chat.Tag.Builder, gg.strims.ppspp.proto.Chat.TagOrBuilder> tagsBuilder_;
+          gg.strims.ppspp.proto.Chat.MessageEntities.Tag, gg.strims.ppspp.proto.Chat.MessageEntities.Tag.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.TagOrBuilder> tagsBuilder_;
 
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
-      public java.util.List<gg.strims.ppspp.proto.Chat.Tag> getTagsList() {
+      public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Tag> getTagsList() {
         if (tagsBuilder_ == null) {
           return java.util.Collections.unmodifiableList(tags_);
         } else {
@@ -16798,7 +22746,7 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
       public int getTagsCount() {
         if (tagsBuilder_ == null) {
@@ -16808,9 +22756,9 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Tag getTags(int index) {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Tag getTags(int index) {
         if (tagsBuilder_ == null) {
           return tags_.get(index);
         } else {
@@ -16818,10 +22766,10 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
       public Builder setTags(
-          int index, gg.strims.ppspp.proto.Chat.Tag value) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Tag value) {
         if (tagsBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -16835,10 +22783,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
       public Builder setTags(
-          int index, gg.strims.ppspp.proto.Chat.Tag.Builder builderForValue) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Tag.Builder builderForValue) {
         if (tagsBuilder_ == null) {
           ensureTagsIsMutable();
           tags_.set(index, builderForValue.build());
@@ -16849,9 +22797,9 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
-      public Builder addTags(gg.strims.ppspp.proto.Chat.Tag value) {
+      public Builder addTags(gg.strims.ppspp.proto.Chat.MessageEntities.Tag value) {
         if (tagsBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -16865,10 +22813,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
       public Builder addTags(
-          int index, gg.strims.ppspp.proto.Chat.Tag value) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Tag value) {
         if (tagsBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -16882,10 +22830,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
       public Builder addTags(
-          gg.strims.ppspp.proto.Chat.Tag.Builder builderForValue) {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Tag.Builder builderForValue) {
         if (tagsBuilder_ == null) {
           ensureTagsIsMutable();
           tags_.add(builderForValue.build());
@@ -16896,10 +22844,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
       public Builder addTags(
-          int index, gg.strims.ppspp.proto.Chat.Tag.Builder builderForValue) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Tag.Builder builderForValue) {
         if (tagsBuilder_ == null) {
           ensureTagsIsMutable();
           tags_.add(index, builderForValue.build());
@@ -16910,10 +22858,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
       public Builder addAllTags(
-          java.lang.Iterable<? extends gg.strims.ppspp.proto.Chat.Tag> values) {
+          java.lang.Iterable<? extends gg.strims.ppspp.proto.Chat.MessageEntities.Tag> values) {
         if (tagsBuilder_ == null) {
           ensureTagsIsMutable();
           com.google.protobuf.AbstractMessageLite.Builder.addAll(
@@ -16925,7 +22873,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
       public Builder clearTags() {
         if (tagsBuilder_ == null) {
@@ -16938,7 +22886,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
       public Builder removeTags(int index) {
         if (tagsBuilder_ == null) {
@@ -16951,16 +22899,16 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Tag.Builder getTagsBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Tag.Builder getTagsBuilder(
           int index) {
         return getTagsFieldBuilder().getBuilder(index);
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
-      public gg.strims.ppspp.proto.Chat.TagOrBuilder getTagsOrBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.TagOrBuilder getTagsOrBuilder(
           int index) {
         if (tagsBuilder_ == null) {
           return tags_.get(index);  } else {
@@ -16968,9 +22916,9 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
-      public java.util.List<? extends gg.strims.ppspp.proto.Chat.TagOrBuilder> 
+      public java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.TagOrBuilder> 
            getTagsOrBuilderList() {
         if (tagsBuilder_ != null) {
           return tagsBuilder_.getMessageOrBuilderList();
@@ -16979,33 +22927,33 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Tag.Builder addTagsBuilder() {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Tag.Builder addTagsBuilder() {
         return getTagsFieldBuilder().addBuilder(
-            gg.strims.ppspp.proto.Chat.Tag.getDefaultInstance());
+            gg.strims.ppspp.proto.Chat.MessageEntities.Tag.getDefaultInstance());
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Tag.Builder addTagsBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Tag.Builder addTagsBuilder(
           int index) {
         return getTagsFieldBuilder().addBuilder(
-            index, gg.strims.ppspp.proto.Chat.Tag.getDefaultInstance());
+            index, gg.strims.ppspp.proto.Chat.MessageEntities.Tag.getDefaultInstance());
       }
       /**
-       * <code>repeated .Tag tags = 4;</code>
+       * <code>repeated .MessageEntities.Tag tags = 4;</code>
        */
-      public java.util.List<gg.strims.ppspp.proto.Chat.Tag.Builder> 
+      public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Tag.Builder> 
            getTagsBuilderList() {
         return getTagsFieldBuilder().getBuilderList();
       }
       private com.google.protobuf.RepeatedFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Tag, gg.strims.ppspp.proto.Chat.Tag.Builder, gg.strims.ppspp.proto.Chat.TagOrBuilder> 
+          gg.strims.ppspp.proto.Chat.MessageEntities.Tag, gg.strims.ppspp.proto.Chat.MessageEntities.Tag.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.TagOrBuilder> 
           getTagsFieldBuilder() {
         if (tagsBuilder_ == null) {
           tagsBuilder_ = new com.google.protobuf.RepeatedFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.Tag, gg.strims.ppspp.proto.Chat.Tag.Builder, gg.strims.ppspp.proto.Chat.TagOrBuilder>(
+              gg.strims.ppspp.proto.Chat.MessageEntities.Tag, gg.strims.ppspp.proto.Chat.MessageEntities.Tag.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.TagOrBuilder>(
                   tags_,
                   ((bitField0_ & 0x00000008) != 0),
                   getParentForChildren(),
@@ -17015,22 +22963,22 @@ public final class Chat {
         return tagsBuilder_;
       }
 
-      private java.util.List<gg.strims.ppspp.proto.Chat.CodeBlock> codeBlocks_ =
+      private java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock> codeBlocks_ =
         java.util.Collections.emptyList();
       private void ensureCodeBlocksIsMutable() {
         if (!((bitField0_ & 0x00000010) != 0)) {
-          codeBlocks_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.CodeBlock>(codeBlocks_);
+          codeBlocks_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock>(codeBlocks_);
           bitField0_ |= 0x00000010;
          }
       }
 
       private com.google.protobuf.RepeatedFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.CodeBlock, gg.strims.ppspp.proto.Chat.CodeBlock.Builder, gg.strims.ppspp.proto.Chat.CodeBlockOrBuilder> codeBlocksBuilder_;
+          gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlockOrBuilder> codeBlocksBuilder_;
 
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
-      public java.util.List<gg.strims.ppspp.proto.Chat.CodeBlock> getCodeBlocksList() {
+      public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock> getCodeBlocksList() {
         if (codeBlocksBuilder_ == null) {
           return java.util.Collections.unmodifiableList(codeBlocks_);
         } else {
@@ -17038,7 +22986,7 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
       public int getCodeBlocksCount() {
         if (codeBlocksBuilder_ == null) {
@@ -17048,9 +22996,9 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
-      public gg.strims.ppspp.proto.Chat.CodeBlock getCodeBlocks(int index) {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock getCodeBlocks(int index) {
         if (codeBlocksBuilder_ == null) {
           return codeBlocks_.get(index);
         } else {
@@ -17058,10 +23006,10 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
       public Builder setCodeBlocks(
-          int index, gg.strims.ppspp.proto.Chat.CodeBlock value) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock value) {
         if (codeBlocksBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -17075,10 +23023,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
       public Builder setCodeBlocks(
-          int index, gg.strims.ppspp.proto.Chat.CodeBlock.Builder builderForValue) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.Builder builderForValue) {
         if (codeBlocksBuilder_ == null) {
           ensureCodeBlocksIsMutable();
           codeBlocks_.set(index, builderForValue.build());
@@ -17089,9 +23037,9 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
-      public Builder addCodeBlocks(gg.strims.ppspp.proto.Chat.CodeBlock value) {
+      public Builder addCodeBlocks(gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock value) {
         if (codeBlocksBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -17105,10 +23053,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
       public Builder addCodeBlocks(
-          int index, gg.strims.ppspp.proto.Chat.CodeBlock value) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock value) {
         if (codeBlocksBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -17122,10 +23070,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
       public Builder addCodeBlocks(
-          gg.strims.ppspp.proto.Chat.CodeBlock.Builder builderForValue) {
+          gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.Builder builderForValue) {
         if (codeBlocksBuilder_ == null) {
           ensureCodeBlocksIsMutable();
           codeBlocks_.add(builderForValue.build());
@@ -17136,10 +23084,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
       public Builder addCodeBlocks(
-          int index, gg.strims.ppspp.proto.Chat.CodeBlock.Builder builderForValue) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.Builder builderForValue) {
         if (codeBlocksBuilder_ == null) {
           ensureCodeBlocksIsMutable();
           codeBlocks_.add(index, builderForValue.build());
@@ -17150,10 +23098,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
       public Builder addAllCodeBlocks(
-          java.lang.Iterable<? extends gg.strims.ppspp.proto.Chat.CodeBlock> values) {
+          java.lang.Iterable<? extends gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock> values) {
         if (codeBlocksBuilder_ == null) {
           ensureCodeBlocksIsMutable();
           com.google.protobuf.AbstractMessageLite.Builder.addAll(
@@ -17165,7 +23113,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
       public Builder clearCodeBlocks() {
         if (codeBlocksBuilder_ == null) {
@@ -17178,7 +23126,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
       public Builder removeCodeBlocks(int index) {
         if (codeBlocksBuilder_ == null) {
@@ -17191,16 +23139,16 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
-      public gg.strims.ppspp.proto.Chat.CodeBlock.Builder getCodeBlocksBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.Builder getCodeBlocksBuilder(
           int index) {
         return getCodeBlocksFieldBuilder().getBuilder(index);
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
-      public gg.strims.ppspp.proto.Chat.CodeBlockOrBuilder getCodeBlocksOrBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlockOrBuilder getCodeBlocksOrBuilder(
           int index) {
         if (codeBlocksBuilder_ == null) {
           return codeBlocks_.get(index);  } else {
@@ -17208,9 +23156,9 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
-      public java.util.List<? extends gg.strims.ppspp.proto.Chat.CodeBlockOrBuilder> 
+      public java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlockOrBuilder> 
            getCodeBlocksOrBuilderList() {
         if (codeBlocksBuilder_ != null) {
           return codeBlocksBuilder_.getMessageOrBuilderList();
@@ -17219,33 +23167,33 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
-      public gg.strims.ppspp.proto.Chat.CodeBlock.Builder addCodeBlocksBuilder() {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.Builder addCodeBlocksBuilder() {
         return getCodeBlocksFieldBuilder().addBuilder(
-            gg.strims.ppspp.proto.Chat.CodeBlock.getDefaultInstance());
+            gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.getDefaultInstance());
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
-      public gg.strims.ppspp.proto.Chat.CodeBlock.Builder addCodeBlocksBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.Builder addCodeBlocksBuilder(
           int index) {
         return getCodeBlocksFieldBuilder().addBuilder(
-            index, gg.strims.ppspp.proto.Chat.CodeBlock.getDefaultInstance());
+            index, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.getDefaultInstance());
       }
       /**
-       * <code>repeated .CodeBlock code_blocks = 5;</code>
+       * <code>repeated .MessageEntities.CodeBlock code_blocks = 5;</code>
        */
-      public java.util.List<gg.strims.ppspp.proto.Chat.CodeBlock.Builder> 
+      public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.Builder> 
            getCodeBlocksBuilderList() {
         return getCodeBlocksFieldBuilder().getBuilderList();
       }
       private com.google.protobuf.RepeatedFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.CodeBlock, gg.strims.ppspp.proto.Chat.CodeBlock.Builder, gg.strims.ppspp.proto.Chat.CodeBlockOrBuilder> 
+          gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlockOrBuilder> 
           getCodeBlocksFieldBuilder() {
         if (codeBlocksBuilder_ == null) {
           codeBlocksBuilder_ = new com.google.protobuf.RepeatedFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.CodeBlock, gg.strims.ppspp.proto.Chat.CodeBlock.Builder, gg.strims.ppspp.proto.Chat.CodeBlockOrBuilder>(
+              gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlock.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.CodeBlockOrBuilder>(
                   codeBlocks_,
                   ((bitField0_ & 0x00000010) != 0),
                   getParentForChildren(),
@@ -17255,22 +23203,22 @@ public final class Chat {
         return codeBlocksBuilder_;
       }
 
-      private java.util.List<gg.strims.ppspp.proto.Chat.Spoiler> spoilers_ =
+      private java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler> spoilers_ =
         java.util.Collections.emptyList();
       private void ensureSpoilersIsMutable() {
         if (!((bitField0_ & 0x00000020) != 0)) {
-          spoilers_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.Spoiler>(spoilers_);
+          spoilers_ = new java.util.ArrayList<gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler>(spoilers_);
           bitField0_ |= 0x00000020;
          }
       }
 
       private com.google.protobuf.RepeatedFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Spoiler, gg.strims.ppspp.proto.Chat.Spoiler.Builder, gg.strims.ppspp.proto.Chat.SpoilerOrBuilder> spoilersBuilder_;
+          gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler, gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.SpoilerOrBuilder> spoilersBuilder_;
 
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
-      public java.util.List<gg.strims.ppspp.proto.Chat.Spoiler> getSpoilersList() {
+      public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler> getSpoilersList() {
         if (spoilersBuilder_ == null) {
           return java.util.Collections.unmodifiableList(spoilers_);
         } else {
@@ -17278,7 +23226,7 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
       public int getSpoilersCount() {
         if (spoilersBuilder_ == null) {
@@ -17288,9 +23236,9 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Spoiler getSpoilers(int index) {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler getSpoilers(int index) {
         if (spoilersBuilder_ == null) {
           return spoilers_.get(index);
         } else {
@@ -17298,10 +23246,10 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
       public Builder setSpoilers(
-          int index, gg.strims.ppspp.proto.Chat.Spoiler value) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler value) {
         if (spoilersBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -17315,10 +23263,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
       public Builder setSpoilers(
-          int index, gg.strims.ppspp.proto.Chat.Spoiler.Builder builderForValue) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.Builder builderForValue) {
         if (spoilersBuilder_ == null) {
           ensureSpoilersIsMutable();
           spoilers_.set(index, builderForValue.build());
@@ -17329,9 +23277,9 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
-      public Builder addSpoilers(gg.strims.ppspp.proto.Chat.Spoiler value) {
+      public Builder addSpoilers(gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler value) {
         if (spoilersBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -17345,10 +23293,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
       public Builder addSpoilers(
-          int index, gg.strims.ppspp.proto.Chat.Spoiler value) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler value) {
         if (spoilersBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -17362,10 +23310,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
       public Builder addSpoilers(
-          gg.strims.ppspp.proto.Chat.Spoiler.Builder builderForValue) {
+          gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.Builder builderForValue) {
         if (spoilersBuilder_ == null) {
           ensureSpoilersIsMutable();
           spoilers_.add(builderForValue.build());
@@ -17376,10 +23324,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
       public Builder addSpoilers(
-          int index, gg.strims.ppspp.proto.Chat.Spoiler.Builder builderForValue) {
+          int index, gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.Builder builderForValue) {
         if (spoilersBuilder_ == null) {
           ensureSpoilersIsMutable();
           spoilers_.add(index, builderForValue.build());
@@ -17390,10 +23338,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
       public Builder addAllSpoilers(
-          java.lang.Iterable<? extends gg.strims.ppspp.proto.Chat.Spoiler> values) {
+          java.lang.Iterable<? extends gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler> values) {
         if (spoilersBuilder_ == null) {
           ensureSpoilersIsMutable();
           com.google.protobuf.AbstractMessageLite.Builder.addAll(
@@ -17405,7 +23353,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
       public Builder clearSpoilers() {
         if (spoilersBuilder_ == null) {
@@ -17418,7 +23366,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
       public Builder removeSpoilers(int index) {
         if (spoilersBuilder_ == null) {
@@ -17431,16 +23379,16 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Spoiler.Builder getSpoilersBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.Builder getSpoilersBuilder(
           int index) {
         return getSpoilersFieldBuilder().getBuilder(index);
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
-      public gg.strims.ppspp.proto.Chat.SpoilerOrBuilder getSpoilersOrBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.SpoilerOrBuilder getSpoilersOrBuilder(
           int index) {
         if (spoilersBuilder_ == null) {
           return spoilers_.get(index);  } else {
@@ -17448,9 +23396,9 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
-      public java.util.List<? extends gg.strims.ppspp.proto.Chat.SpoilerOrBuilder> 
+      public java.util.List<? extends gg.strims.ppspp.proto.Chat.MessageEntities.SpoilerOrBuilder> 
            getSpoilersOrBuilderList() {
         if (spoilersBuilder_ != null) {
           return spoilersBuilder_.getMessageOrBuilderList();
@@ -17459,33 +23407,33 @@ public final class Chat {
         }
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Spoiler.Builder addSpoilersBuilder() {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.Builder addSpoilersBuilder() {
         return getSpoilersFieldBuilder().addBuilder(
-            gg.strims.ppspp.proto.Chat.Spoiler.getDefaultInstance());
+            gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.getDefaultInstance());
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
-      public gg.strims.ppspp.proto.Chat.Spoiler.Builder addSpoilersBuilder(
+      public gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.Builder addSpoilersBuilder(
           int index) {
         return getSpoilersFieldBuilder().addBuilder(
-            index, gg.strims.ppspp.proto.Chat.Spoiler.getDefaultInstance());
+            index, gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.getDefaultInstance());
       }
       /**
-       * <code>repeated .Spoiler spoilers = 6;</code>
+       * <code>repeated .MessageEntities.Spoiler spoilers = 6;</code>
        */
-      public java.util.List<gg.strims.ppspp.proto.Chat.Spoiler.Builder> 
+      public java.util.List<gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.Builder> 
            getSpoilersBuilderList() {
         return getSpoilersFieldBuilder().getBuilderList();
       }
       private com.google.protobuf.RepeatedFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Spoiler, gg.strims.ppspp.proto.Chat.Spoiler.Builder, gg.strims.ppspp.proto.Chat.SpoilerOrBuilder> 
+          gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler, gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.SpoilerOrBuilder> 
           getSpoilersFieldBuilder() {
         if (spoilersBuilder_ == null) {
           spoilersBuilder_ = new com.google.protobuf.RepeatedFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.Spoiler, gg.strims.ppspp.proto.Chat.Spoiler.Builder, gg.strims.ppspp.proto.Chat.SpoilerOrBuilder>(
+              gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler, gg.strims.ppspp.proto.Chat.MessageEntities.Spoiler.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.SpoilerOrBuilder>(
                   spoilers_,
                   ((bitField0_ & 0x00000020) != 0),
                   getParentForChildren(),
@@ -17495,31 +23443,31 @@ public final class Chat {
         return spoilersBuilder_;
       }
 
-      private gg.strims.ppspp.proto.Chat.GenericEntity greenText_;
+      private gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity greenText_;
       private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.GenericEntity, gg.strims.ppspp.proto.Chat.GenericEntity.Builder, gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder> greenTextBuilder_;
+          gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder> greenTextBuilder_;
       /**
-       * <code>.GenericEntity green_text = 7;</code>
+       * <code>.MessageEntities.GenericEntity green_text = 7;</code>
        * @return Whether the greenText field is set.
        */
       public boolean hasGreenText() {
         return greenTextBuilder_ != null || greenText_ != null;
       }
       /**
-       * <code>.GenericEntity green_text = 7;</code>
+       * <code>.MessageEntities.GenericEntity green_text = 7;</code>
        * @return The greenText.
        */
-      public gg.strims.ppspp.proto.Chat.GenericEntity getGreenText() {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity getGreenText() {
         if (greenTextBuilder_ == null) {
-          return greenText_ == null ? gg.strims.ppspp.proto.Chat.GenericEntity.getDefaultInstance() : greenText_;
+          return greenText_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.getDefaultInstance() : greenText_;
         } else {
           return greenTextBuilder_.getMessage();
         }
       }
       /**
-       * <code>.GenericEntity green_text = 7;</code>
+       * <code>.MessageEntities.GenericEntity green_text = 7;</code>
        */
-      public Builder setGreenText(gg.strims.ppspp.proto.Chat.GenericEntity value) {
+      public Builder setGreenText(gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity value) {
         if (greenTextBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -17533,10 +23481,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>.GenericEntity green_text = 7;</code>
+       * <code>.MessageEntities.GenericEntity green_text = 7;</code>
        */
       public Builder setGreenText(
-          gg.strims.ppspp.proto.Chat.GenericEntity.Builder builderForValue) {
+          gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder builderForValue) {
         if (greenTextBuilder_ == null) {
           greenText_ = builderForValue.build();
           onChanged();
@@ -17547,13 +23495,13 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>.GenericEntity green_text = 7;</code>
+       * <code>.MessageEntities.GenericEntity green_text = 7;</code>
        */
-      public Builder mergeGreenText(gg.strims.ppspp.proto.Chat.GenericEntity value) {
+      public Builder mergeGreenText(gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity value) {
         if (greenTextBuilder_ == null) {
           if (greenText_ != null) {
             greenText_ =
-              gg.strims.ppspp.proto.Chat.GenericEntity.newBuilder(greenText_).mergeFrom(value).buildPartial();
+              gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.newBuilder(greenText_).mergeFrom(value).buildPartial();
           } else {
             greenText_ = value;
           }
@@ -17565,7 +23513,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>.GenericEntity green_text = 7;</code>
+       * <code>.MessageEntities.GenericEntity green_text = 7;</code>
        */
       public Builder clearGreenText() {
         if (greenTextBuilder_ == null) {
@@ -17579,33 +23527,33 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>.GenericEntity green_text = 7;</code>
+       * <code>.MessageEntities.GenericEntity green_text = 7;</code>
        */
-      public gg.strims.ppspp.proto.Chat.GenericEntity.Builder getGreenTextBuilder() {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder getGreenTextBuilder() {
         
         onChanged();
         return getGreenTextFieldBuilder().getBuilder();
       }
       /**
-       * <code>.GenericEntity green_text = 7;</code>
+       * <code>.MessageEntities.GenericEntity green_text = 7;</code>
        */
-      public gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder getGreenTextOrBuilder() {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder getGreenTextOrBuilder() {
         if (greenTextBuilder_ != null) {
           return greenTextBuilder_.getMessageOrBuilder();
         } else {
           return greenText_ == null ?
-              gg.strims.ppspp.proto.Chat.GenericEntity.getDefaultInstance() : greenText_;
+              gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.getDefaultInstance() : greenText_;
         }
       }
       /**
-       * <code>.GenericEntity green_text = 7;</code>
+       * <code>.MessageEntities.GenericEntity green_text = 7;</code>
        */
       private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.GenericEntity, gg.strims.ppspp.proto.Chat.GenericEntity.Builder, gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder> 
+          gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder> 
           getGreenTextFieldBuilder() {
         if (greenTextBuilder_ == null) {
           greenTextBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.GenericEntity, gg.strims.ppspp.proto.Chat.GenericEntity.Builder, gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder>(
+              gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder>(
                   getGreenText(),
                   getParentForChildren(),
                   isClean());
@@ -17614,31 +23562,31 @@ public final class Chat {
         return greenTextBuilder_;
       }
 
-      private gg.strims.ppspp.proto.Chat.GenericEntity selfMessage_;
+      private gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity selfMessage_;
       private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.GenericEntity, gg.strims.ppspp.proto.Chat.GenericEntity.Builder, gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder> selfMessageBuilder_;
+          gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder> selfMessageBuilder_;
       /**
-       * <code>.GenericEntity self_message = 8;</code>
+       * <code>.MessageEntities.GenericEntity self_message = 8;</code>
        * @return Whether the selfMessage field is set.
        */
       public boolean hasSelfMessage() {
         return selfMessageBuilder_ != null || selfMessage_ != null;
       }
       /**
-       * <code>.GenericEntity self_message = 8;</code>
+       * <code>.MessageEntities.GenericEntity self_message = 8;</code>
        * @return The selfMessage.
        */
-      public gg.strims.ppspp.proto.Chat.GenericEntity getSelfMessage() {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity getSelfMessage() {
         if (selfMessageBuilder_ == null) {
-          return selfMessage_ == null ? gg.strims.ppspp.proto.Chat.GenericEntity.getDefaultInstance() : selfMessage_;
+          return selfMessage_ == null ? gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.getDefaultInstance() : selfMessage_;
         } else {
           return selfMessageBuilder_.getMessage();
         }
       }
       /**
-       * <code>.GenericEntity self_message = 8;</code>
+       * <code>.MessageEntities.GenericEntity self_message = 8;</code>
        */
-      public Builder setSelfMessage(gg.strims.ppspp.proto.Chat.GenericEntity value) {
+      public Builder setSelfMessage(gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity value) {
         if (selfMessageBuilder_ == null) {
           if (value == null) {
             throw new NullPointerException();
@@ -17652,10 +23600,10 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>.GenericEntity self_message = 8;</code>
+       * <code>.MessageEntities.GenericEntity self_message = 8;</code>
        */
       public Builder setSelfMessage(
-          gg.strims.ppspp.proto.Chat.GenericEntity.Builder builderForValue) {
+          gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder builderForValue) {
         if (selfMessageBuilder_ == null) {
           selfMessage_ = builderForValue.build();
           onChanged();
@@ -17666,13 +23614,13 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>.GenericEntity self_message = 8;</code>
+       * <code>.MessageEntities.GenericEntity self_message = 8;</code>
        */
-      public Builder mergeSelfMessage(gg.strims.ppspp.proto.Chat.GenericEntity value) {
+      public Builder mergeSelfMessage(gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity value) {
         if (selfMessageBuilder_ == null) {
           if (selfMessage_ != null) {
             selfMessage_ =
-              gg.strims.ppspp.proto.Chat.GenericEntity.newBuilder(selfMessage_).mergeFrom(value).buildPartial();
+              gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.newBuilder(selfMessage_).mergeFrom(value).buildPartial();
           } else {
             selfMessage_ = value;
           }
@@ -17684,7 +23632,7 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>.GenericEntity self_message = 8;</code>
+       * <code>.MessageEntities.GenericEntity self_message = 8;</code>
        */
       public Builder clearSelfMessage() {
         if (selfMessageBuilder_ == null) {
@@ -17698,33 +23646,33 @@ public final class Chat {
         return this;
       }
       /**
-       * <code>.GenericEntity self_message = 8;</code>
+       * <code>.MessageEntities.GenericEntity self_message = 8;</code>
        */
-      public gg.strims.ppspp.proto.Chat.GenericEntity.Builder getSelfMessageBuilder() {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder getSelfMessageBuilder() {
         
         onChanged();
         return getSelfMessageFieldBuilder().getBuilder();
       }
       /**
-       * <code>.GenericEntity self_message = 8;</code>
+       * <code>.MessageEntities.GenericEntity self_message = 8;</code>
        */
-      public gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder getSelfMessageOrBuilder() {
+      public gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder getSelfMessageOrBuilder() {
         if (selfMessageBuilder_ != null) {
           return selfMessageBuilder_.getMessageOrBuilder();
         } else {
           return selfMessage_ == null ?
-              gg.strims.ppspp.proto.Chat.GenericEntity.getDefaultInstance() : selfMessage_;
+              gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.getDefaultInstance() : selfMessage_;
         }
       }
       /**
-       * <code>.GenericEntity self_message = 8;</code>
+       * <code>.MessageEntities.GenericEntity self_message = 8;</code>
        */
       private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.GenericEntity, gg.strims.ppspp.proto.Chat.GenericEntity.Builder, gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder> 
+          gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder> 
           getSelfMessageFieldBuilder() {
         if (selfMessageBuilder_ == null) {
           selfMessageBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.GenericEntity, gg.strims.ppspp.proto.Chat.GenericEntity.Builder, gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder>(
+              gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntity.Builder, gg.strims.ppspp.proto.Chat.MessageEntities.GenericEntityOrBuilder>(
                   getSelfMessage(),
                   getParentForChildren(),
                   isClean());
@@ -17780,5804 +23728,6 @@ public final class Chat {
 
     @java.lang.Override
     public gg.strims.ppspp.proto.Chat.MessageEntities getDefaultInstanceForType() {
-      return DEFAULT_INSTANCE;
-    }
-
-  }
-
-  public interface BoundsOrBuilder extends
-      // @@protoc_insertion_point(interface_extends:Bounds)
-      com.google.protobuf.MessageOrBuilder {
-
-    /**
-     * <code>int64 start = 1;</code>
-     * @return The start.
-     */
-    long getStart();
-
-    /**
-     * <code>int64 end = 2;</code>
-     * @return The end.
-     */
-    long getEnd();
-  }
-  /**
-   * Protobuf type {@code Bounds}
-   */
-  public static final class Bounds extends
-      com.google.protobuf.GeneratedMessageV3 implements
-      // @@protoc_insertion_point(message_implements:Bounds)
-      BoundsOrBuilder {
-  private static final long serialVersionUID = 0L;
-    // Use Bounds.newBuilder() to construct.
-    private Bounds(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
-      super(builder);
-    }
-    private Bounds() {
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Bounds();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
-    private Bounds(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      this();
-      if (extensionRegistry == null) {
-        throw new java.lang.NullPointerException();
-      }
-      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
-          com.google.protobuf.UnknownFieldSet.newBuilder();
-      try {
-        boolean done = false;
-        while (!done) {
-          int tag = input.readTag();
-          switch (tag) {
-            case 0:
-              done = true;
-              break;
-            case 8: {
-
-              start_ = input.readInt64();
-              break;
-            }
-            case 16: {
-
-              end_ = input.readInt64();
-              break;
-            }
-            default: {
-              if (!parseUnknownField(
-                  input, unknownFields, extensionRegistry, tag)) {
-                done = true;
-              }
-              break;
-            }
-          }
-        }
-      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-        throw e.setUnfinishedMessage(this);
-      } catch (java.io.IOException e) {
-        throw new com.google.protobuf.InvalidProtocolBufferException(
-            e).setUnfinishedMessage(this);
-      } finally {
-        this.unknownFields = unknownFields.build();
-        makeExtensionsImmutable();
-      }
-    }
-    public static final com.google.protobuf.Descriptors.Descriptor
-        getDescriptor() {
-      return gg.strims.ppspp.proto.Chat.internal_static_Bounds_descriptor;
-    }
-
-    @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-        internalGetFieldAccessorTable() {
-      return gg.strims.ppspp.proto.Chat.internal_static_Bounds_fieldAccessorTable
-          .ensureFieldAccessorsInitialized(
-              gg.strims.ppspp.proto.Chat.Bounds.class, gg.strims.ppspp.proto.Chat.Bounds.Builder.class);
-    }
-
-    public static final int START_FIELD_NUMBER = 1;
-    private long start_;
-    /**
-     * <code>int64 start = 1;</code>
-     * @return The start.
-     */
-    @java.lang.Override
-    public long getStart() {
-      return start_;
-    }
-
-    public static final int END_FIELD_NUMBER = 2;
-    private long end_;
-    /**
-     * <code>int64 end = 2;</code>
-     * @return The end.
-     */
-    @java.lang.Override
-    public long getEnd() {
-      return end_;
-    }
-
-    private byte memoizedIsInitialized = -1;
-    @java.lang.Override
-    public final boolean isInitialized() {
-      byte isInitialized = memoizedIsInitialized;
-      if (isInitialized == 1) return true;
-      if (isInitialized == 0) return false;
-
-      memoizedIsInitialized = 1;
-      return true;
-    }
-
-    @java.lang.Override
-    public void writeTo(com.google.protobuf.CodedOutputStream output)
-                        throws java.io.IOException {
-      if (start_ != 0L) {
-        output.writeInt64(1, start_);
-      }
-      if (end_ != 0L) {
-        output.writeInt64(2, end_);
-      }
-      unknownFields.writeTo(output);
-    }
-
-    @java.lang.Override
-    public int getSerializedSize() {
-      int size = memoizedSize;
-      if (size != -1) return size;
-
-      size = 0;
-      if (start_ != 0L) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeInt64Size(1, start_);
-      }
-      if (end_ != 0L) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeInt64Size(2, end_);
-      }
-      size += unknownFields.getSerializedSize();
-      memoizedSize = size;
-      return size;
-    }
-
-    @java.lang.Override
-    public boolean equals(final java.lang.Object obj) {
-      if (obj == this) {
-       return true;
-      }
-      if (!(obj instanceof gg.strims.ppspp.proto.Chat.Bounds)) {
-        return super.equals(obj);
-      }
-      gg.strims.ppspp.proto.Chat.Bounds other = (gg.strims.ppspp.proto.Chat.Bounds) obj;
-
-      if (getStart()
-          != other.getStart()) return false;
-      if (getEnd()
-          != other.getEnd()) return false;
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
-    }
-
-    @java.lang.Override
-    public int hashCode() {
-      if (memoizedHashCode != 0) {
-        return memoizedHashCode;
-      }
-      int hash = 41;
-      hash = (19 * hash) + getDescriptor().hashCode();
-      hash = (37 * hash) + START_FIELD_NUMBER;
-      hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
-          getStart());
-      hash = (37 * hash) + END_FIELD_NUMBER;
-      hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
-          getEnd());
-      hash = (29 * hash) + unknownFields.hashCode();
-      memoizedHashCode = hash;
-      return hash;
-    }
-
-    public static gg.strims.ppspp.proto.Chat.Bounds parseFrom(
-        java.nio.ByteBuffer data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Bounds parseFrom(
-        java.nio.ByteBuffer data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Bounds parseFrom(
-        com.google.protobuf.ByteString data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Bounds parseFrom(
-        com.google.protobuf.ByteString data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Bounds parseFrom(byte[] data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Bounds parseFrom(
-        byte[] data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Bounds parseFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Bounds parseFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Bounds parseDelimitedFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Bounds parseDelimitedFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Bounds parseFrom(
-        com.google.protobuf.CodedInputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Bounds parseFrom(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-
-    @java.lang.Override
-    public Builder newBuilderForType() { return newBuilder(); }
-    public static Builder newBuilder() {
-      return DEFAULT_INSTANCE.toBuilder();
-    }
-    public static Builder newBuilder(gg.strims.ppspp.proto.Chat.Bounds prototype) {
-      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
-    }
-    @java.lang.Override
-    public Builder toBuilder() {
-      return this == DEFAULT_INSTANCE
-          ? new Builder() : new Builder().mergeFrom(this);
-    }
-
-    @java.lang.Override
-    protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-      Builder builder = new Builder(parent);
-      return builder;
-    }
-    /**
-     * Protobuf type {@code Bounds}
-     */
-    public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
-        // @@protoc_insertion_point(builder_implements:Bounds)
-        gg.strims.ppspp.proto.Chat.BoundsOrBuilder {
-      public static final com.google.protobuf.Descriptors.Descriptor
-          getDescriptor() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Bounds_descriptor;
-      }
-
-      @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-          internalGetFieldAccessorTable() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Bounds_fieldAccessorTable
-            .ensureFieldAccessorsInitialized(
-                gg.strims.ppspp.proto.Chat.Bounds.class, gg.strims.ppspp.proto.Chat.Bounds.Builder.class);
-      }
-
-      // Construct using gg.strims.ppspp.proto.Chat.Bounds.newBuilder()
-      private Builder() {
-        maybeForceBuilderInitialization();
-      }
-
-      private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-        super(parent);
-        maybeForceBuilderInitialization();
-      }
-      private void maybeForceBuilderInitialization() {
-        if (com.google.protobuf.GeneratedMessageV3
-                .alwaysUseFieldBuilders) {
-        }
-      }
-      @java.lang.Override
-      public Builder clear() {
-        super.clear();
-        start_ = 0L;
-
-        end_ = 0L;
-
-        return this;
-      }
-
-      @java.lang.Override
-      public com.google.protobuf.Descriptors.Descriptor
-          getDescriptorForType() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Bounds_descriptor;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Bounds getDefaultInstanceForType() {
-        return gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance();
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Bounds build() {
-        gg.strims.ppspp.proto.Chat.Bounds result = buildPartial();
-        if (!result.isInitialized()) {
-          throw newUninitializedMessageException(result);
-        }
-        return result;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Bounds buildPartial() {
-        gg.strims.ppspp.proto.Chat.Bounds result = new gg.strims.ppspp.proto.Chat.Bounds(this);
-        result.start_ = start_;
-        result.end_ = end_;
-        onBuilt();
-        return result;
-      }
-
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
-      public Builder mergeFrom(com.google.protobuf.Message other) {
-        if (other instanceof gg.strims.ppspp.proto.Chat.Bounds) {
-          return mergeFrom((gg.strims.ppspp.proto.Chat.Bounds)other);
-        } else {
-          super.mergeFrom(other);
-          return this;
-        }
-      }
-
-      public Builder mergeFrom(gg.strims.ppspp.proto.Chat.Bounds other) {
-        if (other == gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance()) return this;
-        if (other.getStart() != 0L) {
-          setStart(other.getStart());
-        }
-        if (other.getEnd() != 0L) {
-          setEnd(other.getEnd());
-        }
-        this.mergeUnknownFields(other.unknownFields);
-        onChanged();
-        return this;
-      }
-
-      @java.lang.Override
-      public final boolean isInitialized() {
-        return true;
-      }
-
-      @java.lang.Override
-      public Builder mergeFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws java.io.IOException {
-        gg.strims.ppspp.proto.Chat.Bounds parsedMessage = null;
-        try {
-          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
-        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-          parsedMessage = (gg.strims.ppspp.proto.Chat.Bounds) e.getUnfinishedMessage();
-          throw e.unwrapIOException();
-        } finally {
-          if (parsedMessage != null) {
-            mergeFrom(parsedMessage);
-          }
-        }
-        return this;
-      }
-
-      private long start_ ;
-      /**
-       * <code>int64 start = 1;</code>
-       * @return The start.
-       */
-      @java.lang.Override
-      public long getStart() {
-        return start_;
-      }
-      /**
-       * <code>int64 start = 1;</code>
-       * @param value The start to set.
-       * @return This builder for chaining.
-       */
-      public Builder setStart(long value) {
-        
-        start_ = value;
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>int64 start = 1;</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearStart() {
-        
-        start_ = 0L;
-        onChanged();
-        return this;
-      }
-
-      private long end_ ;
-      /**
-       * <code>int64 end = 2;</code>
-       * @return The end.
-       */
-      @java.lang.Override
-      public long getEnd() {
-        return end_;
-      }
-      /**
-       * <code>int64 end = 2;</code>
-       * @param value The end to set.
-       * @return This builder for chaining.
-       */
-      public Builder setEnd(long value) {
-        
-        end_ = value;
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>int64 end = 2;</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearEnd() {
-        
-        end_ = 0L;
-        onChanged();
-        return this;
-      }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
-
-      // @@protoc_insertion_point(builder_scope:Bounds)
-    }
-
-    // @@protoc_insertion_point(class_scope:Bounds)
-    private static final gg.strims.ppspp.proto.Chat.Bounds DEFAULT_INSTANCE;
-    static {
-      DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.Bounds();
-    }
-
-    public static gg.strims.ppspp.proto.Chat.Bounds getDefaultInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    private static final com.google.protobuf.Parser<Bounds>
-        PARSER = new com.google.protobuf.AbstractParser<Bounds>() {
-      @java.lang.Override
-      public Bounds parsePartialFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws com.google.protobuf.InvalidProtocolBufferException {
-        return new Bounds(input, extensionRegistry);
-      }
-    };
-
-    public static com.google.protobuf.Parser<Bounds> parser() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public com.google.protobuf.Parser<Bounds> getParserForType() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Bounds getDefaultInstanceForType() {
-      return DEFAULT_INSTANCE;
-    }
-
-  }
-
-  public interface LinkOrBuilder extends
-      // @@protoc_insertion_point(interface_extends:Link)
-      com.google.protobuf.MessageOrBuilder {
-
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    boolean hasBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    gg.strims.ppspp.proto.Chat.Bounds getBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder();
-
-    /**
-     * <code>string url = 2;</code>
-     * @return The url.
-     */
-    java.lang.String getUrl();
-    /**
-     * <code>string url = 2;</code>
-     * @return The bytes for url.
-     */
-    com.google.protobuf.ByteString
-        getUrlBytes();
-  }
-  /**
-   * Protobuf type {@code Link}
-   */
-  public static final class Link extends
-      com.google.protobuf.GeneratedMessageV3 implements
-      // @@protoc_insertion_point(message_implements:Link)
-      LinkOrBuilder {
-  private static final long serialVersionUID = 0L;
-    // Use Link.newBuilder() to construct.
-    private Link(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
-      super(builder);
-    }
-    private Link() {
-      url_ = "";
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Link();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
-    private Link(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      this();
-      if (extensionRegistry == null) {
-        throw new java.lang.NullPointerException();
-      }
-      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
-          com.google.protobuf.UnknownFieldSet.newBuilder();
-      try {
-        boolean done = false;
-        while (!done) {
-          int tag = input.readTag();
-          switch (tag) {
-            case 0:
-              done = true;
-              break;
-            case 10: {
-              gg.strims.ppspp.proto.Chat.Bounds.Builder subBuilder = null;
-              if (bounds_ != null) {
-                subBuilder = bounds_.toBuilder();
-              }
-              bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.Bounds.parser(), extensionRegistry);
-              if (subBuilder != null) {
-                subBuilder.mergeFrom(bounds_);
-                bounds_ = subBuilder.buildPartial();
-              }
-
-              break;
-            }
-            case 18: {
-              java.lang.String s = input.readStringRequireUtf8();
-
-              url_ = s;
-              break;
-            }
-            default: {
-              if (!parseUnknownField(
-                  input, unknownFields, extensionRegistry, tag)) {
-                done = true;
-              }
-              break;
-            }
-          }
-        }
-      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-        throw e.setUnfinishedMessage(this);
-      } catch (java.io.IOException e) {
-        throw new com.google.protobuf.InvalidProtocolBufferException(
-            e).setUnfinishedMessage(this);
-      } finally {
-        this.unknownFields = unknownFields.build();
-        makeExtensionsImmutable();
-      }
-    }
-    public static final com.google.protobuf.Descriptors.Descriptor
-        getDescriptor() {
-      return gg.strims.ppspp.proto.Chat.internal_static_Link_descriptor;
-    }
-
-    @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-        internalGetFieldAccessorTable() {
-      return gg.strims.ppspp.proto.Chat.internal_static_Link_fieldAccessorTable
-          .ensureFieldAccessorsInitialized(
-              gg.strims.ppspp.proto.Chat.Link.class, gg.strims.ppspp.proto.Chat.Link.Builder.class);
-    }
-
-    public static final int BOUNDS_FIELD_NUMBER = 1;
-    private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    @java.lang.Override
-    public boolean hasBounds() {
-      return bounds_ != null;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-      return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-      return getBounds();
-    }
-
-    public static final int URL_FIELD_NUMBER = 2;
-    private volatile java.lang.Object url_;
-    /**
-     * <code>string url = 2;</code>
-     * @return The url.
-     */
-    @java.lang.Override
-    public java.lang.String getUrl() {
-      java.lang.Object ref = url_;
-      if (ref instanceof java.lang.String) {
-        return (java.lang.String) ref;
-      } else {
-        com.google.protobuf.ByteString bs = 
-            (com.google.protobuf.ByteString) ref;
-        java.lang.String s = bs.toStringUtf8();
-        url_ = s;
-        return s;
-      }
-    }
-    /**
-     * <code>string url = 2;</code>
-     * @return The bytes for url.
-     */
-    @java.lang.Override
-    public com.google.protobuf.ByteString
-        getUrlBytes() {
-      java.lang.Object ref = url_;
-      if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
-            com.google.protobuf.ByteString.copyFromUtf8(
-                (java.lang.String) ref);
-        url_ = b;
-        return b;
-      } else {
-        return (com.google.protobuf.ByteString) ref;
-      }
-    }
-
-    private byte memoizedIsInitialized = -1;
-    @java.lang.Override
-    public final boolean isInitialized() {
-      byte isInitialized = memoizedIsInitialized;
-      if (isInitialized == 1) return true;
-      if (isInitialized == 0) return false;
-
-      memoizedIsInitialized = 1;
-      return true;
-    }
-
-    @java.lang.Override
-    public void writeTo(com.google.protobuf.CodedOutputStream output)
-                        throws java.io.IOException {
-      if (bounds_ != null) {
-        output.writeMessage(1, getBounds());
-      }
-      if (!getUrlBytes().isEmpty()) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 2, url_);
-      }
-      unknownFields.writeTo(output);
-    }
-
-    @java.lang.Override
-    public int getSerializedSize() {
-      int size = memoizedSize;
-      if (size != -1) return size;
-
-      size = 0;
-      if (bounds_ != null) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeMessageSize(1, getBounds());
-      }
-      if (!getUrlBytes().isEmpty()) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, url_);
-      }
-      size += unknownFields.getSerializedSize();
-      memoizedSize = size;
-      return size;
-    }
-
-    @java.lang.Override
-    public boolean equals(final java.lang.Object obj) {
-      if (obj == this) {
-       return true;
-      }
-      if (!(obj instanceof gg.strims.ppspp.proto.Chat.Link)) {
-        return super.equals(obj);
-      }
-      gg.strims.ppspp.proto.Chat.Link other = (gg.strims.ppspp.proto.Chat.Link) obj;
-
-      if (hasBounds() != other.hasBounds()) return false;
-      if (hasBounds()) {
-        if (!getBounds()
-            .equals(other.getBounds())) return false;
-      }
-      if (!getUrl()
-          .equals(other.getUrl())) return false;
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
-    }
-
-    @java.lang.Override
-    public int hashCode() {
-      if (memoizedHashCode != 0) {
-        return memoizedHashCode;
-      }
-      int hash = 41;
-      hash = (19 * hash) + getDescriptor().hashCode();
-      if (hasBounds()) {
-        hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
-        hash = (53 * hash) + getBounds().hashCode();
-      }
-      hash = (37 * hash) + URL_FIELD_NUMBER;
-      hash = (53 * hash) + getUrl().hashCode();
-      hash = (29 * hash) + unknownFields.hashCode();
-      memoizedHashCode = hash;
-      return hash;
-    }
-
-    public static gg.strims.ppspp.proto.Chat.Link parseFrom(
-        java.nio.ByteBuffer data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Link parseFrom(
-        java.nio.ByteBuffer data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Link parseFrom(
-        com.google.protobuf.ByteString data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Link parseFrom(
-        com.google.protobuf.ByteString data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Link parseFrom(byte[] data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Link parseFrom(
-        byte[] data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Link parseFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Link parseFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Link parseDelimitedFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Link parseDelimitedFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Link parseFrom(
-        com.google.protobuf.CodedInputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Link parseFrom(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-
-    @java.lang.Override
-    public Builder newBuilderForType() { return newBuilder(); }
-    public static Builder newBuilder() {
-      return DEFAULT_INSTANCE.toBuilder();
-    }
-    public static Builder newBuilder(gg.strims.ppspp.proto.Chat.Link prototype) {
-      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
-    }
-    @java.lang.Override
-    public Builder toBuilder() {
-      return this == DEFAULT_INSTANCE
-          ? new Builder() : new Builder().mergeFrom(this);
-    }
-
-    @java.lang.Override
-    protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-      Builder builder = new Builder(parent);
-      return builder;
-    }
-    /**
-     * Protobuf type {@code Link}
-     */
-    public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
-        // @@protoc_insertion_point(builder_implements:Link)
-        gg.strims.ppspp.proto.Chat.LinkOrBuilder {
-      public static final com.google.protobuf.Descriptors.Descriptor
-          getDescriptor() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Link_descriptor;
-      }
-
-      @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-          internalGetFieldAccessorTable() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Link_fieldAccessorTable
-            .ensureFieldAccessorsInitialized(
-                gg.strims.ppspp.proto.Chat.Link.class, gg.strims.ppspp.proto.Chat.Link.Builder.class);
-      }
-
-      // Construct using gg.strims.ppspp.proto.Chat.Link.newBuilder()
-      private Builder() {
-        maybeForceBuilderInitialization();
-      }
-
-      private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-        super(parent);
-        maybeForceBuilderInitialization();
-      }
-      private void maybeForceBuilderInitialization() {
-        if (com.google.protobuf.GeneratedMessageV3
-                .alwaysUseFieldBuilders) {
-        }
-      }
-      @java.lang.Override
-      public Builder clear() {
-        super.clear();
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-        url_ = "";
-
-        return this;
-      }
-
-      @java.lang.Override
-      public com.google.protobuf.Descriptors.Descriptor
-          getDescriptorForType() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Link_descriptor;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Link getDefaultInstanceForType() {
-        return gg.strims.ppspp.proto.Chat.Link.getDefaultInstance();
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Link build() {
-        gg.strims.ppspp.proto.Chat.Link result = buildPartial();
-        if (!result.isInitialized()) {
-          throw newUninitializedMessageException(result);
-        }
-        return result;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Link buildPartial() {
-        gg.strims.ppspp.proto.Chat.Link result = new gg.strims.ppspp.proto.Chat.Link(this);
-        if (boundsBuilder_ == null) {
-          result.bounds_ = bounds_;
-        } else {
-          result.bounds_ = boundsBuilder_.build();
-        }
-        result.url_ = url_;
-        onBuilt();
-        return result;
-      }
-
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
-      public Builder mergeFrom(com.google.protobuf.Message other) {
-        if (other instanceof gg.strims.ppspp.proto.Chat.Link) {
-          return mergeFrom((gg.strims.ppspp.proto.Chat.Link)other);
-        } else {
-          super.mergeFrom(other);
-          return this;
-        }
-      }
-
-      public Builder mergeFrom(gg.strims.ppspp.proto.Chat.Link other) {
-        if (other == gg.strims.ppspp.proto.Chat.Link.getDefaultInstance()) return this;
-        if (other.hasBounds()) {
-          mergeBounds(other.getBounds());
-        }
-        if (!other.getUrl().isEmpty()) {
-          url_ = other.url_;
-          onChanged();
-        }
-        this.mergeUnknownFields(other.unknownFields);
-        onChanged();
-        return this;
-      }
-
-      @java.lang.Override
-      public final boolean isInitialized() {
-        return true;
-      }
-
-      @java.lang.Override
-      public Builder mergeFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws java.io.IOException {
-        gg.strims.ppspp.proto.Chat.Link parsedMessage = null;
-        try {
-          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
-        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-          parsedMessage = (gg.strims.ppspp.proto.Chat.Link) e.getUnfinishedMessage();
-          throw e.unwrapIOException();
-        } finally {
-          if (parsedMessage != null) {
-            mergeFrom(parsedMessage);
-          }
-        }
-        return this;
-      }
-
-      private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> boundsBuilder_;
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return Whether the bounds field is set.
-       */
-      public boolean hasBounds() {
-        return boundsBuilder_ != null || bounds_ != null;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return The bounds.
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-        if (boundsBuilder_ == null) {
-          return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        } else {
-          return boundsBuilder_.getMessage();
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (value == null) {
-            throw new NullPointerException();
-          }
-          bounds_ = value;
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(
-          gg.strims.ppspp.proto.Chat.Bounds.Builder builderForValue) {
-        if (boundsBuilder_ == null) {
-          bounds_ = builderForValue.build();
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(builderForValue.build());
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder mergeBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (bounds_ != null) {
-            bounds_ =
-              gg.strims.ppspp.proto.Chat.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
-          } else {
-            bounds_ = value;
-          }
-          onChanged();
-        } else {
-          boundsBuilder_.mergeFrom(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder clearBounds() {
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-          onChanged();
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds.Builder getBoundsBuilder() {
-        
-        onChanged();
-        return getBoundsFieldBuilder().getBuilder();
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-        if (boundsBuilder_ != null) {
-          return boundsBuilder_.getMessageOrBuilder();
-        } else {
-          return bounds_ == null ?
-              gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> 
-          getBoundsFieldBuilder() {
-        if (boundsBuilder_ == null) {
-          boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder>(
-                  getBounds(),
-                  getParentForChildren(),
-                  isClean());
-          bounds_ = null;
-        }
-        return boundsBuilder_;
-      }
-
-      private java.lang.Object url_ = "";
-      /**
-       * <code>string url = 2;</code>
-       * @return The url.
-       */
-      public java.lang.String getUrl() {
-        java.lang.Object ref = url_;
-        if (!(ref instanceof java.lang.String)) {
-          com.google.protobuf.ByteString bs =
-              (com.google.protobuf.ByteString) ref;
-          java.lang.String s = bs.toStringUtf8();
-          url_ = s;
-          return s;
-        } else {
-          return (java.lang.String) ref;
-        }
-      }
-      /**
-       * <code>string url = 2;</code>
-       * @return The bytes for url.
-       */
-      public com.google.protobuf.ByteString
-          getUrlBytes() {
-        java.lang.Object ref = url_;
-        if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
-              com.google.protobuf.ByteString.copyFromUtf8(
-                  (java.lang.String) ref);
-          url_ = b;
-          return b;
-        } else {
-          return (com.google.protobuf.ByteString) ref;
-        }
-      }
-      /**
-       * <code>string url = 2;</code>
-       * @param value The url to set.
-       * @return This builder for chaining.
-       */
-      public Builder setUrl(
-          java.lang.String value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
-        url_ = value;
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>string url = 2;</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearUrl() {
-        
-        url_ = getDefaultInstance().getUrl();
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>string url = 2;</code>
-       * @param value The bytes for url to set.
-       * @return This builder for chaining.
-       */
-      public Builder setUrlBytes(
-          com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  checkByteStringIsUtf8(value);
-        
-        url_ = value;
-        onChanged();
-        return this;
-      }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
-
-      // @@protoc_insertion_point(builder_scope:Link)
-    }
-
-    // @@protoc_insertion_point(class_scope:Link)
-    private static final gg.strims.ppspp.proto.Chat.Link DEFAULT_INSTANCE;
-    static {
-      DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.Link();
-    }
-
-    public static gg.strims.ppspp.proto.Chat.Link getDefaultInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    private static final com.google.protobuf.Parser<Link>
-        PARSER = new com.google.protobuf.AbstractParser<Link>() {
-      @java.lang.Override
-      public Link parsePartialFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws com.google.protobuf.InvalidProtocolBufferException {
-        return new Link(input, extensionRegistry);
-      }
-    };
-
-    public static com.google.protobuf.Parser<Link> parser() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public com.google.protobuf.Parser<Link> getParserForType() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Link getDefaultInstanceForType() {
-      return DEFAULT_INSTANCE;
-    }
-
-  }
-
-  public interface EmoteOrBuilder extends
-      // @@protoc_insertion_point(interface_extends:Emote)
-      com.google.protobuf.MessageOrBuilder {
-
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    boolean hasBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    gg.strims.ppspp.proto.Chat.Bounds getBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder();
-
-    /**
-     * <code>string name = 2;</code>
-     * @return The name.
-     */
-    java.lang.String getName();
-    /**
-     * <code>string name = 2;</code>
-     * @return The bytes for name.
-     */
-    com.google.protobuf.ByteString
-        getNameBytes();
-
-    /**
-     * <code>repeated string modifiers = 3;</code>
-     * @return A list containing the modifiers.
-     */
-    java.util.List<java.lang.String>
-        getModifiersList();
-    /**
-     * <code>repeated string modifiers = 3;</code>
-     * @return The count of modifiers.
-     */
-    int getModifiersCount();
-    /**
-     * <code>repeated string modifiers = 3;</code>
-     * @param index The index of the element to return.
-     * @return The modifiers at the given index.
-     */
-    java.lang.String getModifiers(int index);
-    /**
-     * <code>repeated string modifiers = 3;</code>
-     * @param index The index of the value to return.
-     * @return The bytes of the modifiers at the given index.
-     */
-    com.google.protobuf.ByteString
-        getModifiersBytes(int index);
-
-    /**
-     * <code>int64 combo = 4;</code>
-     * @return The combo.
-     */
-    long getCombo();
-  }
-  /**
-   * Protobuf type {@code Emote}
-   */
-  public static final class Emote extends
-      com.google.protobuf.GeneratedMessageV3 implements
-      // @@protoc_insertion_point(message_implements:Emote)
-      EmoteOrBuilder {
-  private static final long serialVersionUID = 0L;
-    // Use Emote.newBuilder() to construct.
-    private Emote(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
-      super(builder);
-    }
-    private Emote() {
-      name_ = "";
-      modifiers_ = com.google.protobuf.LazyStringArrayList.EMPTY;
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Emote();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
-    private Emote(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      this();
-      if (extensionRegistry == null) {
-        throw new java.lang.NullPointerException();
-      }
-      int mutable_bitField0_ = 0;
-      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
-          com.google.protobuf.UnknownFieldSet.newBuilder();
-      try {
-        boolean done = false;
-        while (!done) {
-          int tag = input.readTag();
-          switch (tag) {
-            case 0:
-              done = true;
-              break;
-            case 10: {
-              gg.strims.ppspp.proto.Chat.Bounds.Builder subBuilder = null;
-              if (bounds_ != null) {
-                subBuilder = bounds_.toBuilder();
-              }
-              bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.Bounds.parser(), extensionRegistry);
-              if (subBuilder != null) {
-                subBuilder.mergeFrom(bounds_);
-                bounds_ = subBuilder.buildPartial();
-              }
-
-              break;
-            }
-            case 18: {
-              java.lang.String s = input.readStringRequireUtf8();
-
-              name_ = s;
-              break;
-            }
-            case 26: {
-              java.lang.String s = input.readStringRequireUtf8();
-              if (!((mutable_bitField0_ & 0x00000001) != 0)) {
-                modifiers_ = new com.google.protobuf.LazyStringArrayList();
-                mutable_bitField0_ |= 0x00000001;
-              }
-              modifiers_.add(s);
-              break;
-            }
-            case 32: {
-
-              combo_ = input.readInt64();
-              break;
-            }
-            default: {
-              if (!parseUnknownField(
-                  input, unknownFields, extensionRegistry, tag)) {
-                done = true;
-              }
-              break;
-            }
-          }
-        }
-      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-        throw e.setUnfinishedMessage(this);
-      } catch (java.io.IOException e) {
-        throw new com.google.protobuf.InvalidProtocolBufferException(
-            e).setUnfinishedMessage(this);
-      } finally {
-        if (((mutable_bitField0_ & 0x00000001) != 0)) {
-          modifiers_ = modifiers_.getUnmodifiableView();
-        }
-        this.unknownFields = unknownFields.build();
-        makeExtensionsImmutable();
-      }
-    }
-    public static final com.google.protobuf.Descriptors.Descriptor
-        getDescriptor() {
-      return gg.strims.ppspp.proto.Chat.internal_static_Emote_descriptor;
-    }
-
-    @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-        internalGetFieldAccessorTable() {
-      return gg.strims.ppspp.proto.Chat.internal_static_Emote_fieldAccessorTable
-          .ensureFieldAccessorsInitialized(
-              gg.strims.ppspp.proto.Chat.Emote.class, gg.strims.ppspp.proto.Chat.Emote.Builder.class);
-    }
-
-    public static final int BOUNDS_FIELD_NUMBER = 1;
-    private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    @java.lang.Override
-    public boolean hasBounds() {
-      return bounds_ != null;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-      return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-      return getBounds();
-    }
-
-    public static final int NAME_FIELD_NUMBER = 2;
-    private volatile java.lang.Object name_;
-    /**
-     * <code>string name = 2;</code>
-     * @return The name.
-     */
-    @java.lang.Override
-    public java.lang.String getName() {
-      java.lang.Object ref = name_;
-      if (ref instanceof java.lang.String) {
-        return (java.lang.String) ref;
-      } else {
-        com.google.protobuf.ByteString bs = 
-            (com.google.protobuf.ByteString) ref;
-        java.lang.String s = bs.toStringUtf8();
-        name_ = s;
-        return s;
-      }
-    }
-    /**
-     * <code>string name = 2;</code>
-     * @return The bytes for name.
-     */
-    @java.lang.Override
-    public com.google.protobuf.ByteString
-        getNameBytes() {
-      java.lang.Object ref = name_;
-      if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
-            com.google.protobuf.ByteString.copyFromUtf8(
-                (java.lang.String) ref);
-        name_ = b;
-        return b;
-      } else {
-        return (com.google.protobuf.ByteString) ref;
-      }
-    }
-
-    public static final int MODIFIERS_FIELD_NUMBER = 3;
-    private com.google.protobuf.LazyStringList modifiers_;
-    /**
-     * <code>repeated string modifiers = 3;</code>
-     * @return A list containing the modifiers.
-     */
-    public com.google.protobuf.ProtocolStringList
-        getModifiersList() {
-      return modifiers_;
-    }
-    /**
-     * <code>repeated string modifiers = 3;</code>
-     * @return The count of modifiers.
-     */
-    public int getModifiersCount() {
-      return modifiers_.size();
-    }
-    /**
-     * <code>repeated string modifiers = 3;</code>
-     * @param index The index of the element to return.
-     * @return The modifiers at the given index.
-     */
-    public java.lang.String getModifiers(int index) {
-      return modifiers_.get(index);
-    }
-    /**
-     * <code>repeated string modifiers = 3;</code>
-     * @param index The index of the value to return.
-     * @return The bytes of the modifiers at the given index.
-     */
-    public com.google.protobuf.ByteString
-        getModifiersBytes(int index) {
-      return modifiers_.getByteString(index);
-    }
-
-    public static final int COMBO_FIELD_NUMBER = 4;
-    private long combo_;
-    /**
-     * <code>int64 combo = 4;</code>
-     * @return The combo.
-     */
-    @java.lang.Override
-    public long getCombo() {
-      return combo_;
-    }
-
-    private byte memoizedIsInitialized = -1;
-    @java.lang.Override
-    public final boolean isInitialized() {
-      byte isInitialized = memoizedIsInitialized;
-      if (isInitialized == 1) return true;
-      if (isInitialized == 0) return false;
-
-      memoizedIsInitialized = 1;
-      return true;
-    }
-
-    @java.lang.Override
-    public void writeTo(com.google.protobuf.CodedOutputStream output)
-                        throws java.io.IOException {
-      if (bounds_ != null) {
-        output.writeMessage(1, getBounds());
-      }
-      if (!getNameBytes().isEmpty()) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 2, name_);
-      }
-      for (int i = 0; i < modifiers_.size(); i++) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 3, modifiers_.getRaw(i));
-      }
-      if (combo_ != 0L) {
-        output.writeInt64(4, combo_);
-      }
-      unknownFields.writeTo(output);
-    }
-
-    @java.lang.Override
-    public int getSerializedSize() {
-      int size = memoizedSize;
-      if (size != -1) return size;
-
-      size = 0;
-      if (bounds_ != null) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeMessageSize(1, getBounds());
-      }
-      if (!getNameBytes().isEmpty()) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, name_);
-      }
-      {
-        int dataSize = 0;
-        for (int i = 0; i < modifiers_.size(); i++) {
-          dataSize += computeStringSizeNoTag(modifiers_.getRaw(i));
-        }
-        size += dataSize;
-        size += 1 * getModifiersList().size();
-      }
-      if (combo_ != 0L) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeInt64Size(4, combo_);
-      }
-      size += unknownFields.getSerializedSize();
-      memoizedSize = size;
-      return size;
-    }
-
-    @java.lang.Override
-    public boolean equals(final java.lang.Object obj) {
-      if (obj == this) {
-       return true;
-      }
-      if (!(obj instanceof gg.strims.ppspp.proto.Chat.Emote)) {
-        return super.equals(obj);
-      }
-      gg.strims.ppspp.proto.Chat.Emote other = (gg.strims.ppspp.proto.Chat.Emote) obj;
-
-      if (hasBounds() != other.hasBounds()) return false;
-      if (hasBounds()) {
-        if (!getBounds()
-            .equals(other.getBounds())) return false;
-      }
-      if (!getName()
-          .equals(other.getName())) return false;
-      if (!getModifiersList()
-          .equals(other.getModifiersList())) return false;
-      if (getCombo()
-          != other.getCombo()) return false;
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
-    }
-
-    @java.lang.Override
-    public int hashCode() {
-      if (memoizedHashCode != 0) {
-        return memoizedHashCode;
-      }
-      int hash = 41;
-      hash = (19 * hash) + getDescriptor().hashCode();
-      if (hasBounds()) {
-        hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
-        hash = (53 * hash) + getBounds().hashCode();
-      }
-      hash = (37 * hash) + NAME_FIELD_NUMBER;
-      hash = (53 * hash) + getName().hashCode();
-      if (getModifiersCount() > 0) {
-        hash = (37 * hash) + MODIFIERS_FIELD_NUMBER;
-        hash = (53 * hash) + getModifiersList().hashCode();
-      }
-      hash = (37 * hash) + COMBO_FIELD_NUMBER;
-      hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
-          getCombo());
-      hash = (29 * hash) + unknownFields.hashCode();
-      memoizedHashCode = hash;
-      return hash;
-    }
-
-    public static gg.strims.ppspp.proto.Chat.Emote parseFrom(
-        java.nio.ByteBuffer data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Emote parseFrom(
-        java.nio.ByteBuffer data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Emote parseFrom(
-        com.google.protobuf.ByteString data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Emote parseFrom(
-        com.google.protobuf.ByteString data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Emote parseFrom(byte[] data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Emote parseFrom(
-        byte[] data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Emote parseFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Emote parseFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Emote parseDelimitedFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Emote parseDelimitedFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Emote parseFrom(
-        com.google.protobuf.CodedInputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Emote parseFrom(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-
-    @java.lang.Override
-    public Builder newBuilderForType() { return newBuilder(); }
-    public static Builder newBuilder() {
-      return DEFAULT_INSTANCE.toBuilder();
-    }
-    public static Builder newBuilder(gg.strims.ppspp.proto.Chat.Emote prototype) {
-      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
-    }
-    @java.lang.Override
-    public Builder toBuilder() {
-      return this == DEFAULT_INSTANCE
-          ? new Builder() : new Builder().mergeFrom(this);
-    }
-
-    @java.lang.Override
-    protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-      Builder builder = new Builder(parent);
-      return builder;
-    }
-    /**
-     * Protobuf type {@code Emote}
-     */
-    public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
-        // @@protoc_insertion_point(builder_implements:Emote)
-        gg.strims.ppspp.proto.Chat.EmoteOrBuilder {
-      public static final com.google.protobuf.Descriptors.Descriptor
-          getDescriptor() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Emote_descriptor;
-      }
-
-      @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-          internalGetFieldAccessorTable() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Emote_fieldAccessorTable
-            .ensureFieldAccessorsInitialized(
-                gg.strims.ppspp.proto.Chat.Emote.class, gg.strims.ppspp.proto.Chat.Emote.Builder.class);
-      }
-
-      // Construct using gg.strims.ppspp.proto.Chat.Emote.newBuilder()
-      private Builder() {
-        maybeForceBuilderInitialization();
-      }
-
-      private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-        super(parent);
-        maybeForceBuilderInitialization();
-      }
-      private void maybeForceBuilderInitialization() {
-        if (com.google.protobuf.GeneratedMessageV3
-                .alwaysUseFieldBuilders) {
-        }
-      }
-      @java.lang.Override
-      public Builder clear() {
-        super.clear();
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-        name_ = "";
-
-        modifiers_ = com.google.protobuf.LazyStringArrayList.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00000001);
-        combo_ = 0L;
-
-        return this;
-      }
-
-      @java.lang.Override
-      public com.google.protobuf.Descriptors.Descriptor
-          getDescriptorForType() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Emote_descriptor;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Emote getDefaultInstanceForType() {
-        return gg.strims.ppspp.proto.Chat.Emote.getDefaultInstance();
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Emote build() {
-        gg.strims.ppspp.proto.Chat.Emote result = buildPartial();
-        if (!result.isInitialized()) {
-          throw newUninitializedMessageException(result);
-        }
-        return result;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Emote buildPartial() {
-        gg.strims.ppspp.proto.Chat.Emote result = new gg.strims.ppspp.proto.Chat.Emote(this);
-        int from_bitField0_ = bitField0_;
-        if (boundsBuilder_ == null) {
-          result.bounds_ = bounds_;
-        } else {
-          result.bounds_ = boundsBuilder_.build();
-        }
-        result.name_ = name_;
-        if (((bitField0_ & 0x00000001) != 0)) {
-          modifiers_ = modifiers_.getUnmodifiableView();
-          bitField0_ = (bitField0_ & ~0x00000001);
-        }
-        result.modifiers_ = modifiers_;
-        result.combo_ = combo_;
-        onBuilt();
-        return result;
-      }
-
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
-      public Builder mergeFrom(com.google.protobuf.Message other) {
-        if (other instanceof gg.strims.ppspp.proto.Chat.Emote) {
-          return mergeFrom((gg.strims.ppspp.proto.Chat.Emote)other);
-        } else {
-          super.mergeFrom(other);
-          return this;
-        }
-      }
-
-      public Builder mergeFrom(gg.strims.ppspp.proto.Chat.Emote other) {
-        if (other == gg.strims.ppspp.proto.Chat.Emote.getDefaultInstance()) return this;
-        if (other.hasBounds()) {
-          mergeBounds(other.getBounds());
-        }
-        if (!other.getName().isEmpty()) {
-          name_ = other.name_;
-          onChanged();
-        }
-        if (!other.modifiers_.isEmpty()) {
-          if (modifiers_.isEmpty()) {
-            modifiers_ = other.modifiers_;
-            bitField0_ = (bitField0_ & ~0x00000001);
-          } else {
-            ensureModifiersIsMutable();
-            modifiers_.addAll(other.modifiers_);
-          }
-          onChanged();
-        }
-        if (other.getCombo() != 0L) {
-          setCombo(other.getCombo());
-        }
-        this.mergeUnknownFields(other.unknownFields);
-        onChanged();
-        return this;
-      }
-
-      @java.lang.Override
-      public final boolean isInitialized() {
-        return true;
-      }
-
-      @java.lang.Override
-      public Builder mergeFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws java.io.IOException {
-        gg.strims.ppspp.proto.Chat.Emote parsedMessage = null;
-        try {
-          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
-        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-          parsedMessage = (gg.strims.ppspp.proto.Chat.Emote) e.getUnfinishedMessage();
-          throw e.unwrapIOException();
-        } finally {
-          if (parsedMessage != null) {
-            mergeFrom(parsedMessage);
-          }
-        }
-        return this;
-      }
-      private int bitField0_;
-
-      private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> boundsBuilder_;
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return Whether the bounds field is set.
-       */
-      public boolean hasBounds() {
-        return boundsBuilder_ != null || bounds_ != null;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return The bounds.
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-        if (boundsBuilder_ == null) {
-          return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        } else {
-          return boundsBuilder_.getMessage();
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (value == null) {
-            throw new NullPointerException();
-          }
-          bounds_ = value;
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(
-          gg.strims.ppspp.proto.Chat.Bounds.Builder builderForValue) {
-        if (boundsBuilder_ == null) {
-          bounds_ = builderForValue.build();
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(builderForValue.build());
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder mergeBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (bounds_ != null) {
-            bounds_ =
-              gg.strims.ppspp.proto.Chat.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
-          } else {
-            bounds_ = value;
-          }
-          onChanged();
-        } else {
-          boundsBuilder_.mergeFrom(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder clearBounds() {
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-          onChanged();
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds.Builder getBoundsBuilder() {
-        
-        onChanged();
-        return getBoundsFieldBuilder().getBuilder();
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-        if (boundsBuilder_ != null) {
-          return boundsBuilder_.getMessageOrBuilder();
-        } else {
-          return bounds_ == null ?
-              gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> 
-          getBoundsFieldBuilder() {
-        if (boundsBuilder_ == null) {
-          boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder>(
-                  getBounds(),
-                  getParentForChildren(),
-                  isClean());
-          bounds_ = null;
-        }
-        return boundsBuilder_;
-      }
-
-      private java.lang.Object name_ = "";
-      /**
-       * <code>string name = 2;</code>
-       * @return The name.
-       */
-      public java.lang.String getName() {
-        java.lang.Object ref = name_;
-        if (!(ref instanceof java.lang.String)) {
-          com.google.protobuf.ByteString bs =
-              (com.google.protobuf.ByteString) ref;
-          java.lang.String s = bs.toStringUtf8();
-          name_ = s;
-          return s;
-        } else {
-          return (java.lang.String) ref;
-        }
-      }
-      /**
-       * <code>string name = 2;</code>
-       * @return The bytes for name.
-       */
-      public com.google.protobuf.ByteString
-          getNameBytes() {
-        java.lang.Object ref = name_;
-        if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
-              com.google.protobuf.ByteString.copyFromUtf8(
-                  (java.lang.String) ref);
-          name_ = b;
-          return b;
-        } else {
-          return (com.google.protobuf.ByteString) ref;
-        }
-      }
-      /**
-       * <code>string name = 2;</code>
-       * @param value The name to set.
-       * @return This builder for chaining.
-       */
-      public Builder setName(
-          java.lang.String value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
-        name_ = value;
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>string name = 2;</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearName() {
-        
-        name_ = getDefaultInstance().getName();
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>string name = 2;</code>
-       * @param value The bytes for name to set.
-       * @return This builder for chaining.
-       */
-      public Builder setNameBytes(
-          com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  checkByteStringIsUtf8(value);
-        
-        name_ = value;
-        onChanged();
-        return this;
-      }
-
-      private com.google.protobuf.LazyStringList modifiers_ = com.google.protobuf.LazyStringArrayList.EMPTY;
-      private void ensureModifiersIsMutable() {
-        if (!((bitField0_ & 0x00000001) != 0)) {
-          modifiers_ = new com.google.protobuf.LazyStringArrayList(modifiers_);
-          bitField0_ |= 0x00000001;
-         }
-      }
-      /**
-       * <code>repeated string modifiers = 3;</code>
-       * @return A list containing the modifiers.
-       */
-      public com.google.protobuf.ProtocolStringList
-          getModifiersList() {
-        return modifiers_.getUnmodifiableView();
-      }
-      /**
-       * <code>repeated string modifiers = 3;</code>
-       * @return The count of modifiers.
-       */
-      public int getModifiersCount() {
-        return modifiers_.size();
-      }
-      /**
-       * <code>repeated string modifiers = 3;</code>
-       * @param index The index of the element to return.
-       * @return The modifiers at the given index.
-       */
-      public java.lang.String getModifiers(int index) {
-        return modifiers_.get(index);
-      }
-      /**
-       * <code>repeated string modifiers = 3;</code>
-       * @param index The index of the value to return.
-       * @return The bytes of the modifiers at the given index.
-       */
-      public com.google.protobuf.ByteString
-          getModifiersBytes(int index) {
-        return modifiers_.getByteString(index);
-      }
-      /**
-       * <code>repeated string modifiers = 3;</code>
-       * @param index The index to set the value at.
-       * @param value The modifiers to set.
-       * @return This builder for chaining.
-       */
-      public Builder setModifiers(
-          int index, java.lang.String value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  ensureModifiersIsMutable();
-        modifiers_.set(index, value);
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>repeated string modifiers = 3;</code>
-       * @param value The modifiers to add.
-       * @return This builder for chaining.
-       */
-      public Builder addModifiers(
-          java.lang.String value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  ensureModifiersIsMutable();
-        modifiers_.add(value);
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>repeated string modifiers = 3;</code>
-       * @param values The modifiers to add.
-       * @return This builder for chaining.
-       */
-      public Builder addAllModifiers(
-          java.lang.Iterable<java.lang.String> values) {
-        ensureModifiersIsMutable();
-        com.google.protobuf.AbstractMessageLite.Builder.addAll(
-            values, modifiers_);
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>repeated string modifiers = 3;</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearModifiers() {
-        modifiers_ = com.google.protobuf.LazyStringArrayList.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00000001);
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>repeated string modifiers = 3;</code>
-       * @param value The bytes of the modifiers to add.
-       * @return This builder for chaining.
-       */
-      public Builder addModifiersBytes(
-          com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  checkByteStringIsUtf8(value);
-        ensureModifiersIsMutable();
-        modifiers_.add(value);
-        onChanged();
-        return this;
-      }
-
-      private long combo_ ;
-      /**
-       * <code>int64 combo = 4;</code>
-       * @return The combo.
-       */
-      @java.lang.Override
-      public long getCombo() {
-        return combo_;
-      }
-      /**
-       * <code>int64 combo = 4;</code>
-       * @param value The combo to set.
-       * @return This builder for chaining.
-       */
-      public Builder setCombo(long value) {
-        
-        combo_ = value;
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>int64 combo = 4;</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearCombo() {
-        
-        combo_ = 0L;
-        onChanged();
-        return this;
-      }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
-
-      // @@protoc_insertion_point(builder_scope:Emote)
-    }
-
-    // @@protoc_insertion_point(class_scope:Emote)
-    private static final gg.strims.ppspp.proto.Chat.Emote DEFAULT_INSTANCE;
-    static {
-      DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.Emote();
-    }
-
-    public static gg.strims.ppspp.proto.Chat.Emote getDefaultInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    private static final com.google.protobuf.Parser<Emote>
-        PARSER = new com.google.protobuf.AbstractParser<Emote>() {
-      @java.lang.Override
-      public Emote parsePartialFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws com.google.protobuf.InvalidProtocolBufferException {
-        return new Emote(input, extensionRegistry);
-      }
-    };
-
-    public static com.google.protobuf.Parser<Emote> parser() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public com.google.protobuf.Parser<Emote> getParserForType() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Emote getDefaultInstanceForType() {
-      return DEFAULT_INSTANCE;
-    }
-
-  }
-
-  public interface NickOrBuilder extends
-      // @@protoc_insertion_point(interface_extends:Nick)
-      com.google.protobuf.MessageOrBuilder {
-
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    boolean hasBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    gg.strims.ppspp.proto.Chat.Bounds getBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder();
-
-    /**
-     * <code>string nick = 2;</code>
-     * @return The nick.
-     */
-    java.lang.String getNick();
-    /**
-     * <code>string nick = 2;</code>
-     * @return The bytes for nick.
-     */
-    com.google.protobuf.ByteString
-        getNickBytes();
-  }
-  /**
-   * Protobuf type {@code Nick}
-   */
-  public static final class Nick extends
-      com.google.protobuf.GeneratedMessageV3 implements
-      // @@protoc_insertion_point(message_implements:Nick)
-      NickOrBuilder {
-  private static final long serialVersionUID = 0L;
-    // Use Nick.newBuilder() to construct.
-    private Nick(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
-      super(builder);
-    }
-    private Nick() {
-      nick_ = "";
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Nick();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
-    private Nick(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      this();
-      if (extensionRegistry == null) {
-        throw new java.lang.NullPointerException();
-      }
-      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
-          com.google.protobuf.UnknownFieldSet.newBuilder();
-      try {
-        boolean done = false;
-        while (!done) {
-          int tag = input.readTag();
-          switch (tag) {
-            case 0:
-              done = true;
-              break;
-            case 10: {
-              gg.strims.ppspp.proto.Chat.Bounds.Builder subBuilder = null;
-              if (bounds_ != null) {
-                subBuilder = bounds_.toBuilder();
-              }
-              bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.Bounds.parser(), extensionRegistry);
-              if (subBuilder != null) {
-                subBuilder.mergeFrom(bounds_);
-                bounds_ = subBuilder.buildPartial();
-              }
-
-              break;
-            }
-            case 18: {
-              java.lang.String s = input.readStringRequireUtf8();
-
-              nick_ = s;
-              break;
-            }
-            default: {
-              if (!parseUnknownField(
-                  input, unknownFields, extensionRegistry, tag)) {
-                done = true;
-              }
-              break;
-            }
-          }
-        }
-      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-        throw e.setUnfinishedMessage(this);
-      } catch (java.io.IOException e) {
-        throw new com.google.protobuf.InvalidProtocolBufferException(
-            e).setUnfinishedMessage(this);
-      } finally {
-        this.unknownFields = unknownFields.build();
-        makeExtensionsImmutable();
-      }
-    }
-    public static final com.google.protobuf.Descriptors.Descriptor
-        getDescriptor() {
-      return gg.strims.ppspp.proto.Chat.internal_static_Nick_descriptor;
-    }
-
-    @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-        internalGetFieldAccessorTable() {
-      return gg.strims.ppspp.proto.Chat.internal_static_Nick_fieldAccessorTable
-          .ensureFieldAccessorsInitialized(
-              gg.strims.ppspp.proto.Chat.Nick.class, gg.strims.ppspp.proto.Chat.Nick.Builder.class);
-    }
-
-    public static final int BOUNDS_FIELD_NUMBER = 1;
-    private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    @java.lang.Override
-    public boolean hasBounds() {
-      return bounds_ != null;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-      return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-      return getBounds();
-    }
-
-    public static final int NICK_FIELD_NUMBER = 2;
-    private volatile java.lang.Object nick_;
-    /**
-     * <code>string nick = 2;</code>
-     * @return The nick.
-     */
-    @java.lang.Override
-    public java.lang.String getNick() {
-      java.lang.Object ref = nick_;
-      if (ref instanceof java.lang.String) {
-        return (java.lang.String) ref;
-      } else {
-        com.google.protobuf.ByteString bs = 
-            (com.google.protobuf.ByteString) ref;
-        java.lang.String s = bs.toStringUtf8();
-        nick_ = s;
-        return s;
-      }
-    }
-    /**
-     * <code>string nick = 2;</code>
-     * @return The bytes for nick.
-     */
-    @java.lang.Override
-    public com.google.protobuf.ByteString
-        getNickBytes() {
-      java.lang.Object ref = nick_;
-      if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
-            com.google.protobuf.ByteString.copyFromUtf8(
-                (java.lang.String) ref);
-        nick_ = b;
-        return b;
-      } else {
-        return (com.google.protobuf.ByteString) ref;
-      }
-    }
-
-    private byte memoizedIsInitialized = -1;
-    @java.lang.Override
-    public final boolean isInitialized() {
-      byte isInitialized = memoizedIsInitialized;
-      if (isInitialized == 1) return true;
-      if (isInitialized == 0) return false;
-
-      memoizedIsInitialized = 1;
-      return true;
-    }
-
-    @java.lang.Override
-    public void writeTo(com.google.protobuf.CodedOutputStream output)
-                        throws java.io.IOException {
-      if (bounds_ != null) {
-        output.writeMessage(1, getBounds());
-      }
-      if (!getNickBytes().isEmpty()) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 2, nick_);
-      }
-      unknownFields.writeTo(output);
-    }
-
-    @java.lang.Override
-    public int getSerializedSize() {
-      int size = memoizedSize;
-      if (size != -1) return size;
-
-      size = 0;
-      if (bounds_ != null) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeMessageSize(1, getBounds());
-      }
-      if (!getNickBytes().isEmpty()) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, nick_);
-      }
-      size += unknownFields.getSerializedSize();
-      memoizedSize = size;
-      return size;
-    }
-
-    @java.lang.Override
-    public boolean equals(final java.lang.Object obj) {
-      if (obj == this) {
-       return true;
-      }
-      if (!(obj instanceof gg.strims.ppspp.proto.Chat.Nick)) {
-        return super.equals(obj);
-      }
-      gg.strims.ppspp.proto.Chat.Nick other = (gg.strims.ppspp.proto.Chat.Nick) obj;
-
-      if (hasBounds() != other.hasBounds()) return false;
-      if (hasBounds()) {
-        if (!getBounds()
-            .equals(other.getBounds())) return false;
-      }
-      if (!getNick()
-          .equals(other.getNick())) return false;
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
-    }
-
-    @java.lang.Override
-    public int hashCode() {
-      if (memoizedHashCode != 0) {
-        return memoizedHashCode;
-      }
-      int hash = 41;
-      hash = (19 * hash) + getDescriptor().hashCode();
-      if (hasBounds()) {
-        hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
-        hash = (53 * hash) + getBounds().hashCode();
-      }
-      hash = (37 * hash) + NICK_FIELD_NUMBER;
-      hash = (53 * hash) + getNick().hashCode();
-      hash = (29 * hash) + unknownFields.hashCode();
-      memoizedHashCode = hash;
-      return hash;
-    }
-
-    public static gg.strims.ppspp.proto.Chat.Nick parseFrom(
-        java.nio.ByteBuffer data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Nick parseFrom(
-        java.nio.ByteBuffer data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Nick parseFrom(
-        com.google.protobuf.ByteString data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Nick parseFrom(
-        com.google.protobuf.ByteString data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Nick parseFrom(byte[] data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Nick parseFrom(
-        byte[] data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Nick parseFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Nick parseFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Nick parseDelimitedFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Nick parseDelimitedFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Nick parseFrom(
-        com.google.protobuf.CodedInputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Nick parseFrom(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-
-    @java.lang.Override
-    public Builder newBuilderForType() { return newBuilder(); }
-    public static Builder newBuilder() {
-      return DEFAULT_INSTANCE.toBuilder();
-    }
-    public static Builder newBuilder(gg.strims.ppspp.proto.Chat.Nick prototype) {
-      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
-    }
-    @java.lang.Override
-    public Builder toBuilder() {
-      return this == DEFAULT_INSTANCE
-          ? new Builder() : new Builder().mergeFrom(this);
-    }
-
-    @java.lang.Override
-    protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-      Builder builder = new Builder(parent);
-      return builder;
-    }
-    /**
-     * Protobuf type {@code Nick}
-     */
-    public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
-        // @@protoc_insertion_point(builder_implements:Nick)
-        gg.strims.ppspp.proto.Chat.NickOrBuilder {
-      public static final com.google.protobuf.Descriptors.Descriptor
-          getDescriptor() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Nick_descriptor;
-      }
-
-      @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-          internalGetFieldAccessorTable() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Nick_fieldAccessorTable
-            .ensureFieldAccessorsInitialized(
-                gg.strims.ppspp.proto.Chat.Nick.class, gg.strims.ppspp.proto.Chat.Nick.Builder.class);
-      }
-
-      // Construct using gg.strims.ppspp.proto.Chat.Nick.newBuilder()
-      private Builder() {
-        maybeForceBuilderInitialization();
-      }
-
-      private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-        super(parent);
-        maybeForceBuilderInitialization();
-      }
-      private void maybeForceBuilderInitialization() {
-        if (com.google.protobuf.GeneratedMessageV3
-                .alwaysUseFieldBuilders) {
-        }
-      }
-      @java.lang.Override
-      public Builder clear() {
-        super.clear();
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-        nick_ = "";
-
-        return this;
-      }
-
-      @java.lang.Override
-      public com.google.protobuf.Descriptors.Descriptor
-          getDescriptorForType() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Nick_descriptor;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Nick getDefaultInstanceForType() {
-        return gg.strims.ppspp.proto.Chat.Nick.getDefaultInstance();
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Nick build() {
-        gg.strims.ppspp.proto.Chat.Nick result = buildPartial();
-        if (!result.isInitialized()) {
-          throw newUninitializedMessageException(result);
-        }
-        return result;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Nick buildPartial() {
-        gg.strims.ppspp.proto.Chat.Nick result = new gg.strims.ppspp.proto.Chat.Nick(this);
-        if (boundsBuilder_ == null) {
-          result.bounds_ = bounds_;
-        } else {
-          result.bounds_ = boundsBuilder_.build();
-        }
-        result.nick_ = nick_;
-        onBuilt();
-        return result;
-      }
-
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
-      public Builder mergeFrom(com.google.protobuf.Message other) {
-        if (other instanceof gg.strims.ppspp.proto.Chat.Nick) {
-          return mergeFrom((gg.strims.ppspp.proto.Chat.Nick)other);
-        } else {
-          super.mergeFrom(other);
-          return this;
-        }
-      }
-
-      public Builder mergeFrom(gg.strims.ppspp.proto.Chat.Nick other) {
-        if (other == gg.strims.ppspp.proto.Chat.Nick.getDefaultInstance()) return this;
-        if (other.hasBounds()) {
-          mergeBounds(other.getBounds());
-        }
-        if (!other.getNick().isEmpty()) {
-          nick_ = other.nick_;
-          onChanged();
-        }
-        this.mergeUnknownFields(other.unknownFields);
-        onChanged();
-        return this;
-      }
-
-      @java.lang.Override
-      public final boolean isInitialized() {
-        return true;
-      }
-
-      @java.lang.Override
-      public Builder mergeFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws java.io.IOException {
-        gg.strims.ppspp.proto.Chat.Nick parsedMessage = null;
-        try {
-          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
-        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-          parsedMessage = (gg.strims.ppspp.proto.Chat.Nick) e.getUnfinishedMessage();
-          throw e.unwrapIOException();
-        } finally {
-          if (parsedMessage != null) {
-            mergeFrom(parsedMessage);
-          }
-        }
-        return this;
-      }
-
-      private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> boundsBuilder_;
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return Whether the bounds field is set.
-       */
-      public boolean hasBounds() {
-        return boundsBuilder_ != null || bounds_ != null;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return The bounds.
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-        if (boundsBuilder_ == null) {
-          return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        } else {
-          return boundsBuilder_.getMessage();
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (value == null) {
-            throw new NullPointerException();
-          }
-          bounds_ = value;
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(
-          gg.strims.ppspp.proto.Chat.Bounds.Builder builderForValue) {
-        if (boundsBuilder_ == null) {
-          bounds_ = builderForValue.build();
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(builderForValue.build());
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder mergeBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (bounds_ != null) {
-            bounds_ =
-              gg.strims.ppspp.proto.Chat.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
-          } else {
-            bounds_ = value;
-          }
-          onChanged();
-        } else {
-          boundsBuilder_.mergeFrom(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder clearBounds() {
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-          onChanged();
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds.Builder getBoundsBuilder() {
-        
-        onChanged();
-        return getBoundsFieldBuilder().getBuilder();
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-        if (boundsBuilder_ != null) {
-          return boundsBuilder_.getMessageOrBuilder();
-        } else {
-          return bounds_ == null ?
-              gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> 
-          getBoundsFieldBuilder() {
-        if (boundsBuilder_ == null) {
-          boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder>(
-                  getBounds(),
-                  getParentForChildren(),
-                  isClean());
-          bounds_ = null;
-        }
-        return boundsBuilder_;
-      }
-
-      private java.lang.Object nick_ = "";
-      /**
-       * <code>string nick = 2;</code>
-       * @return The nick.
-       */
-      public java.lang.String getNick() {
-        java.lang.Object ref = nick_;
-        if (!(ref instanceof java.lang.String)) {
-          com.google.protobuf.ByteString bs =
-              (com.google.protobuf.ByteString) ref;
-          java.lang.String s = bs.toStringUtf8();
-          nick_ = s;
-          return s;
-        } else {
-          return (java.lang.String) ref;
-        }
-      }
-      /**
-       * <code>string nick = 2;</code>
-       * @return The bytes for nick.
-       */
-      public com.google.protobuf.ByteString
-          getNickBytes() {
-        java.lang.Object ref = nick_;
-        if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
-              com.google.protobuf.ByteString.copyFromUtf8(
-                  (java.lang.String) ref);
-          nick_ = b;
-          return b;
-        } else {
-          return (com.google.protobuf.ByteString) ref;
-        }
-      }
-      /**
-       * <code>string nick = 2;</code>
-       * @param value The nick to set.
-       * @return This builder for chaining.
-       */
-      public Builder setNick(
-          java.lang.String value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
-        nick_ = value;
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>string nick = 2;</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearNick() {
-        
-        nick_ = getDefaultInstance().getNick();
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>string nick = 2;</code>
-       * @param value The bytes for nick to set.
-       * @return This builder for chaining.
-       */
-      public Builder setNickBytes(
-          com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  checkByteStringIsUtf8(value);
-        
-        nick_ = value;
-        onChanged();
-        return this;
-      }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
-
-      // @@protoc_insertion_point(builder_scope:Nick)
-    }
-
-    // @@protoc_insertion_point(class_scope:Nick)
-    private static final gg.strims.ppspp.proto.Chat.Nick DEFAULT_INSTANCE;
-    static {
-      DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.Nick();
-    }
-
-    public static gg.strims.ppspp.proto.Chat.Nick getDefaultInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    private static final com.google.protobuf.Parser<Nick>
-        PARSER = new com.google.protobuf.AbstractParser<Nick>() {
-      @java.lang.Override
-      public Nick parsePartialFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws com.google.protobuf.InvalidProtocolBufferException {
-        return new Nick(input, extensionRegistry);
-      }
-    };
-
-    public static com.google.protobuf.Parser<Nick> parser() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public com.google.protobuf.Parser<Nick> getParserForType() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Nick getDefaultInstanceForType() {
-      return DEFAULT_INSTANCE;
-    }
-
-  }
-
-  public interface TagOrBuilder extends
-      // @@protoc_insertion_point(interface_extends:Tag)
-      com.google.protobuf.MessageOrBuilder {
-
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    boolean hasBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    gg.strims.ppspp.proto.Chat.Bounds getBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder();
-
-    /**
-     * <code>string name = 2;</code>
-     * @return The name.
-     */
-    java.lang.String getName();
-    /**
-     * <code>string name = 2;</code>
-     * @return The bytes for name.
-     */
-    com.google.protobuf.ByteString
-        getNameBytes();
-  }
-  /**
-   * Protobuf type {@code Tag}
-   */
-  public static final class Tag extends
-      com.google.protobuf.GeneratedMessageV3 implements
-      // @@protoc_insertion_point(message_implements:Tag)
-      TagOrBuilder {
-  private static final long serialVersionUID = 0L;
-    // Use Tag.newBuilder() to construct.
-    private Tag(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
-      super(builder);
-    }
-    private Tag() {
-      name_ = "";
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Tag();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
-    private Tag(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      this();
-      if (extensionRegistry == null) {
-        throw new java.lang.NullPointerException();
-      }
-      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
-          com.google.protobuf.UnknownFieldSet.newBuilder();
-      try {
-        boolean done = false;
-        while (!done) {
-          int tag = input.readTag();
-          switch (tag) {
-            case 0:
-              done = true;
-              break;
-            case 10: {
-              gg.strims.ppspp.proto.Chat.Bounds.Builder subBuilder = null;
-              if (bounds_ != null) {
-                subBuilder = bounds_.toBuilder();
-              }
-              bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.Bounds.parser(), extensionRegistry);
-              if (subBuilder != null) {
-                subBuilder.mergeFrom(bounds_);
-                bounds_ = subBuilder.buildPartial();
-              }
-
-              break;
-            }
-            case 18: {
-              java.lang.String s = input.readStringRequireUtf8();
-
-              name_ = s;
-              break;
-            }
-            default: {
-              if (!parseUnknownField(
-                  input, unknownFields, extensionRegistry, tag)) {
-                done = true;
-              }
-              break;
-            }
-          }
-        }
-      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-        throw e.setUnfinishedMessage(this);
-      } catch (java.io.IOException e) {
-        throw new com.google.protobuf.InvalidProtocolBufferException(
-            e).setUnfinishedMessage(this);
-      } finally {
-        this.unknownFields = unknownFields.build();
-        makeExtensionsImmutable();
-      }
-    }
-    public static final com.google.protobuf.Descriptors.Descriptor
-        getDescriptor() {
-      return gg.strims.ppspp.proto.Chat.internal_static_Tag_descriptor;
-    }
-
-    @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-        internalGetFieldAccessorTable() {
-      return gg.strims.ppspp.proto.Chat.internal_static_Tag_fieldAccessorTable
-          .ensureFieldAccessorsInitialized(
-              gg.strims.ppspp.proto.Chat.Tag.class, gg.strims.ppspp.proto.Chat.Tag.Builder.class);
-    }
-
-    public static final int BOUNDS_FIELD_NUMBER = 1;
-    private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    @java.lang.Override
-    public boolean hasBounds() {
-      return bounds_ != null;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-      return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-      return getBounds();
-    }
-
-    public static final int NAME_FIELD_NUMBER = 2;
-    private volatile java.lang.Object name_;
-    /**
-     * <code>string name = 2;</code>
-     * @return The name.
-     */
-    @java.lang.Override
-    public java.lang.String getName() {
-      java.lang.Object ref = name_;
-      if (ref instanceof java.lang.String) {
-        return (java.lang.String) ref;
-      } else {
-        com.google.protobuf.ByteString bs = 
-            (com.google.protobuf.ByteString) ref;
-        java.lang.String s = bs.toStringUtf8();
-        name_ = s;
-        return s;
-      }
-    }
-    /**
-     * <code>string name = 2;</code>
-     * @return The bytes for name.
-     */
-    @java.lang.Override
-    public com.google.protobuf.ByteString
-        getNameBytes() {
-      java.lang.Object ref = name_;
-      if (ref instanceof java.lang.String) {
-        com.google.protobuf.ByteString b = 
-            com.google.protobuf.ByteString.copyFromUtf8(
-                (java.lang.String) ref);
-        name_ = b;
-        return b;
-      } else {
-        return (com.google.protobuf.ByteString) ref;
-      }
-    }
-
-    private byte memoizedIsInitialized = -1;
-    @java.lang.Override
-    public final boolean isInitialized() {
-      byte isInitialized = memoizedIsInitialized;
-      if (isInitialized == 1) return true;
-      if (isInitialized == 0) return false;
-
-      memoizedIsInitialized = 1;
-      return true;
-    }
-
-    @java.lang.Override
-    public void writeTo(com.google.protobuf.CodedOutputStream output)
-                        throws java.io.IOException {
-      if (bounds_ != null) {
-        output.writeMessage(1, getBounds());
-      }
-      if (!getNameBytes().isEmpty()) {
-        com.google.protobuf.GeneratedMessageV3.writeString(output, 2, name_);
-      }
-      unknownFields.writeTo(output);
-    }
-
-    @java.lang.Override
-    public int getSerializedSize() {
-      int size = memoizedSize;
-      if (size != -1) return size;
-
-      size = 0;
-      if (bounds_ != null) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeMessageSize(1, getBounds());
-      }
-      if (!getNameBytes().isEmpty()) {
-        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, name_);
-      }
-      size += unknownFields.getSerializedSize();
-      memoizedSize = size;
-      return size;
-    }
-
-    @java.lang.Override
-    public boolean equals(final java.lang.Object obj) {
-      if (obj == this) {
-       return true;
-      }
-      if (!(obj instanceof gg.strims.ppspp.proto.Chat.Tag)) {
-        return super.equals(obj);
-      }
-      gg.strims.ppspp.proto.Chat.Tag other = (gg.strims.ppspp.proto.Chat.Tag) obj;
-
-      if (hasBounds() != other.hasBounds()) return false;
-      if (hasBounds()) {
-        if (!getBounds()
-            .equals(other.getBounds())) return false;
-      }
-      if (!getName()
-          .equals(other.getName())) return false;
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
-    }
-
-    @java.lang.Override
-    public int hashCode() {
-      if (memoizedHashCode != 0) {
-        return memoizedHashCode;
-      }
-      int hash = 41;
-      hash = (19 * hash) + getDescriptor().hashCode();
-      if (hasBounds()) {
-        hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
-        hash = (53 * hash) + getBounds().hashCode();
-      }
-      hash = (37 * hash) + NAME_FIELD_NUMBER;
-      hash = (53 * hash) + getName().hashCode();
-      hash = (29 * hash) + unknownFields.hashCode();
-      memoizedHashCode = hash;
-      return hash;
-    }
-
-    public static gg.strims.ppspp.proto.Chat.Tag parseFrom(
-        java.nio.ByteBuffer data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Tag parseFrom(
-        java.nio.ByteBuffer data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Tag parseFrom(
-        com.google.protobuf.ByteString data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Tag parseFrom(
-        com.google.protobuf.ByteString data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Tag parseFrom(byte[] data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Tag parseFrom(
-        byte[] data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Tag parseFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Tag parseFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Tag parseDelimitedFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Tag parseDelimitedFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Tag parseFrom(
-        com.google.protobuf.CodedInputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Tag parseFrom(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-
-    @java.lang.Override
-    public Builder newBuilderForType() { return newBuilder(); }
-    public static Builder newBuilder() {
-      return DEFAULT_INSTANCE.toBuilder();
-    }
-    public static Builder newBuilder(gg.strims.ppspp.proto.Chat.Tag prototype) {
-      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
-    }
-    @java.lang.Override
-    public Builder toBuilder() {
-      return this == DEFAULT_INSTANCE
-          ? new Builder() : new Builder().mergeFrom(this);
-    }
-
-    @java.lang.Override
-    protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-      Builder builder = new Builder(parent);
-      return builder;
-    }
-    /**
-     * Protobuf type {@code Tag}
-     */
-    public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
-        // @@protoc_insertion_point(builder_implements:Tag)
-        gg.strims.ppspp.proto.Chat.TagOrBuilder {
-      public static final com.google.protobuf.Descriptors.Descriptor
-          getDescriptor() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Tag_descriptor;
-      }
-
-      @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-          internalGetFieldAccessorTable() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Tag_fieldAccessorTable
-            .ensureFieldAccessorsInitialized(
-                gg.strims.ppspp.proto.Chat.Tag.class, gg.strims.ppspp.proto.Chat.Tag.Builder.class);
-      }
-
-      // Construct using gg.strims.ppspp.proto.Chat.Tag.newBuilder()
-      private Builder() {
-        maybeForceBuilderInitialization();
-      }
-
-      private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-        super(parent);
-        maybeForceBuilderInitialization();
-      }
-      private void maybeForceBuilderInitialization() {
-        if (com.google.protobuf.GeneratedMessageV3
-                .alwaysUseFieldBuilders) {
-        }
-      }
-      @java.lang.Override
-      public Builder clear() {
-        super.clear();
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-        name_ = "";
-
-        return this;
-      }
-
-      @java.lang.Override
-      public com.google.protobuf.Descriptors.Descriptor
-          getDescriptorForType() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Tag_descriptor;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Tag getDefaultInstanceForType() {
-        return gg.strims.ppspp.proto.Chat.Tag.getDefaultInstance();
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Tag build() {
-        gg.strims.ppspp.proto.Chat.Tag result = buildPartial();
-        if (!result.isInitialized()) {
-          throw newUninitializedMessageException(result);
-        }
-        return result;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Tag buildPartial() {
-        gg.strims.ppspp.proto.Chat.Tag result = new gg.strims.ppspp.proto.Chat.Tag(this);
-        if (boundsBuilder_ == null) {
-          result.bounds_ = bounds_;
-        } else {
-          result.bounds_ = boundsBuilder_.build();
-        }
-        result.name_ = name_;
-        onBuilt();
-        return result;
-      }
-
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
-      public Builder mergeFrom(com.google.protobuf.Message other) {
-        if (other instanceof gg.strims.ppspp.proto.Chat.Tag) {
-          return mergeFrom((gg.strims.ppspp.proto.Chat.Tag)other);
-        } else {
-          super.mergeFrom(other);
-          return this;
-        }
-      }
-
-      public Builder mergeFrom(gg.strims.ppspp.proto.Chat.Tag other) {
-        if (other == gg.strims.ppspp.proto.Chat.Tag.getDefaultInstance()) return this;
-        if (other.hasBounds()) {
-          mergeBounds(other.getBounds());
-        }
-        if (!other.getName().isEmpty()) {
-          name_ = other.name_;
-          onChanged();
-        }
-        this.mergeUnknownFields(other.unknownFields);
-        onChanged();
-        return this;
-      }
-
-      @java.lang.Override
-      public final boolean isInitialized() {
-        return true;
-      }
-
-      @java.lang.Override
-      public Builder mergeFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws java.io.IOException {
-        gg.strims.ppspp.proto.Chat.Tag parsedMessage = null;
-        try {
-          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
-        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-          parsedMessage = (gg.strims.ppspp.proto.Chat.Tag) e.getUnfinishedMessage();
-          throw e.unwrapIOException();
-        } finally {
-          if (parsedMessage != null) {
-            mergeFrom(parsedMessage);
-          }
-        }
-        return this;
-      }
-
-      private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> boundsBuilder_;
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return Whether the bounds field is set.
-       */
-      public boolean hasBounds() {
-        return boundsBuilder_ != null || bounds_ != null;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return The bounds.
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-        if (boundsBuilder_ == null) {
-          return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        } else {
-          return boundsBuilder_.getMessage();
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (value == null) {
-            throw new NullPointerException();
-          }
-          bounds_ = value;
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(
-          gg.strims.ppspp.proto.Chat.Bounds.Builder builderForValue) {
-        if (boundsBuilder_ == null) {
-          bounds_ = builderForValue.build();
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(builderForValue.build());
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder mergeBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (bounds_ != null) {
-            bounds_ =
-              gg.strims.ppspp.proto.Chat.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
-          } else {
-            bounds_ = value;
-          }
-          onChanged();
-        } else {
-          boundsBuilder_.mergeFrom(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder clearBounds() {
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-          onChanged();
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds.Builder getBoundsBuilder() {
-        
-        onChanged();
-        return getBoundsFieldBuilder().getBuilder();
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-        if (boundsBuilder_ != null) {
-          return boundsBuilder_.getMessageOrBuilder();
-        } else {
-          return bounds_ == null ?
-              gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> 
-          getBoundsFieldBuilder() {
-        if (boundsBuilder_ == null) {
-          boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder>(
-                  getBounds(),
-                  getParentForChildren(),
-                  isClean());
-          bounds_ = null;
-        }
-        return boundsBuilder_;
-      }
-
-      private java.lang.Object name_ = "";
-      /**
-       * <code>string name = 2;</code>
-       * @return The name.
-       */
-      public java.lang.String getName() {
-        java.lang.Object ref = name_;
-        if (!(ref instanceof java.lang.String)) {
-          com.google.protobuf.ByteString bs =
-              (com.google.protobuf.ByteString) ref;
-          java.lang.String s = bs.toStringUtf8();
-          name_ = s;
-          return s;
-        } else {
-          return (java.lang.String) ref;
-        }
-      }
-      /**
-       * <code>string name = 2;</code>
-       * @return The bytes for name.
-       */
-      public com.google.protobuf.ByteString
-          getNameBytes() {
-        java.lang.Object ref = name_;
-        if (ref instanceof String) {
-          com.google.protobuf.ByteString b = 
-              com.google.protobuf.ByteString.copyFromUtf8(
-                  (java.lang.String) ref);
-          name_ = b;
-          return b;
-        } else {
-          return (com.google.protobuf.ByteString) ref;
-        }
-      }
-      /**
-       * <code>string name = 2;</code>
-       * @param value The name to set.
-       * @return This builder for chaining.
-       */
-      public Builder setName(
-          java.lang.String value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  
-        name_ = value;
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>string name = 2;</code>
-       * @return This builder for chaining.
-       */
-      public Builder clearName() {
-        
-        name_ = getDefaultInstance().getName();
-        onChanged();
-        return this;
-      }
-      /**
-       * <code>string name = 2;</code>
-       * @param value The bytes for name to set.
-       * @return This builder for chaining.
-       */
-      public Builder setNameBytes(
-          com.google.protobuf.ByteString value) {
-        if (value == null) {
-    throw new NullPointerException();
-  }
-  checkByteStringIsUtf8(value);
-        
-        name_ = value;
-        onChanged();
-        return this;
-      }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
-
-      // @@protoc_insertion_point(builder_scope:Tag)
-    }
-
-    // @@protoc_insertion_point(class_scope:Tag)
-    private static final gg.strims.ppspp.proto.Chat.Tag DEFAULT_INSTANCE;
-    static {
-      DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.Tag();
-    }
-
-    public static gg.strims.ppspp.proto.Chat.Tag getDefaultInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    private static final com.google.protobuf.Parser<Tag>
-        PARSER = new com.google.protobuf.AbstractParser<Tag>() {
-      @java.lang.Override
-      public Tag parsePartialFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws com.google.protobuf.InvalidProtocolBufferException {
-        return new Tag(input, extensionRegistry);
-      }
-    };
-
-    public static com.google.protobuf.Parser<Tag> parser() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public com.google.protobuf.Parser<Tag> getParserForType() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Tag getDefaultInstanceForType() {
-      return DEFAULT_INSTANCE;
-    }
-
-  }
-
-  public interface CodeBlockOrBuilder extends
-      // @@protoc_insertion_point(interface_extends:CodeBlock)
-      com.google.protobuf.MessageOrBuilder {
-
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    boolean hasBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    gg.strims.ppspp.proto.Chat.Bounds getBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder();
-  }
-  /**
-   * Protobuf type {@code CodeBlock}
-   */
-  public static final class CodeBlock extends
-      com.google.protobuf.GeneratedMessageV3 implements
-      // @@protoc_insertion_point(message_implements:CodeBlock)
-      CodeBlockOrBuilder {
-  private static final long serialVersionUID = 0L;
-    // Use CodeBlock.newBuilder() to construct.
-    private CodeBlock(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
-      super(builder);
-    }
-    private CodeBlock() {
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new CodeBlock();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
-    private CodeBlock(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      this();
-      if (extensionRegistry == null) {
-        throw new java.lang.NullPointerException();
-      }
-      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
-          com.google.protobuf.UnknownFieldSet.newBuilder();
-      try {
-        boolean done = false;
-        while (!done) {
-          int tag = input.readTag();
-          switch (tag) {
-            case 0:
-              done = true;
-              break;
-            case 10: {
-              gg.strims.ppspp.proto.Chat.Bounds.Builder subBuilder = null;
-              if (bounds_ != null) {
-                subBuilder = bounds_.toBuilder();
-              }
-              bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.Bounds.parser(), extensionRegistry);
-              if (subBuilder != null) {
-                subBuilder.mergeFrom(bounds_);
-                bounds_ = subBuilder.buildPartial();
-              }
-
-              break;
-            }
-            default: {
-              if (!parseUnknownField(
-                  input, unknownFields, extensionRegistry, tag)) {
-                done = true;
-              }
-              break;
-            }
-          }
-        }
-      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-        throw e.setUnfinishedMessage(this);
-      } catch (java.io.IOException e) {
-        throw new com.google.protobuf.InvalidProtocolBufferException(
-            e).setUnfinishedMessage(this);
-      } finally {
-        this.unknownFields = unknownFields.build();
-        makeExtensionsImmutable();
-      }
-    }
-    public static final com.google.protobuf.Descriptors.Descriptor
-        getDescriptor() {
-      return gg.strims.ppspp.proto.Chat.internal_static_CodeBlock_descriptor;
-    }
-
-    @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-        internalGetFieldAccessorTable() {
-      return gg.strims.ppspp.proto.Chat.internal_static_CodeBlock_fieldAccessorTable
-          .ensureFieldAccessorsInitialized(
-              gg.strims.ppspp.proto.Chat.CodeBlock.class, gg.strims.ppspp.proto.Chat.CodeBlock.Builder.class);
-    }
-
-    public static final int BOUNDS_FIELD_NUMBER = 1;
-    private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    @java.lang.Override
-    public boolean hasBounds() {
-      return bounds_ != null;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-      return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-      return getBounds();
-    }
-
-    private byte memoizedIsInitialized = -1;
-    @java.lang.Override
-    public final boolean isInitialized() {
-      byte isInitialized = memoizedIsInitialized;
-      if (isInitialized == 1) return true;
-      if (isInitialized == 0) return false;
-
-      memoizedIsInitialized = 1;
-      return true;
-    }
-
-    @java.lang.Override
-    public void writeTo(com.google.protobuf.CodedOutputStream output)
-                        throws java.io.IOException {
-      if (bounds_ != null) {
-        output.writeMessage(1, getBounds());
-      }
-      unknownFields.writeTo(output);
-    }
-
-    @java.lang.Override
-    public int getSerializedSize() {
-      int size = memoizedSize;
-      if (size != -1) return size;
-
-      size = 0;
-      if (bounds_ != null) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeMessageSize(1, getBounds());
-      }
-      size += unknownFields.getSerializedSize();
-      memoizedSize = size;
-      return size;
-    }
-
-    @java.lang.Override
-    public boolean equals(final java.lang.Object obj) {
-      if (obj == this) {
-       return true;
-      }
-      if (!(obj instanceof gg.strims.ppspp.proto.Chat.CodeBlock)) {
-        return super.equals(obj);
-      }
-      gg.strims.ppspp.proto.Chat.CodeBlock other = (gg.strims.ppspp.proto.Chat.CodeBlock) obj;
-
-      if (hasBounds() != other.hasBounds()) return false;
-      if (hasBounds()) {
-        if (!getBounds()
-            .equals(other.getBounds())) return false;
-      }
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
-    }
-
-    @java.lang.Override
-    public int hashCode() {
-      if (memoizedHashCode != 0) {
-        return memoizedHashCode;
-      }
-      int hash = 41;
-      hash = (19 * hash) + getDescriptor().hashCode();
-      if (hasBounds()) {
-        hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
-        hash = (53 * hash) + getBounds().hashCode();
-      }
-      hash = (29 * hash) + unknownFields.hashCode();
-      memoizedHashCode = hash;
-      return hash;
-    }
-
-    public static gg.strims.ppspp.proto.Chat.CodeBlock parseFrom(
-        java.nio.ByteBuffer data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.CodeBlock parseFrom(
-        java.nio.ByteBuffer data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.CodeBlock parseFrom(
-        com.google.protobuf.ByteString data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.CodeBlock parseFrom(
-        com.google.protobuf.ByteString data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.CodeBlock parseFrom(byte[] data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.CodeBlock parseFrom(
-        byte[] data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.CodeBlock parseFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.CodeBlock parseFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.CodeBlock parseDelimitedFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.CodeBlock parseDelimitedFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.CodeBlock parseFrom(
-        com.google.protobuf.CodedInputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.CodeBlock parseFrom(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-
-    @java.lang.Override
-    public Builder newBuilderForType() { return newBuilder(); }
-    public static Builder newBuilder() {
-      return DEFAULT_INSTANCE.toBuilder();
-    }
-    public static Builder newBuilder(gg.strims.ppspp.proto.Chat.CodeBlock prototype) {
-      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
-    }
-    @java.lang.Override
-    public Builder toBuilder() {
-      return this == DEFAULT_INSTANCE
-          ? new Builder() : new Builder().mergeFrom(this);
-    }
-
-    @java.lang.Override
-    protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-      Builder builder = new Builder(parent);
-      return builder;
-    }
-    /**
-     * Protobuf type {@code CodeBlock}
-     */
-    public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
-        // @@protoc_insertion_point(builder_implements:CodeBlock)
-        gg.strims.ppspp.proto.Chat.CodeBlockOrBuilder {
-      public static final com.google.protobuf.Descriptors.Descriptor
-          getDescriptor() {
-        return gg.strims.ppspp.proto.Chat.internal_static_CodeBlock_descriptor;
-      }
-
-      @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-          internalGetFieldAccessorTable() {
-        return gg.strims.ppspp.proto.Chat.internal_static_CodeBlock_fieldAccessorTable
-            .ensureFieldAccessorsInitialized(
-                gg.strims.ppspp.proto.Chat.CodeBlock.class, gg.strims.ppspp.proto.Chat.CodeBlock.Builder.class);
-      }
-
-      // Construct using gg.strims.ppspp.proto.Chat.CodeBlock.newBuilder()
-      private Builder() {
-        maybeForceBuilderInitialization();
-      }
-
-      private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-        super(parent);
-        maybeForceBuilderInitialization();
-      }
-      private void maybeForceBuilderInitialization() {
-        if (com.google.protobuf.GeneratedMessageV3
-                .alwaysUseFieldBuilders) {
-        }
-      }
-      @java.lang.Override
-      public Builder clear() {
-        super.clear();
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-        return this;
-      }
-
-      @java.lang.Override
-      public com.google.protobuf.Descriptors.Descriptor
-          getDescriptorForType() {
-        return gg.strims.ppspp.proto.Chat.internal_static_CodeBlock_descriptor;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.CodeBlock getDefaultInstanceForType() {
-        return gg.strims.ppspp.proto.Chat.CodeBlock.getDefaultInstance();
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.CodeBlock build() {
-        gg.strims.ppspp.proto.Chat.CodeBlock result = buildPartial();
-        if (!result.isInitialized()) {
-          throw newUninitializedMessageException(result);
-        }
-        return result;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.CodeBlock buildPartial() {
-        gg.strims.ppspp.proto.Chat.CodeBlock result = new gg.strims.ppspp.proto.Chat.CodeBlock(this);
-        if (boundsBuilder_ == null) {
-          result.bounds_ = bounds_;
-        } else {
-          result.bounds_ = boundsBuilder_.build();
-        }
-        onBuilt();
-        return result;
-      }
-
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
-      public Builder mergeFrom(com.google.protobuf.Message other) {
-        if (other instanceof gg.strims.ppspp.proto.Chat.CodeBlock) {
-          return mergeFrom((gg.strims.ppspp.proto.Chat.CodeBlock)other);
-        } else {
-          super.mergeFrom(other);
-          return this;
-        }
-      }
-
-      public Builder mergeFrom(gg.strims.ppspp.proto.Chat.CodeBlock other) {
-        if (other == gg.strims.ppspp.proto.Chat.CodeBlock.getDefaultInstance()) return this;
-        if (other.hasBounds()) {
-          mergeBounds(other.getBounds());
-        }
-        this.mergeUnknownFields(other.unknownFields);
-        onChanged();
-        return this;
-      }
-
-      @java.lang.Override
-      public final boolean isInitialized() {
-        return true;
-      }
-
-      @java.lang.Override
-      public Builder mergeFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws java.io.IOException {
-        gg.strims.ppspp.proto.Chat.CodeBlock parsedMessage = null;
-        try {
-          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
-        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-          parsedMessage = (gg.strims.ppspp.proto.Chat.CodeBlock) e.getUnfinishedMessage();
-          throw e.unwrapIOException();
-        } finally {
-          if (parsedMessage != null) {
-            mergeFrom(parsedMessage);
-          }
-        }
-        return this;
-      }
-
-      private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> boundsBuilder_;
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return Whether the bounds field is set.
-       */
-      public boolean hasBounds() {
-        return boundsBuilder_ != null || bounds_ != null;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return The bounds.
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-        if (boundsBuilder_ == null) {
-          return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        } else {
-          return boundsBuilder_.getMessage();
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (value == null) {
-            throw new NullPointerException();
-          }
-          bounds_ = value;
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(
-          gg.strims.ppspp.proto.Chat.Bounds.Builder builderForValue) {
-        if (boundsBuilder_ == null) {
-          bounds_ = builderForValue.build();
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(builderForValue.build());
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder mergeBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (bounds_ != null) {
-            bounds_ =
-              gg.strims.ppspp.proto.Chat.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
-          } else {
-            bounds_ = value;
-          }
-          onChanged();
-        } else {
-          boundsBuilder_.mergeFrom(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder clearBounds() {
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-          onChanged();
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds.Builder getBoundsBuilder() {
-        
-        onChanged();
-        return getBoundsFieldBuilder().getBuilder();
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-        if (boundsBuilder_ != null) {
-          return boundsBuilder_.getMessageOrBuilder();
-        } else {
-          return bounds_ == null ?
-              gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> 
-          getBoundsFieldBuilder() {
-        if (boundsBuilder_ == null) {
-          boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder>(
-                  getBounds(),
-                  getParentForChildren(),
-                  isClean());
-          bounds_ = null;
-        }
-        return boundsBuilder_;
-      }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
-
-      // @@protoc_insertion_point(builder_scope:CodeBlock)
-    }
-
-    // @@protoc_insertion_point(class_scope:CodeBlock)
-    private static final gg.strims.ppspp.proto.Chat.CodeBlock DEFAULT_INSTANCE;
-    static {
-      DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.CodeBlock();
-    }
-
-    public static gg.strims.ppspp.proto.Chat.CodeBlock getDefaultInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    private static final com.google.protobuf.Parser<CodeBlock>
-        PARSER = new com.google.protobuf.AbstractParser<CodeBlock>() {
-      @java.lang.Override
-      public CodeBlock parsePartialFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws com.google.protobuf.InvalidProtocolBufferException {
-        return new CodeBlock(input, extensionRegistry);
-      }
-    };
-
-    public static com.google.protobuf.Parser<CodeBlock> parser() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public com.google.protobuf.Parser<CodeBlock> getParserForType() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.CodeBlock getDefaultInstanceForType() {
-      return DEFAULT_INSTANCE;
-    }
-
-  }
-
-  public interface SpoilerOrBuilder extends
-      // @@protoc_insertion_point(interface_extends:Spoiler)
-      com.google.protobuf.MessageOrBuilder {
-
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    boolean hasBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    gg.strims.ppspp.proto.Chat.Bounds getBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder();
-  }
-  /**
-   * Protobuf type {@code Spoiler}
-   */
-  public static final class Spoiler extends
-      com.google.protobuf.GeneratedMessageV3 implements
-      // @@protoc_insertion_point(message_implements:Spoiler)
-      SpoilerOrBuilder {
-  private static final long serialVersionUID = 0L;
-    // Use Spoiler.newBuilder() to construct.
-    private Spoiler(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
-      super(builder);
-    }
-    private Spoiler() {
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new Spoiler();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
-    private Spoiler(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      this();
-      if (extensionRegistry == null) {
-        throw new java.lang.NullPointerException();
-      }
-      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
-          com.google.protobuf.UnknownFieldSet.newBuilder();
-      try {
-        boolean done = false;
-        while (!done) {
-          int tag = input.readTag();
-          switch (tag) {
-            case 0:
-              done = true;
-              break;
-            case 10: {
-              gg.strims.ppspp.proto.Chat.Bounds.Builder subBuilder = null;
-              if (bounds_ != null) {
-                subBuilder = bounds_.toBuilder();
-              }
-              bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.Bounds.parser(), extensionRegistry);
-              if (subBuilder != null) {
-                subBuilder.mergeFrom(bounds_);
-                bounds_ = subBuilder.buildPartial();
-              }
-
-              break;
-            }
-            default: {
-              if (!parseUnknownField(
-                  input, unknownFields, extensionRegistry, tag)) {
-                done = true;
-              }
-              break;
-            }
-          }
-        }
-      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-        throw e.setUnfinishedMessage(this);
-      } catch (java.io.IOException e) {
-        throw new com.google.protobuf.InvalidProtocolBufferException(
-            e).setUnfinishedMessage(this);
-      } finally {
-        this.unknownFields = unknownFields.build();
-        makeExtensionsImmutable();
-      }
-    }
-    public static final com.google.protobuf.Descriptors.Descriptor
-        getDescriptor() {
-      return gg.strims.ppspp.proto.Chat.internal_static_Spoiler_descriptor;
-    }
-
-    @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-        internalGetFieldAccessorTable() {
-      return gg.strims.ppspp.proto.Chat.internal_static_Spoiler_fieldAccessorTable
-          .ensureFieldAccessorsInitialized(
-              gg.strims.ppspp.proto.Chat.Spoiler.class, gg.strims.ppspp.proto.Chat.Spoiler.Builder.class);
-    }
-
-    public static final int BOUNDS_FIELD_NUMBER = 1;
-    private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    @java.lang.Override
-    public boolean hasBounds() {
-      return bounds_ != null;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-      return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-      return getBounds();
-    }
-
-    private byte memoizedIsInitialized = -1;
-    @java.lang.Override
-    public final boolean isInitialized() {
-      byte isInitialized = memoizedIsInitialized;
-      if (isInitialized == 1) return true;
-      if (isInitialized == 0) return false;
-
-      memoizedIsInitialized = 1;
-      return true;
-    }
-
-    @java.lang.Override
-    public void writeTo(com.google.protobuf.CodedOutputStream output)
-                        throws java.io.IOException {
-      if (bounds_ != null) {
-        output.writeMessage(1, getBounds());
-      }
-      unknownFields.writeTo(output);
-    }
-
-    @java.lang.Override
-    public int getSerializedSize() {
-      int size = memoizedSize;
-      if (size != -1) return size;
-
-      size = 0;
-      if (bounds_ != null) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeMessageSize(1, getBounds());
-      }
-      size += unknownFields.getSerializedSize();
-      memoizedSize = size;
-      return size;
-    }
-
-    @java.lang.Override
-    public boolean equals(final java.lang.Object obj) {
-      if (obj == this) {
-       return true;
-      }
-      if (!(obj instanceof gg.strims.ppspp.proto.Chat.Spoiler)) {
-        return super.equals(obj);
-      }
-      gg.strims.ppspp.proto.Chat.Spoiler other = (gg.strims.ppspp.proto.Chat.Spoiler) obj;
-
-      if (hasBounds() != other.hasBounds()) return false;
-      if (hasBounds()) {
-        if (!getBounds()
-            .equals(other.getBounds())) return false;
-      }
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
-    }
-
-    @java.lang.Override
-    public int hashCode() {
-      if (memoizedHashCode != 0) {
-        return memoizedHashCode;
-      }
-      int hash = 41;
-      hash = (19 * hash) + getDescriptor().hashCode();
-      if (hasBounds()) {
-        hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
-        hash = (53 * hash) + getBounds().hashCode();
-      }
-      hash = (29 * hash) + unknownFields.hashCode();
-      memoizedHashCode = hash;
-      return hash;
-    }
-
-    public static gg.strims.ppspp.proto.Chat.Spoiler parseFrom(
-        java.nio.ByteBuffer data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Spoiler parseFrom(
-        java.nio.ByteBuffer data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Spoiler parseFrom(
-        com.google.protobuf.ByteString data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Spoiler parseFrom(
-        com.google.protobuf.ByteString data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Spoiler parseFrom(byte[] data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.Spoiler parseFrom(
-        byte[] data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Spoiler parseFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Spoiler parseFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Spoiler parseDelimitedFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Spoiler parseDelimitedFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.Spoiler parseFrom(
-        com.google.protobuf.CodedInputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.Spoiler parseFrom(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-
-    @java.lang.Override
-    public Builder newBuilderForType() { return newBuilder(); }
-    public static Builder newBuilder() {
-      return DEFAULT_INSTANCE.toBuilder();
-    }
-    public static Builder newBuilder(gg.strims.ppspp.proto.Chat.Spoiler prototype) {
-      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
-    }
-    @java.lang.Override
-    public Builder toBuilder() {
-      return this == DEFAULT_INSTANCE
-          ? new Builder() : new Builder().mergeFrom(this);
-    }
-
-    @java.lang.Override
-    protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-      Builder builder = new Builder(parent);
-      return builder;
-    }
-    /**
-     * Protobuf type {@code Spoiler}
-     */
-    public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
-        // @@protoc_insertion_point(builder_implements:Spoiler)
-        gg.strims.ppspp.proto.Chat.SpoilerOrBuilder {
-      public static final com.google.protobuf.Descriptors.Descriptor
-          getDescriptor() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Spoiler_descriptor;
-      }
-
-      @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-          internalGetFieldAccessorTable() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Spoiler_fieldAccessorTable
-            .ensureFieldAccessorsInitialized(
-                gg.strims.ppspp.proto.Chat.Spoiler.class, gg.strims.ppspp.proto.Chat.Spoiler.Builder.class);
-      }
-
-      // Construct using gg.strims.ppspp.proto.Chat.Spoiler.newBuilder()
-      private Builder() {
-        maybeForceBuilderInitialization();
-      }
-
-      private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-        super(parent);
-        maybeForceBuilderInitialization();
-      }
-      private void maybeForceBuilderInitialization() {
-        if (com.google.protobuf.GeneratedMessageV3
-                .alwaysUseFieldBuilders) {
-        }
-      }
-      @java.lang.Override
-      public Builder clear() {
-        super.clear();
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-        return this;
-      }
-
-      @java.lang.Override
-      public com.google.protobuf.Descriptors.Descriptor
-          getDescriptorForType() {
-        return gg.strims.ppspp.proto.Chat.internal_static_Spoiler_descriptor;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Spoiler getDefaultInstanceForType() {
-        return gg.strims.ppspp.proto.Chat.Spoiler.getDefaultInstance();
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Spoiler build() {
-        gg.strims.ppspp.proto.Chat.Spoiler result = buildPartial();
-        if (!result.isInitialized()) {
-          throw newUninitializedMessageException(result);
-        }
-        return result;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.Spoiler buildPartial() {
-        gg.strims.ppspp.proto.Chat.Spoiler result = new gg.strims.ppspp.proto.Chat.Spoiler(this);
-        if (boundsBuilder_ == null) {
-          result.bounds_ = bounds_;
-        } else {
-          result.bounds_ = boundsBuilder_.build();
-        }
-        onBuilt();
-        return result;
-      }
-
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
-      public Builder mergeFrom(com.google.protobuf.Message other) {
-        if (other instanceof gg.strims.ppspp.proto.Chat.Spoiler) {
-          return mergeFrom((gg.strims.ppspp.proto.Chat.Spoiler)other);
-        } else {
-          super.mergeFrom(other);
-          return this;
-        }
-      }
-
-      public Builder mergeFrom(gg.strims.ppspp.proto.Chat.Spoiler other) {
-        if (other == gg.strims.ppspp.proto.Chat.Spoiler.getDefaultInstance()) return this;
-        if (other.hasBounds()) {
-          mergeBounds(other.getBounds());
-        }
-        this.mergeUnknownFields(other.unknownFields);
-        onChanged();
-        return this;
-      }
-
-      @java.lang.Override
-      public final boolean isInitialized() {
-        return true;
-      }
-
-      @java.lang.Override
-      public Builder mergeFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws java.io.IOException {
-        gg.strims.ppspp.proto.Chat.Spoiler parsedMessage = null;
-        try {
-          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
-        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-          parsedMessage = (gg.strims.ppspp.proto.Chat.Spoiler) e.getUnfinishedMessage();
-          throw e.unwrapIOException();
-        } finally {
-          if (parsedMessage != null) {
-            mergeFrom(parsedMessage);
-          }
-        }
-        return this;
-      }
-
-      private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> boundsBuilder_;
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return Whether the bounds field is set.
-       */
-      public boolean hasBounds() {
-        return boundsBuilder_ != null || bounds_ != null;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return The bounds.
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-        if (boundsBuilder_ == null) {
-          return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        } else {
-          return boundsBuilder_.getMessage();
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (value == null) {
-            throw new NullPointerException();
-          }
-          bounds_ = value;
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(
-          gg.strims.ppspp.proto.Chat.Bounds.Builder builderForValue) {
-        if (boundsBuilder_ == null) {
-          bounds_ = builderForValue.build();
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(builderForValue.build());
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder mergeBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (bounds_ != null) {
-            bounds_ =
-              gg.strims.ppspp.proto.Chat.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
-          } else {
-            bounds_ = value;
-          }
-          onChanged();
-        } else {
-          boundsBuilder_.mergeFrom(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder clearBounds() {
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-          onChanged();
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds.Builder getBoundsBuilder() {
-        
-        onChanged();
-        return getBoundsFieldBuilder().getBuilder();
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-        if (boundsBuilder_ != null) {
-          return boundsBuilder_.getMessageOrBuilder();
-        } else {
-          return bounds_ == null ?
-              gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> 
-          getBoundsFieldBuilder() {
-        if (boundsBuilder_ == null) {
-          boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder>(
-                  getBounds(),
-                  getParentForChildren(),
-                  isClean());
-          bounds_ = null;
-        }
-        return boundsBuilder_;
-      }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
-
-      // @@protoc_insertion_point(builder_scope:Spoiler)
-    }
-
-    // @@protoc_insertion_point(class_scope:Spoiler)
-    private static final gg.strims.ppspp.proto.Chat.Spoiler DEFAULT_INSTANCE;
-    static {
-      DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.Spoiler();
-    }
-
-    public static gg.strims.ppspp.proto.Chat.Spoiler getDefaultInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    private static final com.google.protobuf.Parser<Spoiler>
-        PARSER = new com.google.protobuf.AbstractParser<Spoiler>() {
-      @java.lang.Override
-      public Spoiler parsePartialFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws com.google.protobuf.InvalidProtocolBufferException {
-        return new Spoiler(input, extensionRegistry);
-      }
-    };
-
-    public static com.google.protobuf.Parser<Spoiler> parser() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public com.google.protobuf.Parser<Spoiler> getParserForType() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Spoiler getDefaultInstanceForType() {
-      return DEFAULT_INSTANCE;
-    }
-
-  }
-
-  public interface GenericEntityOrBuilder extends
-      // @@protoc_insertion_point(interface_extends:GenericEntity)
-      com.google.protobuf.MessageOrBuilder {
-
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    boolean hasBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    gg.strims.ppspp.proto.Chat.Bounds getBounds();
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder();
-  }
-  /**
-   * Protobuf type {@code GenericEntity}
-   */
-  public static final class GenericEntity extends
-      com.google.protobuf.GeneratedMessageV3 implements
-      // @@protoc_insertion_point(message_implements:GenericEntity)
-      GenericEntityOrBuilder {
-  private static final long serialVersionUID = 0L;
-    // Use GenericEntity.newBuilder() to construct.
-    private GenericEntity(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
-      super(builder);
-    }
-    private GenericEntity() {
-    }
-
-    @java.lang.Override
-    @SuppressWarnings({"unused"})
-    protected java.lang.Object newInstance(
-        UnusedPrivateParameter unused) {
-      return new GenericEntity();
-    }
-
-    @java.lang.Override
-    public final com.google.protobuf.UnknownFieldSet
-    getUnknownFields() {
-      return this.unknownFields;
-    }
-    private GenericEntity(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      this();
-      if (extensionRegistry == null) {
-        throw new java.lang.NullPointerException();
-      }
-      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
-          com.google.protobuf.UnknownFieldSet.newBuilder();
-      try {
-        boolean done = false;
-        while (!done) {
-          int tag = input.readTag();
-          switch (tag) {
-            case 0:
-              done = true;
-              break;
-            case 10: {
-              gg.strims.ppspp.proto.Chat.Bounds.Builder subBuilder = null;
-              if (bounds_ != null) {
-                subBuilder = bounds_.toBuilder();
-              }
-              bounds_ = input.readMessage(gg.strims.ppspp.proto.Chat.Bounds.parser(), extensionRegistry);
-              if (subBuilder != null) {
-                subBuilder.mergeFrom(bounds_);
-                bounds_ = subBuilder.buildPartial();
-              }
-
-              break;
-            }
-            default: {
-              if (!parseUnknownField(
-                  input, unknownFields, extensionRegistry, tag)) {
-                done = true;
-              }
-              break;
-            }
-          }
-        }
-      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-        throw e.setUnfinishedMessage(this);
-      } catch (java.io.IOException e) {
-        throw new com.google.protobuf.InvalidProtocolBufferException(
-            e).setUnfinishedMessage(this);
-      } finally {
-        this.unknownFields = unknownFields.build();
-        makeExtensionsImmutable();
-      }
-    }
-    public static final com.google.protobuf.Descriptors.Descriptor
-        getDescriptor() {
-      return gg.strims.ppspp.proto.Chat.internal_static_GenericEntity_descriptor;
-    }
-
-    @java.lang.Override
-    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-        internalGetFieldAccessorTable() {
-      return gg.strims.ppspp.proto.Chat.internal_static_GenericEntity_fieldAccessorTable
-          .ensureFieldAccessorsInitialized(
-              gg.strims.ppspp.proto.Chat.GenericEntity.class, gg.strims.ppspp.proto.Chat.GenericEntity.Builder.class);
-    }
-
-    public static final int BOUNDS_FIELD_NUMBER = 1;
-    private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return Whether the bounds field is set.
-     */
-    @java.lang.Override
-    public boolean hasBounds() {
-      return bounds_ != null;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     * @return The bounds.
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-      return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-    }
-    /**
-     * <code>.Bounds bounds = 1;</code>
-     */
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-      return getBounds();
-    }
-
-    private byte memoizedIsInitialized = -1;
-    @java.lang.Override
-    public final boolean isInitialized() {
-      byte isInitialized = memoizedIsInitialized;
-      if (isInitialized == 1) return true;
-      if (isInitialized == 0) return false;
-
-      memoizedIsInitialized = 1;
-      return true;
-    }
-
-    @java.lang.Override
-    public void writeTo(com.google.protobuf.CodedOutputStream output)
-                        throws java.io.IOException {
-      if (bounds_ != null) {
-        output.writeMessage(1, getBounds());
-      }
-      unknownFields.writeTo(output);
-    }
-
-    @java.lang.Override
-    public int getSerializedSize() {
-      int size = memoizedSize;
-      if (size != -1) return size;
-
-      size = 0;
-      if (bounds_ != null) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeMessageSize(1, getBounds());
-      }
-      size += unknownFields.getSerializedSize();
-      memoizedSize = size;
-      return size;
-    }
-
-    @java.lang.Override
-    public boolean equals(final java.lang.Object obj) {
-      if (obj == this) {
-       return true;
-      }
-      if (!(obj instanceof gg.strims.ppspp.proto.Chat.GenericEntity)) {
-        return super.equals(obj);
-      }
-      gg.strims.ppspp.proto.Chat.GenericEntity other = (gg.strims.ppspp.proto.Chat.GenericEntity) obj;
-
-      if (hasBounds() != other.hasBounds()) return false;
-      if (hasBounds()) {
-        if (!getBounds()
-            .equals(other.getBounds())) return false;
-      }
-      if (!unknownFields.equals(other.unknownFields)) return false;
-      return true;
-    }
-
-    @java.lang.Override
-    public int hashCode() {
-      if (memoizedHashCode != 0) {
-        return memoizedHashCode;
-      }
-      int hash = 41;
-      hash = (19 * hash) + getDescriptor().hashCode();
-      if (hasBounds()) {
-        hash = (37 * hash) + BOUNDS_FIELD_NUMBER;
-        hash = (53 * hash) + getBounds().hashCode();
-      }
-      hash = (29 * hash) + unknownFields.hashCode();
-      memoizedHashCode = hash;
-      return hash;
-    }
-
-    public static gg.strims.ppspp.proto.Chat.GenericEntity parseFrom(
-        java.nio.ByteBuffer data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.GenericEntity parseFrom(
-        java.nio.ByteBuffer data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.GenericEntity parseFrom(
-        com.google.protobuf.ByteString data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.GenericEntity parseFrom(
-        com.google.protobuf.ByteString data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.GenericEntity parseFrom(byte[] data)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data);
-    }
-    public static gg.strims.ppspp.proto.Chat.GenericEntity parseFrom(
-        byte[] data,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws com.google.protobuf.InvalidProtocolBufferException {
-      return PARSER.parseFrom(data, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.GenericEntity parseFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.GenericEntity parseFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.GenericEntity parseDelimitedFrom(java.io.InputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.GenericEntity parseDelimitedFrom(
-        java.io.InputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
-    }
-    public static gg.strims.ppspp.proto.Chat.GenericEntity parseFrom(
-        com.google.protobuf.CodedInputStream input)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input);
-    }
-    public static gg.strims.ppspp.proto.Chat.GenericEntity parseFrom(
-        com.google.protobuf.CodedInputStream input,
-        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-        throws java.io.IOException {
-      return com.google.protobuf.GeneratedMessageV3
-          .parseWithIOException(PARSER, input, extensionRegistry);
-    }
-
-    @java.lang.Override
-    public Builder newBuilderForType() { return newBuilder(); }
-    public static Builder newBuilder() {
-      return DEFAULT_INSTANCE.toBuilder();
-    }
-    public static Builder newBuilder(gg.strims.ppspp.proto.Chat.GenericEntity prototype) {
-      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
-    }
-    @java.lang.Override
-    public Builder toBuilder() {
-      return this == DEFAULT_INSTANCE
-          ? new Builder() : new Builder().mergeFrom(this);
-    }
-
-    @java.lang.Override
-    protected Builder newBuilderForType(
-        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-      Builder builder = new Builder(parent);
-      return builder;
-    }
-    /**
-     * Protobuf type {@code GenericEntity}
-     */
-    public static final class Builder extends
-        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
-        // @@protoc_insertion_point(builder_implements:GenericEntity)
-        gg.strims.ppspp.proto.Chat.GenericEntityOrBuilder {
-      public static final com.google.protobuf.Descriptors.Descriptor
-          getDescriptor() {
-        return gg.strims.ppspp.proto.Chat.internal_static_GenericEntity_descriptor;
-      }
-
-      @java.lang.Override
-      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-          internalGetFieldAccessorTable() {
-        return gg.strims.ppspp.proto.Chat.internal_static_GenericEntity_fieldAccessorTable
-            .ensureFieldAccessorsInitialized(
-                gg.strims.ppspp.proto.Chat.GenericEntity.class, gg.strims.ppspp.proto.Chat.GenericEntity.Builder.class);
-      }
-
-      // Construct using gg.strims.ppspp.proto.Chat.GenericEntity.newBuilder()
-      private Builder() {
-        maybeForceBuilderInitialization();
-      }
-
-      private Builder(
-          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
-        super(parent);
-        maybeForceBuilderInitialization();
-      }
-      private void maybeForceBuilderInitialization() {
-        if (com.google.protobuf.GeneratedMessageV3
-                .alwaysUseFieldBuilders) {
-        }
-      }
-      @java.lang.Override
-      public Builder clear() {
-        super.clear();
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-        return this;
-      }
-
-      @java.lang.Override
-      public com.google.protobuf.Descriptors.Descriptor
-          getDescriptorForType() {
-        return gg.strims.ppspp.proto.Chat.internal_static_GenericEntity_descriptor;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.GenericEntity getDefaultInstanceForType() {
-        return gg.strims.ppspp.proto.Chat.GenericEntity.getDefaultInstance();
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.GenericEntity build() {
-        gg.strims.ppspp.proto.Chat.GenericEntity result = buildPartial();
-        if (!result.isInitialized()) {
-          throw newUninitializedMessageException(result);
-        }
-        return result;
-      }
-
-      @java.lang.Override
-      public gg.strims.ppspp.proto.Chat.GenericEntity buildPartial() {
-        gg.strims.ppspp.proto.Chat.GenericEntity result = new gg.strims.ppspp.proto.Chat.GenericEntity(this);
-        if (boundsBuilder_ == null) {
-          result.bounds_ = bounds_;
-        } else {
-          result.bounds_ = boundsBuilder_.build();
-        }
-        onBuilt();
-        return result;
-      }
-
-      @java.lang.Override
-      public Builder clone() {
-        return super.clone();
-      }
-      @java.lang.Override
-      public Builder setField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.setField(field, value);
-      }
-      @java.lang.Override
-      public Builder clearField(
-          com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return super.clearField(field);
-      }
-      @java.lang.Override
-      public Builder clearOneof(
-          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return super.clearOneof(oneof);
-      }
-      @java.lang.Override
-      public Builder setRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          int index, java.lang.Object value) {
-        return super.setRepeatedField(field, index, value);
-      }
-      @java.lang.Override
-      public Builder addRepeatedField(
-          com.google.protobuf.Descriptors.FieldDescriptor field,
-          java.lang.Object value) {
-        return super.addRepeatedField(field, value);
-      }
-      @java.lang.Override
-      public Builder mergeFrom(com.google.protobuf.Message other) {
-        if (other instanceof gg.strims.ppspp.proto.Chat.GenericEntity) {
-          return mergeFrom((gg.strims.ppspp.proto.Chat.GenericEntity)other);
-        } else {
-          super.mergeFrom(other);
-          return this;
-        }
-      }
-
-      public Builder mergeFrom(gg.strims.ppspp.proto.Chat.GenericEntity other) {
-        if (other == gg.strims.ppspp.proto.Chat.GenericEntity.getDefaultInstance()) return this;
-        if (other.hasBounds()) {
-          mergeBounds(other.getBounds());
-        }
-        this.mergeUnknownFields(other.unknownFields);
-        onChanged();
-        return this;
-      }
-
-      @java.lang.Override
-      public final boolean isInitialized() {
-        return true;
-      }
-
-      @java.lang.Override
-      public Builder mergeFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws java.io.IOException {
-        gg.strims.ppspp.proto.Chat.GenericEntity parsedMessage = null;
-        try {
-          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
-        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
-          parsedMessage = (gg.strims.ppspp.proto.Chat.GenericEntity) e.getUnfinishedMessage();
-          throw e.unwrapIOException();
-        } finally {
-          if (parsedMessage != null) {
-            mergeFrom(parsedMessage);
-          }
-        }
-        return this;
-      }
-
-      private gg.strims.ppspp.proto.Chat.Bounds bounds_;
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> boundsBuilder_;
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return Whether the bounds field is set.
-       */
-      public boolean hasBounds() {
-        return boundsBuilder_ != null || bounds_ != null;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       * @return The bounds.
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds getBounds() {
-        if (boundsBuilder_ == null) {
-          return bounds_ == null ? gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        } else {
-          return boundsBuilder_.getMessage();
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (value == null) {
-            throw new NullPointerException();
-          }
-          bounds_ = value;
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder setBounds(
-          gg.strims.ppspp.proto.Chat.Bounds.Builder builderForValue) {
-        if (boundsBuilder_ == null) {
-          bounds_ = builderForValue.build();
-          onChanged();
-        } else {
-          boundsBuilder_.setMessage(builderForValue.build());
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder mergeBounds(gg.strims.ppspp.proto.Chat.Bounds value) {
-        if (boundsBuilder_ == null) {
-          if (bounds_ != null) {
-            bounds_ =
-              gg.strims.ppspp.proto.Chat.Bounds.newBuilder(bounds_).mergeFrom(value).buildPartial();
-          } else {
-            bounds_ = value;
-          }
-          onChanged();
-        } else {
-          boundsBuilder_.mergeFrom(value);
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public Builder clearBounds() {
-        if (boundsBuilder_ == null) {
-          bounds_ = null;
-          onChanged();
-        } else {
-          bounds_ = null;
-          boundsBuilder_ = null;
-        }
-
-        return this;
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.Bounds.Builder getBoundsBuilder() {
-        
-        onChanged();
-        return getBoundsFieldBuilder().getBuilder();
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      public gg.strims.ppspp.proto.Chat.BoundsOrBuilder getBoundsOrBuilder() {
-        if (boundsBuilder_ != null) {
-          return boundsBuilder_.getMessageOrBuilder();
-        } else {
-          return bounds_ == null ?
-              gg.strims.ppspp.proto.Chat.Bounds.getDefaultInstance() : bounds_;
-        }
-      }
-      /**
-       * <code>.Bounds bounds = 1;</code>
-       */
-      private com.google.protobuf.SingleFieldBuilderV3<
-          gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder> 
-          getBoundsFieldBuilder() {
-        if (boundsBuilder_ == null) {
-          boundsBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
-              gg.strims.ppspp.proto.Chat.Bounds, gg.strims.ppspp.proto.Chat.Bounds.Builder, gg.strims.ppspp.proto.Chat.BoundsOrBuilder>(
-                  getBounds(),
-                  getParentForChildren(),
-                  isClean());
-          bounds_ = null;
-        }
-        return boundsBuilder_;
-      }
-      @java.lang.Override
-      public final Builder setUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFields(unknownFields);
-      }
-
-      @java.lang.Override
-      public final Builder mergeUnknownFields(
-          final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.mergeUnknownFields(unknownFields);
-      }
-
-
-      // @@protoc_insertion_point(builder_scope:GenericEntity)
-    }
-
-    // @@protoc_insertion_point(class_scope:GenericEntity)
-    private static final gg.strims.ppspp.proto.Chat.GenericEntity DEFAULT_INSTANCE;
-    static {
-      DEFAULT_INSTANCE = new gg.strims.ppspp.proto.Chat.GenericEntity();
-    }
-
-    public static gg.strims.ppspp.proto.Chat.GenericEntity getDefaultInstance() {
-      return DEFAULT_INSTANCE;
-    }
-
-    private static final com.google.protobuf.Parser<GenericEntity>
-        PARSER = new com.google.protobuf.AbstractParser<GenericEntity>() {
-      @java.lang.Override
-      public GenericEntity parsePartialFrom(
-          com.google.protobuf.CodedInputStream input,
-          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
-          throws com.google.protobuf.InvalidProtocolBufferException {
-        return new GenericEntity(input, extensionRegistry);
-      }
-    };
-
-    public static com.google.protobuf.Parser<GenericEntity> parser() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public com.google.protobuf.Parser<GenericEntity> getParserForType() {
-      return PARSER;
-    }
-
-    @java.lang.Override
-    public gg.strims.ppspp.proto.Chat.GenericEntity getDefaultInstanceForType() {
       return DEFAULT_INSTANCE;
     }
 
@@ -25779,45 +25929,45 @@ public final class Chat {
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
       internal_static_MessageEntities_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_Bounds_descriptor;
+    internal_static_MessageEntities_Bounds_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-      internal_static_Bounds_fieldAccessorTable;
+      internal_static_MessageEntities_Bounds_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_Link_descriptor;
+    internal_static_MessageEntities_Link_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-      internal_static_Link_fieldAccessorTable;
+      internal_static_MessageEntities_Link_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_Emote_descriptor;
+    internal_static_MessageEntities_Emote_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-      internal_static_Emote_fieldAccessorTable;
+      internal_static_MessageEntities_Emote_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_Nick_descriptor;
+    internal_static_MessageEntities_Nick_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-      internal_static_Nick_fieldAccessorTable;
+      internal_static_MessageEntities_Nick_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_Tag_descriptor;
+    internal_static_MessageEntities_Tag_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-      internal_static_Tag_fieldAccessorTable;
+      internal_static_MessageEntities_Tag_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_CodeBlock_descriptor;
+    internal_static_MessageEntities_CodeBlock_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-      internal_static_CodeBlock_fieldAccessorTable;
+      internal_static_MessageEntities_CodeBlock_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_Spoiler_descriptor;
+    internal_static_MessageEntities_Spoiler_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-      internal_static_Spoiler_fieldAccessorTable;
+      internal_static_MessageEntities_Spoiler_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
-    internal_static_GenericEntity_descriptor;
+    internal_static_MessageEntities_GenericEntity_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
-      internal_static_GenericEntity_fieldAccessorTable;
+      internal_static_MessageEntities_GenericEntity_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_CallChatClientRequest_descriptor;
   private static final 
@@ -25865,40 +26015,46 @@ public final class Chat {
       "r_id\030\001 \001(\004\022-\n\005close\030\002 \001(\0132\034.CallChatServ" +
       "erRequest.CloseH\000\032\007\n\005CloseB\006\n\004body\"@\n\025Op" +
       "enChatClientRequest\022\023\n\013network_key\030\001 \001(\014" +
-      "\022\022\n\nserver_key\030\002 \001(\014\"\237\002\n\017ChatClientEvent" +
+      "\022\022\n\nserver_key\030\002 \001(\014\"\255\002\n\017ChatClientEvent" +
       "\022%\n\004open\030\001 \001(\0132\025.ChatClientEvent.OpenH\000\022" +
       "+\n\007message\030\002 \001(\0132\030.ChatClientEvent.Messa" +
       "geH\000\022\'\n\005close\030\003 \001(\0132\026.ChatClientEvent.Cl" +
-      "oseH\000\032\031\n\004Open\022\021\n\tclient_id\030\001 \001(\004\032c\n\007Mess" +
+      "oseH\000\032\031\n\004Open\022\021\n\tclient_id\030\001 \001(\004\032q\n\007Mess" +
       "age\022\021\n\tsent_time\030\001 \001(\003\022\023\n\013server_time\030\002 " +
-      "\001(\003\022\014\n\004body\030\003 \001(\t\022\"\n\010entities\030\004 \001(\0132\020.Me" +
-      "ssageEntities\032\007\n\005CloseB\006\n\004body\"\030\n\010ChatRo" +
-      "om\022\014\n\004name\030\001 \001(\t\"^\n\nChatServer\022\n\n\002id\030\001 \001" +
-      "(\004\022\023\n\013network_key\030\002 \001(\014\022\021\n\003key\030\003 \001(\0132\004.K" +
-      "ey\022\034\n\tchat_room\030\004 \001(\0132\t.ChatRoom\"\360\001\n\017Mes" +
-      "sageEntities\022\024\n\005links\030\001 \003(\0132\005.Link\022\026\n\006em" +
-      "otes\030\002 \003(\0132\006.Emote\022\024\n\005nicks\030\003 \003(\0132\005.Nick" +
-      "\022\022\n\004tags\030\004 \003(\0132\004.Tag\022\037\n\013code_blocks\030\005 \003(" +
-      "\0132\n.CodeBlock\022\032\n\010spoilers\030\006 \003(\0132\010.Spoile" +
-      "r\022\"\n\ngreen_text\030\007 \001(\0132\016.GenericEntity\022$\n" +
-      "\014self_message\030\010 \001(\0132\016.GenericEntity\"$\n\006B" +
-      "ounds\022\r\n\005start\030\001 \001(\003\022\013\n\003end\030\002 \001(\003\",\n\004Lin" +
-      "k\022\027\n\006bounds\030\001 \001(\0132\007.Bounds\022\013\n\003url\030\002 \001(\t\"" +
-      "P\n\005Emote\022\027\n\006bounds\030\001 \001(\0132\007.Bounds\022\014\n\004nam" +
-      "e\030\002 \001(\t\022\021\n\tmodifiers\030\003 \003(\t\022\r\n\005combo\030\004 \001(" +
-      "\003\"-\n\004Nick\022\027\n\006bounds\030\001 \001(\0132\007.Bounds\022\014\n\004ni" +
-      "ck\030\002 \001(\t\",\n\003Tag\022\027\n\006bounds\030\001 \001(\0132\007.Bounds" +
-      "\022\014\n\004name\030\002 \001(\t\"$\n\tCodeBlock\022\027\n\006bounds\030\001 " +
-      "\001(\0132\007.Bounds\"\"\n\007Spoiler\022\027\n\006bounds\030\001 \001(\0132" +
-      "\007.Bounds\"(\n\rGenericEntity\022\027\n\006bounds\030\001 \001(" +
-      "\0132\007.Bounds\"\304\001\n\025CallChatClientRequest\022\021\n\t" +
-      "client_id\030\001 \001(\004\0221\n\007message\030\002 \001(\0132\036.CallC" +
-      "hatClientRequest.MessageH\000\022-\n\005close\030\003 \001(" +
-      "\0132\034.CallChatClientRequest.CloseH\000\032%\n\007Mes" +
-      "sage\022\014\n\004time\030\001 \001(\003\022\014\n\004body\030\002 \001(\t\032\007\n\005Clos" +
-      "eB\006\n\004bodyBD\n\025gg.strims.ppspp.protoZ&gith" +
-      "ub.com/MemeLabs/go-ppspp/pkg/pb;pb\272\002\002PBb" +
-      "\006proto3"
+      "\001(\003\022\014\n\004nick\030\003 \001(\t\022\014\n\004body\030\004 \001(\t\022\"\n\010entit" +
+      "ies\030\005 \001(\0132\020.MessageEntities\032\007\n\005CloseB\006\n\004" +
+      "body\"\030\n\010ChatRoom\022\014\n\004name\030\001 \001(\t\"^\n\nChatSe" +
+      "rver\022\n\n\002id\030\001 \001(\004\022\023\n\013network_key\030\002 \001(\014\022\021\n" +
+      "\003key\030\003 \001(\0132\004.Key\022\034\n\tchat_room\030\004 \001(\0132\t.Ch" +
+      "atRoom\"\327\006\n\017MessageEntities\022$\n\005links\030\001 \003(" +
+      "\0132\025.MessageEntities.Link\022&\n\006emotes\030\002 \003(\013" +
+      "2\026.MessageEntities.Emote\022$\n\005nicks\030\003 \003(\0132" +
+      "\025.MessageEntities.Nick\022\"\n\004tags\030\004 \003(\0132\024.M" +
+      "essageEntities.Tag\022/\n\013code_blocks\030\005 \003(\0132" +
+      "\032.MessageEntities.CodeBlock\022*\n\010spoilers\030" +
+      "\006 \003(\0132\030.MessageEntities.Spoiler\0222\n\ngreen" +
+      "_text\030\007 \001(\0132\036.MessageEntities.GenericEnt" +
+      "ity\0224\n\014self_message\030\010 \001(\0132\036.MessageEntit" +
+      "ies.GenericEntity\032$\n\006Bounds\022\r\n\005start\030\001 \001" +
+      "(\003\022\013\n\003end\030\002 \001(\003\032<\n\004Link\022\'\n\006bounds\030\001 \001(\0132" +
+      "\027.MessageEntities.Bounds\022\013\n\003url\030\002 \001(\t\032`\n" +
+      "\005Emote\022\'\n\006bounds\030\001 \001(\0132\027.MessageEntities" +
+      ".Bounds\022\014\n\004name\030\002 \001(\t\022\021\n\tmodifiers\030\003 \003(\t" +
+      "\022\r\n\005combo\030\004 \001(\003\032=\n\004Nick\022\'\n\006bounds\030\001 \001(\0132" +
+      "\027.MessageEntities.Bounds\022\014\n\004nick\030\002 \001(\t\032<" +
+      "\n\003Tag\022\'\n\006bounds\030\001 \001(\0132\027.MessageEntities." +
+      "Bounds\022\014\n\004name\030\002 \001(\t\0324\n\tCodeBlock\022\'\n\006bou" +
+      "nds\030\001 \001(\0132\027.MessageEntities.Bounds\0322\n\007Sp" +
+      "oiler\022\'\n\006bounds\030\001 \001(\0132\027.MessageEntities." +
+      "Bounds\0328\n\rGenericEntity\022\'\n\006bounds\030\001 \001(\0132" +
+      "\027.MessageEntities.Bounds\"\304\001\n\025CallChatCli" +
+      "entRequest\022\021\n\tclient_id\030\001 \001(\004\0221\n\007message" +
+      "\030\002 \001(\0132\036.CallChatClientRequest.MessageH\000" +
+      "\022-\n\005close\030\003 \001(\0132\034.CallChatClientRequest." +
+      "CloseH\000\032%\n\007Message\022\014\n\004time\030\001 \001(\003\022\014\n\004body" +
+      "\030\002 \001(\t\032\007\n\005CloseB\006\n\004bodyBD\n\025gg.strims.pps" +
+      "pp.protoZ&github.com/MemeLabs/go-ppspp/p" +
+      "kg/pb;pb\272\002\002PBb\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -26024,7 +26180,7 @@ public final class Chat {
     internal_static_ChatClientEvent_Message_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_ChatClientEvent_Message_descriptor,
-        new java.lang.String[] { "SentTime", "ServerTime", "Body", "Entities", });
+        new java.lang.String[] { "SentTime", "ServerTime", "Nick", "Body", "Entities", });
     internal_static_ChatClientEvent_Close_descriptor =
       internal_static_ChatClientEvent_descriptor.getNestedTypes().get(2);
     internal_static_ChatClientEvent_Close_fieldAccessorTable = new
@@ -26049,56 +26205,56 @@ public final class Chat {
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_MessageEntities_descriptor,
         new java.lang.String[] { "Links", "Emotes", "Nicks", "Tags", "CodeBlocks", "Spoilers", "GreenText", "SelfMessage", });
-    internal_static_Bounds_descriptor =
-      getDescriptor().getMessageTypes().get(18);
-    internal_static_Bounds_fieldAccessorTable = new
+    internal_static_MessageEntities_Bounds_descriptor =
+      internal_static_MessageEntities_descriptor.getNestedTypes().get(0);
+    internal_static_MessageEntities_Bounds_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
-        internal_static_Bounds_descriptor,
+        internal_static_MessageEntities_Bounds_descriptor,
         new java.lang.String[] { "Start", "End", });
-    internal_static_Link_descriptor =
-      getDescriptor().getMessageTypes().get(19);
-    internal_static_Link_fieldAccessorTable = new
+    internal_static_MessageEntities_Link_descriptor =
+      internal_static_MessageEntities_descriptor.getNestedTypes().get(1);
+    internal_static_MessageEntities_Link_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
-        internal_static_Link_descriptor,
+        internal_static_MessageEntities_Link_descriptor,
         new java.lang.String[] { "Bounds", "Url", });
-    internal_static_Emote_descriptor =
-      getDescriptor().getMessageTypes().get(20);
-    internal_static_Emote_fieldAccessorTable = new
+    internal_static_MessageEntities_Emote_descriptor =
+      internal_static_MessageEntities_descriptor.getNestedTypes().get(2);
+    internal_static_MessageEntities_Emote_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
-        internal_static_Emote_descriptor,
+        internal_static_MessageEntities_Emote_descriptor,
         new java.lang.String[] { "Bounds", "Name", "Modifiers", "Combo", });
-    internal_static_Nick_descriptor =
-      getDescriptor().getMessageTypes().get(21);
-    internal_static_Nick_fieldAccessorTable = new
+    internal_static_MessageEntities_Nick_descriptor =
+      internal_static_MessageEntities_descriptor.getNestedTypes().get(3);
+    internal_static_MessageEntities_Nick_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
-        internal_static_Nick_descriptor,
+        internal_static_MessageEntities_Nick_descriptor,
         new java.lang.String[] { "Bounds", "Nick", });
-    internal_static_Tag_descriptor =
-      getDescriptor().getMessageTypes().get(22);
-    internal_static_Tag_fieldAccessorTable = new
+    internal_static_MessageEntities_Tag_descriptor =
+      internal_static_MessageEntities_descriptor.getNestedTypes().get(4);
+    internal_static_MessageEntities_Tag_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
-        internal_static_Tag_descriptor,
+        internal_static_MessageEntities_Tag_descriptor,
         new java.lang.String[] { "Bounds", "Name", });
-    internal_static_CodeBlock_descriptor =
-      getDescriptor().getMessageTypes().get(23);
-    internal_static_CodeBlock_fieldAccessorTable = new
+    internal_static_MessageEntities_CodeBlock_descriptor =
+      internal_static_MessageEntities_descriptor.getNestedTypes().get(5);
+    internal_static_MessageEntities_CodeBlock_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
-        internal_static_CodeBlock_descriptor,
+        internal_static_MessageEntities_CodeBlock_descriptor,
         new java.lang.String[] { "Bounds", });
-    internal_static_Spoiler_descriptor =
-      getDescriptor().getMessageTypes().get(24);
-    internal_static_Spoiler_fieldAccessorTable = new
+    internal_static_MessageEntities_Spoiler_descriptor =
+      internal_static_MessageEntities_descriptor.getNestedTypes().get(6);
+    internal_static_MessageEntities_Spoiler_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
-        internal_static_Spoiler_descriptor,
+        internal_static_MessageEntities_Spoiler_descriptor,
         new java.lang.String[] { "Bounds", });
-    internal_static_GenericEntity_descriptor =
-      getDescriptor().getMessageTypes().get(25);
-    internal_static_GenericEntity_fieldAccessorTable = new
+    internal_static_MessageEntities_GenericEntity_descriptor =
+      internal_static_MessageEntities_descriptor.getNestedTypes().get(7);
+    internal_static_MessageEntities_GenericEntity_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
-        internal_static_GenericEntity_descriptor,
+        internal_static_MessageEntities_GenericEntity_descriptor,
         new java.lang.String[] { "Bounds", });
     internal_static_CallChatClientRequest_descriptor =
-      getDescriptor().getMessageTypes().get(26);
+      getDescriptor().getMessageTypes().get(18);
     internal_static_CallChatClientRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_CallChatClientRequest_descriptor,
