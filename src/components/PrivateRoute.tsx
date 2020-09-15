@@ -13,11 +13,16 @@ export const PrivateRoute = (props: RouteProps) => {
     return <Route {...props} />;
   }
 
-  const paths = Array.isArray(props.path) ? props.path : [props.path];
-  const redirects = paths.map((path) => (
-    <Redirect key={path} path={path} to={`/login?next=${path}`} />
-  ));
-  return <>{redirects}</>;
+  return (
+    <Route
+      location={props.location}
+      path={props.path}
+      render={({ location: { pathname, search, hash } }) => {
+        const next = (pathname || "") + (search || "") + (hash || "");
+        return <Redirect to={`/login?next=${encodeURIComponent(next)}`} />;
+      }}
+    />
+  );
 };
 
 PrivateRoute.displayName = "PrivateRoute";

@@ -10,7 +10,7 @@ import { useCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
 import * as pb from "../lib/pb";
 
-const VALID_NEXT_PATH = /^\/([a-zA-Z0-9][/a-zA-Z0-9_\-.])*$/;
+const VALID_NEXT_PATH = /^\/\w[\w/_\-.?=#%]*$/;
 
 const LoginPage = () => {
   const [getProfilesRes] = useCall("getProfiles");
