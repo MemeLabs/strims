@@ -5,6 +5,7 @@ package frontend
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -192,6 +193,7 @@ func TestChat(t *testing.T) {
 	}
 
 	done := make(chan struct{})
+	var closeDone sync.Once
 
 	go func() {
 		ctx, cancel := context.WithCancel(context.Background())
@@ -203,7 +205,7 @@ func TestChat(t *testing.T) {
 				go sendMessages(ctx, b.Open.ClientId)
 			case *pb.ChatClientEvent_Message_:
 				t.Log("chat client message", b.Message.Body)
-				close(done)
+				closeDone.Do(func() { close(done) })
 			case *pb.ChatClientEvent_Close_:
 				return
 			}

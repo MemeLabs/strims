@@ -20,10 +20,12 @@ public final class Nickserv {
 
     /**
      * <code>.Key key = 1;</code>
+     * @return Whether the key field is set.
      */
     boolean hasKey();
     /**
      * <code>.Key key = 1;</code>
+     * @return The key.
      */
     gg.strims.ppspp.proto.ProfileOuterClass.Key getKey();
     /**
@@ -33,15 +35,18 @@ public final class Nickserv {
 
     /**
      * <code>uint32 name_change_quota = 2;</code>
+     * @return The nameChangeQuota.
      */
     int getNameChangeQuota();
 
     /**
      * <code>.google.protobuf.Duration token_ttl = 3;</code>
+     * @return Whether the tokenTtl field is set.
      */
     boolean hasTokenTtl();
     /**
      * <code>.google.protobuf.Duration token_ttl = 3;</code>
+     * @return The tokenTtl.
      */
     com.google.protobuf.Duration getTokenTtl();
     /**
@@ -51,19 +56,25 @@ public final class Nickserv {
 
     /**
      * <code>repeated string roles = 4;</code>
+     * @return A list containing the roles.
      */
     java.util.List<java.lang.String>
         getRolesList();
     /**
      * <code>repeated string roles = 4;</code>
+     * @return The count of roles.
      */
     int getRolesCount();
     /**
      * <code>repeated string roles = 4;</code>
+     * @param index The index of the element to return.
+     * @return The roles at the given index.
      */
     java.lang.String getRoles(int index);
     /**
      * <code>repeated string roles = 4;</code>
+     * @param index The index of the value to return.
+     * @return The bytes of the roles at the given index.
      */
     com.google.protobuf.ByteString
         getRolesBytes(int index);
@@ -71,7 +82,7 @@ public final class Nickserv {
   /**
    * Protobuf type {@code ServerConfig}
    */
-  public  static final class ServerConfig extends
+  public static final class ServerConfig extends
       com.google.protobuf.GeneratedMessageV3 implements
       // @@protoc_insertion_point(message_implements:ServerConfig)
       ServerConfigOrBuilder {
@@ -81,8 +92,14 @@ public final class Nickserv {
       super(builder);
     }
     private ServerConfig() {
-      nameChangeQuota_ = 0;
       roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new ServerConfig();
     }
 
     @java.lang.Override
@@ -142,15 +159,15 @@ public final class Nickserv {
             }
             case 34: {
               java.lang.String s = input.readStringRequireUtf8();
-              if (!((mutable_bitField0_ & 0x00000008) == 0x00000008)) {
+              if (!((mutable_bitField0_ & 0x00000001) != 0)) {
                 roles_ = new com.google.protobuf.LazyStringArrayList();
-                mutable_bitField0_ |= 0x00000008;
+                mutable_bitField0_ |= 0x00000001;
               }
               roles_.add(s);
               break;
             }
             default: {
-              if (!parseUnknownFieldProto3(
+              if (!parseUnknownField(
                   input, unknownFields, extensionRegistry, tag)) {
                 done = true;
               }
@@ -164,7 +181,7 @@ public final class Nickserv {
         throw new com.google.protobuf.InvalidProtocolBufferException(
             e).setUnfinishedMessage(this);
       } finally {
-        if (((mutable_bitField0_ & 0x00000008) == 0x00000008)) {
+        if (((mutable_bitField0_ & 0x00000001) != 0)) {
           roles_ = roles_.getUnmodifiableView();
         }
         this.unknownFields = unknownFields.build();
@@ -184,24 +201,28 @@ public final class Nickserv {
               gg.strims.ppspp.proto.Nickserv.ServerConfig.class, gg.strims.ppspp.proto.Nickserv.ServerConfig.Builder.class);
     }
 
-    private int bitField0_;
     public static final int KEY_FIELD_NUMBER = 1;
     private gg.strims.ppspp.proto.ProfileOuterClass.Key key_;
     /**
      * <code>.Key key = 1;</code>
+     * @return Whether the key field is set.
      */
+    @java.lang.Override
     public boolean hasKey() {
       return key_ != null;
     }
     /**
      * <code>.Key key = 1;</code>
+     * @return The key.
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.ProfileOuterClass.Key getKey() {
       return key_ == null ? gg.strims.ppspp.proto.ProfileOuterClass.Key.getDefaultInstance() : key_;
     }
     /**
      * <code>.Key key = 1;</code>
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.ProfileOuterClass.KeyOrBuilder getKeyOrBuilder() {
       return getKey();
     }
@@ -210,7 +231,9 @@ public final class Nickserv {
     private int nameChangeQuota_;
     /**
      * <code>uint32 name_change_quota = 2;</code>
+     * @return The nameChangeQuota.
      */
+    @java.lang.Override
     public int getNameChangeQuota() {
       return nameChangeQuota_;
     }
@@ -219,19 +242,24 @@ public final class Nickserv {
     private com.google.protobuf.Duration tokenTtl_;
     /**
      * <code>.google.protobuf.Duration token_ttl = 3;</code>
+     * @return Whether the tokenTtl field is set.
      */
+    @java.lang.Override
     public boolean hasTokenTtl() {
       return tokenTtl_ != null;
     }
     /**
      * <code>.google.protobuf.Duration token_ttl = 3;</code>
+     * @return The tokenTtl.
      */
+    @java.lang.Override
     public com.google.protobuf.Duration getTokenTtl() {
       return tokenTtl_ == null ? com.google.protobuf.Duration.getDefaultInstance() : tokenTtl_;
     }
     /**
      * <code>.google.protobuf.Duration token_ttl = 3;</code>
      */
+    @java.lang.Override
     public com.google.protobuf.DurationOrBuilder getTokenTtlOrBuilder() {
       return getTokenTtl();
     }
@@ -240,6 +268,7 @@ public final class Nickserv {
     private com.google.protobuf.LazyStringList roles_;
     /**
      * <code>repeated string roles = 4;</code>
+     * @return A list containing the roles.
      */
     public com.google.protobuf.ProtocolStringList
         getRolesList() {
@@ -247,18 +276,23 @@ public final class Nickserv {
     }
     /**
      * <code>repeated string roles = 4;</code>
+     * @return The count of roles.
      */
     public int getRolesCount() {
       return roles_.size();
     }
     /**
      * <code>repeated string roles = 4;</code>
+     * @param index The index of the element to return.
+     * @return The roles at the given index.
      */
     public java.lang.String getRoles(int index) {
       return roles_.get(index);
     }
     /**
      * <code>repeated string roles = 4;</code>
+     * @param index The index of the value to return.
+     * @return The bytes of the roles at the given index.
      */
     public com.google.protobuf.ByteString
         getRolesBytes(int index) {
@@ -335,23 +369,22 @@ public final class Nickserv {
       }
       gg.strims.ppspp.proto.Nickserv.ServerConfig other = (gg.strims.ppspp.proto.Nickserv.ServerConfig) obj;
 
-      boolean result = true;
-      result = result && (hasKey() == other.hasKey());
+      if (hasKey() != other.hasKey()) return false;
       if (hasKey()) {
-        result = result && getKey()
-            .equals(other.getKey());
+        if (!getKey()
+            .equals(other.getKey())) return false;
       }
-      result = result && (getNameChangeQuota()
-          == other.getNameChangeQuota());
-      result = result && (hasTokenTtl() == other.hasTokenTtl());
+      if (getNameChangeQuota()
+          != other.getNameChangeQuota()) return false;
+      if (hasTokenTtl() != other.hasTokenTtl()) return false;
       if (hasTokenTtl()) {
-        result = result && getTokenTtl()
-            .equals(other.getTokenTtl());
+        if (!getTokenTtl()
+            .equals(other.getTokenTtl())) return false;
       }
-      result = result && getRolesList()
-          .equals(other.getRolesList());
-      result = result && unknownFields.equals(other.unknownFields);
-      return result;
+      if (!getRolesList()
+          .equals(other.getRolesList())) return false;
+      if (!unknownFields.equals(other.unknownFields)) return false;
+      return true;
     }
 
     @java.lang.Override
@@ -523,7 +556,7 @@ public final class Nickserv {
           tokenTtlBuilder_ = null;
         }
         roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00000008);
+        bitField0_ = (bitField0_ & ~0x00000001);
         return this;
       }
 
@@ -551,7 +584,6 @@ public final class Nickserv {
       public gg.strims.ppspp.proto.Nickserv.ServerConfig buildPartial() {
         gg.strims.ppspp.proto.Nickserv.ServerConfig result = new gg.strims.ppspp.proto.Nickserv.ServerConfig(this);
         int from_bitField0_ = bitField0_;
-        int to_bitField0_ = 0;
         if (keyBuilder_ == null) {
           result.key_ = key_;
         } else {
@@ -563,47 +595,46 @@ public final class Nickserv {
         } else {
           result.tokenTtl_ = tokenTtlBuilder_.build();
         }
-        if (((bitField0_ & 0x00000008) == 0x00000008)) {
+        if (((bitField0_ & 0x00000001) != 0)) {
           roles_ = roles_.getUnmodifiableView();
-          bitField0_ = (bitField0_ & ~0x00000008);
+          bitField0_ = (bitField0_ & ~0x00000001);
         }
         result.roles_ = roles_;
-        result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
       }
 
       @java.lang.Override
       public Builder clone() {
-        return (Builder) super.clone();
+        return super.clone();
       }
       @java.lang.Override
       public Builder setField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return (Builder) super.setField(field, value);
+        return super.setField(field, value);
       }
       @java.lang.Override
       public Builder clearField(
           com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return (Builder) super.clearField(field);
+        return super.clearField(field);
       }
       @java.lang.Override
       public Builder clearOneof(
           com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return (Builder) super.clearOneof(oneof);
+        return super.clearOneof(oneof);
       }
       @java.lang.Override
       public Builder setRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           int index, java.lang.Object value) {
-        return (Builder) super.setRepeatedField(field, index, value);
+        return super.setRepeatedField(field, index, value);
       }
       @java.lang.Override
       public Builder addRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return (Builder) super.addRepeatedField(field, value);
+        return super.addRepeatedField(field, value);
       }
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -629,7 +660,7 @@ public final class Nickserv {
         if (!other.roles_.isEmpty()) {
           if (roles_.isEmpty()) {
             roles_ = other.roles_;
-            bitField0_ = (bitField0_ & ~0x00000008);
+            bitField0_ = (bitField0_ & ~0x00000001);
           } else {
             ensureRolesIsMutable();
             roles_.addAll(other.roles_);
@@ -666,17 +697,19 @@ public final class Nickserv {
       }
       private int bitField0_;
 
-      private gg.strims.ppspp.proto.ProfileOuterClass.Key key_ = null;
+      private gg.strims.ppspp.proto.ProfileOuterClass.Key key_;
       private com.google.protobuf.SingleFieldBuilderV3<
           gg.strims.ppspp.proto.ProfileOuterClass.Key, gg.strims.ppspp.proto.ProfileOuterClass.Key.Builder, gg.strims.ppspp.proto.ProfileOuterClass.KeyOrBuilder> keyBuilder_;
       /**
        * <code>.Key key = 1;</code>
+       * @return Whether the key field is set.
        */
       public boolean hasKey() {
         return keyBuilder_ != null || key_ != null;
       }
       /**
        * <code>.Key key = 1;</code>
+       * @return The key.
        */
       public gg.strims.ppspp.proto.ProfileOuterClass.Key getKey() {
         if (keyBuilder_ == null) {
@@ -786,12 +819,16 @@ public final class Nickserv {
       private int nameChangeQuota_ ;
       /**
        * <code>uint32 name_change_quota = 2;</code>
+       * @return The nameChangeQuota.
        */
+      @java.lang.Override
       public int getNameChangeQuota() {
         return nameChangeQuota_;
       }
       /**
        * <code>uint32 name_change_quota = 2;</code>
+       * @param value The nameChangeQuota to set.
+       * @return This builder for chaining.
        */
       public Builder setNameChangeQuota(int value) {
         
@@ -801,6 +838,7 @@ public final class Nickserv {
       }
       /**
        * <code>uint32 name_change_quota = 2;</code>
+       * @return This builder for chaining.
        */
       public Builder clearNameChangeQuota() {
         
@@ -809,17 +847,19 @@ public final class Nickserv {
         return this;
       }
 
-      private com.google.protobuf.Duration tokenTtl_ = null;
+      private com.google.protobuf.Duration tokenTtl_;
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.protobuf.Duration, com.google.protobuf.Duration.Builder, com.google.protobuf.DurationOrBuilder> tokenTtlBuilder_;
       /**
        * <code>.google.protobuf.Duration token_ttl = 3;</code>
+       * @return Whether the tokenTtl field is set.
        */
       public boolean hasTokenTtl() {
         return tokenTtlBuilder_ != null || tokenTtl_ != null;
       }
       /**
        * <code>.google.protobuf.Duration token_ttl = 3;</code>
+       * @return The tokenTtl.
        */
       public com.google.protobuf.Duration getTokenTtl() {
         if (tokenTtlBuilder_ == null) {
@@ -928,13 +968,14 @@ public final class Nickserv {
 
       private com.google.protobuf.LazyStringList roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
       private void ensureRolesIsMutable() {
-        if (!((bitField0_ & 0x00000008) == 0x00000008)) {
+        if (!((bitField0_ & 0x00000001) != 0)) {
           roles_ = new com.google.protobuf.LazyStringArrayList(roles_);
-          bitField0_ |= 0x00000008;
+          bitField0_ |= 0x00000001;
          }
       }
       /**
        * <code>repeated string roles = 4;</code>
+       * @return A list containing the roles.
        */
       public com.google.protobuf.ProtocolStringList
           getRolesList() {
@@ -942,18 +983,23 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 4;</code>
+       * @return The count of roles.
        */
       public int getRolesCount() {
         return roles_.size();
       }
       /**
        * <code>repeated string roles = 4;</code>
+       * @param index The index of the element to return.
+       * @return The roles at the given index.
        */
       public java.lang.String getRoles(int index) {
         return roles_.get(index);
       }
       /**
        * <code>repeated string roles = 4;</code>
+       * @param index The index of the value to return.
+       * @return The bytes of the roles at the given index.
        */
       public com.google.protobuf.ByteString
           getRolesBytes(int index) {
@@ -961,6 +1007,9 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 4;</code>
+       * @param index The index to set the value at.
+       * @param value The roles to set.
+       * @return This builder for chaining.
        */
       public Builder setRoles(
           int index, java.lang.String value) {
@@ -974,6 +1023,8 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 4;</code>
+       * @param value The roles to add.
+       * @return This builder for chaining.
        */
       public Builder addRoles(
           java.lang.String value) {
@@ -987,6 +1038,8 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 4;</code>
+       * @param values The roles to add.
+       * @return This builder for chaining.
        */
       public Builder addAllRoles(
           java.lang.Iterable<java.lang.String> values) {
@@ -998,15 +1051,18 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 4;</code>
+       * @return This builder for chaining.
        */
       public Builder clearRoles() {
         roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00000008);
+        bitField0_ = (bitField0_ & ~0x00000001);
         onChanged();
         return this;
       }
       /**
        * <code>repeated string roles = 4;</code>
+       * @param value The bytes of the roles to add.
+       * @return This builder for chaining.
        */
       public Builder addRolesBytes(
           com.google.protobuf.ByteString value) {
@@ -1022,7 +1078,7 @@ public final class Nickserv {
       @java.lang.Override
       public final Builder setUnknownFields(
           final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFieldsProto3(unknownFields);
+        return super.setUnknownFields(unknownFields);
       }
 
       @java.lang.Override
@@ -1078,54 +1134,67 @@ public final class Nickserv {
 
     /**
      * <code>uint64 id = 1;</code>
+     * @return The id.
      */
     long getId();
 
     /**
      * <code>bytes key = 2;</code>
+     * @return The key.
      */
     com.google.protobuf.ByteString getKey();
 
     /**
      * <code>string nick = 3;</code>
+     * @return The nick.
      */
     java.lang.String getNick();
     /**
      * <code>string nick = 3;</code>
+     * @return The bytes for nick.
      */
     com.google.protobuf.ByteString
         getNickBytes();
 
     /**
      * <code>uint32 remaining_name_change_quota = 4;</code>
+     * @return The remainingNameChangeQuota.
      */
     int getRemainingNameChangeQuota();
 
     /**
      * <code>uint64 updated_timestamp = 5;</code>
+     * @return The updatedTimestamp.
      */
     long getUpdatedTimestamp();
 
     /**
      * <code>uint64 created_timestamp = 6;</code>
+     * @return The createdTimestamp.
      */
     long getCreatedTimestamp();
 
     /**
      * <code>repeated string roles = 7;</code>
+     * @return A list containing the roles.
      */
     java.util.List<java.lang.String>
         getRolesList();
     /**
      * <code>repeated string roles = 7;</code>
+     * @return The count of roles.
      */
     int getRolesCount();
     /**
      * <code>repeated string roles = 7;</code>
+     * @param index The index of the element to return.
+     * @return The roles at the given index.
      */
     java.lang.String getRoles(int index);
     /**
      * <code>repeated string roles = 7;</code>
+     * @param index The index of the value to return.
+     * @return The bytes of the roles at the given index.
      */
     com.google.protobuf.ByteString
         getRolesBytes(int index);
@@ -1133,7 +1202,7 @@ public final class Nickserv {
   /**
    * Protobuf type {@code NickservNick}
    */
-  public  static final class NickservNick extends
+  public static final class NickservNick extends
       com.google.protobuf.GeneratedMessageV3 implements
       // @@protoc_insertion_point(message_implements:NickservNick)
       NickservNickOrBuilder {
@@ -1143,13 +1212,16 @@ public final class Nickserv {
       super(builder);
     }
     private NickservNick() {
-      id_ = 0L;
       key_ = com.google.protobuf.ByteString.EMPTY;
       nick_ = "";
-      remainingNameChangeQuota_ = 0;
-      updatedTimestamp_ = 0L;
-      createdTimestamp_ = 0L;
       roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new NickservNick();
     }
 
     @java.lang.Override
@@ -1209,15 +1281,15 @@ public final class Nickserv {
             }
             case 58: {
               java.lang.String s = input.readStringRequireUtf8();
-              if (!((mutable_bitField0_ & 0x00000040) == 0x00000040)) {
+              if (!((mutable_bitField0_ & 0x00000001) != 0)) {
                 roles_ = new com.google.protobuf.LazyStringArrayList();
-                mutable_bitField0_ |= 0x00000040;
+                mutable_bitField0_ |= 0x00000001;
               }
               roles_.add(s);
               break;
             }
             default: {
-              if (!parseUnknownFieldProto3(
+              if (!parseUnknownField(
                   input, unknownFields, extensionRegistry, tag)) {
                 done = true;
               }
@@ -1231,7 +1303,7 @@ public final class Nickserv {
         throw new com.google.protobuf.InvalidProtocolBufferException(
             e).setUnfinishedMessage(this);
       } finally {
-        if (((mutable_bitField0_ & 0x00000040) == 0x00000040)) {
+        if (((mutable_bitField0_ & 0x00000001) != 0)) {
           roles_ = roles_.getUnmodifiableView();
         }
         this.unknownFields = unknownFields.build();
@@ -1251,12 +1323,13 @@ public final class Nickserv {
               gg.strims.ppspp.proto.Nickserv.NickservNick.class, gg.strims.ppspp.proto.Nickserv.NickservNick.Builder.class);
     }
 
-    private int bitField0_;
     public static final int ID_FIELD_NUMBER = 1;
     private long id_;
     /**
      * <code>uint64 id = 1;</code>
+     * @return The id.
      */
+    @java.lang.Override
     public long getId() {
       return id_;
     }
@@ -1265,7 +1338,9 @@ public final class Nickserv {
     private com.google.protobuf.ByteString key_;
     /**
      * <code>bytes key = 2;</code>
+     * @return The key.
      */
+    @java.lang.Override
     public com.google.protobuf.ByteString getKey() {
       return key_;
     }
@@ -1274,7 +1349,9 @@ public final class Nickserv {
     private volatile java.lang.Object nick_;
     /**
      * <code>string nick = 3;</code>
+     * @return The nick.
      */
+    @java.lang.Override
     public java.lang.String getNick() {
       java.lang.Object ref = nick_;
       if (ref instanceof java.lang.String) {
@@ -1289,7 +1366,9 @@ public final class Nickserv {
     }
     /**
      * <code>string nick = 3;</code>
+     * @return The bytes for nick.
      */
+    @java.lang.Override
     public com.google.protobuf.ByteString
         getNickBytes() {
       java.lang.Object ref = nick_;
@@ -1308,7 +1387,9 @@ public final class Nickserv {
     private int remainingNameChangeQuota_;
     /**
      * <code>uint32 remaining_name_change_quota = 4;</code>
+     * @return The remainingNameChangeQuota.
      */
+    @java.lang.Override
     public int getRemainingNameChangeQuota() {
       return remainingNameChangeQuota_;
     }
@@ -1317,7 +1398,9 @@ public final class Nickserv {
     private long updatedTimestamp_;
     /**
      * <code>uint64 updated_timestamp = 5;</code>
+     * @return The updatedTimestamp.
      */
+    @java.lang.Override
     public long getUpdatedTimestamp() {
       return updatedTimestamp_;
     }
@@ -1326,7 +1409,9 @@ public final class Nickserv {
     private long createdTimestamp_;
     /**
      * <code>uint64 created_timestamp = 6;</code>
+     * @return The createdTimestamp.
      */
+    @java.lang.Override
     public long getCreatedTimestamp() {
       return createdTimestamp_;
     }
@@ -1335,6 +1420,7 @@ public final class Nickserv {
     private com.google.protobuf.LazyStringList roles_;
     /**
      * <code>repeated string roles = 7;</code>
+     * @return A list containing the roles.
      */
     public com.google.protobuf.ProtocolStringList
         getRolesList() {
@@ -1342,18 +1428,23 @@ public final class Nickserv {
     }
     /**
      * <code>repeated string roles = 7;</code>
+     * @return The count of roles.
      */
     public int getRolesCount() {
       return roles_.size();
     }
     /**
      * <code>repeated string roles = 7;</code>
+     * @param index The index of the element to return.
+     * @return The roles at the given index.
      */
     public java.lang.String getRoles(int index) {
       return roles_.get(index);
     }
     /**
      * <code>repeated string roles = 7;</code>
+     * @param index The index of the value to return.
+     * @return The bytes of the roles at the given index.
      */
     public com.google.protobuf.ByteString
         getRolesBytes(int index) {
@@ -1450,23 +1541,22 @@ public final class Nickserv {
       }
       gg.strims.ppspp.proto.Nickserv.NickservNick other = (gg.strims.ppspp.proto.Nickserv.NickservNick) obj;
 
-      boolean result = true;
-      result = result && (getId()
-          == other.getId());
-      result = result && getKey()
-          .equals(other.getKey());
-      result = result && getNick()
-          .equals(other.getNick());
-      result = result && (getRemainingNameChangeQuota()
-          == other.getRemainingNameChangeQuota());
-      result = result && (getUpdatedTimestamp()
-          == other.getUpdatedTimestamp());
-      result = result && (getCreatedTimestamp()
-          == other.getCreatedTimestamp());
-      result = result && getRolesList()
-          .equals(other.getRolesList());
-      result = result && unknownFields.equals(other.unknownFields);
-      return result;
+      if (getId()
+          != other.getId()) return false;
+      if (!getKey()
+          .equals(other.getKey())) return false;
+      if (!getNick()
+          .equals(other.getNick())) return false;
+      if (getRemainingNameChangeQuota()
+          != other.getRemainingNameChangeQuota()) return false;
+      if (getUpdatedTimestamp()
+          != other.getUpdatedTimestamp()) return false;
+      if (getCreatedTimestamp()
+          != other.getCreatedTimestamp()) return false;
+      if (!getRolesList()
+          .equals(other.getRolesList())) return false;
+      if (!unknownFields.equals(other.unknownFields)) return false;
+      return true;
     }
 
     @java.lang.Override
@@ -1641,7 +1731,7 @@ public final class Nickserv {
         createdTimestamp_ = 0L;
 
         roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00000040);
+        bitField0_ = (bitField0_ & ~0x00000001);
         return this;
       }
 
@@ -1669,54 +1759,52 @@ public final class Nickserv {
       public gg.strims.ppspp.proto.Nickserv.NickservNick buildPartial() {
         gg.strims.ppspp.proto.Nickserv.NickservNick result = new gg.strims.ppspp.proto.Nickserv.NickservNick(this);
         int from_bitField0_ = bitField0_;
-        int to_bitField0_ = 0;
         result.id_ = id_;
         result.key_ = key_;
         result.nick_ = nick_;
         result.remainingNameChangeQuota_ = remainingNameChangeQuota_;
         result.updatedTimestamp_ = updatedTimestamp_;
         result.createdTimestamp_ = createdTimestamp_;
-        if (((bitField0_ & 0x00000040) == 0x00000040)) {
+        if (((bitField0_ & 0x00000001) != 0)) {
           roles_ = roles_.getUnmodifiableView();
-          bitField0_ = (bitField0_ & ~0x00000040);
+          bitField0_ = (bitField0_ & ~0x00000001);
         }
         result.roles_ = roles_;
-        result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
       }
 
       @java.lang.Override
       public Builder clone() {
-        return (Builder) super.clone();
+        return super.clone();
       }
       @java.lang.Override
       public Builder setField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return (Builder) super.setField(field, value);
+        return super.setField(field, value);
       }
       @java.lang.Override
       public Builder clearField(
           com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return (Builder) super.clearField(field);
+        return super.clearField(field);
       }
       @java.lang.Override
       public Builder clearOneof(
           com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return (Builder) super.clearOneof(oneof);
+        return super.clearOneof(oneof);
       }
       @java.lang.Override
       public Builder setRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           int index, java.lang.Object value) {
-        return (Builder) super.setRepeatedField(field, index, value);
+        return super.setRepeatedField(field, index, value);
       }
       @java.lang.Override
       public Builder addRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return (Builder) super.addRepeatedField(field, value);
+        return super.addRepeatedField(field, value);
       }
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -1752,7 +1840,7 @@ public final class Nickserv {
         if (!other.roles_.isEmpty()) {
           if (roles_.isEmpty()) {
             roles_ = other.roles_;
-            bitField0_ = (bitField0_ & ~0x00000040);
+            bitField0_ = (bitField0_ & ~0x00000001);
           } else {
             ensureRolesIsMutable();
             roles_.addAll(other.roles_);
@@ -1792,12 +1880,16 @@ public final class Nickserv {
       private long id_ ;
       /**
        * <code>uint64 id = 1;</code>
+       * @return The id.
        */
+      @java.lang.Override
       public long getId() {
         return id_;
       }
       /**
        * <code>uint64 id = 1;</code>
+       * @param value The id to set.
+       * @return This builder for chaining.
        */
       public Builder setId(long value) {
         
@@ -1807,6 +1899,7 @@ public final class Nickserv {
       }
       /**
        * <code>uint64 id = 1;</code>
+       * @return This builder for chaining.
        */
       public Builder clearId() {
         
@@ -1818,12 +1911,16 @@ public final class Nickserv {
       private com.google.protobuf.ByteString key_ = com.google.protobuf.ByteString.EMPTY;
       /**
        * <code>bytes key = 2;</code>
+       * @return The key.
        */
+      @java.lang.Override
       public com.google.protobuf.ByteString getKey() {
         return key_;
       }
       /**
        * <code>bytes key = 2;</code>
+       * @param value The key to set.
+       * @return This builder for chaining.
        */
       public Builder setKey(com.google.protobuf.ByteString value) {
         if (value == null) {
@@ -1836,6 +1933,7 @@ public final class Nickserv {
       }
       /**
        * <code>bytes key = 2;</code>
+       * @return This builder for chaining.
        */
       public Builder clearKey() {
         
@@ -1847,6 +1945,7 @@ public final class Nickserv {
       private java.lang.Object nick_ = "";
       /**
        * <code>string nick = 3;</code>
+       * @return The nick.
        */
       public java.lang.String getNick() {
         java.lang.Object ref = nick_;
@@ -1862,6 +1961,7 @@ public final class Nickserv {
       }
       /**
        * <code>string nick = 3;</code>
+       * @return The bytes for nick.
        */
       public com.google.protobuf.ByteString
           getNickBytes() {
@@ -1878,6 +1978,8 @@ public final class Nickserv {
       }
       /**
        * <code>string nick = 3;</code>
+       * @param value The nick to set.
+       * @return This builder for chaining.
        */
       public Builder setNick(
           java.lang.String value) {
@@ -1891,6 +1993,7 @@ public final class Nickserv {
       }
       /**
        * <code>string nick = 3;</code>
+       * @return This builder for chaining.
        */
       public Builder clearNick() {
         
@@ -1900,6 +2003,8 @@ public final class Nickserv {
       }
       /**
        * <code>string nick = 3;</code>
+       * @param value The bytes for nick to set.
+       * @return This builder for chaining.
        */
       public Builder setNickBytes(
           com.google.protobuf.ByteString value) {
@@ -1916,12 +2021,16 @@ public final class Nickserv {
       private int remainingNameChangeQuota_ ;
       /**
        * <code>uint32 remaining_name_change_quota = 4;</code>
+       * @return The remainingNameChangeQuota.
        */
+      @java.lang.Override
       public int getRemainingNameChangeQuota() {
         return remainingNameChangeQuota_;
       }
       /**
        * <code>uint32 remaining_name_change_quota = 4;</code>
+       * @param value The remainingNameChangeQuota to set.
+       * @return This builder for chaining.
        */
       public Builder setRemainingNameChangeQuota(int value) {
         
@@ -1931,6 +2040,7 @@ public final class Nickserv {
       }
       /**
        * <code>uint32 remaining_name_change_quota = 4;</code>
+       * @return This builder for chaining.
        */
       public Builder clearRemainingNameChangeQuota() {
         
@@ -1942,12 +2052,16 @@ public final class Nickserv {
       private long updatedTimestamp_ ;
       /**
        * <code>uint64 updated_timestamp = 5;</code>
+       * @return The updatedTimestamp.
        */
+      @java.lang.Override
       public long getUpdatedTimestamp() {
         return updatedTimestamp_;
       }
       /**
        * <code>uint64 updated_timestamp = 5;</code>
+       * @param value The updatedTimestamp to set.
+       * @return This builder for chaining.
        */
       public Builder setUpdatedTimestamp(long value) {
         
@@ -1957,6 +2071,7 @@ public final class Nickserv {
       }
       /**
        * <code>uint64 updated_timestamp = 5;</code>
+       * @return This builder for chaining.
        */
       public Builder clearUpdatedTimestamp() {
         
@@ -1968,12 +2083,16 @@ public final class Nickserv {
       private long createdTimestamp_ ;
       /**
        * <code>uint64 created_timestamp = 6;</code>
+       * @return The createdTimestamp.
        */
+      @java.lang.Override
       public long getCreatedTimestamp() {
         return createdTimestamp_;
       }
       /**
        * <code>uint64 created_timestamp = 6;</code>
+       * @param value The createdTimestamp to set.
+       * @return This builder for chaining.
        */
       public Builder setCreatedTimestamp(long value) {
         
@@ -1983,6 +2102,7 @@ public final class Nickserv {
       }
       /**
        * <code>uint64 created_timestamp = 6;</code>
+       * @return This builder for chaining.
        */
       public Builder clearCreatedTimestamp() {
         
@@ -1993,13 +2113,14 @@ public final class Nickserv {
 
       private com.google.protobuf.LazyStringList roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
       private void ensureRolesIsMutable() {
-        if (!((bitField0_ & 0x00000040) == 0x00000040)) {
+        if (!((bitField0_ & 0x00000001) != 0)) {
           roles_ = new com.google.protobuf.LazyStringArrayList(roles_);
-          bitField0_ |= 0x00000040;
+          bitField0_ |= 0x00000001;
          }
       }
       /**
        * <code>repeated string roles = 7;</code>
+       * @return A list containing the roles.
        */
       public com.google.protobuf.ProtocolStringList
           getRolesList() {
@@ -2007,18 +2128,23 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 7;</code>
+       * @return The count of roles.
        */
       public int getRolesCount() {
         return roles_.size();
       }
       /**
        * <code>repeated string roles = 7;</code>
+       * @param index The index of the element to return.
+       * @return The roles at the given index.
        */
       public java.lang.String getRoles(int index) {
         return roles_.get(index);
       }
       /**
        * <code>repeated string roles = 7;</code>
+       * @param index The index of the value to return.
+       * @return The bytes of the roles at the given index.
        */
       public com.google.protobuf.ByteString
           getRolesBytes(int index) {
@@ -2026,6 +2152,9 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 7;</code>
+       * @param index The index to set the value at.
+       * @param value The roles to set.
+       * @return This builder for chaining.
        */
       public Builder setRoles(
           int index, java.lang.String value) {
@@ -2039,6 +2168,8 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 7;</code>
+       * @param value The roles to add.
+       * @return This builder for chaining.
        */
       public Builder addRoles(
           java.lang.String value) {
@@ -2052,6 +2183,8 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 7;</code>
+       * @param values The roles to add.
+       * @return This builder for chaining.
        */
       public Builder addAllRoles(
           java.lang.Iterable<java.lang.String> values) {
@@ -2063,15 +2196,18 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 7;</code>
+       * @return This builder for chaining.
        */
       public Builder clearRoles() {
         roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00000040);
+        bitField0_ = (bitField0_ & ~0x00000001);
         onChanged();
         return this;
       }
       /**
        * <code>repeated string roles = 7;</code>
+       * @param value The bytes of the roles to add.
+       * @return This builder for chaining.
        */
       public Builder addRolesBytes(
           com.google.protobuf.ByteString value) {
@@ -2087,7 +2223,7 @@ public final class Nickserv {
       @java.lang.Override
       public final Builder setUnknownFields(
           final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFieldsProto3(unknownFields);
+        return super.setUnknownFields(unknownFields);
       }
 
       @java.lang.Override
@@ -2143,25 +2279,30 @@ public final class Nickserv {
 
     /**
      * <code>bytes key = 1;</code>
+     * @return The key.
      */
     com.google.protobuf.ByteString getKey();
 
     /**
      * <code>string nick = 2;</code>
+     * @return The nick.
      */
     java.lang.String getNick();
     /**
      * <code>string nick = 2;</code>
+     * @return The bytes for nick.
      */
     com.google.protobuf.ByteString
         getNickBytes();
 
     /**
      * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+     * @return Whether the validUntil field is set.
      */
     boolean hasValidUntil();
     /**
      * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+     * @return The validUntil.
      */
     com.google.protobuf.Timestamp getValidUntil();
     /**
@@ -2171,24 +2312,31 @@ public final class Nickserv {
 
     /**
      * <code>bytes signature = 4;</code>
+     * @return The signature.
      */
     com.google.protobuf.ByteString getSignature();
 
     /**
      * <code>repeated string roles = 5;</code>
+     * @return A list containing the roles.
      */
     java.util.List<java.lang.String>
         getRolesList();
     /**
      * <code>repeated string roles = 5;</code>
+     * @return The count of roles.
      */
     int getRolesCount();
     /**
      * <code>repeated string roles = 5;</code>
+     * @param index The index of the element to return.
+     * @return The roles at the given index.
      */
     java.lang.String getRoles(int index);
     /**
      * <code>repeated string roles = 5;</code>
+     * @param index The index of the value to return.
+     * @return The bytes of the roles at the given index.
      */
     com.google.protobuf.ByteString
         getRolesBytes(int index);
@@ -2196,7 +2344,7 @@ public final class Nickserv {
   /**
    * Protobuf type {@code NickServToken}
    */
-  public  static final class NickServToken extends
+  public static final class NickServToken extends
       com.google.protobuf.GeneratedMessageV3 implements
       // @@protoc_insertion_point(message_implements:NickServToken)
       NickServTokenOrBuilder {
@@ -2210,6 +2358,13 @@ public final class Nickserv {
       nick_ = "";
       signature_ = com.google.protobuf.ByteString.EMPTY;
       roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new NickServToken();
     }
 
     @java.lang.Override
@@ -2267,15 +2422,15 @@ public final class Nickserv {
             }
             case 42: {
               java.lang.String s = input.readStringRequireUtf8();
-              if (!((mutable_bitField0_ & 0x00000010) == 0x00000010)) {
+              if (!((mutable_bitField0_ & 0x00000001) != 0)) {
                 roles_ = new com.google.protobuf.LazyStringArrayList();
-                mutable_bitField0_ |= 0x00000010;
+                mutable_bitField0_ |= 0x00000001;
               }
               roles_.add(s);
               break;
             }
             default: {
-              if (!parseUnknownFieldProto3(
+              if (!parseUnknownField(
                   input, unknownFields, extensionRegistry, tag)) {
                 done = true;
               }
@@ -2289,7 +2444,7 @@ public final class Nickserv {
         throw new com.google.protobuf.InvalidProtocolBufferException(
             e).setUnfinishedMessage(this);
       } finally {
-        if (((mutable_bitField0_ & 0x00000010) == 0x00000010)) {
+        if (((mutable_bitField0_ & 0x00000001) != 0)) {
           roles_ = roles_.getUnmodifiableView();
         }
         this.unknownFields = unknownFields.build();
@@ -2309,12 +2464,13 @@ public final class Nickserv {
               gg.strims.ppspp.proto.Nickserv.NickServToken.class, gg.strims.ppspp.proto.Nickserv.NickServToken.Builder.class);
     }
 
-    private int bitField0_;
     public static final int KEY_FIELD_NUMBER = 1;
     private com.google.protobuf.ByteString key_;
     /**
      * <code>bytes key = 1;</code>
+     * @return The key.
      */
+    @java.lang.Override
     public com.google.protobuf.ByteString getKey() {
       return key_;
     }
@@ -2323,7 +2479,9 @@ public final class Nickserv {
     private volatile java.lang.Object nick_;
     /**
      * <code>string nick = 2;</code>
+     * @return The nick.
      */
+    @java.lang.Override
     public java.lang.String getNick() {
       java.lang.Object ref = nick_;
       if (ref instanceof java.lang.String) {
@@ -2338,7 +2496,9 @@ public final class Nickserv {
     }
     /**
      * <code>string nick = 2;</code>
+     * @return The bytes for nick.
      */
+    @java.lang.Override
     public com.google.protobuf.ByteString
         getNickBytes() {
       java.lang.Object ref = nick_;
@@ -2357,19 +2517,24 @@ public final class Nickserv {
     private com.google.protobuf.Timestamp validUntil_;
     /**
      * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+     * @return Whether the validUntil field is set.
      */
+    @java.lang.Override
     public boolean hasValidUntil() {
       return validUntil_ != null;
     }
     /**
      * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+     * @return The validUntil.
      */
+    @java.lang.Override
     public com.google.protobuf.Timestamp getValidUntil() {
       return validUntil_ == null ? com.google.protobuf.Timestamp.getDefaultInstance() : validUntil_;
     }
     /**
      * <code>.google.protobuf.Timestamp valid_until = 3;</code>
      */
+    @java.lang.Override
     public com.google.protobuf.TimestampOrBuilder getValidUntilOrBuilder() {
       return getValidUntil();
     }
@@ -2378,7 +2543,9 @@ public final class Nickserv {
     private com.google.protobuf.ByteString signature_;
     /**
      * <code>bytes signature = 4;</code>
+     * @return The signature.
      */
+    @java.lang.Override
     public com.google.protobuf.ByteString getSignature() {
       return signature_;
     }
@@ -2387,6 +2554,7 @@ public final class Nickserv {
     private com.google.protobuf.LazyStringList roles_;
     /**
      * <code>repeated string roles = 5;</code>
+     * @return A list containing the roles.
      */
     public com.google.protobuf.ProtocolStringList
         getRolesList() {
@@ -2394,18 +2562,23 @@ public final class Nickserv {
     }
     /**
      * <code>repeated string roles = 5;</code>
+     * @return The count of roles.
      */
     public int getRolesCount() {
       return roles_.size();
     }
     /**
      * <code>repeated string roles = 5;</code>
+     * @param index The index of the element to return.
+     * @return The roles at the given index.
      */
     public java.lang.String getRoles(int index) {
       return roles_.get(index);
     }
     /**
      * <code>repeated string roles = 5;</code>
+     * @param index The index of the value to return.
+     * @return The bytes of the roles at the given index.
      */
     public com.google.protobuf.ByteString
         getRolesBytes(int index) {
@@ -2488,22 +2661,21 @@ public final class Nickserv {
       }
       gg.strims.ppspp.proto.Nickserv.NickServToken other = (gg.strims.ppspp.proto.Nickserv.NickServToken) obj;
 
-      boolean result = true;
-      result = result && getKey()
-          .equals(other.getKey());
-      result = result && getNick()
-          .equals(other.getNick());
-      result = result && (hasValidUntil() == other.hasValidUntil());
+      if (!getKey()
+          .equals(other.getKey())) return false;
+      if (!getNick()
+          .equals(other.getNick())) return false;
+      if (hasValidUntil() != other.hasValidUntil()) return false;
       if (hasValidUntil()) {
-        result = result && getValidUntil()
-            .equals(other.getValidUntil());
+        if (!getValidUntil()
+            .equals(other.getValidUntil())) return false;
       }
-      result = result && getSignature()
-          .equals(other.getSignature());
-      result = result && getRolesList()
-          .equals(other.getRolesList());
-      result = result && unknownFields.equals(other.unknownFields);
-      return result;
+      if (!getSignature()
+          .equals(other.getSignature())) return false;
+      if (!getRolesList()
+          .equals(other.getRolesList())) return false;
+      if (!unknownFields.equals(other.unknownFields)) return false;
+      return true;
     }
 
     @java.lang.Override
@@ -2673,7 +2845,7 @@ public final class Nickserv {
         signature_ = com.google.protobuf.ByteString.EMPTY;
 
         roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00000010);
+        bitField0_ = (bitField0_ & ~0x00000001);
         return this;
       }
 
@@ -2701,7 +2873,6 @@ public final class Nickserv {
       public gg.strims.ppspp.proto.Nickserv.NickServToken buildPartial() {
         gg.strims.ppspp.proto.Nickserv.NickServToken result = new gg.strims.ppspp.proto.Nickserv.NickServToken(this);
         int from_bitField0_ = bitField0_;
-        int to_bitField0_ = 0;
         result.key_ = key_;
         result.nick_ = nick_;
         if (validUntilBuilder_ == null) {
@@ -2710,47 +2881,46 @@ public final class Nickserv {
           result.validUntil_ = validUntilBuilder_.build();
         }
         result.signature_ = signature_;
-        if (((bitField0_ & 0x00000010) == 0x00000010)) {
+        if (((bitField0_ & 0x00000001) != 0)) {
           roles_ = roles_.getUnmodifiableView();
-          bitField0_ = (bitField0_ & ~0x00000010);
+          bitField0_ = (bitField0_ & ~0x00000001);
         }
         result.roles_ = roles_;
-        result.bitField0_ = to_bitField0_;
         onBuilt();
         return result;
       }
 
       @java.lang.Override
       public Builder clone() {
-        return (Builder) super.clone();
+        return super.clone();
       }
       @java.lang.Override
       public Builder setField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return (Builder) super.setField(field, value);
+        return super.setField(field, value);
       }
       @java.lang.Override
       public Builder clearField(
           com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return (Builder) super.clearField(field);
+        return super.clearField(field);
       }
       @java.lang.Override
       public Builder clearOneof(
           com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return (Builder) super.clearOneof(oneof);
+        return super.clearOneof(oneof);
       }
       @java.lang.Override
       public Builder setRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           int index, java.lang.Object value) {
-        return (Builder) super.setRepeatedField(field, index, value);
+        return super.setRepeatedField(field, index, value);
       }
       @java.lang.Override
       public Builder addRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return (Builder) super.addRepeatedField(field, value);
+        return super.addRepeatedField(field, value);
       }
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -2780,7 +2950,7 @@ public final class Nickserv {
         if (!other.roles_.isEmpty()) {
           if (roles_.isEmpty()) {
             roles_ = other.roles_;
-            bitField0_ = (bitField0_ & ~0x00000010);
+            bitField0_ = (bitField0_ & ~0x00000001);
           } else {
             ensureRolesIsMutable();
             roles_.addAll(other.roles_);
@@ -2820,12 +2990,16 @@ public final class Nickserv {
       private com.google.protobuf.ByteString key_ = com.google.protobuf.ByteString.EMPTY;
       /**
        * <code>bytes key = 1;</code>
+       * @return The key.
        */
+      @java.lang.Override
       public com.google.protobuf.ByteString getKey() {
         return key_;
       }
       /**
        * <code>bytes key = 1;</code>
+       * @param value The key to set.
+       * @return This builder for chaining.
        */
       public Builder setKey(com.google.protobuf.ByteString value) {
         if (value == null) {
@@ -2838,6 +3012,7 @@ public final class Nickserv {
       }
       /**
        * <code>bytes key = 1;</code>
+       * @return This builder for chaining.
        */
       public Builder clearKey() {
         
@@ -2849,6 +3024,7 @@ public final class Nickserv {
       private java.lang.Object nick_ = "";
       /**
        * <code>string nick = 2;</code>
+       * @return The nick.
        */
       public java.lang.String getNick() {
         java.lang.Object ref = nick_;
@@ -2864,6 +3040,7 @@ public final class Nickserv {
       }
       /**
        * <code>string nick = 2;</code>
+       * @return The bytes for nick.
        */
       public com.google.protobuf.ByteString
           getNickBytes() {
@@ -2880,6 +3057,8 @@ public final class Nickserv {
       }
       /**
        * <code>string nick = 2;</code>
+       * @param value The nick to set.
+       * @return This builder for chaining.
        */
       public Builder setNick(
           java.lang.String value) {
@@ -2893,6 +3072,7 @@ public final class Nickserv {
       }
       /**
        * <code>string nick = 2;</code>
+       * @return This builder for chaining.
        */
       public Builder clearNick() {
         
@@ -2902,6 +3082,8 @@ public final class Nickserv {
       }
       /**
        * <code>string nick = 2;</code>
+       * @param value The bytes for nick to set.
+       * @return This builder for chaining.
        */
       public Builder setNickBytes(
           com.google.protobuf.ByteString value) {
@@ -2915,17 +3097,19 @@ public final class Nickserv {
         return this;
       }
 
-      private com.google.protobuf.Timestamp validUntil_ = null;
+      private com.google.protobuf.Timestamp validUntil_;
       private com.google.protobuf.SingleFieldBuilderV3<
           com.google.protobuf.Timestamp, com.google.protobuf.Timestamp.Builder, com.google.protobuf.TimestampOrBuilder> validUntilBuilder_;
       /**
        * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+       * @return Whether the validUntil field is set.
        */
       public boolean hasValidUntil() {
         return validUntilBuilder_ != null || validUntil_ != null;
       }
       /**
        * <code>.google.protobuf.Timestamp valid_until = 3;</code>
+       * @return The validUntil.
        */
       public com.google.protobuf.Timestamp getValidUntil() {
         if (validUntilBuilder_ == null) {
@@ -3035,12 +3219,16 @@ public final class Nickserv {
       private com.google.protobuf.ByteString signature_ = com.google.protobuf.ByteString.EMPTY;
       /**
        * <code>bytes signature = 4;</code>
+       * @return The signature.
        */
+      @java.lang.Override
       public com.google.protobuf.ByteString getSignature() {
         return signature_;
       }
       /**
        * <code>bytes signature = 4;</code>
+       * @param value The signature to set.
+       * @return This builder for chaining.
        */
       public Builder setSignature(com.google.protobuf.ByteString value) {
         if (value == null) {
@@ -3053,6 +3241,7 @@ public final class Nickserv {
       }
       /**
        * <code>bytes signature = 4;</code>
+       * @return This builder for chaining.
        */
       public Builder clearSignature() {
         
@@ -3063,13 +3252,14 @@ public final class Nickserv {
 
       private com.google.protobuf.LazyStringList roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
       private void ensureRolesIsMutable() {
-        if (!((bitField0_ & 0x00000010) == 0x00000010)) {
+        if (!((bitField0_ & 0x00000001) != 0)) {
           roles_ = new com.google.protobuf.LazyStringArrayList(roles_);
-          bitField0_ |= 0x00000010;
+          bitField0_ |= 0x00000001;
          }
       }
       /**
        * <code>repeated string roles = 5;</code>
+       * @return A list containing the roles.
        */
       public com.google.protobuf.ProtocolStringList
           getRolesList() {
@@ -3077,18 +3267,23 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 5;</code>
+       * @return The count of roles.
        */
       public int getRolesCount() {
         return roles_.size();
       }
       /**
        * <code>repeated string roles = 5;</code>
+       * @param index The index of the element to return.
+       * @return The roles at the given index.
        */
       public java.lang.String getRoles(int index) {
         return roles_.get(index);
       }
       /**
        * <code>repeated string roles = 5;</code>
+       * @param index The index of the value to return.
+       * @return The bytes of the roles at the given index.
        */
       public com.google.protobuf.ByteString
           getRolesBytes(int index) {
@@ -3096,6 +3291,9 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 5;</code>
+       * @param index The index to set the value at.
+       * @param value The roles to set.
+       * @return This builder for chaining.
        */
       public Builder setRoles(
           int index, java.lang.String value) {
@@ -3109,6 +3307,8 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 5;</code>
+       * @param value The roles to add.
+       * @return This builder for chaining.
        */
       public Builder addRoles(
           java.lang.String value) {
@@ -3122,6 +3322,8 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 5;</code>
+       * @param values The roles to add.
+       * @return This builder for chaining.
        */
       public Builder addAllRoles(
           java.lang.Iterable<java.lang.String> values) {
@@ -3133,15 +3335,18 @@ public final class Nickserv {
       }
       /**
        * <code>repeated string roles = 5;</code>
+       * @return This builder for chaining.
        */
       public Builder clearRoles() {
         roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
-        bitField0_ = (bitField0_ & ~0x00000010);
+        bitField0_ = (bitField0_ & ~0x00000001);
         onChanged();
         return this;
       }
       /**
        * <code>repeated string roles = 5;</code>
+       * @param value The bytes of the roles to add.
+       * @return This builder for chaining.
        */
       public Builder addRolesBytes(
           com.google.protobuf.ByteString value) {
@@ -3157,7 +3362,7 @@ public final class Nickserv {
       @java.lang.Override
       public final Builder setUnknownFields(
           final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFieldsProto3(unknownFields);
+        return super.setUnknownFields(unknownFields);
       }
 
       @java.lang.Override
@@ -3213,20 +3418,24 @@ public final class Nickserv {
 
     /**
      * <code>uint64 request_id = 1;</code>
+     * @return The requestId.
      */
     long getRequestId();
 
     /**
      * <code>bytes source_public_key = 2;</code>
+     * @return The sourcePublicKey.
      */
     com.google.protobuf.ByteString getSourcePublicKey();
 
     /**
      * <code>.NickServRPCCommand.Create create = 5;</code>
+     * @return Whether the create field is set.
      */
     boolean hasCreate();
     /**
      * <code>.NickServRPCCommand.Create create = 5;</code>
+     * @return The create.
      */
     gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Create getCreate();
     /**
@@ -3236,10 +3445,12 @@ public final class Nickserv {
 
     /**
      * <code>.NickServRPCCommand.Retrieve retrieve = 6;</code>
+     * @return Whether the retrieve field is set.
      */
     boolean hasRetrieve();
     /**
      * <code>.NickServRPCCommand.Retrieve retrieve = 6;</code>
+     * @return The retrieve.
      */
     gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Retrieve getRetrieve();
     /**
@@ -3249,10 +3460,12 @@ public final class Nickserv {
 
     /**
      * <code>.NickServRPCCommand.Update update = 7;</code>
+     * @return Whether the update field is set.
      */
     boolean hasUpdate();
     /**
      * <code>.NickServRPCCommand.Update update = 7;</code>
+     * @return The update.
      */
     gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update getUpdate();
     /**
@@ -3262,10 +3475,12 @@ public final class Nickserv {
 
     /**
      * <code>.NickServRPCCommand.Delete delete = 8;</code>
+     * @return Whether the delete field is set.
      */
     boolean hasDelete();
     /**
      * <code>.NickServRPCCommand.Delete delete = 8;</code>
+     * @return The delete.
      */
     gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Delete getDelete();
     /**
@@ -3278,7 +3493,7 @@ public final class Nickserv {
   /**
    * Protobuf type {@code NickServRPCCommand}
    */
-  public  static final class NickServRPCCommand extends
+  public static final class NickServRPCCommand extends
       com.google.protobuf.GeneratedMessageV3 implements
       // @@protoc_insertion_point(message_implements:NickServRPCCommand)
       NickServRPCCommandOrBuilder {
@@ -3288,8 +3503,14 @@ public final class Nickserv {
       super(builder);
     }
     private NickServRPCCommand() {
-      requestId_ = 0L;
       sourcePublicKey_ = com.google.protobuf.ByteString.EMPTY;
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new NickServRPCCommand();
     }
 
     @java.lang.Override
@@ -3305,7 +3526,6 @@ public final class Nickserv {
       if (extensionRegistry == null) {
         throw new java.lang.NullPointerException();
       }
-      int mutable_bitField0_ = 0;
       com.google.protobuf.UnknownFieldSet.Builder unknownFields =
           com.google.protobuf.UnknownFieldSet.newBuilder();
       try {
@@ -3383,7 +3603,7 @@ public final class Nickserv {
               break;
             }
             default: {
-              if (!parseUnknownFieldProto3(
+              if (!parseUnknownField(
                   input, unknownFields, extensionRegistry, tag)) {
                 done = true;
               }
@@ -3420,10 +3640,12 @@ public final class Nickserv {
 
       /**
        * <code>string nick = 1;</code>
+       * @return The nick.
        */
       java.lang.String getNick();
       /**
        * <code>string nick = 1;</code>
+       * @return The bytes for nick.
        */
       com.google.protobuf.ByteString
           getNickBytes();
@@ -3431,7 +3653,7 @@ public final class Nickserv {
     /**
      * Protobuf type {@code NickServRPCCommand.Create}
      */
-    public  static final class Create extends
+    public static final class Create extends
         com.google.protobuf.GeneratedMessageV3 implements
         // @@protoc_insertion_point(message_implements:NickServRPCCommand.Create)
         CreateOrBuilder {
@@ -3442,6 +3664,13 @@ public final class Nickserv {
       }
       private Create() {
         nick_ = "";
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new Create();
       }
 
       @java.lang.Override
@@ -3457,7 +3686,6 @@ public final class Nickserv {
         if (extensionRegistry == null) {
           throw new java.lang.NullPointerException();
         }
-        int mutable_bitField0_ = 0;
         com.google.protobuf.UnknownFieldSet.Builder unknownFields =
             com.google.protobuf.UnknownFieldSet.newBuilder();
         try {
@@ -3475,7 +3703,7 @@ public final class Nickserv {
                 break;
               }
               default: {
-                if (!parseUnknownFieldProto3(
+                if (!parseUnknownField(
                     input, unknownFields, extensionRegistry, tag)) {
                   done = true;
                 }
@@ -3510,7 +3738,9 @@ public final class Nickserv {
       private volatile java.lang.Object nick_;
       /**
        * <code>string nick = 1;</code>
+       * @return The nick.
        */
+      @java.lang.Override
       public java.lang.String getNick() {
         java.lang.Object ref = nick_;
         if (ref instanceof java.lang.String) {
@@ -3525,7 +3755,9 @@ public final class Nickserv {
       }
       /**
        * <code>string nick = 1;</code>
+       * @return The bytes for nick.
        */
+      @java.lang.Override
       public com.google.protobuf.ByteString
           getNickBytes() {
         java.lang.Object ref = nick_;
@@ -3584,11 +3816,10 @@ public final class Nickserv {
         }
         gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Create other = (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Create) obj;
 
-        boolean result = true;
-        result = result && getNick()
-            .equals(other.getNick());
-        result = result && unknownFields.equals(other.unknownFields);
-        return result;
+        if (!getNick()
+            .equals(other.getNick())) return false;
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
       }
 
       @java.lang.Override
@@ -3768,35 +3999,35 @@ public final class Nickserv {
 
         @java.lang.Override
         public Builder clone() {
-          return (Builder) super.clone();
+          return super.clone();
         }
         @java.lang.Override
         public Builder setField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             java.lang.Object value) {
-          return (Builder) super.setField(field, value);
+          return super.setField(field, value);
         }
         @java.lang.Override
         public Builder clearField(
             com.google.protobuf.Descriptors.FieldDescriptor field) {
-          return (Builder) super.clearField(field);
+          return super.clearField(field);
         }
         @java.lang.Override
         public Builder clearOneof(
             com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-          return (Builder) super.clearOneof(oneof);
+          return super.clearOneof(oneof);
         }
         @java.lang.Override
         public Builder setRepeatedField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             int index, java.lang.Object value) {
-          return (Builder) super.setRepeatedField(field, index, value);
+          return super.setRepeatedField(field, index, value);
         }
         @java.lang.Override
         public Builder addRepeatedField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             java.lang.Object value) {
-          return (Builder) super.addRepeatedField(field, value);
+          return super.addRepeatedField(field, value);
         }
         @java.lang.Override
         public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -3846,6 +4077,7 @@ public final class Nickserv {
         private java.lang.Object nick_ = "";
         /**
          * <code>string nick = 1;</code>
+         * @return The nick.
          */
         public java.lang.String getNick() {
           java.lang.Object ref = nick_;
@@ -3861,6 +4093,7 @@ public final class Nickserv {
         }
         /**
          * <code>string nick = 1;</code>
+         * @return The bytes for nick.
          */
         public com.google.protobuf.ByteString
             getNickBytes() {
@@ -3877,6 +4110,8 @@ public final class Nickserv {
         }
         /**
          * <code>string nick = 1;</code>
+         * @param value The nick to set.
+         * @return This builder for chaining.
          */
         public Builder setNick(
             java.lang.String value) {
@@ -3890,6 +4125,7 @@ public final class Nickserv {
         }
         /**
          * <code>string nick = 1;</code>
+         * @return This builder for chaining.
          */
         public Builder clearNick() {
           
@@ -3899,6 +4135,8 @@ public final class Nickserv {
         }
         /**
          * <code>string nick = 1;</code>
+         * @param value The bytes for nick to set.
+         * @return This builder for chaining.
          */
         public Builder setNickBytes(
             com.google.protobuf.ByteString value) {
@@ -3914,7 +4152,7 @@ public final class Nickserv {
         @java.lang.Override
         public final Builder setUnknownFields(
             final com.google.protobuf.UnknownFieldSet unknownFields) {
-          return super.setUnknownFieldsProto3(unknownFields);
+          return super.setUnknownFields(unknownFields);
         }
 
         @java.lang.Override
@@ -3971,7 +4209,7 @@ public final class Nickserv {
     /**
      * Protobuf type {@code NickServRPCCommand.Retrieve}
      */
-    public  static final class Retrieve extends
+    public static final class Retrieve extends
         com.google.protobuf.GeneratedMessageV3 implements
         // @@protoc_insertion_point(message_implements:NickServRPCCommand.Retrieve)
         RetrieveOrBuilder {
@@ -3981,6 +4219,13 @@ public final class Nickserv {
         super(builder);
       }
       private Retrieve() {
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new Retrieve();
       }
 
       @java.lang.Override
@@ -4007,7 +4252,7 @@ public final class Nickserv {
                 done = true;
                 break;
               default: {
-                if (!parseUnknownFieldProto3(
+                if (!parseUnknownField(
                     input, unknownFields, extensionRegistry, tag)) {
                   done = true;
                 }
@@ -4076,9 +4321,8 @@ public final class Nickserv {
         }
         gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Retrieve other = (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Retrieve) obj;
 
-        boolean result = true;
-        result = result && unknownFields.equals(other.unknownFields);
-        return result;
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
       }
 
       @java.lang.Override
@@ -4253,35 +4497,35 @@ public final class Nickserv {
 
         @java.lang.Override
         public Builder clone() {
-          return (Builder) super.clone();
+          return super.clone();
         }
         @java.lang.Override
         public Builder setField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             java.lang.Object value) {
-          return (Builder) super.setField(field, value);
+          return super.setField(field, value);
         }
         @java.lang.Override
         public Builder clearField(
             com.google.protobuf.Descriptors.FieldDescriptor field) {
-          return (Builder) super.clearField(field);
+          return super.clearField(field);
         }
         @java.lang.Override
         public Builder clearOneof(
             com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-          return (Builder) super.clearOneof(oneof);
+          return super.clearOneof(oneof);
         }
         @java.lang.Override
         public Builder setRepeatedField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             int index, java.lang.Object value) {
-          return (Builder) super.setRepeatedField(field, index, value);
+          return super.setRepeatedField(field, index, value);
         }
         @java.lang.Override
         public Builder addRepeatedField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             java.lang.Object value) {
-          return (Builder) super.addRepeatedField(field, value);
+          return super.addRepeatedField(field, value);
         }
         @java.lang.Override
         public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -4326,7 +4570,7 @@ public final class Nickserv {
         @java.lang.Override
         public final Builder setUnknownFields(
             final com.google.protobuf.UnknownFieldSet unknownFields) {
-          return super.setUnknownFieldsProto3(unknownFields);
+          return super.setUnknownFields(unknownFields);
         }
 
         @java.lang.Override
@@ -4382,10 +4626,12 @@ public final class Nickserv {
 
       /**
        * <code>.NickServRPCCommand.Update.ChangeNick nick = 1;</code>
+       * @return Whether the nick field is set.
        */
       boolean hasNick();
       /**
        * <code>.NickServRPCCommand.Update.ChangeNick nick = 1;</code>
+       * @return The nick.
        */
       gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.ChangeNick getNick();
       /**
@@ -4395,15 +4641,18 @@ public final class Nickserv {
 
       /**
        * <code>uint32 name_change_quota = 2;</code>
+       * @return The nameChangeQuota.
        */
       int getNameChangeQuota();
 
       /**
        * <code>.NickServRPCCommand.Update.Roles roles = 3;</code>
+       * @return Whether the roles field is set.
        */
       boolean hasRoles();
       /**
        * <code>.NickServRPCCommand.Update.Roles roles = 3;</code>
+       * @return The roles.
        */
       gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Roles getRoles();
       /**
@@ -4416,7 +4665,7 @@ public final class Nickserv {
     /**
      * Protobuf type {@code NickServRPCCommand.Update}
      */
-    public  static final class Update extends
+    public static final class Update extends
         com.google.protobuf.GeneratedMessageV3 implements
         // @@protoc_insertion_point(message_implements:NickServRPCCommand.Update)
         UpdateOrBuilder {
@@ -4426,6 +4675,13 @@ public final class Nickserv {
         super(builder);
       }
       private Update() {
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new Update();
       }
 
       @java.lang.Override
@@ -4441,7 +4697,6 @@ public final class Nickserv {
         if (extensionRegistry == null) {
           throw new java.lang.NullPointerException();
         }
-        int mutable_bitField0_ = 0;
         com.google.protobuf.UnknownFieldSet.Builder unknownFields =
             com.google.protobuf.UnknownFieldSet.newBuilder();
         try {
@@ -4486,7 +4741,7 @@ public final class Nickserv {
                 break;
               }
               default: {
-                if (!parseUnknownFieldProto3(
+                if (!parseUnknownField(
                     input, unknownFields, extensionRegistry, tag)) {
                   done = true;
                 }
@@ -4523,19 +4778,25 @@ public final class Nickserv {
 
         /**
          * <code>repeated string roles = 1;</code>
+         * @return A list containing the roles.
          */
         java.util.List<java.lang.String>
             getRolesList();
         /**
          * <code>repeated string roles = 1;</code>
+         * @return The count of roles.
          */
         int getRolesCount();
         /**
          * <code>repeated string roles = 1;</code>
+         * @param index The index of the element to return.
+         * @return The roles at the given index.
          */
         java.lang.String getRoles(int index);
         /**
          * <code>repeated string roles = 1;</code>
+         * @param index The index of the value to return.
+         * @return The bytes of the roles at the given index.
          */
         com.google.protobuf.ByteString
             getRolesBytes(int index);
@@ -4543,7 +4804,7 @@ public final class Nickserv {
       /**
        * Protobuf type {@code NickServRPCCommand.Update.Roles}
        */
-      public  static final class Roles extends
+      public static final class Roles extends
           com.google.protobuf.GeneratedMessageV3 implements
           // @@protoc_insertion_point(message_implements:NickServRPCCommand.Update.Roles)
           RolesOrBuilder {
@@ -4554,6 +4815,13 @@ public final class Nickserv {
         }
         private Roles() {
           roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
+        }
+
+        @java.lang.Override
+        @SuppressWarnings({"unused"})
+        protected java.lang.Object newInstance(
+            UnusedPrivateParameter unused) {
+          return new Roles();
         }
 
         @java.lang.Override
@@ -4582,7 +4850,7 @@ public final class Nickserv {
                   break;
                 case 10: {
                   java.lang.String s = input.readStringRequireUtf8();
-                  if (!((mutable_bitField0_ & 0x00000001) == 0x00000001)) {
+                  if (!((mutable_bitField0_ & 0x00000001) != 0)) {
                     roles_ = new com.google.protobuf.LazyStringArrayList();
                     mutable_bitField0_ |= 0x00000001;
                   }
@@ -4590,7 +4858,7 @@ public final class Nickserv {
                   break;
                 }
                 default: {
-                  if (!parseUnknownFieldProto3(
+                  if (!parseUnknownField(
                       input, unknownFields, extensionRegistry, tag)) {
                     done = true;
                   }
@@ -4604,7 +4872,7 @@ public final class Nickserv {
             throw new com.google.protobuf.InvalidProtocolBufferException(
                 e).setUnfinishedMessage(this);
           } finally {
-            if (((mutable_bitField0_ & 0x00000001) == 0x00000001)) {
+            if (((mutable_bitField0_ & 0x00000001) != 0)) {
               roles_ = roles_.getUnmodifiableView();
             }
             this.unknownFields = unknownFields.build();
@@ -4628,6 +4896,7 @@ public final class Nickserv {
         private com.google.protobuf.LazyStringList roles_;
         /**
          * <code>repeated string roles = 1;</code>
+         * @return A list containing the roles.
          */
         public com.google.protobuf.ProtocolStringList
             getRolesList() {
@@ -4635,18 +4904,23 @@ public final class Nickserv {
         }
         /**
          * <code>repeated string roles = 1;</code>
+         * @return The count of roles.
          */
         public int getRolesCount() {
           return roles_.size();
         }
         /**
          * <code>repeated string roles = 1;</code>
+         * @param index The index of the element to return.
+         * @return The roles at the given index.
          */
         public java.lang.String getRoles(int index) {
           return roles_.get(index);
         }
         /**
          * <code>repeated string roles = 1;</code>
+         * @param index The index of the value to return.
+         * @return The bytes of the roles at the given index.
          */
         public com.google.protobuf.ByteString
             getRolesBytes(int index) {
@@ -4702,11 +4976,10 @@ public final class Nickserv {
           }
           gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Roles other = (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Roles) obj;
 
-          boolean result = true;
-          result = result && getRolesList()
-              .equals(other.getRolesList());
-          result = result && unknownFields.equals(other.unknownFields);
-          return result;
+          if (!getRolesList()
+              .equals(other.getRolesList())) return false;
+          if (!unknownFields.equals(other.unknownFields)) return false;
+          return true;
         }
 
         @java.lang.Override
@@ -4882,7 +5155,7 @@ public final class Nickserv {
           public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Roles buildPartial() {
             gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Roles result = new gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Roles(this);
             int from_bitField0_ = bitField0_;
-            if (((bitField0_ & 0x00000001) == 0x00000001)) {
+            if (((bitField0_ & 0x00000001) != 0)) {
               roles_ = roles_.getUnmodifiableView();
               bitField0_ = (bitField0_ & ~0x00000001);
             }
@@ -4893,35 +5166,35 @@ public final class Nickserv {
 
           @java.lang.Override
           public Builder clone() {
-            return (Builder) super.clone();
+            return super.clone();
           }
           @java.lang.Override
           public Builder setField(
               com.google.protobuf.Descriptors.FieldDescriptor field,
               java.lang.Object value) {
-            return (Builder) super.setField(field, value);
+            return super.setField(field, value);
           }
           @java.lang.Override
           public Builder clearField(
               com.google.protobuf.Descriptors.FieldDescriptor field) {
-            return (Builder) super.clearField(field);
+            return super.clearField(field);
           }
           @java.lang.Override
           public Builder clearOneof(
               com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-            return (Builder) super.clearOneof(oneof);
+            return super.clearOneof(oneof);
           }
           @java.lang.Override
           public Builder setRepeatedField(
               com.google.protobuf.Descriptors.FieldDescriptor field,
               int index, java.lang.Object value) {
-            return (Builder) super.setRepeatedField(field, index, value);
+            return super.setRepeatedField(field, index, value);
           }
           @java.lang.Override
           public Builder addRepeatedField(
               com.google.protobuf.Descriptors.FieldDescriptor field,
               java.lang.Object value) {
-            return (Builder) super.addRepeatedField(field, value);
+            return super.addRepeatedField(field, value);
           }
           @java.lang.Override
           public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -4977,13 +5250,14 @@ public final class Nickserv {
 
           private com.google.protobuf.LazyStringList roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
           private void ensureRolesIsMutable() {
-            if (!((bitField0_ & 0x00000001) == 0x00000001)) {
+            if (!((bitField0_ & 0x00000001) != 0)) {
               roles_ = new com.google.protobuf.LazyStringArrayList(roles_);
               bitField0_ |= 0x00000001;
              }
           }
           /**
            * <code>repeated string roles = 1;</code>
+           * @return A list containing the roles.
            */
           public com.google.protobuf.ProtocolStringList
               getRolesList() {
@@ -4991,18 +5265,23 @@ public final class Nickserv {
           }
           /**
            * <code>repeated string roles = 1;</code>
+           * @return The count of roles.
            */
           public int getRolesCount() {
             return roles_.size();
           }
           /**
            * <code>repeated string roles = 1;</code>
+           * @param index The index of the element to return.
+           * @return The roles at the given index.
            */
           public java.lang.String getRoles(int index) {
             return roles_.get(index);
           }
           /**
            * <code>repeated string roles = 1;</code>
+           * @param index The index of the value to return.
+           * @return The bytes of the roles at the given index.
            */
           public com.google.protobuf.ByteString
               getRolesBytes(int index) {
@@ -5010,6 +5289,9 @@ public final class Nickserv {
           }
           /**
            * <code>repeated string roles = 1;</code>
+           * @param index The index to set the value at.
+           * @param value The roles to set.
+           * @return This builder for chaining.
            */
           public Builder setRoles(
               int index, java.lang.String value) {
@@ -5023,6 +5305,8 @@ public final class Nickserv {
           }
           /**
            * <code>repeated string roles = 1;</code>
+           * @param value The roles to add.
+           * @return This builder for chaining.
            */
           public Builder addRoles(
               java.lang.String value) {
@@ -5036,6 +5320,8 @@ public final class Nickserv {
           }
           /**
            * <code>repeated string roles = 1;</code>
+           * @param values The roles to add.
+           * @return This builder for chaining.
            */
           public Builder addAllRoles(
               java.lang.Iterable<java.lang.String> values) {
@@ -5047,6 +5333,7 @@ public final class Nickserv {
           }
           /**
            * <code>repeated string roles = 1;</code>
+           * @return This builder for chaining.
            */
           public Builder clearRoles() {
             roles_ = com.google.protobuf.LazyStringArrayList.EMPTY;
@@ -5056,6 +5343,8 @@ public final class Nickserv {
           }
           /**
            * <code>repeated string roles = 1;</code>
+           * @param value The bytes of the roles to add.
+           * @return This builder for chaining.
            */
           public Builder addRolesBytes(
               com.google.protobuf.ByteString value) {
@@ -5071,7 +5360,7 @@ public final class Nickserv {
           @java.lang.Override
           public final Builder setUnknownFields(
               final com.google.protobuf.UnknownFieldSet unknownFields) {
-            return super.setUnknownFieldsProto3(unknownFields);
+            return super.setUnknownFields(unknownFields);
           }
 
           @java.lang.Override
@@ -5127,20 +5416,24 @@ public final class Nickserv {
 
         /**
          * <code>string old_nick = 1;</code>
+         * @return The oldNick.
          */
         java.lang.String getOldNick();
         /**
          * <code>string old_nick = 1;</code>
+         * @return The bytes for oldNick.
          */
         com.google.protobuf.ByteString
             getOldNickBytes();
 
         /**
          * <code>string new_nick = 2;</code>
+         * @return The newNick.
          */
         java.lang.String getNewNick();
         /**
          * <code>string new_nick = 2;</code>
+         * @return The bytes for newNick.
          */
         com.google.protobuf.ByteString
             getNewNickBytes();
@@ -5148,7 +5441,7 @@ public final class Nickserv {
       /**
        * Protobuf type {@code NickServRPCCommand.Update.ChangeNick}
        */
-      public  static final class ChangeNick extends
+      public static final class ChangeNick extends
           com.google.protobuf.GeneratedMessageV3 implements
           // @@protoc_insertion_point(message_implements:NickServRPCCommand.Update.ChangeNick)
           ChangeNickOrBuilder {
@@ -5160,6 +5453,13 @@ public final class Nickserv {
         private ChangeNick() {
           oldNick_ = "";
           newNick_ = "";
+        }
+
+        @java.lang.Override
+        @SuppressWarnings({"unused"})
+        protected java.lang.Object newInstance(
+            UnusedPrivateParameter unused) {
+          return new ChangeNick();
         }
 
         @java.lang.Override
@@ -5175,7 +5475,6 @@ public final class Nickserv {
           if (extensionRegistry == null) {
             throw new java.lang.NullPointerException();
           }
-          int mutable_bitField0_ = 0;
           com.google.protobuf.UnknownFieldSet.Builder unknownFields =
               com.google.protobuf.UnknownFieldSet.newBuilder();
           try {
@@ -5199,7 +5498,7 @@ public final class Nickserv {
                   break;
                 }
                 default: {
-                  if (!parseUnknownFieldProto3(
+                  if (!parseUnknownField(
                       input, unknownFields, extensionRegistry, tag)) {
                     done = true;
                   }
@@ -5234,7 +5533,9 @@ public final class Nickserv {
         private volatile java.lang.Object oldNick_;
         /**
          * <code>string old_nick = 1;</code>
+         * @return The oldNick.
          */
+        @java.lang.Override
         public java.lang.String getOldNick() {
           java.lang.Object ref = oldNick_;
           if (ref instanceof java.lang.String) {
@@ -5249,7 +5550,9 @@ public final class Nickserv {
         }
         /**
          * <code>string old_nick = 1;</code>
+         * @return The bytes for oldNick.
          */
+        @java.lang.Override
         public com.google.protobuf.ByteString
             getOldNickBytes() {
           java.lang.Object ref = oldNick_;
@@ -5268,7 +5571,9 @@ public final class Nickserv {
         private volatile java.lang.Object newNick_;
         /**
          * <code>string new_nick = 2;</code>
+         * @return The newNick.
          */
+        @java.lang.Override
         public java.lang.String getNewNick() {
           java.lang.Object ref = newNick_;
           if (ref instanceof java.lang.String) {
@@ -5283,7 +5588,9 @@ public final class Nickserv {
         }
         /**
          * <code>string new_nick = 2;</code>
+         * @return The bytes for newNick.
          */
+        @java.lang.Override
         public com.google.protobuf.ByteString
             getNewNickBytes() {
           java.lang.Object ref = newNick_;
@@ -5348,13 +5655,12 @@ public final class Nickserv {
           }
           gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.ChangeNick other = (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.ChangeNick) obj;
 
-          boolean result = true;
-          result = result && getOldNick()
-              .equals(other.getOldNick());
-          result = result && getNewNick()
-              .equals(other.getNewNick());
-          result = result && unknownFields.equals(other.unknownFields);
-          return result;
+          if (!getOldNick()
+              .equals(other.getOldNick())) return false;
+          if (!getNewNick()
+              .equals(other.getNewNick())) return false;
+          if (!unknownFields.equals(other.unknownFields)) return false;
+          return true;
         }
 
         @java.lang.Override
@@ -5539,35 +5845,35 @@ public final class Nickserv {
 
           @java.lang.Override
           public Builder clone() {
-            return (Builder) super.clone();
+            return super.clone();
           }
           @java.lang.Override
           public Builder setField(
               com.google.protobuf.Descriptors.FieldDescriptor field,
               java.lang.Object value) {
-            return (Builder) super.setField(field, value);
+            return super.setField(field, value);
           }
           @java.lang.Override
           public Builder clearField(
               com.google.protobuf.Descriptors.FieldDescriptor field) {
-            return (Builder) super.clearField(field);
+            return super.clearField(field);
           }
           @java.lang.Override
           public Builder clearOneof(
               com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-            return (Builder) super.clearOneof(oneof);
+            return super.clearOneof(oneof);
           }
           @java.lang.Override
           public Builder setRepeatedField(
               com.google.protobuf.Descriptors.FieldDescriptor field,
               int index, java.lang.Object value) {
-            return (Builder) super.setRepeatedField(field, index, value);
+            return super.setRepeatedField(field, index, value);
           }
           @java.lang.Override
           public Builder addRepeatedField(
               com.google.protobuf.Descriptors.FieldDescriptor field,
               java.lang.Object value) {
-            return (Builder) super.addRepeatedField(field, value);
+            return super.addRepeatedField(field, value);
           }
           @java.lang.Override
           public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -5621,6 +5927,7 @@ public final class Nickserv {
           private java.lang.Object oldNick_ = "";
           /**
            * <code>string old_nick = 1;</code>
+           * @return The oldNick.
            */
           public java.lang.String getOldNick() {
             java.lang.Object ref = oldNick_;
@@ -5636,6 +5943,7 @@ public final class Nickserv {
           }
           /**
            * <code>string old_nick = 1;</code>
+           * @return The bytes for oldNick.
            */
           public com.google.protobuf.ByteString
               getOldNickBytes() {
@@ -5652,6 +5960,8 @@ public final class Nickserv {
           }
           /**
            * <code>string old_nick = 1;</code>
+           * @param value The oldNick to set.
+           * @return This builder for chaining.
            */
           public Builder setOldNick(
               java.lang.String value) {
@@ -5665,6 +5975,7 @@ public final class Nickserv {
           }
           /**
            * <code>string old_nick = 1;</code>
+           * @return This builder for chaining.
            */
           public Builder clearOldNick() {
             
@@ -5674,6 +5985,8 @@ public final class Nickserv {
           }
           /**
            * <code>string old_nick = 1;</code>
+           * @param value The bytes for oldNick to set.
+           * @return This builder for chaining.
            */
           public Builder setOldNickBytes(
               com.google.protobuf.ByteString value) {
@@ -5690,6 +6003,7 @@ public final class Nickserv {
           private java.lang.Object newNick_ = "";
           /**
            * <code>string new_nick = 2;</code>
+           * @return The newNick.
            */
           public java.lang.String getNewNick() {
             java.lang.Object ref = newNick_;
@@ -5705,6 +6019,7 @@ public final class Nickserv {
           }
           /**
            * <code>string new_nick = 2;</code>
+           * @return The bytes for newNick.
            */
           public com.google.protobuf.ByteString
               getNewNickBytes() {
@@ -5721,6 +6036,8 @@ public final class Nickserv {
           }
           /**
            * <code>string new_nick = 2;</code>
+           * @param value The newNick to set.
+           * @return This builder for chaining.
            */
           public Builder setNewNick(
               java.lang.String value) {
@@ -5734,6 +6051,7 @@ public final class Nickserv {
           }
           /**
            * <code>string new_nick = 2;</code>
+           * @return This builder for chaining.
            */
           public Builder clearNewNick() {
             
@@ -5743,6 +6061,8 @@ public final class Nickserv {
           }
           /**
            * <code>string new_nick = 2;</code>
+           * @param value The bytes for newNick to set.
+           * @return This builder for chaining.
            */
           public Builder setNewNickBytes(
               com.google.protobuf.ByteString value) {
@@ -5758,7 +6078,7 @@ public final class Nickserv {
           @java.lang.Override
           public final Builder setUnknownFields(
               final com.google.protobuf.UnknownFieldSet unknownFields) {
-            return super.setUnknownFieldsProto3(unknownFields);
+            return super.setUnknownFields(unknownFields);
           }
 
           @java.lang.Override
@@ -5811,7 +6131,8 @@ public final class Nickserv {
       private int paramCase_ = 0;
       private java.lang.Object param_;
       public enum ParamCase
-          implements com.google.protobuf.Internal.EnumLite {
+          implements com.google.protobuf.Internal.EnumLite,
+              com.google.protobuf.AbstractMessage.InternalOneOfEnum {
         NICK(1),
         NAME_CHANGE_QUOTA(2),
         ROLES(3),
@@ -5821,6 +6142,8 @@ public final class Nickserv {
           this.value = value;
         }
         /**
+         * @param value The number of the enum to look for.
+         * @return The enum associated with the given number.
          * @deprecated Use {@link #forNumber(int)} instead.
          */
         @java.lang.Deprecated
@@ -5851,13 +6174,17 @@ public final class Nickserv {
       public static final int NICK_FIELD_NUMBER = 1;
       /**
        * <code>.NickServRPCCommand.Update.ChangeNick nick = 1;</code>
+       * @return Whether the nick field is set.
        */
+      @java.lang.Override
       public boolean hasNick() {
         return paramCase_ == 1;
       }
       /**
        * <code>.NickServRPCCommand.Update.ChangeNick nick = 1;</code>
+       * @return The nick.
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.ChangeNick getNick() {
         if (paramCase_ == 1) {
            return (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.ChangeNick) param_;
@@ -5867,6 +6194,7 @@ public final class Nickserv {
       /**
        * <code>.NickServRPCCommand.Update.ChangeNick nick = 1;</code>
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.ChangeNickOrBuilder getNickOrBuilder() {
         if (paramCase_ == 1) {
            return (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.ChangeNick) param_;
@@ -5877,7 +6205,9 @@ public final class Nickserv {
       public static final int NAME_CHANGE_QUOTA_FIELD_NUMBER = 2;
       /**
        * <code>uint32 name_change_quota = 2;</code>
+       * @return The nameChangeQuota.
        */
+      @java.lang.Override
       public int getNameChangeQuota() {
         if (paramCase_ == 2) {
           return (java.lang.Integer) param_;
@@ -5888,13 +6218,17 @@ public final class Nickserv {
       public static final int ROLES_FIELD_NUMBER = 3;
       /**
        * <code>.NickServRPCCommand.Update.Roles roles = 3;</code>
+       * @return Whether the roles field is set.
        */
+      @java.lang.Override
       public boolean hasRoles() {
         return paramCase_ == 3;
       }
       /**
        * <code>.NickServRPCCommand.Update.Roles roles = 3;</code>
+       * @return The roles.
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Roles getRoles() {
         if (paramCase_ == 3) {
            return (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Roles) param_;
@@ -5904,6 +6238,7 @@ public final class Nickserv {
       /**
        * <code>.NickServRPCCommand.Update.Roles roles = 3;</code>
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.RolesOrBuilder getRolesOrBuilder() {
         if (paramCase_ == 3) {
            return (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Roles) param_;
@@ -5972,28 +6307,25 @@ public final class Nickserv {
         }
         gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update other = (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update) obj;
 
-        boolean result = true;
-        result = result && getParamCase().equals(
-            other.getParamCase());
-        if (!result) return false;
+        if (!getParamCase().equals(other.getParamCase())) return false;
         switch (paramCase_) {
           case 1:
-            result = result && getNick()
-                .equals(other.getNick());
+            if (!getNick()
+                .equals(other.getNick())) return false;
             break;
           case 2:
-            result = result && (getNameChangeQuota()
-                == other.getNameChangeQuota());
+            if (getNameChangeQuota()
+                != other.getNameChangeQuota()) return false;
             break;
           case 3:
-            result = result && getRoles()
-                .equals(other.getRoles());
+            if (!getRoles()
+                .equals(other.getRoles())) return false;
             break;
           case 0:
           default:
         }
-        result = result && unknownFields.equals(other.unknownFields);
-        return result;
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
       }
 
       @java.lang.Override
@@ -6204,35 +6536,35 @@ public final class Nickserv {
 
         @java.lang.Override
         public Builder clone() {
-          return (Builder) super.clone();
+          return super.clone();
         }
         @java.lang.Override
         public Builder setField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             java.lang.Object value) {
-          return (Builder) super.setField(field, value);
+          return super.setField(field, value);
         }
         @java.lang.Override
         public Builder clearField(
             com.google.protobuf.Descriptors.FieldDescriptor field) {
-          return (Builder) super.clearField(field);
+          return super.clearField(field);
         }
         @java.lang.Override
         public Builder clearOneof(
             com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-          return (Builder) super.clearOneof(oneof);
+          return super.clearOneof(oneof);
         }
         @java.lang.Override
         public Builder setRepeatedField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             int index, java.lang.Object value) {
-          return (Builder) super.setRepeatedField(field, index, value);
+          return super.setRepeatedField(field, index, value);
         }
         @java.lang.Override
         public Builder addRepeatedField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             java.lang.Object value) {
-          return (Builder) super.addRepeatedField(field, value);
+          return super.addRepeatedField(field, value);
         }
         @java.lang.Override
         public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -6311,13 +6643,17 @@ public final class Nickserv {
             gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.ChangeNick, gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.ChangeNick.Builder, gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.ChangeNickOrBuilder> nickBuilder_;
         /**
          * <code>.NickServRPCCommand.Update.ChangeNick nick = 1;</code>
+         * @return Whether the nick field is set.
          */
+        @java.lang.Override
         public boolean hasNick() {
           return paramCase_ == 1;
         }
         /**
          * <code>.NickServRPCCommand.Update.ChangeNick nick = 1;</code>
+         * @return The nick.
          */
+        @java.lang.Override
         public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.ChangeNick getNick() {
           if (nickBuilder_ == null) {
             if (paramCase_ == 1) {
@@ -6411,6 +6747,7 @@ public final class Nickserv {
         /**
          * <code>.NickServRPCCommand.Update.ChangeNick nick = 1;</code>
          */
+        @java.lang.Override
         public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.ChangeNickOrBuilder getNickOrBuilder() {
           if ((paramCase_ == 1) && (nickBuilder_ != null)) {
             return nickBuilder_.getMessageOrBuilder();
@@ -6445,6 +6782,7 @@ public final class Nickserv {
 
         /**
          * <code>uint32 name_change_quota = 2;</code>
+         * @return The nameChangeQuota.
          */
         public int getNameChangeQuota() {
           if (paramCase_ == 2) {
@@ -6454,6 +6792,8 @@ public final class Nickserv {
         }
         /**
          * <code>uint32 name_change_quota = 2;</code>
+         * @param value The nameChangeQuota to set.
+         * @return This builder for chaining.
          */
         public Builder setNameChangeQuota(int value) {
           paramCase_ = 2;
@@ -6463,6 +6803,7 @@ public final class Nickserv {
         }
         /**
          * <code>uint32 name_change_quota = 2;</code>
+         * @return This builder for chaining.
          */
         public Builder clearNameChangeQuota() {
           if (paramCase_ == 2) {
@@ -6477,13 +6818,17 @@ public final class Nickserv {
             gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Roles, gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Roles.Builder, gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.RolesOrBuilder> rolesBuilder_;
         /**
          * <code>.NickServRPCCommand.Update.Roles roles = 3;</code>
+         * @return Whether the roles field is set.
          */
+        @java.lang.Override
         public boolean hasRoles() {
           return paramCase_ == 3;
         }
         /**
          * <code>.NickServRPCCommand.Update.Roles roles = 3;</code>
+         * @return The roles.
          */
+        @java.lang.Override
         public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Roles getRoles() {
           if (rolesBuilder_ == null) {
             if (paramCase_ == 3) {
@@ -6577,6 +6922,7 @@ public final class Nickserv {
         /**
          * <code>.NickServRPCCommand.Update.Roles roles = 3;</code>
          */
+        @java.lang.Override
         public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.RolesOrBuilder getRolesOrBuilder() {
           if ((paramCase_ == 3) && (rolesBuilder_ != null)) {
             return rolesBuilder_.getMessageOrBuilder();
@@ -6611,7 +6957,7 @@ public final class Nickserv {
         @java.lang.Override
         public final Builder setUnknownFields(
             final com.google.protobuf.UnknownFieldSet unknownFields) {
-          return super.setUnknownFieldsProto3(unknownFields);
+          return super.setUnknownFields(unknownFields);
         }
 
         @java.lang.Override
@@ -6668,7 +7014,7 @@ public final class Nickserv {
     /**
      * Protobuf type {@code NickServRPCCommand.Delete}
      */
-    public  static final class Delete extends
+    public static final class Delete extends
         com.google.protobuf.GeneratedMessageV3 implements
         // @@protoc_insertion_point(message_implements:NickServRPCCommand.Delete)
         DeleteOrBuilder {
@@ -6678,6 +7024,13 @@ public final class Nickserv {
         super(builder);
       }
       private Delete() {
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new Delete();
       }
 
       @java.lang.Override
@@ -6704,7 +7057,7 @@ public final class Nickserv {
                 done = true;
                 break;
               default: {
-                if (!parseUnknownFieldProto3(
+                if (!parseUnknownField(
                     input, unknownFields, extensionRegistry, tag)) {
                   done = true;
                 }
@@ -6773,9 +7126,8 @@ public final class Nickserv {
         }
         gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Delete other = (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Delete) obj;
 
-        boolean result = true;
-        result = result && unknownFields.equals(other.unknownFields);
-        return result;
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
       }
 
       @java.lang.Override
@@ -6950,35 +7302,35 @@ public final class Nickserv {
 
         @java.lang.Override
         public Builder clone() {
-          return (Builder) super.clone();
+          return super.clone();
         }
         @java.lang.Override
         public Builder setField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             java.lang.Object value) {
-          return (Builder) super.setField(field, value);
+          return super.setField(field, value);
         }
         @java.lang.Override
         public Builder clearField(
             com.google.protobuf.Descriptors.FieldDescriptor field) {
-          return (Builder) super.clearField(field);
+          return super.clearField(field);
         }
         @java.lang.Override
         public Builder clearOneof(
             com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-          return (Builder) super.clearOneof(oneof);
+          return super.clearOneof(oneof);
         }
         @java.lang.Override
         public Builder setRepeatedField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             int index, java.lang.Object value) {
-          return (Builder) super.setRepeatedField(field, index, value);
+          return super.setRepeatedField(field, index, value);
         }
         @java.lang.Override
         public Builder addRepeatedField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             java.lang.Object value) {
-          return (Builder) super.addRepeatedField(field, value);
+          return super.addRepeatedField(field, value);
         }
         @java.lang.Override
         public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -7023,7 +7375,7 @@ public final class Nickserv {
         @java.lang.Override
         public final Builder setUnknownFields(
             final com.google.protobuf.UnknownFieldSet unknownFields) {
-          return super.setUnknownFieldsProto3(unknownFields);
+          return super.setUnknownFields(unknownFields);
         }
 
         @java.lang.Override
@@ -7076,7 +7428,8 @@ public final class Nickserv {
     private int bodyCase_ = 0;
     private java.lang.Object body_;
     public enum BodyCase
-        implements com.google.protobuf.Internal.EnumLite {
+        implements com.google.protobuf.Internal.EnumLite,
+            com.google.protobuf.AbstractMessage.InternalOneOfEnum {
       CREATE(5),
       RETRIEVE(6),
       UPDATE(7),
@@ -7087,6 +7440,8 @@ public final class Nickserv {
         this.value = value;
       }
       /**
+       * @param value The number of the enum to look for.
+       * @return The enum associated with the given number.
        * @deprecated Use {@link #forNumber(int)} instead.
        */
       @java.lang.Deprecated
@@ -7119,7 +7474,9 @@ public final class Nickserv {
     private long requestId_;
     /**
      * <code>uint64 request_id = 1;</code>
+     * @return The requestId.
      */
+    @java.lang.Override
     public long getRequestId() {
       return requestId_;
     }
@@ -7128,7 +7485,9 @@ public final class Nickserv {
     private com.google.protobuf.ByteString sourcePublicKey_;
     /**
      * <code>bytes source_public_key = 2;</code>
+     * @return The sourcePublicKey.
      */
+    @java.lang.Override
     public com.google.protobuf.ByteString getSourcePublicKey() {
       return sourcePublicKey_;
     }
@@ -7136,13 +7495,17 @@ public final class Nickserv {
     public static final int CREATE_FIELD_NUMBER = 5;
     /**
      * <code>.NickServRPCCommand.Create create = 5;</code>
+     * @return Whether the create field is set.
      */
+    @java.lang.Override
     public boolean hasCreate() {
       return bodyCase_ == 5;
     }
     /**
      * <code>.NickServRPCCommand.Create create = 5;</code>
+     * @return The create.
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Create getCreate() {
       if (bodyCase_ == 5) {
          return (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Create) body_;
@@ -7152,6 +7515,7 @@ public final class Nickserv {
     /**
      * <code>.NickServRPCCommand.Create create = 5;</code>
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.CreateOrBuilder getCreateOrBuilder() {
       if (bodyCase_ == 5) {
          return (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Create) body_;
@@ -7162,13 +7526,17 @@ public final class Nickserv {
     public static final int RETRIEVE_FIELD_NUMBER = 6;
     /**
      * <code>.NickServRPCCommand.Retrieve retrieve = 6;</code>
+     * @return Whether the retrieve field is set.
      */
+    @java.lang.Override
     public boolean hasRetrieve() {
       return bodyCase_ == 6;
     }
     /**
      * <code>.NickServRPCCommand.Retrieve retrieve = 6;</code>
+     * @return The retrieve.
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Retrieve getRetrieve() {
       if (bodyCase_ == 6) {
          return (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Retrieve) body_;
@@ -7178,6 +7546,7 @@ public final class Nickserv {
     /**
      * <code>.NickServRPCCommand.Retrieve retrieve = 6;</code>
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.RetrieveOrBuilder getRetrieveOrBuilder() {
       if (bodyCase_ == 6) {
          return (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Retrieve) body_;
@@ -7188,13 +7557,17 @@ public final class Nickserv {
     public static final int UPDATE_FIELD_NUMBER = 7;
     /**
      * <code>.NickServRPCCommand.Update update = 7;</code>
+     * @return Whether the update field is set.
      */
+    @java.lang.Override
     public boolean hasUpdate() {
       return bodyCase_ == 7;
     }
     /**
      * <code>.NickServRPCCommand.Update update = 7;</code>
+     * @return The update.
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update getUpdate() {
       if (bodyCase_ == 7) {
          return (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update) body_;
@@ -7204,6 +7577,7 @@ public final class Nickserv {
     /**
      * <code>.NickServRPCCommand.Update update = 7;</code>
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.UpdateOrBuilder getUpdateOrBuilder() {
       if (bodyCase_ == 7) {
          return (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update) body_;
@@ -7214,13 +7588,17 @@ public final class Nickserv {
     public static final int DELETE_FIELD_NUMBER = 8;
     /**
      * <code>.NickServRPCCommand.Delete delete = 8;</code>
+     * @return Whether the delete field is set.
      */
+    @java.lang.Override
     public boolean hasDelete() {
       return bodyCase_ == 8;
     }
     /**
      * <code>.NickServRPCCommand.Delete delete = 8;</code>
+     * @return The delete.
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Delete getDelete() {
       if (bodyCase_ == 8) {
          return (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Delete) body_;
@@ -7230,6 +7608,7 @@ public final class Nickserv {
     /**
      * <code>.NickServRPCCommand.Delete delete = 8;</code>
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.DeleteOrBuilder getDeleteOrBuilder() {
       if (bodyCase_ == 8) {
          return (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Delete) body_;
@@ -7317,36 +7696,33 @@ public final class Nickserv {
       }
       gg.strims.ppspp.proto.Nickserv.NickServRPCCommand other = (gg.strims.ppspp.proto.Nickserv.NickServRPCCommand) obj;
 
-      boolean result = true;
-      result = result && (getRequestId()
-          == other.getRequestId());
-      result = result && getSourcePublicKey()
-          .equals(other.getSourcePublicKey());
-      result = result && getBodyCase().equals(
-          other.getBodyCase());
-      if (!result) return false;
+      if (getRequestId()
+          != other.getRequestId()) return false;
+      if (!getSourcePublicKey()
+          .equals(other.getSourcePublicKey())) return false;
+      if (!getBodyCase().equals(other.getBodyCase())) return false;
       switch (bodyCase_) {
         case 5:
-          result = result && getCreate()
-              .equals(other.getCreate());
+          if (!getCreate()
+              .equals(other.getCreate())) return false;
           break;
         case 6:
-          result = result && getRetrieve()
-              .equals(other.getRetrieve());
+          if (!getRetrieve()
+              .equals(other.getRetrieve())) return false;
           break;
         case 7:
-          result = result && getUpdate()
-              .equals(other.getUpdate());
+          if (!getUpdate()
+              .equals(other.getUpdate())) return false;
           break;
         case 8:
-          result = result && getDelete()
-              .equals(other.getDelete());
+          if (!getDelete()
+              .equals(other.getDelete())) return false;
           break;
         case 0:
         default:
       }
-      result = result && unknownFields.equals(other.unknownFields);
-      return result;
+      if (!unknownFields.equals(other.unknownFields)) return false;
+      return true;
     }
 
     @java.lang.Override
@@ -7583,35 +7959,35 @@ public final class Nickserv {
 
       @java.lang.Override
       public Builder clone() {
-        return (Builder) super.clone();
+        return super.clone();
       }
       @java.lang.Override
       public Builder setField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return (Builder) super.setField(field, value);
+        return super.setField(field, value);
       }
       @java.lang.Override
       public Builder clearField(
           com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return (Builder) super.clearField(field);
+        return super.clearField(field);
       }
       @java.lang.Override
       public Builder clearOneof(
           com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return (Builder) super.clearOneof(oneof);
+        return super.clearOneof(oneof);
       }
       @java.lang.Override
       public Builder setRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           int index, java.lang.Object value) {
-        return (Builder) super.setRepeatedField(field, index, value);
+        return super.setRepeatedField(field, index, value);
       }
       @java.lang.Override
       public Builder addRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return (Builder) super.addRepeatedField(field, value);
+        return super.addRepeatedField(field, value);
       }
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -7699,12 +8075,16 @@ public final class Nickserv {
       private long requestId_ ;
       /**
        * <code>uint64 request_id = 1;</code>
+       * @return The requestId.
        */
+      @java.lang.Override
       public long getRequestId() {
         return requestId_;
       }
       /**
        * <code>uint64 request_id = 1;</code>
+       * @param value The requestId to set.
+       * @return This builder for chaining.
        */
       public Builder setRequestId(long value) {
         
@@ -7714,6 +8094,7 @@ public final class Nickserv {
       }
       /**
        * <code>uint64 request_id = 1;</code>
+       * @return This builder for chaining.
        */
       public Builder clearRequestId() {
         
@@ -7725,12 +8106,16 @@ public final class Nickserv {
       private com.google.protobuf.ByteString sourcePublicKey_ = com.google.protobuf.ByteString.EMPTY;
       /**
        * <code>bytes source_public_key = 2;</code>
+       * @return The sourcePublicKey.
        */
+      @java.lang.Override
       public com.google.protobuf.ByteString getSourcePublicKey() {
         return sourcePublicKey_;
       }
       /**
        * <code>bytes source_public_key = 2;</code>
+       * @param value The sourcePublicKey to set.
+       * @return This builder for chaining.
        */
       public Builder setSourcePublicKey(com.google.protobuf.ByteString value) {
         if (value == null) {
@@ -7743,6 +8128,7 @@ public final class Nickserv {
       }
       /**
        * <code>bytes source_public_key = 2;</code>
+       * @return This builder for chaining.
        */
       public Builder clearSourcePublicKey() {
         
@@ -7755,13 +8141,17 @@ public final class Nickserv {
           gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Create, gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Create.Builder, gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.CreateOrBuilder> createBuilder_;
       /**
        * <code>.NickServRPCCommand.Create create = 5;</code>
+       * @return Whether the create field is set.
        */
+      @java.lang.Override
       public boolean hasCreate() {
         return bodyCase_ == 5;
       }
       /**
        * <code>.NickServRPCCommand.Create create = 5;</code>
+       * @return The create.
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Create getCreate() {
         if (createBuilder_ == null) {
           if (bodyCase_ == 5) {
@@ -7855,6 +8245,7 @@ public final class Nickserv {
       /**
        * <code>.NickServRPCCommand.Create create = 5;</code>
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.CreateOrBuilder getCreateOrBuilder() {
         if ((bodyCase_ == 5) && (createBuilder_ != null)) {
           return createBuilder_.getMessageOrBuilder();
@@ -7891,13 +8282,17 @@ public final class Nickserv {
           gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Retrieve, gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Retrieve.Builder, gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.RetrieveOrBuilder> retrieveBuilder_;
       /**
        * <code>.NickServRPCCommand.Retrieve retrieve = 6;</code>
+       * @return Whether the retrieve field is set.
        */
+      @java.lang.Override
       public boolean hasRetrieve() {
         return bodyCase_ == 6;
       }
       /**
        * <code>.NickServRPCCommand.Retrieve retrieve = 6;</code>
+       * @return The retrieve.
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Retrieve getRetrieve() {
         if (retrieveBuilder_ == null) {
           if (bodyCase_ == 6) {
@@ -7991,6 +8386,7 @@ public final class Nickserv {
       /**
        * <code>.NickServRPCCommand.Retrieve retrieve = 6;</code>
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.RetrieveOrBuilder getRetrieveOrBuilder() {
         if ((bodyCase_ == 6) && (retrieveBuilder_ != null)) {
           return retrieveBuilder_.getMessageOrBuilder();
@@ -8027,13 +8423,17 @@ public final class Nickserv {
           gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update, gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update.Builder, gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.UpdateOrBuilder> updateBuilder_;
       /**
        * <code>.NickServRPCCommand.Update update = 7;</code>
+       * @return Whether the update field is set.
        */
+      @java.lang.Override
       public boolean hasUpdate() {
         return bodyCase_ == 7;
       }
       /**
        * <code>.NickServRPCCommand.Update update = 7;</code>
+       * @return The update.
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Update getUpdate() {
         if (updateBuilder_ == null) {
           if (bodyCase_ == 7) {
@@ -8127,6 +8527,7 @@ public final class Nickserv {
       /**
        * <code>.NickServRPCCommand.Update update = 7;</code>
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.UpdateOrBuilder getUpdateOrBuilder() {
         if ((bodyCase_ == 7) && (updateBuilder_ != null)) {
           return updateBuilder_.getMessageOrBuilder();
@@ -8163,13 +8564,17 @@ public final class Nickserv {
           gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Delete, gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Delete.Builder, gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.DeleteOrBuilder> deleteBuilder_;
       /**
        * <code>.NickServRPCCommand.Delete delete = 8;</code>
+       * @return Whether the delete field is set.
        */
+      @java.lang.Override
       public boolean hasDelete() {
         return bodyCase_ == 8;
       }
       /**
        * <code>.NickServRPCCommand.Delete delete = 8;</code>
+       * @return The delete.
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.Delete getDelete() {
         if (deleteBuilder_ == null) {
           if (bodyCase_ == 8) {
@@ -8263,6 +8668,7 @@ public final class Nickserv {
       /**
        * <code>.NickServRPCCommand.Delete delete = 8;</code>
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCCommand.DeleteOrBuilder getDeleteOrBuilder() {
         if ((bodyCase_ == 8) && (deleteBuilder_ != null)) {
           return deleteBuilder_.getMessageOrBuilder();
@@ -8297,7 +8703,7 @@ public final class Nickserv {
       @java.lang.Override
       public final Builder setUnknownFields(
           final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFieldsProto3(unknownFields);
+        return super.setUnknownFields(unknownFields);
       }
 
       @java.lang.Override
@@ -8353,25 +8759,30 @@ public final class Nickserv {
 
     /**
      * <code>uint64 request_id = 1;</code>
+     * @return The requestId.
      */
     long getRequestId();
 
     /**
      * <code>string error = 2;</code>
+     * @return The error.
      */
     java.lang.String getError();
     /**
      * <code>string error = 2;</code>
+     * @return The bytes for error.
      */
     com.google.protobuf.ByteString
         getErrorBytes();
 
     /**
      * <code>.NickServRPCResponse.Update update = 3;</code>
+     * @return Whether the update field is set.
      */
     boolean hasUpdate();
     /**
      * <code>.NickServRPCResponse.Update update = 3;</code>
+     * @return The update.
      */
     gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Update getUpdate();
     /**
@@ -8381,10 +8792,12 @@ public final class Nickserv {
 
     /**
      * <code>.NickServRPCResponse.Delete delete = 4;</code>
+     * @return Whether the delete field is set.
      */
     boolean hasDelete();
     /**
      * <code>.NickServRPCResponse.Delete delete = 4;</code>
+     * @return The delete.
      */
     gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Delete getDelete();
     /**
@@ -8394,10 +8807,12 @@ public final class Nickserv {
 
     /**
      * <code>.NickServToken create = 5;</code>
+     * @return Whether the create field is set.
      */
     boolean hasCreate();
     /**
      * <code>.NickServToken create = 5;</code>
+     * @return The create.
      */
     gg.strims.ppspp.proto.Nickserv.NickServToken getCreate();
     /**
@@ -8407,10 +8822,12 @@ public final class Nickserv {
 
     /**
      * <code>.NickServToken retrieve = 6;</code>
+     * @return Whether the retrieve field is set.
      */
     boolean hasRetrieve();
     /**
      * <code>.NickServToken retrieve = 6;</code>
+     * @return The retrieve.
      */
     gg.strims.ppspp.proto.Nickserv.NickServToken getRetrieve();
     /**
@@ -8423,7 +8840,7 @@ public final class Nickserv {
   /**
    * Protobuf type {@code NickServRPCResponse}
    */
-  public  static final class NickServRPCResponse extends
+  public static final class NickServRPCResponse extends
       com.google.protobuf.GeneratedMessageV3 implements
       // @@protoc_insertion_point(message_implements:NickServRPCResponse)
       NickServRPCResponseOrBuilder {
@@ -8433,7 +8850,13 @@ public final class Nickserv {
       super(builder);
     }
     private NickServRPCResponse() {
-      requestId_ = 0L;
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new NickServRPCResponse();
     }
 
     @java.lang.Override
@@ -8449,7 +8872,6 @@ public final class Nickserv {
       if (extensionRegistry == null) {
         throw new java.lang.NullPointerException();
       }
-      int mutable_bitField0_ = 0;
       com.google.protobuf.UnknownFieldSet.Builder unknownFields =
           com.google.protobuf.UnknownFieldSet.newBuilder();
       try {
@@ -8528,7 +8950,7 @@ public final class Nickserv {
               break;
             }
             default: {
-              if (!parseUnknownFieldProto3(
+              if (!parseUnknownField(
                   input, unknownFields, extensionRegistry, tag)) {
                 done = true;
               }
@@ -8566,7 +8988,7 @@ public final class Nickserv {
     /**
      * Protobuf type {@code NickServRPCResponse.Update}
      */
-    public  static final class Update extends
+    public static final class Update extends
         com.google.protobuf.GeneratedMessageV3 implements
         // @@protoc_insertion_point(message_implements:NickServRPCResponse.Update)
         UpdateOrBuilder {
@@ -8576,6 +8998,13 @@ public final class Nickserv {
         super(builder);
       }
       private Update() {
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new Update();
       }
 
       @java.lang.Override
@@ -8602,7 +9031,7 @@ public final class Nickserv {
                 done = true;
                 break;
               default: {
-                if (!parseUnknownFieldProto3(
+                if (!parseUnknownField(
                     input, unknownFields, extensionRegistry, tag)) {
                   done = true;
                 }
@@ -8671,9 +9100,8 @@ public final class Nickserv {
         }
         gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Update other = (gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Update) obj;
 
-        boolean result = true;
-        result = result && unknownFields.equals(other.unknownFields);
-        return result;
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
       }
 
       @java.lang.Override
@@ -8848,35 +9276,35 @@ public final class Nickserv {
 
         @java.lang.Override
         public Builder clone() {
-          return (Builder) super.clone();
+          return super.clone();
         }
         @java.lang.Override
         public Builder setField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             java.lang.Object value) {
-          return (Builder) super.setField(field, value);
+          return super.setField(field, value);
         }
         @java.lang.Override
         public Builder clearField(
             com.google.protobuf.Descriptors.FieldDescriptor field) {
-          return (Builder) super.clearField(field);
+          return super.clearField(field);
         }
         @java.lang.Override
         public Builder clearOneof(
             com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-          return (Builder) super.clearOneof(oneof);
+          return super.clearOneof(oneof);
         }
         @java.lang.Override
         public Builder setRepeatedField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             int index, java.lang.Object value) {
-          return (Builder) super.setRepeatedField(field, index, value);
+          return super.setRepeatedField(field, index, value);
         }
         @java.lang.Override
         public Builder addRepeatedField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             java.lang.Object value) {
-          return (Builder) super.addRepeatedField(field, value);
+          return super.addRepeatedField(field, value);
         }
         @java.lang.Override
         public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -8921,7 +9349,7 @@ public final class Nickserv {
         @java.lang.Override
         public final Builder setUnknownFields(
             final com.google.protobuf.UnknownFieldSet unknownFields) {
-          return super.setUnknownFieldsProto3(unknownFields);
+          return super.setUnknownFields(unknownFields);
         }
 
         @java.lang.Override
@@ -8978,7 +9406,7 @@ public final class Nickserv {
     /**
      * Protobuf type {@code NickServRPCResponse.Delete}
      */
-    public  static final class Delete extends
+    public static final class Delete extends
         com.google.protobuf.GeneratedMessageV3 implements
         // @@protoc_insertion_point(message_implements:NickServRPCResponse.Delete)
         DeleteOrBuilder {
@@ -8988,6 +9416,13 @@ public final class Nickserv {
         super(builder);
       }
       private Delete() {
+      }
+
+      @java.lang.Override
+      @SuppressWarnings({"unused"})
+      protected java.lang.Object newInstance(
+          UnusedPrivateParameter unused) {
+        return new Delete();
       }
 
       @java.lang.Override
@@ -9014,7 +9449,7 @@ public final class Nickserv {
                 done = true;
                 break;
               default: {
-                if (!parseUnknownFieldProto3(
+                if (!parseUnknownField(
                     input, unknownFields, extensionRegistry, tag)) {
                   done = true;
                 }
@@ -9083,9 +9518,8 @@ public final class Nickserv {
         }
         gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Delete other = (gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Delete) obj;
 
-        boolean result = true;
-        result = result && unknownFields.equals(other.unknownFields);
-        return result;
+        if (!unknownFields.equals(other.unknownFields)) return false;
+        return true;
       }
 
       @java.lang.Override
@@ -9260,35 +9694,35 @@ public final class Nickserv {
 
         @java.lang.Override
         public Builder clone() {
-          return (Builder) super.clone();
+          return super.clone();
         }
         @java.lang.Override
         public Builder setField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             java.lang.Object value) {
-          return (Builder) super.setField(field, value);
+          return super.setField(field, value);
         }
         @java.lang.Override
         public Builder clearField(
             com.google.protobuf.Descriptors.FieldDescriptor field) {
-          return (Builder) super.clearField(field);
+          return super.clearField(field);
         }
         @java.lang.Override
         public Builder clearOneof(
             com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-          return (Builder) super.clearOneof(oneof);
+          return super.clearOneof(oneof);
         }
         @java.lang.Override
         public Builder setRepeatedField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             int index, java.lang.Object value) {
-          return (Builder) super.setRepeatedField(field, index, value);
+          return super.setRepeatedField(field, index, value);
         }
         @java.lang.Override
         public Builder addRepeatedField(
             com.google.protobuf.Descriptors.FieldDescriptor field,
             java.lang.Object value) {
-          return (Builder) super.addRepeatedField(field, value);
+          return super.addRepeatedField(field, value);
         }
         @java.lang.Override
         public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -9333,7 +9767,7 @@ public final class Nickserv {
         @java.lang.Override
         public final Builder setUnknownFields(
             final com.google.protobuf.UnknownFieldSet unknownFields) {
-          return super.setUnknownFieldsProto3(unknownFields);
+          return super.setUnknownFields(unknownFields);
         }
 
         @java.lang.Override
@@ -9386,7 +9820,8 @@ public final class Nickserv {
     private int bodyCase_ = 0;
     private java.lang.Object body_;
     public enum BodyCase
-        implements com.google.protobuf.Internal.EnumLite {
+        implements com.google.protobuf.Internal.EnumLite,
+            com.google.protobuf.AbstractMessage.InternalOneOfEnum {
       ERROR(2),
       UPDATE(3),
       DELETE(4),
@@ -9398,6 +9833,8 @@ public final class Nickserv {
         this.value = value;
       }
       /**
+       * @param value The number of the enum to look for.
+       * @return The enum associated with the given number.
        * @deprecated Use {@link #forNumber(int)} instead.
        */
       @java.lang.Deprecated
@@ -9431,7 +9868,9 @@ public final class Nickserv {
     private long requestId_;
     /**
      * <code>uint64 request_id = 1;</code>
+     * @return The requestId.
      */
+    @java.lang.Override
     public long getRequestId() {
       return requestId_;
     }
@@ -9439,6 +9878,7 @@ public final class Nickserv {
     public static final int ERROR_FIELD_NUMBER = 2;
     /**
      * <code>string error = 2;</code>
+     * @return The error.
      */
     public java.lang.String getError() {
       java.lang.Object ref = "";
@@ -9459,6 +9899,7 @@ public final class Nickserv {
     }
     /**
      * <code>string error = 2;</code>
+     * @return The bytes for error.
      */
     public com.google.protobuf.ByteString
         getErrorBytes() {
@@ -9482,13 +9923,17 @@ public final class Nickserv {
     public static final int UPDATE_FIELD_NUMBER = 3;
     /**
      * <code>.NickServRPCResponse.Update update = 3;</code>
+     * @return Whether the update field is set.
      */
+    @java.lang.Override
     public boolean hasUpdate() {
       return bodyCase_ == 3;
     }
     /**
      * <code>.NickServRPCResponse.Update update = 3;</code>
+     * @return The update.
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Update getUpdate() {
       if (bodyCase_ == 3) {
          return (gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Update) body_;
@@ -9498,6 +9943,7 @@ public final class Nickserv {
     /**
      * <code>.NickServRPCResponse.Update update = 3;</code>
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.UpdateOrBuilder getUpdateOrBuilder() {
       if (bodyCase_ == 3) {
          return (gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Update) body_;
@@ -9508,13 +9954,17 @@ public final class Nickserv {
     public static final int DELETE_FIELD_NUMBER = 4;
     /**
      * <code>.NickServRPCResponse.Delete delete = 4;</code>
+     * @return Whether the delete field is set.
      */
+    @java.lang.Override
     public boolean hasDelete() {
       return bodyCase_ == 4;
     }
     /**
      * <code>.NickServRPCResponse.Delete delete = 4;</code>
+     * @return The delete.
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Delete getDelete() {
       if (bodyCase_ == 4) {
          return (gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Delete) body_;
@@ -9524,6 +9974,7 @@ public final class Nickserv {
     /**
      * <code>.NickServRPCResponse.Delete delete = 4;</code>
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.DeleteOrBuilder getDeleteOrBuilder() {
       if (bodyCase_ == 4) {
          return (gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Delete) body_;
@@ -9534,13 +9985,17 @@ public final class Nickserv {
     public static final int CREATE_FIELD_NUMBER = 5;
     /**
      * <code>.NickServToken create = 5;</code>
+     * @return Whether the create field is set.
      */
+    @java.lang.Override
     public boolean hasCreate() {
       return bodyCase_ == 5;
     }
     /**
      * <code>.NickServToken create = 5;</code>
+     * @return The create.
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServToken getCreate() {
       if (bodyCase_ == 5) {
          return (gg.strims.ppspp.proto.Nickserv.NickServToken) body_;
@@ -9550,6 +10005,7 @@ public final class Nickserv {
     /**
      * <code>.NickServToken create = 5;</code>
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServTokenOrBuilder getCreateOrBuilder() {
       if (bodyCase_ == 5) {
          return (gg.strims.ppspp.proto.Nickserv.NickServToken) body_;
@@ -9560,13 +10016,17 @@ public final class Nickserv {
     public static final int RETRIEVE_FIELD_NUMBER = 6;
     /**
      * <code>.NickServToken retrieve = 6;</code>
+     * @return Whether the retrieve field is set.
      */
+    @java.lang.Override
     public boolean hasRetrieve() {
       return bodyCase_ == 6;
     }
     /**
      * <code>.NickServToken retrieve = 6;</code>
+     * @return The retrieve.
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServToken getRetrieve() {
       if (bodyCase_ == 6) {
          return (gg.strims.ppspp.proto.Nickserv.NickServToken) body_;
@@ -9576,6 +10036,7 @@ public final class Nickserv {
     /**
      * <code>.NickServToken retrieve = 6;</code>
      */
+    @java.lang.Override
     public gg.strims.ppspp.proto.Nickserv.NickServTokenOrBuilder getRetrieveOrBuilder() {
       if (bodyCase_ == 6) {
          return (gg.strims.ppspp.proto.Nickserv.NickServToken) body_;
@@ -9662,38 +10123,35 @@ public final class Nickserv {
       }
       gg.strims.ppspp.proto.Nickserv.NickServRPCResponse other = (gg.strims.ppspp.proto.Nickserv.NickServRPCResponse) obj;
 
-      boolean result = true;
-      result = result && (getRequestId()
-          == other.getRequestId());
-      result = result && getBodyCase().equals(
-          other.getBodyCase());
-      if (!result) return false;
+      if (getRequestId()
+          != other.getRequestId()) return false;
+      if (!getBodyCase().equals(other.getBodyCase())) return false;
       switch (bodyCase_) {
         case 2:
-          result = result && getError()
-              .equals(other.getError());
+          if (!getError()
+              .equals(other.getError())) return false;
           break;
         case 3:
-          result = result && getUpdate()
-              .equals(other.getUpdate());
+          if (!getUpdate()
+              .equals(other.getUpdate())) return false;
           break;
         case 4:
-          result = result && getDelete()
-              .equals(other.getDelete());
+          if (!getDelete()
+              .equals(other.getDelete())) return false;
           break;
         case 5:
-          result = result && getCreate()
-              .equals(other.getCreate());
+          if (!getCreate()
+              .equals(other.getCreate())) return false;
           break;
         case 6:
-          result = result && getRetrieve()
-              .equals(other.getRetrieve());
+          if (!getRetrieve()
+              .equals(other.getRetrieve())) return false;
           break;
         case 0:
         default:
       }
-      result = result && unknownFields.equals(other.unknownFields);
-      return result;
+      if (!unknownFields.equals(other.unknownFields)) return false;
+      return true;
     }
 
     @java.lang.Override
@@ -9932,35 +10390,35 @@ public final class Nickserv {
 
       @java.lang.Override
       public Builder clone() {
-        return (Builder) super.clone();
+        return super.clone();
       }
       @java.lang.Override
       public Builder setField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return (Builder) super.setField(field, value);
+        return super.setField(field, value);
       }
       @java.lang.Override
       public Builder clearField(
           com.google.protobuf.Descriptors.FieldDescriptor field) {
-        return (Builder) super.clearField(field);
+        return super.clearField(field);
       }
       @java.lang.Override
       public Builder clearOneof(
           com.google.protobuf.Descriptors.OneofDescriptor oneof) {
-        return (Builder) super.clearOneof(oneof);
+        return super.clearOneof(oneof);
       }
       @java.lang.Override
       public Builder setRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           int index, java.lang.Object value) {
-        return (Builder) super.setRepeatedField(field, index, value);
+        return super.setRepeatedField(field, index, value);
       }
       @java.lang.Override
       public Builder addRepeatedField(
           com.google.protobuf.Descriptors.FieldDescriptor field,
           java.lang.Object value) {
-        return (Builder) super.addRepeatedField(field, value);
+        return super.addRepeatedField(field, value);
       }
       @java.lang.Override
       public Builder mergeFrom(com.google.protobuf.Message other) {
@@ -10051,12 +10509,16 @@ public final class Nickserv {
       private long requestId_ ;
       /**
        * <code>uint64 request_id = 1;</code>
+       * @return The requestId.
        */
+      @java.lang.Override
       public long getRequestId() {
         return requestId_;
       }
       /**
        * <code>uint64 request_id = 1;</code>
+       * @param value The requestId to set.
+       * @return This builder for chaining.
        */
       public Builder setRequestId(long value) {
         
@@ -10066,6 +10528,7 @@ public final class Nickserv {
       }
       /**
        * <code>uint64 request_id = 1;</code>
+       * @return This builder for chaining.
        */
       public Builder clearRequestId() {
         
@@ -10076,7 +10539,9 @@ public final class Nickserv {
 
       /**
        * <code>string error = 2;</code>
+       * @return The error.
        */
+      @java.lang.Override
       public java.lang.String getError() {
         java.lang.Object ref = "";
         if (bodyCase_ == 2) {
@@ -10096,7 +10561,9 @@ public final class Nickserv {
       }
       /**
        * <code>string error = 2;</code>
+       * @return The bytes for error.
        */
+      @java.lang.Override
       public com.google.protobuf.ByteString
           getErrorBytes() {
         java.lang.Object ref = "";
@@ -10117,6 +10584,8 @@ public final class Nickserv {
       }
       /**
        * <code>string error = 2;</code>
+       * @param value The error to set.
+       * @return This builder for chaining.
        */
       public Builder setError(
           java.lang.String value) {
@@ -10130,6 +10599,7 @@ public final class Nickserv {
       }
       /**
        * <code>string error = 2;</code>
+       * @return This builder for chaining.
        */
       public Builder clearError() {
         if (bodyCase_ == 2) {
@@ -10141,6 +10611,8 @@ public final class Nickserv {
       }
       /**
        * <code>string error = 2;</code>
+       * @param value The bytes for error to set.
+       * @return This builder for chaining.
        */
       public Builder setErrorBytes(
           com.google.protobuf.ByteString value) {
@@ -10158,13 +10630,17 @@ public final class Nickserv {
           gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Update, gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Update.Builder, gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.UpdateOrBuilder> updateBuilder_;
       /**
        * <code>.NickServRPCResponse.Update update = 3;</code>
+       * @return Whether the update field is set.
        */
+      @java.lang.Override
       public boolean hasUpdate() {
         return bodyCase_ == 3;
       }
       /**
        * <code>.NickServRPCResponse.Update update = 3;</code>
+       * @return The update.
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Update getUpdate() {
         if (updateBuilder_ == null) {
           if (bodyCase_ == 3) {
@@ -10258,6 +10734,7 @@ public final class Nickserv {
       /**
        * <code>.NickServRPCResponse.Update update = 3;</code>
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.UpdateOrBuilder getUpdateOrBuilder() {
         if ((bodyCase_ == 3) && (updateBuilder_ != null)) {
           return updateBuilder_.getMessageOrBuilder();
@@ -10294,13 +10771,17 @@ public final class Nickserv {
           gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Delete, gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Delete.Builder, gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.DeleteOrBuilder> deleteBuilder_;
       /**
        * <code>.NickServRPCResponse.Delete delete = 4;</code>
+       * @return Whether the delete field is set.
        */
+      @java.lang.Override
       public boolean hasDelete() {
         return bodyCase_ == 4;
       }
       /**
        * <code>.NickServRPCResponse.Delete delete = 4;</code>
+       * @return The delete.
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.Delete getDelete() {
         if (deleteBuilder_ == null) {
           if (bodyCase_ == 4) {
@@ -10394,6 +10875,7 @@ public final class Nickserv {
       /**
        * <code>.NickServRPCResponse.Delete delete = 4;</code>
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServRPCResponse.DeleteOrBuilder getDeleteOrBuilder() {
         if ((bodyCase_ == 4) && (deleteBuilder_ != null)) {
           return deleteBuilder_.getMessageOrBuilder();
@@ -10430,13 +10912,17 @@ public final class Nickserv {
           gg.strims.ppspp.proto.Nickserv.NickServToken, gg.strims.ppspp.proto.Nickserv.NickServToken.Builder, gg.strims.ppspp.proto.Nickserv.NickServTokenOrBuilder> createBuilder_;
       /**
        * <code>.NickServToken create = 5;</code>
+       * @return Whether the create field is set.
        */
+      @java.lang.Override
       public boolean hasCreate() {
         return bodyCase_ == 5;
       }
       /**
        * <code>.NickServToken create = 5;</code>
+       * @return The create.
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServToken getCreate() {
         if (createBuilder_ == null) {
           if (bodyCase_ == 5) {
@@ -10530,6 +11016,7 @@ public final class Nickserv {
       /**
        * <code>.NickServToken create = 5;</code>
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServTokenOrBuilder getCreateOrBuilder() {
         if ((bodyCase_ == 5) && (createBuilder_ != null)) {
           return createBuilder_.getMessageOrBuilder();
@@ -10566,13 +11053,17 @@ public final class Nickserv {
           gg.strims.ppspp.proto.Nickserv.NickServToken, gg.strims.ppspp.proto.Nickserv.NickServToken.Builder, gg.strims.ppspp.proto.Nickserv.NickServTokenOrBuilder> retrieveBuilder_;
       /**
        * <code>.NickServToken retrieve = 6;</code>
+       * @return Whether the retrieve field is set.
        */
+      @java.lang.Override
       public boolean hasRetrieve() {
         return bodyCase_ == 6;
       }
       /**
        * <code>.NickServToken retrieve = 6;</code>
+       * @return The retrieve.
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServToken getRetrieve() {
         if (retrieveBuilder_ == null) {
           if (bodyCase_ == 6) {
@@ -10666,6 +11157,7 @@ public final class Nickserv {
       /**
        * <code>.NickServToken retrieve = 6;</code>
        */
+      @java.lang.Override
       public gg.strims.ppspp.proto.Nickserv.NickServTokenOrBuilder getRetrieveOrBuilder() {
         if ((bodyCase_ == 6) && (retrieveBuilder_ != null)) {
           return retrieveBuilder_.getMessageOrBuilder();
@@ -10700,7 +11192,7 @@ public final class Nickserv {
       @java.lang.Override
       public final Builder setUnknownFields(
           final com.google.protobuf.UnknownFieldSet unknownFields) {
-        return super.setUnknownFieldsProto3(unknownFields);
+        return super.setUnknownFields(unknownFields);
       }
 
       @java.lang.Override
@@ -10860,21 +11352,13 @@ public final class Nickserv {
       "p.protoZ&github.com/MemeLabs/go-ppspp/pk" +
       "g/pb;pb\272\002\002PBb\006proto3"
     };
-    com.google.protobuf.Descriptors.FileDescriptor.InternalDescriptorAssigner assigner =
-        new com.google.protobuf.Descriptors.FileDescriptor.    InternalDescriptorAssigner() {
-          public com.google.protobuf.ExtensionRegistry assignDescriptors(
-              com.google.protobuf.Descriptors.FileDescriptor root) {
-            descriptor = root;
-            return null;
-          }
-        };
-    com.google.protobuf.Descriptors.FileDescriptor
+    descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
         new com.google.protobuf.Descriptors.FileDescriptor[] {
           gg.strims.ppspp.proto.ProfileOuterClass.getDescriptor(),
           com.google.protobuf.DurationProto.getDescriptor(),
           com.google.protobuf.TimestampProto.getDescriptor(),
-        }, assigner);
+        });
     internal_static_ServerConfig_descriptor =
       getDescriptor().getMessageTypes().get(0);
     internal_static_ServerConfig_fieldAccessorTable = new

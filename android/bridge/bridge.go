@@ -9,7 +9,6 @@ import (
 	"runtime"
 
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -26,6 +25,7 @@ func GetOs() string {
 
 type androidSideWriter struct {
 	AndroidSide
+	io.Reader
 }
 
 func (a *androidSideWriter) Write(p []byte) (int, error) {
@@ -56,7 +56,7 @@ func NewGoSide(s AndroidSide, appFileLocation string) (*GoSide, error) {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
-	svc, err := service.New(service.Options{
+	srv, err := service.New(service.Options{
 		Store:  kv,
 		Logger: l,
 		VPNOptions: []vpn.HostOption{
@@ -71,7 +71,7 @@ func NewGoSide(s AndroidSide, appFileLocation string) (*GoSide, error) {
 
 	inReader, inWriter := io.Pipe()
 
-	go rpc.NewHost(l, svc).Handle(context.Background(), &androidSideWriter{s}, inReader)
+	go srv.Listen(context.Background(), &androidSideWriter{s, inReader})
 
 	return &GoSide{
 		w: inWriter,

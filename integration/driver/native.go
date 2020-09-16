@@ -43,7 +43,7 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 		log.Fatalf("failed to open db: %s", err)
 	}
 
-	svc, err := service.New(service.Options{
+	srv, err := service.New(service.Options{
 		Store:  store,
 		Logger: d.logger,
 		VPNOptions: []vpn.HostOption{
@@ -56,12 +56,11 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 		log.Fatal(err)
 	}
 
-	host := rpc.NewHost(d.logger, svc)
 	hr, hw := io.Pipe()
 	cr, cw := io.Pipe()
 
 	go func() {
-		if err := host.Listen(context.Background(), readWriter{hr, cw}); err != nil {
+		if err := srv.Listen(context.Background(), readWriter{hr, cw}); err != nil {
 			log.Println("rpc host closed with error", err)
 		}
 	}()

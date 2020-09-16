@@ -9,7 +9,6 @@ import (
 	"path"
 
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -42,7 +41,7 @@ func NewGoSide(s SwiftSide) (*GoSide, error) {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
-	svc, err := service.New(service.Options{
+	srv, err := service.New(service.Options{
 		Store:  kv,
 		Logger: logger,
 		VPNOptions: []vpn.HostOption{
@@ -57,16 +56,17 @@ func NewGoSide(s SwiftSide) (*GoSide, error) {
 
 	inReader, inWriter := io.Pipe()
 
-	go rpc.NewHost(logger, svc).Handle(context.Background(), &swiftSideWriter{s}, inReader)
+	go srv.Listen(context.Background(), &swiftSideReadWriter{s, inReader})
 
 	return &GoSide{inWriter}, nil
 }
 
-type swiftSideWriter struct {
+type swiftSideReadWriter struct {
 	SwiftSide
+	io.Reader
 }
 
-func (s *swiftSideWriter) Write(p []byte) (int, error) {
+func (s *swiftSideReadWriter) Write(p []byte) (int, error) {
 	s.EmitData(p)
 	return len(p), nil
 }
