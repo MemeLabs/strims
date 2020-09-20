@@ -1,19 +1,20 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -xe
 
 node_user=$1
 node_addr=$2
 node_key_path=$3
-wg_ip = $4
+wg_ip=$4
 wg_config=$5
 node_name=$6
 
-read -a join_cmd <<< `kubeadm token create --print-join-command | tr -d '\n'`
+read -ra join_cmd <<< "$(kubeadm token create --print-join-command | tr -d '\n')"
 k8s_api_server_endpoint=${join_cmd[2]}
 k8s_token=${join_cmd[4]}
 k8s_ca_cert_hash=${join_cmd[6]}
 
-ssh -T $node_user@$node_addr -i $node_key_path -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no <<CMD
+# shellcheck disable=SC2087
+ssh -T "$node_user"@"$node_addr" -i "$node_key_path" -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no <<CMD
 #!/bin/bash
 set -ex
 sudo -s

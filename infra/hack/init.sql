@@ -1,5 +1,6 @@
 CREATE TABLE IF NOT EXISTS "nodes" (
   "id" BIGINT PRIMARY KEY NOT NULL,
+  "active" INTEGER NOT NULL,
   "started_at" INTEGER NOT NULL,
   "stopped_at" INTEGER,
   "provider_name" TEXT NOT NULL,
@@ -11,8 +12,8 @@ CREATE TABLE IF NOT EXISTS "nodes" (
   "ip_v4" TEXT NOT NULL,
   "ip_v6" TEXT NOT NULL,
   "region_name" TEXT NOT NULL,
-  "region_lat" INTEGER NOT NULL,
-  "region_lng" INTEGER NOT NULL,
+  "region_lat" REAL NOT NULL,
+  "region_lng" REAL NOT NULL,
   "sku_name" TEXT NOT NULL,
   "sku_network_cap" INTEGER NOT NULL,
   "sku_network_speed" INTEGER NOT NULL,

@@ -1,6 +1,7 @@
 package wgutil
 
 import (
+	"crypto"
 	"crypto/rand"
 	"encoding/base64"
 	"fmt"
@@ -65,4 +66,8 @@ AllowedIPs = %s
 Endpoint = %s
 PersistentKeepalive = %d`
 	return fmt.Sprintf(t, c.PublicKey, c.AllowedIPs, c.Endpoint, c.PersistentKeepalive)
+}
+
+func publicKeyFromPrivate(priv []byte) crypto.PublicKey {
+	return ecdh.X25519().PublicKey(priv)
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"github.com/volatiletech/sqlboiler/boil"
 	"go.uber.org/zap"
 )
 
@@ -73,6 +74,8 @@ func initConfig() {
 	} else {
 		backend = b
 	}
+
+	boil.SetDB(backend.DB)
 }
 
 func providerValidArgsFunc(cmd *cobra.Command, args []string, toComplete string) ([]string, cobra.ShellCompDirective) {

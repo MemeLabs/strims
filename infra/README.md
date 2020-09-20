@@ -36,3 +36,7 @@ Providers:
 SSH:
   IdentityFile: /root/.ssh/id_ecdsa_example
 ```
+
+```
+lxc file push scripts/* strims-k8s/mnt/
+```

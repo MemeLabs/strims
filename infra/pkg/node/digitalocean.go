@@ -83,6 +83,10 @@ func (d *DigitalOceanDriver) Provider() string {
 	return "digitalocean"
 }
 
+func (d *DigitalOceanDriver) DefaultUser() string {
+	return "root"
+}
+
 // Regions ...
 func (d *DigitalOceanDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region, error) {
 	return append(make([]*Region, 0, len(digitalOceanRegions)), digitalOceanRegions...), nil

@@ -55,16 +55,17 @@ require (
 	github.com/scaleway/scaleway-sdk-go v1.0.0-beta.6
 	github.com/sony/sonyflake v1.0.0
 	github.com/spf13/afero v1.4.0 // indirect
-	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.7.1
 	github.com/stretchr/testify v1.6.1
 	github.com/tj/assert v0.0.3
-	github.com/volatiletech/null v8.0.0+incompatible // indirect
 	github.com/volatiletech/null/v8 v8.1.0
+	github.com/volatiletech/randomize v0.0.1
 	github.com/volatiletech/sqlboiler v3.7.1+incompatible
+	github.com/volatiletech/sqlboiler/v4 v4.2.0
+	github.com/volatiletech/strmangle v0.0.1
 	go.etcd.io/bbolt v1.3.5
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.16.0

@@ -29,6 +29,10 @@ func (d *HetznerDriver) Provider() string {
 	return "hetzner"
 }
 
+func (d *HetznerDriver) DefaultUser() string {
+	return "root"
+}
+
 // Regions ...
 func (d *HetznerDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region, error) {
 	locations, err := d.client.Location.All(ctx)

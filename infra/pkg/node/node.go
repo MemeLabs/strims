@@ -2,23 +2,40 @@ package node
 
 import (
 	"context"
+	"strings"
 
 	"github.com/golang/geo/s2"
 )
 
-// Driver ...
+type billingType string
+
+const (
+	Monthly billingType = "monthly"
+	Hourly  billingType = "hourly"
+)
+
+// A Driver is defines the implementation of a third party driver such as
+// DigitalOcean. The driver is used to facilitate provisioning and tearing
+// down resources.
 type Driver interface {
+	// Provider returns the name of the current provider configured
 	Provider() string
+	// Regions provides a list of available regions for the current credentials
 	Regions(ctx context.Context, req *RegionsRequest) ([]*Region, error)
+	// SKUs returns a list of available machine specs and prices
 	SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error)
+	// Create provisions a new Node on the provider's service
 	Create(ctx context.Context, req *CreateRequest) (*Node, error)
+	// List returns existing nodes for the provider
 	List(ctx context.Context, req *ListRequest) ([]*Node, error)
+	// Delete allows for shutting down and deleting of a node
 	Delete(ctx context.Context, req *DeleteRequest) error
+	// DefaultUser returns the user allowed for connection and operations
+	DefaultUser() string
 }
 
 // RegionsRequest ...
-type RegionsRequest struct {
-}
+type RegionsRequest struct{}
 
 // SKUsRequest ...
 type SKUsRequest struct {
@@ -31,6 +48,8 @@ type CreateRequest struct {
 	Region string
 	SKU    string
 	SSHKey string
+	// hourly(0) | monthly(1)
+	BillingType billingType
 }
 
 // ListRequest ...
@@ -49,6 +68,9 @@ type Region struct {
 	City   string
 	LatLng s2.LatLng
 }
+
+// Regions ...
+type Regions []*Region
 
 // SKU ...
 type SKU struct {
@@ -85,4 +107,35 @@ type Node struct {
 type Networks struct {
 	V4 []string `json:"v4,omitempty"`
 	V6 []string `json:"v6,omitempty"`
+}
+
+func (r *Regions) FindByName(name string) *Region {
+	for _, reg := range *r {
+		if name == reg.Name {
+			return reg
+		}
+	}
+	return nil
+}
+
+func ValidRegion(region string, regions []*Region) bool {
+	for _, reg := range regions {
+		if reg.Name == region {
+			return true
+		}
+	}
+	return false
+}
+
+func ValidSKU(skuName string, skus []*SKU) bool {
+	for _, sku := range skus {
+		if sku.Name == skuName {
+			return true
+		}
+	}
+	return false
+}
+
+func IsPriviledged(user string) bool {
+	return strings.ToLower(user) == "root"
 }

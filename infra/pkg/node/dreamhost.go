@@ -56,6 +56,10 @@ func (d *DreamHostDriver) Provider() string {
 	return "dreamHost"
 }
 
+func (d *DreamHostDriver) DefaultUser() string {
+	return "ubuntu"
+}
+
 // Regions ...
 func (d *DreamHostDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region, error) {
 	return []*Region{&dreamHostRegion}, nil

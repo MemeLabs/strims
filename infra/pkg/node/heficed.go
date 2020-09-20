@@ -111,6 +111,11 @@ func (d *HeficedDriver) Provider() string {
 	return "heficed"
 }
 
+// DefaultUser used to log into the instances
+func (d *HeficedDriver) DefaultUser() string {
+	return "root"
+}
+
 // Regions returns a list of available regions for the current credentials
 func (d *HeficedDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region, error) {
 	return append(make([]*Region, 0, len(heficedRegions)), heficedRegions...), nil
@@ -240,6 +245,10 @@ func (d *HeficedDriver) Create(ctx context.Context, req *CreateRequest) (*Node, 
 			}
 			order = toHeficedOrder(spec, templateID, req.Region)
 		}
+	}
+
+	if req.BillingType == Hourly {
+		order.BillingTypeId = -1 // hourly
 	}
 
 	if order == nil {

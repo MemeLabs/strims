@@ -1,6 +1,7 @@
 package cmd
 
 import (
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -10,58 +11,115 @@ import (
 	"runtime"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/infra/internal/models"
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
+	"github.com/MemeLabs/go-ppspp/infra/pkg/wgutil"
 	"github.com/spf13/cobra"
+	"github.com/volatiletech/sqlboiler/v4/boil"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 )
 
 func init() {
-	createCmd.PersistentFlags().String("provider", "digitalocean", "hosting provider")
-	createCmd.PersistentFlags().String("region", "sfo2", "hosting provider")
-
 	rootCmd.AddCommand(createCmd)
 }
 
 var createCmd = &cobra.Command{
-	Use:               "create",
-	Short:             "Create node",
-	Args:              cobra.ExactArgs(1),
-	ValidArgsFunction: providerValidArgsFunc,
-	RunE: func(cmd *cobra.Command, args []string) error {
+	Use:   "create [provider] [sku] [region]",
+	Short: "Create node",
+	Args: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
 		d, ok := backend.NodeDrivers[provider]
 		if !ok {
-			return fmt.Errorf("Unsupported provider: %s", provider)
+			return fmt.Errorf("unsupported provider: %s", provider)
 		}
 
-		n, err := d.Create(cmd.Context(), &node.CreateRequest{
-			Name:   "test",
-			Region: "uk-lon1",
-			SKU:    "1210",
-			SSHKey: backend.SSHPublicKey(),
-		})
+		// TODO(jbpratt): refactor this since it will be used numerous times
+		// across drivers
+		regions, err := d.Regions(cmd.Context(), &node.RegionsRequest{})
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to get regions for current driver: %w", err)
+		}
+
+		// TODO(jbpratt): is validation needed here? Maybe, but only if the
+		// implementations aren't already doing the validation otherwise, we
+		// are just making duplicate requests..
+		region := args[1]
+		if !node.ValidRegion(region, regions) {
+			return fmt.Errorf("invalid region for %q", provider)
+		}
+
+		return nil
+	},
+	ValidArgsFunction: providerValidArgsFunc,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		provider := args[0]
+		region := args[1]
+		d, _ := backend.NodeDrivers[provider]
+
+		skus, err := d.SKUs(cmd.Context(), &node.SKUsRequest{Region: region})
+		if err != nil {
+			return fmt.Errorf("failed to get skus for %q", provider)
+		}
+
+		sku := args[2]
+		if !node.ValidSKU(sku, skus) {
+			return fmt.Errorf("invalid sku for %q", provider)
+		}
+
+		req := &node.CreateRequest{
+			Name:        generateHostname(provider, region),
+			Region:      region,
+			SKU:         sku,
+			SSHKey:      backend.SSHPublicKey(),
+			BillingType: node.Hourly,
+		}
+		n, err := d.Create(cmd.Context(), req)
+		if err != nil {
+			return fmt.Errorf("failed to create node(%v): %w", req, err)
 		}
 
 		jsonDump(n)
 
-		// sshKeyPath := "/home/slugalisk/.ssh/id_rsa-slugalisk"
+		// TODO: query out active peers from db and append to static peers
+		tx, err := boil.BeginTx(cmd.Context(), nil)
+		if err != nil {
+			return err
+		}
+		slice, err := models.Nodes(qm.Where("active=?", 1)).All(cmd.Context(), tx)
+		if err != nil {
+			return err
+		}
 
-		// c := exec.Command("ssh", []string{
-		// 	"-o", "UserKnownHostsFile=/dev/null",
-		// 	"-o", "StrictHostKeyChecking=no",
-		// 	"-i", sshKeyPath,
-		// 	fmt.Sprintf("root@%s", n.Networks.V4[0]),
-		// 	"touch ./test-file",
-		// }...)
+		wgIPv4, err := backend.NextWGIPv4(cmd.Context(), slice)
+		if wgIPv4 == "" || err != nil {
+			return fmt.Errorf("failed to get next wg ipv4: %w", err)
+		}
+		_, _, err = wgutil.GenerateKey()
+		if err != nil {
+			return fmt.Errorf("failed to create wg keys: %w", err)
+		}
 
-		// log.Println(c.String())
+		if err := backend.InsertNode(cmd.Context(), n); err != nil {
+			return fmt.Errorf("failed to insert node(%v): %w", n, err)
+		}
 
-		// go relayStdio(c)
+		if err := backend.UpdateController(); err != nil {
+			return fmt.Errorf("failed to update controller config(%v): %w", backend.Conf, err)
+		}
 
-		// if err := c.Run(); err != nil {
-		// 	return err
-		// }
+		if err := backend.InitNode(
+			cmd.Context(),
+			n,
+			d.DefaultUser(),
+			wgIPv4,
+		); err != nil {
+			return fmt.Errorf("failed to init node(%v): %w", nil, err)
+		}
+
+		// TODO: controller should only have peers updated, not entire conf..
+		if err := backend.SyncNodes(cmd.Context(), nil); err != nil {
+			return fmt.Errorf("failed to sync nodes: %w", err)
+		}
 
 		return nil
 	},
@@ -100,4 +158,12 @@ func relayStdio(cmd *exec.Cmd) error {
 	go copy(os.Stderr, stderr)
 	go copy(os.Stdout, stdout)
 	return nil
+}
+
+func generateHostname(provider, region string) string {
+	name := make([]byte, 4)
+	if _, err := rand.Read(name); err != nil {
+		panic(err)
+	}
+	return fmt.Sprintf("%s-%s-%x", provider, region, name)
 }
