@@ -259,7 +259,7 @@ OUTER:
 	return "", fmt.Errorf("failed to find next wg ipv4")
 }
 
-func (b *Backend) InsertNode(ctx context.Context, node *node.Node, wgKey, wgIP string) error {
+func (b *Backend) InsertNode(ctx context.Context, node *node.Node, wgIP, wgKey string) error {
 
 	// TODO: node pricing
 	nodeEntry := &models.Node{
@@ -327,12 +327,16 @@ func (b *Backend) UpdateController() error {
 			return fmt.Errorf("failed to run 'wg setconf': %v", err)
 		}
 	*/
+	// TODO: this assumes running from lxc host which is not accurate long term.
+	// This can be removed as the temp file will be written directly on the
+	// container.
 	if err := run(
 		"lxc", "file", "push", tmp.Name(), fmt.Sprintf("%s%s", containerName, location),
 	); err != nil {
 		return fmt.Errorf("failed to push file to container: %w", err)
 	}
 
+	// TODO: remove `lxc exec`
 	if err := run(
 		"lxc", "exec", "-T", containerName, "--",
 		"python3", "/mnt/controller-sync-wg.py", location,

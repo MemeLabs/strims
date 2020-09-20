@@ -48,14 +48,6 @@ var createCmd = &cobra.Command{
 			return fmt.Errorf("invalid region for %q", provider)
 		}
 
-		return nil
-	},
-	ValidArgsFunction: providerValidArgsFunc,
-	RunE: func(cmd *cobra.Command, args []string) error {
-		provider := args[0]
-		region := args[1]
-		d, _ := backend.NodeDrivers[provider]
-
 		skus, err := d.SKUs(cmd.Context(), &node.SKUsRequest{Region: region})
 		if err != nil {
 			return fmt.Errorf("failed to get skus for %q", provider)
@@ -64,6 +56,18 @@ var createCmd = &cobra.Command{
 		sku := args[2]
 		if !node.ValidSKU(sku, skus) {
 			return fmt.Errorf("invalid sku for %q", provider)
+		}
+
+		return nil
+	},
+	ValidArgsFunction: providerValidArgsFunc,
+	RunE: func(cmd *cobra.Command, args []string) error {
+		provider := args[0]
+		region := args[1]
+		sku := args[2]
+		d, ok := backend.NodeDrivers[provider]
+		if !ok {
+			return fmt.Errorf("invalid node provider for %q", provider)
 		}
 
 		req := &node.CreateRequest{
@@ -79,15 +83,11 @@ var createCmd = &cobra.Command{
 		}
 
 		jsonDump(n)
-		priv, _, err := wgutil.GenerateKey()
-		if err != nil {
-			return fmt.Errorf("failed to create wg keys: %w", err)
-		}
-
 		tx, err := boil.BeginTx(cmd.Context(), nil)
 		if err != nil {
 			return err
 		}
+
 		slice, err := models.Nodes(qm.Where("active=?", 1)).All(cmd.Context(), tx)
 		if err != nil {
 			return err
@@ -113,7 +113,12 @@ var createCmd = &cobra.Command{
 			return fmt.Errorf("failed to get next wg ipv4: %w", err)
 		}
 
-		if err := backend.InsertNode(cmd.Context(), n, priv, wgIPv4); err != nil {
+		wgPriv, _, err := wgutil.GenerateKey()
+		if wgPriv == "" || err != nil {
+			return fmt.Errorf("failed to create wg keys: %w", err)
+		}
+
+		if err := backend.InsertNode(cmd.Context(), n, wgIPv4, wgPriv); err != nil {
 			return fmt.Errorf("failed to insert node(%v): %w", n, err)
 		}
 
