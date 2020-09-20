@@ -1,0 +1,10 @@
+# Extra volumes to scrape logs from
+extraVolumes:
+- name: docker2
+  hostPath:
+    path: /mnt/docker/containers
+
+extraVolumeMounts:
+- name: docker2
+  mountPath: /mnt/docker/containers
+  readOnly: true

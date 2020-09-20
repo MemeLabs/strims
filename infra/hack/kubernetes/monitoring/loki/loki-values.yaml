@@ -7,6 +7,13 @@ resources: {
   {"memory":"1024Mi", "cpu":"500m"}
   }
 
+
+tolerations:
+- key: "node-role.kubernetes.io/master"
+  operator: "Exists"
+  effect: "NoSchedule"
+
+
 persistence:
   enabled: true
   storageClassName: local-path

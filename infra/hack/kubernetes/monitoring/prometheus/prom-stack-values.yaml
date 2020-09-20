@@ -11,6 +11,11 @@ kube-state-metrics:
             operator: In
             values:
             - controller
+  tolerations:
+  - key: "node-role.kubernetes.io/master"
+    operator: "Exists"
+    effect: "NoSchedule"
+
 
 prometheusOperator:
   affinity:
@@ -22,6 +27,10 @@ prometheusOperator:
               operator: In
               values:
               - controller
+  tolerations:
+  - key: "node-role.kubernetes.io/master"
+    operator: "Exists"
+    effect: "NoSchedule"
 
 prometheus:
   prometheusSpec:
@@ -34,6 +43,10 @@ prometheus:
               operator: In
               values:
               - controller
+    tolerations:
+    - key: "node-role.kubernetes.io/master"
+      operator: "Exists"
+      effect: "NoSchedule"
     storageSpec:
       volumeClaimTemplate:
         spec:
@@ -58,6 +71,11 @@ grafana:
     storageClassName: local-path
     enabled: true
     size: 10Gi
+  
+  tolerations:
+  - key: "node-role.kubernetes.io/master"
+    operator: "Exists"
+    effect: "NoSchedule"
 
   ingress:
     hosts:

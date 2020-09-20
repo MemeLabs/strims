@@ -5,6 +5,8 @@ kubectl create namespace monitoring
 
 #add repos
 sudo helm repo add stable https://kubernetes-charts.storage.googleapis.com
+sudo helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
+
 sudo helm repo add loki https://grafana.github.io/loki/charts
 sudo helm repo update
 
@@ -19,14 +21,14 @@ unset grafana_user
 unset grafana_password
 
 #install
-#https://github.com/helm/charts/tree/master/stable/prometheus-operator
-sudo helm install prometheus-operator -n monitoring stable/prometheus-operator -f prometheus/prom-operator-values.yaml
+#https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack
+sudo helm install prometheus-stack -n monitoring prometheus-community/kube-prometheus-stack -f prometheus/prom-stack-values.yaml
 
 #https://github.com/grafana/loki/tree/master/production/helm/loki
 sudo helm install loki -n monitoring -f loki/loki-values.yaml loki/loki
 
 #https://github.com/grafana/loki/tree/master/production/helm/promtail
-sudo helm install loki-promtail -n monitoring --set 'loki.serviceName=loki' loki/promtail
+sudo helm install loki-promtail -n monitoring --set 'loki.serviceName=loki' loki/promtail -f promtail/promtail-values.yaml
 
 
 
