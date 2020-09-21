@@ -44,20 +44,4 @@ spec:
           valueFrom:
             secretKeyRef:
               name: atmon-secret
-              key: password
----
-apiVersion: monitoring.coreos.com/v1
-kind: PodMonitor
-metadata:
-  name: atmon
-  namespace: monitoring
-spec:
-  namespaceSelector:
-    matchNames:
-    - atmon
-  selector:
-    matchLabels:
-      app: atmon
-  podMetricsEndpoints:
-  - port: metrics
-    scrapeTimeout: 1s
+              key: password    
