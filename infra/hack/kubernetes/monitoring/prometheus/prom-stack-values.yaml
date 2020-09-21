@@ -57,12 +57,25 @@ prometheus:
               storage: 10Gi #storage requests don't actually do anything when using storage provisioned on a node locally
     routePrefix: /prometheus
     externalUrl: 'http://strims.monitoring.local/prometheus'
+
+  additionalPodMonitors:
+  - name: atmon-pod-monitor
+    selector:
+      matchLabels:
+        app: atmon
+    namespaceSelector:
+      matchNames: 
+        - atmon
+    podMetricsEndpoints:
+      - targetPort: metrics
+        path: /metrics
+
   ingress:
     enabled: true
     hosts:
       - strims.monitoring.local
     path: "/prometheus"
-
+  
 grafana:
   admin:
     existingSecret: grafana-admin
