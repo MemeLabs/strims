@@ -69,13 +69,13 @@ prometheus:
     podMetricsEndpoints:
       - targetPort: metrics
         path: /metrics
-
+        
   ingress:
     enabled: true
     hosts:
       - strims.monitoring.local
     path: "/prometheus"
-  
+
 grafana:
   admin:
     existingSecret: grafana-admin
