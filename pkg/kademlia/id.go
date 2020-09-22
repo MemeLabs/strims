@@ -11,16 +11,16 @@ import (
 
 // constants ...
 const (
-	IDByteLength = 20
-	IDBitLength  = IDByteLength * 8
+	IDLength    = 32
+	idBitLength = IDLength * 8
 )
 
 // ID ...
-type ID [5]uint32
+type ID [4]uint64
 
 // NewID ...
 func NewID() (ID, error) {
-	b := make([]byte, IDByteLength)
+	b := make([]byte, IDLength)
 	_, err := rand.Read(b)
 	if err != nil {
 		return ID{}, err
@@ -30,39 +30,46 @@ func NewID() (ID, error) {
 
 // UnmarshalID ...
 func UnmarshalID(b []byte) (ID, error) {
-	if len(b) < IDByteLength {
+	if len(b) < IDLength {
 		return ID{}, errors.New("not enough bytes in id")
 	}
 
 	var d ID
-	d[0] = binary.BigEndian.Uint32(b)
-	d[1] = binary.BigEndian.Uint32(b[4:])
-	d[2] = binary.BigEndian.Uint32(b[8:])
-	d[3] = binary.BigEndian.Uint32(b[12:])
-	d[4] = binary.BigEndian.Uint32(b[16:])
+	d[0] = binary.BigEndian.Uint64(b)
+	d[1] = binary.BigEndian.Uint64(b[8:])
+	d[2] = binary.BigEndian.Uint64(b[16:])
+	d[3] = binary.BigEndian.Uint64(b[24:])
 
 	return d, nil
 }
 
+// MustUnmarshalID ....
+func MustUnmarshalID(b []byte) ID {
+	id, err := UnmarshalID(b)
+	if err != nil {
+		panic(err)
+	}
+	return id
+}
+
 // Marshal ...
 func (d ID) Marshal(b []byte) (int, error) {
-	if len(b) < IDByteLength {
+	if len(b) < IDLength {
 		return 0, errors.New("not enough bytes in id")
 	}
 
-	binary.BigEndian.PutUint32(b, d[0])
-	binary.BigEndian.PutUint32(b[4:], d[1])
-	binary.BigEndian.PutUint32(b[8:], d[2])
-	binary.BigEndian.PutUint32(b[12:], d[3])
-	binary.BigEndian.PutUint32(b[16:], d[4])
-	return IDByteLength, nil
+	binary.BigEndian.PutUint64(b, d[0])
+	binary.BigEndian.PutUint64(b[8:], d[1])
+	binary.BigEndian.PutUint64(b[16:], d[2])
+	binary.BigEndian.PutUint64(b[24:], d[3])
+	return IDLength, nil
 }
 
 // MarshalJSON ...
 func (d ID) MarshalJSON() ([]byte, error) {
-	var b [IDByteLength]byte
+	var b [IDLength]byte
 	d.Bytes(b[:])
-	j := make([]byte, base64.StdEncoding.EncodedLen(IDByteLength+2))
+	j := make([]byte, base64.StdEncoding.EncodedLen(IDLength+2))
 	base64.StdEncoding.Encode(j[1:], b[:])
 
 	j[0] = '"'
@@ -74,7 +81,7 @@ func (d ID) MarshalJSON() ([]byte, error) {
 
 // UnmarshalJSON ...
 func (d *ID) UnmarshalJSON(j []byte) error {
-	var b [IDByteLength]byte
+	var b [IDLength]byte
 	_, err := base64.StdEncoding.Decode(b[:], j)
 	if err != nil {
 		return err
@@ -91,8 +98,8 @@ func (d *ID) UnmarshalJSON(j []byte) error {
 
 // Bytes ...
 func (d ID) Bytes(b []byte) []byte {
-	if b == nil || len(b) < IDByteLength {
-		b = make([]byte, IDByteLength)
+	if b == nil || len(b) < IDLength {
+		b = make([]byte, IDLength)
 	}
 	if _, err := d.Marshal(b); err != nil {
 		panic(err)
@@ -113,12 +120,12 @@ func (d ID) Clone() (c ID) {
 
 // Equals ...
 func (d ID) Equals(o ID) bool {
-	return d[0] == o[0] && d[1] == o[1] && d[2] == o[2] && d[3] == o[3] && d[4] == o[4]
+	return d[0] == o[0] && d[1] == o[1] && d[2] == o[2] && d[3] == o[3]
 }
 
 // XOr ...
 func (d ID) XOr(o ID) ID {
-	return ID{d[0] ^ o[0], d[1] ^ o[1], d[2] ^ o[2], d[3] ^ o[3], d[4] ^ o[4]}
+	return ID{d[0] ^ o[0], d[1] ^ o[1], d[2] ^ o[2], d[3] ^ o[3]}
 }
 
 // Less ...

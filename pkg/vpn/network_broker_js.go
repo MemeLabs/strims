@@ -126,7 +126,7 @@ func (s *BrokerService) Init(ctx context.Context, r *pb.BrokerPeerInitRequest) e
 		return errPeeerIDNotFound
 	}
 
-	return pi.(*brokerServicePeer).p.Init(uint16(r.Discriminator), r.Keys)
+	return pi.(*brokerServicePeer).p.Init(r.PreferSender, r.Keys)
 }
 
 // Data ...
@@ -259,11 +259,11 @@ func (p *brokerClientPeer) doReadPump() {
 }
 
 // Init ...
-func (p *brokerClientPeer) Init(discriminator uint16, keys [][]byte) error {
+func (p *brokerClientPeer) Init(preferSender bool, keys [][]byte) error {
 	req := &pb.BrokerPeerInitRequest{
-		PeerId:        p.id,
-		Discriminator: uint32(discriminator),
-		Keys:          keys,
+		PeerId:       p.id,
+		PreferSender: preferSender,
+		Keys:         keys,
 	}
 	return p.client.Call(context.Background(), "init", req)
 }

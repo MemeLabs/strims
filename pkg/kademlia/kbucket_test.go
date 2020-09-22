@@ -12,7 +12,7 @@ func (n node) ID() ID {
 }
 
 func TestKBucket(t *testing.T) {
-	id := ID{0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff}
+	id := ID{0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff}
 	b := NewKBucket(id, 20)
 
 	for i := 0; i < 100; i++ {
@@ -30,7 +30,7 @@ func TestKBucket(t *testing.T) {
 }
 
 func BenchmarkKBucket(b *testing.B) {
-	id := ID{0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff, 0xffffffff}
+	id := ID{0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff, 0xffffffffffffffff}
 	k := NewKBucket(id, 20)
 
 	for i := 0; i < 100; i++ {

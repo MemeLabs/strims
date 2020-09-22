@@ -1,19 +1,18 @@
 package vpn
 
 import (
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
-	"math"
 	"path"
 	"reflect"
 	"runtime"
 	"sync"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
@@ -24,6 +23,7 @@ import (
 )
 
 const reservedPortCount uint16 = 1000
+const hostCertValidDuration = time.Minute
 
 // default network service ports
 const (
@@ -72,22 +72,16 @@ type HostOption func(h *Host) error
 type PeerHandler func(p *Peer)
 
 // NewHost ...
-func NewHost(logger *zap.Logger, key *pb.Key, options ...HostOption) (*Host, error) {
-	discriminator, err := randUint16(math.MaxUint16)
-	if err != nil {
-		return nil, err
-	}
-
-	id, err := NewHostID(key.Public, discriminator)
+func NewHost(logger *zap.Logger, profileKey *pb.Key, options ...HostOption) (*Host, error) {
+	hostKey, err := dao.GenerateKey()
 	if err != nil {
 		return nil, err
 	}
 
 	h := &Host{
-		logger:        logger,
-		discriminator: discriminator,
-		id:            id,
-		key:           key,
+		logger:     logger,
+		profileKey: profileKey,
+		key:        hostKey,
 	}
 
 	for _, o := range options {
@@ -112,8 +106,7 @@ func NewHost(logger *zap.Logger, key *pb.Key, options ...HostOption) (*Host, err
 // Host ...
 type Host struct {
 	logger           *zap.Logger
-	discriminator    uint16
-	id               kademlia.ID
+	profileKey       *pb.Key
 	key              *pb.Key
 	interfaces       []Interface
 	peerHandlersLock sync.Mutex
@@ -146,19 +139,34 @@ func (h *Host) Logger() *zap.Logger {
 	return h.logger
 }
 
-// Discriminator ...
-func (h *Host) Discriminator() uint16 {
-	return h.discriminator
-}
-
 // ID ...
 func (h *Host) ID() kademlia.ID {
-	return h.id
+	return kademlia.MustUnmarshalID(h.key.Public)
 }
 
 // Key ...
 func (h *Host) Key() *pb.Key {
 	return h.key
+}
+
+// Cert ...
+func (h *Host) Cert() (*pb.Certificate, error) {
+	profileCert, err := dao.NewSelfSignedCertificate(h.profileKey, pb.KeyUsage_KEY_USAGE_SIGN, hostCertValidDuration)
+	if err != nil {
+		return nil, fmt.Errorf("generating init cert failed: %w", err)
+	}
+
+	csr, err := dao.NewCertificateRequest(h.key, pb.KeyUsage_KEY_USAGE_SIGN)
+	if err != nil {
+		return nil, err
+	}
+	cert, err := dao.SignCertificateRequest(csr, hostCertValidDuration, h.profileKey)
+	if err != nil {
+		return nil, err
+	}
+	cert.ParentOneof = &pb.Certificate_Parent{Parent: profileCert}
+
+	return cert, nil
 }
 
 // AddLink ...
@@ -167,7 +175,13 @@ func (h *Host) AddLink(c Link) {
 		linksActive.Inc()
 		defer linksActive.Dec()
 
-		p, err := newPeer(h.logger, instrumentLink(c), h.key, h.id)
+		cert, err := h.Cert()
+		if err != nil {
+			h.logger.Error("peer init error", zap.Error(err))
+			return
+		}
+
+		p, err := newPeer(h.logger, instrumentLink(c), h.profileKey, cert)
 		if err != nil {
 			h.logger.Error("peer init error", zap.Error(err))
 			return
@@ -249,14 +263,6 @@ func (h *Host) Dial(addr InterfaceAddr) error {
 		return err
 	}
 	return nil
-}
-
-// NewHostID ...
-func NewHostID(key []byte, hid uint16) (kademlia.ID, error) {
-	var t [20]byte
-	copy(t[:18], key)
-	binary.BigEndian.PutUint16(t[18:], hid)
-	return kademlia.UnmarshalID(t[:])
 }
 
 type peerMap struct {

@@ -1,12 +1,15 @@
-import { execFile } from "child_process";
+import { execFile, execFileSync } from "child_process";
 import * as crypto from "crypto";
 import { readFileSync, unlinkSync } from "fs";
 import { basename, join } from "path";
+
 import * as webpack from "webpack";
 
 const proxyBuilder = (filename: string) => `
 export default gobridge(fetch('${filename}').then(response => response.arrayBuffer()));
 `;
+
+const versionPkg = "github.com/MemeLabs/go-ppspp/pkg/version";
 
 const getGoBin = (root: string) => `${root}/bin/go`;
 
@@ -26,9 +29,16 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
   const goBin = getGoBin(opts.env.GOROOT);
   const outFile = `${this.resourcePath}.wasm`;
 
-  const args = [ "build", "-mod", "readonly" ];
+  const args = ["build", "-mod", "readonly"];
   if (this.mode === "production") {
-    args.push("-trimpath", "-ldflags", "-s -w");
+    const rev = execFileSync("git", ["rev-parse", "HEAD"]).toString().substr(0, 8);
+    args.push(
+      "-trimpath",
+      "-ldflags",
+      `-s -w -X ${versionPkg}.Platform=web -X ${versionPkg}.Version=${rev}`
+    );
+  } else {
+    args.push("-ldflags", `-X ${versionPkg}.Platform=web`);
   }
   args.push("-o", outFile, this.resourcePath);
 
@@ -58,7 +68,7 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
         join(__dirname, "..", "dist", "gobridge.js"),
         "';",
         proxyBuilder(emittedFilename),
-      ].join(""),
+      ].join("")
     );
   });
 }

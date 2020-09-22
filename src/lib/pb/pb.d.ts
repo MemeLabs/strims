@@ -8387,11 +8387,11 @@ export interface IPeerInit {
     /** PeerInit certificate */
     certificate?: (ICertificate|null);
 
-    /** PeerInit iv */
-    iv?: (Uint8Array|null);
+    /** PeerInit nodePlatform */
+    nodePlatform?: (string|null);
 
-    /** PeerInit hostId */
-    hostId?: (Uint8Array|null);
+    /** PeerInit nodeVersion */
+    nodeVersion?: (string|null);
 }
 
 /** Represents a PeerInit. */
@@ -8409,11 +8409,11 @@ export class PeerInit implements IPeerInit {
     /** PeerInit certificate. */
     public certificate?: (ICertificate|null);
 
-    /** PeerInit iv. */
-    public iv: Uint8Array;
+    /** PeerInit nodePlatform. */
+    public nodePlatform: string;
 
-    /** PeerInit hostId. */
-    public hostId: Uint8Array;
+    /** PeerInit nodeVersion. */
+    public nodeVersion: string;
 
     /**
      * Creates a new PeerInit instance using the specified properties.
@@ -8592,9 +8592,6 @@ export namespace NetworkHandshake {
 
         /** Init keyCount */
         keyCount?: (number|null);
-
-        /** Init discriminator */
-        discriminator?: (number|null);
     }
 
     /** Represents an Init. */
@@ -8608,9 +8605,6 @@ export namespace NetworkHandshake {
 
         /** Init keyCount. */
         public keyCount: number;
-
-        /** Init discriminator. */
-        public discriminator: number;
 
         /**
          * Creates a new Init instance using the specified properties.
@@ -8782,9 +8776,6 @@ export namespace NetworkHandshake {
     /** Properties of a NetworkBindings. */
     interface INetworkBindings {
 
-        /** NetworkBindings discriminator */
-        discriminator?: (number|null);
-
         /** NetworkBindings networkBindings */
         networkBindings?: (NetworkHandshake.INetworkBinding[]|null);
     }
@@ -8797,9 +8788,6 @@ export namespace NetworkHandshake {
          * @param [properties] Properties to set
          */
         constructor(properties?: NetworkHandshake.INetworkBindings);
-
-        /** NetworkBindings discriminator. */
-        public discriminator: number;
 
         /** NetworkBindings networkBindings. */
         public networkBindings: NetworkHandshake.INetworkBinding[];
@@ -9446,8 +9434,8 @@ export interface IBrokerPeerInitRequest {
     /** BrokerPeerInitRequest peerId */
     peerId?: (number|null);
 
-    /** BrokerPeerInitRequest discriminator */
-    discriminator?: (number|null);
+    /** BrokerPeerInitRequest preferSender */
+    preferSender?: (boolean|null);
 
     /** BrokerPeerInitRequest keys */
     keys?: (Uint8Array[]|null);
@@ -9465,8 +9453,8 @@ export class BrokerPeerInitRequest implements IBrokerPeerInitRequest {
     /** BrokerPeerInitRequest peerId. */
     public peerId: number;
 
-    /** BrokerPeerInitRequest discriminator. */
-    public discriminator: number;
+    /** BrokerPeerInitRequest preferSender. */
+    public preferSender: boolean;
 
     /** BrokerPeerInitRequest keys. */
     public keys: Uint8Array[];
@@ -15098,6 +15086,9 @@ export interface ICertificateRequest {
     /** CertificateRequest keyUsage */
     keyUsage?: (number|null);
 
+    /** CertificateRequest subject */
+    subject?: (string|null);
+
     /** CertificateRequest signature */
     signature?: (Uint8Array|null);
 }
@@ -15119,6 +15110,9 @@ export class CertificateRequest implements ICertificateRequest {
 
     /** CertificateRequest keyUsage. */
     public keyUsage: number;
+
+    /** CertificateRequest subject. */
+    public subject: string;
 
     /** CertificateRequest signature. */
     public signature: Uint8Array;
@@ -15206,6 +15200,9 @@ export interface ICertificate {
     /** Certificate keyUsage */
     keyUsage?: (number|null);
 
+    /** Certificate subject */
+    subject?: (string|null);
+
     /** Certificate notBefore */
     notBefore?: (number|null);
 
@@ -15239,6 +15236,9 @@ export class Certificate implements ICertificate {
 
     /** Certificate keyUsage. */
     public keyUsage: number;
+
+    /** Certificate subject. */
+    public subject: string;
 
     /** Certificate notBefore. */
     public notBefore: number;

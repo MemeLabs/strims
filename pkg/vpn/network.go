@@ -266,7 +266,9 @@ func (h *networkBootstrap) readHandshakes(ch *FrameReadWriter) error {
 }
 
 func (h *networkBootstrap) initBroker(b NetworkBrokerPeer) error {
-	return b.Init(h.networks.host.discriminator, h.networks.NetworkKeys())
+	// peers have to agree to sender/receiver preference prior to negotiation.
+	// comparing host ids is arbitrary but gauranteed to be asymetric.
+	return b.Init(h.peer.hostID.Less(h.networks.host.ID()), h.networks.NetworkKeys())
 }
 
 func (h *networkBootstrap) exchangeBindingsAsSender(ch *FrameReadWriter, keys [][]byte) error {
@@ -279,7 +281,7 @@ func (h *networkBootstrap) exchangeBindingsAsSender(ch *FrameReadWriter, keys []
 	if _, err = h.verifyNetworkBindings(peerNetworkBindings); err != nil {
 		return err
 	}
-	return h.handleNetworkBindings(peerNetworkBindings.Discriminator, networkBindings, peerNetworkBindings.NetworkBindings)
+	return h.handleNetworkBindings(networkBindings, peerNetworkBindings.NetworkBindings)
 }
 
 func (h *networkBootstrap) exchangeBindingsAsReceiver(ch *FrameReadWriter, handshake *pb.NetworkHandshake) error {
@@ -292,7 +294,7 @@ func (h *networkBootstrap) exchangeBindingsAsReceiver(ch *FrameReadWriter, hands
 	if err != nil {
 		return err
 	}
-	return h.handleNetworkBindings(peerNetworkBindings.Discriminator, networkBindings, peerNetworkBindings.NetworkBindings)
+	return h.handleNetworkBindings(networkBindings, peerNetworkBindings.NetworkBindings)
 }
 
 func (h *networkBootstrap) sendNetworkBindings(ch *FrameReadWriter, keys [][]byte) ([]*pb.NetworkHandshake_NetworkBinding, error) {
@@ -323,7 +325,6 @@ func (h *networkBootstrap) sendNetworkBindings(ch *FrameReadWriter, keys [][]byt
 	err := WriteProtoStream(ch, &pb.NetworkHandshake{
 		Body: &pb.NetworkHandshake_NetworkBindings_{
 			NetworkBindings: &pb.NetworkHandshake_NetworkBindings{
-				Discriminator:   uint32(h.networks.host.discriminator),
 				NetworkBindings: bindings,
 			},
 		},
@@ -366,12 +367,8 @@ func NewNetwork(logger *zap.Logger, host *Host, certificate *pb.Certificate, rec
 	}
 }
 
-func (h *networkBootstrap) handleNetworkBindings(discriminator uint32, networkBindings, peerNetworkBindings []*pb.NetworkHandshake_NetworkBinding) error {
-	if discriminator > uint32(math.MaxUint16) {
-		return ErrDiscriminatorBounds
-	}
-
-	hostID, err := NewHostID(h.peer.Certificate.Key, uint16(discriminator))
+func (h *networkBootstrap) handleNetworkBindings(networkBindings, peerNetworkBindings []*pb.NetworkHandshake_NetworkBinding) error {
+	hostID, err := kademlia.UnmarshalID(h.peer.Certificate.Key)
 	if err != nil {
 		return err
 	}

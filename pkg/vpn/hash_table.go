@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"log"
@@ -324,7 +324,7 @@ func (p *HashTableStore) Get(hashTableID uint32, hash []byte) *pb.HashTableMessa
 }
 
 func hashTableRecordHash(key, salt []byte) []byte {
-	hash := sha1.New()
+	hash := sha256.New()
 	if _, err := hash.Write(key); err != nil {
 		log.Println(err)
 	}

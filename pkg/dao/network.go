@@ -60,7 +60,7 @@ func NewNetwork(name string) (*pb.Network, error) {
 		Name: name,
 		Key:  key,
 	}
-	csr, err := NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN)
+	csr, err := NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN, WithSubject(name))
 	if err != nil {
 		return nil, err
 	}

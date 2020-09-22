@@ -110,6 +110,7 @@ message CertificateRequest {
   bytes key = 1;
   KeyType key_type = 2;
   uint32 key_usage = 3;
+  string subject = 5;
   bytes signature = 4;
 }
 
@@ -117,6 +118,7 @@ message Certificate {
   bytes key = 1;
   KeyType key_type = 2;
   uint32 key_usage = 3;
+  string subject = 9;
   uint64 not_before = 4;
   uint64 not_after = 5;
   bytes serial_number = 6;

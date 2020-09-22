@@ -4344,16 +4344,28 @@ public final class Vpn {
     gg.strims.ppspp.proto.ProfileOuterClass.CertificateOrBuilder getCertificateOrBuilder();
 
     /**
-     * <code>bytes iv = 3;</code>
-     * @return The iv.
+     * <code>string node_platform = 3;</code>
+     * @return The nodePlatform.
      */
-    com.google.protobuf.ByteString getIv();
+    java.lang.String getNodePlatform();
+    /**
+     * <code>string node_platform = 3;</code>
+     * @return The bytes for nodePlatform.
+     */
+    com.google.protobuf.ByteString
+        getNodePlatformBytes();
 
     /**
-     * <code>bytes host_id = 4;</code>
-     * @return The hostId.
+     * <code>string node_version = 4;</code>
+     * @return The nodeVersion.
      */
-    com.google.protobuf.ByteString getHostId();
+    java.lang.String getNodeVersion();
+    /**
+     * <code>string node_version = 4;</code>
+     * @return The bytes for nodeVersion.
+     */
+    com.google.protobuf.ByteString
+        getNodeVersionBytes();
   }
   /**
    * Protobuf type {@code PeerInit}
@@ -4368,8 +4380,8 @@ public final class Vpn {
       super(builder);
     }
     private PeerInit() {
-      iv_ = com.google.protobuf.ByteString.EMPTY;
-      hostId_ = com.google.protobuf.ByteString.EMPTY;
+      nodePlatform_ = "";
+      nodeVersion_ = "";
     }
 
     @java.lang.Override
@@ -4421,13 +4433,15 @@ public final class Vpn {
               break;
             }
             case 26: {
+              java.lang.String s = input.readStringRequireUtf8();
 
-              iv_ = input.readBytes();
+              nodePlatform_ = s;
               break;
             }
             case 34: {
+              java.lang.String s = input.readStringRequireUtf8();
 
-              hostId_ = input.readBytes();
+              nodeVersion_ = s;
               break;
             }
             default: {
@@ -4499,26 +4513,80 @@ public final class Vpn {
       return getCertificate();
     }
 
-    public static final int IV_FIELD_NUMBER = 3;
-    private com.google.protobuf.ByteString iv_;
+    public static final int NODE_PLATFORM_FIELD_NUMBER = 3;
+    private volatile java.lang.Object nodePlatform_;
     /**
-     * <code>bytes iv = 3;</code>
-     * @return The iv.
+     * <code>string node_platform = 3;</code>
+     * @return The nodePlatform.
      */
     @java.lang.Override
-    public com.google.protobuf.ByteString getIv() {
-      return iv_;
+    public java.lang.String getNodePlatform() {
+      java.lang.Object ref = nodePlatform_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        nodePlatform_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string node_platform = 3;</code>
+     * @return The bytes for nodePlatform.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getNodePlatformBytes() {
+      java.lang.Object ref = nodePlatform_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        nodePlatform_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
     }
 
-    public static final int HOST_ID_FIELD_NUMBER = 4;
-    private com.google.protobuf.ByteString hostId_;
+    public static final int NODE_VERSION_FIELD_NUMBER = 4;
+    private volatile java.lang.Object nodeVersion_;
     /**
-     * <code>bytes host_id = 4;</code>
-     * @return The hostId.
+     * <code>string node_version = 4;</code>
+     * @return The nodeVersion.
      */
     @java.lang.Override
-    public com.google.protobuf.ByteString getHostId() {
-      return hostId_;
+    public java.lang.String getNodeVersion() {
+      java.lang.Object ref = nodeVersion_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        nodeVersion_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string node_version = 4;</code>
+     * @return The bytes for nodeVersion.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getNodeVersionBytes() {
+      java.lang.Object ref = nodeVersion_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        nodeVersion_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
     }
 
     private byte memoizedIsInitialized = -1;
@@ -4541,11 +4609,11 @@ public final class Vpn {
       if (certificate_ != null) {
         output.writeMessage(2, getCertificate());
       }
-      if (!iv_.isEmpty()) {
-        output.writeBytes(3, iv_);
+      if (!getNodePlatformBytes().isEmpty()) {
+        com.google.protobuf.GeneratedMessageV3.writeString(output, 3, nodePlatform_);
       }
-      if (!hostId_.isEmpty()) {
-        output.writeBytes(4, hostId_);
+      if (!getNodeVersionBytes().isEmpty()) {
+        com.google.protobuf.GeneratedMessageV3.writeString(output, 4, nodeVersion_);
       }
       unknownFields.writeTo(output);
     }
@@ -4564,13 +4632,11 @@ public final class Vpn {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(2, getCertificate());
       }
-      if (!iv_.isEmpty()) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(3, iv_);
+      if (!getNodePlatformBytes().isEmpty()) {
+        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(3, nodePlatform_);
       }
-      if (!hostId_.isEmpty()) {
-        size += com.google.protobuf.CodedOutputStream
-          .computeBytesSize(4, hostId_);
+      if (!getNodeVersionBytes().isEmpty()) {
+        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(4, nodeVersion_);
       }
       size += unknownFields.getSerializedSize();
       memoizedSize = size;
@@ -4594,10 +4660,10 @@ public final class Vpn {
         if (!getCertificate()
             .equals(other.getCertificate())) return false;
       }
-      if (!getIv()
-          .equals(other.getIv())) return false;
-      if (!getHostId()
-          .equals(other.getHostId())) return false;
+      if (!getNodePlatform()
+          .equals(other.getNodePlatform())) return false;
+      if (!getNodeVersion()
+          .equals(other.getNodeVersion())) return false;
       if (!unknownFields.equals(other.unknownFields)) return false;
       return true;
     }
@@ -4615,10 +4681,10 @@ public final class Vpn {
         hash = (37 * hash) + CERTIFICATE_FIELD_NUMBER;
         hash = (53 * hash) + getCertificate().hashCode();
       }
-      hash = (37 * hash) + IV_FIELD_NUMBER;
-      hash = (53 * hash) + getIv().hashCode();
-      hash = (37 * hash) + HOST_ID_FIELD_NUMBER;
-      hash = (53 * hash) + getHostId().hashCode();
+      hash = (37 * hash) + NODE_PLATFORM_FIELD_NUMBER;
+      hash = (53 * hash) + getNodePlatform().hashCode();
+      hash = (37 * hash) + NODE_VERSION_FIELD_NUMBER;
+      hash = (53 * hash) + getNodeVersion().hashCode();
       hash = (29 * hash) + unknownFields.hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -4760,9 +4826,9 @@ public final class Vpn {
           certificate_ = null;
           certificateBuilder_ = null;
         }
-        iv_ = com.google.protobuf.ByteString.EMPTY;
+        nodePlatform_ = "";
 
-        hostId_ = com.google.protobuf.ByteString.EMPTY;
+        nodeVersion_ = "";
 
         return this;
       }
@@ -4796,8 +4862,8 @@ public final class Vpn {
         } else {
           result.certificate_ = certificateBuilder_.build();
         }
-        result.iv_ = iv_;
-        result.hostId_ = hostId_;
+        result.nodePlatform_ = nodePlatform_;
+        result.nodeVersion_ = nodeVersion_;
         onBuilt();
         return result;
       }
@@ -4852,11 +4918,13 @@ public final class Vpn {
         if (other.hasCertificate()) {
           mergeCertificate(other.getCertificate());
         }
-        if (other.getIv() != com.google.protobuf.ByteString.EMPTY) {
-          setIv(other.getIv());
+        if (!other.getNodePlatform().isEmpty()) {
+          nodePlatform_ = other.nodePlatform_;
+          onChanged();
         }
-        if (other.getHostId() != com.google.protobuf.ByteString.EMPTY) {
-          setHostId(other.getHostId());
+        if (!other.getNodeVersion().isEmpty()) {
+          nodeVersion_ = other.nodeVersion_;
+          onChanged();
         }
         this.mergeUnknownFields(other.unknownFields);
         onChanged();
@@ -5037,70 +5105,154 @@ public final class Vpn {
         return certificateBuilder_;
       }
 
-      private com.google.protobuf.ByteString iv_ = com.google.protobuf.ByteString.EMPTY;
+      private java.lang.Object nodePlatform_ = "";
       /**
-       * <code>bytes iv = 3;</code>
-       * @return The iv.
+       * <code>string node_platform = 3;</code>
+       * @return The nodePlatform.
        */
-      @java.lang.Override
-      public com.google.protobuf.ByteString getIv() {
-        return iv_;
+      public java.lang.String getNodePlatform() {
+        java.lang.Object ref = nodePlatform_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          nodePlatform_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
       }
       /**
-       * <code>bytes iv = 3;</code>
-       * @param value The iv to set.
+       * <code>string node_platform = 3;</code>
+       * @return The bytes for nodePlatform.
+       */
+      public com.google.protobuf.ByteString
+          getNodePlatformBytes() {
+        java.lang.Object ref = nodePlatform_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          nodePlatform_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string node_platform = 3;</code>
+       * @param value The nodePlatform to set.
        * @return This builder for chaining.
        */
-      public Builder setIv(com.google.protobuf.ByteString value) {
+      public Builder setNodePlatform(
+          java.lang.String value) {
         if (value == null) {
     throw new NullPointerException();
   }
   
-        iv_ = value;
+        nodePlatform_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>bytes iv = 3;</code>
+       * <code>string node_platform = 3;</code>
        * @return This builder for chaining.
        */
-      public Builder clearIv() {
+      public Builder clearNodePlatform() {
         
-        iv_ = getDefaultInstance().getIv();
+        nodePlatform_ = getDefaultInstance().getNodePlatform();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string node_platform = 3;</code>
+       * @param value The bytes for nodePlatform to set.
+       * @return This builder for chaining.
+       */
+      public Builder setNodePlatformBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+        
+        nodePlatform_ = value;
         onChanged();
         return this;
       }
 
-      private com.google.protobuf.ByteString hostId_ = com.google.protobuf.ByteString.EMPTY;
+      private java.lang.Object nodeVersion_ = "";
       /**
-       * <code>bytes host_id = 4;</code>
-       * @return The hostId.
+       * <code>string node_version = 4;</code>
+       * @return The nodeVersion.
        */
-      @java.lang.Override
-      public com.google.protobuf.ByteString getHostId() {
-        return hostId_;
+      public java.lang.String getNodeVersion() {
+        java.lang.Object ref = nodeVersion_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          nodeVersion_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
       }
       /**
-       * <code>bytes host_id = 4;</code>
-       * @param value The hostId to set.
+       * <code>string node_version = 4;</code>
+       * @return The bytes for nodeVersion.
+       */
+      public com.google.protobuf.ByteString
+          getNodeVersionBytes() {
+        java.lang.Object ref = nodeVersion_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          nodeVersion_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string node_version = 4;</code>
+       * @param value The nodeVersion to set.
        * @return This builder for chaining.
        */
-      public Builder setHostId(com.google.protobuf.ByteString value) {
+      public Builder setNodeVersion(
+          java.lang.String value) {
         if (value == null) {
     throw new NullPointerException();
   }
   
-        hostId_ = value;
+        nodeVersion_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>bytes host_id = 4;</code>
+       * <code>string node_version = 4;</code>
        * @return This builder for chaining.
        */
-      public Builder clearHostId() {
+      public Builder clearNodeVersion() {
         
-        hostId_ = getDefaultInstance().getHostId();
+        nodeVersion_ = getDefaultInstance().getNodeVersion();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string node_version = 4;</code>
+       * @param value The bytes for nodeVersion to set.
+       * @return This builder for chaining.
+       */
+      public Builder setNodeVersionBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+        
+        nodeVersion_ = value;
         onChanged();
         return this;
       }
@@ -5307,12 +5459,6 @@ public final class Vpn {
        * @return The keyCount.
        */
       int getKeyCount();
-
-      /**
-       * <code>uint32 discriminator = 2;</code>
-       * @return The discriminator.
-       */
-      int getDiscriminator();
     }
     /**
      * Protobuf type {@code NetworkHandshake.Init}
@@ -5364,11 +5510,6 @@ public final class Vpn {
                 keyCount_ = input.readInt32();
                 break;
               }
-              case 16: {
-
-                discriminator_ = input.readUInt32();
-                break;
-              }
               default: {
                 if (!parseUnknownField(
                     input, unknownFields, extensionRegistry, tag)) {
@@ -5412,17 +5553,6 @@ public final class Vpn {
         return keyCount_;
       }
 
-      public static final int DISCRIMINATOR_FIELD_NUMBER = 2;
-      private int discriminator_;
-      /**
-       * <code>uint32 discriminator = 2;</code>
-       * @return The discriminator.
-       */
-      @java.lang.Override
-      public int getDiscriminator() {
-        return discriminator_;
-      }
-
       private byte memoizedIsInitialized = -1;
       @java.lang.Override
       public final boolean isInitialized() {
@@ -5440,9 +5570,6 @@ public final class Vpn {
         if (keyCount_ != 0) {
           output.writeInt32(1, keyCount_);
         }
-        if (discriminator_ != 0) {
-          output.writeUInt32(2, discriminator_);
-        }
         unknownFields.writeTo(output);
       }
 
@@ -5455,10 +5582,6 @@ public final class Vpn {
         if (keyCount_ != 0) {
           size += com.google.protobuf.CodedOutputStream
             .computeInt32Size(1, keyCount_);
-        }
-        if (discriminator_ != 0) {
-          size += com.google.protobuf.CodedOutputStream
-            .computeUInt32Size(2, discriminator_);
         }
         size += unknownFields.getSerializedSize();
         memoizedSize = size;
@@ -5477,8 +5600,6 @@ public final class Vpn {
 
         if (getKeyCount()
             != other.getKeyCount()) return false;
-        if (getDiscriminator()
-            != other.getDiscriminator()) return false;
         if (!unknownFields.equals(other.unknownFields)) return false;
         return true;
       }
@@ -5492,8 +5613,6 @@ public final class Vpn {
         hash = (19 * hash) + getDescriptor().hashCode();
         hash = (37 * hash) + KEY_COUNT_FIELD_NUMBER;
         hash = (53 * hash) + getKeyCount();
-        hash = (37 * hash) + DISCRIMINATOR_FIELD_NUMBER;
-        hash = (53 * hash) + getDiscriminator();
         hash = (29 * hash) + unknownFields.hashCode();
         memoizedHashCode = hash;
         return hash;
@@ -5629,8 +5748,6 @@ public final class Vpn {
           super.clear();
           keyCount_ = 0;
 
-          discriminator_ = 0;
-
           return this;
         }
 
@@ -5658,7 +5775,6 @@ public final class Vpn {
         public gg.strims.ppspp.proto.Vpn.NetworkHandshake.Init buildPartial() {
           gg.strims.ppspp.proto.Vpn.NetworkHandshake.Init result = new gg.strims.ppspp.proto.Vpn.NetworkHandshake.Init(this);
           result.keyCount_ = keyCount_;
-          result.discriminator_ = discriminator_;
           onBuilt();
           return result;
         }
@@ -5709,9 +5825,6 @@ public final class Vpn {
           if (other == gg.strims.ppspp.proto.Vpn.NetworkHandshake.Init.getDefaultInstance()) return this;
           if (other.getKeyCount() != 0) {
             setKeyCount(other.getKeyCount());
-          }
-          if (other.getDiscriminator() != 0) {
-            setDiscriminator(other.getDiscriminator());
           }
           this.mergeUnknownFields(other.unknownFields);
           onChanged();
@@ -5769,37 +5882,6 @@ public final class Vpn {
         public Builder clearKeyCount() {
           
           keyCount_ = 0;
-          onChanged();
-          return this;
-        }
-
-        private int discriminator_ ;
-        /**
-         * <code>uint32 discriminator = 2;</code>
-         * @return The discriminator.
-         */
-        @java.lang.Override
-        public int getDiscriminator() {
-          return discriminator_;
-        }
-        /**
-         * <code>uint32 discriminator = 2;</code>
-         * @param value The discriminator to set.
-         * @return This builder for chaining.
-         */
-        public Builder setDiscriminator(int value) {
-          
-          discriminator_ = value;
-          onChanged();
-          return this;
-        }
-        /**
-         * <code>uint32 discriminator = 2;</code>
-         * @return This builder for chaining.
-         */
-        public Builder clearDiscriminator() {
-          
-          discriminator_ = 0;
           onChanged();
           return this;
         }
@@ -6552,12 +6634,6 @@ public final class Vpn {
         com.google.protobuf.MessageOrBuilder {
 
       /**
-       * <code>uint32 discriminator = 1;</code>
-       * @return The discriminator.
-       */
-      int getDiscriminator();
-
-      /**
        * <code>repeated .NetworkHandshake.NetworkBinding network_bindings = 2;</code>
        */
       java.util.List<gg.strims.ppspp.proto.Vpn.NetworkHandshake.NetworkBinding> 
@@ -6628,11 +6704,6 @@ public final class Vpn {
               case 0:
                 done = true;
                 break;
-              case 8: {
-
-                discriminator_ = input.readUInt32();
-                break;
-              }
               case 18: {
                 if (!((mutable_bitField0_ & 0x00000001) != 0)) {
                   networkBindings_ = new java.util.ArrayList<gg.strims.ppspp.proto.Vpn.NetworkHandshake.NetworkBinding>();
@@ -6675,17 +6746,6 @@ public final class Vpn {
         return gg.strims.ppspp.proto.Vpn.internal_static_NetworkHandshake_NetworkBindings_fieldAccessorTable
             .ensureFieldAccessorsInitialized(
                 gg.strims.ppspp.proto.Vpn.NetworkHandshake.NetworkBindings.class, gg.strims.ppspp.proto.Vpn.NetworkHandshake.NetworkBindings.Builder.class);
-      }
-
-      public static final int DISCRIMINATOR_FIELD_NUMBER = 1;
-      private int discriminator_;
-      /**
-       * <code>uint32 discriminator = 1;</code>
-       * @return The discriminator.
-       */
-      @java.lang.Override
-      public int getDiscriminator() {
-        return discriminator_;
       }
 
       public static final int NETWORK_BINDINGS_FIELD_NUMBER = 2;
@@ -6742,9 +6802,6 @@ public final class Vpn {
       @java.lang.Override
       public void writeTo(com.google.protobuf.CodedOutputStream output)
                           throws java.io.IOException {
-        if (discriminator_ != 0) {
-          output.writeUInt32(1, discriminator_);
-        }
         for (int i = 0; i < networkBindings_.size(); i++) {
           output.writeMessage(2, networkBindings_.get(i));
         }
@@ -6757,10 +6814,6 @@ public final class Vpn {
         if (size != -1) return size;
 
         size = 0;
-        if (discriminator_ != 0) {
-          size += com.google.protobuf.CodedOutputStream
-            .computeUInt32Size(1, discriminator_);
-        }
         for (int i = 0; i < networkBindings_.size(); i++) {
           size += com.google.protobuf.CodedOutputStream
             .computeMessageSize(2, networkBindings_.get(i));
@@ -6780,8 +6833,6 @@ public final class Vpn {
         }
         gg.strims.ppspp.proto.Vpn.NetworkHandshake.NetworkBindings other = (gg.strims.ppspp.proto.Vpn.NetworkHandshake.NetworkBindings) obj;
 
-        if (getDiscriminator()
-            != other.getDiscriminator()) return false;
         if (!getNetworkBindingsList()
             .equals(other.getNetworkBindingsList())) return false;
         if (!unknownFields.equals(other.unknownFields)) return false;
@@ -6795,8 +6846,6 @@ public final class Vpn {
         }
         int hash = 41;
         hash = (19 * hash) + getDescriptor().hashCode();
-        hash = (37 * hash) + DISCRIMINATOR_FIELD_NUMBER;
-        hash = (53 * hash) + getDiscriminator();
         if (getNetworkBindingsCount() > 0) {
           hash = (37 * hash) + NETWORK_BINDINGS_FIELD_NUMBER;
           hash = (53 * hash) + getNetworkBindingsList().hashCode();
@@ -6935,8 +6984,6 @@ public final class Vpn {
         @java.lang.Override
         public Builder clear() {
           super.clear();
-          discriminator_ = 0;
-
           if (networkBindingsBuilder_ == null) {
             networkBindings_ = java.util.Collections.emptyList();
             bitField0_ = (bitField0_ & ~0x00000001);
@@ -6970,7 +7017,6 @@ public final class Vpn {
         public gg.strims.ppspp.proto.Vpn.NetworkHandshake.NetworkBindings buildPartial() {
           gg.strims.ppspp.proto.Vpn.NetworkHandshake.NetworkBindings result = new gg.strims.ppspp.proto.Vpn.NetworkHandshake.NetworkBindings(this);
           int from_bitField0_ = bitField0_;
-          result.discriminator_ = discriminator_;
           if (networkBindingsBuilder_ == null) {
             if (((bitField0_ & 0x00000001) != 0)) {
               networkBindings_ = java.util.Collections.unmodifiableList(networkBindings_);
@@ -7028,9 +7074,6 @@ public final class Vpn {
 
         public Builder mergeFrom(gg.strims.ppspp.proto.Vpn.NetworkHandshake.NetworkBindings other) {
           if (other == gg.strims.ppspp.proto.Vpn.NetworkHandshake.NetworkBindings.getDefaultInstance()) return this;
-          if (other.getDiscriminator() != 0) {
-            setDiscriminator(other.getDiscriminator());
-          }
           if (networkBindingsBuilder_ == null) {
             if (!other.networkBindings_.isEmpty()) {
               if (networkBindings_.isEmpty()) {
@@ -7086,37 +7129,6 @@ public final class Vpn {
           return this;
         }
         private int bitField0_;
-
-        private int discriminator_ ;
-        /**
-         * <code>uint32 discriminator = 1;</code>
-         * @return The discriminator.
-         */
-        @java.lang.Override
-        public int getDiscriminator() {
-          return discriminator_;
-        }
-        /**
-         * <code>uint32 discriminator = 1;</code>
-         * @param value The discriminator to set.
-         * @return This builder for chaining.
-         */
-        public Builder setDiscriminator(int value) {
-          
-          discriminator_ = value;
-          onChanged();
-          return this;
-        }
-        /**
-         * <code>uint32 discriminator = 1;</code>
-         * @return This builder for chaining.
-         */
-        public Builder clearDiscriminator() {
-          
-          discriminator_ = 0;
-          onChanged();
-          return this;
-        }
 
         private java.util.List<gg.strims.ppspp.proto.Vpn.NetworkHandshake.NetworkBinding> networkBindings_ =
           java.util.Collections.emptyList();
@@ -12190,10 +12202,10 @@ public final class Vpn {
     long getPeerId();
 
     /**
-     * <code>uint32 discriminator = 2;</code>
-     * @return The discriminator.
+     * <code>bool prefer_sender = 2;</code>
+     * @return The preferSender.
      */
-    int getDiscriminator();
+    boolean getPreferSender();
 
     /**
      * <code>repeated bytes keys = 3;</code>
@@ -12266,7 +12278,7 @@ public final class Vpn {
             }
             case 16: {
 
-              discriminator_ = input.readUInt32();
+              preferSender_ = input.readBool();
               break;
             }
             case 26: {
@@ -12323,15 +12335,15 @@ public final class Vpn {
       return peerId_;
     }
 
-    public static final int DISCRIMINATOR_FIELD_NUMBER = 2;
-    private int discriminator_;
+    public static final int PREFER_SENDER_FIELD_NUMBER = 2;
+    private boolean preferSender_;
     /**
-     * <code>uint32 discriminator = 2;</code>
-     * @return The discriminator.
+     * <code>bool prefer_sender = 2;</code>
+     * @return The preferSender.
      */
     @java.lang.Override
-    public int getDiscriminator() {
-      return discriminator_;
+    public boolean getPreferSender() {
+      return preferSender_;
     }
 
     public static final int KEYS_FIELD_NUMBER = 3;
@@ -12378,8 +12390,8 @@ public final class Vpn {
       if (peerId_ != 0L) {
         output.writeUInt64(1, peerId_);
       }
-      if (discriminator_ != 0) {
-        output.writeUInt32(2, discriminator_);
+      if (preferSender_ != false) {
+        output.writeBool(2, preferSender_);
       }
       for (int i = 0; i < keys_.size(); i++) {
         output.writeBytes(3, keys_.get(i));
@@ -12397,9 +12409,9 @@ public final class Vpn {
         size += com.google.protobuf.CodedOutputStream
           .computeUInt64Size(1, peerId_);
       }
-      if (discriminator_ != 0) {
+      if (preferSender_ != false) {
         size += com.google.protobuf.CodedOutputStream
-          .computeUInt32Size(2, discriminator_);
+          .computeBoolSize(2, preferSender_);
       }
       {
         int dataSize = 0;
@@ -12427,8 +12439,8 @@ public final class Vpn {
 
       if (getPeerId()
           != other.getPeerId()) return false;
-      if (getDiscriminator()
-          != other.getDiscriminator()) return false;
+      if (getPreferSender()
+          != other.getPreferSender()) return false;
       if (!getKeysList()
           .equals(other.getKeysList())) return false;
       if (!unknownFields.equals(other.unknownFields)) return false;
@@ -12445,8 +12457,9 @@ public final class Vpn {
       hash = (37 * hash) + PEER_ID_FIELD_NUMBER;
       hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
           getPeerId());
-      hash = (37 * hash) + DISCRIMINATOR_FIELD_NUMBER;
-      hash = (53 * hash) + getDiscriminator();
+      hash = (37 * hash) + PREFER_SENDER_FIELD_NUMBER;
+      hash = (53 * hash) + com.google.protobuf.Internal.hashBoolean(
+          getPreferSender());
       if (getKeysCount() > 0) {
         hash = (37 * hash) + KEYS_FIELD_NUMBER;
         hash = (53 * hash) + getKeysList().hashCode();
@@ -12586,7 +12599,7 @@ public final class Vpn {
         super.clear();
         peerId_ = 0L;
 
-        discriminator_ = 0;
+        preferSender_ = false;
 
         keys_ = java.util.Collections.emptyList();
         bitField0_ = (bitField0_ & ~0x00000001);
@@ -12618,7 +12631,7 @@ public final class Vpn {
         gg.strims.ppspp.proto.Vpn.BrokerPeerInitRequest result = new gg.strims.ppspp.proto.Vpn.BrokerPeerInitRequest(this);
         int from_bitField0_ = bitField0_;
         result.peerId_ = peerId_;
-        result.discriminator_ = discriminator_;
+        result.preferSender_ = preferSender_;
         if (((bitField0_ & 0x00000001) != 0)) {
           keys_ = java.util.Collections.unmodifiableList(keys_);
           bitField0_ = (bitField0_ & ~0x00000001);
@@ -12675,8 +12688,8 @@ public final class Vpn {
         if (other.getPeerId() != 0L) {
           setPeerId(other.getPeerId());
         }
-        if (other.getDiscriminator() != 0) {
-          setDiscriminator(other.getDiscriminator());
+        if (other.getPreferSender() != false) {
+          setPreferSender(other.getPreferSender());
         }
         if (!other.keys_.isEmpty()) {
           if (keys_.isEmpty()) {
@@ -12749,33 +12762,33 @@ public final class Vpn {
         return this;
       }
 
-      private int discriminator_ ;
+      private boolean preferSender_ ;
       /**
-       * <code>uint32 discriminator = 2;</code>
-       * @return The discriminator.
+       * <code>bool prefer_sender = 2;</code>
+       * @return The preferSender.
        */
       @java.lang.Override
-      public int getDiscriminator() {
-        return discriminator_;
+      public boolean getPreferSender() {
+        return preferSender_;
       }
       /**
-       * <code>uint32 discriminator = 2;</code>
-       * @param value The discriminator to set.
+       * <code>bool prefer_sender = 2;</code>
+       * @param value The preferSender to set.
        * @return This builder for chaining.
        */
-      public Builder setDiscriminator(int value) {
+      public Builder setPreferSender(boolean value) {
         
-        discriminator_ = value;
+        preferSender_ = value;
         onChanged();
         return this;
       }
       /**
-       * <code>uint32 discriminator = 2;</code>
+       * <code>bool prefer_sender = 2;</code>
        * @return This builder for chaining.
        */
-      public Builder clearDiscriminator() {
+      public Builder clearPreferSender() {
         
-        discriminator_ = 0;
+        preferSender_ = false;
         onChanged();
         return this;
       }
@@ -32272,84 +32285,83 @@ public final class Vpn {
       "etwork_id\030\001 \001(\004\022\023\n\013network_key\030\002 \001(\014\032\"\n\014" +
       "NetworkClose\022\022\n\nnetwork_id\030\001 \001(\004B\006\n\004body" +
       "\"/\n\016NetworkAddress\022\017\n\007host_id\030\001 \001(\014\022\014\n\004p" +
-      "ort\030\002 \001(\r\"d\n\010PeerInit\022\030\n\020protocol_versio" +
+      "ort\030\002 \001(\r\"t\n\010PeerInit\022\030\n\020protocol_versio" +
       "n\030\001 \001(\r\022!\n\013certificate\030\002 \001(\0132\014.Certifica" +
-      "te\022\n\n\002iv\030\003 \001(\014\022\017\n\007host_id\030\004 \001(\014\"\334\002\n\020Netw" +
-      "orkHandshake\022&\n\004init\030\001 \001(\0132\026.NetworkHand" +
-      "shake.InitH\000\022=\n\020network_bindings\030\002 \001(\0132!" +
-      ".NetworkHandshake.NetworkBindingsH\000\0320\n\004I" +
-      "nit\022\021\n\tkey_count\030\001 \001(\005\022\025\n\rdiscriminator\030" +
-      "\002 \001(\r\032A\n\016NetworkBinding\022\014\n\004port\030\001 \001(\r\022!\n" +
-      "\013certificate\030\002 \001(\0132\014.Certificate\032d\n\017Netw" +
-      "orkBindings\022\025\n\rdiscriminator\030\001 \001(\r\022:\n\020ne" +
-      "twork_bindings\030\002 \003(\0132 .NetworkHandshake." +
-      "NetworkBindingB\006\n\004body\"%\n\021BrokerPeerRequ" +
-      "est\022\020\n\010conn_mtu\030\001 \001(\005\"\251\002\n\017BrokerPeerEven" +
-      "t\022%\n\004open\030\001 \001(\0132\025.BrokerPeerEvent.OpenH\000" +
-      "\022%\n\004data\030\002 \001(\0132\025.BrokerPeerEvent.DataH\000\022" +
-      "6\n\rinit_required\030\003 \001(\0132\035.BrokerPeerEvent" +
-      ".InitRequiredH\000\022%\n\004keys\030\004 \001(\0132\025.BrokerPe" +
-      "erEvent.KeysH\000\032\027\n\004Open\022\017\n\007peer_id\030\001 \001(\004\032" +
-      "\024\n\004Data\022\014\n\004data\030\001 \001(\014\032\034\n\014InitRequired\022\014\n" +
-      "\004data\030\001 \001(\014\032\024\n\004Keys\022\014\n\004keys\030\001 \003(\014B\006\n\004bod" +
-      "y\"M\n\025BrokerPeerInitRequest\022\017\n\007peer_id\030\001 " +
-      "\001(\004\022\025\n\rdiscriminator\030\002 \001(\r\022\014\n\004keys\030\003 \003(\014" +
-      "\"6\n\025BrokerPeerDataRequest\022\017\n\007peer_id\030\001 \001" +
-      "(\004\022\014\n\004data\030\002 \001(\014\"n\n\017BootstrapClient\022\n\n\002i" +
-      "d\030\001 \001(\004\022=\n\021websocket_options\030\002 \001(\0132 .Boo" +
-      "tstrapClientWebSocketOptionsH\000B\020\n\016client" +
-      "_options\"P\n\037BootstrapClientWebSocketOpti" +
-      "ons\022\013\n\003url\030\001 \001(\t\022 \n\030insecure_skip_verify" +
-      "_tls\030\002 \001(\010\"o\n\034CreateBootstrapClientReque" +
-      "st\022=\n\021websocket_options\030\001 \001(\0132 .Bootstra" +
-      "pClientWebSocketOptionsH\000B\020\n\016client_opti" +
-      "ons\"K\n\035CreateBootstrapClientResponse\022*\n\020" +
-      "bootstrap_client\030\001 \001(\0132\020.BootstrapClient" +
-      "\"{\n\034UpdateBootstrapClientRequest\022\n\n\002id\030\001" +
-      " \001(\004\022=\n\021websocket_options\030\002 \001(\0132 .Bootst" +
-      "rapClientWebSocketOptionsH\000B\020\n\016client_op" +
-      "tions\"K\n\035UpdateBootstrapClientResponse\022*" +
-      "\n\020bootstrap_client\030\001 \001(\0132\020.BootstrapClie" +
-      "nt\"*\n\034DeleteBootstrapClientRequest\022\n\n\002id" +
-      "\030\001 \001(\004\"\037\n\035DeleteBootstrapClientResponse\"" +
-      "\'\n\031GetBootstrapClientRequest\022\n\n\002id\030\001 \001(\004" +
-      "\"H\n\032GetBootstrapClientResponse\022*\n\020bootst" +
-      "rap_client\030\001 \001(\0132\020.BootstrapClient\"\034\n\032Ge" +
-      "tBootstrapClientsRequest\"J\n\033GetBootstrap" +
-      "ClientsResponse\022+\n\021bootstrap_clients\030\001 \003" +
-      "(\0132\020.BootstrapClient\"\032\n\030GetBootstrapPeer" +
-      "sRequest\":\n\031GetBootstrapPeersResponse\022\035\n" +
-      "\005peers\030\001 \003(\0132\016.BootstrapPeer\"/\n\rBootstra" +
-      "pPeer\022\017\n\007host_id\030\001 \001(\014\022\r\n\005label\030\002 \001(\t\"\347\002" +
-      "\n\027BootstrapServiceMessage\022<\n\014broker_offe" +
-      "r\030\001 \001(\0132$.BootstrapServiceMessage.Broker" +
-      "OfferH\000\022B\n\017publish_request\030\002 \001(\0132\'.Boots" +
-      "trapServiceMessage.PublishRequestH\000\022D\n\020p" +
-      "ublish_response\030\003 \001(\0132(.BootstrapService" +
-      "Message.PublishResponseH\000\032\r\n\013BrokerOffer" +
-      "\032A\n\016PublishRequest\022\014\n\004name\030\001 \001(\t\022!\n\013cert" +
-      "ificate\030\002 \001(\0132\014.Certificate\032*\n\017PublishRe" +
-      "sponse\022\017\n\005error\030\001 \001(\tH\000B\006\n\004bodyB\006\n\004body\"" +
-      "R\n$PublishNetworkToBootstrapPeerRequest\022" +
-      "\017\n\007host_id\030\001 \001(\014\022\031\n\007network\030\002 \001(\0132\010.Netw" +
-      "ork\"\'\n%PublishNetworkToBootstrapPeerResp" +
-      "onse\"\277\004\n\023PeerExchangeMessage\022/\n\007request\030" +
-      "\001 \001(\0132\034.PeerExchangeMessage.RequestH\000\0221\n" +
-      "\010response\030\002 \001(\0132\035.PeerExchangeMessage.Re" +
-      "sponseH\000\022+\n\005offer\030\003 \001(\0132\032.PeerExchangeMe" +
-      "ssage.OfferH\000\022-\n\006answer\030\004 \001(\0132\033.PeerExch" +
-      "angeMessage.AnswerH\000\022:\n\rice_candidate\030\005 " +
-      "\001(\0132!.PeerExchangeMessage.IceCandidateH\000" +
-      "\022@\n\020callback_request\030\006 \001(\0132$.PeerExchang" +
-      "eMessage.CallbackRequestH\000\032\030\n\007Request\022\r\n" +
-      "\005count\030\001 \001(\r\032\027\n\010Response\022\013\n\003ids\030\001 \003(\014\032+\n" +
-      "\005Offer\022\024\n\014mediation_id\030\001 \001(\004\022\014\n\004data\030\002 \001" +
-      "(\014\032,\n\006Answer\022\024\n\014mediation_id\030\001 \001(\004\022\014\n\004da" +
-      "ta\030\002 \001(\014\032A\n\014IceCandidate\022\024\n\014mediation_id" +
-      "\030\001 \001(\004\022\r\n\005index\030\002 \001(\004\022\014\n\004data\030\003 \001(\014\032\021\n\017C" +
-      "allbackRequestB\006\n\004bodyBD\n\025gg.strims.ppsp" +
-      "p.protoZ&github.com/MemeLabs/go-ppspp/pk" +
-      "g/pb;pb\272\002\002PBb\006proto3"
+      "te\022\025\n\rnode_platform\030\003 \001(\t\022\024\n\014node_versio" +
+      "n\030\004 \001(\t\"\256\002\n\020NetworkHandshake\022&\n\004init\030\001 \001" +
+      "(\0132\026.NetworkHandshake.InitH\000\022=\n\020network_" +
+      "bindings\030\002 \001(\0132!.NetworkHandshake.Networ" +
+      "kBindingsH\000\032\031\n\004Init\022\021\n\tkey_count\030\001 \001(\005\032A" +
+      "\n\016NetworkBinding\022\014\n\004port\030\001 \001(\r\022!\n\013certif" +
+      "icate\030\002 \001(\0132\014.Certificate\032M\n\017NetworkBind" +
+      "ings\022:\n\020network_bindings\030\002 \003(\0132 .Network" +
+      "Handshake.NetworkBindingB\006\n\004body\"%\n\021Brok" +
+      "erPeerRequest\022\020\n\010conn_mtu\030\001 \001(\005\"\251\002\n\017Brok" +
+      "erPeerEvent\022%\n\004open\030\001 \001(\0132\025.BrokerPeerEv" +
+      "ent.OpenH\000\022%\n\004data\030\002 \001(\0132\025.BrokerPeerEve" +
+      "nt.DataH\000\0226\n\rinit_required\030\003 \001(\0132\035.Broke" +
+      "rPeerEvent.InitRequiredH\000\022%\n\004keys\030\004 \001(\0132" +
+      "\025.BrokerPeerEvent.KeysH\000\032\027\n\004Open\022\017\n\007peer" +
+      "_id\030\001 \001(\004\032\024\n\004Data\022\014\n\004data\030\001 \001(\014\032\034\n\014InitR" +
+      "equired\022\014\n\004data\030\001 \001(\014\032\024\n\004Keys\022\014\n\004keys\030\001 " +
+      "\003(\014B\006\n\004body\"M\n\025BrokerPeerInitRequest\022\017\n\007" +
+      "peer_id\030\001 \001(\004\022\025\n\rprefer_sender\030\002 \001(\010\022\014\n\004" +
+      "keys\030\003 \003(\014\"6\n\025BrokerPeerDataRequest\022\017\n\007p" +
+      "eer_id\030\001 \001(\004\022\014\n\004data\030\002 \001(\014\"n\n\017BootstrapC" +
+      "lient\022\n\n\002id\030\001 \001(\004\022=\n\021websocket_options\030\002" +
+      " \001(\0132 .BootstrapClientWebSocketOptionsH\000" +
+      "B\020\n\016client_options\"P\n\037BootstrapClientWeb" +
+      "SocketOptions\022\013\n\003url\030\001 \001(\t\022 \n\030insecure_s" +
+      "kip_verify_tls\030\002 \001(\010\"o\n\034CreateBootstrapC" +
+      "lientRequest\022=\n\021websocket_options\030\001 \001(\0132" +
+      " .BootstrapClientWebSocketOptionsH\000B\020\n\016c" +
+      "lient_options\"K\n\035CreateBootstrapClientRe" +
+      "sponse\022*\n\020bootstrap_client\030\001 \001(\0132\020.Boots" +
+      "trapClient\"{\n\034UpdateBootstrapClientReque" +
+      "st\022\n\n\002id\030\001 \001(\004\022=\n\021websocket_options\030\002 \001(" +
+      "\0132 .BootstrapClientWebSocketOptionsH\000B\020\n" +
+      "\016client_options\"K\n\035UpdateBootstrapClient" +
+      "Response\022*\n\020bootstrap_client\030\001 \001(\0132\020.Boo" +
+      "tstrapClient\"*\n\034DeleteBootstrapClientReq" +
+      "uest\022\n\n\002id\030\001 \001(\004\"\037\n\035DeleteBootstrapClien" +
+      "tResponse\"\'\n\031GetBootstrapClientRequest\022\n" +
+      "\n\002id\030\001 \001(\004\"H\n\032GetBootstrapClientResponse" +
+      "\022*\n\020bootstrap_client\030\001 \001(\0132\020.BootstrapCl" +
+      "ient\"\034\n\032GetBootstrapClientsRequest\"J\n\033Ge" +
+      "tBootstrapClientsResponse\022+\n\021bootstrap_c" +
+      "lients\030\001 \003(\0132\020.BootstrapClient\"\032\n\030GetBoo" +
+      "tstrapPeersRequest\":\n\031GetBootstrapPeersR" +
+      "esponse\022\035\n\005peers\030\001 \003(\0132\016.BootstrapPeer\"/" +
+      "\n\rBootstrapPeer\022\017\n\007host_id\030\001 \001(\014\022\r\n\005labe" +
+      "l\030\002 \001(\t\"\347\002\n\027BootstrapServiceMessage\022<\n\014b" +
+      "roker_offer\030\001 \001(\0132$.BootstrapServiceMess" +
+      "age.BrokerOfferH\000\022B\n\017publish_request\030\002 \001" +
+      "(\0132\'.BootstrapServiceMessage.PublishRequ" +
+      "estH\000\022D\n\020publish_response\030\003 \001(\0132(.Bootst" +
+      "rapServiceMessage.PublishResponseH\000\032\r\n\013B" +
+      "rokerOffer\032A\n\016PublishRequest\022\014\n\004name\030\001 \001" +
+      "(\t\022!\n\013certificate\030\002 \001(\0132\014.Certificate\032*\n" +
+      "\017PublishResponse\022\017\n\005error\030\001 \001(\tH\000B\006\n\004bod" +
+      "yB\006\n\004body\"R\n$PublishNetworkToBootstrapPe" +
+      "erRequest\022\017\n\007host_id\030\001 \001(\014\022\031\n\007network\030\002 " +
+      "\001(\0132\010.Network\"\'\n%PublishNetworkToBootstr" +
+      "apPeerResponse\"\277\004\n\023PeerExchangeMessage\022/" +
+      "\n\007request\030\001 \001(\0132\034.PeerExchangeMessage.Re" +
+      "questH\000\0221\n\010response\030\002 \001(\0132\035.PeerExchange" +
+      "Message.ResponseH\000\022+\n\005offer\030\003 \001(\0132\032.Peer" +
+      "ExchangeMessage.OfferH\000\022-\n\006answer\030\004 \001(\0132" +
+      "\033.PeerExchangeMessage.AnswerH\000\022:\n\rice_ca" +
+      "ndidate\030\005 \001(\0132!.PeerExchangeMessage.IceC" +
+      "andidateH\000\022@\n\020callback_request\030\006 \001(\0132$.P" +
+      "eerExchangeMessage.CallbackRequestH\000\032\030\n\007" +
+      "Request\022\r\n\005count\030\001 \001(\r\032\027\n\010Response\022\013\n\003id" +
+      "s\030\001 \003(\014\032+\n\005Offer\022\024\n\014mediation_id\030\001 \001(\004\022\014" +
+      "\n\004data\030\002 \001(\014\032,\n\006Answer\022\024\n\014mediation_id\030\001" +
+      " \001(\004\022\014\n\004data\030\002 \001(\014\032A\n\014IceCandidate\022\024\n\014me" +
+      "diation_id\030\001 \001(\004\022\r\n\005index\030\002 \001(\004\022\014\n\004data\030" +
+      "\003 \001(\014\032\021\n\017CallbackRequestB\006\n\004bodyBD\n\025gg.s" +
+      "trims.ppspp.protoZ&github.com/MemeLabs/g" +
+      "o-ppspp/pkg/pb;pb\272\002\002PBb\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -32409,7 +32421,7 @@ public final class Vpn {
     internal_static_PeerInit_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_PeerInit_descriptor,
-        new java.lang.String[] { "ProtocolVersion", "Certificate", "Iv", "HostId", });
+        new java.lang.String[] { "ProtocolVersion", "Certificate", "NodePlatform", "NodeVersion", });
     internal_static_NetworkHandshake_descriptor =
       getDescriptor().getMessageTypes().get(7);
     internal_static_NetworkHandshake_fieldAccessorTable = new
@@ -32421,7 +32433,7 @@ public final class Vpn {
     internal_static_NetworkHandshake_Init_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_NetworkHandshake_Init_descriptor,
-        new java.lang.String[] { "KeyCount", "Discriminator", });
+        new java.lang.String[] { "KeyCount", });
     internal_static_NetworkHandshake_NetworkBinding_descriptor =
       internal_static_NetworkHandshake_descriptor.getNestedTypes().get(1);
     internal_static_NetworkHandshake_NetworkBinding_fieldAccessorTable = new
@@ -32433,7 +32445,7 @@ public final class Vpn {
     internal_static_NetworkHandshake_NetworkBindings_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_NetworkHandshake_NetworkBindings_descriptor,
-        new java.lang.String[] { "Discriminator", "NetworkBindings", });
+        new java.lang.String[] { "NetworkBindings", });
     internal_static_BrokerPeerRequest_descriptor =
       getDescriptor().getMessageTypes().get(8);
     internal_static_BrokerPeerRequest_fieldAccessorTable = new
@@ -32475,7 +32487,7 @@ public final class Vpn {
     internal_static_BrokerPeerInitRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_BrokerPeerInitRequest_descriptor,
-        new java.lang.String[] { "PeerId", "Discriminator", "Keys", });
+        new java.lang.String[] { "PeerId", "PreferSender", "Keys", });
     internal_static_BrokerPeerDataRequest_descriptor =
       getDescriptor().getMessageTypes().get(11);
     internal_static_BrokerPeerDataRequest_fieldAccessorTable = new

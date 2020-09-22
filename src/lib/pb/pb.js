@@ -18836,8 +18836,8 @@ export const PeerInit = $root.PeerInit = (() => {
      * @interface IPeerInit
      * @property {number|null} [protocolVersion] PeerInit protocolVersion
      * @property {ICertificate|null} [certificate] PeerInit certificate
-     * @property {Uint8Array|null} [iv] PeerInit iv
-     * @property {Uint8Array|null} [hostId] PeerInit hostId
+     * @property {string|null} [nodePlatform] PeerInit nodePlatform
+     * @property {string|null} [nodeVersion] PeerInit nodeVersion
      */
 
     /**
@@ -18872,20 +18872,20 @@ export const PeerInit = $root.PeerInit = (() => {
     PeerInit.prototype.certificate = null;
 
     /**
-     * PeerInit iv.
-     * @member {Uint8Array} iv
+     * PeerInit nodePlatform.
+     * @member {string} nodePlatform
      * @memberof PeerInit
      * @instance
      */
-    PeerInit.prototype.iv = $util.newBuffer([]);
+    PeerInit.prototype.nodePlatform = "";
 
     /**
-     * PeerInit hostId.
-     * @member {Uint8Array} hostId
+     * PeerInit nodeVersion.
+     * @member {string} nodeVersion
      * @memberof PeerInit
      * @instance
      */
-    PeerInit.prototype.hostId = $util.newBuffer([]);
+    PeerInit.prototype.nodeVersion = "";
 
     /**
      * Creates a new PeerInit instance using the specified properties.
@@ -18915,10 +18915,10 @@ export const PeerInit = $root.PeerInit = (() => {
             writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.protocolVersion);
         if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
             $root.Certificate.encode(message.certificate, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-        if (message.iv != null && Object.hasOwnProperty.call(message, "iv"))
-            writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.iv);
-        if (message.hostId != null && Object.hasOwnProperty.call(message, "hostId"))
-            writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.hostId);
+        if (message.nodePlatform != null && Object.hasOwnProperty.call(message, "nodePlatform"))
+            writer.uint32(/* id 3, wireType 2 =*/26).string(message.nodePlatform);
+        if (message.nodeVersion != null && Object.hasOwnProperty.call(message, "nodeVersion"))
+            writer.uint32(/* id 4, wireType 2 =*/34).string(message.nodeVersion);
         return writer;
     };
 
@@ -18960,10 +18960,10 @@ export const PeerInit = $root.PeerInit = (() => {
                 message.certificate = $root.Certificate.decode(reader, reader.uint32());
                 break;
             case 3:
-                message.iv = reader.bytes();
+                message.nodePlatform = reader.string();
                 break;
             case 4:
-                message.hostId = reader.bytes();
+                message.nodeVersion = reader.string();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -19008,12 +19008,12 @@ export const PeerInit = $root.PeerInit = (() => {
             if (error)
                 return "certificate." + error;
         }
-        if (message.iv != null && message.hasOwnProperty("iv"))
-            if (!(message.iv && typeof message.iv.length === "number" || $util.isString(message.iv)))
-                return "iv: buffer expected";
-        if (message.hostId != null && message.hasOwnProperty("hostId"))
-            if (!(message.hostId && typeof message.hostId.length === "number" || $util.isString(message.hostId)))
-                return "hostId: buffer expected";
+        if (message.nodePlatform != null && message.hasOwnProperty("nodePlatform"))
+            if (!$util.isString(message.nodePlatform))
+                return "nodePlatform: string expected";
+        if (message.nodeVersion != null && message.hasOwnProperty("nodeVersion"))
+            if (!$util.isString(message.nodeVersion))
+                return "nodeVersion: string expected";
         return null;
     };
 
@@ -19036,16 +19036,10 @@ export const PeerInit = $root.PeerInit = (() => {
                 throw TypeError(".PeerInit.certificate: object expected");
             message.certificate = $root.Certificate.fromObject(object.certificate);
         }
-        if (object.iv != null)
-            if (typeof object.iv === "string")
-                $util.base64.decode(object.iv, message.iv = $util.newBuffer($util.base64.length(object.iv)), 0);
-            else if (object.iv.length)
-                message.iv = object.iv;
-        if (object.hostId != null)
-            if (typeof object.hostId === "string")
-                $util.base64.decode(object.hostId, message.hostId = $util.newBuffer($util.base64.length(object.hostId)), 0);
-            else if (object.hostId.length)
-                message.hostId = object.hostId;
+        if (object.nodePlatform != null)
+            message.nodePlatform = String(object.nodePlatform);
+        if (object.nodeVersion != null)
+            message.nodeVersion = String(object.nodeVersion);
         return message;
     };
 
@@ -19065,29 +19059,17 @@ export const PeerInit = $root.PeerInit = (() => {
         if (options.defaults) {
             object.protocolVersion = 0;
             object.certificate = null;
-            if (options.bytes === String)
-                object.iv = "";
-            else {
-                object.iv = [];
-                if (options.bytes !== Array)
-                    object.iv = $util.newBuffer(object.iv);
-            }
-            if (options.bytes === String)
-                object.hostId = "";
-            else {
-                object.hostId = [];
-                if (options.bytes !== Array)
-                    object.hostId = $util.newBuffer(object.hostId);
-            }
+            object.nodePlatform = "";
+            object.nodeVersion = "";
         }
         if (message.protocolVersion != null && message.hasOwnProperty("protocolVersion"))
             object.protocolVersion = message.protocolVersion;
         if (message.certificate != null && message.hasOwnProperty("certificate"))
             object.certificate = $root.Certificate.toObject(message.certificate, options);
-        if (message.iv != null && message.hasOwnProperty("iv"))
-            object.iv = options.bytes === String ? $util.base64.encode(message.iv, 0, message.iv.length) : options.bytes === Array ? Array.prototype.slice.call(message.iv) : message.iv;
-        if (message.hostId != null && message.hasOwnProperty("hostId"))
-            object.hostId = options.bytes === String ? $util.base64.encode(message.hostId, 0, message.hostId.length) : options.bytes === Array ? Array.prototype.slice.call(message.hostId) : message.hostId;
+        if (message.nodePlatform != null && message.hasOwnProperty("nodePlatform"))
+            object.nodePlatform = message.nodePlatform;
+        if (message.nodeVersion != null && message.hasOwnProperty("nodeVersion"))
+            object.nodeVersion = message.nodeVersion;
         return object;
     };
 
@@ -19354,7 +19336,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
          * @memberof NetworkHandshake
          * @interface IInit
          * @property {number|null} [keyCount] Init keyCount
-         * @property {number|null} [discriminator] Init discriminator
          */
 
         /**
@@ -19379,14 +19360,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
          * @instance
          */
         Init.prototype.keyCount = 0;
-
-        /**
-         * Init discriminator.
-         * @member {number} discriminator
-         * @memberof NetworkHandshake.Init
-         * @instance
-         */
-        Init.prototype.discriminator = 0;
 
         /**
          * Creates a new Init instance using the specified properties.
@@ -19414,8 +19387,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
                 writer = $Writer.create();
             if (message.keyCount != null && Object.hasOwnProperty.call(message, "keyCount"))
                 writer.uint32(/* id 1, wireType 0 =*/8).int32(message.keyCount);
-            if (message.discriminator != null && Object.hasOwnProperty.call(message, "discriminator"))
-                writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.discriminator);
             return writer;
         };
 
@@ -19452,9 +19423,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
                 switch (tag >>> 3) {
                 case 1:
                     message.keyCount = reader.int32();
-                    break;
-                case 2:
-                    message.discriminator = reader.uint32();
                     break;
                 default:
                     reader.skipType(tag & 7);
@@ -19494,9 +19462,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (message.keyCount != null && message.hasOwnProperty("keyCount"))
                 if (!$util.isInteger(message.keyCount))
                     return "keyCount: integer expected";
-            if (message.discriminator != null && message.hasOwnProperty("discriminator"))
-                if (!$util.isInteger(message.discriminator))
-                    return "discriminator: integer expected";
             return null;
         };
 
@@ -19514,8 +19479,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             let message = new $root.NetworkHandshake.Init();
             if (object.keyCount != null)
                 message.keyCount = object.keyCount | 0;
-            if (object.discriminator != null)
-                message.discriminator = object.discriminator >>> 0;
             return message;
         };
 
@@ -19532,14 +19495,10 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (!options)
                 options = {};
             let object = {};
-            if (options.defaults) {
+            if (options.defaults)
                 object.keyCount = 0;
-                object.discriminator = 0;
-            }
             if (message.keyCount != null && message.hasOwnProperty("keyCount"))
                 object.keyCount = message.keyCount;
-            if (message.discriminator != null && message.hasOwnProperty("discriminator"))
-                object.discriminator = message.discriminator;
             return object;
         };
 
@@ -19778,7 +19737,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
          * Properties of a NetworkBindings.
          * @memberof NetworkHandshake
          * @interface INetworkBindings
-         * @property {number|null} [discriminator] NetworkBindings discriminator
          * @property {Array.<NetworkHandshake.INetworkBinding>|null} [networkBindings] NetworkBindings networkBindings
          */
 
@@ -19797,14 +19755,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
                     if (properties[keys[i]] != null)
                         this[keys[i]] = properties[keys[i]];
         }
-
-        /**
-         * NetworkBindings discriminator.
-         * @member {number} discriminator
-         * @memberof NetworkHandshake.NetworkBindings
-         * @instance
-         */
-        NetworkBindings.prototype.discriminator = 0;
 
         /**
          * NetworkBindings networkBindings.
@@ -19838,8 +19788,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         NetworkBindings.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.discriminator != null && Object.hasOwnProperty.call(message, "discriminator"))
-                writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.discriminator);
             if (message.networkBindings != null && message.networkBindings.length)
                 for (let i = 0; i < message.networkBindings.length; ++i)
                     $root.NetworkHandshake.NetworkBinding.encode(message.networkBindings[i], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
@@ -19877,9 +19825,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
-                case 1:
-                    message.discriminator = reader.uint32();
-                    break;
                 case 2:
                     if (!(message.networkBindings && message.networkBindings.length))
                         message.networkBindings = [];
@@ -19920,9 +19865,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         NetworkBindings.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.discriminator != null && message.hasOwnProperty("discriminator"))
-                if (!$util.isInteger(message.discriminator))
-                    return "discriminator: integer expected";
             if (message.networkBindings != null && message.hasOwnProperty("networkBindings")) {
                 if (!Array.isArray(message.networkBindings))
                     return "networkBindings: array expected";
@@ -19947,8 +19889,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (object instanceof $root.NetworkHandshake.NetworkBindings)
                 return object;
             let message = new $root.NetworkHandshake.NetworkBindings();
-            if (object.discriminator != null)
-                message.discriminator = object.discriminator >>> 0;
             if (object.networkBindings) {
                 if (!Array.isArray(object.networkBindings))
                     throw TypeError(".NetworkHandshake.NetworkBindings.networkBindings: array expected");
@@ -19977,10 +19917,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             let object = {};
             if (options.arrays || options.defaults)
                 object.networkBindings = [];
-            if (options.defaults)
-                object.discriminator = 0;
-            if (message.discriminator != null && message.hasOwnProperty("discriminator"))
-                object.discriminator = message.discriminator;
             if (message.networkBindings && message.networkBindings.length) {
                 object.networkBindings = [];
                 for (let j = 0; j < message.networkBindings.length; ++j)
@@ -21312,7 +21248,7 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
      * @exports IBrokerPeerInitRequest
      * @interface IBrokerPeerInitRequest
      * @property {number|null} [peerId] BrokerPeerInitRequest peerId
-     * @property {number|null} [discriminator] BrokerPeerInitRequest discriminator
+     * @property {boolean|null} [preferSender] BrokerPeerInitRequest preferSender
      * @property {Array.<Uint8Array>|null} [keys] BrokerPeerInitRequest keys
      */
 
@@ -21341,12 +21277,12 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
     BrokerPeerInitRequest.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
-     * BrokerPeerInitRequest discriminator.
-     * @member {number} discriminator
+     * BrokerPeerInitRequest preferSender.
+     * @member {boolean} preferSender
      * @memberof BrokerPeerInitRequest
      * @instance
      */
-    BrokerPeerInitRequest.prototype.discriminator = 0;
+    BrokerPeerInitRequest.prototype.preferSender = false;
 
     /**
      * BrokerPeerInitRequest keys.
@@ -21382,8 +21318,8 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
             writer = $Writer.create();
         if (message.peerId != null && Object.hasOwnProperty.call(message, "peerId"))
             writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.peerId);
-        if (message.discriminator != null && Object.hasOwnProperty.call(message, "discriminator"))
-            writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.discriminator);
+        if (message.preferSender != null && Object.hasOwnProperty.call(message, "preferSender"))
+            writer.uint32(/* id 2, wireType 0 =*/16).bool(message.preferSender);
         if (message.keys != null && message.keys.length)
             for (let i = 0; i < message.keys.length; ++i)
                 writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.keys[i]);
@@ -21425,7 +21361,7 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
                 message.peerId = reader.uint64();
                 break;
             case 2:
-                message.discriminator = reader.uint32();
+                message.preferSender = reader.bool();
                 break;
             case 3:
                 if (!(message.keys && message.keys.length))
@@ -21470,9 +21406,9 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
         if (message.peerId != null && message.hasOwnProperty("peerId"))
             if (!$util.isInteger(message.peerId) && !(message.peerId && $util.isInteger(message.peerId.low) && $util.isInteger(message.peerId.high)))
                 return "peerId: integer|Long expected";
-        if (message.discriminator != null && message.hasOwnProperty("discriminator"))
-            if (!$util.isInteger(message.discriminator))
-                return "discriminator: integer expected";
+        if (message.preferSender != null && message.hasOwnProperty("preferSender"))
+            if (typeof message.preferSender !== "boolean")
+                return "preferSender: boolean expected";
         if (message.keys != null && message.hasOwnProperty("keys")) {
             if (!Array.isArray(message.keys))
                 return "keys: array expected";
@@ -21504,8 +21440,8 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
                 message.peerId = object.peerId;
             else if (typeof object.peerId === "object")
                 message.peerId = new $util.LongBits(object.peerId.low >>> 0, object.peerId.high >>> 0).toNumber(true);
-        if (object.discriminator != null)
-            message.discriminator = object.discriminator >>> 0;
+        if (object.preferSender != null)
+            message.preferSender = Boolean(object.preferSender);
         if (object.keys) {
             if (!Array.isArray(object.keys))
                 throw TypeError(".BrokerPeerInitRequest.keys: array expected");
@@ -21540,15 +21476,15 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
                 object.peerId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
             } else
                 object.peerId = options.longs === String ? "0" : 0;
-            object.discriminator = 0;
+            object.preferSender = false;
         }
         if (message.peerId != null && message.hasOwnProperty("peerId"))
             if (typeof message.peerId === "number")
                 object.peerId = options.longs === String ? String(message.peerId) : message.peerId;
             else
                 object.peerId = options.longs === String ? $util.Long.prototype.toString.call(message.peerId) : options.longs === Number ? new $util.LongBits(message.peerId.low >>> 0, message.peerId.high >>> 0).toNumber(true) : message.peerId;
-        if (message.discriminator != null && message.hasOwnProperty("discriminator"))
-            object.discriminator = message.discriminator;
+        if (message.preferSender != null && message.hasOwnProperty("preferSender"))
+            object.preferSender = message.preferSender;
         if (message.keys && message.keys.length) {
             object.keys = [];
             for (let j = 0; j < message.keys.length; ++j)
@@ -33935,6 +33871,7 @@ export const CertificateRequest = $root.CertificateRequest = (() => {
      * @property {Uint8Array|null} [key] CertificateRequest key
      * @property {KeyType|null} [keyType] CertificateRequest keyType
      * @property {number|null} [keyUsage] CertificateRequest keyUsage
+     * @property {string|null} [subject] CertificateRequest subject
      * @property {Uint8Array|null} [signature] CertificateRequest signature
      */
 
@@ -33978,6 +33915,14 @@ export const CertificateRequest = $root.CertificateRequest = (() => {
     CertificateRequest.prototype.keyUsage = 0;
 
     /**
+     * CertificateRequest subject.
+     * @member {string} subject
+     * @memberof CertificateRequest
+     * @instance
+     */
+    CertificateRequest.prototype.subject = "";
+
+    /**
      * CertificateRequest signature.
      * @member {Uint8Array} signature
      * @memberof CertificateRequest
@@ -34017,6 +33962,8 @@ export const CertificateRequest = $root.CertificateRequest = (() => {
             writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.keyUsage);
         if (message.signature != null && Object.hasOwnProperty.call(message, "signature"))
             writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.signature);
+        if (message.subject != null && Object.hasOwnProperty.call(message, "subject"))
+            writer.uint32(/* id 5, wireType 2 =*/42).string(message.subject);
         return writer;
     };
 
@@ -34059,6 +34006,9 @@ export const CertificateRequest = $root.CertificateRequest = (() => {
                 break;
             case 3:
                 message.keyUsage = reader.uint32();
+                break;
+            case 5:
+                message.subject = reader.string();
                 break;
             case 4:
                 message.signature = reader.bytes();
@@ -34113,6 +34063,9 @@ export const CertificateRequest = $root.CertificateRequest = (() => {
         if (message.keyUsage != null && message.hasOwnProperty("keyUsage"))
             if (!$util.isInteger(message.keyUsage))
                 return "keyUsage: integer expected";
+        if (message.subject != null && message.hasOwnProperty("subject"))
+            if (!$util.isString(message.subject))
+                return "subject: string expected";
         if (message.signature != null && message.hasOwnProperty("signature"))
             if (!(message.signature && typeof message.signature.length === "number" || $util.isString(message.signature)))
                 return "signature: buffer expected";
@@ -34152,6 +34105,8 @@ export const CertificateRequest = $root.CertificateRequest = (() => {
         }
         if (object.keyUsage != null)
             message.keyUsage = object.keyUsage >>> 0;
+        if (object.subject != null)
+            message.subject = String(object.subject);
         if (object.signature != null)
             if (typeof object.signature === "string")
                 $util.base64.decode(object.signature, message.signature = $util.newBuffer($util.base64.length(object.signature)), 0);
@@ -34190,6 +34145,7 @@ export const CertificateRequest = $root.CertificateRequest = (() => {
                 if (options.bytes !== Array)
                     object.signature = $util.newBuffer(object.signature);
             }
+            object.subject = "";
         }
         if (message.key != null && message.hasOwnProperty("key"))
             object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
@@ -34199,6 +34155,8 @@ export const CertificateRequest = $root.CertificateRequest = (() => {
             object.keyUsage = message.keyUsage;
         if (message.signature != null && message.hasOwnProperty("signature"))
             object.signature = options.bytes === String ? $util.base64.encode(message.signature, 0, message.signature.length) : options.bytes === Array ? Array.prototype.slice.call(message.signature) : message.signature;
+        if (message.subject != null && message.hasOwnProperty("subject"))
+            object.subject = message.subject;
         return object;
     };
 
@@ -34225,6 +34183,7 @@ export const Certificate = $root.Certificate = (() => {
      * @property {Uint8Array|null} [key] Certificate key
      * @property {KeyType|null} [keyType] Certificate keyType
      * @property {number|null} [keyUsage] Certificate keyUsage
+     * @property {string|null} [subject] Certificate subject
      * @property {number|null} [notBefore] Certificate notBefore
      * @property {number|null} [notAfter] Certificate notAfter
      * @property {Uint8Array|null} [serialNumber] Certificate serialNumber
@@ -34270,6 +34229,14 @@ export const Certificate = $root.Certificate = (() => {
      * @instance
      */
     Certificate.prototype.keyUsage = 0;
+
+    /**
+     * Certificate subject.
+     * @member {string} subject
+     * @memberof Certificate
+     * @instance
+     */
+    Certificate.prototype.subject = "";
 
     /**
      * Certificate notBefore.
@@ -34365,6 +34332,8 @@ export const Certificate = $root.Certificate = (() => {
             writer.uint32(/* id 7, wireType 2 =*/58).bytes(message.signature);
         if (message.parent != null && Object.hasOwnProperty.call(message, "parent"))
             $root.Certificate.encode(message.parent, writer.uint32(/* id 8, wireType 2 =*/66).fork()).ldelim();
+        if (message.subject != null && Object.hasOwnProperty.call(message, "subject"))
+            writer.uint32(/* id 9, wireType 2 =*/74).string(message.subject);
         return writer;
     };
 
@@ -34407,6 +34376,9 @@ export const Certificate = $root.Certificate = (() => {
                 break;
             case 3:
                 message.keyUsage = reader.uint32();
+                break;
+            case 9:
+                message.subject = reader.string();
                 break;
             case 4:
                 message.notBefore = reader.uint64();
@@ -34474,6 +34446,9 @@ export const Certificate = $root.Certificate = (() => {
         if (message.keyUsage != null && message.hasOwnProperty("keyUsage"))
             if (!$util.isInteger(message.keyUsage))
                 return "keyUsage: integer expected";
+        if (message.subject != null && message.hasOwnProperty("subject"))
+            if (!$util.isString(message.subject))
+                return "subject: string expected";
         if (message.notBefore != null && message.hasOwnProperty("notBefore"))
             if (!$util.isInteger(message.notBefore) && !(message.notBefore && $util.isInteger(message.notBefore.low) && $util.isInteger(message.notBefore.high)))
                 return "notBefore: integer|Long expected";
@@ -34530,6 +34505,8 @@ export const Certificate = $root.Certificate = (() => {
         }
         if (object.keyUsage != null)
             message.keyUsage = object.keyUsage >>> 0;
+        if (object.subject != null)
+            message.subject = String(object.subject);
         if (object.notBefore != null)
             if ($util.Long)
                 (message.notBefore = $util.Long.fromValue(object.notBefore)).unsigned = true;
@@ -34613,6 +34590,7 @@ export const Certificate = $root.Certificate = (() => {
                 if (options.bytes !== Array)
                     object.signature = $util.newBuffer(object.signature);
             }
+            object.subject = "";
         }
         if (message.key != null && message.hasOwnProperty("key"))
             object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
@@ -34639,6 +34617,8 @@ export const Certificate = $root.Certificate = (() => {
             if (options.oneofs)
                 object.parentOneof = "parent";
         }
+        if (message.subject != null && message.hasOwnProperty("subject"))
+            object.subject = message.subject;
         return object;
     };
 

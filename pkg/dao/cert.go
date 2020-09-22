@@ -21,12 +21,26 @@ var (
 	ErrInvalidSignature                   = errors.New("invalid certificate signature")
 )
 
+// CertificateRequestOption ...
+type CertificateRequestOption func(*pb.CertificateRequest)
+
+// WithSubject ...
+func WithSubject(subject string) CertificateRequestOption {
+	return func(csr *pb.CertificateRequest) {
+		csr.Subject = subject
+	}
+}
+
 // NewCertificateRequest ...
-func NewCertificateRequest(key *pb.Key, keyUsage pb.KeyUsage) (*pb.CertificateRequest, error) {
+func NewCertificateRequest(key *pb.Key, keyUsage pb.KeyUsage, opts ...CertificateRequestOption) (*pb.CertificateRequest, error) {
 	csr := &pb.CertificateRequest{
 		Key:      key.Public,
 		KeyType:  key.Type,
 		KeyUsage: uint32(keyUsage),
+	}
+
+	for _, opt := range opts {
+		opt(csr)
 	}
 
 	reqBytes, _ := serializeCertificateRequest(csr)
@@ -170,6 +184,7 @@ func serializeCertificate(cert *pb.Certificate) ([]byte, int) {
 	n += 4
 	binary.BigEndian.PutUint32(b[n:], cert.KeyUsage)
 	n += 4
+	n += copy(b[n:], []byte(cert.Subject))
 	binary.BigEndian.PutUint64(b[n:], cert.NotBefore)
 	n += 8
 	binary.BigEndian.PutUint64(b[n:], cert.NotAfter)
@@ -181,13 +196,14 @@ func serializeCertificate(cert *pb.Certificate) ([]byte, int) {
 
 // serializeCertificateRequest returns a stable byte representation of a certificate request
 func serializeCertificateRequest(csr *pb.CertificateRequest) ([]byte, int) {
-	b := make([]byte, 8+len(csr.Key))
+	b := make([]byte, 8+len(csr.Key)+len([]byte(csr.Subject)))
 
 	n := copy(b, csr.Key)
 	binary.BigEndian.PutUint32(b[n:], uint32(csr.KeyType))
 	n += 4
 	binary.BigEndian.PutUint32(b[n:], csr.KeyUsage)
 	n += 4
+	n += copy(b[n:], []byte(csr.Subject))
 
 	return b, n
 }

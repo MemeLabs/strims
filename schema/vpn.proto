@@ -39,14 +39,13 @@ message NetworkAddress {
 message PeerInit {
   uint32 protocol_version = 1;
   Certificate certificate = 2;
-  bytes iv = 3;
-  bytes host_id = 4;
+  string node_platform = 3;
+  string node_version = 4;
 }
 
 message NetworkHandshake {
   message Init {
     int32 key_count = 1;
-    uint32 discriminator = 2;
   }
 
   message NetworkBinding {
@@ -55,7 +54,6 @@ message NetworkHandshake {
   }
 
   message NetworkBindings {
-    uint32 discriminator = 1;
     repeated NetworkBinding network_bindings = 2;
   }
 
@@ -96,7 +94,7 @@ message BrokerPeerEvent {
 
 message BrokerPeerInitRequest {
   uint64 peer_id = 1;
-  uint32 discriminator = 2;
+  bool prefer_sender = 2;
   repeated bytes keys = 3;
 }
 

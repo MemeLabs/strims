@@ -9,16 +9,16 @@ import (
 var bucketBits []ID
 
 func init() {
-	bucketBits = make([]ID, IDBitLength)
+	bucketBits = make([]ID, idBitLength)
 	l := len(bucketBits[0])
 
-	for i := 0; i < IDBitLength; i++ {
-		j := IDBitLength - i - 1
-		b := j >> l
+	for i := 0; i < idBitLength; i++ {
+		j := idBitLength - i - 1
+		b := j / 64
 		for k := b; k < l; k++ {
-			bucketBits[j][k] = math.MaxUint32
+			bucketBits[j][k] = math.MaxUint64
 		}
-		bucketBits[j][b] = 1 << (i & 0x1f)
+		bucketBits[j][b] = 1 << (i & 63)
 		bucketBits[j][b] |= (bucketBits[j][b] - 1)
 	}
 }
@@ -28,6 +28,7 @@ type Interface interface {
 	ID() ID
 }
 
+// Evictable ...
 type Evictable interface {
 	Evict()
 }
@@ -44,9 +45,9 @@ type KBucket struct {
 
 // NewKBucket ...
 func NewKBucket(id ID, k int) *KBucket {
-	b := make([]bucket, IDBitLength)
-	is := make([]Interface, k*IDBitLength)
-	for i := 0; i < IDBitLength; i++ {
+	b := make([]bucket, idBitLength)
+	is := make([]Interface, k*idBitLength)
+	for i := 0; i < idBitLength; i++ {
 		b[i] = bucket(is[i*k : i*k])
 	}
 

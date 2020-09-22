@@ -9,7 +9,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 )
 
-const messageHeaderLen = 28
+const messageHeaderLen = kademlia.IDLength + 8
 
 // MessageHeader ...
 type MessageHeader struct {
@@ -28,10 +28,10 @@ func (m MessageHeader) Marshal(b []byte) (n int, err error) {
 	if _, err = m.DstID.Marshal(b); err != nil {
 		return
 	}
-	binary.BigEndian.PutUint16(b[20:], m.DstPort)
-	binary.BigEndian.PutUint16(b[22:], m.SrcPort)
-	binary.BigEndian.PutUint16(b[24:], m.Seq)
-	binary.BigEndian.PutUint16(b[26:], m.Length)
+	binary.BigEndian.PutUint16(b[kademlia.IDLength:], m.DstPort)
+	binary.BigEndian.PutUint16(b[kademlia.IDLength+2:], m.SrcPort)
+	binary.BigEndian.PutUint16(b[kademlia.IDLength+4:], m.Seq)
+	binary.BigEndian.PutUint16(b[kademlia.IDLength+6:], m.Length)
 	return messageHeaderLen, nil
 }
 
@@ -44,14 +44,14 @@ func (m *MessageHeader) Unmarshal(b []byte) (n int, err error) {
 	if err != nil {
 		return
 	}
-	m.DstPort = binary.BigEndian.Uint16(b[20:])
-	m.SrcPort = binary.BigEndian.Uint16(b[22:])
-	m.Seq = binary.BigEndian.Uint16(b[24:])
-	m.Length = binary.BigEndian.Uint16(b[26:])
+	m.DstPort = binary.BigEndian.Uint16(b[kademlia.IDLength:])
+	m.SrcPort = binary.BigEndian.Uint16(b[kademlia.IDLength+2:])
+	m.Seq = binary.BigEndian.Uint16(b[kademlia.IDLength+4:])
+	m.Length = binary.BigEndian.Uint16(b[kademlia.IDLength+6:])
 	return messageHeaderLen, nil
 }
 
-const messageTrailerLen = 84
+const messageTrailerLen = kademlia.IDLength + 64
 
 // Trailers represents the messages path
 // index 0 is the sender and subsequent indexes are hops
@@ -71,7 +71,7 @@ func (m *MessageTrailer) Marshal(b []byte) (n int, err error) {
 	if _, err = m.HostID.Marshal(b); err != nil {
 		return
 	}
-	copy(b[20:], m.Signature)
+	copy(b[kademlia.IDLength:], m.Signature)
 	return messageTrailerLen, nil
 }
 
@@ -84,7 +84,7 @@ func (m *MessageTrailer) Unmarshal(b []byte) (n int, err error) {
 	if err != nil {
 		return
 	}
-	m.Signature = b[20:]
+	m.Signature = b[kademlia.IDLength:]
 	return messageTrailerLen, nil
 }
 
@@ -105,7 +105,7 @@ type Message struct {
 	Trailers Trailers
 }
 
-type MessageID [2 + kademlia.IDByteLength]byte
+type MessageID [2 + kademlia.IDLength]byte
 
 // ID ...
 func (m *Message) ID() (id MessageID) {

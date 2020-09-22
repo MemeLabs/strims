@@ -1,20 +1,17 @@
 package vpn
 
 import (
-	"crypto/aes"
 	"crypto/cipher"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"math"
 	"sync"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
-	"github.com/aead/ecdh"
+	"github.com/MemeLabs/go-ppspp/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
@@ -39,46 +36,12 @@ var (
 	})
 )
 
-func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key, hostID kademlia.ID) (*Peer, error) {
-	// TODO: use io timeout?
-	validDuration := time.Second * 10
-
-	signingCert, err := dao.NewSelfSignedCertificate(
-		hostKey,
-		pb.KeyUsage_KEY_USAGE_SIGN|pb.KeyUsage_KEY_USAGE_PEER,
-		validDuration,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("generating init cert failed: %w", err)
-	}
-
-	key, pub, err := ecdh.X25519().GenerateKey(rand.Reader)
-	if err != nil {
-		return nil, fmt.Errorf("generating cipher key failed: %w", err)
-	}
-
-	pubBytes := pub.([32]byte)
-	cipherCSR := &pb.CertificateRequest{
-		Key:      pubBytes[:],
-		KeyType:  pb.KeyType_KEY_TYPE_X25519,
-		KeyUsage: uint32(pb.KeyUsage_KEY_USAGE_ENCIPHERMENT),
-	}
-	cipherCert, err := dao.SignCertificateRequest(cipherCSR, validDuration, hostKey)
-	if err != nil {
-		return nil, fmt.Errorf("signing cipher cert failed: %w", err)
-	}
-	cipherCert.ParentOneof = &pb.Certificate_Parent{Parent: signingCert}
-
-	var iv [16]byte
-	if _, err := rand.Read(iv[:]); err != nil {
-		return nil, fmt.Errorf("reading peer iv failed: %w", err)
-	}
-
-	err = WriteProtoStream(link, &pb.PeerInit{
+func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key, hostCert *pb.Certificate) (*Peer, error) {
+	err := WriteProtoStream(link, &pb.PeerInit{
 		ProtocolVersion: 1,
-		Certificate:     cipherCert,
-		Iv:              iv[:],
-		HostId:          hostID.Bytes(nil),
+		Certificate:     hostCert,
+		NodePlatform:    version.Platform,
+		NodeVersion:     version.Version,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("writing peer init failed: %w", err)
@@ -89,11 +52,6 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key, hostID kademlia.ID)
 		return nil, fmt.Errorf("reading peer init failed: %w", err)
 	}
 
-	peerHostID, err := kademlia.UnmarshalID(init.HostId)
-	if err != nil {
-		return nil, fmt.Errorf("peer host id malformed: %w", err)
-	}
-
 	if err := dao.VerifyCertificate(init.Certificate); err != nil {
 		return nil, fmt.Errorf("peer cert verification failed: %w", err)
 	}
@@ -101,26 +59,16 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key, hostID kademlia.ID)
 		return nil, errors.New("invalid peer certificate")
 	}
 
-	if err := ecdh.X25519().Check(init.Certificate.Key); err != nil {
-		return nil, fmt.Errorf("peer cipher key check failed: %w", err)
-	}
-	block, err := aes.NewCipher(ecdh.X25519().ComputeSecret(key, init.Certificate.Key))
+	hostID, err := kademlia.UnmarshalID(init.Certificate.Key)
 	if err != nil {
-		return nil, fmt.Errorf("shared secret generation failed: %w", err)
+		return nil, fmt.Errorf("peer host id malformed: %w", err)
 	}
-
-	_ = block
-	// link = &cipherLink{
-	// 	writeStream: cipher.NewCFBEncrypter(block, iv[:]),
-	// 	readStream:  cipher.NewCFBDecrypter(block, init.Iv),
-	// 	link:        link,
-	// }
 
 	p := &Peer{
 		logger:       logger,
 		Link:         link,
 		Certificate:  init.Certificate.GetParent(),
-		hostID:       peerHostID,
+		hostID:       hostID,
 		handlers:     map[uint16]FrameHandler{},
 		reservations: map[uint16]struct{}{},
 		done:         make(chan struct{}),

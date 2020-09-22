@@ -20,7 +20,7 @@ type NetworkBroker interface {
 
 // NetworkBrokerPeer ...
 type NetworkBrokerPeer interface {
-	Init(discriminator uint16, keys [][]byte) error
+	Init(preferSender bool, keys [][]byte) error
 	InitRequired() <-chan struct{}
 	Keys() <-chan [][]byte
 	Close()
@@ -71,8 +71,8 @@ func newNetworkBrokerPeer(logger *zap.Logger, c ReadWriteFlusher) *networkBroker
 }
 
 type networkBrokerLocalParams struct {
-	discriminator uint16
-	keys          [][]byte
+	preferSender bool
+	keys         [][]byte
 }
 
 type networkBrokerPeer struct {
@@ -87,16 +87,16 @@ type networkBrokerPeer struct {
 	closeOnce    sync.Once
 }
 
-func (p *networkBrokerPeer) Init(discriminator uint16, keys [][]byte) error {
+func (p *networkBrokerPeer) Init(preferSender bool, keys [][]byte) error {
 	go func() {
 		p.initLock.Lock()
 		defer p.initLock.Unlock()
 
 		p.logger.Debug("starting network negotiation", zap.Int("keys", len(keys)))
 
-		p.localParams <- networkBrokerLocalParams{discriminator, keys}
+		p.localParams <- networkBrokerLocalParams{preferSender, keys}
 
-		if err := p.sendInit(discriminator, keys); err != nil {
+		if err := p.sendInit(keys); err != nil {
 			p.logger.Error("sending negotiation init failed", zap.Error(err))
 			return
 		}
@@ -153,15 +153,14 @@ func (p *networkBrokerPeer) readInits() (err error) {
 	}
 }
 
-func (p *networkBrokerPeer) sendInit(discriminator uint16, keys [][]byte) error {
+func (p *networkBrokerPeer) sendInit(keys [][]byte) error {
 	p.cLock.Lock()
 	defer p.cLock.Unlock()
 
 	err := WriteProtoStream(p.c, &pb.NetworkHandshake{
 		Body: &pb.NetworkHandshake_Init_{
 			Init: &pb.NetworkHandshake_Init{
-				KeyCount:      int32(len(keys)),
-				Discriminator: uint32(discriminator),
+				KeyCount: int32(len(keys)),
 			},
 		},
 	})
@@ -174,7 +173,7 @@ func (p *networkBrokerPeer) sendInit(discriminator uint16, keys [][]byte) error 
 	return nil
 }
 
-func (p *networkBrokerPeer) awaitLocalParams() (uint16, [][]byte, error) {
+func (p *networkBrokerPeer) awaitLocalParams() (bool, [][]byte, error) {
 	var l networkBrokerLocalParams
 	var ok bool
 
@@ -186,24 +185,24 @@ func (p *networkBrokerPeer) awaitLocalParams() (uint16, [][]byte, error) {
 		select {
 		case l, ok = <-p.localParams:
 		case <-time.After(10 * time.Second):
-			return 0, nil, errors.New("timeout")
+			return false, nil, errors.New("timeout")
 		}
 	}
 
 	if !ok {
-		return 0, nil, errors.New("broker closed")
+		return false, nil, errors.New("broker closed")
 	}
-	return l.discriminator, l.keys, nil
+	return l.preferSender, l.keys, nil
 }
 
 func (p *networkBrokerPeer) handleInit(init *pb.NetworkHandshake_Init) error {
-	discriminator, keys, err := p.awaitLocalParams()
+	preferSender, keys, err := p.awaitLocalParams()
 	if err != nil {
 		return err
 	}
 
 	// communication cost for the PSZ sender scales better than the receiver.
-	if int(init.KeyCount) < len(keys) || (int(init.KeyCount) == len(keys) && uint16(init.Discriminator) > discriminator) {
+	if int(init.KeyCount) < len(keys) || (int(init.KeyCount) == len(keys) && preferSender) {
 		return p.exchangeKeysAsSender(keys)
 	}
 

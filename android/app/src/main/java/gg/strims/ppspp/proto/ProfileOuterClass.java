@@ -19416,6 +19416,18 @@ public final class ProfileOuterClass {
     int getKeyUsage();
 
     /**
+     * <code>string subject = 5;</code>
+     * @return The subject.
+     */
+    java.lang.String getSubject();
+    /**
+     * <code>string subject = 5;</code>
+     * @return The bytes for subject.
+     */
+    com.google.protobuf.ByteString
+        getSubjectBytes();
+
+    /**
      * <code>bytes signature = 4;</code>
      * @return The signature.
      */
@@ -19436,6 +19448,7 @@ public final class ProfileOuterClass {
     private CertificateRequest() {
       key_ = com.google.protobuf.ByteString.EMPTY;
       keyType_ = 0;
+      subject_ = "";
       signature_ = com.google.protobuf.ByteString.EMPTY;
     }
 
@@ -19488,6 +19501,12 @@ public final class ProfileOuterClass {
             case 34: {
 
               signature_ = input.readBytes();
+              break;
+            }
+            case 42: {
+              java.lang.String s = input.readStringRequireUtf8();
+
+              subject_ = s;
               break;
             }
             default: {
@@ -19563,6 +19582,44 @@ public final class ProfileOuterClass {
       return keyUsage_;
     }
 
+    public static final int SUBJECT_FIELD_NUMBER = 5;
+    private volatile java.lang.Object subject_;
+    /**
+     * <code>string subject = 5;</code>
+     * @return The subject.
+     */
+    @java.lang.Override
+    public java.lang.String getSubject() {
+      java.lang.Object ref = subject_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        subject_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string subject = 5;</code>
+     * @return The bytes for subject.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSubjectBytes() {
+      java.lang.Object ref = subject_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        subject_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
     public static final int SIGNATURE_FIELD_NUMBER = 4;
     private com.google.protobuf.ByteString signature_;
     /**
@@ -19600,6 +19657,9 @@ public final class ProfileOuterClass {
       if (!signature_.isEmpty()) {
         output.writeBytes(4, signature_);
       }
+      if (!getSubjectBytes().isEmpty()) {
+        com.google.protobuf.GeneratedMessageV3.writeString(output, 5, subject_);
+      }
       unknownFields.writeTo(output);
     }
 
@@ -19625,6 +19685,9 @@ public final class ProfileOuterClass {
         size += com.google.protobuf.CodedOutputStream
           .computeBytesSize(4, signature_);
       }
+      if (!getSubjectBytes().isEmpty()) {
+        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(5, subject_);
+      }
       size += unknownFields.getSerializedSize();
       memoizedSize = size;
       return size;
@@ -19645,6 +19708,8 @@ public final class ProfileOuterClass {
       if (keyType_ != other.keyType_) return false;
       if (getKeyUsage()
           != other.getKeyUsage()) return false;
+      if (!getSubject()
+          .equals(other.getSubject())) return false;
       if (!getSignature()
           .equals(other.getSignature())) return false;
       if (!unknownFields.equals(other.unknownFields)) return false;
@@ -19664,6 +19729,8 @@ public final class ProfileOuterClass {
       hash = (53 * hash) + keyType_;
       hash = (37 * hash) + KEY_USAGE_FIELD_NUMBER;
       hash = (53 * hash) + getKeyUsage();
+      hash = (37 * hash) + SUBJECT_FIELD_NUMBER;
+      hash = (53 * hash) + getSubject().hashCode();
       hash = (37 * hash) + SIGNATURE_FIELD_NUMBER;
       hash = (53 * hash) + getSignature().hashCode();
       hash = (29 * hash) + unknownFields.hashCode();
@@ -19805,6 +19872,8 @@ public final class ProfileOuterClass {
 
         keyUsage_ = 0;
 
+        subject_ = "";
+
         signature_ = com.google.protobuf.ByteString.EMPTY;
 
         return this;
@@ -19836,6 +19905,7 @@ public final class ProfileOuterClass {
         result.key_ = key_;
         result.keyType_ = keyType_;
         result.keyUsage_ = keyUsage_;
+        result.subject_ = subject_;
         result.signature_ = signature_;
         onBuilt();
         return result;
@@ -19893,6 +19963,10 @@ public final class ProfileOuterClass {
         }
         if (other.getKeyUsage() != 0) {
           setKeyUsage(other.getKeyUsage());
+        }
+        if (!other.getSubject().isEmpty()) {
+          subject_ = other.subject_;
+          onChanged();
         }
         if (other.getSignature() != com.google.protobuf.ByteString.EMPTY) {
           setSignature(other.getSignature());
@@ -20045,6 +20119,82 @@ public final class ProfileOuterClass {
         return this;
       }
 
+      private java.lang.Object subject_ = "";
+      /**
+       * <code>string subject = 5;</code>
+       * @return The subject.
+       */
+      public java.lang.String getSubject() {
+        java.lang.Object ref = subject_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          subject_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string subject = 5;</code>
+       * @return The bytes for subject.
+       */
+      public com.google.protobuf.ByteString
+          getSubjectBytes() {
+        java.lang.Object ref = subject_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          subject_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string subject = 5;</code>
+       * @param value The subject to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSubject(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  
+        subject_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string subject = 5;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearSubject() {
+        
+        subject_ = getDefaultInstance().getSubject();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string subject = 5;</code>
+       * @param value The bytes for subject to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSubjectBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+        
+        subject_ = value;
+        onChanged();
+        return this;
+      }
+
       private com.google.protobuf.ByteString signature_ = com.google.protobuf.ByteString.EMPTY;
       /**
        * <code>bytes signature = 4;</code>
@@ -20159,6 +20309,18 @@ public final class ProfileOuterClass {
     int getKeyUsage();
 
     /**
+     * <code>string subject = 9;</code>
+     * @return The subject.
+     */
+    java.lang.String getSubject();
+    /**
+     * <code>string subject = 9;</code>
+     * @return The bytes for subject.
+     */
+    com.google.protobuf.ByteString
+        getSubjectBytes();
+
+    /**
      * <code>uint64 not_before = 4;</code>
      * @return The notBefore.
      */
@@ -20214,6 +20376,7 @@ public final class ProfileOuterClass {
     private Certificate() {
       key_ = com.google.protobuf.ByteString.EMPTY;
       keyType_ = 0;
+      subject_ = "";
       serialNumber_ = com.google.protobuf.ByteString.EMPTY;
       signature_ = com.google.protobuf.ByteString.EMPTY;
     }
@@ -20296,6 +20459,12 @@ public final class ProfileOuterClass {
                 parentOneof_ = subBuilder.buildPartial();
               }
               parentOneofCase_ = 8;
+              break;
+            }
+            case 74: {
+              java.lang.String s = input.readStringRequireUtf8();
+
+              subject_ = s;
               break;
             }
             default: {
@@ -20408,6 +20577,44 @@ public final class ProfileOuterClass {
     @java.lang.Override
     public int getKeyUsage() {
       return keyUsage_;
+    }
+
+    public static final int SUBJECT_FIELD_NUMBER = 9;
+    private volatile java.lang.Object subject_;
+    /**
+     * <code>string subject = 9;</code>
+     * @return The subject.
+     */
+    @java.lang.Override
+    public java.lang.String getSubject() {
+      java.lang.Object ref = subject_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        subject_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string subject = 9;</code>
+     * @return The bytes for subject.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getSubjectBytes() {
+      java.lang.Object ref = subject_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        subject_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
     }
 
     public static final int NOT_BEFORE_FIELD_NUMBER = 4;
@@ -20523,6 +20730,9 @@ public final class ProfileOuterClass {
       if (parentOneofCase_ == 8) {
         output.writeMessage(8, (gg.strims.ppspp.proto.ProfileOuterClass.Certificate) parentOneof_);
       }
+      if (!getSubjectBytes().isEmpty()) {
+        com.google.protobuf.GeneratedMessageV3.writeString(output, 9, subject_);
+      }
       unknownFields.writeTo(output);
     }
 
@@ -20564,6 +20774,9 @@ public final class ProfileOuterClass {
         size += com.google.protobuf.CodedOutputStream
           .computeMessageSize(8, (gg.strims.ppspp.proto.ProfileOuterClass.Certificate) parentOneof_);
       }
+      if (!getSubjectBytes().isEmpty()) {
+        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(9, subject_);
+      }
       size += unknownFields.getSerializedSize();
       memoizedSize = size;
       return size;
@@ -20584,6 +20797,8 @@ public final class ProfileOuterClass {
       if (keyType_ != other.keyType_) return false;
       if (getKeyUsage()
           != other.getKeyUsage()) return false;
+      if (!getSubject()
+          .equals(other.getSubject())) return false;
       if (getNotBefore()
           != other.getNotBefore()) return false;
       if (getNotAfter()
@@ -20618,6 +20833,8 @@ public final class ProfileOuterClass {
       hash = (53 * hash) + keyType_;
       hash = (37 * hash) + KEY_USAGE_FIELD_NUMBER;
       hash = (53 * hash) + getKeyUsage();
+      hash = (37 * hash) + SUBJECT_FIELD_NUMBER;
+      hash = (53 * hash) + getSubject().hashCode();
       hash = (37 * hash) + NOT_BEFORE_FIELD_NUMBER;
       hash = (53 * hash) + com.google.protobuf.Internal.hashLong(
           getNotBefore());
@@ -20775,6 +20992,8 @@ public final class ProfileOuterClass {
 
         keyUsage_ = 0;
 
+        subject_ = "";
+
         notBefore_ = 0L;
 
         notAfter_ = 0L;
@@ -20814,6 +21033,7 @@ public final class ProfileOuterClass {
         result.key_ = key_;
         result.keyType_ = keyType_;
         result.keyUsage_ = keyUsage_;
+        result.subject_ = subject_;
         result.notBefore_ = notBefore_;
         result.notAfter_ = notAfter_;
         result.serialNumber_ = serialNumber_;
@@ -20882,6 +21102,10 @@ public final class ProfileOuterClass {
         }
         if (other.getKeyUsage() != 0) {
           setKeyUsage(other.getKeyUsage());
+        }
+        if (!other.getSubject().isEmpty()) {
+          subject_ = other.subject_;
+          onChanged();
         }
         if (other.getNotBefore() != 0L) {
           setNotBefore(other.getNotBefore());
@@ -21063,6 +21287,82 @@ public final class ProfileOuterClass {
       public Builder clearKeyUsage() {
         
         keyUsage_ = 0;
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object subject_ = "";
+      /**
+       * <code>string subject = 9;</code>
+       * @return The subject.
+       */
+      public java.lang.String getSubject() {
+        java.lang.Object ref = subject_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          subject_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string subject = 9;</code>
+       * @return The bytes for subject.
+       */
+      public com.google.protobuf.ByteString
+          getSubjectBytes() {
+        java.lang.Object ref = subject_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          subject_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string subject = 9;</code>
+       * @param value The subject to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSubject(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  
+        subject_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string subject = 9;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearSubject() {
+        
+        subject_ = getDefaultInstance().getSubject();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string subject = 9;</code>
+       * @param value The bytes for subject to set.
+       * @return This builder for chaining.
+       */
+      public Builder setSubjectBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+        
+        subject_ = value;
         onChanged();
         return this;
       }
@@ -31484,50 +31784,51 @@ public final class ProfileOuterClass {
       "ptions\022\022\n\niterations\030\001 \001(\r\022\020\n\010key_size\030\002" +
       " \001(\r\022\014\n\004salt\030\003 \001(\014B\r\n\013kdf_options\">\n\003Key" +
       "\022\026\n\004type\030\001 \001(\0162\010.KeyType\022\017\n\007private\030\002 \001(" +
-      "\014\022\016\n\006public\030\003 \001(\014\"c\n\022CertificateRequest\022" +
+      "\014\022\016\n\006public\030\003 \001(\014\"t\n\022CertificateRequest\022" +
       "\013\n\003key\030\001 \001(\014\022\032\n\010key_type\030\002 \001(\0162\010.KeyType" +
-      "\022\021\n\tkey_usage\030\003 \001(\r\022\021\n\tsignature\030\004 \001(\014\"\312" +
-      "\001\n\013Certificate\022\013\n\003key\030\001 \001(\014\022\032\n\010key_type\030" +
-      "\002 \001(\0162\010.KeyType\022\021\n\tkey_usage\030\003 \001(\r\022\022\n\nno" +
-      "t_before\030\004 \001(\004\022\021\n\tnot_after\030\005 \001(\004\022\025\n\rser" +
-      "ial_number\030\006 \001(\014\022\021\n\tsignature\030\007 \001(\014\022\036\n\006p" +
-      "arent\030\010 \001(\0132\014.CertificateH\000B\016\n\014parent_on" +
-      "eof\"\223\001\n\007Profile\022\n\n\002id\030\001 \001(\004\022\014\n\004name\030\002 \001(" +
-      "\t\022\016\n\006secret\030\003 \001(\014\022\021\n\003key\030\004 \001(\0132\004.Key\022\032\n\010" +
-      "networks\030\005 \003(\0132\010.Network\022/\n\023network_memb" +
-      "erships\030\006 \003(\0132\022.NetworkMembership\"*\n\016Pro" +
-      "fileSummary\022\n\n\002id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\"Y\n" +
-      "\007Network\022\n\n\002id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\022\021\n\003ke" +
-      "y\030\003 \001(\0132\004.Key\022!\n\013certificate\030\004 \001(\0132\014.Cer" +
-      "tificate\"\240\001\n\021NetworkMembership\022\n\n\002id\030\001 \001" +
-      "(\004\022\022\n\ncreated_at\030\002 \001(\004\022\014\n\004name\030\003 \001(\t\022$\n\016" +
-      "ca_certificate\030\004 \001(\0132\014.Certificate\022!\n\013ce" +
-      "rtificate\030\005 \001(\0132\014.Certificate\022\024\n\014last_se" +
-      "en_at\030\006 \001(\004\"u\n\036CreateNetworkInvitationRe" +
-      "quest\022\031\n\013signing_key\030\001 \001(\0132\004.Key\022\"\n\014sign" +
-      "ing_cert\030\002 \001(\0132\014.Certificate\022\024\n\014network_" +
-      "name\030\003 \001(\t\"t\n\037CreateNetworkInvitationRes" +
-      "ponse\022\037\n\ninvitation\030\001 \001(\0132\013.Invitation\022\026" +
-      "\n\016invitation_b64\030\002 \001(\t\022\030\n\020invitation_byt" +
-      "es\030\003 \001(\014\"+\n\nInvitation\022\017\n\007version\030\001 \001(\r\022" +
-      "\014\n\004data\030\002 \001(\014\"Z\n\014InvitationV0\022\021\n\003key\030\001 \001" +
-      "(\0132\004.Key\022!\n\013certificate\030\002 \001(\0132\014.Certific" +
-      "ate\022\024\n\014network_name\030\004 \001(\t\"r\n,CreateNetwo" +
-      "rkMembershipFromInvitationRequest\022\030\n\016inv" +
-      "itation_b64\030\001 \001(\tH\000\022\032\n\020invitation_bytes\030" +
-      "\002 \001(\014H\000B\014\n\ninvitation\"W\n-CreateNetworkMe" +
-      "mbershipFromInvitationResponse\022&\n\nmember" +
-      "ship\030\001 \001(\0132\022.NetworkMembership\"#\n\005Mutex\022" +
-      "\013\n\003eol\030\001 \001(\003\022\r\n\005token\030\002 \001(\014*=\n\007KDFType\022\026" +
-      "\n\022KDF_TYPE_UNDEFINED\020\000\022\032\n\026KDF_TYPE_PBKDF" +
-      "2_SHA256\020\001*L\n\007KeyType\022\026\n\022KEY_TYPE_UNDEFI" +
-      "NED\020\000\022\024\n\020KEY_TYPE_ED25519\020\001\022\023\n\017KEY_TYPE_" +
-      "X25519\020\002*\226\001\n\010KeyUsage\022\027\n\023KEY_USAGE_UNDEF" +
-      "INED\020\000\022\022\n\016KEY_USAGE_PEER\020\001\022\027\n\023KEY_USAGE_" +
-      "BOOTSTRAP\020\002\022\022\n\016KEY_USAGE_SIGN\020\004\022\024\n\020KEY_U" +
-      "SAGE_BROKER\020\010\022\032\n\026KEY_USAGE_ENCIPHERMENT\020" +
-      "\020BD\n\025gg.strims.ppspp.protoZ&github.com/M" +
-      "emeLabs/go-ppspp/pkg/pb;pb\272\002\002PBb\006proto3"
+      "\022\021\n\tkey_usage\030\003 \001(\r\022\017\n\007subject\030\005 \001(\t\022\021\n\t" +
+      "signature\030\004 \001(\014\"\333\001\n\013Certificate\022\013\n\003key\030\001" +
+      " \001(\014\022\032\n\010key_type\030\002 \001(\0162\010.KeyType\022\021\n\tkey_" +
+      "usage\030\003 \001(\r\022\017\n\007subject\030\t \001(\t\022\022\n\nnot_befo" +
+      "re\030\004 \001(\004\022\021\n\tnot_after\030\005 \001(\004\022\025\n\rserial_nu" +
+      "mber\030\006 \001(\014\022\021\n\tsignature\030\007 \001(\014\022\036\n\006parent\030" +
+      "\010 \001(\0132\014.CertificateH\000B\016\n\014parent_oneof\"\223\001" +
+      "\n\007Profile\022\n\n\002id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\022\016\n\006s" +
+      "ecret\030\003 \001(\014\022\021\n\003key\030\004 \001(\0132\004.Key\022\032\n\010networ" +
+      "ks\030\005 \003(\0132\010.Network\022/\n\023network_membership" +
+      "s\030\006 \003(\0132\022.NetworkMembership\"*\n\016ProfileSu" +
+      "mmary\022\n\n\002id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\"Y\n\007Netwo" +
+      "rk\022\n\n\002id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\022\021\n\003key\030\003 \001(" +
+      "\0132\004.Key\022!\n\013certificate\030\004 \001(\0132\014.Certifica" +
+      "te\"\240\001\n\021NetworkMembership\022\n\n\002id\030\001 \001(\004\022\022\n\n" +
+      "created_at\030\002 \001(\004\022\014\n\004name\030\003 \001(\t\022$\n\016ca_cer" +
+      "tificate\030\004 \001(\0132\014.Certificate\022!\n\013certific" +
+      "ate\030\005 \001(\0132\014.Certificate\022\024\n\014last_seen_at\030" +
+      "\006 \001(\004\"u\n\036CreateNetworkInvitationRequest\022" +
+      "\031\n\013signing_key\030\001 \001(\0132\004.Key\022\"\n\014signing_ce" +
+      "rt\030\002 \001(\0132\014.Certificate\022\024\n\014network_name\030\003" +
+      " \001(\t\"t\n\037CreateNetworkInvitationResponse\022" +
+      "\037\n\ninvitation\030\001 \001(\0132\013.Invitation\022\026\n\016invi" +
+      "tation_b64\030\002 \001(\t\022\030\n\020invitation_bytes\030\003 \001" +
+      "(\014\"+\n\nInvitation\022\017\n\007version\030\001 \001(\r\022\014\n\004dat" +
+      "a\030\002 \001(\014\"Z\n\014InvitationV0\022\021\n\003key\030\001 \001(\0132\004.K" +
+      "ey\022!\n\013certificate\030\002 \001(\0132\014.Certificate\022\024\n" +
+      "\014network_name\030\004 \001(\t\"r\n,CreateNetworkMemb" +
+      "ershipFromInvitationRequest\022\030\n\016invitatio" +
+      "n_b64\030\001 \001(\tH\000\022\032\n\020invitation_bytes\030\002 \001(\014H" +
+      "\000B\014\n\ninvitation\"W\n-CreateNetworkMembersh" +
+      "ipFromInvitationResponse\022&\n\nmembership\030\001" +
+      " \001(\0132\022.NetworkMembership\"#\n\005Mutex\022\013\n\003eol" +
+      "\030\001 \001(\003\022\r\n\005token\030\002 \001(\014*=\n\007KDFType\022\026\n\022KDF_" +
+      "TYPE_UNDEFINED\020\000\022\032\n\026KDF_TYPE_PBKDF2_SHA2" +
+      "56\020\001*L\n\007KeyType\022\026\n\022KEY_TYPE_UNDEFINED\020\000\022" +
+      "\024\n\020KEY_TYPE_ED25519\020\001\022\023\n\017KEY_TYPE_X25519" +
+      "\020\002*\226\001\n\010KeyUsage\022\027\n\023KEY_USAGE_UNDEFINED\020\000" +
+      "\022\022\n\016KEY_USAGE_PEER\020\001\022\027\n\023KEY_USAGE_BOOTST" +
+      "RAP\020\002\022\022\n\016KEY_USAGE_SIGN\020\004\022\024\n\020KEY_USAGE_B" +
+      "ROKER\020\010\022\032\n\026KEY_USAGE_ENCIPHERMENT\020\020BD\n\025g" +
+      "g.strims.ppspp.protoZ&github.com/MemeLab" +
+      "s/go-ppspp/pkg/pb;pb\272\002\002PBb\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -31724,13 +32025,13 @@ public final class ProfileOuterClass {
     internal_static_CertificateRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_CertificateRequest_descriptor,
-        new java.lang.String[] { "Key", "KeyType", "KeyUsage", "Signature", });
+        new java.lang.String[] { "Key", "KeyType", "KeyUsage", "Subject", "Signature", });
     internal_static_Certificate_descriptor =
       getDescriptor().getMessageTypes().get(31);
     internal_static_Certificate_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_Certificate_descriptor,
-        new java.lang.String[] { "Key", "KeyType", "KeyUsage", "NotBefore", "NotAfter", "SerialNumber", "Signature", "Parent", "ParentOneof", });
+        new java.lang.String[] { "Key", "KeyType", "KeyUsage", "Subject", "NotBefore", "NotAfter", "SerialNumber", "Signature", "Parent", "ParentOneof", });
     internal_static_Profile_descriptor =
       getDescriptor().getMessageTypes().get(32);
     internal_static_Profile_fieldAccessorTable = new

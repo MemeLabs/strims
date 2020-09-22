@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"math"
@@ -204,7 +205,7 @@ func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, err
 		},
 	)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("starting pubsub swarm failed: %w", err)
 	}
 	svc.Swarms.OpenSwarm(swarm)
 
@@ -214,7 +215,7 @@ func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, err
 	if err != nil {
 		svc.Swarms.CloseSwarm(swarm.ID())
 		cancel()
-		return nil, err
+		return nil, fmt.Errorf("publishing swarm to peer index failed: %w", err)
 	}
 
 	newSwarmPeerManager(ctx, svc, getPeersGetter(ctx, svc, key, salt))

@@ -145,7 +145,8 @@ func (s *Frontend) CreateNetwork(ctx context.Context, r *pb.CreateNetworkRequest
 		return nil, err
 	}
 
-	csr, err := dao.NewCertificateRequest(session.Profile().Key, pb.KeyUsage_KEY_USAGE_PEER)
+	profile := session.Profile()
+	csr, err := dao.NewCertificateRequest(profile.Key, pb.KeyUsage_KEY_USAGE_PEER, dao.WithSubject(profile.Name))
 	if err != nil {
 		return nil, err
 	}

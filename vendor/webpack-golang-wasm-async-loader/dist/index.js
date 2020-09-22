@@ -7,6 +7,7 @@ const path_1 = require("path");
 const proxyBuilder = (filename) => `
 export default gobridge(fetch('${filename}').then(response => response.arrayBuffer()));
 `;
+const versionPkg = "github.com/MemeLabs/go-ppspp/pkg/version";
 const getGoBin = (root) => `${root}/bin/go`;
 function loader(contents) {
     const cb = this.async();
@@ -23,7 +24,11 @@ function loader(contents) {
     const outFile = `${this.resourcePath}.wasm`;
     const args = ["build", "-mod", "readonly"];
     if (this.mode === "production") {
-        args.push("-trimpath", "-ldflags", "-s -w");
+        const rev = child_process_1.execFileSync("git", ["rev-parse", "HEAD"]).toString().substr(0, 8);
+        args.push("-trimpath", "-ldflags", `-s -w -X ${versionPkg}.Platform=web -X ${versionPkg}.Version=${rev}`);
+    }
+    else {
+        args.push("-ldflags", `-X ${versionPkg}.Platform=web`);
     }
     args.push("-o", outFile, this.resourcePath);
     child_process_1.execFile(goBin, args, opts, (err) => {

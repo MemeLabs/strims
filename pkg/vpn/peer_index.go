@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"log"
@@ -374,7 +374,7 @@ func (p *PeerIndexStore) Closest(peerIndexID uint32, hostID kademlia.ID, hash []
 }
 
 func peerIndexRecordHash(key, salt []byte) []byte {
-	hash := sha1.New()
+	hash := sha256.New()
 	if _, err := hash.Write(key); err != nil {
 		log.Println(err)
 	}
