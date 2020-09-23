@@ -1,7 +1,10 @@
 package kademlia
 
 import (
+	"crypto/sha256"
 	"testing"
+
+	"github.com/docker/docker/pkg/testutil/assert"
 )
 
 func TestXOR(t *testing.T) {
@@ -11,4 +14,19 @@ func TestXOR(t *testing.T) {
 	if !a.XOr(b).Equals(c) {
 		t.Fail()
 	}
+}
+
+func TestMarshalUnmarshal(t *testing.T) {
+	hash := sha256.New()
+	hash.Write([]byte("test"))
+	b0 := hash.Sum(nil)
+
+	id0, err := UnmarshalID(b0)
+	assert.NilError(t, err)
+
+	b1 := id0.Bytes(nil)
+	id1, err := UnmarshalID(b1)
+	assert.NilError(t, err)
+
+	assert.Equal(t, id0, id1)
 }

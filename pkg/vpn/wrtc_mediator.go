@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -289,7 +288,7 @@ func (s *PeerExchange) Connect(hostID kademlia.ID) error {
 		if err := s.dial(newMediator(hostID, s.network)); err != nil {
 			s.logger.Debug(
 				"dial failed requesting callback",
-				logutil.ByteHex("host", hostID.Bytes(nil)),
+				zap.Stringer("host", hostID),
 				zap.Error(err),
 			)
 			if err := s.sendCallbackRequest(hostID); err != nil {
@@ -328,7 +327,7 @@ func (s *PeerExchange) handleCallbackRequest(m *pb.PeerExchangeMessage_CallbackR
 func (s *PeerExchange) handleOffer(m *pb.PeerExchangeMessage_Offer, msg *Message) error {
 	s.logger.Debug(
 		"handling offer",
-		logutil.ByteHex("host", msg.FromHostID().Bytes(nil)),
+		zap.Stringer("host", msg.FromHostID()),
 	)
 	go func() {
 		if err := s.dial(newMediatorFromOffer(msg.FromHostID(), s.network, m.MediationId, m.Data)); err != nil {
@@ -348,7 +347,7 @@ func (s *PeerExchange) dial(t *mediator) error {
 
 	s.logger.Debug(
 		"creating connection",
-		logutil.ByteHex("host", t.id.Bytes(nil)),
+		zap.Stringer("host", t.id),
 	)
 
 	s.mediatorsLock.Lock()

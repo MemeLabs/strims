@@ -44,7 +44,7 @@ func newSwarmPeer(peer *vpn.Peer) *swarmPeer {
 
 	return &swarmPeer{
 		peer:       peer,
-		swarmPeer:  ppspp.NewPeer(peer.Certificate.Key),
+		swarmPeer:  ppspp.NewPeer(peer.HostID().Bytes(nil)),
 		rw:         rw,
 		swarmPorts: map[string]*swarmPeerSwarmItem{},
 	}
@@ -107,7 +107,7 @@ func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
 	go func() {
 		s.logger.Debug(
 			"opening swarm channel",
-			logutil.ByteHex("peer", p.peer.Certificate.Key),
+			zap.Stringer("peer", p.peer.HostID()),
 			zap.Stringer("swarm", s.swarm.ID()),
 			zap.Uint16("localPort", localPort),
 			zap.Uint16("remotePort", remotePort),
@@ -139,7 +139,7 @@ func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
 
 		s.logger.Debug(
 			"closed swarm channel",
-			logutil.ByteHex("peer", p.peer.Certificate.Key),
+			zap.Stringer("peer", p.peer.HostID()),
 			zap.Stringer("swarm", s.swarm.ID()),
 			zap.Uint16("localPort", localPort),
 			zap.Uint16("remotePort", remotePort),
@@ -235,7 +235,7 @@ func (t *swarmNetwork) sendOpen(s *swarmSwarm, p *swarmPeer) error {
 
 	t.logger.Debug(
 		"announcing swarm to peer",
-		logutil.ByteHex("peer", p.peer.Certificate.Key),
+		zap.Stringer("peer", p.peer.HostID()),
 		zap.Stringer("swarm", s.swarm.ID()),
 		zap.Uint16("port", port),
 	)

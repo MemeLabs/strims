@@ -247,7 +247,7 @@ func (h *networkBootstrap) removeNetworkLinks() {
 	for n, l := range h.links {
 		h.logger.Debug(
 			"removing peer from network",
-			logutil.ByteHex("peer", l.hostID.Bytes(nil)),
+			zap.Stringer("peer", l.hostID),
 			logutil.ByteHex("network", certificateParentKey(n.certificate)),
 		)
 
@@ -368,11 +368,6 @@ func NewNetwork(logger *zap.Logger, host *Host, certificate *pb.Certificate, rec
 }
 
 func (h *networkBootstrap) handleNetworkBindings(networkBindings, peerNetworkBindings []*pb.NetworkHandshake_NetworkBinding) error {
-	hostID, err := kademlia.UnmarshalID(h.peer.Certificate.Key)
-	if err != nil {
-		return err
-	}
-
 	for i, pb := range peerNetworkBindings {
 		b := networkBindings[i]
 
@@ -393,14 +388,14 @@ func (h *networkBootstrap) handleNetworkBindings(networkBindings, peerNetworkBin
 
 		h.logger.Debug(
 			"adding peer to network",
-			logutil.ByteHex("peer", hostID.Bytes(nil)),
+			zap.Stringer("peer", h.peer.hostID),
 			logutil.ByteHex("network", certificateParentKey(pb.Certificate)),
 			zap.Uint32("localPort", b.Port),
 			zap.Uint32("remotePort", pb.Port),
 		)
 
 		link := &networkLink{
-			hostID:          hostID,
+			hostID:          h.peer.hostID,
 			FrameReadWriter: NewFrameReadWriter(h.peer.Link, uint16(pb.Port), h.peer.Link.MTU()),
 		}
 		h.links[n] = link
@@ -528,6 +523,12 @@ func (n *Network) HandleFrame(f Frame) {
 
 // Send ...
 func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
+	n.logger.Debug(
+		"sending message",
+		zap.Stringer("dst", id),
+		zap.Uint16("srcPort", srcPort),
+		zap.Uint16("dstPort", port),
+	)
 	return n.handleMessage(&Message{
 		Header: MessageHeader{
 			DstID:   id,
@@ -542,13 +543,13 @@ func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
 
 func (n *Network) handleMessage(m *Message) error {
 	if m.Header.DstID.Equals(n.host.ID()) {
-		var src []byte
+		var src kademlia.ID
 		if len(m.Trailers) != 0 {
-			src = m.Trailers[0].HostID.Bytes(nil)
+			src = m.Trailers[0].HostID
 		}
 		n.logger.Debug(
 			"received message",
-			logutil.ByteHex("src", src),
+			zap.Stringer("src", src),
 			zap.Uint16("srcPort", m.Header.SrcPort),
 			zap.Uint16("dstPort", m.Header.DstPort),
 		)

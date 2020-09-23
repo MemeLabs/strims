@@ -190,12 +190,12 @@ func newPeerIndexItemKey(peerIndexID uint32, hash []byte, localHostID kademlia.I
 		k[i] ^= hash[i]
 	}
 
-	binary.BigEndian.PutUint32(k[20:], peerIndexID)
-	copy(k[24:], remoteHostID)
+	binary.BigEndian.PutUint32(k[kademlia.IDLength:], peerIndexID)
+	copy(k[kademlia.IDLength+4:], remoteHostID)
 	return k
 }
 
-type peerIndexItemKey [44]byte
+type peerIndexItemKey [kademlia.IDLength*2 + 4]byte
 
 func (k peerIndexItemKey) Less(o peerIndexItemKey) bool {
 	return bytes.Compare(k[:], o[:]) == -1

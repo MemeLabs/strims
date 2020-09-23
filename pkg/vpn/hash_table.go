@@ -175,11 +175,11 @@ func newHashTableItemKey(hashTableID uint32, hash []byte, localHostID kademlia.I
 		k[i] ^= hash[i]
 	}
 
-	binary.BigEndian.PutUint32(k[20:], hashTableID)
+	binary.BigEndian.PutUint32(k[kademlia.IDLength:], hashTableID)
 	return k
 }
 
-type hashTableItemKey [24]byte
+type hashTableItemKey [kademlia.IDLength + 4]byte
 
 func (k hashTableItemKey) Less(o hashTableItemKey) bool {
 	return bytes.Compare(k[:], o[:]) == -1
