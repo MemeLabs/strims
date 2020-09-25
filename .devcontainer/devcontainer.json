@@ -1,0 +1,33 @@
+// For format details, see https://aka.ms/vscode-remote/devcontainer.json
+{
+	"name": "go-ppspp development container",
+	"dockerFile": "Dockerfile",
+	"context": "..",
+	"postCreateCommand": "npm ci && go get ./...",
+
+	// Set *default* container specific settings.json values on container create.
+	"settings": {
+		"terminal.integrated.shell.linux": "/bin/bash"
+	},
+
+	// Add the IDs of extensions you want installed when the container is created.
+	"extensions": [
+		"codezombiech.gitignore",
+		"esbenp.prettier-vscode",
+		"gencer.html-slim-scss-css-class-completion",
+		"golang.go",
+		"ms-azuretools.vscode-docker",
+		"redhat.vscode-yaml",
+		"zxh404.vscode-proto3",
+		"dbaeumer.vscode-eslint",
+	],
+
+	// Use 'forwardPorts' to make a list of ports inside the container available locally.
+	"forwardPorts": [
+		1935,
+		8080,
+		8082,
+	],
+
+	"remoteUser": "vscode",
+}
