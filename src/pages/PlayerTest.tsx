@@ -25,7 +25,7 @@ const PlayerTest = () => {
     <MainLayout>
       <main className="home_page__main">
         <header className="home_page__subheader"></header>
-        <section className="home_page__main__video" style={{ position: "relative" }}>
+        <section className="home_page__main__video">
           {loaded && (
             <VideoPlayer
               networkKey={Base64.toUint8Array(params.networkKey)}

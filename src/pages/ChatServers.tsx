@@ -1,12 +1,20 @@
 import * as React from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
-import Select from "react-select";
+import Select, { OptionTypeBase } from "react-select";
 
 import { InputError, InputLabel, TextInput } from "../components/Form";
 import { MainLayout } from "../components/MainLayout";
 import { useCall, useLazyCall } from "../contexts/Api";
 import * as pb from "../lib/pb";
+
+interface ChatServerFormData {
+  name: string;
+  networkKey: {
+    value: Uint8Array;
+    label: string;
+  };
+}
 
 const ChatServerForm = ({ onCreate }: { onCreate: (res: pb.CreateChatServerResponse) => void }) => {
   const [{ value, error, loading }, createChatServer] = useLazyCall("createChatServer", {
@@ -14,11 +22,11 @@ const ChatServerForm = ({ onCreate }: { onCreate: (res: pb.CreateChatServerRespo
   });
   const [networkMembershipsRes] = useCall("getNetworkMemberships");
 
-  const { register, handleSubmit, control, errors } = useForm({
+  const { register, handleSubmit, control, errors } = useForm<ChatServerFormData>({
     mode: "onBlur",
   });
 
-  const onSubmit = (data) => {
+  const onSubmit = handleSubmit((data) => {
     createChatServer(
       new pb.CreateChatServerRequest({
         networkKey: data.networkKey.value,
@@ -27,10 +35,10 @@ const ChatServerForm = ({ onCreate }: { onCreate: (res: pb.CreateChatServerRespo
         },
       })
     );
-  };
+  });
 
   return (
-    <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
+    <form className="thing_form" onSubmit={onSubmit}>
       {error && <InputError error={error.message || "Error creating chat server"} />}
       <TextInput
         error={errors?.name}

@@ -24,7 +24,7 @@ const Emote: FunctionComponent<EmoteProps> = ({ children, name, modifiers, ...pr
     </span>
   );
 
-  if (modifiers && modifiers.length > 0) {
+  if (modifiers?.length > 0) {
     emote = modifiers.reduce(
       (emote, modifier, i) => (
         <span
