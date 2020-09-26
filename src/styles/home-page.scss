@@ -39,6 +39,8 @@
     flex: 1;
   }
 
+  $left-expanded-width: 200px;
+
   &__left {
     display: flex;
     flex-direction: column;
@@ -87,10 +89,20 @@
       flex-direction: row;
       align-items: center;
       padding: 5px 10px;
+      max-width: $left-expanded-width;
 
       &__text {
-        vertical-align: middle;
+        box-sizing: border-box;
+        display: flex;
+        max-width: 100%;
+        overflow: hidden;
         padding: 0 10px;
+
+        span {
+          overflow: hidden;
+          text-overflow: ellipsis;
+          white-space: nowrap;
+        }
       }
     }
 
@@ -107,6 +119,7 @@
     }
 
     &__link__gem {
+      flex: 0 0 30px;
       background: green;
       border-radius: 50%;
       height: 30px;
@@ -146,7 +159,7 @@
     }
 
     &--expanded {
-      flex: 0 0 150px;
+      flex: 0 0 $left-expanded-width;
 
       .main_layout__left {
         &__toggle {
@@ -246,8 +259,7 @@
       display: flex;
       flex: 0 1 1.5em;
       height: 2em;
-      justify-content: center;
-      justify-items: center;
+      align-items: center;
       outline: none;
 
       @include color-scheme('dark') {
@@ -306,6 +318,7 @@
       flex: 1;
       display: flex;
       flex-direction: column;
+      position: relative;
 
       &__video {
         flex: 1;

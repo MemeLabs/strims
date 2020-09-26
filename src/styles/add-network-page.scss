@@ -1,0 +1,59 @@
+.modal {
+  align-items: center;
+  display: flex;
+  height: 100vh;
+  justify-content: center;
+  left: 0;
+  position: fixed;
+  top: 0;
+  width: 100vw;
+  z-index: 100;
+
+  &__background {
+    background: rgba($black, 0.8);
+    height: 100vh;
+    position: absolute;
+    width: 100vw;
+  }
+
+  &__window {
+    background: $white;
+    border-radius: 10px;
+    width: 500px;
+    position: relative;
+  }
+
+  &__close_button {
+    position: absolute;
+    right: 10px;
+    top: 10px;
+    cursor: pointer;
+    color: $gray-200;
+    transition: color 200ms;
+
+    &:hover {
+      color: $slate-200;
+    }
+  }
+
+  &__body {
+    padding: 15px 10px;
+  }
+
+  &__footer {
+    background: $gray-500;
+    padding: 10px;
+    border-radius: 0 0 10px 10px;
+    display: flex;
+    justify-content: flex-end;
+    flex-direction: row;
+  }
+}
+
+.create_network {
+  &__title {
+    font-size: 1.2em;
+    line-height: 2em;
+    text-align: center;
+  }
+}

@@ -3,6 +3,13 @@ import { Base64 } from "js-base64";
 import Tooltip from "rc-tooltip";
 import * as React from "react";
 import { ReactElement } from "react";
+import {
+  DragDropContext,
+  Draggable,
+  DropResult,
+  Droppable,
+  ResponderProvided,
+} from "react-beautiful-dnd";
 import { BiNetworkChart } from "react-icons/bi";
 import {
   FiActivity,
@@ -17,20 +24,66 @@ import {
   FiUser,
   FiVideo,
 } from "react-icons/fi";
-import { Link } from "react-router-dom";
+import { Link, useHistory } from "react-router-dom";
 import { useToggle } from "react-use";
+import usePortal from "react-useportal";
 
 import { useCall, useClient } from "../contexts/Api";
 import { useTheme } from "../contexts/Theme";
+import { CreateNetworkResponse, INetworkMembership } from "../lib/pb";
+import AddNetworkModal from "./AddNetworkModal";
+
+const NetworkAddButton: React.FunctionComponent<React.ComponentProps<"button">> = ({
+  children,
+  ...props
+}) => {
+  const { isOpen, openPortal, closePortal, Portal } = usePortal();
+  const history = useHistory();
+
+  const handleCreate = (res: CreateNetworkResponse) => {
+    history.push(`/directory/${Base64.fromUint8Array(res.network.key.public, true)}`);
+    closePortal();
+  };
+
+  return (
+    <>
+      <button {...props} onClick={openPortal}>
+        {children}
+      </button>
+      {isOpen && (
+        <Portal>
+          <AddNetworkModal onCreate={handleCreate} onClose={closePortal} />
+        </Portal>
+      )}
+    </>
+  );
+};
 
 const NetworkNav = () => {
   const [expanded, toggleExpanded] = useToggle(false);
-  const [networkMembershipsRes] = useCall("getNetworkMemberships");
+  const [networkMemberships, setNetworkMemberships] = React.useState<INetworkMembership[]>([]);
+
+  const [{ error, loading }] = useCall("getNetworkMemberships", {
+    onComplete: (res) => setNetworkMemberships(res.networkMemberships),
+  });
+
+  const onDragEnd = React.useCallback((result: DropResult, provided: ResponderProvided) => {
+    if (!result.destination) {
+      return;
+    }
+
+    setNetworkMemberships((prev) => {
+      const next = Array.from(prev);
+      const [target] = next.splice(result.source.index, 1);
+      next.splice(result.destination.index, 0, target);
+      return next;
+    });
+  }, []);
 
   let links: ReactElement;
-  if (networkMembershipsRes.error) {
+  if (error) {
     links = <div>error</div>;
-  } else if (networkMembershipsRes.loading) {
+  } else if (loading) {
     links = <div>...</div>;
   } else {
     links = (
@@ -40,16 +93,48 @@ const NetworkNav = () => {
             <BiNetworkChart />
           </div>
         </Tooltip>
-        {networkMembershipsRes.value.networkMemberships.map((membership) => (
-          <Link
-            to={`/directory/${Base64.fromUint8Array(membership.caCertificate.key, true)}`}
-            className="main_layout__left__link"
-            key={membership.id}
-          >
-            <div className="main_layout__left__link__gem">{membership.name.substr(0, 1)}</div>
-            <div className="main_layout__left__link__text">{membership.name}</div>
-          </Link>
-        ))}
+        <DragDropContext onDragEnd={onDragEnd}>
+          <Droppable droppableId="networks">
+            {(provided, snapshot) => (
+              <div ref={provided.innerRef} {...provided.droppableProps}>
+                {networkMemberships.map((membership, i) => (
+                  <Draggable draggableId={`network-${membership.id}`} index={i} key={membership.id}>
+                    {(provided, snapshot) => (
+                      <div
+                        ref={provided.innerRef}
+                        {...provided.draggableProps}
+                        {...provided.dragHandleProps}
+                      >
+                        <Tooltip
+                          placement="right"
+                          trigger={["hover"]}
+                          overlay={membership.name}
+                          {...(expanded ? { visible: false } : {})}
+                        >
+                          <Link
+                            to={`/directory/${Base64.fromUint8Array(
+                              membership.caCertificate.key,
+                              true
+                            )}`}
+                            className="main_layout__left__link"
+                          >
+                            <div className="main_layout__left__link__gem">
+                              {membership.name.substr(0, 1)}
+                            </div>
+                            <div className="main_layout__left__link__text">
+                              <span>{membership.name}</span>
+                            </div>
+                          </Link>
+                        </Tooltip>
+                      </div>
+                    )}
+                  </Draggable>
+                ))}
+                {provided.placeholder}
+              </div>
+            )}
+          </Droppable>
+        </DragDropContext>
       </>
     );
   }
@@ -75,12 +160,12 @@ const NetworkNav = () => {
         </Tooltip>
       </div>
       {links}
-      <button className="main_layout__left__add">
+      <NetworkAddButton className="main_layout__left__add">
         <div className="main_layout__left__add__gem">
           <FiPlus />
         </div>
         <div className="main_layout__left__add__text">Add</div>
-      </button>
+      </NetworkAddButton>
     </aside>
   );
 };
