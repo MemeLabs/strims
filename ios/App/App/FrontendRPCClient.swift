@@ -3,7 +3,6 @@
 //  FrontendRPCClient.swift
 //  App
 //
-//  Created by Slugalisk on 8/22/20.
 //  Copyright © 2020 MemeLabs. All rights reserved.
 //
 
@@ -68,7 +67,6 @@ class FrontendRPCClient: RPCClient {
   public func getBootstrapClients(_ arg: PBGetBootstrapClientsRequest = PBGetBootstrapClientsRequest()) -> Promise<PBGetBootstrapClientsResponse> {
     return self.callUnary("getBootstrapClients", arg)
   }
-
   public func createChatServer(_ arg: PBCreateChatServerRequest = PBCreateChatServerRequest()) -> Promise<PBCreateChatServerResponse> {
     return self.callUnary("createChatServer", arg)
   }
@@ -84,14 +82,12 @@ class FrontendRPCClient: RPCClient {
   public func getChatServers(_ arg: PBGetChatServersRequest = PBGetChatServersRequest()) -> Promise<PBGetChatServersResponse> {
     return self.callUnary("getChatServers", arg)
   }
-
   public func startVPN(_ arg: PBStartVPNRequest = PBStartVPNRequest()) throws -> RPCResponseStream<PBNetworkEvent> {
     return try self.callStreaming("startVPN", arg)
   }
   public func stopVPN(_ arg: PBStopVPNRequest = PBStopVPNRequest()) -> Promise<PBStopVPNResponse> {
     return self.callUnary("stopVPN", arg)
   }
-
   public func joinSwarm(_ arg: PBJoinSwarmRequest = PBJoinSwarmRequest()) -> Promise<PBJoinSwarmResponse> {
     return self.callUnary("joinSwarm", arg)
   }
@@ -126,7 +122,7 @@ class FrontendRPCClient: RPCClient {
     return self.callUnary("publishSwarm", arg)
   }
   public func pprof(_ arg: PBPProfRequest = PBPProfRequest()) -> Promise<PBPProfResponse> {
-    return self.callUnary("pProf", arg)
+    return self.callUnary("pprof", arg)
   }
   public func openChatServer(_ arg: PBOpenChatServerRequest = PBOpenChatServerRequest()) throws -> RPCResponseStream<PBChatServerEvent> {
     return try self.callStreaming("openChatServer", arg)
@@ -134,8 +130,8 @@ class FrontendRPCClient: RPCClient {
   public func openChatClient(_ arg: PBOpenChatClientRequest = PBOpenChatClientRequest()) throws -> RPCResponseStream<PBChatClientEvent> {
     return try self.callStreaming("openChatClient", arg)
   }
-  public func callChatClient(_ arg: PBCallChatClientRequest = PBCallChatClientRequest()) throws {
-    try self.call("callChatClient", arg)
+  public func callChatClient(_ arg: PBCallChatClientRequest = PBCallChatClientRequest()) -> Promise<PBCallChatClientResponse> {
+    return self.callUnary("callChatClient", arg)
   }
   public func openVideoClient(_ arg: PBVideoClientOpenRequest = PBVideoClientOpenRequest()) throws -> RPCResponseStream<PBVideoClientEvent> {
     return try self.callStreaming("openVideoClient", arg)
@@ -161,4 +157,5 @@ class FrontendRPCClient: RPCClient {
   public func publishNetworkToBootstrapPeer(_ arg: PBPublishNetworkToBootstrapPeerRequest = PBPublishNetworkToBootstrapPeerRequest()) -> Promise<PBPublishNetworkToBootstrapPeerResponse> {
     return self.callUnary("publishNetworkToBootstrapPeer", arg)
   }
+  
 }
