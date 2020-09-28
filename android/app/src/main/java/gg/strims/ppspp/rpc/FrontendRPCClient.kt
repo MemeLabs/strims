@@ -1,10 +1,16 @@
 package gg.strims.ppspp.rpc
-
 import gg.strims.ppspp.proto.Api.*
 import gg.strims.ppspp.proto.Chat.*
-import gg.strims.ppspp.proto.ProfileOuterClass.*
+import gg.strims.ppspp.proto.Directory.*
+import gg.strims.ppspp.proto.HashTable.*
+import gg.strims.ppspp.proto.Nickserv.*
+import gg.strims.ppspp.proto.PeerIndex.*
+import gg.strims.ppspp.proto.Profile.*
+import gg.strims.ppspp.proto.PubSub.*
+import gg.strims.ppspp.proto.Rpc.*
 import gg.strims.ppspp.proto.Video.*
 import gg.strims.ppspp.proto.Vpn.*
+
 import java.util.concurrent.Future
 
 class FrontendRPCClient(filepath: String) : RPCClient(filepath) {

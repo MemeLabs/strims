@@ -24,9 +24,29 @@ func ToCamel(input string) string {
 	return strings.ToLower(string(input[0])) + input[1:]
 }
 
+func ImportToPascalCase(fileName string) string {
+	for {
+		i := strings.Index(fileName, "_")
+		if i < 0 {
+			break
+		}
+		fileName = strings.Replace(fileName, "_", "", 1)
+		if len(fileName) >= i+1 {
+			fileName = fileName[:i] + strings.ToUpper(string(fileName[i])) + fileName[i+1:]
+		}
+	}
+
+	return strings.TrimSuffix(strings.ToUpper(string(fileName[0]))+fileName[1:], ".proto")
+}
+
+type ProtoService struct {
+	*proto.Service
+	Imports []*proto.Import
+}
+
 // Generator can be implemented for any language to generate client definitions
 type Generator interface {
-	OutputPath(*proto.Service) string
+	OutputPath(ProtoService) string
 	Template() *template.Template
 	Format(string) error
 }
@@ -37,6 +57,7 @@ func main() {
 		log.Fatal(err)
 	}
 	funcMap["ToCamel"] = ToCamel
+	funcMap["ToPascal"] = ImportToPascalCase
 
 	err = filepath.Walk(path.Join(wd, "schema"), func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -54,7 +75,14 @@ func main() {
 		if err != nil {
 			return err
 		}
-		proto.Walk(res, proto.WithService(genService))
+		var imports []*proto.Import
+		proto.Walk(res, proto.WithImport(func(i *proto.Import) {
+			imports = append(imports, i)
+		}))
+
+		proto.Walk(res, proto.WithService(func(s *proto.Service) {
+			genService(ProtoService{s, imports})
+		}))
 
 		return nil
 	})
@@ -64,7 +92,7 @@ func main() {
 	}
 }
 
-func genService(service *proto.Service) {
+func genService(service ProtoService) {
 	for _, generator := range generators {
 		file, err := os.OpenFile(generator.OutputPath(service), os.O_CREATE|os.O_WRONLY, os.ModePerm)
 		if err != nil {
@@ -83,7 +111,7 @@ func genService(service *proto.Service) {
 	}
 }
 
-func writeTemplate(t *template.Template, service *proto.Service, w io.WriteCloser) error {
+func writeTemplate(t *template.Template, service ProtoService, w io.WriteCloser) error {
 	if err := t.Execute(w, service); err != nil {
 		return fmt.Errorf("failed to execute template: %w", err)
 	}
@@ -95,7 +123,7 @@ func writeTemplate(t *template.Template, service *proto.Service, w io.WriteClose
 
 type TsGen struct{}
 
-func (g *TsGen) OutputPath(service *proto.Service) string {
+func (g *TsGen) OutputPath(service ProtoService) string {
 	return path.Join(wd, "src", "lib", "api", ToCamel(service.Name)+"Client.ts")
 }
 
@@ -130,7 +158,7 @@ func (g *TsGen) Format(path string) error {
 
 type SwiftGen struct{}
 
-func (g *SwiftGen) OutputPath(service *proto.Service) string {
+func (g *SwiftGen) OutputPath(service ProtoService) string {
 	return path.Join(wd, "ios", "App", "App", service.Name+"Client.swift")
 }
 
@@ -163,19 +191,15 @@ func (g *SwiftGen) Format(path string) error {
 
 type KotlinGen struct{}
 
-func (g *KotlinGen) OutputPath(service *proto.Service) string {
+func (g *KotlinGen) OutputPath(service ProtoService) string {
 	return path.Join(wd, "android", "app", "src", "main", "java", "gg", "strims", "ppspp", "rpc", service.Name+"Client.kt")
 }
 
 func (g *KotlinGen) Template() *template.Template {
 	// TODO: don't hardcode imports
 	return template.Must(template.New("ts").Funcs(funcMap).Parse(`package gg.strims.ppspp.rpc
-
-import gg.strims.ppspp.proto.Api.*
-import gg.strims.ppspp.proto.Chat.*
-import gg.strims.ppspp.proto.ProfileOuterClass.*
-import gg.strims.ppspp.proto.Video.*
-import gg.strims.ppspp.proto.Vpn.*
+{{range .Imports}}import gg.strims.ppspp.proto.{{.Filename | ToPascal}}.*
+{{end}}
 import java.util.concurrent.Future
 
 class {{.Name}}Client(filepath: String) : RPCClient(filepath) {

@@ -7,7 +7,6 @@ option swift_prefix = "PB";
 import "api.proto";
 import "chat.proto";
 import "directory.proto";
-import "frontend.proto";
 import "hash_table.proto";
 import "nickserv.proto";
 import "peer_index.proto";
@@ -30,38 +29,25 @@ service FrontendRPC {
   rpc deleteNetwork(DeleteNetworkRequest) returns (DeleteNetworkResponse);
   rpc getNetwork(GetNetworkRequest) returns (GetNetworkResponse);
   rpc getNetworks(GetNetworksRequest) returns (GetNetworksResponse);
-  rpc getNetworkMemberships(GetNetworkMembershipsRequest)
-      returns (GetNetworkMembershipsResponse);
-  rpc deleteNetworkMembership(DeleteNetworkMembershipRequest)
-      returns (DeleteNetworkMembershipResponse);
-  rpc createBootstrapClient(CreateBootstrapClientRequest)
-      returns (CreateBootstrapClientResponse);
-  rpc updateBootstrapClient(UpdateBootstrapClientRequest)
-      returns (UpdateBootstrapClientResponse);
-  rpc deleteBootstrapClient(DeleteBootstrapClientRequest)
-      returns (DeleteBootstrapClientResponse);
-  rpc getBootstrapClient(GetBootstrapClientRequest)
-      returns (GetBootstrapClientResponse);
-  rpc getBootstrapClients(GetBootstrapClientsRequest)
-      returns (GetBootstrapClientsResponse);
-  rpc createChatServer(CreateChatServerRequest)
-      returns (CreateChatServerResponse);
-  rpc updateChatServer(UpdateChatServerRequest)
-      returns (UpdateChatServerResponse);
-  rpc deleteChatServer(DeleteChatServerRequest)
-      returns (DeleteChatServerResponse);
+  rpc getNetworkMemberships(GetNetworkMembershipsRequest) returns (GetNetworkMembershipsResponse);
+  rpc deleteNetworkMembership(DeleteNetworkMembershipRequest) returns (DeleteNetworkMembershipResponse);
+  rpc createBootstrapClient(CreateBootstrapClientRequest) returns (CreateBootstrapClientResponse);
+  rpc updateBootstrapClient(UpdateBootstrapClientRequest) returns (UpdateBootstrapClientResponse);
+  rpc deleteBootstrapClient(DeleteBootstrapClientRequest) returns (DeleteBootstrapClientResponse);
+  rpc getBootstrapClient(GetBootstrapClientRequest) returns (GetBootstrapClientResponse);
+  rpc getBootstrapClients(GetBootstrapClientsRequest) returns (GetBootstrapClientsResponse);
+  rpc createChatServer(CreateChatServerRequest) returns (CreateChatServerResponse);
+  rpc updateChatServer(UpdateChatServerRequest) returns (UpdateChatServerResponse);
+  rpc deleteChatServer(DeleteChatServerRequest) returns (DeleteChatServerResponse);
   rpc getChatServer(GetChatServerRequest) returns (GetChatServerResponse);
   rpc getChatServers(GetChatServersRequest) returns (GetChatServersResponse);
   rpc startVPN(StartVPNRequest) returns (stream NetworkEvent);
   rpc stopVPN(StopVPNRequest) returns (StopVPNResponse);
   rpc joinSwarm(JoinSwarmRequest) returns (JoinSwarmResponse);
   rpc leaveSwarm(LeaveSwarmRequest) returns (LeaveSwarmResponse);
-  rpc getIngressStreams(GetIngressStreamsRequest)
-      returns (stream GetIngressStreamsResponse);
-  rpc startRTMPIngress(StartRTMPIngressRequest)
-      returns (StartRTMPIngressResponse);
-  rpc stopRTMPIngress(StartRTMPIngressRequest)
-      returns (StartRTMPIngressResponse);
+  rpc getIngressStreams(GetIngressStreamsRequest) returns (stream GetIngressStreamsResponse);
+  rpc startRTMPIngress(StartRTMPIngressRequest) returns (StartRTMPIngressResponse);
+  rpc stopRTMPIngress(StartRTMPIngressRequest) returns (StartRTMPIngressResponse);
   rpc startHLSEgress(StartHLSEgressRequest) returns (StartHLSEgressResponse);
   rpc stopHLSEgress(StopHLSEgressRequest) returns (StopHLSEgressResponse);
   rpc startSwarm(StartSwarmRequest) returns (StartSwarmResponse);
@@ -74,16 +60,10 @@ service FrontendRPC {
   rpc callChatClient(CallChatClientRequest) returns (CallChatClientResponse);
   rpc openVideoClient(VideoClientOpenRequest) returns (stream VideoClientEvent);
   rpc openVideoServer(VideoServerOpenRequest) returns (VideoServerOpenResponse);
-  rpc writeToVideoServer(VideoServerWriteRequest)
-      returns (VideoServerWriteResponse);
+  rpc writeToVideoServer(VideoServerWriteRequest) returns (VideoServerWriteResponse);
   rpc readMetrics(ReadMetricsRequest) returns (ReadMetricsResponse);
-  rpc createNetworkInvitation(CreateNetworkInvitationRequest)
-      returns (CreateNetworkInvitationResponse);
-  rpc createNetworkMembershipFromInvitation(
-      CreateNetworkMembershipFromInvitationRequest)
-      returns (CreateNetworkMembershipFromInvitationResponse);
-  rpc getBootstrapPeers(GetBootstrapPeersRequest)
-      returns (GetBootstrapPeersResponse);
-  rpc publishNetworkToBootstrapPeer(PublishNetworkToBootstrapPeerRequest)
-      returns (PublishNetworkToBootstrapPeerResponse);
+  rpc createNetworkInvitation(CreateNetworkInvitationRequest) returns (CreateNetworkInvitationResponse);
+  rpc createNetworkMembershipFromInvitation(CreateNetworkMembershipFromInvitationRequest) returns (CreateNetworkMembershipFromInvitationResponse);
+  rpc getBootstrapPeers(GetBootstrapPeersRequest) returns (GetBootstrapPeersResponse);
+  rpc publishNetworkToBootstrapPeer(PublishNetworkToBootstrapPeerRequest) returns (PublishNetworkToBootstrapPeerResponse);
 }
