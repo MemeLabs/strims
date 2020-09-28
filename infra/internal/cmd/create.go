@@ -79,8 +79,11 @@ var createCmd = &cobra.Command{
 		}
 
 		jsonDump(n)
+		priv, _, err := wgutil.GenerateKey()
+		if err != nil {
+			return fmt.Errorf("failed to create wg keys: %w", err)
+		}
 
-		// TODO: query out active peers from db and append to static peers
 		tx, err := boil.BeginTx(cmd.Context(), nil)
 		if err != nil {
 			return err
@@ -90,16 +93,27 @@ var createCmd = &cobra.Command{
 			return err
 		}
 
+		for i := 0; i < len(slice); i++ {
+			for _, peer := range backend.Conf.Peers {
+				if peer.Endpoint == slice[i].IPV4 {
+					continue
+				}
+			}
+
+			backend.Conf.Peers = append(backend.Conf.Peers, wgutil.InterfacePeerConfig{
+				PublicKey:           slice[i].WireguardKey,
+				AllowedIPs:          slice[i].WireguardIP,
+				Endpoint:            slice[i].IPV4,
+				PersistentKeepalive: 25,
+			})
+		}
+
 		wgIPv4, err := backend.NextWGIPv4(cmd.Context(), slice)
 		if wgIPv4 == "" || err != nil {
 			return fmt.Errorf("failed to get next wg ipv4: %w", err)
 		}
-		_, _, err = wgutil.GenerateKey()
-		if err != nil {
-			return fmt.Errorf("failed to create wg keys: %w", err)
-		}
 
-		if err := backend.InsertNode(cmd.Context(), n); err != nil {
+		if err := backend.InsertNode(cmd.Context(), n, priv, wgIPv4); err != nil {
 			return fmt.Errorf("failed to insert node(%v): %w", n, err)
 		}
 

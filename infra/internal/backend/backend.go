@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"os"
 	"os/exec"
@@ -258,7 +259,7 @@ OUTER:
 	return "", fmt.Errorf("failed to find next wg ipv4")
 }
 
-func (b *Backend) InsertNode(ctx context.Context, node *node.Node) error {
+func (b *Backend) InsertNode(ctx context.Context, node *node.Node, wgKey, wgIP string) error {
 
 	// TODO: node pricing
 	nodeEntry := &models.Node{
@@ -271,9 +272,11 @@ func (b *Backend) InsertNode(ctx context.Context, node *node.Node) error {
 		Disk:       int64(node.Disk),
 		IPV4:       node.Networks.V4[0],
 		// IPV6:       node.Networks.V6[0],
-		RegionName: node.Region.Name,
-		RegionLat:  float64(node.Region.LatLng.Lat),
-		RegionLng:  float64(node.Region.LatLng.Lng),
+		RegionName:   node.Region.Name,
+		RegionLat:    float64(node.Region.LatLng.Lat),
+		RegionLng:    float64(node.Region.LatLng.Lng),
+		WireguardIP:  wgIP,
+		WireguardKey: wgKey,
 	}
 
 	if err := nodeEntry.Insert(ctx, b.DB, boil.Infer()); err != nil {
@@ -299,22 +302,48 @@ func (b *Backend) UpdateController() error {
 		return fmt.Errorf("failed to close temp file: %w", err)
 	}
 
-	// TODO: this assumes running from lxc host which is not accurate long term.
-	// This can be removed as the temp file will be written directly on the
-	// container.
+	// TODO: with the understanding that the final binary will be executed on
+	// the lxc master we can just do the work from the python script in Go all
+	// of this can be replaced with:
+	/*
+		const wgConf = "/etc/wireguard/wg0.conf"
+		tmp, err := ioutil.TempFile("", "goppspp")
+		if err != nil {
+			return fmt.Errorf("failed to create tmp file: %w", err)
+		}
+		defer os.Remove(tmp.Name())
+
+		// back up wireguard conf
+		if err := copyFile(tmp.Name(), wgConf); err != nil {
+			return fmt.Errorf("failed to copy file: (%s to %s) %v", tmp.Name(), wgConf, err)
+		}
+
+		// replace wg conf with new conf
+		if err := copyFile(wgConf, newConfLocation); err != nil {
+			return fmt.Errorf("failed to copy file: (%s to %s) %v", wgConf, newConfLocation, err)
+		}
+
+		if err := run("wg", "setconf", "wg0", "<(", "wg-quick", "strip", "wg0", ")"); err != nil {
+			return fmt.Errorf("failed to run 'wg setconf': %v", err)
+		}
+	*/
 	if err := run(
 		"lxc", "file", "push", tmp.Name(), fmt.Sprintf("%s%s", containerName, location),
 	); err != nil {
 		return fmt.Errorf("failed to push file to container: %w", err)
 	}
 
-	// TODO: remove `lxc exec`
 	if err := run(
 		"lxc", "exec", "-T", containerName, "--",
 		"python3", "/mnt/controller-sync-wg.py", location,
 	); err != nil {
 		return fmt.Errorf("failed to update controller: %w", err)
 	}
+	return nil
+}
+
+func (b *Backend) controllerSync(newConfLocation string) error {
+
 	return nil
 }
 
@@ -352,8 +381,19 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user, wgIP stri
 }
 
 func (b *Backend) SyncNodes(ctx context.Context, nodes []*node.Node) error {
-	// TODO: for each node, update config (`scripts/node-sync-wg.sh`)
-	return fmt.Errorf("unimplemented")
+	for _, node := range nodes {
+		if err := run(
+			"scripts/node-sync-wg.sh",
+			// TODO: can we just have a map of default user keyed on provider?
+			"",
+			node.Networks.V4[0],
+			b.SSHIdentityFile(),
+			b.Conf.String(),
+		); err != nil {
+			return fmt.Errorf("failed to exec 'node-sync-wg.sh': %w", err)
+		}
+	}
+	return nil
 }
 
 // sshToNode allows connection to an instance via SSH. A user, address and
@@ -389,4 +429,26 @@ func run(args ...string) error {
 		return fmt.Errorf("failed to exec cmd: %w with %q", err, output)
 	}
 	return nil
+}
+
+// copyFile copies the src file to dst. Any existing file will be overwritten
+// and will not copy file attributes.
+func copyFile(src, dst string) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.Create(dst)
+	if err != nil {
+		return err
+	}
+	defer out.Close()
+
+	_, err = io.Copy(out, in)
+	if err != nil {
+		return err
+	}
+	return out.Close()
 }
