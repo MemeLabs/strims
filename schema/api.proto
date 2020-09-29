@@ -30,7 +30,6 @@ enum MetricsFormat {
   METRICS_FORMAT_OPEN_METRICS = 4;
 }
 
-
 // TODO: discard
 message MonitorSwarmsRequest {}
 message MonitorSwarmsResponse {

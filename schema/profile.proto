@@ -50,8 +50,14 @@ message LoadSessionResponse {
   Profile profile = 2;
 }
 
+message NetworkIcon {
+  bytes data = 1;
+  string type = 2;
+}
+
 message CreateNetworkRequest {
   string name = 1;
+  NetworkIcon icon = 2;
 }
 message CreateNetworkResponse {
   Network network = 1;

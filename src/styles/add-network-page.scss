@@ -56,4 +56,16 @@
     line-height: 2em;
     text-align: center;
   }
+
+  &__description {
+    text-align: center;
+    color: $slate-500;
+    font-size: 0.9em;
+  }
+
+  &__avatar {
+    display: flex;
+    justify-content: center;
+    margin: 20px 0 30px;
+  }
 }

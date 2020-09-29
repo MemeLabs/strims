@@ -9,15 +9,15 @@ import Client from "../lib/api/client";
 const LoadingMessage = () => <p className="loading_message">loading</p>;
 
 const Provider = ({ client, children }: { client: Client; children: any }) => (
-  <ThemeProvider>
-    <BrowserRouter>
-      <React.Suspense fallback={<LoadingMessage />}>
-        <ApiProvider value={client}>
+  <BrowserRouter>
+    <React.Suspense fallback={<LoadingMessage />}>
+      <ApiProvider value={client}>
+        <ThemeProvider>
           <ProfileProvider>{children}</ProfileProvider>
-        </ApiProvider>
-      </React.Suspense>
-    </BrowserRouter>
-  </ThemeProvider>
+        </ThemeProvider>
+      </ApiProvider>
+    </React.Suspense>
+  </BrowserRouter>
 );
 
 export default Provider;

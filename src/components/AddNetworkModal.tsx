@@ -4,7 +4,7 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { MdClose } from "react-icons/md";
 
-import { InputError, TextInput } from "../components/Form";
+import { AvatarInput, ImageValue, InputError, TextInput } from "../components/Form";
 import { MainLayout } from "../components/MainLayout";
 import { useClient, useLazyCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
@@ -23,6 +23,7 @@ interface AddNetworkModalProps {
 
 interface AddNetworkFormData {
   name: string;
+  icon: ImageValue;
 }
 
 const AddNetworkModal: React.FunctionComponent<AddNetworkModalProps> = ({ onCreate, onClose }) => {
@@ -31,7 +32,7 @@ const AddNetworkModal: React.FunctionComponent<AddNetworkModalProps> = ({ onCrea
   const [{ error, loading }, createNetwork] = useLazyCall("createNetwork", {
     onComplete: onCreate,
   });
-  const { register, handleSubmit, errors } = useForm<AddNetworkFormData>({
+  const { control, register, handleSubmit, errors } = useForm<AddNetworkFormData>({
     mode: "onBlur",
   });
 
@@ -47,7 +48,14 @@ const AddNetworkModal: React.FunctionComponent<AddNetworkModalProps> = ({ onCrea
         <form onSubmit={onSubmit}>
           <div className="modal__body">
             <h1 className="create_network__title">Create a network</h1>
+            <div className="create_network__description">
+              Give your new network a personality with a name and an icon. You can always change it
+              later.
+            </div>
             {error && <InputError error={error.message || "Error creating network"} />}
+            <div className="create_network__avatar">
+              <AvatarInput name="icon" control={control} />
+            </div>
             <TextInput
               error={errors.name && "Name is required"}
               inputRef={register({ required: true })}

@@ -9463,6 +9463,648 @@ public final class ProfileOuterClass {
 
   }
 
+  public interface NetworkIconOrBuilder extends
+      // @@protoc_insertion_point(interface_extends:NetworkIcon)
+      com.google.protobuf.MessageOrBuilder {
+
+    /**
+     * <code>bytes data = 1;</code>
+     * @return The data.
+     */
+    com.google.protobuf.ByteString getData();
+
+    /**
+     * <code>string type = 2;</code>
+     * @return The type.
+     */
+    java.lang.String getType();
+    /**
+     * <code>string type = 2;</code>
+     * @return The bytes for type.
+     */
+    com.google.protobuf.ByteString
+        getTypeBytes();
+  }
+  /**
+   * Protobuf type {@code NetworkIcon}
+   */
+  public static final class NetworkIcon extends
+      com.google.protobuf.GeneratedMessageV3 implements
+      // @@protoc_insertion_point(message_implements:NetworkIcon)
+      NetworkIconOrBuilder {
+  private static final long serialVersionUID = 0L;
+    // Use NetworkIcon.newBuilder() to construct.
+    private NetworkIcon(com.google.protobuf.GeneratedMessageV3.Builder<?> builder) {
+      super(builder);
+    }
+    private NetworkIcon() {
+      data_ = com.google.protobuf.ByteString.EMPTY;
+      type_ = "";
+    }
+
+    @java.lang.Override
+    @SuppressWarnings({"unused"})
+    protected java.lang.Object newInstance(
+        UnusedPrivateParameter unused) {
+      return new NetworkIcon();
+    }
+
+    @java.lang.Override
+    public final com.google.protobuf.UnknownFieldSet
+    getUnknownFields() {
+      return this.unknownFields;
+    }
+    private NetworkIcon(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      this();
+      if (extensionRegistry == null) {
+        throw new java.lang.NullPointerException();
+      }
+      com.google.protobuf.UnknownFieldSet.Builder unknownFields =
+          com.google.protobuf.UnknownFieldSet.newBuilder();
+      try {
+        boolean done = false;
+        while (!done) {
+          int tag = input.readTag();
+          switch (tag) {
+            case 0:
+              done = true;
+              break;
+            case 10: {
+
+              data_ = input.readBytes();
+              break;
+            }
+            case 18: {
+              java.lang.String s = input.readStringRequireUtf8();
+
+              type_ = s;
+              break;
+            }
+            default: {
+              if (!parseUnknownField(
+                  input, unknownFields, extensionRegistry, tag)) {
+                done = true;
+              }
+              break;
+            }
+          }
+        }
+      } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+        throw e.setUnfinishedMessage(this);
+      } catch (java.io.IOException e) {
+        throw new com.google.protobuf.InvalidProtocolBufferException(
+            e).setUnfinishedMessage(this);
+      } finally {
+        this.unknownFields = unknownFields.build();
+        makeExtensionsImmutable();
+      }
+    }
+    public static final com.google.protobuf.Descriptors.Descriptor
+        getDescriptor() {
+      return gg.strims.ppspp.proto.ProfileOuterClass.internal_static_NetworkIcon_descriptor;
+    }
+
+    @java.lang.Override
+    protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+        internalGetFieldAccessorTable() {
+      return gg.strims.ppspp.proto.ProfileOuterClass.internal_static_NetworkIcon_fieldAccessorTable
+          .ensureFieldAccessorsInitialized(
+              gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.class, gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.Builder.class);
+    }
+
+    public static final int DATA_FIELD_NUMBER = 1;
+    private com.google.protobuf.ByteString data_;
+    /**
+     * <code>bytes data = 1;</code>
+     * @return The data.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString getData() {
+      return data_;
+    }
+
+    public static final int TYPE_FIELD_NUMBER = 2;
+    private volatile java.lang.Object type_;
+    /**
+     * <code>string type = 2;</code>
+     * @return The type.
+     */
+    @java.lang.Override
+    public java.lang.String getType() {
+      java.lang.Object ref = type_;
+      if (ref instanceof java.lang.String) {
+        return (java.lang.String) ref;
+      } else {
+        com.google.protobuf.ByteString bs = 
+            (com.google.protobuf.ByteString) ref;
+        java.lang.String s = bs.toStringUtf8();
+        type_ = s;
+        return s;
+      }
+    }
+    /**
+     * <code>string type = 2;</code>
+     * @return The bytes for type.
+     */
+    @java.lang.Override
+    public com.google.protobuf.ByteString
+        getTypeBytes() {
+      java.lang.Object ref = type_;
+      if (ref instanceof java.lang.String) {
+        com.google.protobuf.ByteString b = 
+            com.google.protobuf.ByteString.copyFromUtf8(
+                (java.lang.String) ref);
+        type_ = b;
+        return b;
+      } else {
+        return (com.google.protobuf.ByteString) ref;
+      }
+    }
+
+    private byte memoizedIsInitialized = -1;
+    @java.lang.Override
+    public final boolean isInitialized() {
+      byte isInitialized = memoizedIsInitialized;
+      if (isInitialized == 1) return true;
+      if (isInitialized == 0) return false;
+
+      memoizedIsInitialized = 1;
+      return true;
+    }
+
+    @java.lang.Override
+    public void writeTo(com.google.protobuf.CodedOutputStream output)
+                        throws java.io.IOException {
+      if (!data_.isEmpty()) {
+        output.writeBytes(1, data_);
+      }
+      if (!getTypeBytes().isEmpty()) {
+        com.google.protobuf.GeneratedMessageV3.writeString(output, 2, type_);
+      }
+      unknownFields.writeTo(output);
+    }
+
+    @java.lang.Override
+    public int getSerializedSize() {
+      int size = memoizedSize;
+      if (size != -1) return size;
+
+      size = 0;
+      if (!data_.isEmpty()) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeBytesSize(1, data_);
+      }
+      if (!getTypeBytes().isEmpty()) {
+        size += com.google.protobuf.GeneratedMessageV3.computeStringSize(2, type_);
+      }
+      size += unknownFields.getSerializedSize();
+      memoizedSize = size;
+      return size;
+    }
+
+    @java.lang.Override
+    public boolean equals(final java.lang.Object obj) {
+      if (obj == this) {
+       return true;
+      }
+      if (!(obj instanceof gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon)) {
+        return super.equals(obj);
+      }
+      gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon other = (gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon) obj;
+
+      if (!getData()
+          .equals(other.getData())) return false;
+      if (!getType()
+          .equals(other.getType())) return false;
+      if (!unknownFields.equals(other.unknownFields)) return false;
+      return true;
+    }
+
+    @java.lang.Override
+    public int hashCode() {
+      if (memoizedHashCode != 0) {
+        return memoizedHashCode;
+      }
+      int hash = 41;
+      hash = (19 * hash) + getDescriptor().hashCode();
+      hash = (37 * hash) + DATA_FIELD_NUMBER;
+      hash = (53 * hash) + getData().hashCode();
+      hash = (37 * hash) + TYPE_FIELD_NUMBER;
+      hash = (53 * hash) + getType().hashCode();
+      hash = (29 * hash) + unknownFields.hashCode();
+      memoizedHashCode = hash;
+      return hash;
+    }
+
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parseFrom(
+        java.nio.ByteBuffer data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parseFrom(
+        java.nio.ByteBuffer data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parseFrom(
+        com.google.protobuf.ByteString data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parseFrom(
+        com.google.protobuf.ByteString data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parseFrom(byte[] data)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data);
+    }
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parseFrom(
+        byte[] data,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws com.google.protobuf.InvalidProtocolBufferException {
+      return PARSER.parseFrom(data, extensionRegistry);
+    }
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parseFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parseFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parseDelimitedFrom(java.io.InputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input);
+    }
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parseDelimitedFrom(
+        java.io.InputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseDelimitedWithIOException(PARSER, input, extensionRegistry);
+    }
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parseFrom(
+        com.google.protobuf.CodedInputStream input)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input);
+    }
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parseFrom(
+        com.google.protobuf.CodedInputStream input,
+        com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+        throws java.io.IOException {
+      return com.google.protobuf.GeneratedMessageV3
+          .parseWithIOException(PARSER, input, extensionRegistry);
+    }
+
+    @java.lang.Override
+    public Builder newBuilderForType() { return newBuilder(); }
+    public static Builder newBuilder() {
+      return DEFAULT_INSTANCE.toBuilder();
+    }
+    public static Builder newBuilder(gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon prototype) {
+      return DEFAULT_INSTANCE.toBuilder().mergeFrom(prototype);
+    }
+    @java.lang.Override
+    public Builder toBuilder() {
+      return this == DEFAULT_INSTANCE
+          ? new Builder() : new Builder().mergeFrom(this);
+    }
+
+    @java.lang.Override
+    protected Builder newBuilderForType(
+        com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+      Builder builder = new Builder(parent);
+      return builder;
+    }
+    /**
+     * Protobuf type {@code NetworkIcon}
+     */
+    public static final class Builder extends
+        com.google.protobuf.GeneratedMessageV3.Builder<Builder> implements
+        // @@protoc_insertion_point(builder_implements:NetworkIcon)
+        gg.strims.ppspp.proto.ProfileOuterClass.NetworkIconOrBuilder {
+      public static final com.google.protobuf.Descriptors.Descriptor
+          getDescriptor() {
+        return gg.strims.ppspp.proto.ProfileOuterClass.internal_static_NetworkIcon_descriptor;
+      }
+
+      @java.lang.Override
+      protected com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+          internalGetFieldAccessorTable() {
+        return gg.strims.ppspp.proto.ProfileOuterClass.internal_static_NetworkIcon_fieldAccessorTable
+            .ensureFieldAccessorsInitialized(
+                gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.class, gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.Builder.class);
+      }
+
+      // Construct using gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.newBuilder()
+      private Builder() {
+        maybeForceBuilderInitialization();
+      }
+
+      private Builder(
+          com.google.protobuf.GeneratedMessageV3.BuilderParent parent) {
+        super(parent);
+        maybeForceBuilderInitialization();
+      }
+      private void maybeForceBuilderInitialization() {
+        if (com.google.protobuf.GeneratedMessageV3
+                .alwaysUseFieldBuilders) {
+        }
+      }
+      @java.lang.Override
+      public Builder clear() {
+        super.clear();
+        data_ = com.google.protobuf.ByteString.EMPTY;
+
+        type_ = "";
+
+        return this;
+      }
+
+      @java.lang.Override
+      public com.google.protobuf.Descriptors.Descriptor
+          getDescriptorForType() {
+        return gg.strims.ppspp.proto.ProfileOuterClass.internal_static_NetworkIcon_descriptor;
+      }
+
+      @java.lang.Override
+      public gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon getDefaultInstanceForType() {
+        return gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.getDefaultInstance();
+      }
+
+      @java.lang.Override
+      public gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon build() {
+        gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon result = buildPartial();
+        if (!result.isInitialized()) {
+          throw newUninitializedMessageException(result);
+        }
+        return result;
+      }
+
+      @java.lang.Override
+      public gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon buildPartial() {
+        gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon result = new gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon(this);
+        result.data_ = data_;
+        result.type_ = type_;
+        onBuilt();
+        return result;
+      }
+
+      @java.lang.Override
+      public Builder clone() {
+        return super.clone();
+      }
+      @java.lang.Override
+      public Builder setField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.setField(field, value);
+      }
+      @java.lang.Override
+      public Builder clearField(
+          com.google.protobuf.Descriptors.FieldDescriptor field) {
+        return super.clearField(field);
+      }
+      @java.lang.Override
+      public Builder clearOneof(
+          com.google.protobuf.Descriptors.OneofDescriptor oneof) {
+        return super.clearOneof(oneof);
+      }
+      @java.lang.Override
+      public Builder setRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          int index, java.lang.Object value) {
+        return super.setRepeatedField(field, index, value);
+      }
+      @java.lang.Override
+      public Builder addRepeatedField(
+          com.google.protobuf.Descriptors.FieldDescriptor field,
+          java.lang.Object value) {
+        return super.addRepeatedField(field, value);
+      }
+      @java.lang.Override
+      public Builder mergeFrom(com.google.protobuf.Message other) {
+        if (other instanceof gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon) {
+          return mergeFrom((gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon)other);
+        } else {
+          super.mergeFrom(other);
+          return this;
+        }
+      }
+
+      public Builder mergeFrom(gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon other) {
+        if (other == gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.getDefaultInstance()) return this;
+        if (other.getData() != com.google.protobuf.ByteString.EMPTY) {
+          setData(other.getData());
+        }
+        if (!other.getType().isEmpty()) {
+          type_ = other.type_;
+          onChanged();
+        }
+        this.mergeUnknownFields(other.unknownFields);
+        onChanged();
+        return this;
+      }
+
+      @java.lang.Override
+      public final boolean isInitialized() {
+        return true;
+      }
+
+      @java.lang.Override
+      public Builder mergeFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws java.io.IOException {
+        gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon parsedMessage = null;
+        try {
+          parsedMessage = PARSER.parsePartialFrom(input, extensionRegistry);
+        } catch (com.google.protobuf.InvalidProtocolBufferException e) {
+          parsedMessage = (gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon) e.getUnfinishedMessage();
+          throw e.unwrapIOException();
+        } finally {
+          if (parsedMessage != null) {
+            mergeFrom(parsedMessage);
+          }
+        }
+        return this;
+      }
+
+      private com.google.protobuf.ByteString data_ = com.google.protobuf.ByteString.EMPTY;
+      /**
+       * <code>bytes data = 1;</code>
+       * @return The data.
+       */
+      @java.lang.Override
+      public com.google.protobuf.ByteString getData() {
+        return data_;
+      }
+      /**
+       * <code>bytes data = 1;</code>
+       * @param value The data to set.
+       * @return This builder for chaining.
+       */
+      public Builder setData(com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  
+        data_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>bytes data = 1;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearData() {
+        
+        data_ = getDefaultInstance().getData();
+        onChanged();
+        return this;
+      }
+
+      private java.lang.Object type_ = "";
+      /**
+       * <code>string type = 2;</code>
+       * @return The type.
+       */
+      public java.lang.String getType() {
+        java.lang.Object ref = type_;
+        if (!(ref instanceof java.lang.String)) {
+          com.google.protobuf.ByteString bs =
+              (com.google.protobuf.ByteString) ref;
+          java.lang.String s = bs.toStringUtf8();
+          type_ = s;
+          return s;
+        } else {
+          return (java.lang.String) ref;
+        }
+      }
+      /**
+       * <code>string type = 2;</code>
+       * @return The bytes for type.
+       */
+      public com.google.protobuf.ByteString
+          getTypeBytes() {
+        java.lang.Object ref = type_;
+        if (ref instanceof String) {
+          com.google.protobuf.ByteString b = 
+              com.google.protobuf.ByteString.copyFromUtf8(
+                  (java.lang.String) ref);
+          type_ = b;
+          return b;
+        } else {
+          return (com.google.protobuf.ByteString) ref;
+        }
+      }
+      /**
+       * <code>string type = 2;</code>
+       * @param value The type to set.
+       * @return This builder for chaining.
+       */
+      public Builder setType(
+          java.lang.String value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  
+        type_ = value;
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string type = 2;</code>
+       * @return This builder for chaining.
+       */
+      public Builder clearType() {
+        
+        type_ = getDefaultInstance().getType();
+        onChanged();
+        return this;
+      }
+      /**
+       * <code>string type = 2;</code>
+       * @param value The bytes for type to set.
+       * @return This builder for chaining.
+       */
+      public Builder setTypeBytes(
+          com.google.protobuf.ByteString value) {
+        if (value == null) {
+    throw new NullPointerException();
+  }
+  checkByteStringIsUtf8(value);
+        
+        type_ = value;
+        onChanged();
+        return this;
+      }
+      @java.lang.Override
+      public final Builder setUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.setUnknownFields(unknownFields);
+      }
+
+      @java.lang.Override
+      public final Builder mergeUnknownFields(
+          final com.google.protobuf.UnknownFieldSet unknownFields) {
+        return super.mergeUnknownFields(unknownFields);
+      }
+
+
+      // @@protoc_insertion_point(builder_scope:NetworkIcon)
+    }
+
+    // @@protoc_insertion_point(class_scope:NetworkIcon)
+    private static final gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon DEFAULT_INSTANCE;
+    static {
+      DEFAULT_INSTANCE = new gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon();
+    }
+
+    public static gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon getDefaultInstance() {
+      return DEFAULT_INSTANCE;
+    }
+
+    private static final com.google.protobuf.Parser<NetworkIcon>
+        PARSER = new com.google.protobuf.AbstractParser<NetworkIcon>() {
+      @java.lang.Override
+      public NetworkIcon parsePartialFrom(
+          com.google.protobuf.CodedInputStream input,
+          com.google.protobuf.ExtensionRegistryLite extensionRegistry)
+          throws com.google.protobuf.InvalidProtocolBufferException {
+        return new NetworkIcon(input, extensionRegistry);
+      }
+    };
+
+    public static com.google.protobuf.Parser<NetworkIcon> parser() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public com.google.protobuf.Parser<NetworkIcon> getParserForType() {
+      return PARSER;
+    }
+
+    @java.lang.Override
+    public gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon getDefaultInstanceForType() {
+      return DEFAULT_INSTANCE;
+    }
+
+  }
+
   public interface CreateNetworkRequestOrBuilder extends
       // @@protoc_insertion_point(interface_extends:CreateNetworkRequest)
       com.google.protobuf.MessageOrBuilder {
@@ -9478,6 +10120,21 @@ public final class ProfileOuterClass {
      */
     com.google.protobuf.ByteString
         getNameBytes();
+
+    /**
+     * <code>.NetworkIcon icon = 2;</code>
+     * @return Whether the icon field is set.
+     */
+    boolean hasIcon();
+    /**
+     * <code>.NetworkIcon icon = 2;</code>
+     * @return The icon.
+     */
+    gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon getIcon();
+    /**
+     * <code>.NetworkIcon icon = 2;</code>
+     */
+    gg.strims.ppspp.proto.ProfileOuterClass.NetworkIconOrBuilder getIconOrBuilder();
   }
   /**
    * Protobuf type {@code CreateNetworkRequest}
@@ -9529,6 +10186,19 @@ public final class ProfileOuterClass {
               java.lang.String s = input.readStringRequireUtf8();
 
               name_ = s;
+              break;
+            }
+            case 18: {
+              gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.Builder subBuilder = null;
+              if (icon_ != null) {
+                subBuilder = icon_.toBuilder();
+              }
+              icon_ = input.readMessage(gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.parser(), extensionRegistry);
+              if (subBuilder != null) {
+                subBuilder.mergeFrom(icon_);
+                icon_ = subBuilder.buildPartial();
+              }
+
               break;
             }
             default: {
@@ -9601,6 +10271,32 @@ public final class ProfileOuterClass {
       }
     }
 
+    public static final int ICON_FIELD_NUMBER = 2;
+    private gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon icon_;
+    /**
+     * <code>.NetworkIcon icon = 2;</code>
+     * @return Whether the icon field is set.
+     */
+    @java.lang.Override
+    public boolean hasIcon() {
+      return icon_ != null;
+    }
+    /**
+     * <code>.NetworkIcon icon = 2;</code>
+     * @return The icon.
+     */
+    @java.lang.Override
+    public gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon getIcon() {
+      return icon_ == null ? gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.getDefaultInstance() : icon_;
+    }
+    /**
+     * <code>.NetworkIcon icon = 2;</code>
+     */
+    @java.lang.Override
+    public gg.strims.ppspp.proto.ProfileOuterClass.NetworkIconOrBuilder getIconOrBuilder() {
+      return getIcon();
+    }
+
     private byte memoizedIsInitialized = -1;
     @java.lang.Override
     public final boolean isInitialized() {
@@ -9618,6 +10314,9 @@ public final class ProfileOuterClass {
       if (!getNameBytes().isEmpty()) {
         com.google.protobuf.GeneratedMessageV3.writeString(output, 1, name_);
       }
+      if (icon_ != null) {
+        output.writeMessage(2, getIcon());
+      }
       unknownFields.writeTo(output);
     }
 
@@ -9629,6 +10328,10 @@ public final class ProfileOuterClass {
       size = 0;
       if (!getNameBytes().isEmpty()) {
         size += com.google.protobuf.GeneratedMessageV3.computeStringSize(1, name_);
+      }
+      if (icon_ != null) {
+        size += com.google.protobuf.CodedOutputStream
+          .computeMessageSize(2, getIcon());
       }
       size += unknownFields.getSerializedSize();
       memoizedSize = size;
@@ -9647,6 +10350,11 @@ public final class ProfileOuterClass {
 
       if (!getName()
           .equals(other.getName())) return false;
+      if (hasIcon() != other.hasIcon()) return false;
+      if (hasIcon()) {
+        if (!getIcon()
+            .equals(other.getIcon())) return false;
+      }
       if (!unknownFields.equals(other.unknownFields)) return false;
       return true;
     }
@@ -9660,6 +10368,10 @@ public final class ProfileOuterClass {
       hash = (19 * hash) + getDescriptor().hashCode();
       hash = (37 * hash) + NAME_FIELD_NUMBER;
       hash = (53 * hash) + getName().hashCode();
+      if (hasIcon()) {
+        hash = (37 * hash) + ICON_FIELD_NUMBER;
+        hash = (53 * hash) + getIcon().hashCode();
+      }
       hash = (29 * hash) + unknownFields.hashCode();
       memoizedHashCode = hash;
       return hash;
@@ -9795,6 +10507,12 @@ public final class ProfileOuterClass {
         super.clear();
         name_ = "";
 
+        if (iconBuilder_ == null) {
+          icon_ = null;
+        } else {
+          icon_ = null;
+          iconBuilder_ = null;
+        }
         return this;
       }
 
@@ -9822,6 +10540,11 @@ public final class ProfileOuterClass {
       public gg.strims.ppspp.proto.ProfileOuterClass.CreateNetworkRequest buildPartial() {
         gg.strims.ppspp.proto.ProfileOuterClass.CreateNetworkRequest result = new gg.strims.ppspp.proto.ProfileOuterClass.CreateNetworkRequest(this);
         result.name_ = name_;
+        if (iconBuilder_ == null) {
+          result.icon_ = icon_;
+        } else {
+          result.icon_ = iconBuilder_.build();
+        }
         onBuilt();
         return result;
       }
@@ -9873,6 +10596,9 @@ public final class ProfileOuterClass {
         if (!other.getName().isEmpty()) {
           name_ = other.name_;
           onChanged();
+        }
+        if (other.hasIcon()) {
+          mergeIcon(other.getIcon());
         }
         this.mergeUnknownFields(other.unknownFields);
         onChanged();
@@ -9977,6 +10703,125 @@ public final class ProfileOuterClass {
         name_ = value;
         onChanged();
         return this;
+      }
+
+      private gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon icon_;
+      private com.google.protobuf.SingleFieldBuilderV3<
+          gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon, gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.Builder, gg.strims.ppspp.proto.ProfileOuterClass.NetworkIconOrBuilder> iconBuilder_;
+      /**
+       * <code>.NetworkIcon icon = 2;</code>
+       * @return Whether the icon field is set.
+       */
+      public boolean hasIcon() {
+        return iconBuilder_ != null || icon_ != null;
+      }
+      /**
+       * <code>.NetworkIcon icon = 2;</code>
+       * @return The icon.
+       */
+      public gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon getIcon() {
+        if (iconBuilder_ == null) {
+          return icon_ == null ? gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.getDefaultInstance() : icon_;
+        } else {
+          return iconBuilder_.getMessage();
+        }
+      }
+      /**
+       * <code>.NetworkIcon icon = 2;</code>
+       */
+      public Builder setIcon(gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon value) {
+        if (iconBuilder_ == null) {
+          if (value == null) {
+            throw new NullPointerException();
+          }
+          icon_ = value;
+          onChanged();
+        } else {
+          iconBuilder_.setMessage(value);
+        }
+
+        return this;
+      }
+      /**
+       * <code>.NetworkIcon icon = 2;</code>
+       */
+      public Builder setIcon(
+          gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.Builder builderForValue) {
+        if (iconBuilder_ == null) {
+          icon_ = builderForValue.build();
+          onChanged();
+        } else {
+          iconBuilder_.setMessage(builderForValue.build());
+        }
+
+        return this;
+      }
+      /**
+       * <code>.NetworkIcon icon = 2;</code>
+       */
+      public Builder mergeIcon(gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon value) {
+        if (iconBuilder_ == null) {
+          if (icon_ != null) {
+            icon_ =
+              gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.newBuilder(icon_).mergeFrom(value).buildPartial();
+          } else {
+            icon_ = value;
+          }
+          onChanged();
+        } else {
+          iconBuilder_.mergeFrom(value);
+        }
+
+        return this;
+      }
+      /**
+       * <code>.NetworkIcon icon = 2;</code>
+       */
+      public Builder clearIcon() {
+        if (iconBuilder_ == null) {
+          icon_ = null;
+          onChanged();
+        } else {
+          icon_ = null;
+          iconBuilder_ = null;
+        }
+
+        return this;
+      }
+      /**
+       * <code>.NetworkIcon icon = 2;</code>
+       */
+      public gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.Builder getIconBuilder() {
+        
+        onChanged();
+        return getIconFieldBuilder().getBuilder();
+      }
+      /**
+       * <code>.NetworkIcon icon = 2;</code>
+       */
+      public gg.strims.ppspp.proto.ProfileOuterClass.NetworkIconOrBuilder getIconOrBuilder() {
+        if (iconBuilder_ != null) {
+          return iconBuilder_.getMessageOrBuilder();
+        } else {
+          return icon_ == null ?
+              gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.getDefaultInstance() : icon_;
+        }
+      }
+      /**
+       * <code>.NetworkIcon icon = 2;</code>
+       */
+      private com.google.protobuf.SingleFieldBuilderV3<
+          gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon, gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.Builder, gg.strims.ppspp.proto.ProfileOuterClass.NetworkIconOrBuilder> 
+          getIconFieldBuilder() {
+        if (iconBuilder_ == null) {
+          iconBuilder_ = new com.google.protobuf.SingleFieldBuilderV3<
+              gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon, gg.strims.ppspp.proto.ProfileOuterClass.NetworkIcon.Builder, gg.strims.ppspp.proto.ProfileOuterClass.NetworkIconOrBuilder>(
+                  getIcon(),
+                  getParentForChildren(),
+                  isClean());
+          icon_ = null;
+        }
+        return iconBuilder_;
       }
       @java.lang.Override
       public final Builder setUnknownFields(
@@ -31587,6 +32432,11 @@ public final class ProfileOuterClass {
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
       internal_static_LoadSessionResponse_fieldAccessorTable;
   private static final com.google.protobuf.Descriptors.Descriptor
+    internal_static_NetworkIcon_descriptor;
+  private static final 
+    com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
+      internal_static_NetworkIcon_fieldAccessorTable;
+  private static final com.google.protobuf.Descriptors.Descriptor
     internal_static_CreateNetworkRequest_descriptor;
   private static final 
     com.google.protobuf.GeneratedMessageV3.FieldAccessorTable
@@ -31763,72 +32613,74 @@ public final class ProfileOuterClass {
       "\0132\017.ProfileSummary\"(\n\022LoadSessionRequest" +
       "\022\022\n\nsession_id\030\001 \001(\t\"D\n\023LoadSessionRespo" +
       "nse\022\022\n\nsession_id\030\001 \001(\t\022\031\n\007profile\030\002 \001(\013" +
-      "2\010.Profile\"$\n\024CreateNetworkRequest\022\014\n\004na" +
-      "me\030\001 \001(\t\"2\n\025CreateNetworkResponse\022\031\n\007net" +
-      "work\030\001 \001(\0132\010.Network\"0\n\024UpdateNetworkReq" +
-      "uest\022\n\n\002id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\"2\n\025Update" +
-      "NetworkResponse\022\031\n\007network\030\001 \001(\0132\010.Netwo" +
-      "rk\"\"\n\024DeleteNetworkRequest\022\n\n\002id\030\001 \001(\004\"\027" +
-      "\n\025DeleteNetworkResponse\"\037\n\021GetNetworkReq" +
-      "uest\022\n\n\002id\030\001 \001(\004\"/\n\022GetNetworkResponse\022\031" +
-      "\n\007network\030\001 \001(\0132\010.Network\"\024\n\022GetNetworks" +
-      "Request\"1\n\023GetNetworksResponse\022\032\n\010networ" +
-      "ks\030\001 \003(\0132\010.Network\"\036\n\034GetNetworkMembersh" +
-      "ipsRequest\"P\n\035GetNetworkMembershipsRespo" +
-      "nse\022/\n\023network_memberships\030\001 \003(\0132\022.Netwo" +
-      "rkMembership\",\n\036DeleteNetworkMembershipR" +
-      "equest\022\n\n\002id\030\001 \001(\004\"!\n\037DeleteNetworkMembe" +
-      "rshipResponse\"\261\001\n\nStorageKey\022\032\n\010kdf_type" +
-      "\030\001 \001(\0162\010.KDFType\0223\n\016pbkdf2_options\030\002 \001(\013" +
-      "2\031.StorageKey.PBKDF2OptionsH\000\032C\n\rPBKDF2O" +
-      "ptions\022\022\n\niterations\030\001 \001(\r\022\020\n\010key_size\030\002" +
-      " \001(\r\022\014\n\004salt\030\003 \001(\014B\r\n\013kdf_options\">\n\003Key" +
-      "\022\026\n\004type\030\001 \001(\0162\010.KeyType\022\017\n\007private\030\002 \001(" +
-      "\014\022\016\n\006public\030\003 \001(\014\"t\n\022CertificateRequest\022" +
-      "\013\n\003key\030\001 \001(\014\022\032\n\010key_type\030\002 \001(\0162\010.KeyType" +
-      "\022\021\n\tkey_usage\030\003 \001(\r\022\017\n\007subject\030\005 \001(\t\022\021\n\t" +
-      "signature\030\004 \001(\014\"\333\001\n\013Certificate\022\013\n\003key\030\001" +
-      " \001(\014\022\032\n\010key_type\030\002 \001(\0162\010.KeyType\022\021\n\tkey_" +
-      "usage\030\003 \001(\r\022\017\n\007subject\030\t \001(\t\022\022\n\nnot_befo" +
-      "re\030\004 \001(\004\022\021\n\tnot_after\030\005 \001(\004\022\025\n\rserial_nu" +
-      "mber\030\006 \001(\014\022\021\n\tsignature\030\007 \001(\014\022\036\n\006parent\030" +
-      "\010 \001(\0132\014.CertificateH\000B\016\n\014parent_oneof\"\223\001" +
-      "\n\007Profile\022\n\n\002id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\022\016\n\006s" +
-      "ecret\030\003 \001(\014\022\021\n\003key\030\004 \001(\0132\004.Key\022\032\n\010networ" +
-      "ks\030\005 \003(\0132\010.Network\022/\n\023network_membership" +
-      "s\030\006 \003(\0132\022.NetworkMembership\"*\n\016ProfileSu" +
-      "mmary\022\n\n\002id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\"Y\n\007Netwo" +
-      "rk\022\n\n\002id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\022\021\n\003key\030\003 \001(" +
-      "\0132\004.Key\022!\n\013certificate\030\004 \001(\0132\014.Certifica" +
-      "te\"\240\001\n\021NetworkMembership\022\n\n\002id\030\001 \001(\004\022\022\n\n" +
-      "created_at\030\002 \001(\004\022\014\n\004name\030\003 \001(\t\022$\n\016ca_cer" +
-      "tificate\030\004 \001(\0132\014.Certificate\022!\n\013certific" +
-      "ate\030\005 \001(\0132\014.Certificate\022\024\n\014last_seen_at\030" +
-      "\006 \001(\004\"u\n\036CreateNetworkInvitationRequest\022" +
-      "\031\n\013signing_key\030\001 \001(\0132\004.Key\022\"\n\014signing_ce" +
-      "rt\030\002 \001(\0132\014.Certificate\022\024\n\014network_name\030\003" +
-      " \001(\t\"t\n\037CreateNetworkInvitationResponse\022" +
-      "\037\n\ninvitation\030\001 \001(\0132\013.Invitation\022\026\n\016invi" +
-      "tation_b64\030\002 \001(\t\022\030\n\020invitation_bytes\030\003 \001" +
-      "(\014\"+\n\nInvitation\022\017\n\007version\030\001 \001(\r\022\014\n\004dat" +
-      "a\030\002 \001(\014\"Z\n\014InvitationV0\022\021\n\003key\030\001 \001(\0132\004.K" +
-      "ey\022!\n\013certificate\030\002 \001(\0132\014.Certificate\022\024\n" +
-      "\014network_name\030\004 \001(\t\"r\n,CreateNetworkMemb" +
-      "ershipFromInvitationRequest\022\030\n\016invitatio" +
-      "n_b64\030\001 \001(\tH\000\022\032\n\020invitation_bytes\030\002 \001(\014H" +
-      "\000B\014\n\ninvitation\"W\n-CreateNetworkMembersh" +
-      "ipFromInvitationResponse\022&\n\nmembership\030\001" +
-      " \001(\0132\022.NetworkMembership\"#\n\005Mutex\022\013\n\003eol" +
-      "\030\001 \001(\003\022\r\n\005token\030\002 \001(\014*=\n\007KDFType\022\026\n\022KDF_" +
-      "TYPE_UNDEFINED\020\000\022\032\n\026KDF_TYPE_PBKDF2_SHA2" +
-      "56\020\001*L\n\007KeyType\022\026\n\022KEY_TYPE_UNDEFINED\020\000\022" +
-      "\024\n\020KEY_TYPE_ED25519\020\001\022\023\n\017KEY_TYPE_X25519" +
-      "\020\002*\226\001\n\010KeyUsage\022\027\n\023KEY_USAGE_UNDEFINED\020\000" +
-      "\022\022\n\016KEY_USAGE_PEER\020\001\022\027\n\023KEY_USAGE_BOOTST" +
-      "RAP\020\002\022\022\n\016KEY_USAGE_SIGN\020\004\022\024\n\020KEY_USAGE_B" +
-      "ROKER\020\010\022\032\n\026KEY_USAGE_ENCIPHERMENT\020\020BD\n\025g" +
-      "g.strims.ppspp.protoZ&github.com/MemeLab" +
-      "s/go-ppspp/pkg/pb;pb\272\002\002PBb\006proto3"
+      "2\010.Profile\")\n\013NetworkIcon\022\014\n\004data\030\001 \001(\014\022" +
+      "\014\n\004type\030\002 \001(\t\"@\n\024CreateNetworkRequest\022\014\n" +
+      "\004name\030\001 \001(\t\022\032\n\004icon\030\002 \001(\0132\014.NetworkIcon\"" +
+      "2\n\025CreateNetworkResponse\022\031\n\007network\030\001 \001(" +
+      "\0132\010.Network\"0\n\024UpdateNetworkRequest\022\n\n\002i" +
+      "d\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\"2\n\025UpdateNetworkRe" +
+      "sponse\022\031\n\007network\030\001 \001(\0132\010.Network\"\"\n\024Del" +
+      "eteNetworkRequest\022\n\n\002id\030\001 \001(\004\"\027\n\025DeleteN" +
+      "etworkResponse\"\037\n\021GetNetworkRequest\022\n\n\002i" +
+      "d\030\001 \001(\004\"/\n\022GetNetworkResponse\022\031\n\007network" +
+      "\030\001 \001(\0132\010.Network\"\024\n\022GetNetworksRequest\"1" +
+      "\n\023GetNetworksResponse\022\032\n\010networks\030\001 \003(\0132" +
+      "\010.Network\"\036\n\034GetNetworkMembershipsReques" +
+      "t\"P\n\035GetNetworkMembershipsResponse\022/\n\023ne" +
+      "twork_memberships\030\001 \003(\0132\022.NetworkMembers" +
+      "hip\",\n\036DeleteNetworkMembershipRequest\022\n\n" +
+      "\002id\030\001 \001(\004\"!\n\037DeleteNetworkMembershipResp" +
+      "onse\"\261\001\n\nStorageKey\022\032\n\010kdf_type\030\001 \001(\0162\010." +
+      "KDFType\0223\n\016pbkdf2_options\030\002 \001(\0132\031.Storag" +
+      "eKey.PBKDF2OptionsH\000\032C\n\rPBKDF2Options\022\022\n" +
+      "\niterations\030\001 \001(\r\022\020\n\010key_size\030\002 \001(\r\022\014\n\004s" +
+      "alt\030\003 \001(\014B\r\n\013kdf_options\">\n\003Key\022\026\n\004type\030" +
+      "\001 \001(\0162\010.KeyType\022\017\n\007private\030\002 \001(\014\022\016\n\006publ" +
+      "ic\030\003 \001(\014\"t\n\022CertificateRequest\022\013\n\003key\030\001 " +
+      "\001(\014\022\032\n\010key_type\030\002 \001(\0162\010.KeyType\022\021\n\tkey_u" +
+      "sage\030\003 \001(\r\022\017\n\007subject\030\005 \001(\t\022\021\n\tsignature" +
+      "\030\004 \001(\014\"\333\001\n\013Certificate\022\013\n\003key\030\001 \001(\014\022\032\n\010k" +
+      "ey_type\030\002 \001(\0162\010.KeyType\022\021\n\tkey_usage\030\003 \001" +
+      "(\r\022\017\n\007subject\030\t \001(\t\022\022\n\nnot_before\030\004 \001(\004\022" +
+      "\021\n\tnot_after\030\005 \001(\004\022\025\n\rserial_number\030\006 \001(" +
+      "\014\022\021\n\tsignature\030\007 \001(\014\022\036\n\006parent\030\010 \001(\0132\014.C" +
+      "ertificateH\000B\016\n\014parent_oneof\"\223\001\n\007Profile" +
+      "\022\n\n\002id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\022\016\n\006secret\030\003 \001" +
+      "(\014\022\021\n\003key\030\004 \001(\0132\004.Key\022\032\n\010networks\030\005 \003(\0132" +
+      "\010.Network\022/\n\023network_memberships\030\006 \003(\0132\022" +
+      ".NetworkMembership\"*\n\016ProfileSummary\022\n\n\002" +
+      "id\030\001 \001(\004\022\014\n\004name\030\002 \001(\t\"Y\n\007Network\022\n\n\002id\030" +
+      "\001 \001(\004\022\014\n\004name\030\002 \001(\t\022\021\n\003key\030\003 \001(\0132\004.Key\022!" +
+      "\n\013certificate\030\004 \001(\0132\014.Certificate\"\240\001\n\021Ne" +
+      "tworkMembership\022\n\n\002id\030\001 \001(\004\022\022\n\ncreated_a" +
+      "t\030\002 \001(\004\022\014\n\004name\030\003 \001(\t\022$\n\016ca_certificate\030" +
+      "\004 \001(\0132\014.Certificate\022!\n\013certificate\030\005 \001(\013" +
+      "2\014.Certificate\022\024\n\014last_seen_at\030\006 \001(\004\"u\n\036" +
+      "CreateNetworkInvitationRequest\022\031\n\013signin" +
+      "g_key\030\001 \001(\0132\004.Key\022\"\n\014signing_cert\030\002 \001(\0132" +
+      "\014.Certificate\022\024\n\014network_name\030\003 \001(\t\"t\n\037C" +
+      "reateNetworkInvitationResponse\022\037\n\ninvita" +
+      "tion\030\001 \001(\0132\013.Invitation\022\026\n\016invitation_b6" +
+      "4\030\002 \001(\t\022\030\n\020invitation_bytes\030\003 \001(\014\"+\n\nInv" +
+      "itation\022\017\n\007version\030\001 \001(\r\022\014\n\004data\030\002 \001(\014\"Z" +
+      "\n\014InvitationV0\022\021\n\003key\030\001 \001(\0132\004.Key\022!\n\013cer" +
+      "tificate\030\002 \001(\0132\014.Certificate\022\024\n\014network_" +
+      "name\030\004 \001(\t\"r\n,CreateNetworkMembershipFro" +
+      "mInvitationRequest\022\030\n\016invitation_b64\030\001 \001" +
+      "(\tH\000\022\032\n\020invitation_bytes\030\002 \001(\014H\000B\014\n\ninvi" +
+      "tation\"W\n-CreateNetworkMembershipFromInv" +
+      "itationResponse\022&\n\nmembership\030\001 \001(\0132\022.Ne" +
+      "tworkMembership\"#\n\005Mutex\022\013\n\003eol\030\001 \001(\003\022\r\n" +
+      "\005token\030\002 \001(\014*=\n\007KDFType\022\026\n\022KDF_TYPE_UNDE" +
+      "FINED\020\000\022\032\n\026KDF_TYPE_PBKDF2_SHA256\020\001*L\n\007K" +
+      "eyType\022\026\n\022KEY_TYPE_UNDEFINED\020\000\022\024\n\020KEY_TY" +
+      "PE_ED25519\020\001\022\023\n\017KEY_TYPE_X25519\020\002*\226\001\n\010Ke" +
+      "yUsage\022\027\n\023KEY_USAGE_UNDEFINED\020\000\022\022\n\016KEY_U" +
+      "SAGE_PEER\020\001\022\027\n\023KEY_USAGE_BOOTSTRAP\020\002\022\022\n\016" +
+      "KEY_USAGE_SIGN\020\004\022\024\n\020KEY_USAGE_BROKER\020\010\022\032" +
+      "\n\026KEY_USAGE_ENCIPHERMENT\020\020BD\n\025gg.strims." +
+      "ppspp.protoZ&github.com/MemeLabs/go-ppsp" +
+      "p/pkg/pb;pb\272\002\002PBb\006proto3"
     };
     descriptor = com.google.protobuf.Descriptors.FileDescriptor
       .internalBuildGeneratedFileFrom(descriptorData,
@@ -31918,92 +32770,98 @@ public final class ProfileOuterClass {
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_LoadSessionResponse_descriptor,
         new java.lang.String[] { "SessionId", "Profile", });
-    internal_static_CreateNetworkRequest_descriptor =
+    internal_static_NetworkIcon_descriptor =
       getDescriptor().getMessageTypes().get(14);
+    internal_static_NetworkIcon_fieldAccessorTable = new
+      com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
+        internal_static_NetworkIcon_descriptor,
+        new java.lang.String[] { "Data", "Type", });
+    internal_static_CreateNetworkRequest_descriptor =
+      getDescriptor().getMessageTypes().get(15);
     internal_static_CreateNetworkRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_CreateNetworkRequest_descriptor,
-        new java.lang.String[] { "Name", });
+        new java.lang.String[] { "Name", "Icon", });
     internal_static_CreateNetworkResponse_descriptor =
-      getDescriptor().getMessageTypes().get(15);
+      getDescriptor().getMessageTypes().get(16);
     internal_static_CreateNetworkResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_CreateNetworkResponse_descriptor,
         new java.lang.String[] { "Network", });
     internal_static_UpdateNetworkRequest_descriptor =
-      getDescriptor().getMessageTypes().get(16);
+      getDescriptor().getMessageTypes().get(17);
     internal_static_UpdateNetworkRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_UpdateNetworkRequest_descriptor,
         new java.lang.String[] { "Id", "Name", });
     internal_static_UpdateNetworkResponse_descriptor =
-      getDescriptor().getMessageTypes().get(17);
+      getDescriptor().getMessageTypes().get(18);
     internal_static_UpdateNetworkResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_UpdateNetworkResponse_descriptor,
         new java.lang.String[] { "Network", });
     internal_static_DeleteNetworkRequest_descriptor =
-      getDescriptor().getMessageTypes().get(18);
+      getDescriptor().getMessageTypes().get(19);
     internal_static_DeleteNetworkRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_DeleteNetworkRequest_descriptor,
         new java.lang.String[] { "Id", });
     internal_static_DeleteNetworkResponse_descriptor =
-      getDescriptor().getMessageTypes().get(19);
+      getDescriptor().getMessageTypes().get(20);
     internal_static_DeleteNetworkResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_DeleteNetworkResponse_descriptor,
         new java.lang.String[] { });
     internal_static_GetNetworkRequest_descriptor =
-      getDescriptor().getMessageTypes().get(20);
+      getDescriptor().getMessageTypes().get(21);
     internal_static_GetNetworkRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_GetNetworkRequest_descriptor,
         new java.lang.String[] { "Id", });
     internal_static_GetNetworkResponse_descriptor =
-      getDescriptor().getMessageTypes().get(21);
+      getDescriptor().getMessageTypes().get(22);
     internal_static_GetNetworkResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_GetNetworkResponse_descriptor,
         new java.lang.String[] { "Network", });
     internal_static_GetNetworksRequest_descriptor =
-      getDescriptor().getMessageTypes().get(22);
+      getDescriptor().getMessageTypes().get(23);
     internal_static_GetNetworksRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_GetNetworksRequest_descriptor,
         new java.lang.String[] { });
     internal_static_GetNetworksResponse_descriptor =
-      getDescriptor().getMessageTypes().get(23);
+      getDescriptor().getMessageTypes().get(24);
     internal_static_GetNetworksResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_GetNetworksResponse_descriptor,
         new java.lang.String[] { "Networks", });
     internal_static_GetNetworkMembershipsRequest_descriptor =
-      getDescriptor().getMessageTypes().get(24);
+      getDescriptor().getMessageTypes().get(25);
     internal_static_GetNetworkMembershipsRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_GetNetworkMembershipsRequest_descriptor,
         new java.lang.String[] { });
     internal_static_GetNetworkMembershipsResponse_descriptor =
-      getDescriptor().getMessageTypes().get(25);
+      getDescriptor().getMessageTypes().get(26);
     internal_static_GetNetworkMembershipsResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_GetNetworkMembershipsResponse_descriptor,
         new java.lang.String[] { "NetworkMemberships", });
     internal_static_DeleteNetworkMembershipRequest_descriptor =
-      getDescriptor().getMessageTypes().get(26);
+      getDescriptor().getMessageTypes().get(27);
     internal_static_DeleteNetworkMembershipRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_DeleteNetworkMembershipRequest_descriptor,
         new java.lang.String[] { "Id", });
     internal_static_DeleteNetworkMembershipResponse_descriptor =
-      getDescriptor().getMessageTypes().get(27);
+      getDescriptor().getMessageTypes().get(28);
     internal_static_DeleteNetworkMembershipResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_DeleteNetworkMembershipResponse_descriptor,
         new java.lang.String[] { });
     internal_static_StorageKey_descriptor =
-      getDescriptor().getMessageTypes().get(28);
+      getDescriptor().getMessageTypes().get(29);
     internal_static_StorageKey_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_StorageKey_descriptor,
@@ -32015,85 +32873,85 @@ public final class ProfileOuterClass {
         internal_static_StorageKey_PBKDF2Options_descriptor,
         new java.lang.String[] { "Iterations", "KeySize", "Salt", });
     internal_static_Key_descriptor =
-      getDescriptor().getMessageTypes().get(29);
+      getDescriptor().getMessageTypes().get(30);
     internal_static_Key_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_Key_descriptor,
         new java.lang.String[] { "Type", "Private", "Public", });
     internal_static_CertificateRequest_descriptor =
-      getDescriptor().getMessageTypes().get(30);
+      getDescriptor().getMessageTypes().get(31);
     internal_static_CertificateRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_CertificateRequest_descriptor,
         new java.lang.String[] { "Key", "KeyType", "KeyUsage", "Subject", "Signature", });
     internal_static_Certificate_descriptor =
-      getDescriptor().getMessageTypes().get(31);
+      getDescriptor().getMessageTypes().get(32);
     internal_static_Certificate_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_Certificate_descriptor,
         new java.lang.String[] { "Key", "KeyType", "KeyUsage", "Subject", "NotBefore", "NotAfter", "SerialNumber", "Signature", "Parent", "ParentOneof", });
     internal_static_Profile_descriptor =
-      getDescriptor().getMessageTypes().get(32);
+      getDescriptor().getMessageTypes().get(33);
     internal_static_Profile_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_Profile_descriptor,
         new java.lang.String[] { "Id", "Name", "Secret", "Key", "Networks", "NetworkMemberships", });
     internal_static_ProfileSummary_descriptor =
-      getDescriptor().getMessageTypes().get(33);
+      getDescriptor().getMessageTypes().get(34);
     internal_static_ProfileSummary_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_ProfileSummary_descriptor,
         new java.lang.String[] { "Id", "Name", });
     internal_static_Network_descriptor =
-      getDescriptor().getMessageTypes().get(34);
+      getDescriptor().getMessageTypes().get(35);
     internal_static_Network_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_Network_descriptor,
         new java.lang.String[] { "Id", "Name", "Key", "Certificate", });
     internal_static_NetworkMembership_descriptor =
-      getDescriptor().getMessageTypes().get(35);
+      getDescriptor().getMessageTypes().get(36);
     internal_static_NetworkMembership_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_NetworkMembership_descriptor,
         new java.lang.String[] { "Id", "CreatedAt", "Name", "CaCertificate", "Certificate", "LastSeenAt", });
     internal_static_CreateNetworkInvitationRequest_descriptor =
-      getDescriptor().getMessageTypes().get(36);
+      getDescriptor().getMessageTypes().get(37);
     internal_static_CreateNetworkInvitationRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_CreateNetworkInvitationRequest_descriptor,
         new java.lang.String[] { "SigningKey", "SigningCert", "NetworkName", });
     internal_static_CreateNetworkInvitationResponse_descriptor =
-      getDescriptor().getMessageTypes().get(37);
+      getDescriptor().getMessageTypes().get(38);
     internal_static_CreateNetworkInvitationResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_CreateNetworkInvitationResponse_descriptor,
         new java.lang.String[] { "Invitation", "InvitationB64", "InvitationBytes", });
     internal_static_Invitation_descriptor =
-      getDescriptor().getMessageTypes().get(38);
+      getDescriptor().getMessageTypes().get(39);
     internal_static_Invitation_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_Invitation_descriptor,
         new java.lang.String[] { "Version", "Data", });
     internal_static_InvitationV0_descriptor =
-      getDescriptor().getMessageTypes().get(39);
+      getDescriptor().getMessageTypes().get(40);
     internal_static_InvitationV0_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_InvitationV0_descriptor,
         new java.lang.String[] { "Key", "Certificate", "NetworkName", });
     internal_static_CreateNetworkMembershipFromInvitationRequest_descriptor =
-      getDescriptor().getMessageTypes().get(40);
+      getDescriptor().getMessageTypes().get(41);
     internal_static_CreateNetworkMembershipFromInvitationRequest_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_CreateNetworkMembershipFromInvitationRequest_descriptor,
         new java.lang.String[] { "InvitationB64", "InvitationBytes", "Invitation", });
     internal_static_CreateNetworkMembershipFromInvitationResponse_descriptor =
-      getDescriptor().getMessageTypes().get(41);
+      getDescriptor().getMessageTypes().get(42);
     internal_static_CreateNetworkMembershipFromInvitationResponse_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_CreateNetworkMembershipFromInvitationResponse_descriptor,
         new java.lang.String[] { "Membership", });
     internal_static_Mutex_descriptor =
-      getDescriptor().getMessageTypes().get(42);
+      getDescriptor().getMessageTypes().get(43);
     internal_static_Mutex_fieldAccessorTable = new
       com.google.protobuf.GeneratedMessageV3.FieldAccessorTable(
         internal_static_Mutex_descriptor,

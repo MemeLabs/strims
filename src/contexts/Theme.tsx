@@ -5,6 +5,7 @@ type ColorScheme = "dark" | "light";
 
 interface State {
   colorScheme: ColorScheme;
+  navOrder: number[];
 }
 
 type Action =
@@ -13,11 +14,13 @@ type Action =
       colorScheme: ColorScheme;
     }
   | {
-      type: "MEME";
+      type: "SET_NAV_ORDER";
+      navOrder: number[];
     };
 
 const initialState: State = {
   colorScheme: "dark",
+  navOrder: [],
 };
 
 const ProfileContext = React.createContext<[State, (action: Action) => void]>(null);
@@ -28,6 +31,12 @@ const themeReducer = (state: State, action: Action): State => {
       return {
         ...state,
         colorScheme: action.colorScheme,
+      };
+    case "SET_NAV_ORDER":
+      console.log(action.navOrder);
+      return {
+        ...state,
+        navOrder: action.navOrder,
       };
     default:
       return state;
@@ -42,8 +51,15 @@ export const useTheme = () => {
       colorScheme,
     });
 
+  const setNavOrder = (navOrder: number[]) =>
+    dispatch({
+      type: "SET_NAV_ORDER",
+      navOrder,
+    });
+
   const actions = {
     setColorScheme,
+    setNavOrder,
   };
   return [state, actions] as [State, typeof actions];
 };
