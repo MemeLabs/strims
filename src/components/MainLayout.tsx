@@ -62,6 +62,7 @@ const NetworkAddButton: React.FunctionComponent<React.ComponentProps<"button">> 
 const NetworkNav = () => {
   const [expanded, toggleExpanded] = useToggle(false);
   const [networkMemberships, setNetworkMemberships] = React.useState<INetworkMembership[]>([]);
+  const [state, { setNavOrder }] = useTheme();
 
   const [{ error, loading }] = useCall("getNetworkMemberships", {
     onComplete: (res) => setNetworkMemberships(res.networkMemberships),
@@ -76,6 +77,7 @@ const NetworkNav = () => {
       const next = Array.from(prev);
       const [target] = next.splice(result.source.index, 1);
       next.splice(result.destination.index, 0, target);
+      setNavOrder(next.map(({ id }) => id));
       return next;
     });
   }, []);

@@ -30460,6 +30460,225 @@ export const LoadSessionResponse = $root.LoadSessionResponse = (() => {
     return LoadSessionResponse;
 })();
 
+export const NetworkIcon = $root.NetworkIcon = (() => {
+
+    /**
+     * Properties of a NetworkIcon.
+     * @exports INetworkIcon
+     * @interface INetworkIcon
+     * @property {Uint8Array|null} [data] NetworkIcon data
+     * @property {string|null} [type] NetworkIcon type
+     */
+
+    /**
+     * Constructs a new NetworkIcon.
+     * @exports NetworkIcon
+     * @classdesc Represents a NetworkIcon.
+     * @implements INetworkIcon
+     * @constructor
+     * @param {INetworkIcon=} [properties] Properties to set
+     */
+    function NetworkIcon(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * NetworkIcon data.
+     * @member {Uint8Array} data
+     * @memberof NetworkIcon
+     * @instance
+     */
+    NetworkIcon.prototype.data = $util.newBuffer([]);
+
+    /**
+     * NetworkIcon type.
+     * @member {string} type
+     * @memberof NetworkIcon
+     * @instance
+     */
+    NetworkIcon.prototype.type = "";
+
+    /**
+     * Creates a new NetworkIcon instance using the specified properties.
+     * @function create
+     * @memberof NetworkIcon
+     * @static
+     * @param {INetworkIcon=} [properties] Properties to set
+     * @returns {NetworkIcon} NetworkIcon instance
+     */
+    NetworkIcon.create = function create(properties) {
+        return new NetworkIcon(properties);
+    };
+
+    /**
+     * Encodes the specified NetworkIcon message. Does not implicitly {@link NetworkIcon.verify|verify} messages.
+     * @function encode
+     * @memberof NetworkIcon
+     * @static
+     * @param {INetworkIcon} message NetworkIcon message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkIcon.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.data != null && Object.hasOwnProperty.call(message, "data"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.data);
+        if (message.type != null && Object.hasOwnProperty.call(message, "type"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.type);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified NetworkIcon message, length delimited. Does not implicitly {@link NetworkIcon.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof NetworkIcon
+     * @static
+     * @param {INetworkIcon} message NetworkIcon message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkIcon.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a NetworkIcon message from the specified reader or buffer.
+     * @function decode
+     * @memberof NetworkIcon
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {NetworkIcon} NetworkIcon
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkIcon.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkIcon();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.data = reader.bytes();
+                break;
+            case 2:
+                message.type = reader.string();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a NetworkIcon message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof NetworkIcon
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {NetworkIcon} NetworkIcon
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkIcon.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a NetworkIcon message.
+     * @function verify
+     * @memberof NetworkIcon
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    NetworkIcon.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.data != null && message.hasOwnProperty("data"))
+            if (!(message.data && typeof message.data.length === "number" || $util.isString(message.data)))
+                return "data: buffer expected";
+        if (message.type != null && message.hasOwnProperty("type"))
+            if (!$util.isString(message.type))
+                return "type: string expected";
+        return null;
+    };
+
+    /**
+     * Creates a NetworkIcon message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof NetworkIcon
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {NetworkIcon} NetworkIcon
+     */
+    NetworkIcon.fromObject = function fromObject(object) {
+        if (object instanceof $root.NetworkIcon)
+            return object;
+        let message = new $root.NetworkIcon();
+        if (object.data != null)
+            if (typeof object.data === "string")
+                $util.base64.decode(object.data, message.data = $util.newBuffer($util.base64.length(object.data)), 0);
+            else if (object.data.length)
+                message.data = object.data;
+        if (object.type != null)
+            message.type = String(object.type);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a NetworkIcon message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof NetworkIcon
+     * @static
+     * @param {NetworkIcon} message NetworkIcon
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    NetworkIcon.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if (options.bytes === String)
+                object.data = "";
+            else {
+                object.data = [];
+                if (options.bytes !== Array)
+                    object.data = $util.newBuffer(object.data);
+            }
+            object.type = "";
+        }
+        if (message.data != null && message.hasOwnProperty("data"))
+            object.data = options.bytes === String ? $util.base64.encode(message.data, 0, message.data.length) : options.bytes === Array ? Array.prototype.slice.call(message.data) : message.data;
+        if (message.type != null && message.hasOwnProperty("type"))
+            object.type = message.type;
+        return object;
+    };
+
+    /**
+     * Converts this NetworkIcon to JSON.
+     * @function toJSON
+     * @memberof NetworkIcon
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    NetworkIcon.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return NetworkIcon;
+})();
+
 export const CreateNetworkRequest = $root.CreateNetworkRequest = (() => {
 
     /**
@@ -30467,6 +30686,7 @@ export const CreateNetworkRequest = $root.CreateNetworkRequest = (() => {
      * @exports ICreateNetworkRequest
      * @interface ICreateNetworkRequest
      * @property {string|null} [name] CreateNetworkRequest name
+     * @property {INetworkIcon|null} [icon] CreateNetworkRequest icon
      */
 
     /**
@@ -30491,6 +30711,14 @@ export const CreateNetworkRequest = $root.CreateNetworkRequest = (() => {
      * @instance
      */
     CreateNetworkRequest.prototype.name = "";
+
+    /**
+     * CreateNetworkRequest icon.
+     * @member {INetworkIcon|null|undefined} icon
+     * @memberof CreateNetworkRequest
+     * @instance
+     */
+    CreateNetworkRequest.prototype.icon = null;
 
     /**
      * Creates a new CreateNetworkRequest instance using the specified properties.
@@ -30518,6 +30746,8 @@ export const CreateNetworkRequest = $root.CreateNetworkRequest = (() => {
             writer = $Writer.create();
         if (message.name != null && Object.hasOwnProperty.call(message, "name"))
             writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
+        if (message.icon != null && Object.hasOwnProperty.call(message, "icon"))
+            $root.NetworkIcon.encode(message.icon, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
         return writer;
     };
 
@@ -30554,6 +30784,9 @@ export const CreateNetworkRequest = $root.CreateNetworkRequest = (() => {
             switch (tag >>> 3) {
             case 1:
                 message.name = reader.string();
+                break;
+            case 2:
+                message.icon = $root.NetworkIcon.decode(reader, reader.uint32());
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -30593,6 +30826,11 @@ export const CreateNetworkRequest = $root.CreateNetworkRequest = (() => {
         if (message.name != null && message.hasOwnProperty("name"))
             if (!$util.isString(message.name))
                 return "name: string expected";
+        if (message.icon != null && message.hasOwnProperty("icon")) {
+            let error = $root.NetworkIcon.verify(message.icon);
+            if (error)
+                return "icon." + error;
+        }
         return null;
     };
 
@@ -30610,6 +30848,11 @@ export const CreateNetworkRequest = $root.CreateNetworkRequest = (() => {
         let message = new $root.CreateNetworkRequest();
         if (object.name != null)
             message.name = String(object.name);
+        if (object.icon != null) {
+            if (typeof object.icon !== "object")
+                throw TypeError(".CreateNetworkRequest.icon: object expected");
+            message.icon = $root.NetworkIcon.fromObject(object.icon);
+        }
         return message;
     };
 
@@ -30626,10 +30869,14 @@ export const CreateNetworkRequest = $root.CreateNetworkRequest = (() => {
         if (!options)
             options = {};
         let object = {};
-        if (options.defaults)
+        if (options.defaults) {
             object.name = "";
+            object.icon = null;
+        }
         if (message.name != null && message.hasOwnProperty("name"))
             object.name = message.name;
+        if (message.icon != null && message.hasOwnProperty("icon"))
+            object.icon = $root.NetworkIcon.toObject(message.icon, options);
         return object;
     };
 

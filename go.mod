@@ -17,6 +17,7 @@ require (
 	github.com/docker/docker v1.13.1
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.4.0 // indirect
+	github.com/emicklei/proto v1.9.0
 	github.com/emirpasic/gods v1.12.0
 	github.com/friendsofgo/errors v0.9.2
 	github.com/gobwas/httphead v0.0.0-20200921212729-da3d93bc3c58 // indirect

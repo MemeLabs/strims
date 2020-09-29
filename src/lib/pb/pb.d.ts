@@ -13526,11 +13526,110 @@ export class LoadSessionResponse implements ILoadSessionResponse {
     public toJSON(): { [k: string]: any };
 }
 
+/** Properties of a NetworkIcon. */
+export interface INetworkIcon {
+
+    /** NetworkIcon data */
+    data?: (Uint8Array|null);
+
+    /** NetworkIcon type */
+    type?: (string|null);
+}
+
+/** Represents a NetworkIcon. */
+export class NetworkIcon implements INetworkIcon {
+
+    /**
+     * Constructs a new NetworkIcon.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: INetworkIcon);
+
+    /** NetworkIcon data. */
+    public data: Uint8Array;
+
+    /** NetworkIcon type. */
+    public type: string;
+
+    /**
+     * Creates a new NetworkIcon instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns NetworkIcon instance
+     */
+    public static create(properties?: INetworkIcon): NetworkIcon;
+
+    /**
+     * Encodes the specified NetworkIcon message. Does not implicitly {@link NetworkIcon.verify|verify} messages.
+     * @param message NetworkIcon message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: INetworkIcon, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified NetworkIcon message, length delimited. Does not implicitly {@link NetworkIcon.verify|verify} messages.
+     * @param message NetworkIcon message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: INetworkIcon, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a NetworkIcon message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns NetworkIcon
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkIcon;
+
+    /**
+     * Decodes a NetworkIcon message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns NetworkIcon
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkIcon;
+
+    /**
+     * Verifies a NetworkIcon message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a NetworkIcon message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns NetworkIcon
+     */
+    public static fromObject(object: { [k: string]: any }): NetworkIcon;
+
+    /**
+     * Creates a plain object from a NetworkIcon message. Also converts values to other types if specified.
+     * @param message NetworkIcon
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: NetworkIcon, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this NetworkIcon to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
 /** Properties of a CreateNetworkRequest. */
 export interface ICreateNetworkRequest {
 
     /** CreateNetworkRequest name */
     name?: (string|null);
+
+    /** CreateNetworkRequest icon */
+    icon?: (INetworkIcon|null);
 }
 
 /** Represents a CreateNetworkRequest. */
@@ -13544,6 +13643,9 @@ export class CreateNetworkRequest implements ICreateNetworkRequest {
 
     /** CreateNetworkRequest name. */
     public name: string;
+
+    /** CreateNetworkRequest icon. */
+    public icon?: (INetworkIcon|null);
 
     /**
      * Creates a new CreateNetworkRequest instance using the specified properties.

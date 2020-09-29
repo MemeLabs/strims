@@ -100,6 +100,7 @@ registerType("GetProfilesRequest", pb.GetProfilesRequest);
 registerType("GetProfilesResponse", pb.GetProfilesResponse);
 registerType("LoadSessionRequest", pb.LoadSessionRequest);
 registerType("LoadSessionResponse", pb.LoadSessionResponse);
+registerType("NetworkIcon", pb.NetworkIcon);
 registerType("CreateNetworkRequest", pb.CreateNetworkRequest);
 registerType("CreateNetworkResponse", pb.CreateNetworkResponse);
 registerType("UpdateNetworkRequest", pb.UpdateNetworkRequest);
