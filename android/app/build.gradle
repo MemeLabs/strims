@@ -51,7 +51,7 @@ android {
 dependencies {
     implementation name: 'bridge', ext: 'aar'
 
-    implementation Libs.Proto.googleProto
+    implementation Libs.Proto.wire
 
     implementation Libs.Player.exoPlayer
 

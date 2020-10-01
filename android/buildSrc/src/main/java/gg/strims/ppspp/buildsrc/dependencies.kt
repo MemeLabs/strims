@@ -5,7 +5,7 @@ object Versions {
 }
 
 object Libs {
-    const val androidGradlePlugin = "com.android.tools.build:gradle:4.2.0-alpha08"
+    const val androidGradlePlugin = "com.android.tools.build:gradle:4.2.0-alpha13"
     const val jdkDesugar = "com.android.tools:desugar_jdk_libs:1.0.9"
 
     const val junit = "junit:junit:4.13"
@@ -13,8 +13,8 @@ object Libs {
     const val material = "com.google.android.material:material:1.1.0"
 
     object Proto {
-        private const val version = "3.13.0"
-        const val googleProto = "com.google.protobuf:protobuf-java-util:$version"
+        private const val version = "3.4.0"
+        const val wire = "com.squareup.wire:wire-runtime:$version"
     }
 
     object Player {
@@ -42,7 +42,7 @@ object Libs {
 
         object Compose {
             const val snapshot = ""
-            private const val version = "1.0.0-alpha01"
+            private const val version = "1.0.0-alpha04"
 
             const val core = "androidx.compose.ui:ui:$version"
             const val foundation = "androidx.compose.foundation:foundation:$version"
