@@ -72,7 +72,5 @@ func (t *manager) manage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rw := vpn.NewWSReadWriter(c)
-	if err := t.RPCService.Listen(context.Background(), rw); err != nil {
-		log.Printf("connection closed: %s", err)
-	}
+	t.RPCService.Listen(context.Background(), rw)
 }

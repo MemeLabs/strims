@@ -34,13 +34,14 @@ func (a *androidSideWriter) Write(p []byte) (int, error) {
 }
 
 type GoSide struct {
-	w *io.PipeWriter
+	w io.Writer
 }
 
 // Write ...
 func (g *GoSide) Write(b []byte) error {
 	fmt.Printf("got value %x\n", b)
 	_, err := g.w.Write(b)
+	fmt.Println("done writing")
 	return err
 }
 
