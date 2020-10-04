@@ -1,13 +1,14 @@
 package gg.strims.ppspp.rpc
 
 import android.util.Log
-import com.squareup.wire.AnyMessage
-import com.squareup.wire.Message
-import com.squareup.wire.ProtoAdapter
+import com.squareup.wire.*
 import gg.strims.ppspp.proto.Call
 import gg.strims.ppspp.proto.Cancel
 import gg.strims.ppspp.proto.Close
 import gg.strims.ppspp.proto.Error
+import okio.buffer
+import okio.sink
+import okio.source
 import java.io.ByteArrayOutputStream
 import java.util.*
 import java.util.concurrent.ExecutorService
@@ -52,7 +53,10 @@ open class RPCClient(filepath: String) {
     private fun handleCallback(b: ByteArray?) {
         val stream = b!!.inputStream()
         try {
-            // parse call
+            // TODO
+            val s2 = stream.source().buffer()
+            ProtoReader(s2).readVarint64()
+            s2.close()
             val call = Call.ADAPTER.decode(stream)
             this.callbacks[call.parent_id]?.let {
                 it(call)
@@ -67,21 +71,22 @@ open class RPCClient(filepath: String) {
         return this.nextCallID
     }
 
-    fun <T : Message<*, *>> call(method: String, arg: T, callID: Long, parentID: Long = 0) {
+    fun <T : Message<T, *>> call(method: String, arg: T, callID: Long, parentID: Long = 0) {
         val packed = AnyMessage.pack(arg)
 
         val call = Call(parent_id = parentID, id = callID, method = method, argument = packed)
         val stream = ByteArrayOutputStream()
-        call.encode(stream)
-        stream.close()
+        val s2 = stream.sink().buffer()
+        val pw = ProtoWriter(s2)
+        Log.i("test", "encoded size is ${arg.adapter.encodedSize(arg)}")
+        pw.writeVarint64(Call.ADAPTER.encodedSize(call).toLong())
+        call.encode(s2)
+        s2.close()
 
-        Log.i("ree", "writing to bridge")
         this.g.write(stream.toByteArray())
-        Log.i("ree", "wrote to bridge")
-
     }
 
-    fun <T : Message<*, *>> call(method: String, arg: T) {
+    fun <T : Message<T, *>> call(method: String, arg: T) {
         this.call(method, arg, this.getNextCallID())
     }
 
