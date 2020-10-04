@@ -12,20 +12,10 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
-
-// WebRTCMediator ...
-type WebRTCMediator interface {
-	Scheme() string
-	GetOffer() ([]byte, error)
-	GetAnswer() ([]byte, error)
-	GetICECandidates() <-chan []byte
-	SendOffer([]byte) error
-	SendAnswer([]byte) error
-	SendICECandidate([]byte) error
-}
 
 var closedChan = make(chan struct{})
 
@@ -42,8 +32,8 @@ func newMediationID() uint64 {
 	return binary.LittleEndian.Uint64(b[:])
 }
 
-func newMediator(hostID kademlia.ID, network *Network) *mediator {
-	return &mediator{
+func newWebRTCMediator(hostID kademlia.ID, network *Network) *webRTCMediator {
+	return &webRTCMediator{
 		mediationID:           newMediationID(),
 		id:                    hostID,
 		network:               network,
@@ -54,13 +44,13 @@ func newMediator(hostID kademlia.ID, network *Network) *mediator {
 	}
 }
 
-func newMediatorFromOffer(
+func newWebRTCMediatorFromOffer(
 	hostID kademlia.ID,
 	network *Network,
 	remoteMediationID uint64,
 	offer []byte,
-) *mediator {
-	return &mediator{
+) *webRTCMediator {
+	return &webRTCMediator{
 		mediationID:           newMediationID(),
 		remoteMediationID:     remoteMediationID,
 		id:                    hostID,
@@ -73,7 +63,7 @@ func newMediatorFromOffer(
 	}
 }
 
-type mediator struct {
+type webRTCMediator struct {
 	mediationID           uint64
 	remoteMediationID     uint64
 	id                    kademlia.ID
@@ -92,15 +82,15 @@ type mediator struct {
 	remoteDescription     []byte
 }
 
-func (m *mediator) Scheme() string {
-	return "webrtc"
+func (m *webRTCMediator) Scheme() string {
+	return vnic.WebRTCScheme
 }
 
-func (m *mediator) String() string {
-	return fmt.Sprintf("webrtc:%x/%s", m.network.CAKey(), m.id)
+func (m *webRTCMediator) String() string {
+	return fmt.Sprintf("%s:%x/%s", vnic.WebRTCScheme, m.network.Key(), m.id)
 }
 
-func (m *mediator) SetAnswer(remoteMediationID uint64, answer []byte) error {
+func (m *webRTCMediator) SetAnswer(remoteMediationID uint64, answer []byte) error {
 	if remoteMediationID == 0 {
 		return errors.New("remote mediation id must be non zero")
 	}
@@ -118,14 +108,14 @@ func (m *mediator) SetAnswer(remoteMediationID uint64, answer []byte) error {
 	return nil
 }
 
-func (m *mediator) close(err error) {
+func (m *webRTCMediator) close(err error) {
 	m.closeOnce.Do(func() {
 		m.closeErr = err
 		close(m.done)
 	})
 }
 
-func (m *mediator) addICECandidate(index uint64, candidate []byte) (bool, error) {
+func (m *webRTCMediator) addICECandidate(index uint64, candidate []byte) (bool, error) {
 	if index > 64 {
 		return false, errors.New("ice candidate index out of range")
 	}
@@ -156,7 +146,7 @@ func (m *mediator) addICECandidate(index uint64, candidate []byte) (bool, error)
 	return false, nil
 }
 
-func (m *mediator) getRemoteDescription() ([]byte, error) {
+func (m *webRTCMediator) getRemoteDescription() ([]byte, error) {
 	select {
 	case <-m.remoteDescriptionDone:
 		return m.remoteDescription, nil
@@ -165,7 +155,7 @@ func (m *mediator) getRemoteDescription() ([]byte, error) {
 	}
 }
 
-func (m *mediator) GetOffer() ([]byte, error) {
+func (m *webRTCMediator) GetOffer() ([]byte, error) {
 	if m.init {
 		return nil, nil
 	}
@@ -173,15 +163,15 @@ func (m *mediator) GetOffer() ([]byte, error) {
 	return m.getRemoteDescription()
 }
 
-func (m *mediator) GetAnswer() ([]byte, error) {
+func (m *webRTCMediator) GetAnswer() ([]byte, error) {
 	return m.getRemoteDescription()
 }
 
-func (m *mediator) GetICECandidates() <-chan []byte {
+func (m *webRTCMediator) GetICECandidates() <-chan []byte {
 	return m.remoteICECandiates
 }
 
-func (m *mediator) SendOffer(offer []byte) error {
+func (m *webRTCMediator) SendOffer(offer []byte) error {
 	msg := &pb.PeerExchangeMessage{
 		Body: &pb.PeerExchangeMessage_Offer_{
 			Offer: &pb.PeerExchangeMessage_Offer{
@@ -190,10 +180,10 @@ func (m *mediator) SendOffer(offer []byte) error {
 			},
 		},
 	}
-	return sendProto(m.network, m.id, PeerExchangePort, PeerExchangePort, msg)
+	return m.network.SendProto(m.id, vnic.PeerExchangePort, vnic.PeerExchangePort, msg)
 }
 
-func (m *mediator) SendAnswer(answer []byte) error {
+func (m *webRTCMediator) SendAnswer(answer []byte) error {
 	msg := &pb.PeerExchangeMessage{
 		Body: &pb.PeerExchangeMessage_Answer_{
 			Answer: &pb.PeerExchangeMessage_Answer{
@@ -202,10 +192,10 @@ func (m *mediator) SendAnswer(answer []byte) error {
 			},
 		},
 	}
-	return sendProto(m.network, m.id, PeerExchangePort, PeerExchangePort, msg)
+	return m.network.SendProto(m.id, vnic.PeerExchangePort, vnic.PeerExchangePort, msg)
 }
 
-func (m *mediator) SendICECandidate(candidate []byte) error {
+func (m *webRTCMediator) SendICECandidate(candidate []byte) error {
 	index := atomic.AddUint64(&m.nextICESendIndex, 1) - 1
 
 	if _, err := m.getRemoteDescription(); err != nil {
@@ -221,7 +211,7 @@ func (m *mediator) SendICECandidate(candidate []byte) error {
 			},
 		},
 	}
-	return sendProto(m.network, m.id, PeerExchangePort, PeerExchangePort, msg)
+	return m.network.SendProto(m.id, vnic.PeerExchangePort, vnic.PeerExchangePort, msg)
 }
 
 // NewPeerExchange ...
@@ -229,7 +219,7 @@ func NewPeerExchange(logger *zap.Logger, network *Network) *PeerExchange {
 	return &PeerExchange{
 		logger:    logger,
 		network:   network,
-		mediators: map[kademlia.ID]*mediator{},
+		mediators: map[kademlia.ID]*webRTCMediator{},
 	}
 }
 
@@ -238,7 +228,7 @@ type PeerExchange struct {
 	logger        *zap.Logger
 	network       *Network
 	mediatorsLock sync.Mutex
-	mediators     map[kademlia.ID]*mediator
+	mediators     map[kademlia.ID]*webRTCMediator
 }
 
 // HandleMessage ...
@@ -273,7 +263,7 @@ func (s *PeerExchange) HandleMessage(msg *Message) (bool, error) {
 // Connect create mediator to negotiate connection with peer
 func (s *PeerExchange) Connect(hostID kademlia.ID) error {
 	// TODO: handle races
-	if _, ok := s.network.host.GetPeer(hostID); ok {
+	if s.network.hasLink(hostID) {
 		return nil
 	}
 
@@ -285,7 +275,7 @@ func (s *PeerExchange) Connect(hostID kademlia.ID) error {
 	}
 
 	go func() {
-		if err := s.dial(newMediator(hostID, s.network)); err != nil {
+		if err := s.dial(newWebRTCMediator(hostID, s.network)); err != nil {
 			s.logger.Debug(
 				"dial failed requesting callback",
 				zap.Stringer("host", hostID),
@@ -309,12 +299,12 @@ func (s *PeerExchange) sendCallbackRequest(hostID kademlia.ID) error {
 			CallbackRequest: &pb.PeerExchangeMessage_CallbackRequest{},
 		},
 	}
-	return sendProto(s.network, hostID, PeerExchangePort, PeerExchangePort, msg)
+	return s.network.SendProto(hostID, vnic.PeerExchangePort, vnic.PeerExchangePort, msg)
 }
 
 func (s *PeerExchange) handleCallbackRequest(m *pb.PeerExchangeMessage_CallbackRequest, msg *Message) error {
 	go func() {
-		if err := s.dial(newMediator(msg.FromHostID(), s.network)); err != nil {
+		if err := s.dial(newWebRTCMediator(msg.FromHostID(), s.network)); err != nil {
 			s.logger.Debug(
 				"dial failed handling callback request",
 				zap.Error(err),
@@ -330,7 +320,7 @@ func (s *PeerExchange) handleOffer(m *pb.PeerExchangeMessage_Offer, msg *Message
 		zap.Stringer("host", msg.FromHostID()),
 	)
 	go func() {
-		if err := s.dial(newMediatorFromOffer(msg.FromHostID(), s.network, m.MediationId, m.Data)); err != nil {
+		if err := s.dial(newWebRTCMediatorFromOffer(msg.FromHostID(), s.network, m.MediationId, m.Data)); err != nil {
 			s.logger.Debug(
 				"dial failed for newMediatorFromOffer",
 				zap.Error(err),
@@ -340,7 +330,7 @@ func (s *PeerExchange) handleOffer(m *pb.PeerExchangeMessage_Offer, msg *Message
 	return nil
 }
 
-func (s *PeerExchange) dial(t *mediator) error {
+func (s *PeerExchange) dial(t *webRTCMediator) error {
 	if _, ok := s.mediators[t.id]; ok {
 		return errors.New("duplicate connection attempt")
 	}

@@ -1,4 +1,4 @@
-package service
+package pubsub
 
 import (
 	"bytes"
@@ -28,13 +28,13 @@ const pubSubChunkSize = 128
 const syncAddrRetryIvl = 5 * time.Second
 const syncAddrRefreshIvl = 10 * time.Minute
 
-// PubSubServerOptions ...
-type PubSubServerOptions struct {
+// ServerOptions ...
+type ServerOptions struct {
 	Key *pb.Key
 }
 
-// NewPubSubServer ...
-func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubServer, error) {
+// NewServer ...
+func NewServer(svc *NetworkServices, key *pb.Key, salt []byte) (*Server, error) {
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
 		// SwarmOptions: ppspp.NewDefaultSwarmOptions(),
 		SwarmOptions: ppspp.SwarmOptions{
@@ -81,7 +81,7 @@ func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubSer
 		return nil, err
 	}
 
-	s := &PubSubServer{
+	s := &Server{
 		logger:   svc.Host.Logger(),
 		close:    cancel,
 		messages: make(chan *pb.PubSubEvent_Message),
@@ -99,8 +99,8 @@ func NewPubSubServer(svc *NetworkServices, key *pb.Key, salt []byte) (*PubSubSer
 	return s, nil
 }
 
-// PubSubServer ...
-type PubSubServer struct {
+// Server ...
+type Server struct {
 	logger    *zap.Logger
 	close     context.CancelFunc
 	closeOnce sync.Once
@@ -111,7 +111,7 @@ type PubSubServer struct {
 }
 
 // Close ...
-func (s *PubSubServer) Close() {
+func (s *Server) Close() {
 	s.closeOnce.Do(func() {
 		s.close()
 		close(s.messages)
@@ -120,12 +120,12 @@ func (s *PubSubServer) Close() {
 }
 
 // Messages ...
-func (s *PubSubServer) Messages() <-chan *pb.PubSubEvent_Message {
+func (s *Server) Messages() <-chan *pb.PubSubEvent_Message {
 	return s.messages
 }
 
 // Send ...
-func (s *PubSubServer) Send(ctx context.Context, key string, body []byte) error {
+func (s *Server) Send(ctx context.Context, key string, body []byte) error {
 	_, err := s.send(&pb.PubSubEvent{
 		Body: &pb.PubSubEvent_Message_{
 			Message: &pb.PubSubEvent_Message{
@@ -153,7 +153,7 @@ func (s *PubSubServer) Send(ctx context.Context, key string, body []byte) error 
 	return nil
 }
 
-func (s *PubSubServer) send(e *pb.PubSubEvent) (int, error) {
+func (s *Server) send(e *pb.PubSubEvent) (int, error) {
 	b := pool.Get(uint16(proto.Size(e)))
 	defer pool.Put(b)
 
@@ -170,7 +170,7 @@ func (s *PubSubServer) send(e *pb.PubSubEvent) (int, error) {
 }
 
 // HandleMessage ...
-func (s *PubSubServer) HandleMessage(msg *vpn.Message) (forward bool, err error) {
+func (s *Server) HandleMessage(msg *vpn.Message) (forward bool, err error) {
 	var req pb.PubSubEvent
 	if err := proto.Unmarshal(msg.Body, &req); err != nil {
 		return false, err
@@ -186,8 +186,8 @@ func (s *PubSubServer) HandleMessage(msg *vpn.Message) (forward bool, err error)
 	return true, nil
 }
 
-// NewPubSubClient ...
-func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, error) {
+// NewClient ...
+func NewClient(svc *NetworkServices, key, salt []byte) (*Client, error) {
 	port, err := svc.Network.ReservePort()
 	if err != nil {
 		return nil, err
@@ -220,7 +220,7 @@ func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, err
 
 	newSwarmPeerManager(ctx, svc, getPeersGetter(ctx, svc, key, salt))
 
-	c := &PubSubClient{
+	c := &Client{
 		logger:    svc.Host.Logger(),
 		ctx:       ctx,
 		close:     cancel,
@@ -233,7 +233,7 @@ func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, err
 
 	go c.syncAddr(svc, key, salt)
 	go func() {
-		if err := c.readPubSubEvents(); err != nil {
+		if err := c.readEvents(); err != nil {
 			c.logger.Debug("pubsub read error", zap.Error(err))
 		}
 	}()
@@ -241,8 +241,8 @@ func NewPubSubClient(svc *NetworkServices, key, salt []byte) (*PubSubClient, err
 	return c, nil
 }
 
-// PubSubClient ...
-type PubSubClient struct {
+// Client ...
+type Client struct {
 	logger    *zap.Logger
 	ctx       context.Context
 	close     context.CancelFunc
@@ -255,7 +255,7 @@ type PubSubClient struct {
 	messages  chan *pb.PubSubEvent_Message
 }
 
-func (c *PubSubClient) syncAddr(svc *NetworkServices, key, salt []byte) {
+func (c *Client) syncAddr(svc *NetworkServices, key, salt []byte) {
 	var nextTick time.Duration
 	var closeOnce sync.Once
 	for {
@@ -278,7 +278,7 @@ func (c *PubSubClient) syncAddr(svc *NetworkServices, key, salt []byte) {
 }
 
 // Close ...
-func (c *PubSubClient) Close() {
+func (c *Client) Close() {
 	c.closeOnce.Do(func() {
 		c.close()
 		close(c.messages)
@@ -287,12 +287,12 @@ func (c *PubSubClient) Close() {
 }
 
 // Messages ...
-func (c *PubSubClient) Messages() <-chan *pb.PubSubEvent_Message {
+func (c *Client) Messages() <-chan *pb.PubSubEvent_Message {
 	return c.messages
 }
 
 // Send ...
-func (c *PubSubClient) Send(ctx context.Context, key string, body []byte) error {
+func (c *Client) Send(ctx context.Context, key string, body []byte) error {
 	select {
 	case <-c.addrReady:
 	case <-c.ctx.Done():
@@ -322,7 +322,7 @@ func (c *PubSubClient) Send(ctx context.Context, key string, body []byte) error 
 	return c.svc.Network.Send(addr.HostID, addr.Port, c.port, b)
 }
 
-func (c *PubSubClient) readPubSubEvents() error {
+func (c *Client) readEvents() error {
 	defer c.Close()
 
 	r := prefixstream.NewReader(c.swarm.Reader())

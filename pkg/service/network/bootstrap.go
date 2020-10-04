@@ -1,4 +1,4 @@
-package service
+package network
 
 import (
 	"errors"
@@ -9,6 +9,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -24,7 +26,7 @@ func NewBootstrapService(
 	logger *zap.Logger,
 	host *vpn.Host,
 	store *dao.ProfileStore,
-	networkController *NetworkController,
+	networkController *Controller,
 	opt BootstrapServiceOptions,
 ) *BootstrapService {
 	s := &BootstrapService{
@@ -43,13 +45,13 @@ func NewBootstrapService(
 type BootstrapService struct {
 	logger            *zap.Logger
 	store             *dao.ProfileStore
-	networkController *NetworkController
+	networkController *Controller
 	peersLock         sync.Mutex
 	peers             bootstrapServicePeerMap
 	enablePublishing  bool
 }
 
-func (c *BootstrapService) handlePeer(peer *vpn.Peer) {
+func (c *BootstrapService) handlePeer(peer *vnic.Peer) {
 	c.logger.Debug("creating boostrap service peer", logutil.ByteHex("peer", peer.Certificate.Key))
 	p := newBootstrapServicePeer(c.logger, c.store, c.networkController, peer)
 
@@ -73,7 +75,7 @@ func (c *BootstrapService) handlePeer(peer *vpn.Peer) {
 }
 
 // HandleFrame ...
-func (c *BootstrapService) HandleFrame(p *vpn.Peer, f vpn.Frame) error {
+func (c *BootstrapService) HandleFrame(p *vnic.Peer, f vnic.Frame) error {
 	return nil
 }
 
@@ -108,22 +110,22 @@ func (c *BootstrapService) PublishNetwork(hostID kademlia.ID, network *pb.Networ
 func newBootstrapServicePeer(
 	logger *zap.Logger,
 	store *dao.ProfileStore,
-	networkController *NetworkController,
-	peer *vpn.Peer,
+	networkController *Controller,
+	peer *vnic.Peer,
 ) *bootstrapServicePeer {
 	s := &bootstrapServicePeer{
 		logger:            logger,
 		vpnPeer:           peer,
-		ch:                vpn.NewFrameReadWriter(peer.Link, vpn.BootstrapPort, peer.Link.MTU()),
+		ch:                vnic.NewFrameReadWriter(peer.Link, vnic.BootstrapPort, peer.Link.MTU()),
 		store:             store,
 		networkController: networkController,
 	}
 
-	peer.SetHandler(vpn.BootstrapPort, s.ch.HandleFrame)
+	peer.SetHandler(vnic.BootstrapPort, s.ch.HandleFrame)
 	go func() {
 		s.readMessages()
 
-		peer.RemoveHandler(vpn.BootstrapPort)
+		peer.RemoveHandler(vnic.BootstrapPort)
 	}()
 
 	return s
@@ -132,17 +134,17 @@ func newBootstrapServicePeer(
 // bootstrapServicePeer ...
 type bootstrapServicePeer struct {
 	logger            *zap.Logger
-	vpnPeer           *vpn.Peer
-	ch                *vpn.FrameReadWriter
+	vpnPeer           *vnic.Peer
+	ch                *vnic.FrameReadWriter
 	store             *dao.ProfileStore
-	networkController *NetworkController
+	networkController *Controller
 	enablePublishing  bool
 }
 
 func (s *bootstrapServicePeer) readMessages() {
 	var msg pb.BootstrapServiceMessage
 	for {
-		if err := vpn.ReadProtoStream(s.ch, &msg); err != nil {
+		if err := protoutil.ReadStream(s.ch, &msg); err != nil {
 			s.logger.Info("bootstrap service peer read error", zap.Error(err))
 			break
 		}
@@ -192,7 +194,7 @@ func (s *bootstrapServicePeer) PublishNetwork(network *pb.Network, validDuration
 	}
 	cert.ParentOneof = &pb.Certificate_Parent{Parent: network.Certificate}
 
-	err = vpn.WriteProtoStream(s.ch, &pb.BootstrapServiceMessage{
+	err = protoutil.WriteStream(s.ch, &pb.BootstrapServiceMessage{
 		Body: &pb.BootstrapServiceMessage_PublishRequest_{
 			PublishRequest: &pb.BootstrapServiceMessage_PublishRequest{
 				Name:        network.Name,
@@ -208,7 +210,7 @@ func (s *bootstrapServicePeer) PublishNetwork(network *pb.Network, validDuration
 
 // EnablePublishing ...
 func (s *bootstrapServicePeer) EnablePublishing() error {
-	err := vpn.WriteProtoStream(s.ch, &pb.BootstrapServiceMessage{
+	err := protoutil.WriteStream(s.ch, &pb.BootstrapServiceMessage{
 		Body: &pb.BootstrapServiceMessage_BrokerOffer_{
 			BrokerOffer: &pb.BootstrapServiceMessage_BrokerOffer{},
 		},
@@ -267,7 +269,7 @@ func StartBootstrapClients(logger *zap.Logger, host *vpn.Host, store *dao.Profil
 		switch o := o.ClientOptions.(type) {
 		case *pb.BootstrapClient_WebsocketOptions:
 			go func() {
-				err := host.Dial(vpn.WebSocketAddr{
+				err := host.Dial(vnic.WebSocketAddr{
 					URL:                   o.WebsocketOptions.Url,
 					InsecureSkipVerifyTLS: o.WebsocketOptions.InsecureSkipVerifyTls,
 				})

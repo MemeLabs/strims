@@ -21,12 +21,6 @@ func NewSwarmID(key []byte) SwarmID {
 	return SwarmID(b)
 }
 
-// LiveSignatureByteLength ...
-func (s SwarmID) LiveSignatureByteLength() int {
-	// ECDSAP256SHA256
-	return 64
-}
-
 // String ...
 func (s SwarmID) String() string {
 	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(s)

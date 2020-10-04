@@ -17,6 +17,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/go-ppspp/pkg/randutil"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -29,21 +31,14 @@ const hashTableMaxSize = 5120
 
 var nextHashTableID uint32
 
-// HashTable ...
-type HashTable interface {
-	Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error)
-	Get(ctx context.Context, key, salt []byte) (<-chan *HashTableValue, error)
-	HandleMessage(msg *Message) (forward bool, err error)
-}
-
 // NewHashTable ...
-func NewHashTable(logger *zap.Logger, n *Network, store *HashTableStore) HashTable {
+func NewHashTable(logger *zap.Logger, n *Network, store *HashTableStore) *HashTable {
 	id := atomic.AddUint32(&nextHashTableID, 1)
 	if id == 0 {
 		panic("hash table id overflow")
 	}
 
-	return &hashTable{
+	return &HashTable{
 		logger:  logger,
 		id:      id,
 		store:   store,
@@ -51,7 +46,8 @@ func NewHashTable(logger *zap.Logger, n *Network, store *HashTableStore) HashTab
 	}
 }
 
-type hashTable struct {
+// HashTable ...
+type HashTable struct {
 	logger              *zap.Logger
 	id                  uint32
 	store               *HashTableStore
@@ -59,7 +55,8 @@ type hashTable struct {
 	searchResponseChans sync.Map
 }
 
-func (s *hashTable) HandleMessage(msg *Message) (forward bool, err error) {
+// HandleMessage ...
+func (s *HashTable) HandleMessage(msg *Message) (forward bool, err error) {
 	var m pb.HashTableMessage
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
 		return true, err
@@ -85,7 +82,7 @@ func (s *hashTable) HandleMessage(msg *Message) (forward bool, err error) {
 	return true, err
 }
 
-func (s *hashTable) handlePublish(r *pb.HashTableMessage_Record) error {
+func (s *HashTable) handlePublish(r *pb.HashTableMessage_Record) error {
 	if !verifyHashTableRecord(r) {
 		return errors.New("invalid record signature")
 	}
@@ -93,7 +90,7 @@ func (s *hashTable) handlePublish(r *pb.HashTableMessage_Record) error {
 	return s.store.Insert(s.id, r)
 }
 
-func (s *hashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
+func (s *HashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
 	if !verifyHashTableRecord(r) {
 		return errors.New("invalid record signature")
 	}
@@ -101,7 +98,7 @@ func (s *hashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
 	return s.store.Remove(s.id, r)
 }
 
-func (s *hashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHostID kademlia.ID) error {
+func (s *HashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHostID kademlia.ID) error {
 	record := s.store.Get(s.id, m.Hash)
 	if record == nil {
 		return nil
@@ -115,10 +112,10 @@ func (s *hashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHo
 			},
 		},
 	}
-	return sendProto(s.network, originHostID, HashTablePort, HashTablePort, msg)
+	return s.network.SendProto(originHostID, vnic.HashTablePort, vnic.HashTablePort, msg)
 }
 
-func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse) error {
+func (s *HashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse) error {
 	if !verifyHashTableRecord(m.Record) {
 		return nil
 	}
@@ -130,18 +127,20 @@ func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse) error 
 	return nil
 }
 
-func (s *hashTable) Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error) {
+// Set ...
+func (s *HashTable) Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error) {
 	return newHashTablePublisher(ctx, s.logger, s.network, key, salt, value)
 }
 
-func (s *hashTable) Get(ctx context.Context, key, salt []byte) (<-chan *HashTableValue, error) {
+// Get ...
+func (s *HashTable) Get(ctx context.Context, key, salt []byte) (<-chan *HashTableValue, error) {
 	hash := hashTableRecordHash(key, salt)
 	target, err := kademlia.UnmarshalID(hash)
 	if err != nil {
 		return nil, err
 	}
 
-	rid, err := randUint64()
+	rid, err := randutil.Uint64()
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +153,7 @@ func (s *hashTable) Get(ctx context.Context, key, salt []byte) (<-chan *HashTabl
 			},
 		},
 	}
-	if err := sendProto(s.network, target, HashTablePort, HashTablePort, msg); err != nil {
+	if err := s.network.SendProto(target, vnic.HashTablePort, vnic.HashTablePort, msg); err != nil {
 		return nil, err
 	}
 
@@ -442,7 +441,7 @@ func (p *HashTablePublisher) publish(t time.Time) {
 			},
 		},
 	}
-	if err := sendProto(p.network, p.target, HashTablePort, HashTablePort, msg); err != nil {
+	if err := p.network.SendProto(p.target, vnic.HashTablePort, vnic.HashTablePort, msg); err != nil {
 		p.logger.Debug(
 			"error publishing hash table item",
 			zap.Error(err),
@@ -465,7 +464,7 @@ func (p *HashTablePublisher) unpublish() {
 			},
 		},
 	}
-	if err := sendProto(p.network, p.target, HashTablePort, HashTablePort, msg); err != nil {
+	if err := p.network.SendProto(p.target, vnic.HashTablePort, vnic.HashTablePort, msg); err != nil {
 		p.logger.Debug(
 			"error unpublishing hash table item",
 			zap.Error(err),

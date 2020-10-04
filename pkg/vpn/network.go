@@ -1,360 +1,24 @@
 package vpn
 
 import (
-	"bytes"
-	"errors"
-	"log"
+	"fmt"
 	"math"
-	"sort"
 	"sync"
 	"sync/atomic"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/event"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/go-ppspp/pkg/randutil"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	lru "github.com/hashicorp/golang-lru"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
 
-const recentMessageIDHistoryLength = 10000
-const maxMessageHops = 5
-const maxMessageReplicas = 5
-
-// errors ...
-var (
-	ErrDuplicateNetworkKey      = errors.New("duplicate network key")
-	ErrNetworkNotFound          = errors.New("network not found")
-	ErrPeerClosed               = errors.New("peer closed")
-	ErrNetworkBindingsEmpty     = errors.New("network bindings empty")
-	ErrDiscriminatorBounds      = errors.New("discriminator out of range")
-	ErrNetworkOwnerMismatch     = errors.New("init and network certificate key mismatch")
-	ErrNetworkAuthorityMismatch = errors.New("network ca mismatch")
-	ErrNetworkIDBounds          = errors.New("network id out of range")
-)
-
-// NewNetworks ...
-func NewNetworks(logger *zap.Logger, host *Host) *Networks {
-	recentMessageIDs, err := lru.New(recentMessageIDHistoryLength)
-	if err != nil {
-		panic(err)
-	}
-
-	n := &Networks{
-		logger:           logger,
-		host:             host,
-		recentMessageIDs: recentMessageIDs,
-	}
-
-	host.AddPeerHandler(n.handlePeer)
-
-	return n
-}
-
-// Networks ...
-type Networks struct {
-	logger               *zap.Logger
-	host                 *Host
-	networksLock         sync.Mutex
-	networks             []*Network
-	networkObservers     event.Observable
-	peerNetworkObservers event.Observable
-	recentMessageIDs     *lru.Cache
-}
-
-func (h *Networks) handlePeer(p *Peer) {
-	newNetworkBootstrap(h.logger, h, p)
-}
-
-// NotifyNetwork ...
-func (h *Networks) NotifyNetwork(ch chan *Network) {
-	h.networkObservers.Notify(ch)
-}
-
-// StopNotifyingNetwork ...
-func (h *Networks) StopNotifyingNetwork(ch chan *Network) {
-	h.networkObservers.StopNotifying(ch)
-}
-
-// NotifyPeerNetwork ...
-func (h *Networks) NotifyPeerNetwork(ch chan PeerNetwork) {
-	h.peerNetworkObservers.Notify(ch)
-}
-
-// AddNetwork ...
-func (h *Networks) AddNetwork(cert *pb.Certificate) (*Network, error) {
-	n := NewNetwork(h.logger, h.host, cert, h.recentMessageIDs)
-
-	h.networksLock.Lock()
-	defer h.networksLock.Unlock()
-
-	end := len(h.networks)
-	i, ok := h.findIndexByKey(n.CAKey())
-	if ok {
-		return nil, ErrDuplicateNetworkKey
-	}
-
-	h.networks = append(h.networks, n)
-	if i != end {
-		copy(h.networks[i+1:], h.networks[i:])
-		h.networks[i] = n
-	}
-
-	h.networkObservers.Emit(n)
-
-	return n, nil
-}
-
-// RemoveNetwork ...
-func (h *Networks) RemoveNetwork(n *Network) error {
-	h.networksLock.Lock()
-	defer h.networksLock.Unlock()
-
-	i, ok := h.findIndexByKey(n.CAKey())
-	if !ok || h.networks[i] != n {
-		return ErrNetworkNotFound
-	}
-
-	copy(h.networks[i:], h.networks[i+1:])
-	h.networks = h.networks[:len(h.networks)-1]
-
-	n.Close()
-	return nil
-}
-
-// Networks ...
-func (h *Networks) Networks() []*Network {
-	h.networksLock.Lock()
-	defer h.networksLock.Unlock()
-	c := make([]*Network, len(h.networks))
-	copy(c, h.networks)
-	return c
-}
-
-// NetworkKeys ...
-func (h *Networks) NetworkKeys() [][]byte {
-	h.networksLock.Lock()
-	defer h.networksLock.Unlock()
-
-	keys := make([][]byte, len(h.networks))
-	for i, n := range h.networks {
-		keys[i] = n.CAKey()
-	}
-	return keys
-}
-
-// FindByKey ...
-func (h *Networks) FindByKey(key []byte) (*Network, bool) {
-	h.networksLock.Lock()
-	defer h.networksLock.Unlock()
-
-	i, ok := h.findIndexByKey(key)
-	if !ok {
-		return nil, false
-	}
-	return h.networks[i], true
-}
-
-func (h *Networks) findIndexByKey(key []byte) (int, bool) {
-	end := len(h.networks)
-	i := sort.Search(end, func(i int) bool {
-		return bytes.Compare(key, h.networks[i].CAKey()) >= 0
-	})
-	return i, i < end && bytes.Equal(key, h.networks[i].CAKey())
-}
-
-func newNetworkBootstrap(logger *zap.Logger, n *Networks, peer *Peer) *networkBootstrap {
-	b := &networkBootstrap{
-		logger:     logger,
-		networks:   n,
-		peer:       peer,
-		links:      make(map[*Network]*networkLink),
-		handshakes: make(chan *pb.NetworkHandshake),
-	}
-
-	ch := NewFrameReadWriter(peer.Link, NetworkInitPort, peer.Link.MTU())
-	peer.SetHandler(NetworkInitPort, ch.HandleFrame)
-
-	go func() {
-		if err := b.readHandshakes(ch); err != nil {
-			logger.Error("failed to read handshake", zap.Error(err))
-		}
-		peer.Close()
-	}()
-
-	bch := NewFrameReadWriter(peer.Link, NetworkBrokerPort, peer.Link.MTU())
-	peer.SetHandler(NetworkBrokerPort, bch.HandleFrame)
-
-	go func() {
-		if err := b.negotiateNetworks(ch, bch); err != nil {
-			logger.Error("failed to bootstrap peer networks", zap.Error(err))
-		}
-
-		peer.RemoveHandler(NetworkInitPort)
-		peer.RemoveHandler(NetworkBrokerPort)
-
-		b.removeNetworkLinks()
-	}()
-
-	return b
-}
-
-type networkBootstrap struct {
-	logger     *zap.Logger
-	networks   *Networks
-	peer       *Peer
-	links      map[*Network]*networkLink
-	handshakes chan *pb.NetworkHandshake
-}
-
-func (h *networkBootstrap) negotiateNetworks(ch, bch *FrameReadWriter) (err error) {
-	networks := make(chan *Network, 1)
-	h.networks.NotifyNetwork(networks)
-	defer h.networks.StopNotifyingNetwork(networks)
-
-	broker, err := h.networks.host.networkBroker.BrokerPeer(bch)
-	if err != nil {
-		return err
-	}
-	defer broker.Close()
-
-	if err := h.initBroker(broker); err != nil {
-		return err
-	}
-
-	for {
-		select {
-		case keys := <-broker.Keys():
-			err = h.exchangeBindingsAsSender(ch, keys)
-		case handshake := <-h.handshakes:
-			err = h.exchangeBindingsAsReceiver(ch, handshake)
-		case <-networks:
-			err = h.initBroker(broker)
-		case <-broker.InitRequired():
-			err = h.initBroker(broker)
-		case <-h.peer.Done():
-			err = ErrPeerClosed
-		}
-		if err != nil {
-			return err
-		}
-	}
-}
-
-func (h *networkBootstrap) removeNetworkLinks() {
-	for n, l := range h.links {
-		h.logger.Debug(
-			"removing peer from network",
-			zap.Stringer("peer", l.hostID),
-			logutil.ByteHex("network", certificateParentKey(n.certificate)),
-		)
-
-		n.RemoveLink(l)
-	}
-}
-
-func (h *networkBootstrap) readHandshakes(ch *FrameReadWriter) error {
-	for {
-		var handshake pb.NetworkHandshake
-		if err := ReadProtoStream(ch, &handshake); err != nil {
-			return err
-		}
-		h.handshakes <- &handshake
-	}
-}
-
-func (h *networkBootstrap) initBroker(b NetworkBrokerPeer) error {
-	// peers have to agree to sender/receiver preference prior to negotiation.
-	// comparing host ids is arbitrary but gauranteed to be asymetric.
-	return b.Init(h.peer.hostID.Less(h.networks.host.ID()), h.networks.NetworkKeys())
-}
-
-func (h *networkBootstrap) exchangeBindingsAsSender(ch *FrameReadWriter, keys [][]byte) error {
-	networkBindings, err := h.sendNetworkBindings(ch, keys)
-	if err != nil {
-		return err
-	}
-	handshake := <-h.handshakes
-	peerNetworkBindings := handshake.GetNetworkBindings()
-	if _, err = h.verifyNetworkBindings(peerNetworkBindings); err != nil {
-		return err
-	}
-	return h.handleNetworkBindings(networkBindings, peerNetworkBindings.NetworkBindings)
-}
-
-func (h *networkBootstrap) exchangeBindingsAsReceiver(ch *FrameReadWriter, handshake *pb.NetworkHandshake) error {
-	peerNetworkBindings := handshake.GetNetworkBindings()
-	keys, err := h.verifyNetworkBindings(peerNetworkBindings)
-	if err != nil {
-		return err
-	}
-	networkBindings, err := h.sendNetworkBindings(ch, keys)
-	if err != nil {
-		return err
-	}
-	return h.handleNetworkBindings(networkBindings, peerNetworkBindings.NetworkBindings)
-}
-
-func (h *networkBootstrap) sendNetworkBindings(ch *FrameReadWriter, keys [][]byte) ([]*pb.NetworkHandshake_NetworkBinding, error) {
-	var bindings []*pb.NetworkHandshake_NetworkBinding
-
-	for _, key := range keys {
-		n, ok := h.networks.FindByKey(key)
-		if !ok {
-			return nil, ErrNetworkNotFound
-		}
-		if _, ok := h.links[n]; ok {
-			continue
-		}
-
-		port, err := h.peer.ReservePort()
-		if err != nil {
-			return nil, err
-		}
-
-		bindings = append(
-			bindings,
-			&pb.NetworkHandshake_NetworkBinding{
-				Port:        uint32(port),
-				Certificate: n.certificate,
-			},
-		)
-	}
-	err := WriteProtoStream(ch, &pb.NetworkHandshake{
-		Body: &pb.NetworkHandshake_NetworkBindings_{
-			NetworkBindings: &pb.NetworkHandshake_NetworkBindings{
-				NetworkBindings: bindings,
-			},
-		},
-	})
-	if err != nil {
-		return nil, err
-	}
-	if err := ch.Flush(); err != nil {
-		return nil, err
-	}
-	return bindings, nil
-}
-
-func (h *networkBootstrap) verifyNetworkBindings(bindings *pb.NetworkHandshake_NetworkBindings) ([][]byte, error) {
-	if bindings == nil {
-		return nil, ErrNetworkBindingsEmpty
-	}
-
-	keys := make([][]byte, len(bindings.NetworkBindings))
-	for i, b := range bindings.NetworkBindings {
-		if err := dao.VerifyCertificate(b.Certificate); err != nil {
-			return nil, err
-		}
-		keys[i] = certificateParentKey(b.Certificate)
-	}
-	return keys, nil
-}
-
-// NewNetwork ...
-func NewNetwork(logger *zap.Logger, host *Host, certificate *pb.Certificate, recentMessageIDs *lru.Cache) *Network {
+// newNetwork ...
+func newNetwork(logger *zap.Logger, host *vnic.Host, certificate *pb.Certificate, recentMessageIDs *lru.Cache) *Network {
 	return &Network{
 		logger:           logger,
 		host:             host,
@@ -367,54 +31,10 @@ func NewNetwork(logger *zap.Logger, host *Host, certificate *pb.Certificate, rec
 	}
 }
 
-func (h *networkBootstrap) handleNetworkBindings(networkBindings, peerNetworkBindings []*pb.NetworkHandshake_NetworkBinding) error {
-	for i, pb := range peerNetworkBindings {
-		b := networkBindings[i]
-
-		if !bytes.Equal(h.peer.Certificate.Key, pb.Certificate.Key) {
-			return ErrNetworkOwnerMismatch
-		}
-		if !bytes.Equal(certificateParentKey(b.Certificate), certificateParentKey(pb.Certificate)) {
-			return ErrNetworkAuthorityMismatch
-		}
-		if pb.Port > uint32(math.MaxUint16) {
-			return ErrNetworkIDBounds
-		}
-
-		n, ok := h.networks.FindByKey(certificateParentKey(pb.Certificate))
-		if !ok {
-			return ErrNetworkNotFound
-		}
-
-		h.logger.Debug(
-			"adding peer to network",
-			zap.Stringer("peer", h.peer.hostID),
-			logutil.ByteHex("network", certificateParentKey(pb.Certificate)),
-			zap.Uint32("localPort", b.Port),
-			zap.Uint32("remotePort", pb.Port),
-		)
-
-		link := &networkLink{
-			hostID:          h.peer.hostID,
-			FrameReadWriter: NewFrameReadWriter(h.peer.Link, uint16(pb.Port), h.peer.Link.MTU()),
-		}
-		h.links[n] = link
-		n.AddLink(link)
-
-		h.peer.SetHandler(uint16(b.Port), func(p *Peer, f Frame) error {
-			n.HandleFrame(f)
-			return nil
-		})
-
-		h.networks.peerNetworkObservers.Emit(PeerNetwork{h.peer, n})
-	}
-	return nil
-}
-
 // Network ...
 type Network struct {
 	logger           *zap.Logger
-	host             *Host
+	host             *vnic.Host
 	seq              uint64
 	certificate      *pb.Certificate
 	recentMessageIDs *lru.Cache
@@ -441,6 +61,17 @@ func (n *Network) SetHandler(port uint16, h MessageHandler) error {
 	return nil
 }
 
+// RemoveHandler ...
+func (n *Network) RemoveHandler(port uint16) {
+	n.handlersLock.Lock()
+	n.reservationsLock.Lock()
+	defer n.reservationsLock.Unlock()
+	defer n.handlersLock.Unlock()
+
+	delete(n.reservations, port)
+	delete(n.handlers, port)
+}
+
 // Handler ...
 func (n *Network) Handler(port uint16) MessageHandler {
 	n.handlersLock.Lock()
@@ -454,7 +85,7 @@ func (n *Network) ReservePort() (uint16, error) {
 	defer n.reservationsLock.Unlock()
 
 	for {
-		port, err := randUint16(math.MaxUint16 - reservedPortCount)
+		port, err := randutil.Uint16n(math.MaxUint16 - reservedPortCount)
 		if err != nil {
 			return 0, err
 		}
@@ -485,40 +116,45 @@ func (n *Network) Done() <-chan struct{} {
 	return n.done
 }
 
-// CAKey ...
-func (n *Network) CAKey() []byte {
-	return certificateParentKey(n.certificate)
+// Key ...
+func (n *Network) Key() []byte {
+	return dao.GetRootCert(n.certificate).Key
 }
 
-// AddLink ...
-func (n *Network) AddLink(link *networkLink) {
+// addLink ...
+func (n *Network) addLink(link *networkLink) {
 	n.linksLock.Lock()
 	n.links.Insert(link)
 	n.linksLock.Unlock()
 }
 
-// RemoveLink ...
-func (n *Network) RemoveLink(link *networkLink) {
+// removeLink ...
+func (n *Network) removeLink(link *networkLink) {
 	n.linksLock.Lock()
 	n.links.Remove(link.ID())
 	n.linksLock.Unlock()
 }
 
-// HandleFrame ...
-func (n *Network) HandleFrame(f Frame) {
+// hasLink ...
+func (n *Network) hasLink(id kademlia.ID) bool {
+	n.linksLock.Lock()
+	_, ok := n.links.Get(id)
+	n.linksLock.Unlock()
+	return ok
+}
+
+// handleFrame ...
+func (n *Network) handleFrame(_ *vnic.Peer, f vnic.Frame) error {
 	var m Message
 	if _, err := m.Unmarshal(f.Body); err != nil {
-		n.logger.Debug("failed to read frame", zap.Error(err))
-		return
+		return fmt.Errorf("failed to read message from frame: %w", err)
 	}
 
 	if ok, _ := n.recentMessageIDs.ContainsOrAdd(m.ID(), struct{}{}); ok {
-		return
+		return nil
 	}
 
-	if err := n.handleMessage(&m); err != nil {
-		log.Println(err)
-	}
+	return n.handleMessage(&m)
 }
 
 // Send ...
@@ -539,6 +175,19 @@ func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
 		},
 		Body: b,
 	})
+}
+
+// SendProto ...
+func (n *Network) SendProto(id kademlia.ID, port, srcPort uint16, msg proto.Message) error {
+	b := pool.Get(uint16(proto.Size(msg)))
+	defer pool.Put(b)
+
+	_, err := proto.MarshalOptions{}.MarshalAppend((*b)[:0], msg)
+	if err != nil {
+		return err
+	}
+
+	return n.Send(id, port, srcPort, *b)
 }
 
 func (n *Network) handleMessage(m *Message) error {
@@ -629,7 +278,7 @@ type MessageHandler interface {
 // TODO: handle eviction
 type networkLink struct {
 	hostID kademlia.ID
-	*FrameReadWriter
+	*vnic.FrameReadWriter
 }
 
 // ID ...
@@ -639,10 +288,6 @@ func (c *networkLink) ID() kademlia.ID {
 
 // PeerNetwork ...
 type PeerNetwork struct {
-	Peer    *Peer
+	Peer    *vnic.Peer
 	Network *Network
-}
-
-func certificateParentKey(c *pb.Certificate) []byte {
-	return dao.GetRootCert(c).GetKey()
 }

@@ -10,52 +10,44 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/mpc"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"go.uber.org/zap"
 )
 
-// NetworkBroker ...
-type NetworkBroker interface {
-	BrokerPeer(c ReadWriteFlusher) (NetworkBrokerPeer, error)
+// BrokerFactory constructs network brokers from peer i/o channels
+type BrokerFactory interface {
+	Broker(c ReadWriteFlusher) (Broker, error)
 }
 
-// NetworkBrokerPeer ...
-type NetworkBrokerPeer interface {
+// Broker negotiates shared networks between peers and binds the peers
+// to the negotiated networks.
+type Broker interface {
 	Init(preferSender bool, keys [][]byte) error
 	InitRequired() <-chan struct{}
 	Keys() <-chan [][]byte
 	Close()
 }
 
-// WithNetworkBroker ...
-func WithNetworkBroker(b NetworkBroker) HostOption {
-	return func(host *Host) error {
-		host.networkBroker = b
-		return nil
-	}
-}
-
-// NewNetworkBroker ...
-func NewNetworkBroker(logger *zap.Logger) NetworkBroker {
-	return &networkBroker{
+// NewBrokerFactory constructs a new local broker factory
+func NewBrokerFactory(logger *zap.Logger) BrokerFactory {
+	return &brokerFactory{
 		logger: logger,
 	}
 }
 
-// networkBroker ...
-type networkBroker struct {
+type brokerFactory struct {
 	logger *zap.Logger
 }
 
-// BrokerPeer ...
-func (h *networkBroker) BrokerPeer(c ReadWriteFlusher) (NetworkBrokerPeer, error) {
-	return newNetworkBrokerPeer(h.logger, c), nil
+func (h *brokerFactory) Broker(c ReadWriteFlusher) (Broker, error) {
+	return newBroker(h.logger, c), nil
 }
 
-func newNetworkBrokerPeer(logger *zap.Logger, c ReadWriteFlusher) *networkBrokerPeer {
-	p := &networkBrokerPeer{
+func newBroker(logger *zap.Logger, c ReadWriteFlusher) *broker {
+	p := &broker{
 		logger:       logger,
 		c:            c,
-		localParams:  make(chan networkBrokerLocalParams, 1),
+		localParams:  make(chan brokerLocalParams, 1),
 		initRequired: make(chan struct{}, 1),
 		initDone:     make(chan error, 1),
 		keys:         make(chan [][]byte, 1),
@@ -70,16 +62,16 @@ func newNetworkBrokerPeer(logger *zap.Logger, c ReadWriteFlusher) *networkBroker
 	return p
 }
 
-type networkBrokerLocalParams struct {
+type brokerLocalParams struct {
 	preferSender bool
 	keys         [][]byte
 }
 
-type networkBrokerPeer struct {
+type broker struct {
 	logger       *zap.Logger
 	cLock        sync.Mutex
 	c            ReadWriteFlusher
-	localParams  chan networkBrokerLocalParams
+	localParams  chan brokerLocalParams
 	initLock     sync.Mutex
 	initRequired chan struct{}
 	initDone     chan error
@@ -87,14 +79,14 @@ type networkBrokerPeer struct {
 	closeOnce    sync.Once
 }
 
-func (p *networkBrokerPeer) Init(preferSender bool, keys [][]byte) error {
+func (p *broker) Init(preferSender bool, keys [][]byte) error {
 	go func() {
 		p.initLock.Lock()
 		defer p.initLock.Unlock()
 
 		p.logger.Debug("starting network negotiation", zap.Int("keys", len(keys)))
 
-		p.localParams <- networkBrokerLocalParams{preferSender, keys}
+		p.localParams <- brokerLocalParams{preferSender, keys}
 
 		if err := p.sendInit(keys); err != nil {
 			p.logger.Error("sending negotiation init failed", zap.Error(err))
@@ -111,15 +103,15 @@ func (p *networkBrokerPeer) Init(preferSender bool, keys [][]byte) error {
 	return nil
 }
 
-func (p *networkBrokerPeer) InitRequired() <-chan struct{} {
+func (p *broker) InitRequired() <-chan struct{} {
 	return p.initRequired
 }
 
-func (p *networkBrokerPeer) Keys() <-chan [][]byte {
+func (p *broker) Keys() <-chan [][]byte {
 	return p.keys
 }
 
-func (p *networkBrokerPeer) Close() {
+func (p *broker) Close() {
 	p.closeOnce.Do(func() {
 		close(p.localParams)
 		close(p.initRequired)
@@ -128,12 +120,12 @@ func (p *networkBrokerPeer) Close() {
 	})
 }
 
-func (p *networkBrokerPeer) readInits() (err error) {
+func (p *broker) readInits() (err error) {
 	defer p.Close()
 
 	for {
 		var handshake pb.NetworkHandshake
-		if err := ReadProtoStream(p.c, &handshake); err != nil {
+		if err := protoutil.ReadStream(p.c, &handshake); err != nil {
 			return err
 		}
 
@@ -153,11 +145,11 @@ func (p *networkBrokerPeer) readInits() (err error) {
 	}
 }
 
-func (p *networkBrokerPeer) sendInit(keys [][]byte) error {
+func (p *broker) sendInit(keys [][]byte) error {
 	p.cLock.Lock()
 	defer p.cLock.Unlock()
 
-	err := WriteProtoStream(p.c, &pb.NetworkHandshake{
+	err := protoutil.WriteStream(p.c, &pb.NetworkHandshake{
 		Body: &pb.NetworkHandshake_Init_{
 			Init: &pb.NetworkHandshake_Init{
 				KeyCount: int32(len(keys)),
@@ -173,8 +165,8 @@ func (p *networkBrokerPeer) sendInit(keys [][]byte) error {
 	return nil
 }
 
-func (p *networkBrokerPeer) awaitLocalParams() (bool, [][]byte, error) {
-	var l networkBrokerLocalParams
+func (p *broker) awaitLocalParams() (bool, [][]byte, error) {
+	var l brokerLocalParams
 	var ok bool
 
 	select {
@@ -195,7 +187,7 @@ func (p *networkBrokerPeer) awaitLocalParams() (bool, [][]byte, error) {
 	return l.preferSender, l.keys, nil
 }
 
-func (p *networkBrokerPeer) handleInit(init *pb.NetworkHandshake_Init) error {
+func (p *broker) handleInit(init *pb.NetworkHandshake_Init) error {
 	preferSender, keys, err := p.awaitLocalParams()
 	if err != nil {
 		return err
@@ -215,7 +207,7 @@ func (p *networkBrokerPeer) handleInit(init *pb.NetworkHandshake_Init) error {
 	return err
 }
 
-func (p *networkBrokerPeer) exchangeKeysAsSender(keys [][]byte) error {
+func (p *broker) exchangeKeysAsSender(keys [][]byte) error {
 	p.cLock.Lock()
 	defer p.cLock.Unlock()
 
@@ -247,7 +239,7 @@ func (p *networkBrokerPeer) exchangeKeysAsSender(keys [][]byte) error {
 	return nil
 }
 
-func (p *networkBrokerPeer) exchangeKeysAsReceiver(keys [][]byte) ([][]byte, error) {
+func (p *broker) exchangeKeysAsReceiver(keys [][]byte) ([][]byte, error) {
 	p.cLock.Lock()
 	defer p.cLock.Unlock()
 

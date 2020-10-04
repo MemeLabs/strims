@@ -14,8 +14,10 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/gobridge"
+	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/go-ppspp/pkg/wasmio"
 	"go.uber.org/zap"
@@ -83,13 +85,19 @@ func newLogger(bridge js.Value) *zap.Logger {
 func initDefault(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
 
+	vpnBrokerClient := vpn.NewBrokerFactoryClient(logger, wasmio.NewWorkerProxy(bridge, "broker"))
+
 	srv, err := service.New(service.Options{
 		Store:  wasmio.NewKVStore(bridge),
 		Logger: logger,
-		VPNOptions: []vpn.HostOption{
-			vpn.WithNetworkBroker(vpn.NewBrokerClient(logger, wasmio.NewWorkerProxy(bridge, "broker"))),
-			vpn.WithInterface(vpn.NewWSInterface(logger, bridge)),
-			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger, bridge))),
+		NewVPNHost: func(key *pb.Key) (*vpn.Host, error) {
+			ws := vnic.NewWSInterface(logger, bridge)
+			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, bridge))
+			vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
+			if err != nil {
+				return nil, err
+			}
+			return vpn.New(logger, vnicHost, vpnBrokerClient)
 		},
 	})
 	if err != nil {
@@ -103,6 +111,6 @@ func initBroker(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
 
 	host := rpc.NewHost(logger)
-	host.RegisterService("NetworkBroker", vpn.NewBrokerService(logger))
+	host.RegisterService("NetworkBroker", vpn.NewBrokerFactoryService(logger))
 	host.Listen(context.Background(), bus)
 }
