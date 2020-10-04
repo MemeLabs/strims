@@ -9,7 +9,9 @@ import (
 	"runtime"
 
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
+	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
@@ -46,7 +48,7 @@ func (g *GoSide) Write(b []byte) error {
 
 // NewGoSide ...
 func NewGoSide(s AndroidSide, appFileLocation string) (*GoSide, error) {
-	l, err := zap.NewDevelopment()
+	logger, err := zap.NewDevelopment()
 	if err != nil {
 		return nil, err
 	}
@@ -58,11 +60,15 @@ func NewGoSide(s AndroidSide, appFileLocation string) (*GoSide, error) {
 
 	srv, err := service.New(service.Options{
 		Store:  kv,
-		Logger: l,
-		VPNOptions: []vpn.HostOption{
-			vpn.WithNetworkBroker(vpn.NewNetworkBroker(l)),
-			vpn.WithInterface(vpn.NewWSInterface(l, "")),
-			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(l, nil))),
+		Logger: logger,
+		NewVPNHost: func(key *pb.Key) (*vpn.Host, error) {
+			ws := vnic.NewWSInterface(logger, "")
+			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, nil))
+			vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
+			if err != nil {
+				return nil, err
+			}
+			return vpn.New(logger, vnicHost, vpn.NewBrokerFactory(logger))
 		},
 	})
 	if err != nil {

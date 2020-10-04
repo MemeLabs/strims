@@ -7,6 +7,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -16,8 +17,11 @@ import (
 type Options struct {
 	Store      kv.BlobStore
 	Logger     *zap.Logger
-	VPNOptions []vpn.HostOption
+	NewVPNHost VPNHostFunc
 }
+
+// VPNHostFunc ...
+type VPNHostFunc func(key *pb.Key) (*vpn.Host, error)
 
 // New ...
 func New(options Options) (*Server, error) {
@@ -31,7 +35,7 @@ func New(options Options) (*Server, error) {
 		logger:     options.Logger,
 		store:      options.Store,
 		metadata:   metadata,
-		vpnOptions: options.VPNOptions,
+		newVPNHost: options.NewVPNHost,
 	})
 	return &Server{host}, nil
 }

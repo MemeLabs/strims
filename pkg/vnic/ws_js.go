@@ -1,6 +1,6 @@
 // +build js,wasm
 
-package vpn
+package vnic
 
 import (
 	"syscall/js"

@@ -15,7 +15,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/avast/retry-go"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"
@@ -159,7 +159,7 @@ func (t *testClientBridgeServer) handleRequest(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	rw := vpn.NewWSReadWriter(c)
+	rw := vnic.NewWSReadWriter(c)
 	client := rpc.NewClient(t.logger, rw)
 
 	t.Clients <- client

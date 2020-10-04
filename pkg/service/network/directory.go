@@ -1,4 +1,4 @@
-package service
+package network
 
 import (
 	"bytes"
@@ -11,6 +11,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/go-ppspp/pkg/service/pubsub"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -32,7 +33,7 @@ type Directory interface {
 }
 
 // NewDirectoryServer ...
-func NewDirectoryServer(logger *zap.Logger, lock *dao.Mutex, svc *NetworkServices, key *pb.Key) (*DirectoryServer, error) {
+func NewDirectoryServer(logger *zap.Logger, lock *dao.Mutex, svc *Services, key *pb.Key) (*DirectoryServer, error) {
 	client, err := NewDirectoryClient(logger, svc, key.Public)
 	if err != nil {
 		return nil, err
@@ -53,7 +54,7 @@ func NewDirectoryServer(logger *zap.Logger, lock *dao.Mutex, svc *NetworkService
 	return s, nil
 }
 
-// DirectoryServer ...
+// Server ...
 type DirectoryServer struct {
 	lock          *dao.Mutex
 	close         context.CancelFunc
@@ -63,13 +64,13 @@ type DirectoryServer struct {
 	events        chan *pb.DirectoryServerEvent
 }
 
-func (s *DirectoryServer) upgrade(ctx context.Context, svc *NetworkServices, key *pb.Key) {
+func (s *DirectoryServer) upgrade(ctx context.Context, svc *Services, key *pb.Key) {
 	if err := s.lock.Lock(ctx); err != nil {
 		s.Close()
 		return
 	}
 
-	s.logger.Debug("upgrading directory server", logutil.ByteHex("networkKey", svc.Network.CAKey()))
+	s.logger.Debug("upgrading directory server", logutil.ByteHex("networkKey", svc.Network.Key()))
 
 	s.directoryLock.Lock()
 	defer s.directoryLock.Unlock()
@@ -77,7 +78,7 @@ func (s *DirectoryServer) upgrade(ctx context.Context, svc *NetworkServices, key
 	client := s.directory.(*DirectoryClient)
 	client.ps.Close()
 
-	ps, err := NewPubSubServer(svc, key, directorySalt)
+	ps, err := pubsub.NewServer(svc, key, directorySalt)
 	if err != nil {
 		s.logger.Error("failed to start directory server", zap.Error(err))
 		s.Close()
@@ -148,7 +149,7 @@ type directoryServer struct {
 	*directoryListingMap
 	logger    *zap.Logger
 	closeOnce sync.Once
-	ps        *PubSubServer
+	ps        *pubsub.Server
 }
 
 // Close ...
@@ -163,7 +164,7 @@ func (s *directoryServer) send(ctx context.Context, event *pb.DirectoryServerEve
 	return sendProto(ctx, s.ps, event)
 }
 
-func (s *directoryServer) transformDirectoryMessages(ps *PubSubServer) {
+func (s *directoryServer) transformDirectoryMessages(ps *pubsub.Server) {
 	ticker := time.NewTicker(directoryPingInterval)
 	for {
 		select {
@@ -344,13 +345,13 @@ func (t directoryListingMapItem) Less(oi llrb.Item) bool {
 }
 
 // NewDirectoryClient ...
-func NewDirectoryClient(logger *zap.Logger, svc *NetworkServices, key []byte) (*DirectoryClient, error) {
-	ps, err := NewPubSubClient(svc, key, directorySalt)
+func NewDirectoryClient(logger *zap.Logger, svc *Services, key []byte) (*DirectoryClient, error) {
+	ps, err := pubsub.NewClient(svc, key, directorySalt)
 	if err != nil {
 		return nil, err
 	}
 
-	logger.Debug("starting directory client", logutil.ByteHex("network", svc.Network.CAKey()))
+	logger.Debug("starting directory client", logutil.ByteHex("network", svc.Network.Key()))
 
 	c := &DirectoryClient{
 		directoryListingMap: new(directoryListingMap),
@@ -368,7 +369,7 @@ type DirectoryClient struct {
 	*directoryListingMap
 	logger    *zap.Logger
 	closeOnce sync.Once
-	ps        *PubSubClient
+	ps        *pubsub.Client
 }
 
 // Close ...
@@ -423,7 +424,7 @@ func (c *DirectoryClient) Part(ctx context.Context, key []byte) error {
 	})
 }
 
-func (c *DirectoryClient) readDirectoryEvents(ps *PubSubClient) {
+func (c *DirectoryClient) readDirectoryEvents(ps *pubsub.Client) {
 
 	for m := range ps.Messages() {
 		e := &pb.DirectoryServerEvent{}

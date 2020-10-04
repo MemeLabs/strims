@@ -8,7 +8,9 @@ import (
 	"path"
 
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
+	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
@@ -22,10 +24,14 @@ func newManager(logger *zap.Logger) (*manager, error) {
 	srv, err := service.New(service.Options{
 		Store:  store,
 		Logger: logger,
-		VPNOptions: []vpn.HostOption{
-			vpn.WithNetworkBroker(vpn.NewNetworkBroker(logger)),
-			vpn.WithInterface(vpn.NewWSInterface(logger, addr)),
-			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(logger, nil))),
+		NewVPNHost: func(key *pb.Key) (*vpn.Host, error) {
+			ws := vnic.NewWSInterface(logger, "")
+			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, nil))
+			vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
+			if err != nil {
+				return nil, err
+			}
+			return vpn.New(logger, vnicHost, vpn.NewBrokerFactory(logger))
 		},
 	})
 	if err != nil {

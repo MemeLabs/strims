@@ -61,4 +61,8 @@
     "diagnostics": true,
     "documentLink": true
   },
+  // "go.toolsEnvVars": {
+  //   "GOOS": "js",
+  //   "GOARCH": "wasm"
+  // },
 }

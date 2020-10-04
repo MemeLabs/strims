@@ -1,4 +1,4 @@
-package service
+package network
 
 import (
 	"crypto/ed25519"

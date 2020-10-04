@@ -1,7 +1,6 @@
-package vpn
+package vnic
 
 import (
-	"crypto/cipher"
 	"errors"
 	"fmt"
 	"math"
@@ -10,7 +9,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
+	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/version"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -37,7 +37,7 @@ var (
 )
 
 func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key, hostCert *pb.Certificate) (*Peer, error) {
-	err := WriteProtoStream(link, &pb.PeerInit{
+	err := protoutil.WriteStream(link, &pb.PeerInit{
 		ProtocolVersion: 1,
 		Certificate:     hostCert,
 		NodePlatform:    version.Platform,
@@ -48,7 +48,7 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key, hostCert *pb.Certif
 	}
 
 	var init pb.PeerInit
-	if err = ReadProtoStream(link, &init); err != nil {
+	if err = protoutil.ReadStream(link, &init); err != nil {
 		return nil, fmt.Errorf("reading peer init failed: %w", err)
 	}
 
@@ -170,7 +170,7 @@ func (p *Peer) ReservePort() (uint16, error) {
 	defer p.reservationsLock.Unlock()
 
 	for {
-		port, err := randUint16(math.MaxUint16 - reservedPortCount)
+		port, err := randutil.Uint16n(math.MaxUint16 - reservedPortCount)
 		if err != nil {
 			return 0, err
 		}
@@ -193,38 +193,3 @@ func (p *Peer) ReleasePort(port uint16) {
 
 // FrameHandler ...
 type FrameHandler func(p *Peer, f Frame) error
-
-type cipherLink struct {
-	readStream  cipher.Stream
-	writeLock   sync.Mutex
-	writeStream cipher.Stream
-	link        Link
-}
-
-func (c *cipherLink) Read(p []byte) (int, error) {
-	n, err := c.link.Read(p)
-	if err != nil {
-		return 0, err
-	}
-	c.readStream.XORKeyStream(p[:n], p[:n])
-	return n, nil
-}
-
-func (c *cipherLink) Write(p []byte) (int, error) {
-	b := pool.Get(uint16(len(p)))
-	defer pool.Put(b)
-
-	c.writeLock.Lock()
-	defer c.writeLock.Unlock()
-	c.writeStream.XORKeyStream(*b, p)
-
-	return c.link.Write(*b)
-}
-
-func (c *cipherLink) MTU() int {
-	return c.link.MTU()
-}
-
-func (c *cipherLink) Close() error {
-	return c.link.Close()
-}
