@@ -3,6 +3,17 @@ import gg.strims.ppspp.buildsrc.Libs
 plugins {
     id 'com.android.application'
     id 'kotlin-android'
+    id 'com.squareup.wire'
+}
+
+
+wire {
+    sourcePath {
+        srcDir '../../schema'
+    }
+
+    kotlin {
+    }
 }
 
 android {
