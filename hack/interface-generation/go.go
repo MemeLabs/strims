@@ -1,11 +1,15 @@
 package main
 
 import (
+	"fmt"
+	"go/format"
+	"io/ioutil"
 	"os"
-	"os/exec"
 	"path"
 	"strings"
 	"text/template"
+
+	"golang.org/x/tools/imports"
 )
 
 type GoClientGen struct{}
@@ -38,11 +42,7 @@ type {{.Name}}Service interface {
 }
 
 func (g *GoClientGen) Format(path string) error {
-	formatCmd := exec.Command("go", "fmt", path)
-	formatCmd.Stdout = os.Stdout
-	formatCmd.Stderr = os.Stderr
-
-	return formatCmd.Run()
+	return gofmt(path)
 }
 
 type GoServiceGen struct{}
@@ -83,9 +83,28 @@ func (c *{{$.Name}}Client) {{.Name | ToPascal}} (
 }
 
 func (g *GoServiceGen) Format(path string) error {
-	formatCmd := exec.Command("go", "fmt", path)
-	formatCmd.Stdout = os.Stdout
-	formatCmd.Stderr = os.Stderr
+	return gofmt(path)
+}
 
-	return formatCmd.Run()
+func gofmt(path string) error {
+	preFormat, err := ioutil.ReadFile(path)
+	if err != nil {
+		return fmt.Errorf("failed to read pre-formatted file: %v", err)
+	}
+
+	formattedFile, err := format.Source(preFormat)
+	if err != nil {
+		return fmt.Errorf("failed to format generated file: %v", err)
+	}
+
+	imp, err := imports.Process(path, formattedFile, nil)
+	if err != nil {
+		return fmt.Errorf("failed to import pkgs: %v", err)
+	}
+
+	if err = ioutil.WriteFile(path, imp, os.ModePerm); err != nil {
+		return fmt.Errorf("failed to write formatted file: %v", err)
+	}
+
+	return nil
 }
