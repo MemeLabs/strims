@@ -46,10 +46,10 @@ service FrontendRPC {
   rpc JoinSwarm(JoinSwarmRequest) returns (JoinSwarmResponse);
   rpc LeaveSwarm(LeaveSwarmRequest) returns (LeaveSwarmResponse);
   // rpc GetIngressStreams(GetIngressStreamsRequest) returns (stream GetIngressStreamsResponse);
-  // rpc StartRTMPIngress(StartRTMPIngressRequest) returns (StartRTMPIngressResponse);
+  rpc StartRTMPIngress(StartRTMPIngressRequest) returns (StartRTMPIngressResponse);
   // rpc StopRTMPIngress(StartRTMPIngressRequest) returns (StartRTMPIngressResponse);
-  // rpc StartHLSEgress(StartHLSEgressRequest) returns (StartHLSEgressResponse);
-  // rpc StopHLSEgress(StopHLSEgressRequest) returns (StopHLSEgressResponse);
+  rpc StartHLSEgress(StartHLSEgressRequest) returns (StartHLSEgressResponse);
+  rpc StopHLSEgress(StopHLSEgressRequest) returns (StopHLSEgressResponse);
   // rpc StartSwarm(StartSwarmRequest) returns (StartSwarmResponse);
   // rpc WriteToSwarm(WriteToSwarmRequest) returns (WriteToSwarmResponse);
   // rpc StopSwarm(StopSwarmRequest) returns (StopSwarmResponse);

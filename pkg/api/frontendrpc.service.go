@@ -116,6 +116,18 @@ type FrontendRPCService interface {
 		ctx context.Context,
 		req *pb.LeaveSwarmRequest,
 	) (*pb.LeaveSwarmResponse, error)
+	StartRTMPIngress(
+		ctx context.Context,
+		req *pb.StartRTMPIngressRequest,
+	) (*pb.StartRTMPIngressResponse, error)
+	StartHLSEgress(
+		ctx context.Context,
+		req *pb.StartHLSEgressRequest,
+	) (*pb.StartHLSEgressResponse, error)
+	StopHLSEgress(
+		ctx context.Context,
+		req *pb.StopHLSEgressRequest,
+	) (*pb.StopHLSEgressResponse, error)
 	PublishSwarm(
 		ctx context.Context,
 		req *pb.PublishSwarmRequest,

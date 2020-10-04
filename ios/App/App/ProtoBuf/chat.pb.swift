@@ -402,6 +402,8 @@ public struct PBChatClientEvent {
 
     public var serverTime: Int64 = 0
 
+    public var nick: String = String()
+
     public var body: String = String()
 
     public var entities: PBMessageEntities {
@@ -485,20 +487,20 @@ public struct PBMessageEntities {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var links: [PBLink] = []
+  public var links: [PBMessageEntities.Link] = []
 
-  public var emotes: [PBEmote] = []
+  public var emotes: [PBMessageEntities.Emote] = []
 
-  public var nicks: [PBNick] = []
+  public var nicks: [PBMessageEntities.Nick] = []
 
-  public var tags: [PBTag] = []
+  public var tags: [PBMessageEntities.Tag] = []
 
-  public var codeBlocks: [PBCodeBlock] = []
+  public var codeBlocks: [PBMessageEntities.CodeBlock] = []
 
-  public var spoilers: [PBSpoiler] = []
+  public var spoilers: [PBMessageEntities.Spoiler] = []
 
-  public var greenText: PBGenericEntity {
-    get {return _greenText ?? PBGenericEntity()}
+  public var greenText: PBMessageEntities.GenericEntity {
+    get {return _greenText ?? PBMessageEntities.GenericEntity()}
     set {_greenText = newValue}
   }
   /// Returns true if `greenText` has been explicitly set.
@@ -506,8 +508,8 @@ public struct PBMessageEntities {
   /// Clears the value of `greenText`. Subsequent reads from it will return its default value.
   public mutating func clearGreenText() {self._greenText = nil}
 
-  public var selfMessage: PBGenericEntity {
-    get {return _selfMessage ?? PBGenericEntity()}
+  public var selfMessage: PBMessageEntities.GenericEntity {
+    get {return _selfMessage ?? PBMessageEntities.GenericEntity()}
     set {_selfMessage = newValue}
   }
   /// Returns true if `selfMessage` has been explicitly set.
@@ -517,183 +519,183 @@ public struct PBMessageEntities {
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  public init() {}
+  public struct Bounds {
+    // SwiftProtobuf.Message conformance is added in an extension below. See the
+    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+    // methods supported on all messages.
 
-  fileprivate var _greenText: PBGenericEntity? = nil
-  fileprivate var _selfMessage: PBGenericEntity? = nil
-}
+    public var start: Int64 = 0
 
-public struct PBBounds {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
+    public var end: Int64 = 0
 
-  public var start: Int64 = 0
+    public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-  public var end: Int64 = 0
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-}
-
-public struct PBLink {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var bounds: PBBounds {
-    get {return _bounds ?? PBBounds()}
-    set {_bounds = newValue}
+    public init() {}
   }
-  /// Returns true if `bounds` has been explicitly set.
-  public var hasBounds: Bool {return self._bounds != nil}
-  /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
-  public mutating func clearBounds() {self._bounds = nil}
 
-  public var url: String = String()
+  public struct Link {
+    // SwiftProtobuf.Message conformance is added in an extension below. See the
+    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+    // methods supported on all messages.
 
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
+    public var bounds: PBMessageEntities.Bounds {
+      get {return _bounds ?? PBMessageEntities.Bounds()}
+      set {_bounds = newValue}
+    }
+    /// Returns true if `bounds` has been explicitly set.
+    public var hasBounds: Bool {return self._bounds != nil}
+    /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
+    public mutating func clearBounds() {self._bounds = nil}
 
-  public init() {}
+    public var url: String = String()
 
-  fileprivate var _bounds: PBBounds? = nil
-}
+    public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-public struct PBEmote {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
+    public init() {}
 
-  public var bounds: PBBounds {
-    get {return _bounds ?? PBBounds()}
-    set {_bounds = newValue}
+    fileprivate var _bounds: PBMessageEntities.Bounds? = nil
   }
-  /// Returns true if `bounds` has been explicitly set.
-  public var hasBounds: Bool {return self._bounds != nil}
-  /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
-  public mutating func clearBounds() {self._bounds = nil}
 
-  public var name: String = String()
+  public struct Emote {
+    // SwiftProtobuf.Message conformance is added in an extension below. See the
+    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+    // methods supported on all messages.
 
-  public var modifiers: [String] = []
+    public var bounds: PBMessageEntities.Bounds {
+      get {return _bounds ?? PBMessageEntities.Bounds()}
+      set {_bounds = newValue}
+    }
+    /// Returns true if `bounds` has been explicitly set.
+    public var hasBounds: Bool {return self._bounds != nil}
+    /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
+    public mutating func clearBounds() {self._bounds = nil}
 
-  public var combo: Int64 = 0
+    public var name: String = String()
 
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
+    public var modifiers: [String] = []
 
-  public init() {}
+    public var combo: Int64 = 0
 
-  fileprivate var _bounds: PBBounds? = nil
-}
+    public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-public struct PBNick {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
+    public init() {}
 
-  public var bounds: PBBounds {
-    get {return _bounds ?? PBBounds()}
-    set {_bounds = newValue}
+    fileprivate var _bounds: PBMessageEntities.Bounds? = nil
   }
-  /// Returns true if `bounds` has been explicitly set.
-  public var hasBounds: Bool {return self._bounds != nil}
-  /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
-  public mutating func clearBounds() {self._bounds = nil}
 
-  public var nick: String = String()
+  public struct Nick {
+    // SwiftProtobuf.Message conformance is added in an extension below. See the
+    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+    // methods supported on all messages.
 
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
+    public var bounds: PBMessageEntities.Bounds {
+      get {return _bounds ?? PBMessageEntities.Bounds()}
+      set {_bounds = newValue}
+    }
+    /// Returns true if `bounds` has been explicitly set.
+    public var hasBounds: Bool {return self._bounds != nil}
+    /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
+    public mutating func clearBounds() {self._bounds = nil}
 
-  public init() {}
+    public var nick: String = String()
 
-  fileprivate var _bounds: PBBounds? = nil
-}
+    public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-public struct PBTag {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
+    public init() {}
 
-  public var bounds: PBBounds {
-    get {return _bounds ?? PBBounds()}
-    set {_bounds = newValue}
+    fileprivate var _bounds: PBMessageEntities.Bounds? = nil
   }
-  /// Returns true if `bounds` has been explicitly set.
-  public var hasBounds: Bool {return self._bounds != nil}
-  /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
-  public mutating func clearBounds() {self._bounds = nil}
 
-  public var name: String = String()
+  public struct Tag {
+    // SwiftProtobuf.Message conformance is added in an extension below. See the
+    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+    // methods supported on all messages.
 
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
+    public var bounds: PBMessageEntities.Bounds {
+      get {return _bounds ?? PBMessageEntities.Bounds()}
+      set {_bounds = newValue}
+    }
+    /// Returns true if `bounds` has been explicitly set.
+    public var hasBounds: Bool {return self._bounds != nil}
+    /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
+    public mutating func clearBounds() {self._bounds = nil}
 
-  public init() {}
+    public var name: String = String()
 
-  fileprivate var _bounds: PBBounds? = nil
-}
+    public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-public struct PBCodeBlock {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
+    public init() {}
 
-  public var bounds: PBBounds {
-    get {return _bounds ?? PBBounds()}
-    set {_bounds = newValue}
+    fileprivate var _bounds: PBMessageEntities.Bounds? = nil
   }
-  /// Returns true if `bounds` has been explicitly set.
-  public var hasBounds: Bool {return self._bounds != nil}
-  /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
-  public mutating func clearBounds() {self._bounds = nil}
 
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
+  public struct CodeBlock {
+    // SwiftProtobuf.Message conformance is added in an extension below. See the
+    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+    // methods supported on all messages.
 
-  public init() {}
+    public var bounds: PBMessageEntities.Bounds {
+      get {return _bounds ?? PBMessageEntities.Bounds()}
+      set {_bounds = newValue}
+    }
+    /// Returns true if `bounds` has been explicitly set.
+    public var hasBounds: Bool {return self._bounds != nil}
+    /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
+    public mutating func clearBounds() {self._bounds = nil}
 
-  fileprivate var _bounds: PBBounds? = nil
-}
+    public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-public struct PBSpoiler {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
+    public init() {}
 
-  public var bounds: PBBounds {
-    get {return _bounds ?? PBBounds()}
-    set {_bounds = newValue}
+    fileprivate var _bounds: PBMessageEntities.Bounds? = nil
   }
-  /// Returns true if `bounds` has been explicitly set.
-  public var hasBounds: Bool {return self._bounds != nil}
-  /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
-  public mutating func clearBounds() {self._bounds = nil}
 
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
+  public struct Spoiler {
+    // SwiftProtobuf.Message conformance is added in an extension below. See the
+    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+    // methods supported on all messages.
 
-  public init() {}
+    public var bounds: PBMessageEntities.Bounds {
+      get {return _bounds ?? PBMessageEntities.Bounds()}
+      set {_bounds = newValue}
+    }
+    /// Returns true if `bounds` has been explicitly set.
+    public var hasBounds: Bool {return self._bounds != nil}
+    /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
+    public mutating func clearBounds() {self._bounds = nil}
 
-  fileprivate var _bounds: PBBounds? = nil
-}
+    public var unknownFields = SwiftProtobuf.UnknownStorage()
 
-public struct PBGenericEntity {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
+    public init() {}
 
-  public var bounds: PBBounds {
-    get {return _bounds ?? PBBounds()}
-    set {_bounds = newValue}
+    fileprivate var _bounds: PBMessageEntities.Bounds? = nil
   }
-  /// Returns true if `bounds` has been explicitly set.
-  public var hasBounds: Bool {return self._bounds != nil}
-  /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
-  public mutating func clearBounds() {self._bounds = nil}
 
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
+  public struct GenericEntity {
+    // SwiftProtobuf.Message conformance is added in an extension below. See the
+    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+    // methods supported on all messages.
+
+    public var bounds: PBMessageEntities.Bounds {
+      get {return _bounds ?? PBMessageEntities.Bounds()}
+      set {_bounds = newValue}
+    }
+    /// Returns true if `bounds` has been explicitly set.
+    public var hasBounds: Bool {return self._bounds != nil}
+    /// Clears the value of `bounds`. Subsequent reads from it will return its default value.
+    public mutating func clearBounds() {self._bounds = nil}
+
+    public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+    public init() {}
+
+    fileprivate var _bounds: PBMessageEntities.Bounds? = nil
+  }
 
   public init() {}
 
-  fileprivate var _bounds: PBBounds? = nil
+  fileprivate var _greenText: PBMessageEntities.GenericEntity? = nil
+  fileprivate var _selfMessage: PBMessageEntities.GenericEntity? = nil
 }
 
 public struct PBCallChatClientRequest {
@@ -761,6 +763,16 @@ public struct PBCallChatClientRequest {
 
     public init() {}
   }
+
+  public init() {}
+}
+
+public struct PBCallChatClientResponse {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 }
@@ -1371,8 +1383,9 @@ extension PBChatClientEvent.Message: SwiftProtobuf.Message, SwiftProtobuf._Messa
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .standard(proto: "sent_time"),
     2: .standard(proto: "server_time"),
-    3: .same(proto: "body"),
-    4: .same(proto: "entities"),
+    3: .same(proto: "nick"),
+    4: .same(proto: "body"),
+    5: .same(proto: "entities"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1380,8 +1393,9 @@ extension PBChatClientEvent.Message: SwiftProtobuf.Message, SwiftProtobuf._Messa
       switch fieldNumber {
       case 1: try decoder.decodeSingularInt64Field(value: &self.sentTime)
       case 2: try decoder.decodeSingularInt64Field(value: &self.serverTime)
-      case 3: try decoder.decodeSingularStringField(value: &self.body)
-      case 4: try decoder.decodeSingularMessageField(value: &self._entities)
+      case 3: try decoder.decodeSingularStringField(value: &self.nick)
+      case 4: try decoder.decodeSingularStringField(value: &self.body)
+      case 5: try decoder.decodeSingularMessageField(value: &self._entities)
       default: break
       }
     }
@@ -1394,11 +1408,14 @@ extension PBChatClientEvent.Message: SwiftProtobuf.Message, SwiftProtobuf._Messa
     if self.serverTime != 0 {
       try visitor.visitSingularInt64Field(value: self.serverTime, fieldNumber: 2)
     }
+    if !self.nick.isEmpty {
+      try visitor.visitSingularStringField(value: self.nick, fieldNumber: 3)
+    }
     if !self.body.isEmpty {
-      try visitor.visitSingularStringField(value: self.body, fieldNumber: 3)
+      try visitor.visitSingularStringField(value: self.body, fieldNumber: 4)
     }
     if let v = self._entities {
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -1406,6 +1423,7 @@ extension PBChatClientEvent.Message: SwiftProtobuf.Message, SwiftProtobuf._Messa
   public static func ==(lhs: PBChatClientEvent.Message, rhs: PBChatClientEvent.Message) -> Bool {
     if lhs.sentTime != rhs.sentTime {return false}
     if lhs.serverTime != rhs.serverTime {return false}
+    if lhs.nick != rhs.nick {return false}
     if lhs.body != rhs.body {return false}
     if lhs._entities != rhs._entities {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -1579,8 +1597,8 @@ extension PBMessageEntities: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
   }
 }
 
-extension PBBounds: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "Bounds"
+extension PBMessageEntities.Bounds: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBMessageEntities.protoMessageName + ".Bounds"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "start"),
     2: .same(proto: "end"),
@@ -1606,7 +1624,7 @@ extension PBBounds: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationB
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBBounds, rhs: PBBounds) -> Bool {
+  public static func ==(lhs: PBMessageEntities.Bounds, rhs: PBMessageEntities.Bounds) -> Bool {
     if lhs.start != rhs.start {return false}
     if lhs.end != rhs.end {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -1614,8 +1632,8 @@ extension PBBounds: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationB
   }
 }
 
-extension PBLink: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "Link"
+extension PBMessageEntities.Link: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBMessageEntities.protoMessageName + ".Link"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "bounds"),
     2: .same(proto: "url"),
@@ -1641,7 +1659,7 @@ extension PBLink: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBas
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBLink, rhs: PBLink) -> Bool {
+  public static func ==(lhs: PBMessageEntities.Link, rhs: PBMessageEntities.Link) -> Bool {
     if lhs._bounds != rhs._bounds {return false}
     if lhs.url != rhs.url {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -1649,8 +1667,8 @@ extension PBLink: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBas
   }
 }
 
-extension PBEmote: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "Emote"
+extension PBMessageEntities.Emote: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBMessageEntities.protoMessageName + ".Emote"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "bounds"),
     2: .same(proto: "name"),
@@ -1686,7 +1704,7 @@ extension PBEmote: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBa
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBEmote, rhs: PBEmote) -> Bool {
+  public static func ==(lhs: PBMessageEntities.Emote, rhs: PBMessageEntities.Emote) -> Bool {
     if lhs._bounds != rhs._bounds {return false}
     if lhs.name != rhs.name {return false}
     if lhs.modifiers != rhs.modifiers {return false}
@@ -1696,8 +1714,8 @@ extension PBEmote: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBa
   }
 }
 
-extension PBNick: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "Nick"
+extension PBMessageEntities.Nick: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBMessageEntities.protoMessageName + ".Nick"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "bounds"),
     2: .same(proto: "nick"),
@@ -1723,7 +1741,7 @@ extension PBNick: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBas
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBNick, rhs: PBNick) -> Bool {
+  public static func ==(lhs: PBMessageEntities.Nick, rhs: PBMessageEntities.Nick) -> Bool {
     if lhs._bounds != rhs._bounds {return false}
     if lhs.nick != rhs.nick {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -1731,8 +1749,8 @@ extension PBNick: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBas
   }
 }
 
-extension PBTag: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "Tag"
+extension PBMessageEntities.Tag: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBMessageEntities.protoMessageName + ".Tag"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "bounds"),
     2: .same(proto: "name"),
@@ -1758,7 +1776,7 @@ extension PBTag: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBTag, rhs: PBTag) -> Bool {
+  public static func ==(lhs: PBMessageEntities.Tag, rhs: PBMessageEntities.Tag) -> Bool {
     if lhs._bounds != rhs._bounds {return false}
     if lhs.name != rhs.name {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -1766,8 +1784,8 @@ extension PBTag: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase
   }
 }
 
-extension PBCodeBlock: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "CodeBlock"
+extension PBMessageEntities.CodeBlock: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBMessageEntities.protoMessageName + ".CodeBlock"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "bounds"),
   ]
@@ -1788,15 +1806,15 @@ extension PBCodeBlock: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementati
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBCodeBlock, rhs: PBCodeBlock) -> Bool {
+  public static func ==(lhs: PBMessageEntities.CodeBlock, rhs: PBMessageEntities.CodeBlock) -> Bool {
     if lhs._bounds != rhs._bounds {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBSpoiler: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "Spoiler"
+extension PBMessageEntities.Spoiler: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBMessageEntities.protoMessageName + ".Spoiler"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "bounds"),
   ]
@@ -1817,15 +1835,15 @@ extension PBSpoiler: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementation
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBSpoiler, rhs: PBSpoiler) -> Bool {
+  public static func ==(lhs: PBMessageEntities.Spoiler, rhs: PBMessageEntities.Spoiler) -> Bool {
     if lhs._bounds != rhs._bounds {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBGenericEntity: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GenericEntity"
+extension PBMessageEntities.GenericEntity: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBMessageEntities.protoMessageName + ".GenericEntity"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "bounds"),
   ]
@@ -1846,7 +1864,7 @@ extension PBGenericEntity: SwiftProtobuf.Message, SwiftProtobuf._MessageImplemen
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBGenericEntity, rhs: PBGenericEntity) -> Bool {
+  public static func ==(lhs: PBMessageEntities.GenericEntity, rhs: PBMessageEntities.GenericEntity) -> Bool {
     if lhs._bounds != rhs._bounds {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -1957,6 +1975,25 @@ extension PBCallChatClientRequest.Close: SwiftProtobuf.Message, SwiftProtobuf._M
   }
 
   public static func ==(lhs: PBCallChatClientRequest.Close, rhs: PBCallChatClientRequest.Close) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension PBCallChatClientResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "CallChatClientResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let _ = try decoder.nextFieldNumber() {
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: PBCallChatClientResponse, rhs: PBCallChatClientResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

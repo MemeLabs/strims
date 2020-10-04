@@ -88,6 +88,15 @@ class FrontendRPCClient: RPCClient {
   public func leaveSwarm(_ arg: PBLeaveSwarmRequest = PBLeaveSwarmRequest()) -> Promise<PBLeaveSwarmResponse> {
     return self.callUnary("FrontendRPC/LeaveSwarm", arg)
   }
+  public func startRTMPIngress(_ arg: PBStartRTMPIngressRequest = PBStartRTMPIngressRequest()) -> Promise<PBStartRTMPIngressResponse> {
+    return self.callUnary("FrontendRPC/StartRTMPIngress", arg)
+  }
+  public func startHLSEgress(_ arg: PBStartHLSEgressRequest = PBStartHLSEgressRequest()) -> Promise<PBStartHLSEgressResponse> {
+    return self.callUnary("FrontendRPC/StartHLSEgress", arg)
+  }
+  public func stopHLSEgress(_ arg: PBStopHLSEgressRequest = PBStopHLSEgressRequest()) -> Promise<PBStopHLSEgressResponse> {
+    return self.callUnary("FrontendRPC/StopHLSEgress", arg)
+  }
   public func publishSwarm(_ arg: PBPublishSwarmRequest = PBPublishSwarmRequest()) -> Promise<PBPublishSwarmResponse> {
     return self.callUnary("FrontendRPC/PublishSwarm", arg)
   }
@@ -127,5 +136,5 @@ class FrontendRPCClient: RPCClient {
   public func publishNetworkToBootstrapPeer(_ arg: PBPublishNetworkToBootstrapPeerRequest = PBPublishNetworkToBootstrapPeerRequest()) -> Promise<PBPublishNetworkToBootstrapPeerResponse> {
     return self.callUnary("FrontendRPC/PublishNetworkToBootstrapPeer", arg)
   }
-  
+
 }

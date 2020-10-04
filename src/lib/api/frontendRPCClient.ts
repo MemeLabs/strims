@@ -151,6 +151,23 @@ export default class FrontendRPC extends RPCHost {
   ): Promise<pb.LeaveSwarmResponse> {
     return this.expectOne(this.call("FrontendRPC/LeaveSwarm", new pb.LeaveSwarmRequest(v)));
   }
+  public startRTMPIngress(
+    v: pb.IStartRTMPIngressRequest = new pb.StartRTMPIngressRequest()
+  ): Promise<pb.StartRTMPIngressResponse> {
+    return this.expectOne(
+      this.call("FrontendRPC/StartRTMPIngress", new pb.StartRTMPIngressRequest(v))
+    );
+  }
+  public startHLSEgress(
+    v: pb.IStartHLSEgressRequest = new pb.StartHLSEgressRequest()
+  ): Promise<pb.StartHLSEgressResponse> {
+    return this.expectOne(this.call("FrontendRPC/StartHLSEgress", new pb.StartHLSEgressRequest(v)));
+  }
+  public stopHLSEgress(
+    v: pb.IStopHLSEgressRequest = new pb.StopHLSEgressRequest()
+  ): Promise<pb.StopHLSEgressResponse> {
+    return this.expectOne(this.call("FrontendRPC/StopHLSEgress", new pb.StopHLSEgressRequest(v)));
+  }
   public publishSwarm(
     v: pb.IPublishSwarmRequest = new pb.PublishSwarmRequest()
   ): Promise<pb.PublishSwarmResponse> {

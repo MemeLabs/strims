@@ -9,7 +9,7 @@ import (
 type SwiftGen struct{}
 
 func (g *SwiftGen) OutputPath(service ProtoService) string {
-	return path.Join(wd, "ios", "App", "App", service.Name+"Client.swift")
+	return path.Join(wd, "ios", "App", "App", "API", service.Name+"Client.swift")
 }
 
 func (g *SwiftGen) Template() *template.Template {

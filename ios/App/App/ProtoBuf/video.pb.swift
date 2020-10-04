@@ -303,6 +303,8 @@ public struct PBVideoClientOpenRequest {
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
+  public var swarmKey: Data = Data()
+
   public var emitData: Bool = false
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -1182,26 +1184,32 @@ extension PBVideoServerWriteResponse: SwiftProtobuf.Message, SwiftProtobuf._Mess
 extension PBVideoClientOpenRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = "VideoClientOpenRequest"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .standard(proto: "emit_data"),
+    1: .standard(proto: "swarm_key"),
+    2: .standard(proto: "emit_data"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       switch fieldNumber {
-      case 1: try decoder.decodeSingularBoolField(value: &self.emitData)
+      case 1: try decoder.decodeSingularBytesField(value: &self.swarmKey)
+      case 2: try decoder.decodeSingularBoolField(value: &self.emitData)
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.swarmKey.isEmpty {
+      try visitor.visitSingularBytesField(value: self.swarmKey, fieldNumber: 1)
+    }
     if self.emitData != false {
-      try visitor.visitSingularBoolField(value: self.emitData, fieldNumber: 1)
+      try visitor.visitSingularBoolField(value: self.emitData, fieldNumber: 2)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: PBVideoClientOpenRequest, rhs: PBVideoClientOpenRequest) -> Bool {
+    if lhs.swarmKey != rhs.swarmKey {return false}
     if lhs.emitData != rhs.emitData {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

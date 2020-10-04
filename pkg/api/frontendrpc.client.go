@@ -250,6 +250,33 @@ func (c *FrontendRPCClient) LeaveSwarm(
 	return c.client.CallUnary(ctx, "FrontendRPC/LeaveSwarm", req, res)
 }
 
+// StartRTMPIngress ...
+func (c *FrontendRPCClient) StartRTMPIngress(
+	ctx context.Context,
+	req *pb.StartRTMPIngressRequest,
+	res *pb.StartRTMPIngressResponse,
+) error {
+	return c.client.CallUnary(ctx, "FrontendRPC/StartRTMPIngress", req, res)
+}
+
+// StartHLSEgress ...
+func (c *FrontendRPCClient) StartHLSEgress(
+	ctx context.Context,
+	req *pb.StartHLSEgressRequest,
+	res *pb.StartHLSEgressResponse,
+) error {
+	return c.client.CallUnary(ctx, "FrontendRPC/StartHLSEgress", req, res)
+}
+
+// StopHLSEgress ...
+func (c *FrontendRPCClient) StopHLSEgress(
+	ctx context.Context,
+	req *pb.StopHLSEgressRequest,
+	res *pb.StopHLSEgressResponse,
+) error {
+	return c.client.CallUnary(ctx, "FrontendRPC/StopHLSEgress", req, res)
+}
+
 // PublishSwarm ...
 func (c *FrontendRPCClient) PublishSwarm(
 	ctx context.Context,
