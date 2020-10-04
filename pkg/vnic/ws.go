@@ -1,4 +1,4 @@
-package vpn
+package vnic
 
 import "net/url"
 

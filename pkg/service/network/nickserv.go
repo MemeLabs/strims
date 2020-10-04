@@ -1,4 +1,4 @@
-package service
+package network
 
 import (
 	"bytes"
@@ -38,10 +38,14 @@ var (
 
 const clientTimeout = 10 * time.Second
 
+const pubSubChunkSize = 128
+const syncAddrRetryIvl = 5 * time.Second
+const syncAddrRefreshIvl = 10 * time.Minute
+
 // TODO: tests
 // TODO: get nickserv public key
 
-func NewNickServ(svc *NetworkServices, salt []byte, kvStore kv.RWStore, nickservID uint64) (*NickServ, error) {
+func NewNickServ(svc *Services, salt []byte, kvStore kv.RWStore, nickservID uint64) (*NickServ, error) {
 	cfg, err := dao.GetNickservConfig(kvStore, nickservID) // TODO: nickserv id
 	if err != nil {
 		return nil, err
@@ -103,7 +107,7 @@ type NickServ struct {
 	logger          *zap.Logger
 	close           context.CancelFunc
 	closeOnce       sync.Once
-	svc             *NetworkServices
+	svc             *Services
 	store           *NickServStore
 	roles           map[string]struct{}
 	tokenTTL        time.Duration
@@ -511,7 +515,7 @@ func signNickToken(token *pb.NickServToken, key *pb.Key) error {
 	}
 }
 
-func NewNickServClient(svc *NetworkServices, key, salt []byte) (*NickServClient, error) {
+func NewNickServClient(svc *Services, key, salt []byte) (*NickServClient, error) {
 	port, err := svc.Network.ReservePort()
 	if err != nil {
 		return nil, err
@@ -534,13 +538,13 @@ func NewNickServClient(svc *NetworkServices, key, salt []byte) (*NickServClient,
 type NickServClient struct {
 	close     context.CancelFunc
 	closeOnce sync.Once
-	svc       *NetworkServices
+	svc       *Services
 	responses map[uint64]chan *pb.NickServRPCResponse
 	hostAddr  atomic.Value
 	port      uint16
 }
 
-func (c *NickServClient) syncAddr(ctx context.Context, svc *NetworkServices, key, salt []byte) {
+func (c *NickServClient) syncAddr(ctx context.Context, svc *Services, key, salt []byte) {
 	var nextTick time.Duration
 	for {
 		select {

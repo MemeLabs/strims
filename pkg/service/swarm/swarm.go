@@ -1,4 +1,4 @@
-package service
+package swarm
 
 import (
 	"bytes"
@@ -9,6 +9,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
+	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -38,9 +40,9 @@ func (s *swarmPeerSwarmItem) Ports() (uint16, uint16, bool) {
 	return s.localPort, s.remotePort, s.localPort != 0 && s.remotePort != 0
 }
 
-func newSwarmPeer(peer *vpn.Peer) *swarmPeer {
-	rw := vpn.NewFrameReadWriter(peer.Link, vpn.SwarmPort, peer.Link.MTU())
-	peer.SetHandler(vpn.SwarmPort, rw.HandleFrame)
+func newSwarmPeer(peer *vnic.Peer) *swarmPeer {
+	rw := vnic.NewFrameReadWriter(peer.Link, vnic.SwarmPort, peer.Link.MTU())
+	peer.SetHandler(vnic.SwarmPort, rw.HandleFrame)
 
 	return &swarmPeer{
 		peer:       peer,
@@ -51,9 +53,9 @@ func newSwarmPeer(peer *vpn.Peer) *swarmPeer {
 }
 
 type swarmPeer struct {
-	peer           *vpn.Peer
+	peer           *vnic.Peer
 	swarmPeer      *ppspp.Peer
-	rw             *vpn.FrameReadWriter
+	rw             *vnic.FrameReadWriter
 	swarmPortsLock sync.Mutex
 	swarmPorts     map[string]*swarmPeerSwarmItem
 }
@@ -113,14 +115,14 @@ func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
 			zap.Uint16("remotePort", remotePort),
 		)
 
-		w := vpn.NewFrameWriter(p.peer.Link, remotePort, p.peer.Link.MTU())
+		w := vnic.NewFrameWriter(p.peer.Link, remotePort, p.peer.Link.MTU())
 		ch, err := ppspp.OpenChannel(s.logger, p.swarmPeer, s.swarm, w)
 		if err != nil {
 			return
 		}
 		s.peerChannels[p] = ch
 
-		p.peer.SetHandler(localPort, func(p *vpn.Peer, f vpn.Frame) error {
+		p.peer.SetHandler(localPort, func(p *vnic.Peer, f vnic.Frame) error {
 			_, err := ch.HandleMessage(f.Body)
 			if err != nil {
 				ch.Close()
@@ -187,7 +189,7 @@ func (t *swarmNetwork) Less(o llrb.Item) bool {
 	if !ok {
 		return !o.Less(t)
 	}
-	return bytes.Compare(t.network.CAKey(), os.network.CAKey()) == -1
+	return bytes.Compare(t.network.Key(), os.network.Key()) == -1
 }
 
 func (t *swarmNetwork) addPeer(p *swarmPeer) {
@@ -206,7 +208,7 @@ func (t *swarmNetwork) OpenSwarm(swarm *ppspp.Swarm) {
 	t.logger.Debug(
 		"opening swarm",
 		zap.Stringer("swarm", swarm.ID()),
-		logutil.ByteHex("network", t.network.CAKey()),
+		logutil.ByteHex("network", t.network.Key()),
 	)
 
 	si, ok := t.activeSwarms.Load(swarm.ID().String())
@@ -240,7 +242,7 @@ func (t *swarmNetwork) sendOpen(s *swarmSwarm, p *swarmPeer) error {
 		zap.Uint16("port", port),
 	)
 
-	return vpn.WriteProtoStream(p.rw, &pb.SwarmThingMessage{
+	return protoutil.WriteStream(p.rw, &pb.SwarmThingMessage{
 		Body: &pb.SwarmThingMessage_Open_{
 			Open: &pb.SwarmThingMessage_Open{
 				SwarmId: s.swarm.ID().Binary(),
@@ -259,7 +261,7 @@ func (t *swarmNetwork) CloseSwarm(id ppspp.SwarmID) {
 	t.logger.Debug(
 		"closing swarm",
 		zap.Stringer("swarm", id),
-		logutil.ByteHex("network", t.network.CAKey()),
+		logutil.ByteHex("network", t.network.Key()),
 	)
 
 	msg := &pb.SwarmThingMessage{
@@ -272,7 +274,7 @@ func (t *swarmNetwork) CloseSwarm(id ppspp.SwarmID) {
 
 	t.peers.Range(func(_, value interface{}) bool {
 		rw := value.(*swarmPeer).rw
-		if err := vpn.WriteProtoStream(rw, msg); err != nil {
+		if err := protoutil.WriteStream(rw, msg); err != nil {
 			log.Println(err)
 		}
 		rw.Flush()
@@ -283,7 +285,7 @@ func (t *swarmNetwork) CloseSwarm(id ppspp.SwarmID) {
 	t.activeSwarms.Delete(id.String())
 }
 
-func newSwarmController(logger *zap.Logger, h *vpn.Host, n *vpn.Networks) *swarmController {
+func newSwarmController(logger *zap.Logger, h *vnic.Host, n *vpn.Host) *swarmController {
 	t := &swarmController{
 		logger:    logger,
 		scheduler: ppspp.NewScheduler(context.TODO(), logger),
@@ -302,9 +304,9 @@ type swarmController struct {
 	scheduler    *ppspp.Scheduler
 }
 
-func (t *swarmController) do(h *vpn.Host, n *vpn.Networks) {
-	peers := make(chan *vpn.Peer, 16)
-	h.AddPeerHandler(func(p *vpn.Peer) { peers <- p })
+func (t *swarmController) do(h *vnic.Host, n *vpn.Host) {
+	peers := make(chan *vnic.Peer, 16)
+	h.AddPeerHandler(func(p *vnic.Peer) { peers <- p })
 
 	peerNetworks := make(chan vpn.PeerNetwork, 16)
 	n.NotifyPeerNetwork(peerNetworks)
@@ -319,7 +321,7 @@ func (t *swarmController) do(h *vpn.Host, n *vpn.Networks) {
 	}
 }
 
-func (t *swarmController) addPeerToNetwork(peer *vpn.Peer, network *vpn.Network) {
+func (t *swarmController) addPeerToNetwork(peer *vnic.Peer, network *vpn.Network) {
 	pi, ok := t.peers.Load(peer)
 	if !ok {
 		return
@@ -331,7 +333,7 @@ func (t *swarmController) addPeerToNetwork(peer *vpn.Peer, network *vpn.Network)
 	ni.(*swarmNetwork).addPeer(pi.(*swarmPeer))
 }
 
-func (t *swarmController) handlePeer(peer *vpn.Peer) {
+func (t *swarmController) handlePeer(peer *vnic.Peer) {
 	p := newSwarmPeer(peer)
 	t.peers.Store(peer, p)
 
@@ -340,7 +342,7 @@ func (t *swarmController) handlePeer(peer *vpn.Peer) {
 	go func() {
 		for {
 			msg := new(pb.SwarmThingMessage)
-			if err := vpn.ReadProtoStream(p.rw, msg); err != nil {
+			if err := protoutil.ReadStream(p.rw, msg); err != nil {
 				break
 			}
 

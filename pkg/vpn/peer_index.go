@@ -17,6 +17,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/go-ppspp/pkg/randutil"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -30,21 +32,14 @@ const peerIndexMaxSize = 5120
 
 var nextPeerIndexID uint32
 
-// PeerIndex ...
-type PeerIndex interface {
-	Publish(ctx context.Context, key, salt []byte, port uint16) error
-	Search(ctx context.Context, key, salt []byte) (<-chan *PeerIndexHost, error)
-	HandleMessage(msg *Message) (forward bool, err error)
-}
-
 // NewPeerIndex ...
-func NewPeerIndex(logger *zap.Logger, n *Network, store *PeerIndexStore) PeerIndex {
+func NewPeerIndex(logger *zap.Logger, n *Network, store *PeerIndexStore) *PeerIndex {
 	id := atomic.AddUint32(&nextPeerIndexID, 1)
 	if id == 0 {
 		panic("peer index id overflow")
 	}
 
-	return &peerIndex{
+	return &PeerIndex{
 		logger:  logger,
 		id:      id,
 		store:   store,
@@ -52,7 +47,8 @@ func NewPeerIndex(logger *zap.Logger, n *Network, store *PeerIndexStore) PeerInd
 	}
 }
 
-type peerIndex struct {
+// PeerIndex ...
+type PeerIndex struct {
 	logger              *zap.Logger
 	id                  uint32
 	store               *PeerIndexStore
@@ -60,7 +56,8 @@ type peerIndex struct {
 	searchResponseChans sync.Map
 }
 
-func (s *peerIndex) HandleMessage(msg *Message) (forward bool, err error) {
+// HandleMessage ...
+func (s *PeerIndex) HandleMessage(msg *Message) (forward bool, err error) {
 	var m pb.PeerIndexMessage
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
 		return true, err
@@ -86,7 +83,7 @@ func (s *peerIndex) HandleMessage(msg *Message) (forward bool, err error) {
 	return true, err
 }
 
-func (s *peerIndex) handlePublish(r *pb.PeerIndexMessage_Record) error {
+func (s *PeerIndex) handlePublish(r *pb.PeerIndexMessage_Record) error {
 	if !verifyPeerIndexRecord(r) {
 		return errors.New("invalid record signature")
 	}
@@ -94,7 +91,7 @@ func (s *peerIndex) handlePublish(r *pb.PeerIndexMessage_Record) error {
 	return s.store.Insert(s.id, r)
 }
 
-func (s *peerIndex) handleUnpublish(r *pb.PeerIndexMessage_Record) error {
+func (s *PeerIndex) handleUnpublish(r *pb.PeerIndexMessage_Record) error {
 	if !verifyPeerIndexRecord(r) {
 		return errors.New("invalid record signature")
 	}
@@ -102,7 +99,7 @@ func (s *peerIndex) handleUnpublish(r *pb.PeerIndexMessage_Record) error {
 	return s.store.Remove(s.id, r)
 }
 
-func (s *peerIndex) handleSearchRequest(m *pb.PeerIndexMessage_SearchRequest, originHostID kademlia.ID) error {
+func (s *PeerIndex) handleSearchRequest(m *pb.PeerIndexMessage_SearchRequest, originHostID kademlia.ID) error {
 	records := s.store.Closest(s.id, originHostID, m.Hash)
 	if len(records) == 0 {
 		return nil
@@ -116,10 +113,10 @@ func (s *peerIndex) handleSearchRequest(m *pb.PeerIndexMessage_SearchRequest, or
 			},
 		},
 	}
-	return sendProto(s.network, originHostID, PeerIndexPort, PeerIndexPort, msg)
+	return s.network.SendProto(originHostID, vnic.PeerIndexPort, vnic.PeerIndexPort, msg)
 }
 
-func (s *peerIndex) handleSearchResponse(m *pb.PeerIndexMessage_SearchResponse) error {
+func (s *PeerIndex) handleSearchResponse(m *pb.PeerIndexMessage_SearchResponse) error {
 	for _, r := range m.Records {
 		if !verifyPeerIndexRecord(r) {
 			continue
@@ -132,7 +129,7 @@ func (s *peerIndex) handleSearchResponse(m *pb.PeerIndexMessage_SearchResponse) 
 	return nil
 }
 
-func (s *peerIndex) Publish(ctx context.Context, key, salt []byte, port uint16) error {
+func (s *PeerIndex) Publish(ctx context.Context, key, salt []byte, port uint16) error {
 	s.logger.Debug(
 		"publishing peer index item",
 		logutil.ByteHex("key", key),
@@ -143,14 +140,14 @@ func (s *peerIndex) Publish(ctx context.Context, key, salt []byte, port uint16) 
 	return err
 }
 
-func (s *peerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerIndexHost, error) {
+func (s *PeerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerIndexHost, error) {
 	hash := peerIndexRecordHash(key, salt)
 	target, err := kademlia.UnmarshalID(hash)
 	if err != nil {
 		return nil, err
 	}
 
-	rid, err := randUint64()
+	rid, err := randutil.Uint64()
 	if err != nil {
 		return nil, err
 	}
@@ -163,7 +160,7 @@ func (s *peerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerI
 			},
 		},
 	}
-	if err := sendProto(s.network, target, PeerIndexPort, PeerIndexPort, msg); err != nil {
+	if err := s.network.SendProto(target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg); err != nil {
 		return nil, err
 	}
 
@@ -469,7 +466,7 @@ func (p *peerIndexPublisher) publish(t time.Time) {
 			},
 		},
 	}
-	if err := sendProto(p.network, p.target, PeerIndexPort, PeerIndexPort, msg); err != nil {
+	if err := p.network.SendProto(p.target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg); err != nil {
 		p.logger.Debug(
 			"error publishing peer index item",
 			zap.Error(err),
@@ -489,7 +486,7 @@ func (p *peerIndexPublisher) unpublish() {
 			},
 		},
 	}
-	if err := sendProto(p.network, p.target, PeerIndexPort, PeerIndexPort, msg); err != nil {
+	if err := p.network.SendProto(p.target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg); err != nil {
 		p.logger.Debug(
 			"error unpublishing peer index item",
 			zap.Error(err),

@@ -5,13 +5,18 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/docker/docker/pkg/testutil/assert"
+	"go.uber.org/zap"
 )
 
 func TestMarshalUnmarshal(t *testing.T) {
+	logger, err := zap.NewDevelopment()
+	assert.NilError(t, err)
 	key, err := dao.GenerateKey()
 	assert.NilError(t, err)
-	host := &Host{key: key}
+	host, err := vnic.New(logger, key)
+	assert.NilError(t, err)
 
 	msg := Message{
 		Header: MessageHeader{

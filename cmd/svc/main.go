@@ -13,7 +13,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
@@ -82,14 +82,14 @@ func main() {
 		panic(err)
 	}
 
-	host, err := vpn.NewHost(
+	host, err := vnic.New(
 		logger,
 		profile.Key,
-		vpn.WithNetworkBroker(vpn.NewNetworkBroker(logger)),
-		vpn.WithInterface(vpn.NewWSInterface(logger, addr)),
-		vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(
+		// vnic.WithNetworkBroker(vnic.NewNetworkBroker(logger)),
+		vnic.WithInterface(vnic.NewWSInterface(logger, addr)),
+		vnic.WithInterface(vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(
 			logger,
-			&vpn.WebRTCDialerOptions{
+			&vnic.WebRTCDialerOptions{
 				PortMin: uint16(webRTCPortMin),
 				PortMax: uint16(webRTCPortMax),
 			},

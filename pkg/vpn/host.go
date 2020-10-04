@@ -1,368 +1,226 @@
 package vpn
 
 import (
-	"encoding/json"
+	"bytes"
 	"errors"
-	"fmt"
-	"io"
-	"log"
-	"path"
-	"reflect"
-	"runtime"
 	"sync"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
+	"github.com/MemeLabs/go-ppspp/pkg/event"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	lru "github.com/hashicorp/golang-lru"
 	"github.com/petar/GoLLRB/llrb"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
 )
 
-const reservedPortCount uint16 = 1000
-const hostCertValidDuration = time.Minute
+const reservedPortCount = 1000
+const recentMessageIDHistoryLength = 10000
+const maxMessageHops = 5
+const maxMessageReplicas = 5
 
-// default network service ports
-const (
-	HashTablePort uint16 = iota + 10
-	PeerIndexPort
-	PeerExchangePort
-	DirectoryPort
-	SwarmServicePort
-)
-
-// peer link ports
-const (
-	NetworkInitPort uint16 = iota
-	NetworkBrokerPort
-	BootstrapPort
-	SwarmPort
-)
-
+// errors ...
 var (
-	linksActive = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "strims_vpn_links_active",
-		Help: "The number of active network links",
-	})
-	linkReadBytes = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "strims_vpn_link_read_bytes",
-		Help: "The total number of bytes read from network links",
-	})
-	linkWriteBytes = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "strims_vpn_link_write_bytes",
-		Help: "The total number of bytes written to network links",
-	})
-	dialCount = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "strims_vpn_dial_count",
-		Help: "The total number of dialed network connections",
-	}, []string{"scheme"})
-	dialErrorCount = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "strims_vpn_dial_error_count",
-		Help: "The total number of network connection dial errors",
-	}, []string{"scheme"})
+	ErrDuplicateNetworkKey      = errors.New("duplicate network key")
+	ErrNetworkNotFound          = errors.New("network not found")
+	ErrPeerClosed               = errors.New("peer closed")
+	ErrNetworkBindingsEmpty     = errors.New("network bindings empty")
+	ErrDiscriminatorBounds      = errors.New("discriminator out of range")
+	ErrNetworkOwnerMismatch     = errors.New("init and network certificate key mismatch")
+	ErrNetworkAuthorityMismatch = errors.New("network ca mismatch")
+	ErrNetworkIDBounds          = errors.New("network id out of range")
 )
 
-// HostOption ...
-type HostOption func(h *Host) error
-
-// PeerHandler ...
-type PeerHandler func(p *Peer)
-
-// NewHost ...
-func NewHost(logger *zap.Logger, profileKey *pb.Key, options ...HostOption) (*Host, error) {
-	hostKey, err := dao.GenerateKey()
+// New ...
+func New(logger *zap.Logger, vnicHost *vnic.Host, brokerFactory BrokerFactory) (*Host, error) {
+	recentMessageIDs, err := lru.New(recentMessageIDHistoryLength)
 	if err != nil {
-		return nil, err
+		panic(err)
 	}
 
-	h := &Host{
-		logger:     logger,
-		profileKey: profileKey,
-		key:        hostKey,
+	n := &Host{
+		logger:           logger,
+		VnicHost:         vnicHost,
+		brokerFactory:    brokerFactory,
+		recentMessageIDs: recentMessageIDs,
+		hashTableStore:  vpn.NewHashTableStore(context.Background(), logger, vnicHost.ID()),
+		peerIndexStore:  vpn.NewPeerIndexStore(context.Background(), logger, vnicHost.ID()),
 	}
 
-	for _, o := range options {
-		if err := o(h); err != nil {
-			return nil, err
-		}
-	}
+	vnicHost.AddPeerHandler(n.handlePeer)
 
-	for _, iface := range h.interfaces {
-		if listener, ok := iface.(Listener); ok {
-			go func() {
-				if err := listener.Listen(h); err != nil {
-					log.Println(err)
-				}
-			}()
-		}
-	}
-
-	return h, nil
+	return n, nil
 }
 
 // Host ...
 type Host struct {
-	logger           *zap.Logger
-	profileKey       *pb.Key
-	key              *pb.Key
-	interfaces       []Interface
-	peerHandlersLock sync.Mutex
-	peerHandlers     []PeerHandler
-	peersLock        sync.Mutex
-	peers            peerMap
-
-	// TODO: find a better place for this...
-	networkBroker NetworkBroker
+	*vnic.Host
+	logger               *zap.Logger
+	brokerFactory        BrokerFactory
+	clientsLock          sync.Mutex
+	clients              clientMap
+	networkObservers     event.Observable
+	peerNetworkObservers event.Observable
+	recentMessageIDs     *lru.Cache
+	hashTableStore       *HashTableStore
+	peerIndexStore       *PeerIndexStore
 }
 
-// Close ...
-func (h *Host) Close() {
-	for _, iface := range h.interfaces {
-		if listener, ok := iface.(Listener); ok {
-			listener.Close()
-		}
+func (h *Host) handlePeer(p *vnic.Peer) {
+	newBootstrap(h.logger, h, p)
+}
+
+// NotifyNetwork ...
+func (h *Host) NotifyNetwork(ch chan *Network) {
+	h.networkObservers.Notify(ch)
+}
+
+// StopNotifyingNetwork ...
+func (h *Host) StopNotifyingNetwork(ch chan *Network) {
+	h.networkObservers.StopNotifying(ch)
+}
+
+// NotifyPeerNetwork ...
+func (h *Host) NotifyPeerNetwork(ch chan PeerNetwork) {
+	h.peerNetworkObservers.Notify(ch)
+}
+
+// AddNetwork ...
+func (h *Host) AddNetwork(cert *pb.Certificate) (*Client, error) {
+	h.clientsLock.Lock()
+	defer h.clientsLock.Unlock()
+
+	key := dao.GetRootCert(cert).Key
+	if _, ok := h.clients.Get(key); ok {
+		return nil, ErrDuplicateNetworkKey
 	}
 
-	h.peersLock.Lock()
-	defer h.peersLock.Unlock()
-	h.peers.Each(func(p *Peer) bool {
-		p.Close()
+	network := newNetwork(h.logger, h.vnicHost, cert, h.recentMessageIDs)
+	hashTable := NewHashTable(h.logger, network, h.hashTableStore)
+	peerIndex := NewPeerIndex(h.logger, network, h.peerIndexStore)
+	peerExchange := NewPeerExchange(h.logger, network)
+
+	if err := network.SetHandler(vnic.HashTablePort, hashTable); err != nil {
+		return nil, err
+	}
+	if err := network.SetHandler(vnic.PeerIndexPort, peerIndex); err != nil {
+		return nil, err
+	}
+	if err := network.SetHandler(vnic.PeerExchangePort, peerExchange); err != nil {
+		return nil, err
+	}
+
+	c := &Client{
+		Host: h,
+		Network:      network,
+		HashTable:    hashTable,
+		PeerIndex:    peerIndex,
+		PeerExchange: peerExchange,
+	}
+	if !h.clients.Insert(c) {
+		return nil, ErrDuplicateNetworkKey
+	}
+
+	h.networkObservers.Emit(network)
+
+	return c, nil
+}
+
+// RemoveNetwork ...
+func (h *Host) RemoveNetwork(n *Network) error {
+	h.clientsLock.Lock()
+	defer h.clientsLock.Unlock()
+
+	if _, ok := h.clients.Delete(n.Key()); !ok {
+		return ErrNetworkNotFound
+	}
+
+	n.Close()
+	return nil
+}
+
+// Networks ...
+func (h *Host) Networks() []*Network {
+	h.clientsLock.Lock()
+	defer h.clientsLock.Unlock()
+
+	networks := make([]*Network, h.clients.Len(), 0)
+	h.clients.Each(func(c *Client) bool {
+		networks = append(networks, c.Network)
 		return true
 	})
+	return networks
 }
 
-// Logger ...
-func (h *Host) Logger() *zap.Logger {
-	return h.logger
+// NetworkKeys ...
+func (h *Host) NetworkKeys() [][]byte {
+	h.clientsLock.Lock()
+	defer h.clientsLock.Unlock()
+
+	keys := make([][]byte, h.clients.Len(), 0)
+	h.clients.Each(func(c *Client) bool {
+		keys = append(keys, c.Network.Key())
+		return true
+	})
+	return keys
 }
 
-// ID ...
-func (h *Host) ID() kademlia.ID {
-	return kademlia.MustUnmarshalID(h.key.Public)
+// Client ...
+func (h *Host) Client(key []byte) (*Client, bool) {
+	h.clientsLock.Lock()
+	defer h.clientsLock.Unlock()
+	return h.clients.Get(key); ok {
 }
 
-// Key ...
-func (h *Host) Key() *pb.Key {
-	return h.key
-}
-
-// Cert ...
-func (h *Host) Cert() (*pb.Certificate, error) {
-	profileCert, err := dao.NewSelfSignedCertificate(h.profileKey, pb.KeyUsage_KEY_USAGE_SIGN, hostCertValidDuration)
-	if err != nil {
-		return nil, fmt.Errorf("generating init cert failed: %w", err)
-	}
-
-	csr, err := dao.NewCertificateRequest(h.key, pb.KeyUsage_KEY_USAGE_SIGN)
-	if err != nil {
-		return nil, err
-	}
-	cert, err := dao.SignCertificateRequest(csr, hostCertValidDuration, h.profileKey)
-	if err != nil {
-		return nil, err
-	}
-	cert.ParentOneof = &pb.Certificate_Parent{Parent: profileCert}
-
-	return cert, nil
-}
-
-// AddLink ...
-func (h *Host) AddLink(c Link) {
-	go func() {
-		linksActive.Inc()
-		defer linksActive.Dec()
-
-		cert, err := h.Cert()
-		if err != nil {
-			h.logger.Error("peer init error", zap.Error(err))
-			return
-		}
-
-		p, err := newPeer(h.logger, instrumentLink(c), h.profileKey, cert)
-		if err != nil {
-			h.logger.Error("peer init error", zap.Error(err))
-			return
-		}
-
-		h.logger.Debug(
-			"created peer",
-			logutil.ByteHex("peer", p.Certificate.Key),
-			zap.String("type", reflect.TypeOf(c).String()),
-			zap.Int("mtu", c.MTU()),
-		)
-
-		h.handlePeer(p)
-
-		h.peersLock.Lock()
-		h.peers.Insert(p.HostID(), p)
-		h.peersLock.Unlock()
-
-		p.run()
-
-		h.peersLock.Lock()
-		h.peers.Delete(p.HostID())
-		h.peersLock.Unlock()
-	}()
-}
-
-// AddPeerHandler ...
-func (h *Host) AddPeerHandler(fn PeerHandler) {
-	h.peerHandlersLock.Lock()
-	defer h.peerHandlersLock.Unlock()
-	h.peerHandlers = append(h.peerHandlers, fn)
-}
-
-// GetPeer ...
-func (h *Host) GetPeer(hostID kademlia.ID) (*Peer, bool) {
-	h.peersLock.Lock()
-	defer h.peersLock.Unlock()
-	return h.peers.Get(hostID)
-}
-
-func (h *Host) handlePeer(p *Peer) {
-	h.peerHandlersLock.Lock()
-	defer h.peerHandlersLock.Unlock()
-
-	for _, fn := range h.peerHandlers {
-		fn(p)
-	}
-}
-
-func (h *Host) dialer(scheme string) Interface {
-	for _, i := range h.interfaces {
-		if i.ValidScheme(scheme) {
-			return i
-		}
-	}
-	return nil
-}
-
-// Dial ...
-func (h *Host) Dial(addr InterfaceAddr) error {
-	scheme := addr.Scheme()
-
-	dialCount.WithLabelValues(scheme).Inc()
-	h.logger.Debug(
-		"dialing",
-		zap.String("scheme", scheme),
-		zap.Stringer("addr", addr.(fmt.Stringer)),
-	)
-
-	d := h.dialer(scheme)
-	if d == nil {
-		dialErrorCount.WithLabelValues(scheme).Inc()
-		return errors.New("unsupported scheme")
-	}
-
-	if err := d.Dial(h, addr); err != nil {
-		dialErrorCount.WithLabelValues(scheme).Inc()
-		h.logger.Error("dial error", zap.Error(err))
-		return err
-	}
-	return nil
-}
-
-type peerMap struct {
+type clientMap struct {
 	m llrb.LLRB
 }
 
-func (m *peerMap) Insert(k kademlia.ID, v *Peer) {
-	m.m.InsertNoReplace(peerMapItem{k, v})
+func (m *clientMap) Insert(c *Client) {
+	m.m.InsertNoReplace(&clientMapItem{c.Network.Key(), c})
 }
 
-func (m *peerMap) Delete(k kademlia.ID) {
-	m.m.Delete(peerMapItem{k, nil})
-}
-
-func (m *peerMap) Get(k kademlia.ID) (*Peer, bool) {
-	if it := m.m.Get(peerMapItem{k, nil}); it != nil {
-		return it.(peerMapItem).v, true
+func (m *clientMap) Delete(k []byte) (*Client, bool) {
+	if i := m.m.Delete(&clientMapItem{k: k}); i != nil {
+		return i.(*clientMapItem).v, true
 	}
 	return nil, false
 }
 
-func (m *peerMap) Each(f func(b *Peer) bool) {
+func (m *clientMap) Get(k []byte) (*Client, bool) {
+	if i := m.m.Get(&clientMapItem{k: k}); i != nil {
+		return i.(*clientMapItem).v, true
+	}
+	return nil, false
+}
+
+func (m *clientMap) Len() int {
+	return m.m.Len()
+}
+
+func (m *clientMap) Each(f func(v *Client) bool) {
 	m.m.AscendGreaterOrEqual(llrb.Inf(-1), func(i llrb.Item) bool {
-		return f(i.(peerMapItem).v)
+		return f(i.(*clientMapItem).v)
 	})
 }
 
-type peerMapItem struct {
-	k kademlia.ID
-	v *Peer
+type clientMapItem struct {
+	k []byte
+	v *Client
 }
 
-func (t peerMapItem) Less(oi llrb.Item) bool {
-	if o, ok := oi.(peerMapItem); ok {
-		return t.k.Less(o.k)
+func (t *clientMapItem) Less(oi llrb.Item) bool {
+	if o, ok := oi.(*clientMapItem); ok {
+		return bytes.Compare(t.k, o.k) == -1
 	}
 	return !oi.Less(t)
 }
 
-// Listener ...
-type Listener interface {
-	Listen(h *Host) error
-	Close() error
-}
-
-// WithInterface ...
-func WithInterface(i Interface) HostOption {
-	return func(host *Host) error {
-		host.interfaces = append(host.interfaces, i)
-		return nil
-	}
-}
-
-// Interface ...
-type Interface interface {
-	ValidScheme(string) bool
-	Dial(h *Host, addr InterfaceAddr) error
-}
-
-// InterfaceAddr ...
-type InterfaceAddr interface {
-	Scheme() string
-}
-
-// Link ...
-type Link interface {
-	io.ReadWriteCloser
-	MTU() int
-}
-
-func instrumentLink(l Link) *instrumentedLink {
-	return &instrumentedLink{l}
-}
-
-type instrumentedLink struct {
-	Link
-}
-
-func (l *instrumentedLink) Read(p []byte) (int, error) {
-	n, err := l.Link.Read(p)
-	linkReadBytes.Add(float64(n))
-	return n, err
-}
-
-func (l *instrumentedLink) Write(p []byte) (int, error) {
-	n, err := l.Link.Write(p)
-	linkWriteBytes.Add(float64(n))
-	return n, err
-}
-
-func jsonDump(i interface{}) {
-	_, file, line, _ := runtime.Caller(1)
-	b, err := json.MarshalIndent(i, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf(
-		"%s %s:%d: %s\n",
-		time.Now().Format("2006/01/02 15:04:05.000000"),
-		path.Base(file),
-		line, string(b),
-	)
+// Client ...
+type Client struct {
+	Host *Host
+	Network      *Network
+	HashTable    HashTable
+	PeerIndex    PeerIndex
+	PeerExchange *PeerExchange
 }

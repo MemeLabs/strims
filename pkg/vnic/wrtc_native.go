@@ -1,6 +1,6 @@
 // +build !js
 
-package vpn
+package vnic
 
 import (
 	"bufio"

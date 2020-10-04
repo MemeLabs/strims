@@ -9,8 +9,10 @@ import (
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
+	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
@@ -46,10 +48,14 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 	srv, err := service.New(service.Options{
 		Store:  store,
 		Logger: d.logger,
-		VPNOptions: []vpn.HostOption{
-			vpn.WithNetworkBroker(vpn.NewNetworkBroker(d.logger)),
-			vpn.WithInterface(vpn.NewWSInterface(d.logger, o.VPNServerAddr)),
-			vpn.WithInterface(vpn.NewWebRTCInterface(vpn.NewWebRTCDialer(d.logger, nil))),
+		NewVPNHost: func(key *pb.Key) (*vpn.Host, error) {
+			ws := vnic.NewWSInterface(d.logger, o.VPNServerAddr)
+			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(d.logger, nil))
+			vnicHost, err := vnic.New(d.logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
+			if err != nil {
+				return nil, err
+			}
+			return vpn.New(d.logger, vnicHost, vpn.NewBrokerFactory(d.logger))
 		},
 	})
 	if err != nil {

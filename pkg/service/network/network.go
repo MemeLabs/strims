@@ -1,4 +1,4 @@
-package service
+package network
 
 import (
 	"bytes"
@@ -9,6 +9,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/service/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -16,22 +17,18 @@ import (
 
 var nextServiceOptionID uint32
 
-// NetworkServices ...
-type NetworkServices struct {
-	Host         *vpn.Host
-	Network      *vpn.Network
-	HashTable    vpn.HashTable
-	PeerIndex    vpn.PeerIndex
-	PeerExchange *vpn.PeerExchange
-	Swarms       SwarmNetwork
-	Directory    Directory
+// Services ...
+type Client struct {
+	*vpn.Client
+	Swarms    SwarmNetwork
+	Directory Directory
 }
 
 // NewNetworkController ...
-func NewNetworkController(logger *zap.Logger, host *vpn.Host, store *dao.ProfileStore) (*NetworkController, error) {
-	networks := vpn.NewNetworks(logger, host)
+func NewNetworkController(logger *zap.Logger, host *vpn.Host, store *dao.ProfileStore) (*Controller, error) {
+	networks := vpn.New(logger, host)
 
-	c := &NetworkController{
+	c := &Controller{
 		logger:          logger,
 		store:           store,
 		host:            host,
@@ -49,14 +46,14 @@ func NewNetworkController(logger *zap.Logger, host *vpn.Host, store *dao.Profile
 	return c, nil
 }
 
-// NetworkController ...
-type NetworkController struct {
+// Controller ...
+type Controller struct {
 	logger              *zap.Logger
 	store               *dao.ProfileStore
 	networkServicesLock sync.Mutex
 	networkServices     networkServicesMap
 	host                *vpn.Host
-	networks            *vpn.Networks
+	networks            *vpn.Host
 	hashTableStore      *vpn.HashTableStore
 	peerIndexStore      *vpn.PeerIndexStore
 	swarmController     *swarmController
@@ -74,7 +71,7 @@ func (n pbNetworks) Find(key []byte) *pb.Network {
 	return nil
 }
 
-func (c *NetworkController) startProfileNetworks() error {
+func (c *Controller) startProfileNetworks() error {
 	memberships, err := dao.GetNetworkMemberships(c.store)
 	if err != nil {
 		return err
@@ -101,40 +98,22 @@ func (c *NetworkController) startProfileNetworks() error {
 }
 
 // NetworkServices ...
-func (c *NetworkController) NetworkServices(key []byte) (*NetworkServices, bool) {
+func (c *Controller) NetworkServices(key []byte) (*Client, bool) {
 	c.networkServicesLock.Lock()
 	defer c.networkServicesLock.Unlock()
 	return c.networkServices.Get(key)
 }
 
 // StartNetwork ...
-func (c *NetworkController) StartNetwork(cert *pb.Certificate, opts ...NetworkOption) (*NetworkServices, error) {
-	network, err := c.networks.AddNetwork(cert)
+func (c *Controller) StartNetwork(cert *pb.Certificate, opts ...NetworkOption) (*Client, error) {
+	vpnClient, err := c.networks.AddNetwork(cert)
 	if err != nil {
 		return nil, err
 	}
 
-	hashTable := vpn.NewHashTable(c.logger, network, c.hashTableStore)
-	peerIndex := vpn.NewPeerIndex(c.logger, network, c.peerIndexStore)
-	peerExchange := vpn.NewPeerExchange(c.logger, network)
-
-	if err := network.SetHandler(vpn.HashTablePort, hashTable); err != nil {
-		return nil, err
-	}
-	if err := network.SetHandler(vpn.PeerIndexPort, peerIndex); err != nil {
-		return nil, err
-	}
-	if err := network.SetHandler(vpn.PeerExchangePort, peerExchange); err != nil {
-		return nil, err
-	}
-
-	svc := &NetworkServices{
-		Host:         c.host,
-		Network:      network,
-		HashTable:    hashTable,
-		PeerIndex:    peerIndex,
-		PeerExchange: peerExchange,
-		Swarms:       c.swarmController.AddNetwork(network),
+	svc := &Client{
+		Client: vpnClient,
+		Swarms: c.swarmController.AddNetwork(vpnClient.Network),
 	}
 
 	for _, opt := range opts {
@@ -153,14 +132,14 @@ func (c *NetworkController) StartNetwork(cert *pb.Certificate, opts ...NetworkOp
 }
 
 // NetworkOption ...
-type NetworkOption func(svc *NetworkServices) error
+type NetworkOption func(svc *Client) error
 
 // WithOwnerServices ...
 func WithOwnerServices(logger *zap.Logger, store *dao.ProfileStore, network *pb.Network) NetworkOption {
-	return func(svc *NetworkServices) error {
+	return func(svc *Client) error {
 		lock := dao.NewMutex(logger, store, []byte(fmt.Sprintf("network:%d", network.Id)))
 
-		directory, err := NewDirectoryServer(logger, lock, svc, network.Key)
+		directory, err := directory.NewServer(logger, lock, svc, network.Key)
 		if err != nil {
 			return err
 		}
@@ -172,8 +151,8 @@ func WithOwnerServices(logger *zap.Logger, store *dao.ProfileStore, network *pb.
 
 // WithMemberServices ...
 func WithMemberServices(logger *zap.Logger) NetworkOption {
-	return func(svc *NetworkServices) error {
-		directory, err := NewDirectoryClient(logger, svc, svc.Network.CAKey())
+	return func(svc *Client) error {
+		directory, err := directory.NewClient(logger, svc, svc.Network.Key())
 		if err != nil {
 			return err
 		}
@@ -184,7 +163,7 @@ func WithMemberServices(logger *zap.Logger) NetworkOption {
 }
 
 // StopNetwork ...
-func (c *NetworkController) StopNetwork(cert *pb.Certificate) error {
+func (c *Controller) StopNetwork(cert *pb.Certificate) error {
 	key := dao.GetRootCert(cert).Key
 
 	c.networkServicesLock.Lock()
@@ -199,13 +178,13 @@ func (c *NetworkController) StopNetwork(cert *pb.Certificate) error {
 }
 
 // Events ...
-func (c *NetworkController) Events() <-chan *pb.NetworkEvent {
+func (c *Controller) Events() <-chan *pb.NetworkEvent {
 	return c.eventEmitter.events
 }
 
 func newNetworkEventEmitter() *networkEventEmitter {
 	e := &networkEventEmitter{
-		services: make(chan *NetworkServices),
+		services: make(chan *Client),
 		events:   make(chan *pb.NetworkEvent, 1024),
 		nextID:   1,
 	}
@@ -216,7 +195,7 @@ func newNetworkEventEmitter() *networkEventEmitter {
 }
 
 type networkEventEmitter struct {
-	services chan *NetworkServices
+	services chan *Client
 	events   chan *pb.NetworkEvent
 	cases    []reflect.SelectCase
 	ids      []uint64
@@ -234,7 +213,7 @@ func (e *networkEventEmitter) pump() {
 		i, v, ok := reflect.Select(e.cases)
 
 		if i == 0 {
-			e.handleOpen(v.Interface().(*NetworkServices))
+			e.handleOpen(v.Interface().(*Client))
 			continue
 		}
 
@@ -247,12 +226,12 @@ func (e *networkEventEmitter) pump() {
 	}
 }
 
-func (e *networkEventEmitter) handleOpen(svc *NetworkServices) {
+func (e *networkEventEmitter) handleOpen(svc *Client) {
 	e.events <- &pb.NetworkEvent{
 		Body: &pb.NetworkEvent_NetworkOpen_{
 			NetworkOpen: &pb.NetworkEvent_NetworkOpen{
 				NetworkId:  e.nextID,
-				NetworkKey: svc.Network.CAKey(),
+				NetworkKey: svc.Network.Key(),
 			},
 		},
 	}
@@ -293,7 +272,7 @@ func (e *networkEventEmitter) handleClose(i int) {
 // 	}
 // }
 
-func (e *networkEventEmitter) EmitOpen(svc *NetworkServices) {
+func (e *networkEventEmitter) EmitOpen(svc *Client) {
 	e.services <- svc
 }
 
@@ -301,7 +280,7 @@ type networkServicesMap struct {
 	m llrb.LLRB
 }
 
-func (m *networkServicesMap) Insert(k []byte, v *NetworkServices) {
+func (m *networkServicesMap) Insert(k []byte, v *Client) {
 	m.m.InsertNoReplace(networkServicesMapItem{k, v})
 }
 
@@ -309,7 +288,7 @@ func (m *networkServicesMap) Delete(k []byte) {
 	m.m.Delete(networkServicesMapItem{k, nil})
 }
 
-func (m *networkServicesMap) Get(k []byte) (*NetworkServices, bool) {
+func (m *networkServicesMap) Get(k []byte) (*Client, bool) {
 	if it := m.m.Get(networkServicesMapItem{k, nil}); it != nil {
 		return it.(networkServicesMapItem).v, true
 	}
@@ -318,7 +297,7 @@ func (m *networkServicesMap) Get(k []byte) (*NetworkServices, bool) {
 
 type networkServicesMapItem struct {
 	k []byte
-	v *NetworkServices
+	v *Client
 }
 
 func (t networkServicesMapItem) Less(oi llrb.Item) bool {

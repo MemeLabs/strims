@@ -1,4 +1,4 @@
-package service
+package chat
 
 // Ripped from the old chat with some parts removed
 

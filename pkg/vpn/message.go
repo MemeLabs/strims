@@ -3,11 +3,15 @@ package vpn
 import (
 	"crypto/ed25519"
 	"encoding/binary"
+	"errors"
 	"io"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 )
+
+var errBufferTooSmall = errors.New("buffer too small")
 
 const messageHeaderLen = kademlia.IDLength + 8
 
@@ -133,7 +137,7 @@ func (m *Message) FromHostID() (id kademlia.ID) {
 }
 
 // Marshal ...
-func (m *Message) Marshal(b []byte, host *Host) (n int, err error) {
+func (m *Message) Marshal(b []byte, host *vnic.Host) (n int, err error) {
 	if len(b) < m.Size() {
 		return 0, errBufferTooSmall
 	}
@@ -192,7 +196,7 @@ func (m *Message) Unmarshal(b []byte) (n int, err error) {
 }
 
 // WriteTo ...
-func (m Message) WriteTo(w io.Writer, host *Host) (int64, error) {
+func (m Message) WriteTo(w io.Writer, host *vnic.Host) (int64, error) {
 	b := pool.Get(uint16(m.Size()))
 	defer pool.Put(b)
 

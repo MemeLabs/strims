@@ -37,7 +37,7 @@ type Frontend struct {
 	logger     *zap.Logger
 	store      kv.BlobStore
 	metadata   *dao.MetadataStore
-	vpnOptions []vpn.HostOption
+	newVPNHost VPNHostFunc
 }
 
 // CreateProfile ...
@@ -486,7 +486,7 @@ func (s *Frontend) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (<-chan 
 		return nil, err
 	}
 
-	host, err := vpn.NewHost(s.logger, profile.Key, s.vpnOptions...)
+	host, err := s.newVPNHost(profile.Key)
 	if err != nil {
 		return nil, err
 	}
