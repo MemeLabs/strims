@@ -21,8 +21,8 @@ import { Readable as GenericReadable } from "./stream";
 
 export default class {{.Name}} extends RPCHost {
 	{{range .Elements}}
-	public {{.Name}}(v: pb.I{{.RequestType}} = new pb.{{.RequestType}}()):  {{if .StreamsReturns}}GenericReadable{{else}}Promise{{end}}<pb.{{.ReturnsType}}> {
-		return this.{{if .StreamsReturns}}expectMany{{else}}expectOne{{end}}(this.call("{{.Name | ToCamel}}", new pb.{{.RequestType}}(v)));
+	public {{.Name | ToCamel}}(v: pb.I{{.RequestType}} = new pb.{{.RequestType}}()):  {{if .StreamsReturns}}GenericReadable{{else}}Promise{{end}}<pb.{{.ReturnsType}}> {
+		return this.{{if .StreamsReturns}}expectMany{{else}}expectOne{{end}}(this.call("{{$.Name}}/{{.Name | ToPascal}}", new pb.{{.RequestType}}(v)));
 	}{{end}}
 }
 `))

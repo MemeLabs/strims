@@ -7202,6 +7202,90 @@ export namespace CallChatClientRequest {
     }
 }
 
+/** Properties of a CallChatClientResponse. */
+export interface ICallChatClientResponse {
+}
+
+/** Represents a CallChatClientResponse. */
+export class CallChatClientResponse implements ICallChatClientResponse {
+
+    /**
+     * Constructs a new CallChatClientResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ICallChatClientResponse);
+
+    /**
+     * Creates a new CallChatClientResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns CallChatClientResponse instance
+     */
+    public static create(properties?: ICallChatClientResponse): CallChatClientResponse;
+
+    /**
+     * Encodes the specified CallChatClientResponse message. Does not implicitly {@link CallChatClientResponse.verify|verify} messages.
+     * @param message CallChatClientResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ICallChatClientResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified CallChatClientResponse message, length delimited. Does not implicitly {@link CallChatClientResponse.verify|verify} messages.
+     * @param message CallChatClientResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ICallChatClientResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a CallChatClientResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns CallChatClientResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CallChatClientResponse;
+
+    /**
+     * Decodes a CallChatClientResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns CallChatClientResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CallChatClientResponse;
+
+    /**
+     * Verifies a CallChatClientResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a CallChatClientResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns CallChatClientResponse
+     */
+    public static fromObject(object: { [k: string]: any }): CallChatClientResponse;
+
+    /**
+     * Creates a plain object from a CallChatClientResponse message. Also converts values to other types if specified.
+     * @param message CallChatClientResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: CallChatClientResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this CallChatClientResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
 /** Properties of a Call. */
 export interface ICall {
 

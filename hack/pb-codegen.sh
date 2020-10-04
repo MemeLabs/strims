@@ -12,8 +12,8 @@ GO_DIR="pkg/pb"
 SWIFT_DIR="ios/App/App/ProtoBuf"
 JAVA_DIR="android/app/src/main/java/"
 
-SOURCES="$(ls $SCHEMA_DIR)"
-REL_SOURCES="$(find $SCHEMA_DIR -type f)"
+SOURCES="$(ls $SCHEMA_DIR | grep -v services)"
+REL_SOURCES="$(find $SCHEMA_DIR -type f | grep -v services)"
 
 hack/ts-preprocess.sh $REL_SOURCES /tmp/pbjstemp.proto
 npx pbjs \

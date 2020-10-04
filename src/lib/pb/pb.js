@@ -16309,6 +16309,166 @@ export const CallChatClientRequest = $root.CallChatClientRequest = (() => {
     return CallChatClientRequest;
 })();
 
+export const CallChatClientResponse = $root.CallChatClientResponse = (() => {
+
+    /**
+     * Properties of a CallChatClientResponse.
+     * @exports ICallChatClientResponse
+     * @interface ICallChatClientResponse
+     */
+
+    /**
+     * Constructs a new CallChatClientResponse.
+     * @exports CallChatClientResponse
+     * @classdesc Represents a CallChatClientResponse.
+     * @implements ICallChatClientResponse
+     * @constructor
+     * @param {ICallChatClientResponse=} [properties] Properties to set
+     */
+    function CallChatClientResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new CallChatClientResponse instance using the specified properties.
+     * @function create
+     * @memberof CallChatClientResponse
+     * @static
+     * @param {ICallChatClientResponse=} [properties] Properties to set
+     * @returns {CallChatClientResponse} CallChatClientResponse instance
+     */
+    CallChatClientResponse.create = function create(properties) {
+        return new CallChatClientResponse(properties);
+    };
+
+    /**
+     * Encodes the specified CallChatClientResponse message. Does not implicitly {@link CallChatClientResponse.verify|verify} messages.
+     * @function encode
+     * @memberof CallChatClientResponse
+     * @static
+     * @param {ICallChatClientResponse} message CallChatClientResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    CallChatClientResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified CallChatClientResponse message, length delimited. Does not implicitly {@link CallChatClientResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof CallChatClientResponse
+     * @static
+     * @param {ICallChatClientResponse} message CallChatClientResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    CallChatClientResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a CallChatClientResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof CallChatClientResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {CallChatClientResponse} CallChatClientResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    CallChatClientResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.CallChatClientResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a CallChatClientResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof CallChatClientResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {CallChatClientResponse} CallChatClientResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    CallChatClientResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a CallChatClientResponse message.
+     * @function verify
+     * @memberof CallChatClientResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    CallChatClientResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a CallChatClientResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof CallChatClientResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {CallChatClientResponse} CallChatClientResponse
+     */
+    CallChatClientResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.CallChatClientResponse)
+            return object;
+        return new $root.CallChatClientResponse();
+    };
+
+    /**
+     * Creates a plain object from a CallChatClientResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof CallChatClientResponse
+     * @static
+     * @param {CallChatClientResponse} message CallChatClientResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    CallChatClientResponse.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this CallChatClientResponse to JSON.
+     * @function toJSON
+     * @memberof CallChatClientResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    CallChatClientResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return CallChatClientResponse;
+})();
+
 export const Call = $root.Call = (() => {
 
     /**

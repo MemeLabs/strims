@@ -26,7 +26,7 @@ import PromiseKit
 
 class {{.Name}}Client: RPCClient {
   {{range .Elements}}public func {{.Name | ToCamel}}(_ arg: PB{{.RequestType}} = PB{{.RequestType}}()) {{if .StreamsReturns}}throws -> RPCResponseStream{{else}}-> Promise{{end}}<PB{{.ReturnsType}}> {
-    return{{if .StreamsReturns}} try{{end}} self.{{if .StreamsReturns}}callStreaming{{else}}callUnary{{end}}("{{.Name | ToCamel}}", arg)
+    return{{if .StreamsReturns}} try{{end}} self.{{if .StreamsReturns}}callStreaming{{else}}callUnary{{end}}("{{$.Name}}/{{.Name | ToPascal}}", arg)
   }
   {{end}}
 }

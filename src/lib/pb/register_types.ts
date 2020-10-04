@@ -50,6 +50,7 @@ registerType("ChatRoom", pb.ChatRoom);
 registerType("ChatServer", pb.ChatServer);
 registerType("MessageEntities", pb.MessageEntities);
 registerType("CallChatClientRequest", pb.CallChatClientRequest);
+registerType("CallChatClientResponse", pb.CallChatClientResponse);
 registerType("Call", pb.Call);
 registerType("Error", pb.Error);
 registerType("Cancel", pb.Cancel);

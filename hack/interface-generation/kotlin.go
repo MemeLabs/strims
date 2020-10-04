@@ -24,7 +24,7 @@ class {{.Name}}Client(filepath: String) : RPCClient(filepath) {
     fun {{.Name | ToCamel}}(
         arg: {{.RequestType}} = {{.RequestType}}.newBuilder().build()
     ): {{if .StreamsReturns}}RPCResponseStream{{else}}Future{{end}}<{{.ReturnsType}}> =
-        this.{{if .StreamsReturns}}callStreaming{{else}}callUnary{{end}}("{{.Name | ToCamel}}", arg)
+        this.{{if .StreamsReturns}}callStreaming{{else}}callUnary{{end}}("{{$.Name}}/{{.Name | ToPascal}}", arg)
 {{end}}
 }
 `))
