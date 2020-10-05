@@ -8,5 +8,6 @@ gomobile init
 build bridge library
 
 ```
-gomobile bind -o app/bridge.aar -target=android -androidapi 21 ./bridge
+mkdir app/libs
+gomobile bind -o app/libs/bridge.aar -target=android -androidapi 21 ./bridge
 ```
