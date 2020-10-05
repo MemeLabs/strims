@@ -54,10 +54,11 @@ open class RPCClient(filepath: String) {
         val stream = b!!.inputStream()
         try {
             val s2 = stream.source().buffer()
-            val pr = ProtoReader(s2)
-            pr.readVarint64()
-            val call = Call.ADAPTER.decode(pr)
+            // discard length prefix
+            while (!s2.exhausted() && s2.readByte().toInt() and 0x80 != 0) {}
+            val call = Call.ADAPTER.decode(s2)
             s2.close()
+            Log.d(TAG, "decoded call ${call.toString()}")
             this.callbacks[call.parent_id]?.let {
                 it(call)
             } ?: throw RPCClientError("missing callback")
@@ -161,33 +162,43 @@ open class RPCClient(filepath: String) {
 
             var result: R? = null
             s.acquire()
-            Log.i("ree", "creating callback")
+            Log.i(TAG, "creating callback")
             callbacks[callId] = {
-                Log.i("REE", "in callback")
+                Log.i(TAG, "in callback")
                 callbacks.remove(callId)
                 timer.cancel()
-                result = it.argument?.unpackOrNull(ProtoAdapter.get(R::class.java))
-                Log.i("ree", result.toString())
-                if (result == null) {
-                    ex = RPCClientError(it.argument?.unpackOrNull(Error.ADAPTER)?.message)
-                }
-                if (ex == null) {
-                    ex = RPCClientError("unexpected response type ${it.argument?.typeUrl}")
+
+                val adapter = ProtoAdapter.get(R::class.java)
+                try {
+                    when (it.argument?.typeUrl?.substringAfter("/")) {
+                        adapter.typeUrl?.substringAfter("/") -> {
+                            result = adapter.decode(it.argument?.value!!)
+                        }
+                        "Error" -> {
+                            ex = RPCClientError(Error.ADAPTER.decode(it.argument.value).message)
+                        }
+                        else -> {
+                            ex = RPCClientError("unexpected response type ${it.argument?.typeUrl}")
+                        }
+                    }
+                } catch (e: Exception) {
+                    ex = RPCClientError("response decoding failed ${e.toString()}")
                 }
 
-                Log.i("ree", ex.toString())
+                Log.i(TAG, "argument ${R::class.toString()}: ${result.toString()}")
+                Log.i(TAG, ex.toString())
 
                 s.release()
             }
-            Log.i("ree", "created callback")
+            Log.i(TAG, "created callback")
 
             // call method
             try {
-                Log.i("ree", "executing call")
+                Log.i(TAG, "executing call")
                 call(method, arg, callId)
-                Log.i("ree", "executed call")
+                Log.i(TAG, "executed call")
             } catch (e: Exception) {
-                Log.e("ree", "got error", e)
+                Log.e(TAG, "got error", e)
                 callbacks.remove(callId)
                 throw e
             }

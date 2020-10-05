@@ -12,10 +12,15 @@ GO_DIR="pkg/pb"
 SWIFT_DIR="ios/App/App/ProtoBuf"
 JAVA_DIR="android/app/src/main/java/"
 
-SOURCES="$(ls $SCHEMA_DIR | grep -v services)"
-REL_SOURCES="$(find $SCHEMA_DIR -type f | grep -v services)"
+INPUT_DIR="$SCHEMA_DIR/sanitized"
+rm -rf $INPUT_DIR
+mkdir -p $INPUT_DIR
+hack/remove-services.sh $INPUT_DIR "$(find $SCHEMA_DIR -type f)"
 
-hack/ts-preprocess.sh $REL_SOURCES /tmp/pbjstemp.proto
+SOURCES="$(ls $INPUT_DIR | sort)"
+REL_SOURCES="$(find $INPUT_DIR -type f | sort)"
+
+hack/ts-preprocess.sh /tmp/pbjstemp.proto $REL_SOURCES
 npx pbjs \
     -t static-module \
     -w es6 \
@@ -30,7 +35,7 @@ bash ./hack/ts-codegen.sh $REL_SOURCES
 protoc \
     --go_out $GO_DIR \
     --go_opt=paths=source_relative \
-    -I $SCHEMA_DIR \
+    -I $INPUT_DIR \
     $SOURCES
 
 if command -v protoc-gen-swift &> /dev/null
@@ -38,7 +43,7 @@ then
     protoc \
         --swift_out $SWIFT_DIR \
         --swift_opt Visibility=Public \
-        -I $SCHEMA_DIR \
+        -I $INPUT_DIR \
         $SOURCES
 
     bash ./hack/swift-codegen.sh $REL_SOURCES
