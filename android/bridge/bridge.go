@@ -34,7 +34,7 @@ func (a *androidSideWriter) Write(p []byte) (int, error) {
 }
 
 type GoSide struct {
-	w *io.PipeWriter
+	w io.Writer
 }
 
 // Write ...

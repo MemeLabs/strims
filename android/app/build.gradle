@@ -3,6 +3,18 @@ import gg.strims.ppspp.buildsrc.Libs
 plugins {
     id 'com.android.application'
     id 'kotlin-android'
+    id 'com.squareup.wire'
+}
+
+
+wire {
+    sourcePath {
+        srcDir '../../schema'
+    }
+
+    kotlin {
+        out = 'src/main/java'
+    }
 }
 
 android {
@@ -48,10 +60,16 @@ android {
 
 }
 
+repositories {
+    flatDir {
+        dirs '.'
+    }
+}
+
 dependencies {
     implementation name: 'bridge', ext: 'aar'
 
-    implementation Libs.Proto.googleProto
+    implementation Libs.Proto.wire
 
     implementation Libs.Player.exoPlayer
 

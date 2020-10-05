@@ -6,6 +6,7 @@ buildscript {
         compose_version = '1.0.0-alpha01'
     }
     repositories {
+        mavenCentral()
         google()
         jcenter()
     }
@@ -14,6 +15,7 @@ buildscript {
         classpath Libs.androidGradlePlugin
         classpath Libs.Kotlin.gradlePlugin
         classpath "org.jetbrains.kotlin:kotlin-gradle-plugin:$kotlin_version"
+        classpath "com.squareup.wire:wire-gradle-plugin:3.4.0"
     }
 }
 

@@ -1,8 +1,14 @@
 package gg.strims.ppspp.rpc
 
 import android.util.Log
-import com.google.protobuf.Message
-import gg.strims.ppspp.proto.Rpc
+import com.squareup.wire.*
+import gg.strims.ppspp.proto.Call
+import gg.strims.ppspp.proto.Cancel
+import gg.strims.ppspp.proto.Close
+import gg.strims.ppspp.proto.Error
+import okio.buffer
+import okio.sink
+import okio.source
 import java.io.ByteArrayOutputStream
 import java.util.*
 import java.util.concurrent.ExecutorService
@@ -11,7 +17,7 @@ import java.util.concurrent.Future
 import java.util.concurrent.Semaphore
 import kotlin.concurrent.timerTask
 
-class RPCClientError(message: String) : Exception(message)
+class RPCClientError(message: String?) : Exception(message)
 
 data class RPCEvent(val rawValue: Int) : BitSet() {
     companion object {
@@ -22,7 +28,7 @@ data class RPCEvent(val rawValue: Int) : BitSet() {
     }
 }
 
-class RPCResponseStream<T : Message>(val close: () -> Unit) {
+class RPCResponseStream<T : Message<*, *>>(val close: () -> Unit) {
     var delegate: (T?, RPCEvent) -> Unit = { _: T?, _: RPCEvent -> }
 }
 
@@ -32,13 +38,12 @@ open class RPCClient(filepath: String) {
 
         // const val callbackMethod = "_CALLBACK"
         const val cancelMethod = "_CANCEL"
-        const val anyURLPrefix = "strims.gg/"
     }
 
     val executor: ExecutorService = Executors.newCachedThreadPool()
 
     private var nextCallID: Long = 0
-    var callbacks: MutableMap<Long, (Rpc.Call) -> Unit> = mutableMapOf()
+    var callbacks: MutableMap<Long, (Call) -> Unit> = mutableMapOf()
     private var g: AndroidBridge = AndroidBridge(filepath)
 
     init {
@@ -48,9 +53,12 @@ open class RPCClient(filepath: String) {
     private fun handleCallback(b: ByteArray?) {
         val stream = b!!.inputStream()
         try {
-            // parse call
-            val call = Rpc.Call.parseDelimitedFrom(stream)
-            this.callbacks[call.parentId]?.let {
+            val s2 = stream.source().buffer()
+            val pr = ProtoReader(s2)
+            pr.readVarint64()
+            val call = Call.ADAPTER.decode(pr)
+            s2.close()
+            this.callbacks[call.parent_id]?.let {
                 it(call)
             } ?: throw RPCClientError("missing callback")
         } catch (e: Exception) {
@@ -63,29 +71,27 @@ open class RPCClient(filepath: String) {
         return this.nextCallID
     }
 
-    fun <T : Message> call(method: String, arg: T, callID: Long, parentID: Long = 0) {
-        val packed = com.google.protobuf.Any.pack(arg, anyURLPrefix)
+    fun <T : Message<T, *>> call(method: String, arg: T, callID: Long, parentID: Long = 0) {
+        val packed = AnyMessage.pack(arg)
 
-        val call = Rpc.Call.newBuilder()
-            .setParentId(parentID)
-            .setId(callID)
-            .setArgument(packed)
-            .setMethod(method)
-            .build()
-
+        val call = Call(parent_id = parentID, id = callID, method = method, argument = packed)
         val stream = ByteArrayOutputStream()
-        call.writeDelimitedTo(stream)
-        stream.close()
+        val s2 = stream.sink().buffer()
+        val pw = ProtoWriter(s2)
+        Log.i("test", "encoded size is ${arg.adapter.encodedSize(arg)}")
+        pw.writeVarint64(Call.ADAPTER.encodedSize(call).toLong())
+        call.encode(s2)
+        s2.close()
 
         this.g.write(stream.toByteArray())
     }
 
-    fun <T : Message> call(method: String, arg: T) {
+    fun <T : Message<T, *>> call(method: String, arg: T) {
         this.call(method, arg, this.getNextCallID())
     }
 
     // inline required to get refined type information, see https://stackoverflow.com/a/46870546/5698680
-    inline fun <T : Message, reified R : Message> callStreaming(
+    inline fun <T : Message<T, *>, reified R : Message<R, *>> callStreaming(
         method: String,
         arg: T
     ): RPCResponseStream<R> {
@@ -95,7 +101,7 @@ open class RPCClient(filepath: String) {
             try {
                 this.call(
                     cancelMethod,
-                    Rpc.Cancel.getDefaultInstance(),
+                    Cancel(),
                     this.getNextCallID(),
                     callID
                 )
@@ -104,28 +110,25 @@ open class RPCClient(filepath: String) {
             }
         }
 
+        Log.i("ree", "creating callback")
         this.callbacks[callID] = {
-            try {
-                when {
-                    it.argument.`is`(R::class.java) -> {
-                        val unpacked = it.argument.unpack(R::class.java)
-                        stream.delegate(unpacked, RPCEvent.data)
-                    }
-                    it.argument.`is`(Rpc.Close::class.java) -> {
-                        callbacks.remove(callID)
-                        stream.delegate(null, RPCEvent.close)
-                    }
-                    it.argument.`is`(Rpc.Error::class.java) -> {
-                        callbacks.remove(callID)
-                        stream.delegate(null, RPCEvent.responseError)
-                    }
-                    else -> { // error
-                        callbacks.remove(callID)
-                        stream.delegate(null, RPCEvent.responseError)
-                    }
-                }
-            } catch (e: Exception) {
+            Log.i("REE", "in callback")
+            val unpacked = it.argument?.unpackOrNull(ProtoAdapter.get(R::class.java))
+            if (unpacked != null) {
+                stream.delegate(unpacked, RPCEvent.data)
+            }
+            val close = it.argument?.unpackOrNull(Close.ADAPTER)
+            if (close != null) {
+                callbacks.remove(callID)
+                stream.delegate(null, RPCEvent.close)
+            }
+            val error = it.argument?.unpackOrNull(Error.ADAPTER)
+            if (error != null) {
+                callbacks.remove(callID)
                 stream.delegate(null, RPCEvent.responseError)
+            }
+            if (unpacked == null && close == null && error == null) {
+                callbacks.remove(callID)
             }
         }
 
@@ -140,7 +143,7 @@ open class RPCClient(filepath: String) {
         return stream
     }
 
-    inline fun <T : Message, reified R : Message> callUnary(method: String, arg: T): Future<R> {
+    inline fun <T : Message<T, *>, reified R : Message<R, *>> callUnary(method: String, arg: T): Future<R> {
         val callId = getNextCallID()
         return executor.submit<R> {
             // set timeout
@@ -155,31 +158,36 @@ open class RPCClient(filepath: String) {
 
 
             // prepare callback
+
             var result: R? = null
             s.acquire()
+            Log.i("ree", "creating callback")
             callbacks[callId] = {
+                Log.i("REE", "in callback")
                 callbacks.remove(callId)
                 timer.cancel()
-                when {
-                    it.argument.`is`(R::class.java) -> {
-                        result = it.argument.unpack(R::class.java)
-                        Log.i(TAG, result.toString())
-                    }
-                    it.argument.`is`(Rpc.Error::class.java) -> {
-                        val error = it.argument.unpack(Rpc.Error::class.java)
-                        ex = RPCClientError(error.message)
-                    }
-                    else -> {
-                        ex = RPCClientError("unexpected response type ${it.argument.typeUrl}")
-                    }
+                result = it.argument?.unpackOrNull(ProtoAdapter.get(R::class.java))
+                Log.i("ree", result.toString())
+                if (result == null) {
+                    ex = RPCClientError(it.argument?.unpackOrNull(Error.ADAPTER)?.message)
                 }
+                if (ex == null) {
+                    ex = RPCClientError("unexpected response type ${it.argument?.typeUrl}")
+                }
+
+                Log.i("ree", ex.toString())
+
                 s.release()
             }
+            Log.i("ree", "created callback")
 
             // call method
             try {
+                Log.i("ree", "executing call")
                 call(method, arg, callId)
+                Log.i("ree", "executed call")
             } catch (e: Exception) {
+                Log.e("ree", "got error", e)
                 callbacks.remove(callId)
                 throw e
             }

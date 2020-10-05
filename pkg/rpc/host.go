@@ -27,7 +27,7 @@ type Host struct {
 }
 
 // Listen starts reading incoming calls
-func (h *Host) Listen(ctx context.Context, rw io.ReadWriter) error {
+func (h *Host) Listen(ctx context.Context, rw io.ReadWriter) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -36,7 +36,8 @@ func (h *Host) Listen(ctx context.Context, rw io.ReadWriter) error {
 	for {
 		m, err := readCall(rw)
 		if err != nil {
-			return err
+			h.logger.Error("error reading call", zap.Error(err))
+			continue
 		}
 
 		switch m.Method {
@@ -49,7 +50,7 @@ func (h *Host) Listen(ctx context.Context, rw io.ReadWriter) error {
 		}
 
 		if err := ctx.Err(); err != nil {
-			return err
+			h.logger.Error("error handling call", zap.Error(err))
 		}
 	}
 }
@@ -63,11 +64,11 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 		c.calls.Delete(k)
 
 		if err := recoverError(recover()); err != nil {
-			h.logger.Debug("call handler panicked", zap.Error(err), zap.Stack("stack"))
+			h.logger.Error("call handler panicked", zap.Error(err), zap.Stack("stack"))
 
 			e := &pb.Error{Message: err.Error()}
 			if err := call(ctx, c, callbackMethod, e, withParentID(m.Id)); err != nil {
-				h.logger.Debug("call failed", zap.Error(err))
+				h.logger.Error("call failed", zap.Error(err))
 			}
 		}
 	}()

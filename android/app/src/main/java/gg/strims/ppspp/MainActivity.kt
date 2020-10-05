@@ -31,9 +31,7 @@ import com.google.android.exoplayer2.upstream.DefaultDataSourceFactory
 import com.google.android.exoplayer2.util.Util
 import gg.strims.ppspp.profile.PasswordState
 import gg.strims.ppspp.profile.UsernameState
-import gg.strims.ppspp.proto.ProfileOuterClass.*
-import gg.strims.ppspp.proto.Video.*
-import gg.strims.ppspp.proto.Vpn.*
+import gg.strims.ppspp.proto.*
 import gg.strims.ppspp.rpc.FrontendRPCClient
 import gg.strims.ppspp.rpc.RPCEvent
 import gg.strims.ppspp.ui.PpsppTheme
@@ -51,7 +49,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        var client = FrontendRPCClient(filesDir.canonicalPath)
+        val client = FrontendRPCClient(filesDir.canonicalPath)
         setContent {
             PpsppTheme {
                 // A surface container using the 'background' color from the theme
@@ -81,8 +79,7 @@ class MainActivity : AppCompatActivity() {
     private fun FrontendRPCClient.handleCreateProfile(username: String, password: String): Any =
         try {
             val resp = this.createProfile(
-                CreateProfileRequest.newBuilder().setName(username).setPassword(password)
-                    .build()
+                CreateProfileRequest(name = username, password = password)
             ).get()!!
             Log.i(TAG, "profile: ${resp.profile}")
         } catch (e: Exception) {
@@ -90,15 +87,15 @@ class MainActivity : AppCompatActivity() {
         }
 
     fun FrontendRPCClient.handleLogin(username: String, password: String): Any = try {
-        val profilesResp = this.getProfiles(GetProfilesRequest.newBuilder().build()).get()!!
+        val profilesResp = this.getProfiles(GetProfilesRequest()).get()!!
         try {
             val profileResp = this.loadProfile(
-                LoadProfileRequest.newBuilder()
-                    .setId(profilesResp.profilesList
+                LoadProfileRequest(
+                    id = (profilesResp.profiles
                         .filter { p -> p.name == username }
                         .map { p -> p.id }
-                        .first())
-                    .setName(username).setPassword(password).build()
+                        .first()),
+                    name = username, password = password)
             ).get()!!
             Log.i(TAG, "logged in: ${profileResp.profile}")
         } catch (e: Exception) {
@@ -110,22 +107,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun FrontendRPCClient.handleCreateBootstrapClient(): Any = try {
         val resp = this.createBootstrapClient(
-            CreateBootstrapClientRequest.newBuilder().setWebsocketOptions(
-                BootstrapClientWebSocketOptions.newBuilder()
-                    .setUrl("ws://$addr/test-bootstrap").setInsecureSkipVerifyTls(true)
-                    .build()
-            ).build()
+            CreateBootstrapClientRequest(
+                websocket_options = BootstrapClientWebSocketOptions(
+                    url = "ws://$addr/test-bootstrap",
+                    insecure_skip_verify_tls = true
+                )
+            )
         ).get()!!
-        Log.i(TAG, "bootstrap client: ${resp.bootstrapClient}")
+        Log.i(TAG, "bootstrap client: ${resp.bootstrap_client}")
     } catch (e: Exception) {
         Log.e(TAG, "creating bootstrap client failed", e)
     }
 
     private fun FrontendRPCClient.handleLoadInviteCert(cert: String): Any = try {
         val resp = this.createNetworkMembershipFromInvitation(
-            CreateNetworkMembershipFromInvitationRequest.newBuilder()
-                .setInvitationB64(cert)
-                .build()
+            CreateNetworkMembershipFromInvitationRequest(invitation_b64 = cert)
         ).get()!!
         Log.i(TAG, "membership: ${resp.membership}")
     } catch (e: Exception) {
@@ -133,8 +129,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun FrontendRPCClient.handleCreateNetwork(): Any = try {
-        val resp = this.createNetwork(CreateNetworkRequest.newBuilder().setName("test").build())
-            .get()!!
+        val resp = this.createNetwork(CreateNetworkRequest(name = "test")).get()!!
         Log.i(TAG, "network: ${resp.network}")
     } catch (e: Exception) {
         Log.e(TAG, "creating network failed: $e")
@@ -158,19 +153,17 @@ class MainActivity : AppCompatActivity() {
 
     private fun rootCert(cert: Certificate): Certificate {
         var root = cert
-        while (root.hasParent()) {
-            root = root.parent
+        while (root.parent != null) {
+            root = root.parent!!
         }
         return root
     }
 
     private fun FrontendRPCClient.publishSwarm(id: Long) = try {
         val memberships = this.getNetworkMemberships().get()!!
-        memberships.networkMembershipsList.map {
+        memberships.network_memberships.map {
             this.publishSwarm(
-                PublishSwarmRequest.newBuilder().setId(id)
-                    .setNetworkKey(rootCert(it.certificate).key)
-                    .build()
+                PublishSwarmRequest(id = id, network_key = rootCert(it.certificate!!).key)
             ).get()!!
         }
     } catch (e: Exception) {
@@ -178,10 +171,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     fun FrontendRPCClient.startHLSEgress(id: Long) = try {
-        val resp =
-            this.startHLSEgress(
-                StartHLSEgressRequest.newBuilder().setVideoId(id).build()
-            ).get()!!
+        val resp = this.startHLSEgress(StartHLSEgressRequest(video_id = id)).get()!!
 
         // TODO: we need to pause until the first chunk loads
         runBlocking {
@@ -195,24 +185,21 @@ class MainActivity : AppCompatActivity() {
 
     private fun FrontendRPCClient.handleJoinVideoSwarm(): Any = try {
         val client =
-            this.openVideoClient(VideoClientOpenRequest.newBuilder().build())
+            this.openVideoClient(VideoClientOpenRequest())
         client.delegate = { event: VideoClientEvent?, eventType: RPCEvent ->
             Log.i(TAG, eventType.toString())
             when (eventType) {
                 RPCEvent.data -> {
-                    event!!.bodyCase?.let {
-                        when (it) {
-                            VideoClientEvent.BodyCase.OPEN -> {
-                                Log.i(TAG, "open: ${event.open.id}")
-                                this.publishSwarm(event.open.id)
-                                this.startHLSEgress(event.open.id)
-                            }
-                            VideoClientEvent.BodyCase.DATA -> {
-                                Log.i(TAG, "video data: ${event.data.data.count()}")
-                            }
-                            VideoClientEvent.BodyCase.CLOSE -> Log.i(TAG, "close")
-                            else -> Log.e(TAG, "vpn rpc error")
+
+                    when {
+                        (event!!.open != null) -> {
+                            Log.i(TAG, "open: ${event.open?.id}")
+                            this.publishSwarm(event.open!!.id) // why do I have to assert not null again?
+                            this.startHLSEgress(event.open.id)
                         }
+                        (event.data != null) -> Log.i(TAG, "video data: ${event.data.data.size}")
+                        (event.close != null) -> Log.i(TAG, "close")
+                        else -> Log.e(TAG, "vpn rpc error")
                     }
                 }
                 RPCEvent.close -> Log.i(TAG, "vpn event stream closed")
