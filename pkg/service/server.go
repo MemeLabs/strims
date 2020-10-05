@@ -40,7 +40,7 @@ type Server struct {
 }
 
 // Listen ...
-func (s *Server) Listen(ctx context.Context, rw io.ReadWriter) error {
+func (s *Server) Listen(ctx context.Context, rw io.ReadWriter) {
 	ctx = contextWithSession(ctx, newSession())
-	return s.host.Listen(ctx, rw)
+	s.host.Listen(ctx, rw)
 }

@@ -11,7 +11,6 @@ JS_DIR="src/lib/pb"
 GO_DIR="pkg/pb"
 SWIFT_DIR="ios/App/App/ProtoBuf"
 JAVA_DIR="android/app/src/main/java/"
-PRTOTO_FILES="rpc.proto api.proto nickserv.proto"
 
 SOURCES="$(ls $SCHEMA_DIR)"
 REL_SOURCES="$(find $SCHEMA_DIR -type f)"
@@ -44,10 +43,5 @@ then
 
     bash ./hack/swift-codegen.sh $REL_SOURCES
 fi
-
-protoc \
-    --java_out $JAVA_DIR \
-    -I $SCHEMA_DIR \
-    $SOURCES
 
 popd > /dev/null
