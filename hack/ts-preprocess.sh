@@ -1,4 +1,4 @@
-#! /bin/bash
+#!/bin/bash
 
 OUT=$1
 shift

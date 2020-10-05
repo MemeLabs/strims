@@ -6,6 +6,26 @@ plugins {
     id 'com.squareup.wire'
 }
 
+task findProto(type: Exec) {
+    workingDir "../../"
+    executable "find"
+    args "schema", "-type", "f"
+    standardOutput = new ByteArrayOutputStream()
+    ext.files = {
+        standardOutput.toString()
+    }
+    println standardOutput.toString()
+}
+
+task sanitizeProto(type: Exec) {
+    workingDir "../../"
+    commandLine "hack/remove-services.sh"
+    ignoreExitValue true
+    args "schema/sanitized/", findProto.files()
+}
+
+sanitizeProto.dependsOn findProto
+preBuild.dependsOn sanitizeProto
 
 wire {
     sourcePath {
@@ -60,11 +80,11 @@ android {
 
 }
 
-repositories {
-    flatDir {
-        dirs '.'
-    }
-}
+//repositories {
+//    flatDir {
+//        dirs '.'
+//    }
+//}
 
 dependencies {
     implementation name: 'bridge', ext: 'aar'
