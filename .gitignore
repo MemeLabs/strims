@@ -1,6 +1,6 @@
 node_modules
 dist
-schema/sanitized
+schema/sanitized/*.proto
 *.out
 *.test
 *.g_*

@@ -6,6 +6,12 @@ plugins {
     id 'com.squareup.wire'
 }
 
+task sanitizeProto(type: Exec) {
+    workingDir "../../"
+    commandLine "hack/sanitize-proto.sh"
+}
+
+preBuild.dependsOn sanitizeProto
 
 wire {
     sourcePath {
@@ -58,12 +64,6 @@ android {
         kotlinCompilerExtensionVersion Libs.AndroidX.Compose.version
     }
 
-}
-
-repositories {
-    flatDir {
-        dirs '.'
-    }
 }
 
 dependencies {
