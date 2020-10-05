@@ -9,7 +9,7 @@ plugins {
 
 wire {
     sourcePath {
-        srcDir '../../schema'
+        srcDir '../../schema/sanitized'
     }
 
     kotlin {

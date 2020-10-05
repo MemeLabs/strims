@@ -101,7 +101,8 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 
 func initBroker(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
-	svc := vpn.NewBrokerService(logger)
 
-	rpc.NewHost(logger, svc).Listen(context.Background(), bus)
+	host := rpc.NewHost(logger)
+	host.RegisterService("NetworkBroker", vpn.NewBrokerService(logger))
+	host.Listen(context.Background(), bus)
 }

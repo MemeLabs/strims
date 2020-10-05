@@ -11,11 +11,14 @@ import (
 	"runtime/pprof"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/common/expfmt"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
@@ -26,6 +29,8 @@ var (
 	ErrAuthenticationRequired  = errors.New("method requires authentication")
 	ErrAlreadyJoinedNetwork    = errors.New("user already has a membership for that network")
 )
+
+var _ api.FrontendRPCService = &Frontend{}
 
 // Frontend ...
 type Frontend struct {
@@ -861,16 +866,16 @@ func (s *Frontend) OpenChatClient(ctx context.Context, r *pb.OpenChatClientReque
 }
 
 // CallChatClient ...
-func (s *Frontend) CallChatClient(ctx context.Context, r *pb.CallChatClientRequest) error {
+func (s *Frontend) CallChatClient(ctx context.Context, r *pb.CallChatClientRequest) (*pb.CallChatClientResponse, error) {
 	session := ContextSession(ctx)
 	if session.Anonymous() {
-		return ErrAuthenticationRequired
+		return nil, ErrAuthenticationRequired
 	}
 
 	clientIf, _ := session.Load(r.ClientId)
 	client, ok := clientIf.(*ChatClient)
 	if !ok {
-		return errors.New("client id does not exist")
+		return nil, errors.New("client id does not exist")
 	}
 
 	switch b := r.Body.(type) {
@@ -878,13 +883,13 @@ func (s *Frontend) CallChatClient(ctx context.Context, r *pb.CallChatClientReque
 		if err := client.Send(&pb.ChatClientEvent_Message{
 			Body: b.Message.Body,
 		}); err != nil {
-			return err
+			return nil, err
 		}
 	case *pb.CallChatClientRequest_Close_:
 		client.Close()
 	}
 
-	return nil
+	return &pb.CallChatClientResponse{}, nil
 }
 
 // CreateNetworkInvitation ...
@@ -1085,4 +1090,38 @@ func (s *Frontend) getBootstrapService(ctx context.Context) (*BootstrapService, 
 	}
 
 	return data.bootstrapService, nil
+}
+
+// ReadMetrics ...
+func (s *Frontend) ReadMetrics(ctx context.Context, r *pb.ReadMetricsRequest) (*pb.ReadMetricsResponse, error) {
+	var format expfmt.Format
+	switch r.Format {
+	case pb.MetricsFormat_METRICS_FORMAT_TEXT:
+		format = expfmt.FmtText
+	case pb.MetricsFormat_METRICS_FORMAT_PROTO_DELIM:
+		format = expfmt.FmtProtoDelim
+	case pb.MetricsFormat_METRICS_FORMAT_PROTO_TEXT:
+		format = expfmt.FmtProtoText
+	case pb.MetricsFormat_METRICS_FORMAT_PROTO_COMPACT:
+		format = expfmt.FmtProtoCompact
+	case pb.MetricsFormat_METRICS_FORMAT_OPEN_METRICS:
+		format = expfmt.FmtOpenMetrics
+	default:
+		return nil, errors.New("invalid format")
+	}
+
+	mfs, err := prometheus.DefaultGatherer.Gather()
+	if err != nil {
+		return nil, err
+	}
+
+	var b bytes.Buffer
+	enc := expfmt.NewEncoder(&b, format)
+	for _, mf := range mfs {
+		if err := enc.Encode(mf); err != nil {
+			return nil, err
+		}
+	}
+
+	return &pb.ReadMetricsResponse{Data: b.Bytes()}, nil
 }

@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import Client from "../lib/api/client";
+import Client from "../lib/api/frontendRPCClient";
 
 export const ClientContext = React.createContext<Client>(null);
 

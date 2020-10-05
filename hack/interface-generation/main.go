@@ -1,87 +1,121 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"go/format"
-	"io/ioutil"
+	"io"
 	"log"
 	"os"
+	"path"
+	"path/filepath"
+	"strings"
 	"text/template"
 
-	"golang.org/x/tools/imports"
-	"gopkg.in/yaml.v2"
+	"github.com/emicklei/proto"
 )
 
-// TEMPLATE ...
-const TEMPLATE string = `package {{.Package}}
-{{range .Interfaces}}
-type {{.Name}} interface {
-{{range .Methods}}
-{{.Name}}(ctx context.Context, {{.Input}}) ({{.Output}}, error)
-{{end}}
-}
-{{end}}`
+var (
+	generators = []Generator{&TsGen{}, &SwiftGen{}, &KotlinGen{}, &GoClientGen{}, &GoServiceGen{}}
+	funcMap    = make(template.FuncMap)
+	wd         string
+)
 
-// Config ...
-type Config struct {
-	Package    string `yaml:"package"`
-	Interfaces []struct {
-		Name    string `yaml:"name"`
-		Methods []struct {
-			Name   string `yaml:"name"`
-			Type   string `yaml:"type"`
-			Input  string `yaml:"input"`
-			Output string `yaml:"output"`
-		} `yaml:"methods"`
-	} `yaml:"interfaces"`
+func ToCamel(input string) string {
+	return strings.ToLower(string(input[0])) + input[1:]
+}
+
+func ImportToPascalCase(fileName string) string {
+	for {
+		i := strings.Index(fileName, "_")
+		if i < 0 {
+			break
+		}
+		fileName = strings.Replace(fileName, "_", "", 1)
+		if len(fileName) >= i+1 {
+			fileName = fileName[:i] + strings.ToUpper(string(fileName[i])) + fileName[i+1:]
+		}
+	}
+
+	return strings.TrimSuffix(strings.ToUpper(string(fileName[0]))+fileName[1:], ".proto")
+}
+
+type ProtoService struct {
+	*proto.Service
+	Imports []*proto.Import
+}
+
+// Generator can be implemented for any language to generate client definitions
+type Generator interface {
+	OutputPath(ProtoService) string
+	Template() *template.Template
+	Format(string) error
 }
 
 func main() {
-	config := Config{}
-
-	inputPath := flag.String("input", "services.yml", "path to the input file")
-	outputPath := flag.String("output", "./", "path to output generated code")
-	flag.Parse()
-
-	configYml, err := ioutil.ReadFile(*inputPath)
+	wd, err := os.Getwd()
 	if err != nil {
-		log.Fatal(fmt.Errorf("failed to open input file: %v", err))
+		log.Fatal(err)
 	}
+	funcMap["ToCamel"] = ToCamel
+	funcMap["ToPascal"] = ImportToPascalCase
 
-	if err = yaml.Unmarshal(configYml, &config); err != nil {
-		log.Fatal(fmt.Errorf("failed to unmarshal yaml file: %v", err))
-	}
+	err = filepath.Walk(path.Join(wd, "schema"), func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if info.IsDir() {
+			return nil
+		}
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		parser := proto.NewParser(f)
+		res, err := parser.Parse()
+		if err != nil {
+			return err
+		}
+		var imports []*proto.Import
+		proto.Walk(res, proto.WithImport(func(i *proto.Import) {
+			imports = append(imports, i)
+		}))
 
-	outputFilePath := *outputPath + config.Package + ".if.go"
+		proto.Walk(res, proto.WithService(func(s *proto.Service) {
+			genService(ProtoService{s, imports})
+		}))
 
-	file, err := os.Create(outputFilePath)
+		return nil
+	})
+
 	if err != nil {
-		log.Fatal(fmt.Errorf("failed to create output file: %v", err))
+		log.Fatal(err)
 	}
-	defer file.Close()
+}
 
-	t := template.Must(template.New("config").Parse(TEMPLATE))
-	if err := t.Execute(file, config); err != nil {
-		log.Fatal(fmt.Errorf("failed to execute template: %v", err))
+func genService(service ProtoService) {
+	for _, generator := range generators {
+		file, err := os.OpenFile(generator.OutputPath(service), os.O_CREATE|os.O_WRONLY, os.ModePerm)
+		if err != nil {
+			log.Fatalf("Could not open output file %s: %v", generator.OutputPath(service), err)
+		}
+		if err := file.Truncate(0); err != nil {
+			log.Fatalf("Could not truncate output file %s: %v", file.Name(), err)
+		}
+		template := generator.Template()
+		if err := writeTemplate(template, service, file); err != nil {
+			log.Fatalf("Could not write template to file %s: %v", file.Name(), err)
+		}
+		if err := generator.Format(generator.OutputPath(service)); err != nil {
+			log.Fatalf("Could not format file %s: %v", file.Name(), err)
+		}
 	}
+}
 
-	preFormat, err := ioutil.ReadFile(outputFilePath)
-	if err != nil {
-		log.Fatal(fmt.Errorf("failed to read pre-formatted file: %v", err))
+func writeTemplate(t *template.Template, service ProtoService, w io.WriteCloser) error {
+	if err := t.Execute(w, service); err != nil {
+		return fmt.Errorf("failed to execute template: %w", err)
 	}
-
-	formattedFile, err := format.Source(preFormat)
-	if err != nil {
-		log.Fatal(fmt.Errorf("failed to format generated file: %v", err))
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("failed to close writer: %w", err)
 	}
-
-	imp, err := imports.Process(outputFilePath, formattedFile, nil)
-	if err != nil {
-		log.Fatal(fmt.Errorf("failed to import pkgs: %v", err))
-	}
-
-	if err = ioutil.WriteFile(outputFilePath, imp, 0777); err != nil {
-		log.Fatal(fmt.Errorf("failed to write formatted file: %v", err))
-	}
+	return nil
 }

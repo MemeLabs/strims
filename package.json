@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "pb:gen": "nodemon --watch ./schema -e proto --delay 0.1 --signal SIGINT --exec './hack/pb-codegen.sh || exit 1'",
+    "pb:gen": "nodemon --watch ./schema/*.proto --delay 0.1 --signal SIGINT --exec './hack/pb-codegen.sh || exit 1'",
     "app:electron": "electron ./dist/app/main.js",
     "app:webpack": "webpack --mode development --watch",
     "app:go": "nodemon --watch ./pkg --watch ./cmd/app -e go --delay 0.1 --signal SIGINT --exec 'go build -o ./dist/app/p2p ./cmd/app || exit 1'",

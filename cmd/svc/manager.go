@@ -8,7 +8,6 @@ import (
 	"path"
 
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/gorilla/websocket"
@@ -20,7 +19,7 @@ func newManager(logger *zap.Logger) (*manager, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %s", err)
 	}
-	svc, err := service.New(service.Options{
+	srv, err := service.New(service.Options{
 		Store:  store,
 		Logger: logger,
 		VPNOptions: []vpn.HostOption{
@@ -34,15 +33,16 @@ func newManager(logger *zap.Logger) (*manager, error) {
 	}
 
 	t := &manager{
-		RPCService: rpc.NewHost(logger, svc),
+		logger:    logger,
+		RPCServer: srv,
 	}
 
 	return t, nil
 }
 
 type manager struct {
-	logger     *zap.Logger
-	RPCService *rpc.Host
+	logger    *zap.Logger
+	RPCServer *service.Server
 }
 
 func (t *manager) Run() {
@@ -72,5 +72,5 @@ func (t *manager) manage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	rw := vpn.NewWSReadWriter(c)
-	t.RPCService.Listen(context.Background(), rw)
+	t.RPCServer.Listen(context.Background(), rw)
 }

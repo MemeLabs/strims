@@ -2,6 +2,7 @@ package rpc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"reflect"
@@ -13,17 +14,22 @@ import (
 )
 
 // NewHost ...
-func NewHost(logger *zap.Logger, service interface{}) *Host {
+func NewHost(logger *zap.Logger) *Host {
 	return &Host{
-		logger:  logger,
-		service: service,
+		logger:   logger,
+		services: make(map[string]interface{}),
 	}
 }
 
 // Host ...
 type Host struct {
-	logger  *zap.Logger
-	service interface{}
+	logger   *zap.Logger
+	services map[string]interface{}
+}
+
+// RegisterService ...
+func (h *Host) RegisterService(name string, service interface{}) {
+	h.services[name] = service
 }
 
 // Listen starts reading incoming calls
@@ -55,6 +61,27 @@ func (h *Host) Listen(ctx context.Context, rw io.ReadWriter) {
 	}
 }
 
+var nilValue = reflect.ValueOf(nil)
+
+func (h *Host) findMethod(path string) (reflect.Value, error) {
+	parts := strings.SplitN(path, "/", 2)
+	if len(parts) != 2 {
+		return nilValue, errors.New("invalid method format")
+	}
+
+	service, ok := h.services[parts[0]]
+	if !ok {
+		return nilValue, fmt.Errorf("service not found: %s", parts[0])
+	}
+
+	method := reflect.ValueOf(service).MethodByName(parts[1])
+	if !method.IsValid() {
+		return nilValue, fmt.Errorf("method not found: %s", path)
+	}
+
+	return method, nil
+}
+
 func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 	ctx, cancel := context.WithCancel(ctx)
 	k := callKey{c, m.Id}
@@ -81,9 +108,9 @@ func (h *Host) handleCall(ctx context.Context, c *conn, m *pb.Call) {
 		return
 	}
 
-	method := reflect.ValueOf(h.service).MethodByName(strings.Title(m.Method))
-	if !method.IsValid() {
-		e := &pb.Error{Message: fmt.Sprintf("undefined method: %s", m.Method)}
+	method, err := h.findMethod(m.Method)
+	if err != nil {
+		e := &pb.Error{Message: err.Error()}
 		if err := call(ctx, c, callbackMethod, e, withParentID(m.Id)); err != nil {
 			h.logger.Debug("call failed", zap.Error(err))
 		}

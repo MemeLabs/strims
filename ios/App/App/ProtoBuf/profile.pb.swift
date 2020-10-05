@@ -662,6 +662,8 @@ public struct PBCertificateRequest {
 
   public var keyUsage: UInt32 = 0
 
+  public var subject: String = String()
+
   public var signature: Data = Data()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
@@ -687,6 +689,11 @@ public struct PBCertificate {
   public var keyUsage: UInt32 {
     get {return _storage._keyUsage}
     set {_uniqueStorage()._keyUsage = newValue}
+  }
+
+  public var subject: String {
+    get {return _storage._subject}
+    set {_uniqueStorage()._subject = newValue}
   }
 
   public var notBefore: UInt64 {
@@ -2001,6 +2008,7 @@ extension PBCertificateRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     1: .same(proto: "key"),
     2: .standard(proto: "key_type"),
     3: .standard(proto: "key_usage"),
+    5: .same(proto: "subject"),
     4: .same(proto: "signature"),
   ]
 
@@ -2011,6 +2019,7 @@ extension PBCertificateRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
       case 2: try decoder.decodeSingularEnumField(value: &self.keyType)
       case 3: try decoder.decodeSingularUInt32Field(value: &self.keyUsage)
       case 4: try decoder.decodeSingularBytesField(value: &self.signature)
+      case 5: try decoder.decodeSingularStringField(value: &self.subject)
       default: break
       }
     }
@@ -2029,6 +2038,9 @@ extension PBCertificateRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if !self.signature.isEmpty {
       try visitor.visitSingularBytesField(value: self.signature, fieldNumber: 4)
     }
+    if !self.subject.isEmpty {
+      try visitor.visitSingularStringField(value: self.subject, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2036,6 +2048,7 @@ extension PBCertificateRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     if lhs.key != rhs.key {return false}
     if lhs.keyType != rhs.keyType {return false}
     if lhs.keyUsage != rhs.keyUsage {return false}
+    if lhs.subject != rhs.subject {return false}
     if lhs.signature != rhs.signature {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -2048,6 +2061,7 @@ extension PBCertificate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
     1: .same(proto: "key"),
     2: .standard(proto: "key_type"),
     3: .standard(proto: "key_usage"),
+    9: .same(proto: "subject"),
     4: .standard(proto: "not_before"),
     5: .standard(proto: "not_after"),
     6: .standard(proto: "serial_number"),
@@ -2059,6 +2073,7 @@ extension PBCertificate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
     var _key: Data = Data()
     var _keyType: PBKeyType = .undefined
     var _keyUsage: UInt32 = 0
+    var _subject: String = String()
     var _notBefore: UInt64 = 0
     var _notAfter: UInt64 = 0
     var _serialNumber: Data = Data()
@@ -2073,6 +2088,7 @@ extension PBCertificate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
       _key = source._key
       _keyType = source._keyType
       _keyUsage = source._keyUsage
+      _subject = source._subject
       _notBefore = source._notBefore
       _notAfter = source._notAfter
       _serialNumber = source._serialNumber
@@ -2108,6 +2124,7 @@ extension PBCertificate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
           }
           try decoder.decodeSingularMessageField(value: &v)
           if let v = v {_storage._parentOneof = .parent(v)}
+        case 9: try decoder.decodeSingularStringField(value: &_storage._subject)
         default: break
         }
       }
@@ -2140,6 +2157,9 @@ extension PBCertificate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
       if case .parent(let v)? = _storage._parentOneof {
         try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
       }
+      if !_storage._subject.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._subject, fieldNumber: 9)
+      }
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -2152,6 +2172,7 @@ extension PBCertificate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
         if _storage._key != rhs_storage._key {return false}
         if _storage._keyType != rhs_storage._keyType {return false}
         if _storage._keyUsage != rhs_storage._keyUsage {return false}
+        if _storage._subject != rhs_storage._subject {return false}
         if _storage._notBefore != rhs_storage._notBefore {return false}
         if _storage._notAfter != rhs_storage._notAfter {return false}
         if _storage._serialNumber != rhs_storage._serialNumber {return false}

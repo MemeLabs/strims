@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/integration/driver"
+	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/stretchr/testify/assert"
 )
@@ -47,7 +48,7 @@ func TestCreateProfile(t *testing.T) {
 		},
 	}
 
-	client := td.Client(&driver.ClientOptions{})
+	client := api.NewFrontendRPCClient(td.Client(&driver.ClientOptions{}))
 	for scenario, tc := range tcs {
 		t.Run(scenario, func(t *testing.T) {
 			assert := assert.New(t)
@@ -56,7 +57,7 @@ func TestCreateProfile(t *testing.T) {
 			defer cancel()
 
 			res := &pb.CreateProfileResponse{}
-			err := client.CallUnary(ctx, "createProfile", tc.req, res)
+			err := client.CreateProfile(ctx, tc.req, res)
 			if err == nil {
 				assert.Equal(tc.expected.res.GetProfile().GetName(), res.GetProfile().GetName())
 			} else {
