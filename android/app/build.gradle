@@ -6,25 +6,11 @@ plugins {
     id 'com.squareup.wire'
 }
 
-task findProto(type: Exec) {
-    workingDir "../../"
-    executable "find"
-    args "schema", "-type", "f"
-    standardOutput = new ByteArrayOutputStream()
-    ext.files = {
-        standardOutput.toString()
-    }
-    println standardOutput.toString()
-}
-
 task sanitizeProto(type: Exec) {
     workingDir "../../"
-    commandLine "hack/remove-services.sh"
-    ignoreExitValue true
-    args "schema/sanitized/", findProto.files()
+    commandLine "hack/sanitize-proto.sh"
 }
 
-sanitizeProto.dependsOn findProto
 preBuild.dependsOn sanitizeProto
 
 wire {
