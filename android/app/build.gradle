@@ -60,6 +60,12 @@ android {
 
 }
 
+repositories {
+    flatDir {
+        dirs '.'
+    }
+}
+
 dependencies {
     implementation name: 'bridge', ext: 'aar'
 

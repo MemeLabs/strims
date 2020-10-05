@@ -44,9 +44,4 @@ then
     bash ./hack/swift-codegen.sh $REL_SOURCES
 fi
 
-protoc \
-    --java_out $JAVA_DIR \
-    -I $SCHEMA_DIR \
-    $SOURCES
-
 popd > /dev/null

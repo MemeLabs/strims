@@ -53,11 +53,11 @@ open class RPCClient(filepath: String) {
     private fun handleCallback(b: ByteArray?) {
         val stream = b!!.inputStream()
         try {
-            // TODO
             val s2 = stream.source().buffer()
-            ProtoReader(s2).readVarint64()
+            val pr = ProtoReader(s2)
+            pr.readVarint64()
+            val call = Call.ADAPTER.decode(pr)
             s2.close()
-            val call = Call.ADAPTER.decode(stream)
             this.callbacks[call.parent_id]?.let {
                 it(call)
             } ?: throw RPCClientError("missing callback")
