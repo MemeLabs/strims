@@ -1160,6 +1160,44 @@ func (*CallChatClientRequest_Message_) isCallChatClientRequest_Body() {}
 
 func (*CallChatClientRequest_Close_) isCallChatClientRequest_Body() {}
 
+type CallChatClientResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *CallChatClientResponse) Reset() {
+	*x = CallChatClientResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_chat_proto_msgTypes[19]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CallChatClientResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CallChatClientResponse) ProtoMessage() {}
+
+func (x *CallChatClientResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_chat_proto_msgTypes[19]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CallChatClientResponse.ProtoReflect.Descriptor instead.
+func (*CallChatClientResponse) Descriptor() ([]byte, []int) {
+	return file_chat_proto_rawDescGZIP(), []int{19}
+}
+
 type ChatServerEvent_Open struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -1171,7 +1209,7 @@ type ChatServerEvent_Open struct {
 func (x *ChatServerEvent_Open) Reset() {
 	*x = ChatServerEvent_Open{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[19]
+		mi := &file_chat_proto_msgTypes[20]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1184,7 +1222,7 @@ func (x *ChatServerEvent_Open) String() string {
 func (*ChatServerEvent_Open) ProtoMessage() {}
 
 func (x *ChatServerEvent_Open) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[19]
+	mi := &file_chat_proto_msgTypes[20]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1216,7 +1254,7 @@ type ChatServerEvent_Close struct {
 func (x *ChatServerEvent_Close) Reset() {
 	*x = ChatServerEvent_Close{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[20]
+		mi := &file_chat_proto_msgTypes[21]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1229,7 +1267,7 @@ func (x *ChatServerEvent_Close) String() string {
 func (*ChatServerEvent_Close) ProtoMessage() {}
 
 func (x *ChatServerEvent_Close) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[20]
+	mi := &file_chat_proto_msgTypes[21]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1254,7 +1292,7 @@ type CallChatServerRequest_Close struct {
 func (x *CallChatServerRequest_Close) Reset() {
 	*x = CallChatServerRequest_Close{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[21]
+		mi := &file_chat_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1267,7 +1305,7 @@ func (x *CallChatServerRequest_Close) String() string {
 func (*CallChatServerRequest_Close) ProtoMessage() {}
 
 func (x *CallChatServerRequest_Close) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[21]
+	mi := &file_chat_proto_msgTypes[22]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1294,7 +1332,7 @@ type ChatClientEvent_Open struct {
 func (x *ChatClientEvent_Open) Reset() {
 	*x = ChatClientEvent_Open{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[22]
+		mi := &file_chat_proto_msgTypes[23]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1307,7 +1345,7 @@ func (x *ChatClientEvent_Open) String() string {
 func (*ChatClientEvent_Open) ProtoMessage() {}
 
 func (x *ChatClientEvent_Open) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[22]
+	mi := &file_chat_proto_msgTypes[23]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1345,7 +1383,7 @@ type ChatClientEvent_Message struct {
 func (x *ChatClientEvent_Message) Reset() {
 	*x = ChatClientEvent_Message{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[23]
+		mi := &file_chat_proto_msgTypes[24]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1358,7 +1396,7 @@ func (x *ChatClientEvent_Message) String() string {
 func (*ChatClientEvent_Message) ProtoMessage() {}
 
 func (x *ChatClientEvent_Message) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[23]
+	mi := &file_chat_proto_msgTypes[24]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1418,7 +1456,7 @@ type ChatClientEvent_Close struct {
 func (x *ChatClientEvent_Close) Reset() {
 	*x = ChatClientEvent_Close{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[24]
+		mi := &file_chat_proto_msgTypes[25]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1431,7 +1469,7 @@ func (x *ChatClientEvent_Close) String() string {
 func (*ChatClientEvent_Close) ProtoMessage() {}
 
 func (x *ChatClientEvent_Close) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[24]
+	mi := &file_chat_proto_msgTypes[25]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1459,7 +1497,7 @@ type MessageEntities_Bounds struct {
 func (x *MessageEntities_Bounds) Reset() {
 	*x = MessageEntities_Bounds{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[25]
+		mi := &file_chat_proto_msgTypes[26]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1472,7 +1510,7 @@ func (x *MessageEntities_Bounds) String() string {
 func (*MessageEntities_Bounds) ProtoMessage() {}
 
 func (x *MessageEntities_Bounds) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[25]
+	mi := &file_chat_proto_msgTypes[26]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1514,7 +1552,7 @@ type MessageEntities_Link struct {
 func (x *MessageEntities_Link) Reset() {
 	*x = MessageEntities_Link{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[26]
+		mi := &file_chat_proto_msgTypes[27]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1527,7 +1565,7 @@ func (x *MessageEntities_Link) String() string {
 func (*MessageEntities_Link) ProtoMessage() {}
 
 func (x *MessageEntities_Link) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[26]
+	mi := &file_chat_proto_msgTypes[27]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1571,7 +1609,7 @@ type MessageEntities_Emote struct {
 func (x *MessageEntities_Emote) Reset() {
 	*x = MessageEntities_Emote{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[27]
+		mi := &file_chat_proto_msgTypes[28]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1584,7 +1622,7 @@ func (x *MessageEntities_Emote) String() string {
 func (*MessageEntities_Emote) ProtoMessage() {}
 
 func (x *MessageEntities_Emote) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[27]
+	mi := &file_chat_proto_msgTypes[28]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1640,7 +1678,7 @@ type MessageEntities_Nick struct {
 func (x *MessageEntities_Nick) Reset() {
 	*x = MessageEntities_Nick{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[28]
+		mi := &file_chat_proto_msgTypes[29]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1653,7 +1691,7 @@ func (x *MessageEntities_Nick) String() string {
 func (*MessageEntities_Nick) ProtoMessage() {}
 
 func (x *MessageEntities_Nick) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[28]
+	mi := &file_chat_proto_msgTypes[29]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1695,7 +1733,7 @@ type MessageEntities_Tag struct {
 func (x *MessageEntities_Tag) Reset() {
 	*x = MessageEntities_Tag{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[29]
+		mi := &file_chat_proto_msgTypes[30]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1708,7 +1746,7 @@ func (x *MessageEntities_Tag) String() string {
 func (*MessageEntities_Tag) ProtoMessage() {}
 
 func (x *MessageEntities_Tag) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[29]
+	mi := &file_chat_proto_msgTypes[30]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1749,7 +1787,7 @@ type MessageEntities_CodeBlock struct {
 func (x *MessageEntities_CodeBlock) Reset() {
 	*x = MessageEntities_CodeBlock{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[30]
+		mi := &file_chat_proto_msgTypes[31]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1762,7 +1800,7 @@ func (x *MessageEntities_CodeBlock) String() string {
 func (*MessageEntities_CodeBlock) ProtoMessage() {}
 
 func (x *MessageEntities_CodeBlock) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[30]
+	mi := &file_chat_proto_msgTypes[31]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1796,7 +1834,7 @@ type MessageEntities_Spoiler struct {
 func (x *MessageEntities_Spoiler) Reset() {
 	*x = MessageEntities_Spoiler{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[31]
+		mi := &file_chat_proto_msgTypes[32]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1809,7 +1847,7 @@ func (x *MessageEntities_Spoiler) String() string {
 func (*MessageEntities_Spoiler) ProtoMessage() {}
 
 func (x *MessageEntities_Spoiler) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[31]
+	mi := &file_chat_proto_msgTypes[32]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1843,7 +1881,7 @@ type MessageEntities_GenericEntity struct {
 func (x *MessageEntities_GenericEntity) Reset() {
 	*x = MessageEntities_GenericEntity{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[32]
+		mi := &file_chat_proto_msgTypes[33]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1856,7 +1894,7 @@ func (x *MessageEntities_GenericEntity) String() string {
 func (*MessageEntities_GenericEntity) ProtoMessage() {}
 
 func (x *MessageEntities_GenericEntity) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[32]
+	mi := &file_chat_proto_msgTypes[33]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1891,7 +1929,7 @@ type CallChatClientRequest_Message struct {
 func (x *CallChatClientRequest_Message) Reset() {
 	*x = CallChatClientRequest_Message{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[33]
+		mi := &file_chat_proto_msgTypes[34]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1904,7 +1942,7 @@ func (x *CallChatClientRequest_Message) String() string {
 func (*CallChatClientRequest_Message) ProtoMessage() {}
 
 func (x *CallChatClientRequest_Message) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[33]
+	mi := &file_chat_proto_msgTypes[34]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1943,7 +1981,7 @@ type CallChatClientRequest_Close struct {
 func (x *CallChatClientRequest_Close) Reset() {
 	*x = CallChatClientRequest_Close{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_chat_proto_msgTypes[34]
+		mi := &file_chat_proto_msgTypes[35]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1956,7 +1994,7 @@ func (x *CallChatClientRequest_Close) String() string {
 func (*CallChatClientRequest_Close) ProtoMessage() {}
 
 func (x *CallChatClientRequest_Close) ProtoReflect() protoreflect.Message {
-	mi := &file_chat_proto_msgTypes[34]
+	mi := &file_chat_proto_msgTypes[35]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2158,12 +2196,13 @@ var file_chat_proto_rawDesc = []byte{
 	0x12, 0x0a, 0x04, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x03, 0x52, 0x04, 0x74,
 	0x69, 0x6d, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28,
 	0x09, 0x52, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x1a, 0x07, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65,
-	0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x42, 0x44, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73,
-	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65,
-	0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f,
-	0x70, 0x6b, 0x67, 0x2f, 0x70, 0x62, 0x3b, 0x70, 0x62, 0xba, 0x02, 0x02, 0x50, 0x42, 0x62, 0x06,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0x18, 0x0a, 0x16, 0x43, 0x61, 0x6c, 0x6c,
+	0x43, 0x68, 0x61, 0x74, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e,
+	0x73, 0x65, 0x42, 0x44, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e,
+	0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x5a, 0x26, 0x67, 0x69, 0x74,
+	0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73,
+	0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x62,
+	0x3b, 0x70, 0x62, 0xba, 0x02, 0x02, 0x50, 0x42, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -2178,7 +2217,7 @@ func file_chat_proto_rawDescGZIP() []byte {
 	return file_chat_proto_rawDescData
 }
 
-var file_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 35)
+var file_chat_proto_msgTypes = make([]protoimpl.MessageInfo, 36)
 var file_chat_proto_goTypes = []interface{}{
 	(*CreateChatServerRequest)(nil),       // 0: CreateChatServerRequest
 	(*CreateChatServerResponse)(nil),      // 1: CreateChatServerResponse
@@ -2199,23 +2238,24 @@ var file_chat_proto_goTypes = []interface{}{
 	(*ChatServer)(nil),                    // 16: ChatServer
 	(*MessageEntities)(nil),               // 17: MessageEntities
 	(*CallChatClientRequest)(nil),         // 18: CallChatClientRequest
-	(*ChatServerEvent_Open)(nil),          // 19: ChatServerEvent.Open
-	(*ChatServerEvent_Close)(nil),         // 20: ChatServerEvent.Close
-	(*CallChatServerRequest_Close)(nil),   // 21: CallChatServerRequest.Close
-	(*ChatClientEvent_Open)(nil),          // 22: ChatClientEvent.Open
-	(*ChatClientEvent_Message)(nil),       // 23: ChatClientEvent.Message
-	(*ChatClientEvent_Close)(nil),         // 24: ChatClientEvent.Close
-	(*MessageEntities_Bounds)(nil),        // 25: MessageEntities.Bounds
-	(*MessageEntities_Link)(nil),          // 26: MessageEntities.Link
-	(*MessageEntities_Emote)(nil),         // 27: MessageEntities.Emote
-	(*MessageEntities_Nick)(nil),          // 28: MessageEntities.Nick
-	(*MessageEntities_Tag)(nil),           // 29: MessageEntities.Tag
-	(*MessageEntities_CodeBlock)(nil),     // 30: MessageEntities.CodeBlock
-	(*MessageEntities_Spoiler)(nil),       // 31: MessageEntities.Spoiler
-	(*MessageEntities_GenericEntity)(nil), // 32: MessageEntities.GenericEntity
-	(*CallChatClientRequest_Message)(nil), // 33: CallChatClientRequest.Message
-	(*CallChatClientRequest_Close)(nil),   // 34: CallChatClientRequest.Close
-	(*Key)(nil),                           // 35: Key
+	(*CallChatClientResponse)(nil),        // 19: CallChatClientResponse
+	(*ChatServerEvent_Open)(nil),          // 20: ChatServerEvent.Open
+	(*ChatServerEvent_Close)(nil),         // 21: ChatServerEvent.Close
+	(*CallChatServerRequest_Close)(nil),   // 22: CallChatServerRequest.Close
+	(*ChatClientEvent_Open)(nil),          // 23: ChatClientEvent.Open
+	(*ChatClientEvent_Message)(nil),       // 24: ChatClientEvent.Message
+	(*ChatClientEvent_Close)(nil),         // 25: ChatClientEvent.Close
+	(*MessageEntities_Bounds)(nil),        // 26: MessageEntities.Bounds
+	(*MessageEntities_Link)(nil),          // 27: MessageEntities.Link
+	(*MessageEntities_Emote)(nil),         // 28: MessageEntities.Emote
+	(*MessageEntities_Nick)(nil),          // 29: MessageEntities.Nick
+	(*MessageEntities_Tag)(nil),           // 30: MessageEntities.Tag
+	(*MessageEntities_CodeBlock)(nil),     // 31: MessageEntities.CodeBlock
+	(*MessageEntities_Spoiler)(nil),       // 32: MessageEntities.Spoiler
+	(*MessageEntities_GenericEntity)(nil), // 33: MessageEntities.GenericEntity
+	(*CallChatClientRequest_Message)(nil), // 34: CallChatClientRequest.Message
+	(*CallChatClientRequest_Close)(nil),   // 35: CallChatClientRequest.Close
+	(*Key)(nil),                           // 36: Key
 }
 var file_chat_proto_depIdxs = []int32{
 	15, // 0: CreateChatServerRequest.chat_room:type_name -> ChatRoom
@@ -2225,32 +2265,32 @@ var file_chat_proto_depIdxs = []int32{
 	16, // 4: GetChatServerResponse.chat_server:type_name -> ChatServer
 	16, // 5: GetChatServersResponse.chat_servers:type_name -> ChatServer
 	16, // 6: OpenChatServerRequest.server:type_name -> ChatServer
-	19, // 7: ChatServerEvent.open:type_name -> ChatServerEvent.Open
-	20, // 8: ChatServerEvent.close:type_name -> ChatServerEvent.Close
-	21, // 9: CallChatServerRequest.close:type_name -> CallChatServerRequest.Close
-	22, // 10: ChatClientEvent.open:type_name -> ChatClientEvent.Open
-	23, // 11: ChatClientEvent.message:type_name -> ChatClientEvent.Message
-	24, // 12: ChatClientEvent.close:type_name -> ChatClientEvent.Close
-	35, // 13: ChatServer.key:type_name -> Key
+	20, // 7: ChatServerEvent.open:type_name -> ChatServerEvent.Open
+	21, // 8: ChatServerEvent.close:type_name -> ChatServerEvent.Close
+	22, // 9: CallChatServerRequest.close:type_name -> CallChatServerRequest.Close
+	23, // 10: ChatClientEvent.open:type_name -> ChatClientEvent.Open
+	24, // 11: ChatClientEvent.message:type_name -> ChatClientEvent.Message
+	25, // 12: ChatClientEvent.close:type_name -> ChatClientEvent.Close
+	36, // 13: ChatServer.key:type_name -> Key
 	15, // 14: ChatServer.chat_room:type_name -> ChatRoom
-	26, // 15: MessageEntities.links:type_name -> MessageEntities.Link
-	27, // 16: MessageEntities.emotes:type_name -> MessageEntities.Emote
-	28, // 17: MessageEntities.nicks:type_name -> MessageEntities.Nick
-	29, // 18: MessageEntities.tags:type_name -> MessageEntities.Tag
-	30, // 19: MessageEntities.code_blocks:type_name -> MessageEntities.CodeBlock
-	31, // 20: MessageEntities.spoilers:type_name -> MessageEntities.Spoiler
-	32, // 21: MessageEntities.green_text:type_name -> MessageEntities.GenericEntity
-	32, // 22: MessageEntities.self_message:type_name -> MessageEntities.GenericEntity
-	33, // 23: CallChatClientRequest.message:type_name -> CallChatClientRequest.Message
-	34, // 24: CallChatClientRequest.close:type_name -> CallChatClientRequest.Close
+	27, // 15: MessageEntities.links:type_name -> MessageEntities.Link
+	28, // 16: MessageEntities.emotes:type_name -> MessageEntities.Emote
+	29, // 17: MessageEntities.nicks:type_name -> MessageEntities.Nick
+	30, // 18: MessageEntities.tags:type_name -> MessageEntities.Tag
+	31, // 19: MessageEntities.code_blocks:type_name -> MessageEntities.CodeBlock
+	32, // 20: MessageEntities.spoilers:type_name -> MessageEntities.Spoiler
+	33, // 21: MessageEntities.green_text:type_name -> MessageEntities.GenericEntity
+	33, // 22: MessageEntities.self_message:type_name -> MessageEntities.GenericEntity
+	34, // 23: CallChatClientRequest.message:type_name -> CallChatClientRequest.Message
+	35, // 24: CallChatClientRequest.close:type_name -> CallChatClientRequest.Close
 	17, // 25: ChatClientEvent.Message.entities:type_name -> MessageEntities
-	25, // 26: MessageEntities.Link.bounds:type_name -> MessageEntities.Bounds
-	25, // 27: MessageEntities.Emote.bounds:type_name -> MessageEntities.Bounds
-	25, // 28: MessageEntities.Nick.bounds:type_name -> MessageEntities.Bounds
-	25, // 29: MessageEntities.Tag.bounds:type_name -> MessageEntities.Bounds
-	25, // 30: MessageEntities.CodeBlock.bounds:type_name -> MessageEntities.Bounds
-	25, // 31: MessageEntities.Spoiler.bounds:type_name -> MessageEntities.Bounds
-	25, // 32: MessageEntities.GenericEntity.bounds:type_name -> MessageEntities.Bounds
+	26, // 26: MessageEntities.Link.bounds:type_name -> MessageEntities.Bounds
+	26, // 27: MessageEntities.Emote.bounds:type_name -> MessageEntities.Bounds
+	26, // 28: MessageEntities.Nick.bounds:type_name -> MessageEntities.Bounds
+	26, // 29: MessageEntities.Tag.bounds:type_name -> MessageEntities.Bounds
+	26, // 30: MessageEntities.CodeBlock.bounds:type_name -> MessageEntities.Bounds
+	26, // 31: MessageEntities.Spoiler.bounds:type_name -> MessageEntities.Bounds
+	26, // 32: MessageEntities.GenericEntity.bounds:type_name -> MessageEntities.Bounds
 	33, // [33:33] is the sub-list for method output_type
 	33, // [33:33] is the sub-list for method input_type
 	33, // [33:33] is the sub-list for extension type_name
@@ -2494,7 +2534,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ChatServerEvent_Open); i {
+			switch v := v.(*CallChatClientResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2506,7 +2546,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ChatServerEvent_Close); i {
+			switch v := v.(*ChatServerEvent_Open); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2518,7 +2558,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CallChatServerRequest_Close); i {
+			switch v := v.(*ChatServerEvent_Close); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2530,7 +2570,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ChatClientEvent_Open); i {
+			switch v := v.(*CallChatServerRequest_Close); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2542,7 +2582,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ChatClientEvent_Message); i {
+			switch v := v.(*ChatClientEvent_Open); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2554,7 +2594,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ChatClientEvent_Close); i {
+			switch v := v.(*ChatClientEvent_Message); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2566,7 +2606,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MessageEntities_Bounds); i {
+			switch v := v.(*ChatClientEvent_Close); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2578,7 +2618,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MessageEntities_Link); i {
+			switch v := v.(*MessageEntities_Bounds); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2590,7 +2630,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MessageEntities_Emote); i {
+			switch v := v.(*MessageEntities_Link); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2602,7 +2642,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MessageEntities_Nick); i {
+			switch v := v.(*MessageEntities_Emote); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2614,7 +2654,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MessageEntities_Tag); i {
+			switch v := v.(*MessageEntities_Nick); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2626,7 +2666,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[30].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MessageEntities_CodeBlock); i {
+			switch v := v.(*MessageEntities_Tag); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2638,7 +2678,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[31].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MessageEntities_Spoiler); i {
+			switch v := v.(*MessageEntities_CodeBlock); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2650,7 +2690,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[32].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*MessageEntities_GenericEntity); i {
+			switch v := v.(*MessageEntities_Spoiler); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2662,7 +2702,7 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[33].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CallChatClientRequest_Message); i {
+			switch v := v.(*MessageEntities_GenericEntity); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2674,6 +2714,18 @@ func file_chat_proto_init() {
 			}
 		}
 		file_chat_proto_msgTypes[34].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*CallChatClientRequest_Message); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_chat_proto_msgTypes[35].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*CallChatClientRequest_Close); i {
 			case 0:
 				return &v.state
@@ -2708,7 +2760,7 @@ func file_chat_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_chat_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   35,
+			NumMessages:   36,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

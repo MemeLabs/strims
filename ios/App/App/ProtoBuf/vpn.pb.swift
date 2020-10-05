@@ -161,9 +161,9 @@ public struct PBPeerInit {
   /// Clears the value of `certificate`. Subsequent reads from it will return its default value.
   public mutating func clearCertificate() {self._certificate = nil}
 
-  public var iv: Data = Data()
+  public var nodePlatform: String = String()
 
-  public var hostID: Data = Data()
+  public var nodeVersion: String = String()
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -219,8 +219,6 @@ public struct PBNetworkHandshake {
 
     public var keyCount: Int32 = 0
 
-    public var discriminator: UInt32 = 0
-
     public var unknownFields = SwiftProtobuf.UnknownStorage()
 
     public init() {}
@@ -253,8 +251,6 @@ public struct PBNetworkHandshake {
     // SwiftProtobuf.Message conformance is added in an extension below. See the
     // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
     // methods supported on all messages.
-
-    public var discriminator: UInt32 = 0
 
     public var networkBindings: [PBNetworkHandshake.NetworkBinding] = []
 
@@ -396,7 +392,7 @@ public struct PBBrokerPeerInitRequest {
 
   public var peerID: UInt64 = 0
 
-  public var discriminator: UInt32 = 0
+  public var preferSender: Bool = false
 
   public var keys: [Data] = []
 
@@ -1241,8 +1237,8 @@ extension PBPeerInit: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementatio
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .standard(proto: "protocol_version"),
     2: .same(proto: "certificate"),
-    3: .same(proto: "iv"),
-    4: .standard(proto: "host_id"),
+    3: .standard(proto: "node_platform"),
+    4: .standard(proto: "node_version"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1250,8 +1246,8 @@ extension PBPeerInit: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementatio
       switch fieldNumber {
       case 1: try decoder.decodeSingularUInt32Field(value: &self.protocolVersion)
       case 2: try decoder.decodeSingularMessageField(value: &self._certificate)
-      case 3: try decoder.decodeSingularBytesField(value: &self.iv)
-      case 4: try decoder.decodeSingularBytesField(value: &self.hostID)
+      case 3: try decoder.decodeSingularStringField(value: &self.nodePlatform)
+      case 4: try decoder.decodeSingularStringField(value: &self.nodeVersion)
       default: break
       }
     }
@@ -1264,11 +1260,11 @@ extension PBPeerInit: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementatio
     if let v = self._certificate {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
     }
-    if !self.iv.isEmpty {
-      try visitor.visitSingularBytesField(value: self.iv, fieldNumber: 3)
+    if !self.nodePlatform.isEmpty {
+      try visitor.visitSingularStringField(value: self.nodePlatform, fieldNumber: 3)
     }
-    if !self.hostID.isEmpty {
-      try visitor.visitSingularBytesField(value: self.hostID, fieldNumber: 4)
+    if !self.nodeVersion.isEmpty {
+      try visitor.visitSingularStringField(value: self.nodeVersion, fieldNumber: 4)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
@@ -1276,8 +1272,8 @@ extension PBPeerInit: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementatio
   public static func ==(lhs: PBPeerInit, rhs: PBPeerInit) -> Bool {
     if lhs.protocolVersion != rhs.protocolVersion {return false}
     if lhs._certificate != rhs._certificate {return false}
-    if lhs.iv != rhs.iv {return false}
-    if lhs.hostID != rhs.hostID {return false}
+    if lhs.nodePlatform != rhs.nodePlatform {return false}
+    if lhs.nodeVersion != rhs.nodeVersion {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1336,14 +1332,12 @@ extension PBNetworkHandshake.Init: SwiftProtobuf.Message, SwiftProtobuf._Message
   public static let protoMessageName: String = PBNetworkHandshake.protoMessageName + ".Init"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .standard(proto: "key_count"),
-    2: .same(proto: "discriminator"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       switch fieldNumber {
       case 1: try decoder.decodeSingularInt32Field(value: &self.keyCount)
-      case 2: try decoder.decodeSingularUInt32Field(value: &self.discriminator)
       default: break
       }
     }
@@ -1353,15 +1347,11 @@ extension PBNetworkHandshake.Init: SwiftProtobuf.Message, SwiftProtobuf._Message
     if self.keyCount != 0 {
       try visitor.visitSingularInt32Field(value: self.keyCount, fieldNumber: 1)
     }
-    if self.discriminator != 0 {
-      try visitor.visitSingularUInt32Field(value: self.discriminator, fieldNumber: 2)
-    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: PBNetworkHandshake.Init, rhs: PBNetworkHandshake.Init) -> Bool {
     if lhs.keyCount != rhs.keyCount {return false}
-    if lhs.discriminator != rhs.discriminator {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1405,14 +1395,12 @@ extension PBNetworkHandshake.NetworkBinding: SwiftProtobuf.Message, SwiftProtobu
 extension PBNetworkHandshake.NetworkBindings: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = PBNetworkHandshake.protoMessageName + ".NetworkBindings"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .same(proto: "discriminator"),
     2: .standard(proto: "network_bindings"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       switch fieldNumber {
-      case 1: try decoder.decodeSingularUInt32Field(value: &self.discriminator)
       case 2: try decoder.decodeRepeatedMessageField(value: &self.networkBindings)
       default: break
       }
@@ -1420,9 +1408,6 @@ extension PBNetworkHandshake.NetworkBindings: SwiftProtobuf.Message, SwiftProtob
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.discriminator != 0 {
-      try visitor.visitSingularUInt32Field(value: self.discriminator, fieldNumber: 1)
-    }
     if !self.networkBindings.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.networkBindings, fieldNumber: 2)
     }
@@ -1430,7 +1415,6 @@ extension PBNetworkHandshake.NetworkBindings: SwiftProtobuf.Message, SwiftProtob
   }
 
   public static func ==(lhs: PBNetworkHandshake.NetworkBindings, rhs: PBNetworkHandshake.NetworkBindings) -> Bool {
-    if lhs.discriminator != rhs.discriminator {return false}
     if lhs.networkBindings != rhs.networkBindings {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -1657,7 +1641,7 @@ extension PBBrokerPeerInitRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
   public static let protoMessageName: String = "BrokerPeerInitRequest"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .standard(proto: "peer_id"),
-    2: .same(proto: "discriminator"),
+    2: .standard(proto: "prefer_sender"),
     3: .same(proto: "keys"),
   ]
 
@@ -1665,7 +1649,7 @@ extension PBBrokerPeerInitRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
     while let fieldNumber = try decoder.nextFieldNumber() {
       switch fieldNumber {
       case 1: try decoder.decodeSingularUInt64Field(value: &self.peerID)
-      case 2: try decoder.decodeSingularUInt32Field(value: &self.discriminator)
+      case 2: try decoder.decodeSingularBoolField(value: &self.preferSender)
       case 3: try decoder.decodeRepeatedBytesField(value: &self.keys)
       default: break
       }
@@ -1676,8 +1660,8 @@ extension PBBrokerPeerInitRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
     if self.peerID != 0 {
       try visitor.visitSingularUInt64Field(value: self.peerID, fieldNumber: 1)
     }
-    if self.discriminator != 0 {
-      try visitor.visitSingularUInt32Field(value: self.discriminator, fieldNumber: 2)
+    if self.preferSender != false {
+      try visitor.visitSingularBoolField(value: self.preferSender, fieldNumber: 2)
     }
     if !self.keys.isEmpty {
       try visitor.visitRepeatedBytesField(value: self.keys, fieldNumber: 3)
@@ -1687,7 +1671,7 @@ extension PBBrokerPeerInitRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
 
   public static func ==(lhs: PBBrokerPeerInitRequest, rhs: PBBrokerPeerInitRequest) -> Bool {
     if lhs.peerID != rhs.peerID {return false}
-    if lhs.discriminator != rhs.discriminator {return false}
+    if lhs.preferSender != rhs.preferSender {return false}
     if lhs.keys != rhs.keys {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

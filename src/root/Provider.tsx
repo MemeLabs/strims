@@ -4,7 +4,7 @@ import { BrowserRouter } from "react-router-dom";
 import { Provider as ApiProvider } from "../contexts/Api";
 import { Provider as ProfileProvider } from "../contexts/Profile";
 import { Provider as ThemeProvider } from "../contexts/Theme";
-import Client from "../lib/api/client";
+import Client from "../lib/api/frontendRPCClient";
 
 const LoadingMessage = () => <p className="loading_message">loading</p>;
 

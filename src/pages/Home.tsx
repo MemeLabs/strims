@@ -18,7 +18,7 @@ const HomePage = () => {
 
   const client = useClient();
 
-  const [pprofData, pprof] = useLazyCall("pprof");
+  const [pprofData, pprof] = useLazyCall("pProf");
   const [pprofDownloads, setPProfDownloads] = React.useState([]);
 
   const videoRef = React.useRef<HTMLVideoElement>();

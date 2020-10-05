@@ -37,7 +37,7 @@ type BrokerService struct {
 }
 
 // BrokerPeer ...
-func (s *BrokerService) BrokerPeer(ctx context.Context, r *pb.BrokerPeerRequest) (chan *pb.BrokerPeerEvent, error) {
+func (s *BrokerService) BrokerPeer(ctx context.Context, r *pb.BrokerPeerRequest) (<-chan *pb.BrokerPeerEvent, error) {
 	ch := make(chan *pb.BrokerPeerEvent, 1)
 
 	r0, w0 := io.Pipe()
@@ -167,7 +167,7 @@ func (h *BrokerClient) BrokerPeer(conn ReadWriteFlusher) (NetworkBrokerPeer, err
 
 	req := &pb.BrokerPeerRequest{ConnMtu: int32(connMTU(conn))}
 	events := make(chan *pb.BrokerPeerEvent, 1)
-	if err := h.client.CallStreaming(ctx, "brokerPeer", req, events); err != nil {
+	if err := h.client.CallStreaming(ctx, "NetworkBroker/BrokerPeer", req, events); err != nil {
 		cancel()
 		return nil, err
 	}
@@ -252,7 +252,7 @@ func (p *brokerClientPeer) doReadPump() {
 			PeerId: p.id,
 			Data:   b[:n],
 		}
-		if err := p.client.Call(context.Background(), "data", req); err != nil {
+		if err := p.client.Call(context.Background(), "NetworkBroker/Data", req); err != nil {
 			return
 		}
 	}
@@ -265,7 +265,7 @@ func (p *brokerClientPeer) Init(preferSender bool, keys [][]byte) error {
 		PreferSender: preferSender,
 		Keys:         keys,
 	}
-	return p.client.Call(context.Background(), "init", req)
+	return p.client.Call(context.Background(), "NetworkBroker/Init", req)
 }
 
 func (p *brokerClientPeer) InitRequired() <-chan struct{} {

@@ -10,8 +10,8 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/integration/driver"
+	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -22,15 +22,17 @@ func TestChat(t *testing.T) {
 	}
 
 	type state struct {
-		client  *rpc.Client
+		client  *api.FrontendRPCClient
 		profile pb.CreateProfileResponse
 	}
 
-	a := &state{client: d.Client(&driver.ClientOptions{
-		VPNServerAddr: "0.0.0.0:8084",
-	})}
-	b := &state{client: td.Client(&driver.ClientOptions{})}
-	c := &state{client: td.Client(&driver.ClientOptions{})}
+	a := &state{
+		client: api.NewFrontendRPCClient(d.Client(&driver.ClientOptions{
+			VPNServerAddr: "0.0.0.0:8084",
+		})),
+	}
+	b := &state{client: api.NewFrontendRPCClient(d.Client(&driver.ClientOptions{}))}
+	c := &state{client: api.NewFrontendRPCClient(d.Client(&driver.ClientOptions{}))}
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -39,14 +41,14 @@ func TestChat(t *testing.T) {
 		Name:     "testa",
 		Password: "password",
 	}
-	if err := a.client.CallUnary(ctx, "createProfile", profile, &a.profile); err != nil {
+	if err := a.client.CreateProfile(ctx, profile, &a.profile); err != nil {
 		t.Error(err)
 	}
 
 	vpn := &pb.StartVPNRequest{
 		EnableBootstrapPublishing: true,
 	}
-	if err := a.client.CallStreaming(ctx, "startVPN", vpn, make(chan *pb.NetworkEvent)); err != nil {
+	if err := a.client.StartVPN(ctx, vpn, make(chan *pb.NetworkEvent)); err != nil {
 		t.Error(err)
 	}
 
@@ -57,7 +59,7 @@ func TestChat(t *testing.T) {
 			Name:     name,
 			Password: "password",
 		}
-		if err := s.client.CallUnary(ctx, "createProfile", profile, &s.profile); err != nil {
+		if err := s.client.CreateProfile(ctx, profile, &s.profile); err != nil {
 			return err
 		}
 
@@ -68,11 +70,11 @@ func TestChat(t *testing.T) {
 				},
 			},
 		}
-		if err := s.client.CallUnary(ctx, "createBootstrapClient", bootstrapClient, &pb.CreateBootstrapClientResponse{}); err != nil {
+		if err := s.client.CreateBootstrapClient(ctx, bootstrapClient, &pb.CreateBootstrapClientResponse{}); err != nil {
 			return err
 		}
 
-		if err := s.client.CallStreaming(ctx, "startVPN", &pb.StartVPNRequest{}, make(chan *pb.NetworkEvent)); err != nil {
+		if err := s.client.StartVPN(ctx, &pb.StartVPNRequest{}, make(chan *pb.NetworkEvent)); err != nil {
 			return err
 		}
 
@@ -89,7 +91,7 @@ func TestChat(t *testing.T) {
 	time.Sleep(time.Second)
 
 	bootstrapPeersRes := &pb.GetBootstrapPeersResponse{}
-	if err := b.client.CallUnary(ctx, "getBootstrapPeers", &pb.GetBootstrapPeersRequest{}, bootstrapPeersRes); err != nil {
+	if err := b.client.GetBootstrapPeers(ctx, &pb.GetBootstrapPeersRequest{}, bootstrapPeersRes); err != nil {
 		t.Error(err)
 	}
 
@@ -101,7 +103,7 @@ func TestChat(t *testing.T) {
 		Name: "test",
 	}
 	createNetworkRes := &pb.CreateNetworkResponse{}
-	if err := b.client.CallUnary(ctx, "createNetwork", createNetworkReq, createNetworkRes); err != nil {
+	if err := b.client.CreateNetwork(ctx, createNetworkReq, createNetworkRes); err != nil {
 		t.Error(err)
 	}
 
@@ -109,7 +111,7 @@ func TestChat(t *testing.T) {
 		HostId:  bootstrapPeersRes.Peers[0].HostId,
 		Network: createNetworkRes.Network,
 	}
-	if err := b.client.CallUnary(ctx, "publishNetworkToBootstrapPeer", publishReq, &pb.PublishNetworkToBootstrapPeerResponse{}); err != nil {
+	if err := b.client.PublishNetworkToBootstrapPeer(ctx, publishReq, &pb.PublishNetworkToBootstrapPeerResponse{}); err != nil {
 		t.Error(err)
 	}
 
@@ -119,7 +121,7 @@ func TestChat(t *testing.T) {
 		NetworkName: createNetworkRes.Network.Name,
 	}
 	invitationRes := &pb.CreateNetworkInvitationResponse{}
-	if err := b.client.CallUnary(ctx, "createNetworkInvitation", invitationReq, invitationRes); err != nil {
+	if err := b.client.CreateNetworkInvitation(ctx, invitationReq, invitationRes); err != nil {
 		t.Error(err)
 	}
 
@@ -128,7 +130,7 @@ func TestChat(t *testing.T) {
 			InvitationBytes: invitationRes.InvitationBytes,
 		},
 	}
-	if err := c.client.CallUnary(ctx, "createNetworkMembershipFromInvitation", createInvitationReq, &pb.CreateNetworkMembershipFromInvitationResponse{}); err != nil {
+	if err := c.client.CreateNetworkMembershipFromInvitation(ctx, createInvitationReq, &pb.CreateNetworkMembershipFromInvitationResponse{}); err != nil {
 		t.Error(err)
 	}
 
@@ -139,7 +141,7 @@ func TestChat(t *testing.T) {
 		},
 	}
 	createChatServerRes := &pb.CreateChatServerResponse{}
-	if err := c.client.CallUnary(ctx, "createChatServer", createChatServerReq, createChatServerRes); err != nil {
+	if err := c.client.CreateChatServer(ctx, createChatServerReq, createChatServerRes); err != nil {
 		t.Error(err)
 	}
 
@@ -147,7 +149,7 @@ func TestChat(t *testing.T) {
 		Server: createChatServerRes.ChatServer,
 	}
 	chatServerEvents := make(chan *pb.ChatServerEvent, 1)
-	if err := c.client.CallStreaming(ctx, "openChatServer", openChatServerReq, chatServerEvents); err != nil {
+	if err := c.client.OpenChatServer(ctx, openChatServerReq, chatServerEvents); err != nil {
 		t.Error(err)
 	}
 
@@ -164,7 +166,7 @@ func TestChat(t *testing.T) {
 		ServerKey:  createChatServerRes.ChatServer.Key.Public,
 	}
 	chatClientEvents := make(chan *pb.ChatClientEvent, 1)
-	if err := b.client.CallStreaming(ctx, "openChatClient", openChatClientReq, chatClientEvents); err != nil {
+	if err := b.client.OpenChatClient(ctx, openChatClientReq, chatClientEvents); err != nil {
 		t.Error(err)
 	}
 
@@ -183,7 +185,7 @@ func TestChat(t *testing.T) {
 						},
 					},
 				}
-				if err := b.client.Call(ctx, "callChatClient", callChatClientReq); err != nil {
+				if err := b.client.CallChatClient(ctx, callChatClientReq, &pb.CallChatClientResponse{}); err != nil {
 					t.Error(err)
 				}
 			case <-ctx.Done():

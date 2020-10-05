@@ -1,12 +1,8 @@
 #! /bin/bash
 
-SOURCES=""
-OUT=""
-for NEXT in "$@"
-do
-  SOURCES="$SOURCES $OUT"
-  OUT=$NEXT
-done
+OUT=$1
+shift
+SOURCES="$@"
 
 REORDER_FILE='
 {

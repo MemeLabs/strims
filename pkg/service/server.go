@@ -4,6 +4,7 @@ import (
 	"context"
 	"io"
 
+	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
@@ -25,13 +26,14 @@ func New(options Options) (*Server, error) {
 		return nil, err
 	}
 
-	svc := &Frontend{
+	host := rpc.NewHost(options.Logger)
+	api.RegisterFrontendRPCService(host, &Frontend{
 		logger:     options.Logger,
 		store:      options.Store,
 		metadata:   metadata,
 		vpnOptions: options.VPNOptions,
-	}
-	return &Server{rpc.NewHost(options.Logger, svc)}, nil
+	})
+	return &Server{host}, nil
 }
 
 // Server ...

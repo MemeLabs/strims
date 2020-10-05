@@ -7,17 +7,20 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
-		DAAA110C2500915B00925601 /* pub_sub.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAA11012500915B00925601 /* pub_sub.pb.swift */; };
-		DAAA110D2500915B00925601 /* rpc.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAA11022500915B00925601 /* rpc.pb.swift */; };
-		DAAA110E2500915B00925601 /* types.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAA11032500915B00925601 /* types.swift */; };
-		DAAA110F2500915B00925601 /* profile.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAA11042500915B00925601 /* profile.pb.swift */; };
-		DAAA11102500915B00925601 /* peer_index.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAA11052500915B00925601 /* peer_index.pb.swift */; };
-		DAAA11112500915B00925601 /* directory.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAA11062500915B00925601 /* directory.pb.swift */; };
-		DAAA11122500915B00925601 /* video.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAA11072500915B00925601 /* video.pb.swift */; };
-		DAAA11132500915B00925601 /* vpn.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAA11082500915B00925601 /* vpn.pb.swift */; };
-		DAAA11142500915B00925601 /* api.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAA11092500915B00925601 /* api.pb.swift */; };
-		DAAA11152500915B00925601 /* hash_table.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAA110A2500915B00925601 /* hash_table.pb.swift */; };
-		DAAA11162500915B00925601 /* chat.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAAA110B2500915B00925601 /* chat.pb.swift */; };
+		DA9DDC832529C66F00AA7833 /* RPCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC822529C66E00AA7833 /* RPCClient.swift */; };
+		DA9DDC862529C68500AA7833 /* FrontendRPCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC852529C68500AA7833 /* FrontendRPCClient.swift */; };
+		DA9DDC942529C83E00AA7833 /* api.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC882529C83D00AA7833 /* api.pb.swift */; };
+		DA9DDC952529C83E00AA7833 /* rpc.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC892529C83E00AA7833 /* rpc.pb.swift */; };
+		DA9DDC962529C83E00AA7833 /* hash_table.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC8A2529C83E00AA7833 /* hash_table.pb.swift */; };
+		DA9DDC972529C83E00AA7833 /* chat.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC8B2529C83E00AA7833 /* chat.pb.swift */; };
+		DA9DDC982529C83E00AA7833 /* peer_index.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC8C2529C83E00AA7833 /* peer_index.pb.swift */; };
+		DA9DDC992529C83E00AA7833 /* profile.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC8D2529C83E00AA7833 /* profile.pb.swift */; };
+		DA9DDC9A2529C83E00AA7833 /* pub_sub.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC8E2529C83E00AA7833 /* pub_sub.pb.swift */; };
+		DA9DDC9B2529C83E00AA7833 /* nickserv.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC8F2529C83E00AA7833 /* nickserv.pb.swift */; };
+		DA9DDC9C2529C83E00AA7833 /* directory.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC902529C83E00AA7833 /* directory.pb.swift */; };
+		DA9DDC9D2529C83E00AA7833 /* video.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC912529C83E00AA7833 /* video.pb.swift */; };
+		DA9DDC9E2529C83E00AA7833 /* types.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC922529C83E00AA7833 /* types.swift */; };
+		DA9DDC9F2529C83E00AA7833 /* vpn.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DA9DDC932529C83E00AA7833 /* vpn.pb.swift */; };
 		DAF0EBED24F3505D00646F22 /* .swift-format in Resources */ = {isa = PBXBuildFile; fileRef = DAF0EBEC24F3505D00646F22 /* .swift-format */; };
 		DAF7E56D24EF8291009443E9 /* AppDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF7E56C24EF8291009443E9 /* AppDelegate.swift */; };
 		DAF7E56F24EF8291009443E9 /* SceneDelegate.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF7E56E24EF8291009443E9 /* SceneDelegate.swift */; };
@@ -29,26 +32,24 @@
 		DAF7E58424EF84D4009443E9 /* Bridge.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = DAF7E58324EF84D4009443E9 /* Bridge.framework */; };
 		DAF7E58624EF856D009443E9 /* SwiftBridge.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF7E58524EF856D009443E9 /* SwiftBridge.swift */; };
 		DAF7E58924EF8CD6009443E9 /* SwiftProtobuf in Frameworks */ = {isa = PBXBuildFile; productRef = DAF7E58824EF8CD6009443E9 /* SwiftProtobuf */; };
-		DAF7E58E24EF97AF009443E9 /* api.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF7E58D24EF97AF009443E9 /* api.pb.swift */; };
-		DAF7E58F24EF97AF009443E9 /* rpc.pb.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF7E58C24EF97AF009443E9 /* rpc.pb.swift */; };
-		DAF7E59324F0309A009443E9 /* types.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF7E59224F0309A009443E9 /* types.swift */; };
 		DAF7E59624F05A25009443E9 /* PromiseKit in Frameworks */ = {isa = PBXBuildFile; productRef = DAF7E59524F05A25009443E9 /* PromiseKit */; };
-		DAF7E59824F1981B009443E9 /* RPCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF7E59724F1981A009443E9 /* RPCClient.swift */; };
-		DAF7E59A24F198C6009443E9 /* FrontendRPCClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = DAF7E59924F198C6009443E9 /* FrontendRPCClient.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		DAAA11012500915B00925601 /* pub_sub.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = pub_sub.pb.swift; sourceTree = "<group>"; };
-		DAAA11022500915B00925601 /* rpc.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = rpc.pb.swift; sourceTree = "<group>"; };
-		DAAA11032500915B00925601 /* types.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = types.swift; sourceTree = "<group>"; };
-		DAAA11042500915B00925601 /* profile.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = profile.pb.swift; sourceTree = "<group>"; };
-		DAAA11052500915B00925601 /* peer_index.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = peer_index.pb.swift; sourceTree = "<group>"; };
-		DAAA11062500915B00925601 /* directory.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = directory.pb.swift; sourceTree = "<group>"; };
-		DAAA11072500915B00925601 /* video.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = video.pb.swift; sourceTree = "<group>"; };
-		DAAA11082500915B00925601 /* vpn.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = vpn.pb.swift; sourceTree = "<group>"; };
-		DAAA11092500915B00925601 /* api.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = api.pb.swift; sourceTree = "<group>"; };
-		DAAA110A2500915B00925601 /* hash_table.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = hash_table.pb.swift; sourceTree = "<group>"; };
-		DAAA110B2500915B00925601 /* chat.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = chat.pb.swift; sourceTree = "<group>"; };
+		DA9DDC822529C66E00AA7833 /* RPCClient.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = RPCClient.swift; sourceTree = "<group>"; };
+		DA9DDC852529C68500AA7833 /* FrontendRPCClient.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = FrontendRPCClient.swift; sourceTree = "<group>"; };
+		DA9DDC882529C83D00AA7833 /* api.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = api.pb.swift; sourceTree = "<group>"; };
+		DA9DDC892529C83E00AA7833 /* rpc.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = rpc.pb.swift; sourceTree = "<group>"; };
+		DA9DDC8A2529C83E00AA7833 /* hash_table.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = hash_table.pb.swift; sourceTree = "<group>"; };
+		DA9DDC8B2529C83E00AA7833 /* chat.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = chat.pb.swift; sourceTree = "<group>"; };
+		DA9DDC8C2529C83E00AA7833 /* peer_index.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = peer_index.pb.swift; sourceTree = "<group>"; };
+		DA9DDC8D2529C83E00AA7833 /* profile.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = profile.pb.swift; sourceTree = "<group>"; };
+		DA9DDC8E2529C83E00AA7833 /* pub_sub.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = pub_sub.pb.swift; sourceTree = "<group>"; };
+		DA9DDC8F2529C83E00AA7833 /* nickserv.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = nickserv.pb.swift; sourceTree = "<group>"; };
+		DA9DDC902529C83E00AA7833 /* directory.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = directory.pb.swift; sourceTree = "<group>"; };
+		DA9DDC912529C83E00AA7833 /* video.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = video.pb.swift; sourceTree = "<group>"; };
+		DA9DDC922529C83E00AA7833 /* types.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = types.swift; sourceTree = "<group>"; };
+		DA9DDC932529C83E00AA7833 /* vpn.pb.swift */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.swift; path = vpn.pb.swift; sourceTree = "<group>"; };
 		DAF0EBEC24F3505D00646F22 /* .swift-format */ = {isa = PBXFileReference; lastKnownFileType = text; path = ".swift-format"; sourceTree = "<group>"; };
 		DAF7E56924EF8291009443E9 /* App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = App.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		DAF7E56C24EF8291009443E9 /* AppDelegate.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppDelegate.swift; sourceTree = "<group>"; };
@@ -61,11 +62,6 @@
 		DAF7E57D24EF8293009443E9 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		DAF7E58324EF84D4009443E9 /* Bridge.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; path = Bridge.framework; sourceTree = "<group>"; };
 		DAF7E58524EF856D009443E9 /* SwiftBridge.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SwiftBridge.swift; sourceTree = "<group>"; };
-		DAF7E58C24EF97AF009443E9 /* rpc.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = rpc.pb.swift; sourceTree = "<group>"; };
-		DAF7E58D24EF97AF009443E9 /* api.pb.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = api.pb.swift; sourceTree = "<group>"; };
-		DAF7E59224F0309A009443E9 /* types.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = types.swift; sourceTree = "<group>"; };
-		DAF7E59724F1981A009443E9 /* RPCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RPCClient.swift; sourceTree = "<group>"; };
-		DAF7E59924F198C6009443E9 /* FrontendRPCClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = FrontendRPCClient.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -82,6 +78,42 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		DA9DDC812529C66E00AA7833 /* RPC */ = {
+			isa = PBXGroup;
+			children = (
+				DA9DDC822529C66E00AA7833 /* RPCClient.swift */,
+			);
+			path = RPC;
+			sourceTree = "<group>";
+		};
+		DA9DDC842529C68500AA7833 /* API */ = {
+			isa = PBXGroup;
+			children = (
+				DA9DDC852529C68500AA7833 /* FrontendRPCClient.swift */,
+			);
+			path = API;
+			sourceTree = "<group>";
+		};
+		DA9DDC872529C83D00AA7833 /* ProtoBuf */ = {
+			isa = PBXGroup;
+			children = (
+				DA9DDC882529C83D00AA7833 /* api.pb.swift */,
+				DA9DDC892529C83E00AA7833 /* rpc.pb.swift */,
+				DA9DDC8A2529C83E00AA7833 /* hash_table.pb.swift */,
+				DA9DDC8B2529C83E00AA7833 /* chat.pb.swift */,
+				DA9DDC8C2529C83E00AA7833 /* peer_index.pb.swift */,
+				DA9DDC8D2529C83E00AA7833 /* profile.pb.swift */,
+				DA9DDC8E2529C83E00AA7833 /* pub_sub.pb.swift */,
+				DA9DDC8F2529C83E00AA7833 /* nickserv.pb.swift */,
+				DA9DDC902529C83E00AA7833 /* directory.pb.swift */,
+				DA9DDC912529C83E00AA7833 /* video.pb.swift */,
+				DA9DDC922529C83E00AA7833 /* types.swift */,
+				DA9DDC932529C83E00AA7833 /* vpn.pb.swift */,
+			);
+			name = ProtoBuf;
+			path = App/ProtoBuf;
+			sourceTree = SOURCE_ROOT;
+		};
 		DAF7E56024EF8291009443E9 = {
 			isa = PBXGroup;
 			children = (
@@ -105,18 +137,18 @@
 		DAF7E56B24EF8291009443E9 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				DA9DDC842529C68500AA7833 /* API */,
+				DAF7E57024EF8291009443E9 /* App.xcdatamodeld */,
 				DAF7E56C24EF8291009443E9 /* AppDelegate.swift */,
 				DAF7E57524EF8293009443E9 /* Assets.xcassets */,
 				DAF7E57324EF8291009443E9 /* ContentView.swift */,
 				DAF7E57D24EF8293009443E9 /* Info.plist */,
 				DAF7E57A24EF8293009443E9 /* LaunchScreen.storyboard */,
 				DAF7E57724EF8293009443E9 /* Preview Content */,
+				DA9DDC872529C83D00AA7833 /* ProtoBuf */,
+				DA9DDC812529C66E00AA7833 /* RPC */,
 				DAF7E56E24EF8291009443E9 /* SceneDelegate.swift */,
-				DAF7E59124EF9821009443E9 /* ProtoBuf */,
-				DAF7E57024EF8291009443E9 /* App.xcdatamodeld */,
 				DAF7E58524EF856D009443E9 /* SwiftBridge.swift */,
-				DAF7E59724F1981A009443E9 /* RPCClient.swift */,
-				DAF7E59924F198C6009443E9 /* FrontendRPCClient.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -127,27 +159,6 @@
 				DAF7E57824EF8293009443E9 /* Preview Assets.xcassets */,
 			);
 			path = "Preview Content";
-			sourceTree = "<group>";
-		};
-		DAF7E59124EF9821009443E9 /* ProtoBuf */ = {
-			isa = PBXGroup;
-			children = (
-				DAAA11092500915B00925601 /* api.pb.swift */,
-				DAAA110B2500915B00925601 /* chat.pb.swift */,
-				DAAA11062500915B00925601 /* directory.pb.swift */,
-				DAAA110A2500915B00925601 /* hash_table.pb.swift */,
-				DAAA11052500915B00925601 /* peer_index.pb.swift */,
-				DAAA11042500915B00925601 /* profile.pb.swift */,
-				DAAA11012500915B00925601 /* pub_sub.pb.swift */,
-				DAAA11022500915B00925601 /* rpc.pb.swift */,
-				DAAA11032500915B00925601 /* types.swift */,
-				DAAA11072500915B00925601 /* video.pb.swift */,
-				DAAA11082500915B00925601 /* vpn.pb.swift */,
-				DAF7E58D24EF97AF009443E9 /* api.pb.swift */,
-				DAF7E58C24EF97AF009443E9 /* rpc.pb.swift */,
-				DAF7E59224F0309A009443E9 /* types.swift */,
-			);
-			path = ProtoBuf;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -251,27 +262,25 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				DAAA110F2500915B00925601 /* profile.pb.swift in Sources */,
-				DAAA110C2500915B00925601 /* pub_sub.pb.swift in Sources */,
-				DAAA11112500915B00925601 /* directory.pb.swift in Sources */,
-				DAF7E59324F0309A009443E9 /* types.swift in Sources */,
-				DAF7E58F24EF97AF009443E9 /* rpc.pb.swift in Sources */,
-				DAAA11152500915B00925601 /* hash_table.pb.swift in Sources */,
-				DAF7E59A24F198C6009443E9 /* FrontendRPCClient.swift in Sources */,
+				DA9DDC9F2529C83E00AA7833 /* vpn.pb.swift in Sources */,
+				DA9DDC962529C83E00AA7833 /* hash_table.pb.swift in Sources */,
 				DAF7E56D24EF8291009443E9 /* AppDelegate.swift in Sources */,
-				DAAA11132500915B00925601 /* vpn.pb.swift in Sources */,
-				DAAA11162500915B00925601 /* chat.pb.swift in Sources */,
-				DAF7E58E24EF97AF009443E9 /* api.pb.swift in Sources */,
-				DAAA110E2500915B00925601 /* types.swift in Sources */,
+				DA9DDC992529C83E00AA7833 /* profile.pb.swift in Sources */,
+				DA9DDC9A2529C83E00AA7833 /* pub_sub.pb.swift in Sources */,
+				DA9DDC862529C68500AA7833 /* FrontendRPCClient.swift in Sources */,
+				DA9DDC9C2529C83E00AA7833 /* directory.pb.swift in Sources */,
 				DAF7E57224EF8291009443E9 /* App.xcdatamodeld in Sources */,
-				DAAA11122500915B00925601 /* video.pb.swift in Sources */,
+				DA9DDC9B2529C83E00AA7833 /* nickserv.pb.swift in Sources */,
+				DA9DDC942529C83E00AA7833 /* api.pb.swift in Sources */,
+				DA9DDC9D2529C83E00AA7833 /* video.pb.swift in Sources */,
 				DAF7E57424EF8291009443E9 /* ContentView.swift in Sources */,
-				DAAA110D2500915B00925601 /* rpc.pb.swift in Sources */,
+				DA9DDC972529C83E00AA7833 /* chat.pb.swift in Sources */,
+				DA9DDC982529C83E00AA7833 /* peer_index.pb.swift in Sources */,
 				DAF7E56F24EF8291009443E9 /* SceneDelegate.swift in Sources */,
-				DAAA11142500915B00925601 /* api.pb.swift in Sources */,
-				DAAA11102500915B00925601 /* peer_index.pb.swift in Sources */,
+				DA9DDC9E2529C83E00AA7833 /* types.swift in Sources */,
 				DAF7E58624EF856D009443E9 /* SwiftBridge.swift in Sources */,
-				DAF7E59824F1981B009443E9 /* RPCClient.swift in Sources */,
+				DA9DDC832529C66F00AA7833 /* RPCClient.swift in Sources */,
+				DA9DDC952529C83E00AA7833 /* rpc.pb.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
