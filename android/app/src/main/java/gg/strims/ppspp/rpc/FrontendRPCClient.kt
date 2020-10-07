@@ -1,117 +1,117 @@
 package gg.strims.ppspp.rpc
 import gg.strims.ppspp.proto.*
-import java.util.concurrent.Future
+import com.squareup.wire.Message
 
 class FrontendRPCClient(filepath: String) : RPCClient(filepath) {
 
     fun createProfile(
         arg: CreateProfileRequest = CreateProfileRequest()
-    ): Future<CreateProfileResponse> =
+    ): Message<CreateProfileResponse, *>? =
         this.callUnary("FrontendRPC/CreateProfile", arg)
 
     fun loadProfile(
         arg: LoadProfileRequest = LoadProfileRequest()
-    ): Future<LoadProfileResponse> =
+    ): Message<LoadProfileResponse, *>? =
         this.callUnary("FrontendRPC/LoadProfile", arg)
 
     fun getProfile(
         arg: GetProfileRequest = GetProfileRequest()
-    ): Future<GetProfileResponse> =
+    ): Message<GetProfileResponse, *>? =
         this.callUnary("FrontendRPC/GetProfile", arg)
 
     fun deleteProfile(
         arg: DeleteProfileRequest = DeleteProfileRequest()
-    ): Future<DeleteProfileResponse> =
+    ): Message<DeleteProfileResponse, *>? =
         this.callUnary("FrontendRPC/DeleteProfile", arg)
 
     fun getProfiles(
         arg: GetProfilesRequest = GetProfilesRequest()
-    ): Future<GetProfilesResponse> =
+    ): Message<GetProfilesResponse, *>? =
         this.callUnary("FrontendRPC/GetProfiles", arg)
 
     fun loadSession(
         arg: LoadSessionRequest = LoadSessionRequest()
-    ): Future<LoadSessionResponse> =
+    ): Message<LoadSessionResponse, *>? =
         this.callUnary("FrontendRPC/LoadSession", arg)
 
     fun createNetwork(
         arg: CreateNetworkRequest = CreateNetworkRequest()
-    ): Future<CreateNetworkResponse> =
+    ): Message<CreateNetworkResponse, *>? =
         this.callUnary("FrontendRPC/CreateNetwork", arg)
 
     fun deleteNetwork(
         arg: DeleteNetworkRequest = DeleteNetworkRequest()
-    ): Future<DeleteNetworkResponse> =
+    ): Message<DeleteNetworkResponse, *>? =
         this.callUnary("FrontendRPC/DeleteNetwork", arg)
 
     fun getNetwork(
         arg: GetNetworkRequest = GetNetworkRequest()
-    ): Future<GetNetworkResponse> =
+    ): Message<GetNetworkResponse, *>? =
         this.callUnary("FrontendRPC/GetNetwork", arg)
 
     fun getNetworks(
         arg: GetNetworksRequest = GetNetworksRequest()
-    ): Future<GetNetworksResponse> =
+    ): Message<GetNetworksResponse, *>? =
         this.callUnary("FrontendRPC/GetNetworks", arg)
 
     fun getNetworkMemberships(
         arg: GetNetworkMembershipsRequest = GetNetworkMembershipsRequest()
-    ): Future<GetNetworkMembershipsResponse> =
+    ): Message<GetNetworkMembershipsResponse, *>? =
         this.callUnary("FrontendRPC/GetNetworkMemberships", arg)
 
     fun deleteNetworkMembership(
         arg: DeleteNetworkMembershipRequest = DeleteNetworkMembershipRequest()
-    ): Future<DeleteNetworkMembershipResponse> =
+    ): Message<DeleteNetworkMembershipResponse, *>? =
         this.callUnary("FrontendRPC/DeleteNetworkMembership", arg)
 
     fun createBootstrapClient(
         arg: CreateBootstrapClientRequest = CreateBootstrapClientRequest()
-    ): Future<CreateBootstrapClientResponse> =
+    ): Message<CreateBootstrapClientResponse, *>? =
         this.callUnary("FrontendRPC/CreateBootstrapClient", arg)
 
     fun updateBootstrapClient(
         arg: UpdateBootstrapClientRequest = UpdateBootstrapClientRequest()
-    ): Future<UpdateBootstrapClientResponse> =
+    ): Message<UpdateBootstrapClientResponse, *>? =
         this.callUnary("FrontendRPC/UpdateBootstrapClient", arg)
 
     fun deleteBootstrapClient(
         arg: DeleteBootstrapClientRequest = DeleteBootstrapClientRequest()
-    ): Future<DeleteBootstrapClientResponse> =
+    ): Message<DeleteBootstrapClientResponse, *>? =
         this.callUnary("FrontendRPC/DeleteBootstrapClient", arg)
 
     fun getBootstrapClient(
         arg: GetBootstrapClientRequest = GetBootstrapClientRequest()
-    ): Future<GetBootstrapClientResponse> =
+    ): Message<GetBootstrapClientResponse, *>? =
         this.callUnary("FrontendRPC/GetBootstrapClient", arg)
 
     fun getBootstrapClients(
         arg: GetBootstrapClientsRequest = GetBootstrapClientsRequest()
-    ): Future<GetBootstrapClientsResponse> =
+    ): Message<GetBootstrapClientsResponse, *>? =
         this.callUnary("FrontendRPC/GetBootstrapClients", arg)
 
     fun createChatServer(
         arg: CreateChatServerRequest = CreateChatServerRequest()
-    ): Future<CreateChatServerResponse> =
+    ): Message<CreateChatServerResponse, *>? =
         this.callUnary("FrontendRPC/CreateChatServer", arg)
 
     fun updateChatServer(
         arg: UpdateChatServerRequest = UpdateChatServerRequest()
-    ): Future<UpdateChatServerResponse> =
+    ): Message<UpdateChatServerResponse, *>? =
         this.callUnary("FrontendRPC/UpdateChatServer", arg)
 
     fun deleteChatServer(
         arg: DeleteChatServerRequest = DeleteChatServerRequest()
-    ): Future<DeleteChatServerResponse> =
+    ): Message<DeleteChatServerResponse, *>? =
         this.callUnary("FrontendRPC/DeleteChatServer", arg)
 
     fun getChatServer(
         arg: GetChatServerRequest = GetChatServerRequest()
-    ): Future<GetChatServerResponse> =
+    ): Message<GetChatServerResponse, *>? =
         this.callUnary("FrontendRPC/GetChatServer", arg)
 
     fun getChatServers(
         arg: GetChatServersRequest = GetChatServersRequest()
-    ): Future<GetChatServersResponse> =
+    ): Message<GetChatServersResponse, *>? =
         this.callUnary("FrontendRPC/GetChatServers", arg)
 
     fun startVPN(
@@ -121,42 +121,42 @@ class FrontendRPCClient(filepath: String) : RPCClient(filepath) {
 
     fun stopVPN(
         arg: StopVPNRequest = StopVPNRequest()
-    ): Future<StopVPNResponse> =
+    ): Message<StopVPNResponse, *>? =
         this.callUnary("FrontendRPC/StopVPN", arg)
 
     fun joinSwarm(
         arg: JoinSwarmRequest = JoinSwarmRequest()
-    ): Future<JoinSwarmResponse> =
+    ): Message<JoinSwarmResponse, *>? =
         this.callUnary("FrontendRPC/JoinSwarm", arg)
 
     fun leaveSwarm(
         arg: LeaveSwarmRequest = LeaveSwarmRequest()
-    ): Future<LeaveSwarmResponse> =
+    ): Message<LeaveSwarmResponse, *>? =
         this.callUnary("FrontendRPC/LeaveSwarm", arg)
 
     fun startRTMPIngress(
         arg: StartRTMPIngressRequest = StartRTMPIngressRequest()
-    ): Future<StartRTMPIngressResponse> =
+    ): Message<StartRTMPIngressResponse, *>? =
         this.callUnary("FrontendRPC/StartRTMPIngress", arg)
 
     fun startHLSEgress(
         arg: StartHLSEgressRequest = StartHLSEgressRequest()
-    ): Future<StartHLSEgressResponse> =
+    ): Message<StartHLSEgressResponse, *>? =
         this.callUnary("FrontendRPC/StartHLSEgress", arg)
 
     fun stopHLSEgress(
         arg: StopHLSEgressRequest = StopHLSEgressRequest()
-    ): Future<StopHLSEgressResponse> =
+    ): Message<StopHLSEgressResponse, *>? =
         this.callUnary("FrontendRPC/StopHLSEgress", arg)
 
     fun publishSwarm(
         arg: PublishSwarmRequest = PublishSwarmRequest()
-    ): Future<PublishSwarmResponse> =
+    ): Message<PublishSwarmResponse, *>? =
         this.callUnary("FrontendRPC/PublishSwarm", arg)
 
     fun pProf(
         arg: PProfRequest = PProfRequest()
-    ): Future<PProfResponse> =
+    ): Message<PProfResponse, *>? =
         this.callUnary("FrontendRPC/PProf", arg)
 
     fun openChatServer(
@@ -171,7 +171,7 @@ class FrontendRPCClient(filepath: String) : RPCClient(filepath) {
 
     fun callChatClient(
         arg: CallChatClientRequest = CallChatClientRequest()
-    ): Future<CallChatClientResponse> =
+    ): Message<CallChatClientResponse, *>? =
         this.callUnary("FrontendRPC/CallChatClient", arg)
 
     fun openVideoClient(
@@ -181,37 +181,37 @@ class FrontendRPCClient(filepath: String) : RPCClient(filepath) {
 
     fun openVideoServer(
         arg: VideoServerOpenRequest = VideoServerOpenRequest()
-    ): Future<VideoServerOpenResponse> =
+    ): Message<VideoServerOpenResponse, *>? =
         this.callUnary("FrontendRPC/OpenVideoServer", arg)
 
     fun writeToVideoServer(
         arg: VideoServerWriteRequest = VideoServerWriteRequest()
-    ): Future<VideoServerWriteResponse> =
+    ): Message<VideoServerWriteResponse, *>? =
         this.callUnary("FrontendRPC/WriteToVideoServer", arg)
 
     fun readMetrics(
         arg: ReadMetricsRequest = ReadMetricsRequest()
-    ): Future<ReadMetricsResponse> =
+    ): Message<ReadMetricsResponse, *>? =
         this.callUnary("FrontendRPC/ReadMetrics", arg)
 
     fun createNetworkInvitation(
         arg: CreateNetworkInvitationRequest = CreateNetworkInvitationRequest()
-    ): Future<CreateNetworkInvitationResponse> =
+    ): Message<CreateNetworkInvitationResponse, *>? =
         this.callUnary("FrontendRPC/CreateNetworkInvitation", arg)
 
     fun createNetworkMembershipFromInvitation(
         arg: CreateNetworkMembershipFromInvitationRequest = CreateNetworkMembershipFromInvitationRequest()
-    ): Future<CreateNetworkMembershipFromInvitationResponse> =
+    ): Message<CreateNetworkMembershipFromInvitationResponse, *>? =
         this.callUnary("FrontendRPC/CreateNetworkMembershipFromInvitation", arg)
 
     fun getBootstrapPeers(
         arg: GetBootstrapPeersRequest = GetBootstrapPeersRequest()
-    ): Future<GetBootstrapPeersResponse> =
+    ): Message<GetBootstrapPeersResponse, *>? =
         this.callUnary("FrontendRPC/GetBootstrapPeers", arg)
 
     fun publishNetworkToBootstrapPeer(
         arg: PublishNetworkToBootstrapPeerRequest = PublishNetworkToBootstrapPeerRequest()
-    ): Future<PublishNetworkToBootstrapPeerResponse> =
+    ): Message<PublishNetworkToBootstrapPeerResponse, *>? =
         this.callUnary("FrontendRPC/PublishNetworkToBootstrapPeer", arg)
 
 }

@@ -80,14 +80,14 @@ class MainActivity : AppCompatActivity() {
         try {
             val resp = this.createProfile(
                 CreateProfileRequest(name = username, password = password)
-            ).get()!!
-            Log.i(TAG, "profile: ${resp.profile}")
+            )
+            Log.i(TAG, "profile: ${resp?.withoutUnknownFields()}")
         } catch (e: Exception) {
             Log.e(TAG, "creating profile failed: $e")
         }
 
     fun FrontendRPCClient.handleLogin(username: String, password: String): Any = try {
-        val profilesResp = this.getProfiles(GetProfilesRequest()).get()!!
+        val profilesResp = this.getProfiles(GetProfilesRequest())!!.withoutUnknownFields()
         try {
             val profileResp = this.loadProfile(
                 LoadProfileRequest(
@@ -96,7 +96,7 @@ class MainActivity : AppCompatActivity() {
                         .map { p -> p.id }
                         .first()),
                     name = username, password = password)
-            ).get()!!
+            )!!.withoutUnknownFields()
             Log.i(TAG, "logged in: ${profileResp.profile}")
         } catch (e: Exception) {
             Log.e(TAG, "loading profile failed: $e")
@@ -113,7 +113,7 @@ class MainActivity : AppCompatActivity() {
                     insecure_skip_verify_tls = true
                 )
             )
-        ).get()!!
+        )!!.withoutUnknownFields()
         Log.i(TAG, "bootstrap client: ${resp.bootstrap_client}")
     } catch (e: Exception) {
         Log.e(TAG, "creating bootstrap client failed", e)
@@ -122,14 +122,14 @@ class MainActivity : AppCompatActivity() {
     private fun FrontendRPCClient.handleLoadInviteCert(cert: String): Any = try {
         val resp = this.createNetworkMembershipFromInvitation(
             CreateNetworkMembershipFromInvitationRequest(invitation_b64 = cert)
-        ).get()!!
+        )!!.withoutUnknownFields()
         Log.i(TAG, "membership: ${resp.membership}")
     } catch (e: Exception) {
         Log.e(TAG, "creating network failed: $e")
     }
 
     private fun FrontendRPCClient.handleCreateNetwork(): Any = try {
-        val resp = this.createNetwork(CreateNetworkRequest(name = "test")).get()!!
+        val resp = this.createNetwork(CreateNetworkRequest(name = "test"))!!.withoutUnknownFields()
         Log.i(TAG, "network: ${resp.network}")
     } catch (e: Exception) {
         Log.e(TAG, "creating network failed: $e")
@@ -160,18 +160,18 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun FrontendRPCClient.publishSwarm(id: Long) = try {
-        val memberships = this.getNetworkMemberships().get()!!
+        val memberships = this.getNetworkMemberships()!!.withoutUnknownFields()
         memberships.network_memberships.map {
             this.publishSwarm(
                 PublishSwarmRequest(id = id, network_key = rootCert(it.certificate!!).key)
-            ).get()!!
+            )!!.withoutUnknownFields()
         }
     } catch (e: Exception) {
         Log.e(TAG, "publishing swarm failed: $e")
     }
 
     fun FrontendRPCClient.startHLSEgress(id: Long) = try {
-        val resp = this.startHLSEgress(StartHLSEgressRequest(video_id = id)).get()!!
+        val resp = this.startHLSEgress(StartHLSEgressRequest(video_id = id))!!.withoutUnknownFields()
 
         // TODO: we need to pause until the first chunk loads
         runBlocking {
