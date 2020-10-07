@@ -6,16 +6,18 @@ import gg.strims.ppspp.proto.Call
 import gg.strims.ppspp.proto.Cancel
 import gg.strims.ppspp.proto.Close
 import gg.strims.ppspp.proto.Error
-import kotlinx.coroutines.*
 import okio.buffer
 import okio.sink
 import okio.source
 import java.io.ByteArrayOutputStream
 import java.util.*
-import java.util.concurrent.ExecutorService
-import java.util.concurrent.Executors
+import java.util.concurrent.*
+import java.util.concurrent.atomic.AtomicLong
+import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.ConcurrentMap
 import kotlin.concurrent.timerTask
-import kotlin.coroutines.CoroutineContext
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 import kotlin.coroutines.suspendCoroutine
 
 class RPCClientError(message: String?) : Exception(message)
@@ -43,12 +45,9 @@ open class RPCClient(filepath: String) {
 
     val executor: ExecutorService = Executors.newCachedThreadPool()
 
-    private var nextCallID: Long = 0
-    var callbacks: MutableMap<Long, (Call) -> Unit> = mutableMapOf()
+    private var nextCallID: AtomicLong = AtomicLong(0)
+    var callbacks: ConcurrentMap<Long, (Call) -> Unit> = ConcurrentHashMap()
     private var g: AndroidBridge = AndroidBridge(filepath)
-    private var parentJob = Job()
-    private val coroutineContext: CoroutineContext get() = parentJob + Dispatchers.Main
-    val scope = CoroutineScope(coroutineContext)
 
     init {
         this.g.onData = { b: ByteArray? -> this.handleCallback(b) }
@@ -71,10 +70,7 @@ open class RPCClient(filepath: String) {
         }
     }
 
-    fun getNextCallID(): Long {
-        this.nextCallID += 1
-        return this.nextCallID
-    }
+    fun getNextCallID(): Long = this.nextCallID.incrementAndGet()
 
     fun typeName(typeUrl: String?): String? = typeUrl?.substringAfter("/")
 
@@ -153,60 +149,50 @@ open class RPCClient(filepath: String) {
         return stream
     }
 
-    //inline fun <T : Message<T, *>, reified R : Message<R, *>> callUnary(method: String, arg: T): Future<R> {
-    inline fun <T : Message<T, *>, reified R : Message<R, *>> callUnary(method: String, arg: T): R? {
+    suspend inline fun <T : Message<T, *>, reified R : Message<R, *>> callUnary(method: String, arg: T): R = suspendCoroutine { cont ->
         val callId = getNextCallID()
+
+        // set timeout
         val timer = Timer()
-        var result: R? = null
-        var ex: Throwable? = null
-        scope.async(Dispatchers.IO) {
-            timer.schedule(timerTask {
-                callbacks.remove(callId)
-                ex = RPCClientError("call timeout")
-                scope.cancel("call timeout", RPCClientError("call timeout"))
-            }, 5L * 1000) // five seconds
+        timer.schedule(timerTask {
+            callbacks.remove(callId)
+            cont.resumeWithException(RPCClientError("call timeout"))
+        }, 5L * 1000) // five seconds
 
-            Log.i(TAG, "creating callback")
-            callbacks[callId] = {
-                Log.i(TAG, "in callback")
-                callbacks.remove(callId)
-                val adapter = ProtoAdapter.get(R::class.java)
-                try {
-                    when (typeName(it.argument?.typeUrl)) {
-                        typeName(adapter.typeUrl) -> {
-                            result = adapter.decode(it.argument?.value!!)
-                        }
-                        typeName(Error.ADAPTER.typeUrl) -> {
-                            ex = RPCClientError(Error.ADAPTER.decode(it.argument?.value!!).message)
-                        }
-                        else -> {
-                            ex = RPCClientError("unexpected response type ${it.argument?.typeUrl}")
-                        }
-                    }
-                } catch (e: Exception) {
-                    ex = RPCClientError("response decoding failed ${e.toString()}")
-                }
+        // prepare callback
+        Log.i(TAG, "creating callback")
+        callbacks[callId] = {
+            Log.i(TAG, "in callback")
+            callbacks.remove(callId)
+            timer.cancel()
 
-                Log.i(TAG, "argument ${R::class.toString()}: ${result.toString()}")
-                Log.i(TAG, ex.toString())
-            }
-            Log.i(TAG, "created callback")
-            // call method
+            val adapter = ProtoAdapter.get(R::class.java)
             try {
-                Log.i(TAG, "executing call")
-                call(method, arg, callId)
-                Log.i(TAG, "executed call")
+                when (typeName(it.argument?.typeUrl)) {
+                    typeName(adapter.typeUrl) -> {
+                        cont.resume(adapter.decode(it.argument?.value!!))
+                    }
+                    typeName(Error.ADAPTER.typeUrl) -> {
+                        cont.resumeWithException(RPCClientError(Error.ADAPTER.decode(it.argument?.value!!).message))
+                    }
+                    else -> {
+                        cont.resumeWithException(RPCClientError("unexpected response type ${it.argument?.typeUrl}"))
+                    }
+                }
             } catch (e: Exception) {
-                Log.e(TAG, "got error", e)
-                callbacks.remove(callId)
-                throw e
+                cont.resumeWithException(e)
             }
-
-            if (ex != null) {
-                throw ex as Throwable
-            }
-            return@async result
         }
-        return result
+
+        // call method
+        try {
+            Log.i(TAG, "executing call")
+            call(method, arg, callId)
+            Log.i(TAG, "executed call")
+        } catch (e: Exception) {
+            Log.e(TAG, "got error", e)
+            callbacks.remove(callId)
+            throw e
+        }
     }
 }

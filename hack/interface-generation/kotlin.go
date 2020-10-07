@@ -20,9 +20,9 @@ import com.squareup.wire.Message
 
 class {{.Name}}Client(filepath: String) : RPCClient(filepath) {
 {{range .Elements}}
-    fun {{.Name | ToCamel}}(
+    suspend fun {{.Name | ToCamel}}(
         arg: {{.RequestType}} = {{.RequestType}}()
-    ): {{if .StreamsReturns}}RPCResponseStream{{else}}Message{{end}}<{{.ReturnsType}}{{if.StreamsReturns}}>{{else}}, *>?{{end}} =
+    ): {{if .StreamsReturns}}RPCResponseStream<{{.ReturnsType}}>{{else}}{{.ReturnsType}}{{end}} =
         this.{{if .StreamsReturns}}callStreaming{{else}}callUnary{{end}}("{{$.Name}}/{{.Name | ToPascal}}", arg)
 {{end}}
 }
