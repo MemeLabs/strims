@@ -40,6 +40,8 @@ import gg.strims.ppspp.ui.PpsppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
+import okio.ByteString
+import okio.ByteString.Companion.decodeBase64
 
 private const val TAG = "ppspp"
 
@@ -196,9 +198,11 @@ class MainViewModel: ViewModel() {
         }
     }
 
-    fun joinVideoSwarm() {
+    fun joinVideoSwarm(swarmKey: ByteString) {
         viewModelScope.launch {
-            val videoClient = client.openVideoClient(VideoClientOpenRequest())
+            val videoClient = client.openVideoClient(VideoClientOpenRequest(
+                swarm_key = swarmKey,
+            ))
             videoClient.delegate = { event: VideoClientEvent?, eventType: RPCEvent ->
                 Log.i(TAG, eventType.toString())
                 when (eventType) {
@@ -302,7 +306,7 @@ fun MockButtons() {
         MockButton("Load invite cert") { viewModel.loadInviteCert("EoADCmYIARJA2Ya1yMkBA9TAmwNYL1A/hK9UV835MNas/DWQ1Tqi9DtJ2j219XLJ6OQQWAU5bit/BNNAo7md2mBESeVEgymMnxogSdo9tfVyyejkEFgFOW4rfwTTQKO5ndpgREnlRIMpjJ8SjwIKIEnaPbX1csno5BBYBTluK38E00CjuZ3aYERJ5USDKYyfEAEYBiDiwvn7BSjit578BTIQecq7nNLRMgfQ8SCCKcn1HjpApdw7mtkQ8I5BfWQ1bTlpXUjX7StJRcRAztx7bXtr04ZccByN60VVZs+zk2AIjec0snKQkO03fOn4HefQ1DcSB0KGAQogSWR/I7EoulBAP/ZjOojV+7Jrw9Vyod6iQoCnEiROlLYQARgEIPbB+fsFKPaPg5oGMhDv3gMxOgR3YiZn6Bnoi48NOkAVE+uslKOCFrG27Lk3W+2samt8BBFkokezWLfH884ztSXKYxVaiA6wiCsSNNKc4DNZYy4fO8PFflSwQG8ADVAKIgR0ZXN0") }
         MockButton("Create network") { viewModel.createNetwork() }
         MockButton("Start vpn") { viewModel.startVPN() }
-        MockButton("Join video swarm") { viewModel.joinVideoSwarm() }
+        MockButton("Join video swarm") { viewModel.joinVideoSwarm("0uJfwk6ks1OwZaokGtXDnkEfeBWQjdESbqqGIIq1fjI=".decodeBase64()!!) }
     }
 }
 

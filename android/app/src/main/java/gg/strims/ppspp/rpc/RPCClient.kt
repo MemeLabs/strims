@@ -6,6 +6,8 @@ import gg.strims.ppspp.proto.Call
 import gg.strims.ppspp.proto.Cancel
 import gg.strims.ppspp.proto.Close
 import gg.strims.ppspp.proto.Error
+import kotlinx.coroutines.GlobalScope
+import kotlinx.coroutines.launch
 import okio.buffer
 import okio.sink
 import okio.source
@@ -98,23 +100,25 @@ open class RPCClient(filepath: String) {
         method: String,
         arg: T
     ): RPCResponseStream<R> {
-        val callID = this.getNextCallID()
+        val callID = getNextCallID()
         val stream = RPCResponseStream<R> {
-            this.callbacks.remove(callID)
-            try {
-                this.call(
-                    cancelMethod,
-                    Cancel(),
-                    this.getNextCallID(),
-                    callID
-                )
-            } catch (e: Exception) {
-                Log.e(TAG, "failed to send call", e)
+            callbacks.remove(callID)
+            GlobalScope.launch {
+                try {
+                    call(
+                        cancelMethod,
+                        Cancel(),
+                        getNextCallID(),
+                        callID
+                    )
+                } catch (e: Exception) {
+                    Log.e(TAG, "failed to send call", e)
+                }
             }
         }
 
-        Log.i(TAG, "creating callback")
-        this.callbacks[callID] = callback@ {
+        Log.i(TAG, "creating callback $callID")
+        callbacks[callID] = callback@ {
             Log.i(TAG, "in callback")
 
             val adapter = ProtoAdapter.get(R::class.java)
@@ -135,15 +139,18 @@ open class RPCClient(filepath: String) {
                 stream.delegate(null, RPCEvent.responseError)
             }
 
+            Log.d(TAG, "removing callback $callID")
             callbacks.remove(callID)
         }
 
-        try {
-            this.call(method, arg, callID)
-        } catch (e: Exception) {
-            this.callbacks.remove(callID)
-            stream.delegate(null, RPCEvent.requestError)
-            throw e
+        GlobalScope.launch {
+            try {
+                call(method, arg, callID)
+            } catch (e: Exception) {
+                callbacks.remove(callID)
+                stream.delegate(null, RPCEvent.requestError)
+                throw e
+            }
         }
 
         return stream
