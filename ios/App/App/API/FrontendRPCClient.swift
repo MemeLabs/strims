@@ -136,5 +136,5 @@ class FrontendRPCClient: RPCClient {
   public func publishNetworkToBootstrapPeer(_ arg: PBPublishNetworkToBootstrapPeerRequest = PBPublishNetworkToBootstrapPeerRequest()) -> Promise<PBPublishNetworkToBootstrapPeerResponse> {
     return self.callUnary("FrontendRPC/PublishNetworkToBootstrapPeer", arg)
   }
-
+  
 }
