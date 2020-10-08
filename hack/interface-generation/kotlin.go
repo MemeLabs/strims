@@ -16,7 +16,6 @@ func (g *KotlinGen) Template() *template.Template {
 	// TODO: don't hardcode imports
 	return template.Must(template.New("ts").Funcs(funcMap).Parse(`package gg.strims.ppspp.rpc
 import gg.strims.ppspp.proto.*
-import com.squareup.wire.Message
 
 class {{.Name}}Client(filepath: String) : RPCClient(filepath) {
 {{range .Elements}}

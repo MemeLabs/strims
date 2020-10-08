@@ -1,6 +1,5 @@
 package gg.strims.ppspp.rpc
 import gg.strims.ppspp.proto.*
-import com.squareup.wire.Message
 
 class FrontendRPCClient(filepath: String) : RPCClient(filepath) {
 
