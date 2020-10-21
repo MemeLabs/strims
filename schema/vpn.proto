@@ -57,9 +57,24 @@ message NetworkHandshake {
     repeated NetworkBinding network_bindings = 2;
   }
 
+  message CertificateUpgradeOffer {
+    repeated bytes network_keys = 1;
+  }
+
+  message CertificateUpgradeRequest {
+    repeated bytes network_keys = 1;
+  }
+
+  message CertificateUpgradeResponse {
+    repeated Certificate certificates = 1;
+  }
+
   oneof body {
     Init init = 1;
     NetworkBindings network_bindings = 2;
+    CertificateUpgradeOffer certificate_upgrade_offer = 3;
+    CertificateUpgradeRequest certificate_upgrade_request = 4;
+    CertificateUpgradeResponse certificate_upgrade_response = 5;
   }
 }
 
@@ -142,12 +157,12 @@ message GetBootstrapClientRequest {
 message GetBootstrapClientResponse {
   BootstrapClient bootstrap_client = 1;
 }
-message GetBootstrapClientsRequest {}
-message GetBootstrapClientsResponse {
+message ListBootstrapClientsRequest {}
+message ListBootstrapClientsResponse {
   repeated BootstrapClient bootstrap_clients = 1;
 }
-message GetBootstrapPeersRequest {}
-message GetBootstrapPeersResponse {
+message ListBootstrapPeersRequest {}
+message ListBootstrapPeersResponse {
   repeated BootstrapPeer peers = 1;
 }
 
@@ -218,4 +233,14 @@ message PeerExchangeMessage {
     IceCandidate ice_candidate = 5;
     CallbackRequest callback_request = 6;
   }
+}
+
+service Bootstrap {
+  rpc CreateClient(CreateBootstrapClientRequest) returns (CreateBootstrapClientResponse);
+  rpc UpdateClient(UpdateBootstrapClientRequest) returns (UpdateBootstrapClientResponse);
+  rpc DeleteClient(DeleteBootstrapClientRequest) returns (DeleteBootstrapClientResponse);
+  rpc GetClient(GetBootstrapClientRequest) returns (GetBootstrapClientResponse);
+  rpc ListClients(ListBootstrapClientsRequest) returns (ListBootstrapClientsResponse);
+  rpc ListPeers(ListBootstrapPeersRequest) returns (ListBootstrapPeersResponse);
+  rpc PublishNetworkToPeer(PublishNetworkToBootstrapPeerRequest) returns (PublishNetworkToBootstrapPeerResponse);
 }

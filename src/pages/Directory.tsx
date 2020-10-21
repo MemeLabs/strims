@@ -47,16 +47,16 @@ const Directory = () => {
   const networkKey = Base64.toUint8Array(params.networkKey);
 
   React.useEffect(() => {
-    client.startVPN().on("data", (vpnEvent) => {
+    client.network.startVPN().on("data", (vpnEvent) => {
       if (vpnEvent.networkOpen) {
-        const events = client.getDirectoryEvents({ networkKey });
+        const events = client.network.getDirectoryEvents({ networkKey });
         events.on("data", dispatch);
       }
     });
   }, []);
 
   const handleTestClick = async () => {
-    const res = await client.testDirectoryPublish({ networkKey });
+    const res = await client.network.testDirectoryPublish({ networkKey });
     console.log(res);
   };
 

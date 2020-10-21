@@ -12,6 +12,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
+	"github.com/MemeLabs/go-ppspp/pkg/services/network"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -55,7 +56,7 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 			if err != nil {
 				return nil, err
 			}
-			return vpn.New(d.logger, vnicHost, vpn.NewBrokerFactory(d.logger))
+			return vpn.New(d.logger, vnicHost, network.NewBrokerFactory(d.logger))
 		},
 	})
 	if err != nil {

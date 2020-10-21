@@ -126,7 +126,7 @@ export const useChat = () => {
   const client = useClient();
 
   const sendMessage = (body: string) =>
-    client.callChatClient({
+    client.chat.callClient({
       clientId: state.clientId,
       message: {
         time: Date.now(),
@@ -158,11 +158,11 @@ export const Provider = ({ networkKey, serverKey, children }: any) => {
 
   useEffect(() => {
     console.log({ networkKey, serverKey });
-    const chatClient = client.openChatClient({ networkKey, serverKey });
+    const chatClient = client.chat.openClient({ networkKey, serverKey });
     chatClient.on("data", (data) => dispatch({ type: "CLIENT_DATA", data }));
     chatClient.on("error", (error) => dispatch({ type: "CLIENT_ERROR", error }));
     chatClient.on("close", () => dispatch({ type: "CLIENT_CLOSE" }));
-    return () => client.callChatClient({ clientId: state.clientId, close: {} });
+    return () => client.chat.callClient({ clientId: state.clientId, close: {} });
   }, []);
 
   useEffect(() => {

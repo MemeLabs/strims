@@ -7,10 +7,11 @@ import Select from "react-select";
 import { InputError, InputLabel, TextInput } from "../components/Form";
 import { MainLayout } from "../components/MainLayout";
 import { useCall, useClient, useLazyCall } from "../contexts/Api";
+import { useProfile } from "../contexts/Profile";
 import * as pb from "../lib/pb";
 
 const NetworkForm = ({ onCreate }: { onCreate: (res: pb.CreateNetworkResponse) => void }) => {
-  const [{ value, error, loading }, createNetwork] = useLazyCall("createNetwork", {
+  const [{ value, error, loading }, createNetwork] = useLazyCall("network", "create", {
     onComplete: onCreate,
   });
   const { register, handleSubmit, errors } = useForm({
@@ -48,6 +49,49 @@ const NetworkForm = ({ onCreate }: { onCreate: (res: pb.CreateNetworkResponse) =
   );
 };
 
+const JoinForm = ({
+  onCreate,
+}: {
+  onCreate: (res: pb.CreateNetworkFromInvitationResponse) => void;
+}) => {
+  const [{ value, error, loading }, create] = useLazyCall("network", "createFromInvitation", {
+    onComplete: onCreate,
+  });
+  const { register, handleSubmit, errors } = useForm({
+    mode: "onBlur",
+  });
+
+  const onSubmit = (data) => create(new pb.CreateNetworkFromInvitationRequest(data));
+
+  return (
+    <form className="invite_form" onSubmit={handleSubmit(onSubmit)}>
+      {error && <InputError error={error.message || "Error creating membership"} />}
+      <TextInput
+        error={errors.invitationB64}
+        inputRef={register({
+          required: {
+            value: true,
+            message: "invite is required",
+          },
+          pattern: {
+            value: /^[a-zA-Z0-9+/]+={0,2}$/,
+            message: "invalid invite string",
+          },
+        })}
+        label="Invite string"
+        name="invitationB64"
+        placeholder="Enter an invite string"
+        required
+      />
+      <div className="input_buttons">
+        <button className="input input_button" disabled={loading}>
+          Create Memberhip
+        </button>
+      </div>
+    </form>
+  );
+};
+
 const wrapString = (str: string, cols: number) =>
   new Array(Math.ceil(str.length / cols))
     .fill("")
@@ -63,7 +107,7 @@ const PublishNetworkModal = ({
   network: pb.INetwork;
   onClose: () => void;
 }) => {
-  const [bootstrapPeersRes] = useCall("getBootstrapPeers");
+  const [bootstrapPeersRes] = useCall("bootstrap", "listPeers");
   const client = useClient();
   const { register, handleSubmit, errors, control } = useForm({
     mode: "onBlur",
@@ -71,7 +115,7 @@ const PublishNetworkModal = ({
 
   const onSubmit = (data) => {
     console.log(data);
-    client.publishNetworkToBootstrapPeer({
+    client.bootstrap.publishNetworkToPeer({
       hostId: data.peer.value,
       network: network,
     });
@@ -127,13 +171,15 @@ const NetworkTable = ({
   networks: pb.INetwork[];
   onDelete: () => void;
 }) => {
-  const [, deleteNetwork] = useLazyCall("deleteNetwork", { onComplete: onDelete });
+  const [, deleteNetwork] = useLazyCall("network", "delete", { onComplete: onDelete });
   const client = useClient();
+  const [{ profile }] = useProfile();
 
   const [publishNetwork, setPublishNetwork] = React.useState<pb.INetwork>();
   const modal = publishNetwork && (
     <PublishNetworkModal network={publishNetwork} onClose={() => setPublishNetwork(null)} />
   );
+
   if (!networks) {
     return null;
   }
@@ -142,8 +188,8 @@ const NetworkTable = ({
     const handleDelete = () => deleteNetwork({ id: network.id });
 
     const handleCreateInvite = async () => {
-      const invitation = await client.createNetworkInvitation({
-        signingKey: network.key,
+      const invitation = await client.network.createInvitation({
+        signingKey: profile.key,
         signingCert: network.certificate,
         networkName: network.name,
       });
@@ -179,16 +225,13 @@ const NetworkTable = ({
 };
 
 const NetworksPage = () => {
-  const [networksRes, getNetworks] = useCall("getNetworks");
+  const [networksRes, getNetworks] = useCall("network", "list");
 
   return (
     <MainLayout>
-      <div>
+      <div className="page_body">
         <Link className="settings_link" to="/networks">
           Networks
-        </Link>
-        <Link className="settings_link" to="/memberships">
-          Network Memberships
         </Link>
         <Link className="settings_link" to="/bootstrap-clients">
           Bootstrap Clients
@@ -198,9 +241,7 @@ const NetworksPage = () => {
         </Link>
         <main className="network_page">
           <NetworkForm onCreate={() => getNetworks()} />
-          <h1>Networks</h1>
-          <h2>Recommended Networks</h2>
-          <p>Manage your connected networks</p>
+          <JoinForm onCreate={() => getNetworks()} />
           <NetworkTable networks={networksRes.value?.networks} onDelete={() => getNetworks()} />
         </main>
       </div>

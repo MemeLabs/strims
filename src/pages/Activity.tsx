@@ -426,7 +426,7 @@ const Directory = () => {
   const client = useClient();
 
   React.useEffect(() => {
-    const events = client.startVPN();
+    const events = client.network.startVPN();
     events.on("data", (event) => console.log("network event", event));
   }, []);
 
@@ -435,7 +435,7 @@ const Directory = () => {
   React.useEffect(() => {
     const decoder = new TextDecoder();
     const ivl = setInterval(async () => {
-      const res = await client.readMetrics(
+      const res = await client.debug.readMetrics(
         new ReadMetricsRequest({
           format: 4,
         })

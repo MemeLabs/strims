@@ -6,7 +6,12 @@ import Select, { OptionTypeBase } from "react-select";
 import { InputError, InputLabel, TextInput } from "../components/Form";
 import { MainLayout } from "../components/MainLayout";
 import { useCall, useLazyCall } from "../contexts/Api";
-import * as pb from "../lib/pb";
+import {
+  CreateChatServerRequest,
+  CreateChatServerResponse,
+  ICertificate,
+  IChatServer,
+} from "../lib/pb";
 
 interface ChatServerFormData {
   name: string;
@@ -16,11 +21,14 @@ interface ChatServerFormData {
   };
 }
 
-const ChatServerForm = ({ onCreate }: { onCreate: (res: pb.CreateChatServerResponse) => void }) => {
-  const [{ value, error, loading }, createChatServer] = useLazyCall("createChatServer", {
+const rootCertificate = (cert: ICertificate): ICertificate =>
+  cert.parent ? rootCertificate(cert.parent) : cert;
+
+const ChatServerForm = ({ onCreate }: { onCreate: (res: CreateChatServerResponse) => void }) => {
+  const [{ error, loading }, createChatServer] = useLazyCall("chat", "createServer", {
     onComplete: onCreate,
   });
-  const [networkMembershipsRes] = useCall("getNetworkMemberships");
+  const [networksRes] = useCall("network", "list");
 
   const { register, handleSubmit, control, errors } = useForm<ChatServerFormData>({
     mode: "onBlur",
@@ -28,7 +36,7 @@ const ChatServerForm = ({ onCreate }: { onCreate: (res: pb.CreateChatServerRespo
 
   const onSubmit = handleSubmit((data) => {
     createChatServer(
-      new pb.CreateChatServerRequest({
+      new CreateChatServerRequest({
         networkKey: data.networkKey.value,
         chatRoom: {
           name: data.name,
@@ -58,8 +66,8 @@ const ChatServerForm = ({ onCreate }: { onCreate: (res: pb.CreateChatServerRespo
           as={Select}
           className="input_select"
           placeholder="Select network"
-          options={networkMembershipsRes.value?.networkMemberships.map((n) => ({
-            value: n.caCertificate.key,
+          options={networksRes.value?.networks.map((n) => ({
+            value: rootCertificate(n.certificate).key,
             label: n.name,
           }))}
           name="networkKey"
@@ -86,10 +94,10 @@ const ChatServerTable = ({
   servers,
   onDelete,
 }: {
-  servers: pb.IChatServer[];
+  servers: IChatServer[];
   onDelete: () => void;
 }) => {
-  const [, deleteChatServer] = useLazyCall("deleteChatServer", { onComplete: onDelete });
+  const [, deleteChatServer] = useLazyCall("chat", "deleteServer", { onComplete: onDelete });
 
   if (!servers) {
     return null;
@@ -112,16 +120,13 @@ const ChatServerTable = ({
 };
 
 const ChatServersPage = () => {
-  const [serversRes, getChatServers] = useCall("getChatServers");
+  const [serversRes, getChatServers] = useCall("chat", "listServers");
 
   return (
     <MainLayout>
-      <div>
+      <div className="page_body">
         <Link className="settings_link" to="/networks">
           Networks
-        </Link>
-        <Link className="settings_link" to="/memberships">
-          Network Memberships
         </Link>
         <Link className="settings_link" to="/bootstrap-clients">
           Bootstrap Clients

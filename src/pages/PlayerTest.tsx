@@ -17,7 +17,7 @@ const PlayerTest = () => {
   const client = useClient();
 
   React.useEffect(() => {
-    client.startVPN();
+    client.network.startVPN();
     setTimeout(() => setLoaded(true), 1000);
   }, []);
 

@@ -2,6 +2,7 @@
 
 import { Base64 } from "js-base64";
 import * as React from "react";
+import { Link } from "react-router-dom";
 
 import { MainLayout } from "../components/MainLayout";
 import { useClient, useLazyCall } from "../contexts/Api";
@@ -18,7 +19,7 @@ const HomePage = () => {
 
   const client = useClient();
 
-  const [pprofData, pprof] = useLazyCall("pProf");
+  const [pprofData, pprof] = useLazyCall("debug", "pProf");
   const [pprofDownloads, setPProfDownloads] = React.useState([]);
 
   const videoRef = React.useRef<HTMLVideoElement>();
@@ -37,15 +38,15 @@ const HomePage = () => {
     addDownload(`${pprofData.value.name}.profile`, pprofData.value.data);
   }, [pprofData.value]);
 
-  const handleStartVPNClick = () => client.startVPN();
-  const handleStopVPNClick = async () => await client.stopVPN();
+  const handleStartVPNClick = () => client.network.startVPN();
+  const handleStopVPNClick = async () => await client.network.stopVPN();
 
   const handleColorToggle = () => setColorScheme(colorScheme === "dark" ? "light" : "dark");
   const handleLogout = () => clearProfile();
 
   const handleStartBroadcastClick = async () => {
     const [{ id }, mediaStream] = await Promise.all([
-      client.openVideoServer(),
+      client.video.openServer(),
       (navigator.mediaDevices as any).getDisplayMedia({
         video: true,
         audio: {
@@ -86,22 +87,21 @@ const HomePage = () => {
   const broadcastEncoder = (encoder: webm.Encoder, id: number, mediaStream: MediaStream) => {
     videoRef.current.srcObject = mediaStream;
 
-    encoder.ondata = (data) => client.writeToVideoServer({ id, data });
-    encoder.onend = (data) => client.writeToVideoServer({ id, data, flush: true });
+    encoder.ondata = (data) => client.video.writeToServer({ id, data });
+    encoder.onend = (data) => client.video.writeToServer({ id, data, flush: true });
 
     publishSwarm(id);
   };
 
   const publishSwarm = async (id: number) => {
-    const memeberships = await client.getNetworkMemberships();
-
-    memeberships.networkMemberships.forEach((m) => {
+    const { networks } = await client.network.list();
+    networks.forEach((m) => {
       let rootCert = m.certificate;
       while (rootCert.parent) {
         rootCert = rootCert.parent;
       }
 
-      client.publishSwarm({
+      client.video.publishSwarm({
         id,
         networkKey: rootCert.key,
       });
@@ -115,7 +115,7 @@ const HomePage = () => {
 
     const timeShifted = 0;
 
-    const clientEvents = client.openVideoClient({
+    const clientEvents = client.video.openClient({
       swarmKey: Base64.toUint8Array("0uJfwk6ks1OwZaokGtXDnkEfeBWQjdESbqqGIIq1fjI="),
       emitData: true,
     });
@@ -151,7 +151,7 @@ const HomePage = () => {
 
   const handleTestClick = async () => {
     console.log("starting vpn");
-    const networkEvents = client.startVPN();
+    const networkEvents = client.network.startVPN();
 
     networkEvents.on("data", (e) => {
       console.log(e);
@@ -174,13 +174,9 @@ const HomePage = () => {
   };
 
   const handleChatClientClick = async () => {
-    const servers = await client.getChatServers();
-    if (servers.chatServers.length === 0) {
-      return;
-    }
-
-    const server = servers.chatServers[0];
-    const chatEvents = client.openChatClient(
+    const listServersRes = await client.chat.listServers();
+    const server = listServersRes.chatServers[0];
+    const chatEvents = client.chat.openClient(
       new OpenChatClientRequest({
         networkKey: server.networkKey,
         serverKey: server.key.public,
@@ -196,7 +192,7 @@ const HomePage = () => {
           await new Promise((resolve) => setTimeout(resolve, 2000));
 
           setInterval(() => {
-            client.callChatClient(
+            client.chat.callClient(
               new CallChatClientRequest({
                 clientId: v.open.clientId,
                 message: new CallChatClientRequest.Message({
@@ -230,13 +226,13 @@ const HomePage = () => {
   };
 
   const handleChatServerClick = async () => {
-    const servers = await client.getChatServers();
+    const servers = await client.chat.listServers();
     if (servers.chatServers.length === 0) {
       return;
     }
 
     const server = servers.chatServers[0];
-    const chatEvents = client.openChatServer(new OpenChatServerRequest({ server }));
+    const chatEvents = client.chat.openServer(new OpenChatServerRequest({ server }));
     chatEvents.on("data", (v) => {
       switch (v.body) {
         case "open":
@@ -252,7 +248,7 @@ const HomePage = () => {
   };
 
   const handleReadMetricsClick = async () => {
-    const { data } = await client.readMetrics({ format: 0 });
+    const { data } = await client.debug.readMetrics({ format: 0 });
     console.log(new TextDecoder().decode(data));
   };
 
@@ -268,12 +264,6 @@ const HomePage = () => {
           <div>
             <button className="input input_button" onClick={handleColorToggle}>
               toggle theme
-            </button>
-            <button className="input input_button" onClick={handleStartVPNClick}>
-              start vpn
-            </button>
-            <button className="input input_button" onClick={handleStopVPNClick}>
-              stop vpn
             </button>
             <button className="input input_button" onClick={handleStartBroadcastClick}>
               start broadcast

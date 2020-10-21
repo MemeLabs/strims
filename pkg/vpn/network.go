@@ -121,22 +121,46 @@ func (n *Network) Key() []byte {
 	return dao.GetRootCert(n.certificate).Key
 }
 
-// addLink ...
-func (n *Network) addLink(link *networkLink) {
+// Certificate ...
+func (n *Network) Certificate() *pb.Certificate {
+	return n.certificate
+}
+
+// AddPeer ...
+func (n *Network) AddPeer(peer *vnic.Peer, srcPort, dstPort uint16) {
 	n.linksLock.Lock()
+	defer n.linksLock.Unlock()
+
+	if _, ok := n.links.Get(peer.HostID()); ok {
+		return
+	}
+
+	link := &networkLink{
+		peer:        peer,
+		port:        srcPort,
+		FrameWriter: vnic.NewFrameWriter(peer.Link, dstPort, peer.Link.MTU()),
+	}
+	peer.SetHandler(srcPort, n.handleFrame)
+
 	n.links.Insert(link)
-	n.linksLock.Unlock()
 }
 
-// removeLink ...
-func (n *Network) removeLink(link *networkLink) {
+// RemovePeer ...
+func (n *Network) RemovePeer(id kademlia.ID) {
 	n.linksLock.Lock()
-	n.links.Remove(link.ID())
-	n.linksLock.Unlock()
+	defer n.linksLock.Unlock()
+
+	link, ok := n.links.Get(id)
+	if !ok {
+		return
+	}
+	link.(*networkLink).peer.RemoveHandler(link.(*networkLink).port)
+
+	n.links.Remove(id)
 }
 
-// hasLink ...
-func (n *Network) hasLink(id kademlia.ID) bool {
+// HasPeer ...
+func (n *Network) HasPeer(id kademlia.ID) bool {
 	n.linksLock.Lock()
 	_, ok := n.links.Get(id)
 	n.linksLock.Unlock()
@@ -277,13 +301,14 @@ type MessageHandler interface {
 
 // TODO: handle eviction
 type networkLink struct {
-	hostID kademlia.ID
-	*vnic.FrameReadWriter
+	peer *vnic.Peer
+	port uint16
+	*vnic.FrameWriter
 }
 
 // ID ...
 func (c *networkLink) ID() kademlia.ID {
-	return c.hostID
+	return c.peer.HostID()
 }
 
 // PeerNetwork ...

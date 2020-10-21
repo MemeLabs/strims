@@ -2,6 +2,7 @@ package vpn
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"sync"
 
@@ -32,31 +33,25 @@ var (
 )
 
 // New ...
-func New(logger *zap.Logger, vnicHost *vnic.Host, brokerFactory BrokerFactory) (*Host, error) {
+func New(logger *zap.Logger, vnic *vnic.Host) (*Host, error) {
 	recentMessageIDs, err := lru.New(recentMessageIDHistoryLength)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 
-	n := &Host{
+	return &Host{
 		logger:           logger,
-		VnicHost:         vnicHost,
-		brokerFactory:    brokerFactory,
+		vnic:             vnic,
 		recentMessageIDs: recentMessageIDs,
-		hashTableStore:  vpn.NewHashTableStore(context.Background(), logger, vnicHost.ID()),
-		peerIndexStore:  vpn.NewPeerIndexStore(context.Background(), logger, vnicHost.ID()),
-	}
-
-	vnicHost.AddPeerHandler(n.handlePeer)
-
-	return n, nil
+		hashTableStore:   newHashTableStore(context.Background(), logger, vnic.ID()),
+		peerIndexStore:   newPeerIndexStore(context.Background(), logger, vnic.ID()),
+	}, nil
 }
 
 // Host ...
 type Host struct {
-	*vnic.Host
 	logger               *zap.Logger
-	brokerFactory        BrokerFactory
+	vnic                 *vnic.Host
 	clientsLock          sync.Mutex
 	clients              clientMap
 	networkObservers     event.Observable
@@ -66,8 +61,13 @@ type Host struct {
 	peerIndexStore       *PeerIndexStore
 }
 
-func (h *Host) handlePeer(p *vnic.Peer) {
-	newBootstrap(h.logger, h, p)
+// TODO: get networks
+// TODO: get peers
+// TODO: get peers by network
+
+// VNIC ...
+func (h *Host) VNIC() *vnic.Host {
+	return h.vnic
 }
 
 // NotifyNetwork ...
@@ -95,10 +95,10 @@ func (h *Host) AddNetwork(cert *pb.Certificate) (*Client, error) {
 		return nil, ErrDuplicateNetworkKey
 	}
 
-	network := newNetwork(h.logger, h.vnicHost, cert, h.recentMessageIDs)
-	hashTable := NewHashTable(h.logger, network, h.hashTableStore)
-	peerIndex := NewPeerIndex(h.logger, network, h.peerIndexStore)
-	peerExchange := NewPeerExchange(h.logger, network)
+	network := newNetwork(h.logger, h.vnic, cert, h.recentMessageIDs)
+	hashTable := newHashTable(h.logger, network, h.hashTableStore)
+	peerIndex := newPeerIndex(h.logger, network, h.peerIndexStore)
+	peerExchange := newPeerExchange(h.logger, network)
 
 	if err := network.SetHandler(vnic.HashTablePort, hashTable); err != nil {
 		return nil, err
@@ -111,15 +111,13 @@ func (h *Host) AddNetwork(cert *pb.Certificate) (*Client, error) {
 	}
 
 	c := &Client{
-		Host: h,
+		Host:         h,
 		Network:      network,
 		HashTable:    hashTable,
 		PeerIndex:    peerIndex,
 		PeerExchange: peerExchange,
 	}
-	if !h.clients.Insert(c) {
-		return nil, ErrDuplicateNetworkKey
-	}
+	h.clients.Insert(c)
 
 	h.networkObservers.Emit(network)
 
@@ -127,37 +125,37 @@ func (h *Host) AddNetwork(cert *pb.Certificate) (*Client, error) {
 }
 
 // RemoveNetwork ...
-func (h *Host) RemoveNetwork(n *Network) error {
+func (h *Host) RemoveNetwork(key []byte) error {
 	h.clientsLock.Lock()
 	defer h.clientsLock.Unlock()
 
-	if _, ok := h.clients.Delete(n.Key()); !ok {
+	client, ok := h.clients.Delete(key)
+	if !ok {
 		return ErrNetworkNotFound
 	}
 
-	n.Close()
+	client.Network.Close()
 	return nil
 }
 
 // Networks ...
-func (h *Host) Networks() []*Network {
-	h.clientsLock.Lock()
-	defer h.clientsLock.Unlock()
+// func (h *Host) Networks() []*Network {
+// 	h.clientsLock.Lock()
+// 	defer h.clientsLock.Unlock()
 
-	networks := make([]*Network, h.clients.Len(), 0)
-	h.clients.Each(func(c *Client) bool {
-		networks = append(networks, c.Network)
-		return true
-	})
-	return networks
-}
+// 	networks := make([]*Network, h.clients.Len(), 0)
+// 	h.clients.Each(func(c *Client) bool {
+// 		networks = append(networks, c.Network)
+// 		return true
+// 	})
+// 	return networks
+// }
 
-// NetworkKeys ...
 func (h *Host) NetworkKeys() [][]byte {
 	h.clientsLock.Lock()
 	defer h.clientsLock.Unlock()
 
-	keys := make([][]byte, h.clients.Len(), 0)
+	keys := make([][]byte, 0, h.clients.Len())
 	h.clients.Each(func(c *Client) bool {
 		keys = append(keys, c.Network.Key())
 		return true
@@ -169,7 +167,7 @@ func (h *Host) NetworkKeys() [][]byte {
 func (h *Host) Client(key []byte) (*Client, bool) {
 	h.clientsLock.Lock()
 	defer h.clientsLock.Unlock()
-	return h.clients.Get(key); ok {
+	return h.clients.Get(key)
 }
 
 type clientMap struct {
@@ -218,9 +216,9 @@ func (t *clientMapItem) Less(oi llrb.Item) bool {
 
 // Client ...
 type Client struct {
-	Host *Host
+	Host         *Host
 	Network      *Network
 	HashTable    HashTable
 	PeerIndex    PeerIndex
-	PeerExchange *PeerExchange
+	PeerExchange PeerExchange
 }

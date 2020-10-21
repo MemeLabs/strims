@@ -5,16 +5,9 @@ import { useForm } from "react-hook-form";
 import { MdClose } from "react-icons/md";
 
 import { AvatarInput, ImageValue, InputError, TextInput } from "../components/Form";
-import { MainLayout } from "../components/MainLayout";
-import { useClient, useLazyCall } from "../contexts/Api";
+import { useLazyCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
-import { useTheme } from "../contexts/Theme";
-import { CreateNetworkResponse, DirectoryServerEvent, IDirectoryListing } from "../lib/pb";
-
-interface Listing {
-  key: string;
-  listing: IDirectoryListing;
-}
+import { CreateNetworkResponse } from "../lib/pb";
 
 interface AddNetworkModalProps {
   onCreate: (res: CreateNetworkResponse) => void;
@@ -29,7 +22,7 @@ interface AddNetworkFormData {
 const AddNetworkModal: React.FunctionComponent<AddNetworkModalProps> = ({ onCreate, onClose }) => {
   const [{ profile }] = useProfile();
 
-  const [{ error, loading }, createNetwork] = useLazyCall("createNetwork", {
+  const [{ error, loading }, createNetwork] = useLazyCall("network", "create", {
     onComplete: onCreate,
   });
   const { control, register, handleSubmit, errors } = useForm<AddNetworkFormData>({

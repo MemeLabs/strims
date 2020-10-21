@@ -16,13 +16,15 @@ func (g *TsGen) OutputPath(service ProtoService) string {
 
 func (g *TsGen) Template() *template.Template {
 	return template.Must(template.New("ts").Funcs(funcMap).Parse(`import * as pb from "../pb";
-import { RPCHost } from "./rpc_host";
-import { Readable as GenericReadable } from "./stream";
+import { RPCHost } from "../rpc/host";
+import { Readable as GenericReadable } from "../rpc/stream";
 
-export default class {{.Name}} extends RPCHost {
+export default class {{.Name}} {
+	constructor(private readonly host: RPCHost) {}
+
 	{{range .Elements}}
-	public {{.Name | ToCamel}}(v: pb.I{{.RequestType}} = new pb.{{.RequestType}}()):  {{if .StreamsReturns}}GenericReadable{{else}}Promise{{end}}<pb.{{.ReturnsType}}> {
-		return this.{{if .StreamsReturns}}expectMany{{else}}expectOne{{end}}(this.call("{{$.Name}}/{{.Name | ToPascal}}", new pb.{{.RequestType}}(v)));
+	public {{.Name | ToCamel}}(arg: pb.I{{.RequestType}} = new pb.{{.RequestType}}()):  {{if .StreamsReturns}}GenericReadable{{else}}Promise{{end}}<pb.{{.ReturnsType}}> {
+		return this.host.{{if .StreamsReturns}}expectMany{{else}}expectOne{{end}}(this.host.call("{{$.Name}}/{{.Name | ToPascal}}", new pb.{{.RequestType}}(arg)));
 	}{{end}}
 }
 `))

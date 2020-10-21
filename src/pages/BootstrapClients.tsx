@@ -12,7 +12,7 @@ const BootstrapClientForm = ({
 }: {
   onCreate: (res: pb.CreateBootstrapClientResponse) => void;
 }) => {
-  const [{ value, error, loading }, createBootstrapClient] = useLazyCall("createBootstrapClient", {
+  const [{ error, loading }, createBootstrapClient] = useLazyCall("bootstrap", "createClient", {
     onComplete: onCreate,
   });
   const { register, handleSubmit, errors } = useForm({
@@ -58,7 +58,9 @@ const BootstrapClientTable = ({
   bootstrapClients: pb.IBootstrapClient[];
   onDelete: () => void;
 }) => {
-  const [, deleteBootstrapClient] = useLazyCall("deleteBootstrapClient", { onComplete: onDelete });
+  const [, deleteBootstrapClient] = useLazyCall("bootstrap", "deleteClient", {
+    onComplete: onDelete,
+  });
 
   if (!bootstrapClients) {
     return null;
@@ -80,16 +82,13 @@ const BootstrapClientTable = ({
 };
 
 const BootstrapClientsPage = () => {
-  const [bootstrapClientsRes, getBootstrapClients] = useCall("getBootstrapClients");
+  const [bootstrapClientsRes, getBootstrapClients] = useCall("bootstrap", "listClients");
 
   return (
     <MainLayout>
-      <div>
+      <div className="page_body">
         <Link className="settings_link" to="/networks">
           Networks
-        </Link>
-        <Link className="settings_link" to="/memberships">
-          Network Memberships
         </Link>
         <Link className="settings_link" to="/bootstrap-clients">
           Bootstrap Clients

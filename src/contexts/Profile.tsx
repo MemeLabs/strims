@@ -45,8 +45,8 @@ export const useProfile = () => {
       error,
     }));
 
-  const [, createProfile] = useLazyCall("createProfile", { onComplete, onError });
-  const [, loadProfile] = useLazyCall("loadProfile", { onComplete, onError });
+  const [, createProfile] = useLazyCall("profile", "create", { onComplete, onError });
+  const [, loadProfile] = useLazyCall("profile", "load", { onComplete, onError });
 
   const clearProfile = () => {
     sessionStorage.removeItem("sessionId");
@@ -81,7 +81,7 @@ export const Provider = ({ children }: any) => {
       profile,
     }));
 
-  const [, loadSession] = useLazyCall("loadSession", {
+  const [, loadSession] = useLazyCall("profile", "loadSession", {
     onComplete: ({ profile }) => handleDone(profile),
     onError: () => handleDone(),
   });

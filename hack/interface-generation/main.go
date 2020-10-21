@@ -14,7 +14,7 @@ import (
 )
 
 var (
-	generators = []Generator{&TsGen{}, &SwiftGen{}, &KotlinGen{}, &GoClientGen{}, &GoServiceGen{}}
+	generators = []Generator{&TsGen{}, &SwiftGen{}, &KotlinGen{}, &GoGen{}}
 	funcMap    = make(template.FuncMap)
 	wd         string
 )

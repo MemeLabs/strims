@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+option java_package = "gg.strims.ppspp.proto";
+option swift_prefix = "PB";
+
+message PProfRequest {
+  string name = 1;
+  bool debug = 2;
+  bool gc = 3;
+}
+message PProfResponse {
+  string name = 1;
+  bytes data = 2;
+}
+
+message ReadMetricsRequest {
+  MetricsFormat format = 1;
+}
+
+message ReadMetricsResponse {
+  bytes data = 1;
+}
+
+enum MetricsFormat {
+  METRICS_FORMAT_TEXT = 0;
+  METRICS_FORMAT_PROTO_DELIM = 1;
+  METRICS_FORMAT_PROTO_TEXT = 2;
+  METRICS_FORMAT_PROTO_COMPACT = 3;
+  METRICS_FORMAT_OPEN_METRICS = 4;
+}
+
+service Debug {
+  rpc PProf(PProfRequest) returns (PProfResponse);
+  rpc ReadMetrics(ReadMetricsRequest) returns (ReadMetricsResponse);
+}

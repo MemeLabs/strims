@@ -31,14 +31,18 @@ const hashTableMaxSize = 5120
 
 var nextHashTableID uint32
 
-// NewHashTable ...
-func NewHashTable(logger *zap.Logger, n *Network, store *HashTableStore) *HashTable {
+type HashTable interface {
+	Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error)
+	Get(ctx context.Context, key, salt []byte) (<-chan *HashTableValue, error)
+}
+
+func newHashTable(logger *zap.Logger, n *Network, store *HashTableStore) *hashTable {
 	id := atomic.AddUint32(&nextHashTableID, 1)
 	if id == 0 {
 		panic("hash table id overflow")
 	}
 
-	return &HashTable{
+	return &hashTable{
 		logger:  logger,
 		id:      id,
 		store:   store,
@@ -47,7 +51,7 @@ func NewHashTable(logger *zap.Logger, n *Network, store *HashTableStore) *HashTa
 }
 
 // HashTable ...
-type HashTable struct {
+type hashTable struct {
 	logger              *zap.Logger
 	id                  uint32
 	store               *HashTableStore
@@ -56,7 +60,7 @@ type HashTable struct {
 }
 
 // HandleMessage ...
-func (s *HashTable) HandleMessage(msg *Message) (forward bool, err error) {
+func (s *hashTable) HandleMessage(msg *Message) (forward bool, err error) {
 	var m pb.HashTableMessage
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
 		return true, err
@@ -82,7 +86,7 @@ func (s *HashTable) HandleMessage(msg *Message) (forward bool, err error) {
 	return true, err
 }
 
-func (s *HashTable) handlePublish(r *pb.HashTableMessage_Record) error {
+func (s *hashTable) handlePublish(r *pb.HashTableMessage_Record) error {
 	if !verifyHashTableRecord(r) {
 		return errors.New("invalid record signature")
 	}
@@ -90,7 +94,7 @@ func (s *HashTable) handlePublish(r *pb.HashTableMessage_Record) error {
 	return s.store.Insert(s.id, r)
 }
 
-func (s *HashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
+func (s *hashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
 	if !verifyHashTableRecord(r) {
 		return errors.New("invalid record signature")
 	}
@@ -98,7 +102,7 @@ func (s *HashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
 	return s.store.Remove(s.id, r)
 }
 
-func (s *HashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHostID kademlia.ID) error {
+func (s *hashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHostID kademlia.ID) error {
 	record := s.store.Get(s.id, m.Hash)
 	if record == nil {
 		return nil
@@ -115,7 +119,7 @@ func (s *HashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHo
 	return s.network.SendProto(originHostID, vnic.HashTablePort, vnic.HashTablePort, msg)
 }
 
-func (s *HashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse) error {
+func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse) error {
 	if !verifyHashTableRecord(m.Record) {
 		return nil
 	}
@@ -128,12 +132,12 @@ func (s *HashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse) error 
 }
 
 // Set ...
-func (s *HashTable) Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error) {
+func (s *hashTable) Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error) {
 	return newHashTablePublisher(ctx, s.logger, s.network, key, salt, value)
 }
 
 // Get ...
-func (s *HashTable) Get(ctx context.Context, key, salt []byte) (<-chan *HashTableValue, error) {
+func (s *hashTable) Get(ctx context.Context, key, salt []byte) (<-chan *HashTableValue, error) {
 	hash := hashTableRecordHash(key, salt)
 	target, err := kademlia.UnmarshalID(hash)
 	if err != nil {
@@ -216,8 +220,8 @@ func (p *hashTableItem) Deadline() time.Time {
 	return time.Unix(p.Record().Timestamp, 0).Add(hashTableMaxRecordAge)
 }
 
-// NewHashTableStore ...
-func NewHashTableStore(ctx context.Context, logger *zap.Logger, hostID kademlia.ID) *HashTableStore {
+// newHashTableStore ...
+func newHashTableStore(ctx context.Context, logger *zap.Logger, hostID kademlia.ID) *HashTableStore {
 	p := &HashTableStore{
 		logger:       logger,
 		hostID:       hostID,
