@@ -12,13 +12,13 @@ import (
 	"golang.org/x/tools/imports"
 )
 
-type GoClientGen struct{}
+type GoGen struct{}
 
-func (g *GoClientGen) OutputPath(service ProtoService) string {
-	return path.Join(wd, "pkg", "api", strings.ToLower(service.Name)+".service.go")
+func (g *GoGen) OutputPath(service ProtoService) string {
+	return path.Join(wd, "pkg", "api", strings.ToLower(service.Name)+".go")
 }
 
-func (g *GoClientGen) Template() *template.Template {
+func (g *GoGen) Template() *template.Template {
 	return template.Must(template.New("ts").Funcs(funcMap).Parse(`package api
 
 import (
@@ -38,28 +38,6 @@ type {{.Name}}Service interface {
 	  req *pb.{{.RequestType}},
   ) ({{if .StreamsReturns}}<-chan {{end}}*pb.{{.ReturnsType}}, error)
 {{end}}}
-`))
-}
-
-func (g *GoClientGen) Format(path string) error {
-	return gofmt(path)
-}
-
-type GoServiceGen struct{}
-
-func (g *GoServiceGen) OutputPath(service ProtoService) string {
-	return path.Join(wd, "pkg", "api", strings.ToLower(service.Name)+".client.go")
-}
-
-func (g *GoServiceGen) Template() *template.Template {
-	return template.Must(template.New("ts").Funcs(funcMap).Parse(`package api
-
-import (
-	"context"
-
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
-)
 
 type {{.Name}}Client struct {
 	client  *rpc.Client
@@ -82,11 +60,7 @@ func (c *{{$.Name}}Client) {{.Name | ToPascal}} (
 `))
 }
 
-func (g *GoServiceGen) Format(path string) error {
-	return gofmt(path)
-}
-
-func gofmt(path string) error {
+func (g *GoGen) Format(path string) error {
 	preFormat, err := ioutil.ReadFile(path)
 	if err != nil {
 		return fmt.Errorf("failed to read pre-formatted file: %v", err)

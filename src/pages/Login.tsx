@@ -13,7 +13,7 @@ import * as pb from "../lib/pb";
 const VALID_NEXT_PATH = /^\/\w[\w/_\-.?=#%]*$/;
 
 const LoginPage = () => {
-  const [getProfilesRes] = useCall("getProfiles");
+  const [listProfilesRes] = useCall("profile", "list");
   const [{ profile, error, loading }, profileActions] = useProfile();
   const [selectedProfile, setSelectedProfile] = React.useState<pb.IProfileSummary | null>(null);
   const { register, handleSubmit, errors } = useForm({
@@ -23,7 +23,7 @@ const LoginPage = () => {
 
   React.useEffect(profileActions.clearError, []);
 
-  if (!getProfilesRes.loading && !getProfilesRes.value?.profiles.length) {
+  if (!listProfilesRes.loading && !listProfilesRes.value?.profiles.length) {
     return <Redirect to="/signup" />;
   }
   if (profile) {
@@ -35,7 +35,7 @@ const LoginPage = () => {
     return (
       <LandingPageLayout>
         <div className="login_profile_list">
-          {getProfilesRes.value?.profiles.map((summary) => (
+          {listProfilesRes.value?.profiles.map((summary) => (
             <div
               className="login_profile_list__item"
               key={summary.id}
@@ -63,8 +63,8 @@ const LoginPage = () => {
   return (
     <LandingPageLayout>
       <form onSubmit={handleSubmit(onSubmit)}>
-        {getProfilesRes.error && (
-          <InputError error={getProfilesRes.error.message || "Error loading profiles"} />
+        {listProfilesRes.error && (
+          <InputError error={listProfilesRes.error.message || "Error loading profiles"} />
         )}
         {error && <InputError error={error.message || "Error logging in"} />}
         <TextInput

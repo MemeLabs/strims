@@ -1,382 +1,4 @@
 import * as $protobuf from "protobufjs";
-/** Properties of a PProfRequest. */
-export interface IPProfRequest {
-
-    /** PProfRequest name */
-    name?: (string|null);
-
-    /** PProfRequest debug */
-    debug?: (boolean|null);
-
-    /** PProfRequest gc */
-    gc?: (boolean|null);
-}
-
-/** Represents a PProfRequest. */
-export class PProfRequest implements IPProfRequest {
-
-    /**
-     * Constructs a new PProfRequest.
-     * @param [properties] Properties to set
-     */
-    constructor(properties?: IPProfRequest);
-
-    /** PProfRequest name. */
-    public name: string;
-
-    /** PProfRequest debug. */
-    public debug: boolean;
-
-    /** PProfRequest gc. */
-    public gc: boolean;
-
-    /**
-     * Creates a new PProfRequest instance using the specified properties.
-     * @param [properties] Properties to set
-     * @returns PProfRequest instance
-     */
-    public static create(properties?: IPProfRequest): PProfRequest;
-
-    /**
-     * Encodes the specified PProfRequest message. Does not implicitly {@link PProfRequest.verify|verify} messages.
-     * @param message PProfRequest message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encode(message: IPProfRequest, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Encodes the specified PProfRequest message, length delimited. Does not implicitly {@link PProfRequest.verify|verify} messages.
-     * @param message PProfRequest message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encodeDelimited(message: IPProfRequest, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Decodes a PProfRequest message from the specified reader or buffer.
-     * @param reader Reader or buffer to decode from
-     * @param [length] Message length if known beforehand
-     * @returns PProfRequest
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): PProfRequest;
-
-    /**
-     * Decodes a PProfRequest message from the specified reader or buffer, length delimited.
-     * @param reader Reader or buffer to decode from
-     * @returns PProfRequest
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): PProfRequest;
-
-    /**
-     * Verifies a PProfRequest message.
-     * @param message Plain object to verify
-     * @returns `null` if valid, otherwise the reason why it is not
-     */
-    public static verify(message: { [k: string]: any }): (string|null);
-
-    /**
-     * Creates a PProfRequest message from a plain object. Also converts values to their respective internal types.
-     * @param object Plain object
-     * @returns PProfRequest
-     */
-    public static fromObject(object: { [k: string]: any }): PProfRequest;
-
-    /**
-     * Creates a plain object from a PProfRequest message. Also converts values to other types if specified.
-     * @param message PProfRequest
-     * @param [options] Conversion options
-     * @returns Plain object
-     */
-    public static toObject(message: PProfRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-    /**
-     * Converts this PProfRequest to JSON.
-     * @returns JSON object
-     */
-    public toJSON(): { [k: string]: any };
-}
-
-/** Properties of a PProfResponse. */
-export interface IPProfResponse {
-
-    /** PProfResponse name */
-    name?: (string|null);
-
-    /** PProfResponse data */
-    data?: (Uint8Array|null);
-}
-
-/** Represents a PProfResponse. */
-export class PProfResponse implements IPProfResponse {
-
-    /**
-     * Constructs a new PProfResponse.
-     * @param [properties] Properties to set
-     */
-    constructor(properties?: IPProfResponse);
-
-    /** PProfResponse name. */
-    public name: string;
-
-    /** PProfResponse data. */
-    public data: Uint8Array;
-
-    /**
-     * Creates a new PProfResponse instance using the specified properties.
-     * @param [properties] Properties to set
-     * @returns PProfResponse instance
-     */
-    public static create(properties?: IPProfResponse): PProfResponse;
-
-    /**
-     * Encodes the specified PProfResponse message. Does not implicitly {@link PProfResponse.verify|verify} messages.
-     * @param message PProfResponse message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encode(message: IPProfResponse, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Encodes the specified PProfResponse message, length delimited. Does not implicitly {@link PProfResponse.verify|verify} messages.
-     * @param message PProfResponse message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encodeDelimited(message: IPProfResponse, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Decodes a PProfResponse message from the specified reader or buffer.
-     * @param reader Reader or buffer to decode from
-     * @param [length] Message length if known beforehand
-     * @returns PProfResponse
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): PProfResponse;
-
-    /**
-     * Decodes a PProfResponse message from the specified reader or buffer, length delimited.
-     * @param reader Reader or buffer to decode from
-     * @returns PProfResponse
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): PProfResponse;
-
-    /**
-     * Verifies a PProfResponse message.
-     * @param message Plain object to verify
-     * @returns `null` if valid, otherwise the reason why it is not
-     */
-    public static verify(message: { [k: string]: any }): (string|null);
-
-    /**
-     * Creates a PProfResponse message from a plain object. Also converts values to their respective internal types.
-     * @param object Plain object
-     * @returns PProfResponse
-     */
-    public static fromObject(object: { [k: string]: any }): PProfResponse;
-
-    /**
-     * Creates a plain object from a PProfResponse message. Also converts values to other types if specified.
-     * @param message PProfResponse
-     * @param [options] Conversion options
-     * @returns Plain object
-     */
-    public static toObject(message: PProfResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-    /**
-     * Converts this PProfResponse to JSON.
-     * @returns JSON object
-     */
-    public toJSON(): { [k: string]: any };
-}
-
-/** Properties of a ReadMetricsRequest. */
-export interface IReadMetricsRequest {
-
-    /** ReadMetricsRequest format */
-    format?: (MetricsFormat|null);
-}
-
-/** Represents a ReadMetricsRequest. */
-export class ReadMetricsRequest implements IReadMetricsRequest {
-
-    /**
-     * Constructs a new ReadMetricsRequest.
-     * @param [properties] Properties to set
-     */
-    constructor(properties?: IReadMetricsRequest);
-
-    /** ReadMetricsRequest format. */
-    public format: MetricsFormat;
-
-    /**
-     * Creates a new ReadMetricsRequest instance using the specified properties.
-     * @param [properties] Properties to set
-     * @returns ReadMetricsRequest instance
-     */
-    public static create(properties?: IReadMetricsRequest): ReadMetricsRequest;
-
-    /**
-     * Encodes the specified ReadMetricsRequest message. Does not implicitly {@link ReadMetricsRequest.verify|verify} messages.
-     * @param message ReadMetricsRequest message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encode(message: IReadMetricsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Encodes the specified ReadMetricsRequest message, length delimited. Does not implicitly {@link ReadMetricsRequest.verify|verify} messages.
-     * @param message ReadMetricsRequest message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encodeDelimited(message: IReadMetricsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Decodes a ReadMetricsRequest message from the specified reader or buffer.
-     * @param reader Reader or buffer to decode from
-     * @param [length] Message length if known beforehand
-     * @returns ReadMetricsRequest
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ReadMetricsRequest;
-
-    /**
-     * Decodes a ReadMetricsRequest message from the specified reader or buffer, length delimited.
-     * @param reader Reader or buffer to decode from
-     * @returns ReadMetricsRequest
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ReadMetricsRequest;
-
-    /**
-     * Verifies a ReadMetricsRequest message.
-     * @param message Plain object to verify
-     * @returns `null` if valid, otherwise the reason why it is not
-     */
-    public static verify(message: { [k: string]: any }): (string|null);
-
-    /**
-     * Creates a ReadMetricsRequest message from a plain object. Also converts values to their respective internal types.
-     * @param object Plain object
-     * @returns ReadMetricsRequest
-     */
-    public static fromObject(object: { [k: string]: any }): ReadMetricsRequest;
-
-    /**
-     * Creates a plain object from a ReadMetricsRequest message. Also converts values to other types if specified.
-     * @param message ReadMetricsRequest
-     * @param [options] Conversion options
-     * @returns Plain object
-     */
-    public static toObject(message: ReadMetricsRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-    /**
-     * Converts this ReadMetricsRequest to JSON.
-     * @returns JSON object
-     */
-    public toJSON(): { [k: string]: any };
-}
-
-/** Properties of a ReadMetricsResponse. */
-export interface IReadMetricsResponse {
-
-    /** ReadMetricsResponse data */
-    data?: (Uint8Array|null);
-}
-
-/** Represents a ReadMetricsResponse. */
-export class ReadMetricsResponse implements IReadMetricsResponse {
-
-    /**
-     * Constructs a new ReadMetricsResponse.
-     * @param [properties] Properties to set
-     */
-    constructor(properties?: IReadMetricsResponse);
-
-    /** ReadMetricsResponse data. */
-    public data: Uint8Array;
-
-    /**
-     * Creates a new ReadMetricsResponse instance using the specified properties.
-     * @param [properties] Properties to set
-     * @returns ReadMetricsResponse instance
-     */
-    public static create(properties?: IReadMetricsResponse): ReadMetricsResponse;
-
-    /**
-     * Encodes the specified ReadMetricsResponse message. Does not implicitly {@link ReadMetricsResponse.verify|verify} messages.
-     * @param message ReadMetricsResponse message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encode(message: IReadMetricsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Encodes the specified ReadMetricsResponse message, length delimited. Does not implicitly {@link ReadMetricsResponse.verify|verify} messages.
-     * @param message ReadMetricsResponse message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encodeDelimited(message: IReadMetricsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Decodes a ReadMetricsResponse message from the specified reader or buffer.
-     * @param reader Reader or buffer to decode from
-     * @param [length] Message length if known beforehand
-     * @returns ReadMetricsResponse
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ReadMetricsResponse;
-
-    /**
-     * Decodes a ReadMetricsResponse message from the specified reader or buffer, length delimited.
-     * @param reader Reader or buffer to decode from
-     * @returns ReadMetricsResponse
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ReadMetricsResponse;
-
-    /**
-     * Verifies a ReadMetricsResponse message.
-     * @param message Plain object to verify
-     * @returns `null` if valid, otherwise the reason why it is not
-     */
-    public static verify(message: { [k: string]: any }): (string|null);
-
-    /**
-     * Creates a ReadMetricsResponse message from a plain object. Also converts values to their respective internal types.
-     * @param object Plain object
-     * @returns ReadMetricsResponse
-     */
-    public static fromObject(object: { [k: string]: any }): ReadMetricsResponse;
-
-    /**
-     * Creates a plain object from a ReadMetricsResponse message. Also converts values to other types if specified.
-     * @param message ReadMetricsResponse
-     * @param [options] Conversion options
-     * @returns Plain object
-     */
-    public static toObject(message: ReadMetricsResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-    /**
-     * Converts this ReadMetricsResponse to JSON.
-     * @returns JSON object
-     */
-    public toJSON(): { [k: string]: any };
-}
-
 /** Properties of a MonitorSwarmsRequest. */
 export interface IMonitorSwarmsRequest {
 }
@@ -1649,175 +1271,175 @@ export class GetChatServerResponse implements IGetChatServerResponse {
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a GetChatServersRequest. */
-export interface IGetChatServersRequest {
+/** Properties of a ListChatServersRequest. */
+export interface IListChatServersRequest {
 }
 
-/** Represents a GetChatServersRequest. */
-export class GetChatServersRequest implements IGetChatServersRequest {
+/** Represents a ListChatServersRequest. */
+export class ListChatServersRequest implements IListChatServersRequest {
 
     /**
-     * Constructs a new GetChatServersRequest.
+     * Constructs a new ListChatServersRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IGetChatServersRequest);
+    constructor(properties?: IListChatServersRequest);
 
     /**
-     * Creates a new GetChatServersRequest instance using the specified properties.
+     * Creates a new ListChatServersRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns GetChatServersRequest instance
+     * @returns ListChatServersRequest instance
      */
-    public static create(properties?: IGetChatServersRequest): GetChatServersRequest;
+    public static create(properties?: IListChatServersRequest): ListChatServersRequest;
 
     /**
-     * Encodes the specified GetChatServersRequest message. Does not implicitly {@link GetChatServersRequest.verify|verify} messages.
-     * @param message GetChatServersRequest message or plain object to encode
+     * Encodes the specified ListChatServersRequest message. Does not implicitly {@link ListChatServersRequest.verify|verify} messages.
+     * @param message ListChatServersRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IGetChatServersRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IListChatServersRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified GetChatServersRequest message, length delimited. Does not implicitly {@link GetChatServersRequest.verify|verify} messages.
-     * @param message GetChatServersRequest message or plain object to encode
+     * Encodes the specified ListChatServersRequest message, length delimited. Does not implicitly {@link ListChatServersRequest.verify|verify} messages.
+     * @param message ListChatServersRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IGetChatServersRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IListChatServersRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a GetChatServersRequest message from the specified reader or buffer.
+     * Decodes a ListChatServersRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns GetChatServersRequest
+     * @returns ListChatServersRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetChatServersRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ListChatServersRequest;
 
     /**
-     * Decodes a GetChatServersRequest message from the specified reader or buffer, length delimited.
+     * Decodes a ListChatServersRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns GetChatServersRequest
+     * @returns ListChatServersRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetChatServersRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ListChatServersRequest;
 
     /**
-     * Verifies a GetChatServersRequest message.
+     * Verifies a ListChatServersRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a GetChatServersRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a ListChatServersRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns GetChatServersRequest
+     * @returns ListChatServersRequest
      */
-    public static fromObject(object: { [k: string]: any }): GetChatServersRequest;
+    public static fromObject(object: { [k: string]: any }): ListChatServersRequest;
 
     /**
-     * Creates a plain object from a GetChatServersRequest message. Also converts values to other types if specified.
-     * @param message GetChatServersRequest
+     * Creates a plain object from a ListChatServersRequest message. Also converts values to other types if specified.
+     * @param message ListChatServersRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: GetChatServersRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: ListChatServersRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this GetChatServersRequest to JSON.
+     * Converts this ListChatServersRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a GetChatServersResponse. */
-export interface IGetChatServersResponse {
+/** Properties of a ListChatServersResponse. */
+export interface IListChatServersResponse {
 
-    /** GetChatServersResponse chatServers */
+    /** ListChatServersResponse chatServers */
     chatServers?: (IChatServer[]|null);
 }
 
-/** Represents a GetChatServersResponse. */
-export class GetChatServersResponse implements IGetChatServersResponse {
+/** Represents a ListChatServersResponse. */
+export class ListChatServersResponse implements IListChatServersResponse {
 
     /**
-     * Constructs a new GetChatServersResponse.
+     * Constructs a new ListChatServersResponse.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IGetChatServersResponse);
+    constructor(properties?: IListChatServersResponse);
 
-    /** GetChatServersResponse chatServers. */
+    /** ListChatServersResponse chatServers. */
     public chatServers: IChatServer[];
 
     /**
-     * Creates a new GetChatServersResponse instance using the specified properties.
+     * Creates a new ListChatServersResponse instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns GetChatServersResponse instance
+     * @returns ListChatServersResponse instance
      */
-    public static create(properties?: IGetChatServersResponse): GetChatServersResponse;
+    public static create(properties?: IListChatServersResponse): ListChatServersResponse;
 
     /**
-     * Encodes the specified GetChatServersResponse message. Does not implicitly {@link GetChatServersResponse.verify|verify} messages.
-     * @param message GetChatServersResponse message or plain object to encode
+     * Encodes the specified ListChatServersResponse message. Does not implicitly {@link ListChatServersResponse.verify|verify} messages.
+     * @param message ListChatServersResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IGetChatServersResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IListChatServersResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified GetChatServersResponse message, length delimited. Does not implicitly {@link GetChatServersResponse.verify|verify} messages.
-     * @param message GetChatServersResponse message or plain object to encode
+     * Encodes the specified ListChatServersResponse message, length delimited. Does not implicitly {@link ListChatServersResponse.verify|verify} messages.
+     * @param message ListChatServersResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IGetChatServersResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IListChatServersResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a GetChatServersResponse message from the specified reader or buffer.
+     * Decodes a ListChatServersResponse message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns GetChatServersResponse
+     * @returns ListChatServersResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetChatServersResponse;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ListChatServersResponse;
 
     /**
-     * Decodes a GetChatServersResponse message from the specified reader or buffer, length delimited.
+     * Decodes a ListChatServersResponse message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns GetChatServersResponse
+     * @returns ListChatServersResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetChatServersResponse;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ListChatServersResponse;
 
     /**
-     * Verifies a GetChatServersResponse message.
+     * Verifies a ListChatServersResponse message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a GetChatServersResponse message from a plain object. Also converts values to their respective internal types.
+     * Creates a ListChatServersResponse message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns GetChatServersResponse
+     * @returns ListChatServersResponse
      */
-    public static fromObject(object: { [k: string]: any }): GetChatServersResponse;
+    public static fromObject(object: { [k: string]: any }): ListChatServersResponse;
 
     /**
-     * Creates a plain object from a GetChatServersResponse message. Also converts values to other types if specified.
-     * @param message GetChatServersResponse
+     * Creates a plain object from a ListChatServersResponse message. Also converts values to other types if specified.
+     * @param message ListChatServersResponse
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: GetChatServersResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: ListChatServersResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this GetChatServersResponse to JSON.
+     * Converts this ListChatServersResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -4329,6 +3951,384 @@ export class CallChatClientResponse implements ICallChatClientResponse {
 
     /**
      * Converts this CallChatClientResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a PProfRequest. */
+export interface IPProfRequest {
+
+    /** PProfRequest name */
+    name?: (string|null);
+
+    /** PProfRequest debug */
+    debug?: (boolean|null);
+
+    /** PProfRequest gc */
+    gc?: (boolean|null);
+}
+
+/** Represents a PProfRequest. */
+export class PProfRequest implements IPProfRequest {
+
+    /**
+     * Constructs a new PProfRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IPProfRequest);
+
+    /** PProfRequest name. */
+    public name: string;
+
+    /** PProfRequest debug. */
+    public debug: boolean;
+
+    /** PProfRequest gc. */
+    public gc: boolean;
+
+    /**
+     * Creates a new PProfRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns PProfRequest instance
+     */
+    public static create(properties?: IPProfRequest): PProfRequest;
+
+    /**
+     * Encodes the specified PProfRequest message. Does not implicitly {@link PProfRequest.verify|verify} messages.
+     * @param message PProfRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IPProfRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified PProfRequest message, length delimited. Does not implicitly {@link PProfRequest.verify|verify} messages.
+     * @param message PProfRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IPProfRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a PProfRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns PProfRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): PProfRequest;
+
+    /**
+     * Decodes a PProfRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns PProfRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): PProfRequest;
+
+    /**
+     * Verifies a PProfRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a PProfRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns PProfRequest
+     */
+    public static fromObject(object: { [k: string]: any }): PProfRequest;
+
+    /**
+     * Creates a plain object from a PProfRequest message. Also converts values to other types if specified.
+     * @param message PProfRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: PProfRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this PProfRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a PProfResponse. */
+export interface IPProfResponse {
+
+    /** PProfResponse name */
+    name?: (string|null);
+
+    /** PProfResponse data */
+    data?: (Uint8Array|null);
+}
+
+/** Represents a PProfResponse. */
+export class PProfResponse implements IPProfResponse {
+
+    /**
+     * Constructs a new PProfResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IPProfResponse);
+
+    /** PProfResponse name. */
+    public name: string;
+
+    /** PProfResponse data. */
+    public data: Uint8Array;
+
+    /**
+     * Creates a new PProfResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns PProfResponse instance
+     */
+    public static create(properties?: IPProfResponse): PProfResponse;
+
+    /**
+     * Encodes the specified PProfResponse message. Does not implicitly {@link PProfResponse.verify|verify} messages.
+     * @param message PProfResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IPProfResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified PProfResponse message, length delimited. Does not implicitly {@link PProfResponse.verify|verify} messages.
+     * @param message PProfResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IPProfResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a PProfResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns PProfResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): PProfResponse;
+
+    /**
+     * Decodes a PProfResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns PProfResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): PProfResponse;
+
+    /**
+     * Verifies a PProfResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a PProfResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns PProfResponse
+     */
+    public static fromObject(object: { [k: string]: any }): PProfResponse;
+
+    /**
+     * Creates a plain object from a PProfResponse message. Also converts values to other types if specified.
+     * @param message PProfResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: PProfResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this PProfResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a ReadMetricsRequest. */
+export interface IReadMetricsRequest {
+
+    /** ReadMetricsRequest format */
+    format?: (MetricsFormat|null);
+}
+
+/** Represents a ReadMetricsRequest. */
+export class ReadMetricsRequest implements IReadMetricsRequest {
+
+    /**
+     * Constructs a new ReadMetricsRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IReadMetricsRequest);
+
+    /** ReadMetricsRequest format. */
+    public format: MetricsFormat;
+
+    /**
+     * Creates a new ReadMetricsRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns ReadMetricsRequest instance
+     */
+    public static create(properties?: IReadMetricsRequest): ReadMetricsRequest;
+
+    /**
+     * Encodes the specified ReadMetricsRequest message. Does not implicitly {@link ReadMetricsRequest.verify|verify} messages.
+     * @param message ReadMetricsRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IReadMetricsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified ReadMetricsRequest message, length delimited. Does not implicitly {@link ReadMetricsRequest.verify|verify} messages.
+     * @param message ReadMetricsRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IReadMetricsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a ReadMetricsRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns ReadMetricsRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ReadMetricsRequest;
+
+    /**
+     * Decodes a ReadMetricsRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns ReadMetricsRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ReadMetricsRequest;
+
+    /**
+     * Verifies a ReadMetricsRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a ReadMetricsRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns ReadMetricsRequest
+     */
+    public static fromObject(object: { [k: string]: any }): ReadMetricsRequest;
+
+    /**
+     * Creates a plain object from a ReadMetricsRequest message. Also converts values to other types if specified.
+     * @param message ReadMetricsRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: ReadMetricsRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this ReadMetricsRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a ReadMetricsResponse. */
+export interface IReadMetricsResponse {
+
+    /** ReadMetricsResponse data */
+    data?: (Uint8Array|null);
+}
+
+/** Represents a ReadMetricsResponse. */
+export class ReadMetricsResponse implements IReadMetricsResponse {
+
+    /**
+     * Constructs a new ReadMetricsResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IReadMetricsResponse);
+
+    /** ReadMetricsResponse data. */
+    public data: Uint8Array;
+
+    /**
+     * Creates a new ReadMetricsResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns ReadMetricsResponse instance
+     */
+    public static create(properties?: IReadMetricsResponse): ReadMetricsResponse;
+
+    /**
+     * Encodes the specified ReadMetricsResponse message. Does not implicitly {@link ReadMetricsResponse.verify|verify} messages.
+     * @param message ReadMetricsResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IReadMetricsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified ReadMetricsResponse message, length delimited. Does not implicitly {@link ReadMetricsResponse.verify|verify} messages.
+     * @param message ReadMetricsResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IReadMetricsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a ReadMetricsResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns ReadMetricsResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ReadMetricsResponse;
+
+    /**
+     * Decodes a ReadMetricsResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns ReadMetricsResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ReadMetricsResponse;
+
+    /**
+     * Verifies a ReadMetricsResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a ReadMetricsResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns ReadMetricsResponse
+     */
+    public static fromObject(object: { [k: string]: any }): ReadMetricsResponse;
+
+    /**
+     * Creates a plain object from a ReadMetricsResponse message. Also converts values to other types if specified.
+     * @param message ReadMetricsResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: ReadMetricsResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this ReadMetricsResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -9518,175 +9518,175 @@ export class GetProfileResponse implements IGetProfileResponse {
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a GetProfilesRequest. */
-export interface IGetProfilesRequest {
+/** Properties of a ListProfilesRequest. */
+export interface IListProfilesRequest {
 }
 
-/** Represents a GetProfilesRequest. */
-export class GetProfilesRequest implements IGetProfilesRequest {
+/** Represents a ListProfilesRequest. */
+export class ListProfilesRequest implements IListProfilesRequest {
 
     /**
-     * Constructs a new GetProfilesRequest.
+     * Constructs a new ListProfilesRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IGetProfilesRequest);
+    constructor(properties?: IListProfilesRequest);
 
     /**
-     * Creates a new GetProfilesRequest instance using the specified properties.
+     * Creates a new ListProfilesRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns GetProfilesRequest instance
+     * @returns ListProfilesRequest instance
      */
-    public static create(properties?: IGetProfilesRequest): GetProfilesRequest;
+    public static create(properties?: IListProfilesRequest): ListProfilesRequest;
 
     /**
-     * Encodes the specified GetProfilesRequest message. Does not implicitly {@link GetProfilesRequest.verify|verify} messages.
-     * @param message GetProfilesRequest message or plain object to encode
+     * Encodes the specified ListProfilesRequest message. Does not implicitly {@link ListProfilesRequest.verify|verify} messages.
+     * @param message ListProfilesRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IGetProfilesRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IListProfilesRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified GetProfilesRequest message, length delimited. Does not implicitly {@link GetProfilesRequest.verify|verify} messages.
-     * @param message GetProfilesRequest message or plain object to encode
+     * Encodes the specified ListProfilesRequest message, length delimited. Does not implicitly {@link ListProfilesRequest.verify|verify} messages.
+     * @param message ListProfilesRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IGetProfilesRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IListProfilesRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a GetProfilesRequest message from the specified reader or buffer.
+     * Decodes a ListProfilesRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns GetProfilesRequest
+     * @returns ListProfilesRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetProfilesRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ListProfilesRequest;
 
     /**
-     * Decodes a GetProfilesRequest message from the specified reader or buffer, length delimited.
+     * Decodes a ListProfilesRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns GetProfilesRequest
+     * @returns ListProfilesRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetProfilesRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ListProfilesRequest;
 
     /**
-     * Verifies a GetProfilesRequest message.
+     * Verifies a ListProfilesRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a GetProfilesRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a ListProfilesRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns GetProfilesRequest
+     * @returns ListProfilesRequest
      */
-    public static fromObject(object: { [k: string]: any }): GetProfilesRequest;
+    public static fromObject(object: { [k: string]: any }): ListProfilesRequest;
 
     /**
-     * Creates a plain object from a GetProfilesRequest message. Also converts values to other types if specified.
-     * @param message GetProfilesRequest
+     * Creates a plain object from a ListProfilesRequest message. Also converts values to other types if specified.
+     * @param message ListProfilesRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: GetProfilesRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: ListProfilesRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this GetProfilesRequest to JSON.
+     * Converts this ListProfilesRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a GetProfilesResponse. */
-export interface IGetProfilesResponse {
+/** Properties of a ListProfilesResponse. */
+export interface IListProfilesResponse {
 
-    /** GetProfilesResponse profiles */
+    /** ListProfilesResponse profiles */
     profiles?: (IProfileSummary[]|null);
 }
 
-/** Represents a GetProfilesResponse. */
-export class GetProfilesResponse implements IGetProfilesResponse {
+/** Represents a ListProfilesResponse. */
+export class ListProfilesResponse implements IListProfilesResponse {
 
     /**
-     * Constructs a new GetProfilesResponse.
+     * Constructs a new ListProfilesResponse.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IGetProfilesResponse);
+    constructor(properties?: IListProfilesResponse);
 
-    /** GetProfilesResponse profiles. */
+    /** ListProfilesResponse profiles. */
     public profiles: IProfileSummary[];
 
     /**
-     * Creates a new GetProfilesResponse instance using the specified properties.
+     * Creates a new ListProfilesResponse instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns GetProfilesResponse instance
+     * @returns ListProfilesResponse instance
      */
-    public static create(properties?: IGetProfilesResponse): GetProfilesResponse;
+    public static create(properties?: IListProfilesResponse): ListProfilesResponse;
 
     /**
-     * Encodes the specified GetProfilesResponse message. Does not implicitly {@link GetProfilesResponse.verify|verify} messages.
-     * @param message GetProfilesResponse message or plain object to encode
+     * Encodes the specified ListProfilesResponse message. Does not implicitly {@link ListProfilesResponse.verify|verify} messages.
+     * @param message ListProfilesResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IGetProfilesResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IListProfilesResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified GetProfilesResponse message, length delimited. Does not implicitly {@link GetProfilesResponse.verify|verify} messages.
-     * @param message GetProfilesResponse message or plain object to encode
+     * Encodes the specified ListProfilesResponse message, length delimited. Does not implicitly {@link ListProfilesResponse.verify|verify} messages.
+     * @param message ListProfilesResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IGetProfilesResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IListProfilesResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a GetProfilesResponse message from the specified reader or buffer.
+     * Decodes a ListProfilesResponse message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns GetProfilesResponse
+     * @returns ListProfilesResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetProfilesResponse;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ListProfilesResponse;
 
     /**
-     * Decodes a GetProfilesResponse message from the specified reader or buffer, length delimited.
+     * Decodes a ListProfilesResponse message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns GetProfilesResponse
+     * @returns ListProfilesResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetProfilesResponse;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ListProfilesResponse;
 
     /**
-     * Verifies a GetProfilesResponse message.
+     * Verifies a ListProfilesResponse message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a GetProfilesResponse message from a plain object. Also converts values to their respective internal types.
+     * Creates a ListProfilesResponse message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns GetProfilesResponse
+     * @returns ListProfilesResponse
      */
-    public static fromObject(object: { [k: string]: any }): GetProfilesResponse;
+    public static fromObject(object: { [k: string]: any }): ListProfilesResponse;
 
     /**
-     * Creates a plain object from a GetProfilesResponse message. Also converts values to other types if specified.
-     * @param message GetProfilesResponse
+     * Creates a plain object from a ListProfilesResponse message. Also converts values to other types if specified.
+     * @param message ListProfilesResponse
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: GetProfilesResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: ListProfilesResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this GetProfilesResponse to JSON.
+     * Converts this ListProfilesResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -10700,523 +10700,175 @@ export class GetNetworkResponse implements IGetNetworkResponse {
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a GetNetworksRequest. */
-export interface IGetNetworksRequest {
+/** Properties of a ListNetworksRequest. */
+export interface IListNetworksRequest {
 }
 
-/** Represents a GetNetworksRequest. */
-export class GetNetworksRequest implements IGetNetworksRequest {
+/** Represents a ListNetworksRequest. */
+export class ListNetworksRequest implements IListNetworksRequest {
 
     /**
-     * Constructs a new GetNetworksRequest.
+     * Constructs a new ListNetworksRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IGetNetworksRequest);
+    constructor(properties?: IListNetworksRequest);
 
     /**
-     * Creates a new GetNetworksRequest instance using the specified properties.
+     * Creates a new ListNetworksRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns GetNetworksRequest instance
+     * @returns ListNetworksRequest instance
      */
-    public static create(properties?: IGetNetworksRequest): GetNetworksRequest;
+    public static create(properties?: IListNetworksRequest): ListNetworksRequest;
 
     /**
-     * Encodes the specified GetNetworksRequest message. Does not implicitly {@link GetNetworksRequest.verify|verify} messages.
-     * @param message GetNetworksRequest message or plain object to encode
+     * Encodes the specified ListNetworksRequest message. Does not implicitly {@link ListNetworksRequest.verify|verify} messages.
+     * @param message ListNetworksRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IGetNetworksRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IListNetworksRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified GetNetworksRequest message, length delimited. Does not implicitly {@link GetNetworksRequest.verify|verify} messages.
-     * @param message GetNetworksRequest message or plain object to encode
+     * Encodes the specified ListNetworksRequest message, length delimited. Does not implicitly {@link ListNetworksRequest.verify|verify} messages.
+     * @param message ListNetworksRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IGetNetworksRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IListNetworksRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a GetNetworksRequest message from the specified reader or buffer.
+     * Decodes a ListNetworksRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns GetNetworksRequest
+     * @returns ListNetworksRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetNetworksRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ListNetworksRequest;
 
     /**
-     * Decodes a GetNetworksRequest message from the specified reader or buffer, length delimited.
+     * Decodes a ListNetworksRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns GetNetworksRequest
+     * @returns ListNetworksRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetNetworksRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ListNetworksRequest;
 
     /**
-     * Verifies a GetNetworksRequest message.
+     * Verifies a ListNetworksRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a GetNetworksRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a ListNetworksRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns GetNetworksRequest
+     * @returns ListNetworksRequest
      */
-    public static fromObject(object: { [k: string]: any }): GetNetworksRequest;
+    public static fromObject(object: { [k: string]: any }): ListNetworksRequest;
 
     /**
-     * Creates a plain object from a GetNetworksRequest message. Also converts values to other types if specified.
-     * @param message GetNetworksRequest
+     * Creates a plain object from a ListNetworksRequest message. Also converts values to other types if specified.
+     * @param message ListNetworksRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: GetNetworksRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: ListNetworksRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this GetNetworksRequest to JSON.
+     * Converts this ListNetworksRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a GetNetworksResponse. */
-export interface IGetNetworksResponse {
+/** Properties of a ListNetworksResponse. */
+export interface IListNetworksResponse {
 
-    /** GetNetworksResponse networks */
+    /** ListNetworksResponse networks */
     networks?: (INetwork[]|null);
 }
 
-/** Represents a GetNetworksResponse. */
-export class GetNetworksResponse implements IGetNetworksResponse {
+/** Represents a ListNetworksResponse. */
+export class ListNetworksResponse implements IListNetworksResponse {
 
     /**
-     * Constructs a new GetNetworksResponse.
+     * Constructs a new ListNetworksResponse.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IGetNetworksResponse);
+    constructor(properties?: IListNetworksResponse);
 
-    /** GetNetworksResponse networks. */
+    /** ListNetworksResponse networks. */
     public networks: INetwork[];
 
     /**
-     * Creates a new GetNetworksResponse instance using the specified properties.
+     * Creates a new ListNetworksResponse instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns GetNetworksResponse instance
+     * @returns ListNetworksResponse instance
      */
-    public static create(properties?: IGetNetworksResponse): GetNetworksResponse;
+    public static create(properties?: IListNetworksResponse): ListNetworksResponse;
 
     /**
-     * Encodes the specified GetNetworksResponse message. Does not implicitly {@link GetNetworksResponse.verify|verify} messages.
-     * @param message GetNetworksResponse message or plain object to encode
+     * Encodes the specified ListNetworksResponse message. Does not implicitly {@link ListNetworksResponse.verify|verify} messages.
+     * @param message ListNetworksResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IGetNetworksResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IListNetworksResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified GetNetworksResponse message, length delimited. Does not implicitly {@link GetNetworksResponse.verify|verify} messages.
-     * @param message GetNetworksResponse message or plain object to encode
+     * Encodes the specified ListNetworksResponse message, length delimited. Does not implicitly {@link ListNetworksResponse.verify|verify} messages.
+     * @param message ListNetworksResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IGetNetworksResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IListNetworksResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a GetNetworksResponse message from the specified reader or buffer.
+     * Decodes a ListNetworksResponse message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns GetNetworksResponse
+     * @returns ListNetworksResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetNetworksResponse;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ListNetworksResponse;
 
     /**
-     * Decodes a GetNetworksResponse message from the specified reader or buffer, length delimited.
+     * Decodes a ListNetworksResponse message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns GetNetworksResponse
+     * @returns ListNetworksResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetNetworksResponse;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ListNetworksResponse;
 
     /**
-     * Verifies a GetNetworksResponse message.
+     * Verifies a ListNetworksResponse message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a GetNetworksResponse message from a plain object. Also converts values to their respective internal types.
+     * Creates a ListNetworksResponse message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns GetNetworksResponse
+     * @returns ListNetworksResponse
      */
-    public static fromObject(object: { [k: string]: any }): GetNetworksResponse;
+    public static fromObject(object: { [k: string]: any }): ListNetworksResponse;
 
     /**
-     * Creates a plain object from a GetNetworksResponse message. Also converts values to other types if specified.
-     * @param message GetNetworksResponse
+     * Creates a plain object from a ListNetworksResponse message. Also converts values to other types if specified.
+     * @param message ListNetworksResponse
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: GetNetworksResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: ListNetworksResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this GetNetworksResponse to JSON.
-     * @returns JSON object
-     */
-    public toJSON(): { [k: string]: any };
-}
-
-/** Properties of a GetNetworkMembershipsRequest. */
-export interface IGetNetworkMembershipsRequest {
-}
-
-/** Represents a GetNetworkMembershipsRequest. */
-export class GetNetworkMembershipsRequest implements IGetNetworkMembershipsRequest {
-
-    /**
-     * Constructs a new GetNetworkMembershipsRequest.
-     * @param [properties] Properties to set
-     */
-    constructor(properties?: IGetNetworkMembershipsRequest);
-
-    /**
-     * Creates a new GetNetworkMembershipsRequest instance using the specified properties.
-     * @param [properties] Properties to set
-     * @returns GetNetworkMembershipsRequest instance
-     */
-    public static create(properties?: IGetNetworkMembershipsRequest): GetNetworkMembershipsRequest;
-
-    /**
-     * Encodes the specified GetNetworkMembershipsRequest message. Does not implicitly {@link GetNetworkMembershipsRequest.verify|verify} messages.
-     * @param message GetNetworkMembershipsRequest message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encode(message: IGetNetworkMembershipsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Encodes the specified GetNetworkMembershipsRequest message, length delimited. Does not implicitly {@link GetNetworkMembershipsRequest.verify|verify} messages.
-     * @param message GetNetworkMembershipsRequest message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encodeDelimited(message: IGetNetworkMembershipsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Decodes a GetNetworkMembershipsRequest message from the specified reader or buffer.
-     * @param reader Reader or buffer to decode from
-     * @param [length] Message length if known beforehand
-     * @returns GetNetworkMembershipsRequest
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetNetworkMembershipsRequest;
-
-    /**
-     * Decodes a GetNetworkMembershipsRequest message from the specified reader or buffer, length delimited.
-     * @param reader Reader or buffer to decode from
-     * @returns GetNetworkMembershipsRequest
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetNetworkMembershipsRequest;
-
-    /**
-     * Verifies a GetNetworkMembershipsRequest message.
-     * @param message Plain object to verify
-     * @returns `null` if valid, otherwise the reason why it is not
-     */
-    public static verify(message: { [k: string]: any }): (string|null);
-
-    /**
-     * Creates a GetNetworkMembershipsRequest message from a plain object. Also converts values to their respective internal types.
-     * @param object Plain object
-     * @returns GetNetworkMembershipsRequest
-     */
-    public static fromObject(object: { [k: string]: any }): GetNetworkMembershipsRequest;
-
-    /**
-     * Creates a plain object from a GetNetworkMembershipsRequest message. Also converts values to other types if specified.
-     * @param message GetNetworkMembershipsRequest
-     * @param [options] Conversion options
-     * @returns Plain object
-     */
-    public static toObject(message: GetNetworkMembershipsRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-    /**
-     * Converts this GetNetworkMembershipsRequest to JSON.
-     * @returns JSON object
-     */
-    public toJSON(): { [k: string]: any };
-}
-
-/** Properties of a GetNetworkMembershipsResponse. */
-export interface IGetNetworkMembershipsResponse {
-
-    /** GetNetworkMembershipsResponse networkMemberships */
-    networkMemberships?: (INetworkMembership[]|null);
-}
-
-/** Represents a GetNetworkMembershipsResponse. */
-export class GetNetworkMembershipsResponse implements IGetNetworkMembershipsResponse {
-
-    /**
-     * Constructs a new GetNetworkMembershipsResponse.
-     * @param [properties] Properties to set
-     */
-    constructor(properties?: IGetNetworkMembershipsResponse);
-
-    /** GetNetworkMembershipsResponse networkMemberships. */
-    public networkMemberships: INetworkMembership[];
-
-    /**
-     * Creates a new GetNetworkMembershipsResponse instance using the specified properties.
-     * @param [properties] Properties to set
-     * @returns GetNetworkMembershipsResponse instance
-     */
-    public static create(properties?: IGetNetworkMembershipsResponse): GetNetworkMembershipsResponse;
-
-    /**
-     * Encodes the specified GetNetworkMembershipsResponse message. Does not implicitly {@link GetNetworkMembershipsResponse.verify|verify} messages.
-     * @param message GetNetworkMembershipsResponse message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encode(message: IGetNetworkMembershipsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Encodes the specified GetNetworkMembershipsResponse message, length delimited. Does not implicitly {@link GetNetworkMembershipsResponse.verify|verify} messages.
-     * @param message GetNetworkMembershipsResponse message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encodeDelimited(message: IGetNetworkMembershipsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Decodes a GetNetworkMembershipsResponse message from the specified reader or buffer.
-     * @param reader Reader or buffer to decode from
-     * @param [length] Message length if known beforehand
-     * @returns GetNetworkMembershipsResponse
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetNetworkMembershipsResponse;
-
-    /**
-     * Decodes a GetNetworkMembershipsResponse message from the specified reader or buffer, length delimited.
-     * @param reader Reader or buffer to decode from
-     * @returns GetNetworkMembershipsResponse
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetNetworkMembershipsResponse;
-
-    /**
-     * Verifies a GetNetworkMembershipsResponse message.
-     * @param message Plain object to verify
-     * @returns `null` if valid, otherwise the reason why it is not
-     */
-    public static verify(message: { [k: string]: any }): (string|null);
-
-    /**
-     * Creates a GetNetworkMembershipsResponse message from a plain object. Also converts values to their respective internal types.
-     * @param object Plain object
-     * @returns GetNetworkMembershipsResponse
-     */
-    public static fromObject(object: { [k: string]: any }): GetNetworkMembershipsResponse;
-
-    /**
-     * Creates a plain object from a GetNetworkMembershipsResponse message. Also converts values to other types if specified.
-     * @param message GetNetworkMembershipsResponse
-     * @param [options] Conversion options
-     * @returns Plain object
-     */
-    public static toObject(message: GetNetworkMembershipsResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-    /**
-     * Converts this GetNetworkMembershipsResponse to JSON.
-     * @returns JSON object
-     */
-    public toJSON(): { [k: string]: any };
-}
-
-/** Properties of a DeleteNetworkMembershipRequest. */
-export interface IDeleteNetworkMembershipRequest {
-
-    /** DeleteNetworkMembershipRequest id */
-    id?: (number|null);
-}
-
-/** Represents a DeleteNetworkMembershipRequest. */
-export class DeleteNetworkMembershipRequest implements IDeleteNetworkMembershipRequest {
-
-    /**
-     * Constructs a new DeleteNetworkMembershipRequest.
-     * @param [properties] Properties to set
-     */
-    constructor(properties?: IDeleteNetworkMembershipRequest);
-
-    /** DeleteNetworkMembershipRequest id. */
-    public id: number;
-
-    /**
-     * Creates a new DeleteNetworkMembershipRequest instance using the specified properties.
-     * @param [properties] Properties to set
-     * @returns DeleteNetworkMembershipRequest instance
-     */
-    public static create(properties?: IDeleteNetworkMembershipRequest): DeleteNetworkMembershipRequest;
-
-    /**
-     * Encodes the specified DeleteNetworkMembershipRequest message. Does not implicitly {@link DeleteNetworkMembershipRequest.verify|verify} messages.
-     * @param message DeleteNetworkMembershipRequest message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encode(message: IDeleteNetworkMembershipRequest, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Encodes the specified DeleteNetworkMembershipRequest message, length delimited. Does not implicitly {@link DeleteNetworkMembershipRequest.verify|verify} messages.
-     * @param message DeleteNetworkMembershipRequest message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encodeDelimited(message: IDeleteNetworkMembershipRequest, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Decodes a DeleteNetworkMembershipRequest message from the specified reader or buffer.
-     * @param reader Reader or buffer to decode from
-     * @param [length] Message length if known beforehand
-     * @returns DeleteNetworkMembershipRequest
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DeleteNetworkMembershipRequest;
-
-    /**
-     * Decodes a DeleteNetworkMembershipRequest message from the specified reader or buffer, length delimited.
-     * @param reader Reader or buffer to decode from
-     * @returns DeleteNetworkMembershipRequest
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DeleteNetworkMembershipRequest;
-
-    /**
-     * Verifies a DeleteNetworkMembershipRequest message.
-     * @param message Plain object to verify
-     * @returns `null` if valid, otherwise the reason why it is not
-     */
-    public static verify(message: { [k: string]: any }): (string|null);
-
-    /**
-     * Creates a DeleteNetworkMembershipRequest message from a plain object. Also converts values to their respective internal types.
-     * @param object Plain object
-     * @returns DeleteNetworkMembershipRequest
-     */
-    public static fromObject(object: { [k: string]: any }): DeleteNetworkMembershipRequest;
-
-    /**
-     * Creates a plain object from a DeleteNetworkMembershipRequest message. Also converts values to other types if specified.
-     * @param message DeleteNetworkMembershipRequest
-     * @param [options] Conversion options
-     * @returns Plain object
-     */
-    public static toObject(message: DeleteNetworkMembershipRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-    /**
-     * Converts this DeleteNetworkMembershipRequest to JSON.
-     * @returns JSON object
-     */
-    public toJSON(): { [k: string]: any };
-}
-
-/** Properties of a DeleteNetworkMembershipResponse. */
-export interface IDeleteNetworkMembershipResponse {
-}
-
-/** Represents a DeleteNetworkMembershipResponse. */
-export class DeleteNetworkMembershipResponse implements IDeleteNetworkMembershipResponse {
-
-    /**
-     * Constructs a new DeleteNetworkMembershipResponse.
-     * @param [properties] Properties to set
-     */
-    constructor(properties?: IDeleteNetworkMembershipResponse);
-
-    /**
-     * Creates a new DeleteNetworkMembershipResponse instance using the specified properties.
-     * @param [properties] Properties to set
-     * @returns DeleteNetworkMembershipResponse instance
-     */
-    public static create(properties?: IDeleteNetworkMembershipResponse): DeleteNetworkMembershipResponse;
-
-    /**
-     * Encodes the specified DeleteNetworkMembershipResponse message. Does not implicitly {@link DeleteNetworkMembershipResponse.verify|verify} messages.
-     * @param message DeleteNetworkMembershipResponse message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encode(message: IDeleteNetworkMembershipResponse, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Encodes the specified DeleteNetworkMembershipResponse message, length delimited. Does not implicitly {@link DeleteNetworkMembershipResponse.verify|verify} messages.
-     * @param message DeleteNetworkMembershipResponse message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encodeDelimited(message: IDeleteNetworkMembershipResponse, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Decodes a DeleteNetworkMembershipResponse message from the specified reader or buffer.
-     * @param reader Reader or buffer to decode from
-     * @param [length] Message length if known beforehand
-     * @returns DeleteNetworkMembershipResponse
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DeleteNetworkMembershipResponse;
-
-    /**
-     * Decodes a DeleteNetworkMembershipResponse message from the specified reader or buffer, length delimited.
-     * @param reader Reader or buffer to decode from
-     * @returns DeleteNetworkMembershipResponse
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DeleteNetworkMembershipResponse;
-
-    /**
-     * Verifies a DeleteNetworkMembershipResponse message.
-     * @param message Plain object to verify
-     * @returns `null` if valid, otherwise the reason why it is not
-     */
-    public static verify(message: { [k: string]: any }): (string|null);
-
-    /**
-     * Creates a DeleteNetworkMembershipResponse message from a plain object. Also converts values to their respective internal types.
-     * @param object Plain object
-     * @returns DeleteNetworkMembershipResponse
-     */
-    public static fromObject(object: { [k: string]: any }): DeleteNetworkMembershipResponse;
-
-    /**
-     * Creates a plain object from a DeleteNetworkMembershipResponse message. Also converts values to other types if specified.
-     * @param message DeleteNetworkMembershipResponse
-     * @param [options] Conversion options
-     * @returns Plain object
-     */
-    public static toObject(message: DeleteNetworkMembershipResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-    /**
-     * Converts this DeleteNetworkMembershipResponse to JSON.
+     * Converts this ListNetworksResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -11800,9 +11452,6 @@ export interface IProfile {
 
     /** Profile networks */
     networks?: (INetwork[]|null);
-
-    /** Profile networkMemberships */
-    networkMemberships?: (INetworkMembership[]|null);
 }
 
 /** Represents a Profile. */
@@ -11828,9 +11477,6 @@ export class Profile implements IProfile {
 
     /** Profile networks. */
     public networks: INetwork[];
-
-    /** Profile networkMemberships. */
-    public networkMemberships: INetworkMembership[];
 
     /**
      * Creates a new Profile instance using the specified properties.
@@ -12013,6 +11659,9 @@ export interface INetwork {
 
     /** Network certificate */
     certificate?: (ICertificate|null);
+
+    /** Network icon */
+    icon?: (INetworkIcon|null);
 }
 
 /** Represents a Network. */
@@ -12035,6 +11684,9 @@ export class Network implements INetwork {
 
     /** Network certificate. */
     public certificate?: (ICertificate|null);
+
+    /** Network icon. */
+    public icon?: (INetworkIcon|null);
 
     /**
      * Creates a new Network instance using the specified properties.
@@ -12629,190 +12281,190 @@ export class InvitationV0 implements IInvitationV0 {
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a CreateNetworkMembershipFromInvitationRequest. */
-export interface ICreateNetworkMembershipFromInvitationRequest {
+/** Properties of a CreateNetworkFromInvitationRequest. */
+export interface ICreateNetworkFromInvitationRequest {
 
-    /** CreateNetworkMembershipFromInvitationRequest invitationB64 */
+    /** CreateNetworkFromInvitationRequest invitationB64 */
     invitationB64?: (string|null);
 
-    /** CreateNetworkMembershipFromInvitationRequest invitationBytes */
+    /** CreateNetworkFromInvitationRequest invitationBytes */
     invitationBytes?: (Uint8Array|null);
 }
 
-/** Represents a CreateNetworkMembershipFromInvitationRequest. */
-export class CreateNetworkMembershipFromInvitationRequest implements ICreateNetworkMembershipFromInvitationRequest {
+/** Represents a CreateNetworkFromInvitationRequest. */
+export class CreateNetworkFromInvitationRequest implements ICreateNetworkFromInvitationRequest {
 
     /**
-     * Constructs a new CreateNetworkMembershipFromInvitationRequest.
+     * Constructs a new CreateNetworkFromInvitationRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: ICreateNetworkMembershipFromInvitationRequest);
+    constructor(properties?: ICreateNetworkFromInvitationRequest);
 
-    /** CreateNetworkMembershipFromInvitationRequest invitationB64. */
+    /** CreateNetworkFromInvitationRequest invitationB64. */
     public invitationB64: string;
 
-    /** CreateNetworkMembershipFromInvitationRequest invitationBytes. */
+    /** CreateNetworkFromInvitationRequest invitationBytes. */
     public invitationBytes: Uint8Array;
 
-    /** CreateNetworkMembershipFromInvitationRequest invitation. */
+    /** CreateNetworkFromInvitationRequest invitation. */
     public invitation?: ("invitationB64"|"invitationBytes");
 
     /**
-     * Creates a new CreateNetworkMembershipFromInvitationRequest instance using the specified properties.
+     * Creates a new CreateNetworkFromInvitationRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns CreateNetworkMembershipFromInvitationRequest instance
+     * @returns CreateNetworkFromInvitationRequest instance
      */
-    public static create(properties?: ICreateNetworkMembershipFromInvitationRequest): CreateNetworkMembershipFromInvitationRequest;
+    public static create(properties?: ICreateNetworkFromInvitationRequest): CreateNetworkFromInvitationRequest;
 
     /**
-     * Encodes the specified CreateNetworkMembershipFromInvitationRequest message. Does not implicitly {@link CreateNetworkMembershipFromInvitationRequest.verify|verify} messages.
-     * @param message CreateNetworkMembershipFromInvitationRequest message or plain object to encode
+     * Encodes the specified CreateNetworkFromInvitationRequest message. Does not implicitly {@link CreateNetworkFromInvitationRequest.verify|verify} messages.
+     * @param message CreateNetworkFromInvitationRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: ICreateNetworkMembershipFromInvitationRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: ICreateNetworkFromInvitationRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified CreateNetworkMembershipFromInvitationRequest message, length delimited. Does not implicitly {@link CreateNetworkMembershipFromInvitationRequest.verify|verify} messages.
-     * @param message CreateNetworkMembershipFromInvitationRequest message or plain object to encode
+     * Encodes the specified CreateNetworkFromInvitationRequest message, length delimited. Does not implicitly {@link CreateNetworkFromInvitationRequest.verify|verify} messages.
+     * @param message CreateNetworkFromInvitationRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: ICreateNetworkMembershipFromInvitationRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: ICreateNetworkFromInvitationRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a CreateNetworkMembershipFromInvitationRequest message from the specified reader or buffer.
+     * Decodes a CreateNetworkFromInvitationRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns CreateNetworkMembershipFromInvitationRequest
+     * @returns CreateNetworkFromInvitationRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CreateNetworkMembershipFromInvitationRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CreateNetworkFromInvitationRequest;
 
     /**
-     * Decodes a CreateNetworkMembershipFromInvitationRequest message from the specified reader or buffer, length delimited.
+     * Decodes a CreateNetworkFromInvitationRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns CreateNetworkMembershipFromInvitationRequest
+     * @returns CreateNetworkFromInvitationRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CreateNetworkMembershipFromInvitationRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CreateNetworkFromInvitationRequest;
 
     /**
-     * Verifies a CreateNetworkMembershipFromInvitationRequest message.
+     * Verifies a CreateNetworkFromInvitationRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a CreateNetworkMembershipFromInvitationRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a CreateNetworkFromInvitationRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns CreateNetworkMembershipFromInvitationRequest
+     * @returns CreateNetworkFromInvitationRequest
      */
-    public static fromObject(object: { [k: string]: any }): CreateNetworkMembershipFromInvitationRequest;
+    public static fromObject(object: { [k: string]: any }): CreateNetworkFromInvitationRequest;
 
     /**
-     * Creates a plain object from a CreateNetworkMembershipFromInvitationRequest message. Also converts values to other types if specified.
-     * @param message CreateNetworkMembershipFromInvitationRequest
+     * Creates a plain object from a CreateNetworkFromInvitationRequest message. Also converts values to other types if specified.
+     * @param message CreateNetworkFromInvitationRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: CreateNetworkMembershipFromInvitationRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: CreateNetworkFromInvitationRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this CreateNetworkMembershipFromInvitationRequest to JSON.
+     * Converts this CreateNetworkFromInvitationRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a CreateNetworkMembershipFromInvitationResponse. */
-export interface ICreateNetworkMembershipFromInvitationResponse {
+/** Properties of a CreateNetworkFromInvitationResponse. */
+export interface ICreateNetworkFromInvitationResponse {
 
-    /** CreateNetworkMembershipFromInvitationResponse membership */
-    membership?: (INetworkMembership|null);
+    /** CreateNetworkFromInvitationResponse network */
+    network?: (INetwork|null);
 }
 
-/** Represents a CreateNetworkMembershipFromInvitationResponse. */
-export class CreateNetworkMembershipFromInvitationResponse implements ICreateNetworkMembershipFromInvitationResponse {
+/** Represents a CreateNetworkFromInvitationResponse. */
+export class CreateNetworkFromInvitationResponse implements ICreateNetworkFromInvitationResponse {
 
     /**
-     * Constructs a new CreateNetworkMembershipFromInvitationResponse.
+     * Constructs a new CreateNetworkFromInvitationResponse.
      * @param [properties] Properties to set
      */
-    constructor(properties?: ICreateNetworkMembershipFromInvitationResponse);
+    constructor(properties?: ICreateNetworkFromInvitationResponse);
 
-    /** CreateNetworkMembershipFromInvitationResponse membership. */
-    public membership?: (INetworkMembership|null);
+    /** CreateNetworkFromInvitationResponse network. */
+    public network?: (INetwork|null);
 
     /**
-     * Creates a new CreateNetworkMembershipFromInvitationResponse instance using the specified properties.
+     * Creates a new CreateNetworkFromInvitationResponse instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns CreateNetworkMembershipFromInvitationResponse instance
+     * @returns CreateNetworkFromInvitationResponse instance
      */
-    public static create(properties?: ICreateNetworkMembershipFromInvitationResponse): CreateNetworkMembershipFromInvitationResponse;
+    public static create(properties?: ICreateNetworkFromInvitationResponse): CreateNetworkFromInvitationResponse;
 
     /**
-     * Encodes the specified CreateNetworkMembershipFromInvitationResponse message. Does not implicitly {@link CreateNetworkMembershipFromInvitationResponse.verify|verify} messages.
-     * @param message CreateNetworkMembershipFromInvitationResponse message or plain object to encode
+     * Encodes the specified CreateNetworkFromInvitationResponse message. Does not implicitly {@link CreateNetworkFromInvitationResponse.verify|verify} messages.
+     * @param message CreateNetworkFromInvitationResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: ICreateNetworkMembershipFromInvitationResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: ICreateNetworkFromInvitationResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified CreateNetworkMembershipFromInvitationResponse message, length delimited. Does not implicitly {@link CreateNetworkMembershipFromInvitationResponse.verify|verify} messages.
-     * @param message CreateNetworkMembershipFromInvitationResponse message or plain object to encode
+     * Encodes the specified CreateNetworkFromInvitationResponse message, length delimited. Does not implicitly {@link CreateNetworkFromInvitationResponse.verify|verify} messages.
+     * @param message CreateNetworkFromInvitationResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: ICreateNetworkMembershipFromInvitationResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: ICreateNetworkFromInvitationResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a CreateNetworkMembershipFromInvitationResponse message from the specified reader or buffer.
+     * Decodes a CreateNetworkFromInvitationResponse message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns CreateNetworkMembershipFromInvitationResponse
+     * @returns CreateNetworkFromInvitationResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CreateNetworkMembershipFromInvitationResponse;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CreateNetworkFromInvitationResponse;
 
     /**
-     * Decodes a CreateNetworkMembershipFromInvitationResponse message from the specified reader or buffer, length delimited.
+     * Decodes a CreateNetworkFromInvitationResponse message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns CreateNetworkMembershipFromInvitationResponse
+     * @returns CreateNetworkFromInvitationResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CreateNetworkMembershipFromInvitationResponse;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CreateNetworkFromInvitationResponse;
 
     /**
-     * Verifies a CreateNetworkMembershipFromInvitationResponse message.
+     * Verifies a CreateNetworkFromInvitationResponse message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a CreateNetworkMembershipFromInvitationResponse message from a plain object. Also converts values to their respective internal types.
+     * Creates a CreateNetworkFromInvitationResponse message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns CreateNetworkMembershipFromInvitationResponse
+     * @returns CreateNetworkFromInvitationResponse
      */
-    public static fromObject(object: { [k: string]: any }): CreateNetworkMembershipFromInvitationResponse;
+    public static fromObject(object: { [k: string]: any }): CreateNetworkFromInvitationResponse;
 
     /**
-     * Creates a plain object from a CreateNetworkMembershipFromInvitationResponse message. Also converts values to other types if specified.
-     * @param message CreateNetworkMembershipFromInvitationResponse
+     * Creates a plain object from a CreateNetworkFromInvitationResponse message. Also converts values to other types if specified.
+     * @param message CreateNetworkFromInvitationResponse
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: CreateNetworkMembershipFromInvitationResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: CreateNetworkFromInvitationResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this CreateNetworkMembershipFromInvitationResponse to JSON.
+     * Converts this CreateNetworkFromInvitationResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -15518,85 +15170,85 @@ export class PublishSwarmResponse implements IPublishSwarmResponse {
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a VideoServerOpenRequest. */
-export interface IVideoServerOpenRequest {
+/** Properties of an OpenVideoServerRequest. */
+export interface IOpenVideoServerRequest {
 }
 
-/** Represents a VideoServerOpenRequest. */
-export class VideoServerOpenRequest implements IVideoServerOpenRequest {
+/** Represents an OpenVideoServerRequest. */
+export class OpenVideoServerRequest implements IOpenVideoServerRequest {
 
     /**
-     * Constructs a new VideoServerOpenRequest.
+     * Constructs a new OpenVideoServerRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IVideoServerOpenRequest);
+    constructor(properties?: IOpenVideoServerRequest);
 
     /**
-     * Creates a new VideoServerOpenRequest instance using the specified properties.
+     * Creates a new OpenVideoServerRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns VideoServerOpenRequest instance
+     * @returns OpenVideoServerRequest instance
      */
-    public static create(properties?: IVideoServerOpenRequest): VideoServerOpenRequest;
+    public static create(properties?: IOpenVideoServerRequest): OpenVideoServerRequest;
 
     /**
-     * Encodes the specified VideoServerOpenRequest message. Does not implicitly {@link VideoServerOpenRequest.verify|verify} messages.
-     * @param message VideoServerOpenRequest message or plain object to encode
+     * Encodes the specified OpenVideoServerRequest message. Does not implicitly {@link OpenVideoServerRequest.verify|verify} messages.
+     * @param message OpenVideoServerRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IVideoServerOpenRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IOpenVideoServerRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified VideoServerOpenRequest message, length delimited. Does not implicitly {@link VideoServerOpenRequest.verify|verify} messages.
-     * @param message VideoServerOpenRequest message or plain object to encode
+     * Encodes the specified OpenVideoServerRequest message, length delimited. Does not implicitly {@link OpenVideoServerRequest.verify|verify} messages.
+     * @param message OpenVideoServerRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IVideoServerOpenRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IOpenVideoServerRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a VideoServerOpenRequest message from the specified reader or buffer.
+     * Decodes an OpenVideoServerRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns VideoServerOpenRequest
+     * @returns OpenVideoServerRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoServerOpenRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): OpenVideoServerRequest;
 
     /**
-     * Decodes a VideoServerOpenRequest message from the specified reader or buffer, length delimited.
+     * Decodes an OpenVideoServerRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns VideoServerOpenRequest
+     * @returns OpenVideoServerRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoServerOpenRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): OpenVideoServerRequest;
 
     /**
-     * Verifies a VideoServerOpenRequest message.
+     * Verifies an OpenVideoServerRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a VideoServerOpenRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates an OpenVideoServerRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns VideoServerOpenRequest
+     * @returns OpenVideoServerRequest
      */
-    public static fromObject(object: { [k: string]: any }): VideoServerOpenRequest;
+    public static fromObject(object: { [k: string]: any }): OpenVideoServerRequest;
 
     /**
-     * Creates a plain object from a VideoServerOpenRequest message. Also converts values to other types if specified.
-     * @param message VideoServerOpenRequest
+     * Creates a plain object from an OpenVideoServerRequest message. Also converts values to other types if specified.
+     * @param message OpenVideoServerRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: VideoServerOpenRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: OpenVideoServerRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this VideoServerOpenRequest to JSON.
+     * Converts this OpenVideoServerRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -15692,283 +15344,283 @@ export class VideoServerOpenResponse implements IVideoServerOpenResponse {
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a VideoServerWriteRequest. */
-export interface IVideoServerWriteRequest {
+/** Properties of a WriteToVideoServerRequest. */
+export interface IWriteToVideoServerRequest {
 
-    /** VideoServerWriteRequest id */
+    /** WriteToVideoServerRequest id */
     id?: (number|null);
 
-    /** VideoServerWriteRequest data */
+    /** WriteToVideoServerRequest data */
     data?: (Uint8Array|null);
 
-    /** VideoServerWriteRequest flush */
+    /** WriteToVideoServerRequest flush */
     flush?: (boolean|null);
 }
 
-/** Represents a VideoServerWriteRequest. */
-export class VideoServerWriteRequest implements IVideoServerWriteRequest {
+/** Represents a WriteToVideoServerRequest. */
+export class WriteToVideoServerRequest implements IWriteToVideoServerRequest {
 
     /**
-     * Constructs a new VideoServerWriteRequest.
+     * Constructs a new WriteToVideoServerRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IVideoServerWriteRequest);
+    constructor(properties?: IWriteToVideoServerRequest);
 
-    /** VideoServerWriteRequest id. */
+    /** WriteToVideoServerRequest id. */
     public id: number;
 
-    /** VideoServerWriteRequest data. */
+    /** WriteToVideoServerRequest data. */
     public data: Uint8Array;
 
-    /** VideoServerWriteRequest flush. */
+    /** WriteToVideoServerRequest flush. */
     public flush: boolean;
 
     /**
-     * Creates a new VideoServerWriteRequest instance using the specified properties.
+     * Creates a new WriteToVideoServerRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns VideoServerWriteRequest instance
+     * @returns WriteToVideoServerRequest instance
      */
-    public static create(properties?: IVideoServerWriteRequest): VideoServerWriteRequest;
+    public static create(properties?: IWriteToVideoServerRequest): WriteToVideoServerRequest;
 
     /**
-     * Encodes the specified VideoServerWriteRequest message. Does not implicitly {@link VideoServerWriteRequest.verify|verify} messages.
-     * @param message VideoServerWriteRequest message or plain object to encode
+     * Encodes the specified WriteToVideoServerRequest message. Does not implicitly {@link WriteToVideoServerRequest.verify|verify} messages.
+     * @param message WriteToVideoServerRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IVideoServerWriteRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IWriteToVideoServerRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified VideoServerWriteRequest message, length delimited. Does not implicitly {@link VideoServerWriteRequest.verify|verify} messages.
-     * @param message VideoServerWriteRequest message or plain object to encode
+     * Encodes the specified WriteToVideoServerRequest message, length delimited. Does not implicitly {@link WriteToVideoServerRequest.verify|verify} messages.
+     * @param message WriteToVideoServerRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IVideoServerWriteRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IWriteToVideoServerRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a VideoServerWriteRequest message from the specified reader or buffer.
+     * Decodes a WriteToVideoServerRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns VideoServerWriteRequest
+     * @returns WriteToVideoServerRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoServerWriteRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): WriteToVideoServerRequest;
 
     /**
-     * Decodes a VideoServerWriteRequest message from the specified reader or buffer, length delimited.
+     * Decodes a WriteToVideoServerRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns VideoServerWriteRequest
+     * @returns WriteToVideoServerRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoServerWriteRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): WriteToVideoServerRequest;
 
     /**
-     * Verifies a VideoServerWriteRequest message.
+     * Verifies a WriteToVideoServerRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a VideoServerWriteRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a WriteToVideoServerRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns VideoServerWriteRequest
+     * @returns WriteToVideoServerRequest
      */
-    public static fromObject(object: { [k: string]: any }): VideoServerWriteRequest;
+    public static fromObject(object: { [k: string]: any }): WriteToVideoServerRequest;
 
     /**
-     * Creates a plain object from a VideoServerWriteRequest message. Also converts values to other types if specified.
-     * @param message VideoServerWriteRequest
+     * Creates a plain object from a WriteToVideoServerRequest message. Also converts values to other types if specified.
+     * @param message WriteToVideoServerRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: VideoServerWriteRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: WriteToVideoServerRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this VideoServerWriteRequest to JSON.
+     * Converts this WriteToVideoServerRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a VideoServerWriteResponse. */
-export interface IVideoServerWriteResponse {
+/** Properties of a WriteToVideoServerResponse. */
+export interface IWriteToVideoServerResponse {
 }
 
-/** Represents a VideoServerWriteResponse. */
-export class VideoServerWriteResponse implements IVideoServerWriteResponse {
+/** Represents a WriteToVideoServerResponse. */
+export class WriteToVideoServerResponse implements IWriteToVideoServerResponse {
 
     /**
-     * Constructs a new VideoServerWriteResponse.
+     * Constructs a new WriteToVideoServerResponse.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IVideoServerWriteResponse);
+    constructor(properties?: IWriteToVideoServerResponse);
 
     /**
-     * Creates a new VideoServerWriteResponse instance using the specified properties.
+     * Creates a new WriteToVideoServerResponse instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns VideoServerWriteResponse instance
+     * @returns WriteToVideoServerResponse instance
      */
-    public static create(properties?: IVideoServerWriteResponse): VideoServerWriteResponse;
+    public static create(properties?: IWriteToVideoServerResponse): WriteToVideoServerResponse;
 
     /**
-     * Encodes the specified VideoServerWriteResponse message. Does not implicitly {@link VideoServerWriteResponse.verify|verify} messages.
-     * @param message VideoServerWriteResponse message or plain object to encode
+     * Encodes the specified WriteToVideoServerResponse message. Does not implicitly {@link WriteToVideoServerResponse.verify|verify} messages.
+     * @param message WriteToVideoServerResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IVideoServerWriteResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IWriteToVideoServerResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified VideoServerWriteResponse message, length delimited. Does not implicitly {@link VideoServerWriteResponse.verify|verify} messages.
-     * @param message VideoServerWriteResponse message or plain object to encode
+     * Encodes the specified WriteToVideoServerResponse message, length delimited. Does not implicitly {@link WriteToVideoServerResponse.verify|verify} messages.
+     * @param message WriteToVideoServerResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IVideoServerWriteResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IWriteToVideoServerResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a VideoServerWriteResponse message from the specified reader or buffer.
+     * Decodes a WriteToVideoServerResponse message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns VideoServerWriteResponse
+     * @returns WriteToVideoServerResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoServerWriteResponse;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): WriteToVideoServerResponse;
 
     /**
-     * Decodes a VideoServerWriteResponse message from the specified reader or buffer, length delimited.
+     * Decodes a WriteToVideoServerResponse message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns VideoServerWriteResponse
+     * @returns WriteToVideoServerResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoServerWriteResponse;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): WriteToVideoServerResponse;
 
     /**
-     * Verifies a VideoServerWriteResponse message.
+     * Verifies a WriteToVideoServerResponse message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a VideoServerWriteResponse message from a plain object. Also converts values to their respective internal types.
+     * Creates a WriteToVideoServerResponse message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns VideoServerWriteResponse
+     * @returns WriteToVideoServerResponse
      */
-    public static fromObject(object: { [k: string]: any }): VideoServerWriteResponse;
+    public static fromObject(object: { [k: string]: any }): WriteToVideoServerResponse;
 
     /**
-     * Creates a plain object from a VideoServerWriteResponse message. Also converts values to other types if specified.
-     * @param message VideoServerWriteResponse
+     * Creates a plain object from a WriteToVideoServerResponse message. Also converts values to other types if specified.
+     * @param message WriteToVideoServerResponse
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: VideoServerWriteResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: WriteToVideoServerResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this VideoServerWriteResponse to JSON.
+     * Converts this WriteToVideoServerResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a VideoClientOpenRequest. */
-export interface IVideoClientOpenRequest {
+/** Properties of an OpenVideoClientRequest. */
+export interface IOpenVideoClientRequest {
 
-    /** VideoClientOpenRequest swarmKey */
+    /** OpenVideoClientRequest swarmKey */
     swarmKey?: (Uint8Array|null);
 
-    /** VideoClientOpenRequest emitData */
+    /** OpenVideoClientRequest emitData */
     emitData?: (boolean|null);
 }
 
-/** Represents a VideoClientOpenRequest. */
-export class VideoClientOpenRequest implements IVideoClientOpenRequest {
+/** Represents an OpenVideoClientRequest. */
+export class OpenVideoClientRequest implements IOpenVideoClientRequest {
 
     /**
-     * Constructs a new VideoClientOpenRequest.
+     * Constructs a new OpenVideoClientRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IVideoClientOpenRequest);
+    constructor(properties?: IOpenVideoClientRequest);
 
-    /** VideoClientOpenRequest swarmKey. */
+    /** OpenVideoClientRequest swarmKey. */
     public swarmKey: Uint8Array;
 
-    /** VideoClientOpenRequest emitData. */
+    /** OpenVideoClientRequest emitData. */
     public emitData: boolean;
 
     /**
-     * Creates a new VideoClientOpenRequest instance using the specified properties.
+     * Creates a new OpenVideoClientRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns VideoClientOpenRequest instance
+     * @returns OpenVideoClientRequest instance
      */
-    public static create(properties?: IVideoClientOpenRequest): VideoClientOpenRequest;
+    public static create(properties?: IOpenVideoClientRequest): OpenVideoClientRequest;
 
     /**
-     * Encodes the specified VideoClientOpenRequest message. Does not implicitly {@link VideoClientOpenRequest.verify|verify} messages.
-     * @param message VideoClientOpenRequest message or plain object to encode
+     * Encodes the specified OpenVideoClientRequest message. Does not implicitly {@link OpenVideoClientRequest.verify|verify} messages.
+     * @param message OpenVideoClientRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IVideoClientOpenRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IOpenVideoClientRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified VideoClientOpenRequest message, length delimited. Does not implicitly {@link VideoClientOpenRequest.verify|verify} messages.
-     * @param message VideoClientOpenRequest message or plain object to encode
+     * Encodes the specified OpenVideoClientRequest message, length delimited. Does not implicitly {@link OpenVideoClientRequest.verify|verify} messages.
+     * @param message OpenVideoClientRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IVideoClientOpenRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IOpenVideoClientRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a VideoClientOpenRequest message from the specified reader or buffer.
+     * Decodes an OpenVideoClientRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns VideoClientOpenRequest
+     * @returns OpenVideoClientRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoClientOpenRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): OpenVideoClientRequest;
 
     /**
-     * Decodes a VideoClientOpenRequest message from the specified reader or buffer, length delimited.
+     * Decodes an OpenVideoClientRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns VideoClientOpenRequest
+     * @returns OpenVideoClientRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoClientOpenRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): OpenVideoClientRequest;
 
     /**
-     * Verifies a VideoClientOpenRequest message.
+     * Verifies an OpenVideoClientRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a VideoClientOpenRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates an OpenVideoClientRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns VideoClientOpenRequest
+     * @returns OpenVideoClientRequest
      */
-    public static fromObject(object: { [k: string]: any }): VideoClientOpenRequest;
+    public static fromObject(object: { [k: string]: any }): OpenVideoClientRequest;
 
     /**
-     * Creates a plain object from a VideoClientOpenRequest message. Also converts values to other types if specified.
-     * @param message VideoClientOpenRequest
+     * Creates a plain object from an OpenVideoClientRequest message. Also converts values to other types if specified.
+     * @param message OpenVideoClientRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: VideoClientOpenRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: OpenVideoClientRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this VideoClientOpenRequest to JSON.
+     * Converts this OpenVideoClientRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -17854,6 +17506,15 @@ export interface INetworkHandshake {
 
     /** NetworkHandshake networkBindings */
     networkBindings?: (NetworkHandshake.INetworkBindings|null);
+
+    /** NetworkHandshake certificateUpgradeOffer */
+    certificateUpgradeOffer?: (NetworkHandshake.ICertificateUpgradeOffer|null);
+
+    /** NetworkHandshake certificateUpgradeRequest */
+    certificateUpgradeRequest?: (NetworkHandshake.ICertificateUpgradeRequest|null);
+
+    /** NetworkHandshake certificateUpgradeResponse */
+    certificateUpgradeResponse?: (NetworkHandshake.ICertificateUpgradeResponse|null);
 }
 
 /** Represents a NetworkHandshake. */
@@ -17871,8 +17532,17 @@ export class NetworkHandshake implements INetworkHandshake {
     /** NetworkHandshake networkBindings. */
     public networkBindings?: (NetworkHandshake.INetworkBindings|null);
 
+    /** NetworkHandshake certificateUpgradeOffer. */
+    public certificateUpgradeOffer?: (NetworkHandshake.ICertificateUpgradeOffer|null);
+
+    /** NetworkHandshake certificateUpgradeRequest. */
+    public certificateUpgradeRequest?: (NetworkHandshake.ICertificateUpgradeRequest|null);
+
+    /** NetworkHandshake certificateUpgradeResponse. */
+    public certificateUpgradeResponse?: (NetworkHandshake.ICertificateUpgradeResponse|null);
+
     /** NetworkHandshake body. */
-    public body?: ("init"|"networkBindings");
+    public body?: ("init"|"networkBindings"|"certificateUpgradeOffer"|"certificateUpgradeRequest"|"certificateUpgradeResponse");
 
     /**
      * Creates a new NetworkHandshake instance using the specified properties.
@@ -18218,6 +17888,276 @@ export namespace NetworkHandshake {
 
         /**
          * Converts this NetworkBindings to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a CertificateUpgradeOffer. */
+    interface ICertificateUpgradeOffer {
+
+        /** CertificateUpgradeOffer networkKeys */
+        networkKeys?: (Uint8Array[]|null);
+    }
+
+    /** Represents a CertificateUpgradeOffer. */
+    class CertificateUpgradeOffer implements ICertificateUpgradeOffer {
+
+        /**
+         * Constructs a new CertificateUpgradeOffer.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: NetworkHandshake.ICertificateUpgradeOffer);
+
+        /** CertificateUpgradeOffer networkKeys. */
+        public networkKeys: Uint8Array[];
+
+        /**
+         * Creates a new CertificateUpgradeOffer instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns CertificateUpgradeOffer instance
+         */
+        public static create(properties?: NetworkHandshake.ICertificateUpgradeOffer): NetworkHandshake.CertificateUpgradeOffer;
+
+        /**
+         * Encodes the specified CertificateUpgradeOffer message. Does not implicitly {@link NetworkHandshake.CertificateUpgradeOffer.verify|verify} messages.
+         * @param message CertificateUpgradeOffer message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: NetworkHandshake.ICertificateUpgradeOffer, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified CertificateUpgradeOffer message, length delimited. Does not implicitly {@link NetworkHandshake.CertificateUpgradeOffer.verify|verify} messages.
+         * @param message CertificateUpgradeOffer message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: NetworkHandshake.ICertificateUpgradeOffer, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a CertificateUpgradeOffer message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns CertificateUpgradeOffer
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkHandshake.CertificateUpgradeOffer;
+
+        /**
+         * Decodes a CertificateUpgradeOffer message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns CertificateUpgradeOffer
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkHandshake.CertificateUpgradeOffer;
+
+        /**
+         * Verifies a CertificateUpgradeOffer message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a CertificateUpgradeOffer message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns CertificateUpgradeOffer
+         */
+        public static fromObject(object: { [k: string]: any }): NetworkHandshake.CertificateUpgradeOffer;
+
+        /**
+         * Creates a plain object from a CertificateUpgradeOffer message. Also converts values to other types if specified.
+         * @param message CertificateUpgradeOffer
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: NetworkHandshake.CertificateUpgradeOffer, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this CertificateUpgradeOffer to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a CertificateUpgradeRequest. */
+    interface ICertificateUpgradeRequest {
+
+        /** CertificateUpgradeRequest networkKeys */
+        networkKeys?: (Uint8Array[]|null);
+    }
+
+    /** Represents a CertificateUpgradeRequest. */
+    class CertificateUpgradeRequest implements ICertificateUpgradeRequest {
+
+        /**
+         * Constructs a new CertificateUpgradeRequest.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: NetworkHandshake.ICertificateUpgradeRequest);
+
+        /** CertificateUpgradeRequest networkKeys. */
+        public networkKeys: Uint8Array[];
+
+        /**
+         * Creates a new CertificateUpgradeRequest instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns CertificateUpgradeRequest instance
+         */
+        public static create(properties?: NetworkHandshake.ICertificateUpgradeRequest): NetworkHandshake.CertificateUpgradeRequest;
+
+        /**
+         * Encodes the specified CertificateUpgradeRequest message. Does not implicitly {@link NetworkHandshake.CertificateUpgradeRequest.verify|verify} messages.
+         * @param message CertificateUpgradeRequest message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: NetworkHandshake.ICertificateUpgradeRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified CertificateUpgradeRequest message, length delimited. Does not implicitly {@link NetworkHandshake.CertificateUpgradeRequest.verify|verify} messages.
+         * @param message CertificateUpgradeRequest message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: NetworkHandshake.ICertificateUpgradeRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a CertificateUpgradeRequest message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns CertificateUpgradeRequest
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkHandshake.CertificateUpgradeRequest;
+
+        /**
+         * Decodes a CertificateUpgradeRequest message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns CertificateUpgradeRequest
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkHandshake.CertificateUpgradeRequest;
+
+        /**
+         * Verifies a CertificateUpgradeRequest message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a CertificateUpgradeRequest message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns CertificateUpgradeRequest
+         */
+        public static fromObject(object: { [k: string]: any }): NetworkHandshake.CertificateUpgradeRequest;
+
+        /**
+         * Creates a plain object from a CertificateUpgradeRequest message. Also converts values to other types if specified.
+         * @param message CertificateUpgradeRequest
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: NetworkHandshake.CertificateUpgradeRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this CertificateUpgradeRequest to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a CertificateUpgradeResponse. */
+    interface ICertificateUpgradeResponse {
+
+        /** CertificateUpgradeResponse certificates */
+        certificates?: (ICertificate[]|null);
+    }
+
+    /** Represents a CertificateUpgradeResponse. */
+    class CertificateUpgradeResponse implements ICertificateUpgradeResponse {
+
+        /**
+         * Constructs a new CertificateUpgradeResponse.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: NetworkHandshake.ICertificateUpgradeResponse);
+
+        /** CertificateUpgradeResponse certificates. */
+        public certificates: ICertificate[];
+
+        /**
+         * Creates a new CertificateUpgradeResponse instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns CertificateUpgradeResponse instance
+         */
+        public static create(properties?: NetworkHandshake.ICertificateUpgradeResponse): NetworkHandshake.CertificateUpgradeResponse;
+
+        /**
+         * Encodes the specified CertificateUpgradeResponse message. Does not implicitly {@link NetworkHandshake.CertificateUpgradeResponse.verify|verify} messages.
+         * @param message CertificateUpgradeResponse message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: NetworkHandshake.ICertificateUpgradeResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified CertificateUpgradeResponse message, length delimited. Does not implicitly {@link NetworkHandshake.CertificateUpgradeResponse.verify|verify} messages.
+         * @param message CertificateUpgradeResponse message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: NetworkHandshake.ICertificateUpgradeResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a CertificateUpgradeResponse message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns CertificateUpgradeResponse
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkHandshake.CertificateUpgradeResponse;
+
+        /**
+         * Decodes a CertificateUpgradeResponse message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns CertificateUpgradeResponse
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkHandshake.CertificateUpgradeResponse;
+
+        /**
+         * Verifies a CertificateUpgradeResponse message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a CertificateUpgradeResponse message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns CertificateUpgradeResponse
+         */
+        public static fromObject(object: { [k: string]: any }): NetworkHandshake.CertificateUpgradeResponse;
+
+        /**
+         * Creates a plain object from a CertificateUpgradeResponse message. Also converts values to other types if specified.
+         * @param message CertificateUpgradeResponse
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: NetworkHandshake.CertificateUpgradeResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this CertificateUpgradeResponse to JSON.
          * @returns JSON object
          */
         public toJSON(): { [k: string]: any };
@@ -19907,349 +19847,349 @@ export class GetBootstrapClientResponse implements IGetBootstrapClientResponse {
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a GetBootstrapClientsRequest. */
-export interface IGetBootstrapClientsRequest {
+/** Properties of a ListBootstrapClientsRequest. */
+export interface IListBootstrapClientsRequest {
 }
 
-/** Represents a GetBootstrapClientsRequest. */
-export class GetBootstrapClientsRequest implements IGetBootstrapClientsRequest {
+/** Represents a ListBootstrapClientsRequest. */
+export class ListBootstrapClientsRequest implements IListBootstrapClientsRequest {
 
     /**
-     * Constructs a new GetBootstrapClientsRequest.
+     * Constructs a new ListBootstrapClientsRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IGetBootstrapClientsRequest);
+    constructor(properties?: IListBootstrapClientsRequest);
 
     /**
-     * Creates a new GetBootstrapClientsRequest instance using the specified properties.
+     * Creates a new ListBootstrapClientsRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns GetBootstrapClientsRequest instance
+     * @returns ListBootstrapClientsRequest instance
      */
-    public static create(properties?: IGetBootstrapClientsRequest): GetBootstrapClientsRequest;
+    public static create(properties?: IListBootstrapClientsRequest): ListBootstrapClientsRequest;
 
     /**
-     * Encodes the specified GetBootstrapClientsRequest message. Does not implicitly {@link GetBootstrapClientsRequest.verify|verify} messages.
-     * @param message GetBootstrapClientsRequest message or plain object to encode
+     * Encodes the specified ListBootstrapClientsRequest message. Does not implicitly {@link ListBootstrapClientsRequest.verify|verify} messages.
+     * @param message ListBootstrapClientsRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IGetBootstrapClientsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IListBootstrapClientsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified GetBootstrapClientsRequest message, length delimited. Does not implicitly {@link GetBootstrapClientsRequest.verify|verify} messages.
-     * @param message GetBootstrapClientsRequest message or plain object to encode
+     * Encodes the specified ListBootstrapClientsRequest message, length delimited. Does not implicitly {@link ListBootstrapClientsRequest.verify|verify} messages.
+     * @param message ListBootstrapClientsRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IGetBootstrapClientsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IListBootstrapClientsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a GetBootstrapClientsRequest message from the specified reader or buffer.
+     * Decodes a ListBootstrapClientsRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns GetBootstrapClientsRequest
+     * @returns ListBootstrapClientsRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetBootstrapClientsRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ListBootstrapClientsRequest;
 
     /**
-     * Decodes a GetBootstrapClientsRequest message from the specified reader or buffer, length delimited.
+     * Decodes a ListBootstrapClientsRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns GetBootstrapClientsRequest
+     * @returns ListBootstrapClientsRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetBootstrapClientsRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ListBootstrapClientsRequest;
 
     /**
-     * Verifies a GetBootstrapClientsRequest message.
+     * Verifies a ListBootstrapClientsRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a GetBootstrapClientsRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a ListBootstrapClientsRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns GetBootstrapClientsRequest
+     * @returns ListBootstrapClientsRequest
      */
-    public static fromObject(object: { [k: string]: any }): GetBootstrapClientsRequest;
+    public static fromObject(object: { [k: string]: any }): ListBootstrapClientsRequest;
 
     /**
-     * Creates a plain object from a GetBootstrapClientsRequest message. Also converts values to other types if specified.
-     * @param message GetBootstrapClientsRequest
+     * Creates a plain object from a ListBootstrapClientsRequest message. Also converts values to other types if specified.
+     * @param message ListBootstrapClientsRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: GetBootstrapClientsRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: ListBootstrapClientsRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this GetBootstrapClientsRequest to JSON.
+     * Converts this ListBootstrapClientsRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a GetBootstrapClientsResponse. */
-export interface IGetBootstrapClientsResponse {
+/** Properties of a ListBootstrapClientsResponse. */
+export interface IListBootstrapClientsResponse {
 
-    /** GetBootstrapClientsResponse bootstrapClients */
+    /** ListBootstrapClientsResponse bootstrapClients */
     bootstrapClients?: (IBootstrapClient[]|null);
 }
 
-/** Represents a GetBootstrapClientsResponse. */
-export class GetBootstrapClientsResponse implements IGetBootstrapClientsResponse {
+/** Represents a ListBootstrapClientsResponse. */
+export class ListBootstrapClientsResponse implements IListBootstrapClientsResponse {
 
     /**
-     * Constructs a new GetBootstrapClientsResponse.
+     * Constructs a new ListBootstrapClientsResponse.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IGetBootstrapClientsResponse);
+    constructor(properties?: IListBootstrapClientsResponse);
 
-    /** GetBootstrapClientsResponse bootstrapClients. */
+    /** ListBootstrapClientsResponse bootstrapClients. */
     public bootstrapClients: IBootstrapClient[];
 
     /**
-     * Creates a new GetBootstrapClientsResponse instance using the specified properties.
+     * Creates a new ListBootstrapClientsResponse instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns GetBootstrapClientsResponse instance
+     * @returns ListBootstrapClientsResponse instance
      */
-    public static create(properties?: IGetBootstrapClientsResponse): GetBootstrapClientsResponse;
+    public static create(properties?: IListBootstrapClientsResponse): ListBootstrapClientsResponse;
 
     /**
-     * Encodes the specified GetBootstrapClientsResponse message. Does not implicitly {@link GetBootstrapClientsResponse.verify|verify} messages.
-     * @param message GetBootstrapClientsResponse message or plain object to encode
+     * Encodes the specified ListBootstrapClientsResponse message. Does not implicitly {@link ListBootstrapClientsResponse.verify|verify} messages.
+     * @param message ListBootstrapClientsResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IGetBootstrapClientsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IListBootstrapClientsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified GetBootstrapClientsResponse message, length delimited. Does not implicitly {@link GetBootstrapClientsResponse.verify|verify} messages.
-     * @param message GetBootstrapClientsResponse message or plain object to encode
+     * Encodes the specified ListBootstrapClientsResponse message, length delimited. Does not implicitly {@link ListBootstrapClientsResponse.verify|verify} messages.
+     * @param message ListBootstrapClientsResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IGetBootstrapClientsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IListBootstrapClientsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a GetBootstrapClientsResponse message from the specified reader or buffer.
+     * Decodes a ListBootstrapClientsResponse message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns GetBootstrapClientsResponse
+     * @returns ListBootstrapClientsResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetBootstrapClientsResponse;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ListBootstrapClientsResponse;
 
     /**
-     * Decodes a GetBootstrapClientsResponse message from the specified reader or buffer, length delimited.
+     * Decodes a ListBootstrapClientsResponse message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns GetBootstrapClientsResponse
+     * @returns ListBootstrapClientsResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetBootstrapClientsResponse;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ListBootstrapClientsResponse;
 
     /**
-     * Verifies a GetBootstrapClientsResponse message.
+     * Verifies a ListBootstrapClientsResponse message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a GetBootstrapClientsResponse message from a plain object. Also converts values to their respective internal types.
+     * Creates a ListBootstrapClientsResponse message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns GetBootstrapClientsResponse
+     * @returns ListBootstrapClientsResponse
      */
-    public static fromObject(object: { [k: string]: any }): GetBootstrapClientsResponse;
+    public static fromObject(object: { [k: string]: any }): ListBootstrapClientsResponse;
 
     /**
-     * Creates a plain object from a GetBootstrapClientsResponse message. Also converts values to other types if specified.
-     * @param message GetBootstrapClientsResponse
+     * Creates a plain object from a ListBootstrapClientsResponse message. Also converts values to other types if specified.
+     * @param message ListBootstrapClientsResponse
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: GetBootstrapClientsResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: ListBootstrapClientsResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this GetBootstrapClientsResponse to JSON.
+     * Converts this ListBootstrapClientsResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a GetBootstrapPeersRequest. */
-export interface IGetBootstrapPeersRequest {
+/** Properties of a ListBootstrapPeersRequest. */
+export interface IListBootstrapPeersRequest {
 }
 
-/** Represents a GetBootstrapPeersRequest. */
-export class GetBootstrapPeersRequest implements IGetBootstrapPeersRequest {
+/** Represents a ListBootstrapPeersRequest. */
+export class ListBootstrapPeersRequest implements IListBootstrapPeersRequest {
 
     /**
-     * Constructs a new GetBootstrapPeersRequest.
+     * Constructs a new ListBootstrapPeersRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IGetBootstrapPeersRequest);
+    constructor(properties?: IListBootstrapPeersRequest);
 
     /**
-     * Creates a new GetBootstrapPeersRequest instance using the specified properties.
+     * Creates a new ListBootstrapPeersRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns GetBootstrapPeersRequest instance
+     * @returns ListBootstrapPeersRequest instance
      */
-    public static create(properties?: IGetBootstrapPeersRequest): GetBootstrapPeersRequest;
+    public static create(properties?: IListBootstrapPeersRequest): ListBootstrapPeersRequest;
 
     /**
-     * Encodes the specified GetBootstrapPeersRequest message. Does not implicitly {@link GetBootstrapPeersRequest.verify|verify} messages.
-     * @param message GetBootstrapPeersRequest message or plain object to encode
+     * Encodes the specified ListBootstrapPeersRequest message. Does not implicitly {@link ListBootstrapPeersRequest.verify|verify} messages.
+     * @param message ListBootstrapPeersRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IGetBootstrapPeersRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IListBootstrapPeersRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified GetBootstrapPeersRequest message, length delimited. Does not implicitly {@link GetBootstrapPeersRequest.verify|verify} messages.
-     * @param message GetBootstrapPeersRequest message or plain object to encode
+     * Encodes the specified ListBootstrapPeersRequest message, length delimited. Does not implicitly {@link ListBootstrapPeersRequest.verify|verify} messages.
+     * @param message ListBootstrapPeersRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IGetBootstrapPeersRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IListBootstrapPeersRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a GetBootstrapPeersRequest message from the specified reader or buffer.
+     * Decodes a ListBootstrapPeersRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns GetBootstrapPeersRequest
+     * @returns ListBootstrapPeersRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetBootstrapPeersRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ListBootstrapPeersRequest;
 
     /**
-     * Decodes a GetBootstrapPeersRequest message from the specified reader or buffer, length delimited.
+     * Decodes a ListBootstrapPeersRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns GetBootstrapPeersRequest
+     * @returns ListBootstrapPeersRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetBootstrapPeersRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ListBootstrapPeersRequest;
 
     /**
-     * Verifies a GetBootstrapPeersRequest message.
+     * Verifies a ListBootstrapPeersRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a GetBootstrapPeersRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a ListBootstrapPeersRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns GetBootstrapPeersRequest
+     * @returns ListBootstrapPeersRequest
      */
-    public static fromObject(object: { [k: string]: any }): GetBootstrapPeersRequest;
+    public static fromObject(object: { [k: string]: any }): ListBootstrapPeersRequest;
 
     /**
-     * Creates a plain object from a GetBootstrapPeersRequest message. Also converts values to other types if specified.
-     * @param message GetBootstrapPeersRequest
+     * Creates a plain object from a ListBootstrapPeersRequest message. Also converts values to other types if specified.
+     * @param message ListBootstrapPeersRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: GetBootstrapPeersRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: ListBootstrapPeersRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this GetBootstrapPeersRequest to JSON.
+     * Converts this ListBootstrapPeersRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a GetBootstrapPeersResponse. */
-export interface IGetBootstrapPeersResponse {
+/** Properties of a ListBootstrapPeersResponse. */
+export interface IListBootstrapPeersResponse {
 
-    /** GetBootstrapPeersResponse peers */
+    /** ListBootstrapPeersResponse peers */
     peers?: (IBootstrapPeer[]|null);
 }
 
-/** Represents a GetBootstrapPeersResponse. */
-export class GetBootstrapPeersResponse implements IGetBootstrapPeersResponse {
+/** Represents a ListBootstrapPeersResponse. */
+export class ListBootstrapPeersResponse implements IListBootstrapPeersResponse {
 
     /**
-     * Constructs a new GetBootstrapPeersResponse.
+     * Constructs a new ListBootstrapPeersResponse.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IGetBootstrapPeersResponse);
+    constructor(properties?: IListBootstrapPeersResponse);
 
-    /** GetBootstrapPeersResponse peers. */
+    /** ListBootstrapPeersResponse peers. */
     public peers: IBootstrapPeer[];
 
     /**
-     * Creates a new GetBootstrapPeersResponse instance using the specified properties.
+     * Creates a new ListBootstrapPeersResponse instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns GetBootstrapPeersResponse instance
+     * @returns ListBootstrapPeersResponse instance
      */
-    public static create(properties?: IGetBootstrapPeersResponse): GetBootstrapPeersResponse;
+    public static create(properties?: IListBootstrapPeersResponse): ListBootstrapPeersResponse;
 
     /**
-     * Encodes the specified GetBootstrapPeersResponse message. Does not implicitly {@link GetBootstrapPeersResponse.verify|verify} messages.
-     * @param message GetBootstrapPeersResponse message or plain object to encode
+     * Encodes the specified ListBootstrapPeersResponse message. Does not implicitly {@link ListBootstrapPeersResponse.verify|verify} messages.
+     * @param message ListBootstrapPeersResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IGetBootstrapPeersResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IListBootstrapPeersResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified GetBootstrapPeersResponse message, length delimited. Does not implicitly {@link GetBootstrapPeersResponse.verify|verify} messages.
-     * @param message GetBootstrapPeersResponse message or plain object to encode
+     * Encodes the specified ListBootstrapPeersResponse message, length delimited. Does not implicitly {@link ListBootstrapPeersResponse.verify|verify} messages.
+     * @param message ListBootstrapPeersResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IGetBootstrapPeersResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IListBootstrapPeersResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a GetBootstrapPeersResponse message from the specified reader or buffer.
+     * Decodes a ListBootstrapPeersResponse message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns GetBootstrapPeersResponse
+     * @returns ListBootstrapPeersResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): GetBootstrapPeersResponse;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ListBootstrapPeersResponse;
 
     /**
-     * Decodes a GetBootstrapPeersResponse message from the specified reader or buffer, length delimited.
+     * Decodes a ListBootstrapPeersResponse message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns GetBootstrapPeersResponse
+     * @returns ListBootstrapPeersResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): GetBootstrapPeersResponse;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ListBootstrapPeersResponse;
 
     /**
-     * Verifies a GetBootstrapPeersResponse message.
+     * Verifies a ListBootstrapPeersResponse message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a GetBootstrapPeersResponse message from a plain object. Also converts values to their respective internal types.
+     * Creates a ListBootstrapPeersResponse message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns GetBootstrapPeersResponse
+     * @returns ListBootstrapPeersResponse
      */
-    public static fromObject(object: { [k: string]: any }): GetBootstrapPeersResponse;
+    public static fromObject(object: { [k: string]: any }): ListBootstrapPeersResponse;
 
     /**
-     * Creates a plain object from a GetBootstrapPeersResponse message. Also converts values to other types if specified.
-     * @param message GetBootstrapPeersResponse
+     * Creates a plain object from a ListBootstrapPeersResponse message. Also converts values to other types if specified.
+     * @param message ListBootstrapPeersResponse
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: GetBootstrapPeersResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: ListBootstrapPeersResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this GetBootstrapPeersResponse to JSON.
+     * Converts this ListBootstrapPeersResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -21596,15 +21536,6 @@ export namespace PeerExchangeMessage {
     }
 }
 
-/** MetricsFormat enum. */
-export enum MetricsFormat {
-    METRICS_FORMAT_TEXT = 0,
-    METRICS_FORMAT_PROTO_DELIM = 1,
-    METRICS_FORMAT_PROTO_TEXT = 2,
-    METRICS_FORMAT_PROTO_COMPACT = 3,
-    METRICS_FORMAT_OPEN_METRICS = 4
-}
-
 /** SwarmEventType enum. */
 export enum SwarmEventType {
     CREATE_SWARM = 0,
@@ -21616,6 +21547,15 @@ export enum SwarmEventType {
 export enum WRTCSDPType {
     OFFER = 0,
     ANSWER = 1
+}
+
+/** MetricsFormat enum. */
+export enum MetricsFormat {
+    METRICS_FORMAT_TEXT = 0,
+    METRICS_FORMAT_PROTO_DELIM = 1,
+    METRICS_FORMAT_PROTO_TEXT = 2,
+    METRICS_FORMAT_PROTO_COMPACT = 3,
+    METRICS_FORMAT_OPEN_METRICS = 4
 }
 
 /** KDFType enum. */

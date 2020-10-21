@@ -31,8 +31,8 @@ message GetChatServerRequest {
 message GetChatServerResponse {
   ChatServer chat_server = 1;
 }
-message GetChatServersRequest {}
-message GetChatServersResponse {
+message ListChatServersRequest {}
+message ListChatServersResponse {
   repeated ChatServer chat_servers = 1;
 }
 
@@ -166,3 +166,14 @@ message CallChatClientRequest {
 }
 
 message CallChatClientResponse {}
+
+service Chat {
+  rpc CreateServer(CreateChatServerRequest) returns (CreateChatServerResponse);
+  rpc UpdateServer(UpdateChatServerRequest) returns (UpdateChatServerResponse);
+  rpc DeleteServer(DeleteChatServerRequest) returns (DeleteChatServerResponse);
+  rpc GetServer(GetChatServerRequest) returns (GetChatServerResponse);
+  rpc ListServers(ListChatServersRequest) returns (ListChatServersResponse);
+  rpc OpenServer(OpenChatServerRequest) returns (stream ChatServerEvent);
+  rpc OpenClient(OpenChatClientRequest) returns (stream ChatClientEvent);
+  rpc CallClient(CallChatClientRequest) returns (CallChatClientResponse);
+}

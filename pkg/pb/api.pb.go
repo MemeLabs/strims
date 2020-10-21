@@ -25,61 +25,6 @@ const (
 // of the legacy proto package is being used.
 const _ = proto.ProtoPackageIsVersion4
 
-type MetricsFormat int32
-
-const (
-	MetricsFormat_METRICS_FORMAT_TEXT          MetricsFormat = 0
-	MetricsFormat_METRICS_FORMAT_PROTO_DELIM   MetricsFormat = 1
-	MetricsFormat_METRICS_FORMAT_PROTO_TEXT    MetricsFormat = 2
-	MetricsFormat_METRICS_FORMAT_PROTO_COMPACT MetricsFormat = 3
-	MetricsFormat_METRICS_FORMAT_OPEN_METRICS  MetricsFormat = 4
-)
-
-// Enum value maps for MetricsFormat.
-var (
-	MetricsFormat_name = map[int32]string{
-		0: "METRICS_FORMAT_TEXT",
-		1: "METRICS_FORMAT_PROTO_DELIM",
-		2: "METRICS_FORMAT_PROTO_TEXT",
-		3: "METRICS_FORMAT_PROTO_COMPACT",
-		4: "METRICS_FORMAT_OPEN_METRICS",
-	}
-	MetricsFormat_value = map[string]int32{
-		"METRICS_FORMAT_TEXT":          0,
-		"METRICS_FORMAT_PROTO_DELIM":   1,
-		"METRICS_FORMAT_PROTO_TEXT":    2,
-		"METRICS_FORMAT_PROTO_COMPACT": 3,
-		"METRICS_FORMAT_OPEN_METRICS":  4,
-	}
-)
-
-func (x MetricsFormat) Enum() *MetricsFormat {
-	p := new(MetricsFormat)
-	*p = x
-	return p
-}
-
-func (x MetricsFormat) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (MetricsFormat) Descriptor() protoreflect.EnumDescriptor {
-	return file_api_proto_enumTypes[0].Descriptor()
-}
-
-func (MetricsFormat) Type() protoreflect.EnumType {
-	return &file_api_proto_enumTypes[0]
-}
-
-func (x MetricsFormat) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use MetricsFormat.Descriptor instead.
-func (MetricsFormat) EnumDescriptor() ([]byte, []int) {
-	return file_api_proto_rawDescGZIP(), []int{0}
-}
-
 type SwarmEventType int32
 
 const (
@@ -113,11 +58,11 @@ func (x SwarmEventType) String() string {
 }
 
 func (SwarmEventType) Descriptor() protoreflect.EnumDescriptor {
-	return file_api_proto_enumTypes[1].Descriptor()
+	return file_api_proto_enumTypes[0].Descriptor()
 }
 
 func (SwarmEventType) Type() protoreflect.EnumType {
-	return &file_api_proto_enumTypes[1]
+	return &file_api_proto_enumTypes[0]
 }
 
 func (x SwarmEventType) Number() protoreflect.EnumNumber {
@@ -126,7 +71,7 @@ func (x SwarmEventType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use SwarmEventType.Descriptor instead.
 func (SwarmEventType) EnumDescriptor() ([]byte, []int) {
-	return file_api_proto_rawDescGZIP(), []int{1}
+	return file_api_proto_rawDescGZIP(), []int{0}
 }
 
 type WRTCSDPType int32
@@ -159,11 +104,11 @@ func (x WRTCSDPType) String() string {
 }
 
 func (WRTCSDPType) Descriptor() protoreflect.EnumDescriptor {
-	return file_api_proto_enumTypes[2].Descriptor()
+	return file_api_proto_enumTypes[1].Descriptor()
 }
 
 func (WRTCSDPType) Type() protoreflect.EnumType {
-	return &file_api_proto_enumTypes[2]
+	return &file_api_proto_enumTypes[1]
 }
 
 func (x WRTCSDPType) Number() protoreflect.EnumNumber {
@@ -172,219 +117,7 @@ func (x WRTCSDPType) Number() protoreflect.EnumNumber {
 
 // Deprecated: Use WRTCSDPType.Descriptor instead.
 func (WRTCSDPType) EnumDescriptor() ([]byte, []int) {
-	return file_api_proto_rawDescGZIP(), []int{2}
-}
-
-type PProfRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Name  string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Debug bool   `protobuf:"varint,2,opt,name=debug,proto3" json:"debug,omitempty"`
-	Gc    bool   `protobuf:"varint,3,opt,name=gc,proto3" json:"gc,omitempty"`
-}
-
-func (x *PProfRequest) Reset() {
-	*x = PProfRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_api_proto_msgTypes[0]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *PProfRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PProfRequest) ProtoMessage() {}
-
-func (x *PProfRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_msgTypes[0]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PProfRequest.ProtoReflect.Descriptor instead.
-func (*PProfRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_rawDescGZIP(), []int{0}
-}
-
-func (x *PProfRequest) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *PProfRequest) GetDebug() bool {
-	if x != nil {
-		return x.Debug
-	}
-	return false
-}
-
-func (x *PProfRequest) GetGc() bool {
-	if x != nil {
-		return x.Gc
-	}
-	return false
-}
-
-type PProfResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	Data []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-}
-
-func (x *PProfResponse) Reset() {
-	*x = PProfResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_api_proto_msgTypes[1]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *PProfResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*PProfResponse) ProtoMessage() {}
-
-func (x *PProfResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_msgTypes[1]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use PProfResponse.ProtoReflect.Descriptor instead.
-func (*PProfResponse) Descriptor() ([]byte, []int) {
 	return file_api_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *PProfResponse) GetName() string {
-	if x != nil {
-		return x.Name
-	}
-	return ""
-}
-
-func (x *PProfResponse) GetData() []byte {
-	if x != nil {
-		return x.Data
-	}
-	return nil
-}
-
-type ReadMetricsRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Format MetricsFormat `protobuf:"varint,1,opt,name=format,proto3,enum=MetricsFormat" json:"format,omitempty"`
-}
-
-func (x *ReadMetricsRequest) Reset() {
-	*x = ReadMetricsRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_api_proto_msgTypes[2]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *ReadMetricsRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReadMetricsRequest) ProtoMessage() {}
-
-func (x *ReadMetricsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_msgTypes[2]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReadMetricsRequest.ProtoReflect.Descriptor instead.
-func (*ReadMetricsRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_rawDescGZIP(), []int{2}
-}
-
-func (x *ReadMetricsRequest) GetFormat() MetricsFormat {
-	if x != nil {
-		return x.Format
-	}
-	return MetricsFormat_METRICS_FORMAT_TEXT
-}
-
-type ReadMetricsResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Data []byte `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-}
-
-func (x *ReadMetricsResponse) Reset() {
-	*x = ReadMetricsResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_api_proto_msgTypes[3]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *ReadMetricsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*ReadMetricsResponse) ProtoMessage() {}
-
-func (x *ReadMetricsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_msgTypes[3]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use ReadMetricsResponse.ProtoReflect.Descriptor instead.
-func (*ReadMetricsResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *ReadMetricsResponse) GetData() []byte {
-	if x != nil {
-		return x.Data
-	}
-	return nil
 }
 
 // TODO: discard
@@ -397,7 +130,7 @@ type MonitorSwarmsRequest struct {
 func (x *MonitorSwarmsRequest) Reset() {
 	*x = MonitorSwarmsRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_proto_msgTypes[4]
+		mi := &file_api_proto_msgTypes[0]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -410,7 +143,7 @@ func (x *MonitorSwarmsRequest) String() string {
 func (*MonitorSwarmsRequest) ProtoMessage() {}
 
 func (x *MonitorSwarmsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_msgTypes[4]
+	mi := &file_api_proto_msgTypes[0]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -423,7 +156,7 @@ func (x *MonitorSwarmsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MonitorSwarmsRequest.ProtoReflect.Descriptor instead.
 func (*MonitorSwarmsRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_rawDescGZIP(), []int{4}
+	return file_api_proto_rawDescGZIP(), []int{0}
 }
 
 type MonitorSwarmsResponse struct {
@@ -438,7 +171,7 @@ type MonitorSwarmsResponse struct {
 func (x *MonitorSwarmsResponse) Reset() {
 	*x = MonitorSwarmsResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_proto_msgTypes[5]
+		mi := &file_api_proto_msgTypes[1]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -451,7 +184,7 @@ func (x *MonitorSwarmsResponse) String() string {
 func (*MonitorSwarmsResponse) ProtoMessage() {}
 
 func (x *MonitorSwarmsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_msgTypes[5]
+	mi := &file_api_proto_msgTypes[1]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -464,7 +197,7 @@ func (x *MonitorSwarmsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MonitorSwarmsResponse.ProtoReflect.Descriptor instead.
 func (*MonitorSwarmsResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_rawDescGZIP(), []int{5}
+	return file_api_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *MonitorSwarmsResponse) GetType() SwarmEventType {
@@ -492,7 +225,7 @@ type BootstrapDHTRequest struct {
 func (x *BootstrapDHTRequest) Reset() {
 	*x = BootstrapDHTRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_proto_msgTypes[6]
+		mi := &file_api_proto_msgTypes[2]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -505,7 +238,7 @@ func (x *BootstrapDHTRequest) String() string {
 func (*BootstrapDHTRequest) ProtoMessage() {}
 
 func (x *BootstrapDHTRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_msgTypes[6]
+	mi := &file_api_proto_msgTypes[2]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -518,7 +251,7 @@ func (x *BootstrapDHTRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapDHTRequest.ProtoReflect.Descriptor instead.
 func (*BootstrapDHTRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_rawDescGZIP(), []int{6}
+	return file_api_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *BootstrapDHTRequest) GetTransportUris() []string {
@@ -537,7 +270,7 @@ type BootstrapDHTResponse struct {
 func (x *BootstrapDHTResponse) Reset() {
 	*x = BootstrapDHTResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_proto_msgTypes[7]
+		mi := &file_api_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -550,7 +283,7 @@ func (x *BootstrapDHTResponse) String() string {
 func (*BootstrapDHTResponse) ProtoMessage() {}
 
 func (x *BootstrapDHTResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_msgTypes[7]
+	mi := &file_api_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -563,7 +296,7 @@ func (x *BootstrapDHTResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapDHTResponse.ProtoReflect.Descriptor instead.
 func (*BootstrapDHTResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_rawDescGZIP(), []int{7}
+	return file_api_proto_rawDescGZIP(), []int{3}
 }
 
 type NegotiateWRTCRequest struct {
@@ -578,7 +311,7 @@ type NegotiateWRTCRequest struct {
 func (x *NegotiateWRTCRequest) Reset() {
 	*x = NegotiateWRTCRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_proto_msgTypes[8]
+		mi := &file_api_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -591,7 +324,7 @@ func (x *NegotiateWRTCRequest) String() string {
 func (*NegotiateWRTCRequest) ProtoMessage() {}
 
 func (x *NegotiateWRTCRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_msgTypes[8]
+	mi := &file_api_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -604,7 +337,7 @@ func (x *NegotiateWRTCRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NegotiateWRTCRequest.ProtoReflect.Descriptor instead.
 func (*NegotiateWRTCRequest) Descriptor() ([]byte, []int) {
-	return file_api_proto_rawDescGZIP(), []int{8}
+	return file_api_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *NegotiateWRTCRequest) GetType() WRTCSDPType {
@@ -632,7 +365,7 @@ type NegotiateWRTCResponse struct {
 func (x *NegotiateWRTCResponse) Reset() {
 	*x = NegotiateWRTCResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_api_proto_msgTypes[9]
+		mi := &file_api_proto_msgTypes[5]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -645,7 +378,7 @@ func (x *NegotiateWRTCResponse) String() string {
 func (*NegotiateWRTCResponse) ProtoMessage() {}
 
 func (x *NegotiateWRTCResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_api_proto_msgTypes[9]
+	mi := &file_api_proto_msgTypes[5]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -658,7 +391,7 @@ func (x *NegotiateWRTCResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NegotiateWRTCResponse.ProtoReflect.Descriptor instead.
 func (*NegotiateWRTCResponse) Descriptor() ([]byte, []int) {
-	return file_api_proto_rawDescGZIP(), []int{9}
+	return file_api_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *NegotiateWRTCResponse) GetCandidate() string {
@@ -671,66 +404,41 @@ func (x *NegotiateWRTCResponse) GetCandidate() string {
 var File_api_proto protoreflect.FileDescriptor
 
 var file_api_proto_rawDesc = []byte{
-	0x0a, 0x09, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x48, 0x0a, 0x0c, 0x50,
-	0x50, 0x72, 0x6f, 0x66, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e,
-	0x61, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12,
-	0x14, 0x0a, 0x05, 0x64, 0x65, 0x62, 0x75, 0x67, 0x18, 0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x05,
-	0x64, 0x65, 0x62, 0x75, 0x67, 0x12, 0x0e, 0x0a, 0x02, 0x67, 0x63, 0x18, 0x03, 0x20, 0x01, 0x28,
-	0x08, 0x52, 0x02, 0x67, 0x63, 0x22, 0x37, 0x0a, 0x0d, 0x50, 0x50, 0x72, 0x6f, 0x66, 0x52, 0x65,
-	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x61,
-	0x74, 0x61, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x22, 0x3c,
-	0x0a, 0x12, 0x52, 0x65, 0x61, 0x64, 0x4d, 0x65, 0x74, 0x72, 0x69, 0x63, 0x73, 0x52, 0x65, 0x71,
-	0x75, 0x65, 0x73, 0x74, 0x12, 0x26, 0x0a, 0x06, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x0e, 0x32, 0x0e, 0x2e, 0x4d, 0x65, 0x74, 0x72, 0x69, 0x63, 0x73, 0x46, 0x6f,
-	0x72, 0x6d, 0x61, 0x74, 0x52, 0x06, 0x66, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x22, 0x29, 0x0a, 0x13,
-	0x52, 0x65, 0x61, 0x64, 0x4d, 0x65, 0x74, 0x72, 0x69, 0x63, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x0c, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x22, 0x16, 0x0a, 0x14, 0x4d, 0x6f, 0x6e, 0x69, 0x74,
-	0x6f, 0x72, 0x53, 0x77, 0x61, 0x72, 0x6d, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22,
-	0x4c, 0x0a, 0x15, 0x4d, 0x6f, 0x6e, 0x69, 0x74, 0x6f, 0x72, 0x53, 0x77, 0x61, 0x72, 0x6d, 0x73,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x23, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65,
-	0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x0f, 0x2e, 0x53, 0x77, 0x61, 0x72, 0x6d, 0x45, 0x76,
-	0x65, 0x6e, 0x74, 0x54, 0x79, 0x70, 0x65, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x12, 0x0e, 0x0a,
-	0x02, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69, 0x64, 0x22, 0x3c, 0x0a,
-	0x13, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x44, 0x48, 0x54, 0x52, 0x65, 0x71,
-	0x75, 0x65, 0x73, 0x74, 0x12, 0x25, 0x0a, 0x0e, 0x74, 0x72, 0x61, 0x6e, 0x73, 0x70, 0x6f, 0x72,
-	0x74, 0x5f, 0x75, 0x72, 0x69, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x09, 0x52, 0x0d, 0x74, 0x72,
-	0x61, 0x6e, 0x73, 0x70, 0x6f, 0x72, 0x74, 0x55, 0x72, 0x69, 0x73, 0x22, 0x16, 0x0a, 0x14, 0x42,
-	0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x44, 0x48, 0x54, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x22, 0x69, 0x0a, 0x14, 0x4e, 0x65, 0x67, 0x6f, 0x74, 0x69, 0x61, 0x74, 0x65,
-	0x57, 0x52, 0x54, 0x43, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x20, 0x0a, 0x04, 0x74,
-	0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x0c, 0x2e, 0x57, 0x52, 0x54, 0x43,
-	0x53, 0x44, 0x50, 0x54, 0x79, 0x70, 0x65, 0x52, 0x04, 0x74, 0x79, 0x70, 0x65, 0x12, 0x2f, 0x0a,
-	0x13, 0x73, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x64, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70,
-	0x74, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x12, 0x73, 0x65, 0x73, 0x73,
-	0x69, 0x6f, 0x6e, 0x44, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x22, 0x35,
-	0x0a, 0x15, 0x4e, 0x65, 0x67, 0x6f, 0x74, 0x69, 0x61, 0x74, 0x65, 0x57, 0x52, 0x54, 0x43, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1c, 0x0a, 0x09, 0x63, 0x61, 0x6e, 0x64, 0x69,
-	0x64, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x63, 0x61, 0x6e, 0x64,
-	0x69, 0x64, 0x61, 0x74, 0x65, 0x2a, 0xaa, 0x01, 0x0a, 0x0d, 0x4d, 0x65, 0x74, 0x72, 0x69, 0x63,
-	0x73, 0x46, 0x6f, 0x72, 0x6d, 0x61, 0x74, 0x12, 0x17, 0x0a, 0x13, 0x4d, 0x45, 0x54, 0x52, 0x49,
-	0x43, 0x53, 0x5f, 0x46, 0x4f, 0x52, 0x4d, 0x41, 0x54, 0x5f, 0x54, 0x45, 0x58, 0x54, 0x10, 0x00,
-	0x12, 0x1e, 0x0a, 0x1a, 0x4d, 0x45, 0x54, 0x52, 0x49, 0x43, 0x53, 0x5f, 0x46, 0x4f, 0x52, 0x4d,
-	0x41, 0x54, 0x5f, 0x50, 0x52, 0x4f, 0x54, 0x4f, 0x5f, 0x44, 0x45, 0x4c, 0x49, 0x4d, 0x10, 0x01,
-	0x12, 0x1d, 0x0a, 0x19, 0x4d, 0x45, 0x54, 0x52, 0x49, 0x43, 0x53, 0x5f, 0x46, 0x4f, 0x52, 0x4d,
-	0x41, 0x54, 0x5f, 0x50, 0x52, 0x4f, 0x54, 0x4f, 0x5f, 0x54, 0x45, 0x58, 0x54, 0x10, 0x02, 0x12,
-	0x20, 0x0a, 0x1c, 0x4d, 0x45, 0x54, 0x52, 0x49, 0x43, 0x53, 0x5f, 0x46, 0x4f, 0x52, 0x4d, 0x41,
-	0x54, 0x5f, 0x50, 0x52, 0x4f, 0x54, 0x4f, 0x5f, 0x43, 0x4f, 0x4d, 0x50, 0x41, 0x43, 0x54, 0x10,
-	0x03, 0x12, 0x1f, 0x0a, 0x1b, 0x4d, 0x45, 0x54, 0x52, 0x49, 0x43, 0x53, 0x5f, 0x46, 0x4f, 0x52,
-	0x4d, 0x41, 0x54, 0x5f, 0x4f, 0x50, 0x45, 0x4e, 0x5f, 0x4d, 0x45, 0x54, 0x52, 0x49, 0x43, 0x53,
-	0x10, 0x04, 0x2a, 0x46, 0x0a, 0x0e, 0x53, 0x77, 0x61, 0x72, 0x6d, 0x45, 0x76, 0x65, 0x6e, 0x74,
-	0x54, 0x79, 0x70, 0x65, 0x12, 0x10, 0x0a, 0x0c, 0x43, 0x52, 0x45, 0x41, 0x54, 0x45, 0x5f, 0x53,
-	0x57, 0x41, 0x52, 0x4d, 0x10, 0x00, 0x12, 0x10, 0x0a, 0x0c, 0x55, 0x50, 0x44, 0x41, 0x54, 0x45,
-	0x5f, 0x53, 0x57, 0x41, 0x52, 0x4d, 0x10, 0x01, 0x12, 0x10, 0x0a, 0x0c, 0x44, 0x45, 0x4c, 0x45,
-	0x54, 0x45, 0x5f, 0x53, 0x57, 0x41, 0x52, 0x4d, 0x10, 0x02, 0x2a, 0x24, 0x0a, 0x0b, 0x57, 0x52,
-	0x54, 0x43, 0x53, 0x44, 0x50, 0x54, 0x79, 0x70, 0x65, 0x12, 0x09, 0x0a, 0x05, 0x4f, 0x46, 0x46,
-	0x45, 0x52, 0x10, 0x00, 0x12, 0x0a, 0x0a, 0x06, 0x41, 0x4e, 0x53, 0x57, 0x45, 0x52, 0x10, 0x01,
-	0x42, 0x44, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70,
-	0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75,
-	0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67,
-	0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x62, 0x3b, 0x70,
-	0x62, 0xba, 0x02, 0x02, 0x50, 0x42, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x0a, 0x09, 0x61, 0x70, 0x69, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22, 0x16, 0x0a, 0x14, 0x4d,
+	0x6f, 0x6e, 0x69, 0x74, 0x6f, 0x72, 0x53, 0x77, 0x61, 0x72, 0x6d, 0x73, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x22, 0x4c, 0x0a, 0x15, 0x4d, 0x6f, 0x6e, 0x69, 0x74, 0x6f, 0x72, 0x53, 0x77,
+	0x61, 0x72, 0x6d, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x23, 0x0a, 0x04,
+	0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x0f, 0x2e, 0x53, 0x77, 0x61,
+	0x72, 0x6d, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x54, 0x79, 0x70, 0x65, 0x52, 0x04, 0x74, 0x79, 0x70,
+	0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x02, 0x69,
+	0x64, 0x22, 0x3c, 0x0a, 0x13, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x44, 0x48,
+	0x54, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x25, 0x0a, 0x0e, 0x74, 0x72, 0x61, 0x6e,
+	0x73, 0x70, 0x6f, 0x72, 0x74, 0x5f, 0x75, 0x72, 0x69, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x09,
+	0x52, 0x0d, 0x74, 0x72, 0x61, 0x6e, 0x73, 0x70, 0x6f, 0x72, 0x74, 0x55, 0x72, 0x69, 0x73, 0x22,
+	0x16, 0x0a, 0x14, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72, 0x61, 0x70, 0x44, 0x48, 0x54, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x69, 0x0a, 0x14, 0x4e, 0x65, 0x67, 0x6f, 0x74,
+	0x69, 0x61, 0x74, 0x65, 0x57, 0x52, 0x54, 0x43, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x20, 0x0a, 0x04, 0x74, 0x79, 0x70, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0e, 0x32, 0x0c, 0x2e,
+	0x57, 0x52, 0x54, 0x43, 0x53, 0x44, 0x50, 0x54, 0x79, 0x70, 0x65, 0x52, 0x04, 0x74, 0x79, 0x70,
+	0x65, 0x12, 0x2f, 0x0a, 0x13, 0x73, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x5f, 0x64, 0x65, 0x73,
+	0x63, 0x72, 0x69, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x12,
+	0x73, 0x65, 0x73, 0x73, 0x69, 0x6f, 0x6e, 0x44, 0x65, 0x73, 0x63, 0x72, 0x69, 0x70, 0x74, 0x69,
+	0x6f, 0x6e, 0x22, 0x35, 0x0a, 0x15, 0x4e, 0x65, 0x67, 0x6f, 0x74, 0x69, 0x61, 0x74, 0x65, 0x57,
+	0x52, 0x54, 0x43, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1c, 0x0a, 0x09, 0x63,
+	0x61, 0x6e, 0x64, 0x69, 0x64, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09,
+	0x63, 0x61, 0x6e, 0x64, 0x69, 0x64, 0x61, 0x74, 0x65, 0x2a, 0x46, 0x0a, 0x0e, 0x53, 0x77, 0x61,
+	0x72, 0x6d, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x54, 0x79, 0x70, 0x65, 0x12, 0x10, 0x0a, 0x0c, 0x43,
+	0x52, 0x45, 0x41, 0x54, 0x45, 0x5f, 0x53, 0x57, 0x41, 0x52, 0x4d, 0x10, 0x00, 0x12, 0x10, 0x0a,
+	0x0c, 0x55, 0x50, 0x44, 0x41, 0x54, 0x45, 0x5f, 0x53, 0x57, 0x41, 0x52, 0x4d, 0x10, 0x01, 0x12,
+	0x10, 0x0a, 0x0c, 0x44, 0x45, 0x4c, 0x45, 0x54, 0x45, 0x5f, 0x53, 0x57, 0x41, 0x52, 0x4d, 0x10,
+	0x02, 0x2a, 0x24, 0x0a, 0x0b, 0x57, 0x52, 0x54, 0x43, 0x53, 0x44, 0x50, 0x54, 0x79, 0x70, 0x65,
+	0x12, 0x09, 0x0a, 0x05, 0x4f, 0x46, 0x46, 0x45, 0x52, 0x10, 0x00, 0x12, 0x0a, 0x0a, 0x06, 0x41,
+	0x4e, 0x53, 0x57, 0x45, 0x52, 0x10, 0x01, 0x42, 0x44, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73, 0x74,
+	0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d,
+	0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f, 0x70,
+	0x6b, 0x67, 0x2f, 0x70, 0x62, 0x3b, 0x70, 0x62, 0xba, 0x02, 0x02, 0x50, 0x42, 0x62, 0x06, 0x70,
+	0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -745,32 +453,26 @@ func file_api_proto_rawDescGZIP() []byte {
 	return file_api_proto_rawDescData
 }
 
-var file_api_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
-var file_api_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
+var file_api_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
+var file_api_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_api_proto_goTypes = []interface{}{
-	(MetricsFormat)(0),            // 0: MetricsFormat
-	(SwarmEventType)(0),           // 1: SwarmEventType
-	(WRTCSDPType)(0),              // 2: WRTCSDPType
-	(*PProfRequest)(nil),          // 3: PProfRequest
-	(*PProfResponse)(nil),         // 4: PProfResponse
-	(*ReadMetricsRequest)(nil),    // 5: ReadMetricsRequest
-	(*ReadMetricsResponse)(nil),   // 6: ReadMetricsResponse
-	(*MonitorSwarmsRequest)(nil),  // 7: MonitorSwarmsRequest
-	(*MonitorSwarmsResponse)(nil), // 8: MonitorSwarmsResponse
-	(*BootstrapDHTRequest)(nil),   // 9: BootstrapDHTRequest
-	(*BootstrapDHTResponse)(nil),  // 10: BootstrapDHTResponse
-	(*NegotiateWRTCRequest)(nil),  // 11: NegotiateWRTCRequest
-	(*NegotiateWRTCResponse)(nil), // 12: NegotiateWRTCResponse
+	(SwarmEventType)(0),           // 0: SwarmEventType
+	(WRTCSDPType)(0),              // 1: WRTCSDPType
+	(*MonitorSwarmsRequest)(nil),  // 2: MonitorSwarmsRequest
+	(*MonitorSwarmsResponse)(nil), // 3: MonitorSwarmsResponse
+	(*BootstrapDHTRequest)(nil),   // 4: BootstrapDHTRequest
+	(*BootstrapDHTResponse)(nil),  // 5: BootstrapDHTResponse
+	(*NegotiateWRTCRequest)(nil),  // 6: NegotiateWRTCRequest
+	(*NegotiateWRTCResponse)(nil), // 7: NegotiateWRTCResponse
 }
 var file_api_proto_depIdxs = []int32{
-	0, // 0: ReadMetricsRequest.format:type_name -> MetricsFormat
-	1, // 1: MonitorSwarmsResponse.type:type_name -> SwarmEventType
-	2, // 2: NegotiateWRTCRequest.type:type_name -> WRTCSDPType
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	0, // 0: MonitorSwarmsResponse.type:type_name -> SwarmEventType
+	1, // 1: NegotiateWRTCRequest.type:type_name -> WRTCSDPType
+	2, // [2:2] is the sub-list for method output_type
+	2, // [2:2] is the sub-list for method input_type
+	2, // [2:2] is the sub-list for extension type_name
+	2, // [2:2] is the sub-list for extension extendee
+	0, // [0:2] is the sub-list for field type_name
 }
 
 func init() { file_api_proto_init() }
@@ -780,54 +482,6 @@ func file_api_proto_init() {
 	}
 	if !protoimpl.UnsafeEnabled {
 		file_api_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PProfRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_api_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PProfResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_api_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ReadMetricsRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_api_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ReadMetricsResponse); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_api_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*MonitorSwarmsRequest); i {
 			case 0:
 				return &v.state
@@ -839,7 +493,7 @@ func file_api_proto_init() {
 				return nil
 			}
 		}
-		file_api_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+		file_api_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*MonitorSwarmsResponse); i {
 			case 0:
 				return &v.state
@@ -851,7 +505,7 @@ func file_api_proto_init() {
 				return nil
 			}
 		}
-		file_api_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+		file_api_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*BootstrapDHTRequest); i {
 			case 0:
 				return &v.state
@@ -863,7 +517,7 @@ func file_api_proto_init() {
 				return nil
 			}
 		}
-		file_api_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+		file_api_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*BootstrapDHTResponse); i {
 			case 0:
 				return &v.state
@@ -875,7 +529,7 @@ func file_api_proto_init() {
 				return nil
 			}
 		}
-		file_api_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
+		file_api_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*NegotiateWRTCRequest); i {
 			case 0:
 				return &v.state
@@ -887,7 +541,7 @@ func file_api_proto_init() {
 				return nil
 			}
 		}
-		file_api_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
+		file_api_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*NegotiateWRTCResponse); i {
 			case 0:
 				return &v.state
@@ -905,8 +559,8 @@ func file_api_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_api_proto_rawDesc,
-			NumEnums:      3,
-			NumMessages:   10,
+			NumEnums:      2,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

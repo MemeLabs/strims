@@ -52,19 +52,19 @@ message PublishSwarmRequest {
 }
 message PublishSwarmResponse {}
 
-message VideoServerOpenRequest {}
+message OpenVideoServerRequest {}
 message VideoServerOpenResponse {
   uint64 id = 1;
 }
 
-message VideoServerWriteRequest {
+message WriteToVideoServerRequest {
   uint64 id = 1;
   bytes data = 2;
   bool flush = 3;
 }
-message VideoServerWriteResponse {}
+message WriteToVideoServerResponse {}
 
-message VideoClientOpenRequest {
+message OpenVideoClientRequest {
   bytes swarm_key = 1;
   bool emit_data = 2;
 }
@@ -119,4 +119,16 @@ message SwarmThingMessage {
     Open open = 1;
     Close close = 2;
   }
+}
+
+service Video {
+  rpc OpenClient(OpenVideoClientRequest) returns (stream VideoClientEvent);
+  rpc OpenServer(OpenVideoServerRequest) returns (VideoServerOpenResponse);
+  rpc WriteToServer(WriteToVideoServerRequest) returns (WriteToVideoServerResponse);
+  rpc PublishSwarm(PublishSwarmRequest) returns (PublishSwarmResponse);
+  // rpc GetIngressStreams(GetIngressStreamsRequest) returns (stream GetIngressStreamsResponse);
+  rpc StartRTMPIngress(StartRTMPIngressRequest) returns (StartRTMPIngressResponse);
+  // rpc StopRTMPIngress(StartRTMPIngressRequest) returns (StartRTMPIngressResponse);
+  rpc StartHLSEgress(StartHLSEgressRequest) returns (StartHLSEgressResponse);
+  rpc StopHLSEgress(StopHLSEgressRequest) returns (StopHLSEgressResponse);
 }

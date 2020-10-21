@@ -1,7 +1,7 @@
 package main
 
 import (
-	"errors"
+	"context"
 	"flag"
 	"log"
 	"net/http"
@@ -11,9 +11,11 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
-	"github.com/MemeLabs/go-ppspp/pkg/service"
+	"github.com/MemeLabs/go-ppspp/pkg/frontend"
+	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/services/network"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"go.uber.org/zap"
 )
@@ -26,6 +28,7 @@ var (
 	debugAddr     string
 	webRTCPortMin uint
 	webRTCPortMax uint
+	vnicLabel     string
 )
 
 func init() {
@@ -41,6 +44,7 @@ func init() {
 	flag.StringVar(&debugAddr, "debug-addr", ":6060", "debug server listen address")
 	flag.UintVar(&webRTCPortMin, "webrtc-port-min", 0, "webrtc ephemeral port range min")
 	flag.UintVar(&webRTCPortMax, "webrtc-port-max", 0, "webrtc ephemeral port range max")
+	flag.StringVar(&vnicLabel, "vnic-label", "", "vnic label")
 }
 
 func main() {
@@ -72,117 +76,42 @@ func main() {
 	// t.Run()
 	// return
 
-	profileStore, err := initProfileStore()
+	store, err := initProfileStore()
 	if err != nil {
 		panic(err)
 	}
 
-	profile, err := dao.GetProfile(profileStore)
+	profile, err := dao.GetProfile(store)
 	if err != nil {
 		panic(err)
 	}
 
-	host, err := vnic.New(
-		logger,
-		profile.Key,
-		// vnic.WithNetworkBroker(vnic.NewNetworkBroker(logger)),
-		vnic.WithInterface(vnic.NewWSInterface(logger, addr)),
-		vnic.WithInterface(vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(
+	newVPN := func(key *pb.Key) (*vpn.Host, error) {
+		vnicHost, err := vnic.New(
 			logger,
-			&vnic.WebRTCDialerOptions{
-				PortMin: uint16(webRTCPortMin),
-				PortMax: uint16(webRTCPortMax),
-			},
-		))),
-	)
-	if err != nil {
-		panic(err)
+			key,
+			vnic.WithLabel(vnicLabel),
+			vnic.WithInterface(vnic.NewWSInterface(logger, addr)),
+			vnic.WithInterface(vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(
+				logger,
+				&vnic.WebRTCDialerOptions{
+					PortMin: uint16(webRTCPortMin),
+					PortMax: uint16(webRTCPortMax),
+				},
+			))),
+		)
+		if err != nil {
+			return nil, err
+		}
+		return vpn.New(logger, vnicHost)
 	}
 
-	networkController, err := service.NewNetworkController(logger, host, profileStore)
-	if err != nil {
-		panic(err)
-	}
-
-	bootstrapService := service.NewBootstrapService(
-		logger,
-		host,
-		profileStore,
-		networkController,
-		service.BootstrapServiceOptions{
-			EnablePublishing: true,
-		},
-	)
-
-	_ = bootstrapService
-
-	if rtmpAddr != "" {
-		runRTMPServer(logger, profileStore, networkController)
+	c := frontend.New(logger, newVPN, network.NewBrokerFactory(logger))
+	if err := c.Init(context.Background(), profile, store); err != nil {
+		logger.Fatal("frontend instance init failed", zap.Error(err))
 	}
 
 	select {}
-}
-
-func runRTMPServer(logger *zap.Logger, profileStore *dao.ProfileStore, ctl *service.NetworkController) {
-	x := rtmpingress.NewTranscoder(logger)
-	rtmp := rtmpingress.Server{
-		Addr: rtmpAddr,
-		HandleStream: func(a *rtmpingress.StreamAddr, c *rtmpingress.Conn) {
-			logger.Debug("rtmp stream opened", zap.String("key", a.Key))
-
-			v, err := service.NewVideoServer(logger)
-			if err != nil {
-				logger.Debug("starting video server failed", zap.Error(err))
-				if err := c.Close(); err != nil {
-					logger.Debug("closing rtmp net con failed", zap.Error(err))
-				}
-				return
-			}
-
-			go func() {
-				if err := x.Transcode(a.URI, a.Key, "source", v); err != nil {
-					logger.Debug("transcoder finished", zap.Error(err))
-				}
-			}()
-
-			memberships, err := dao.GetNetworkMemberships(profileStore)
-			if err != nil {
-				logger.Debug("loading network memberships failed", zap.Error(err))
-
-				v.Stop()
-
-				if err := c.Close(); err != nil {
-					logger.Debug("closing rtmp net con failed", zap.Error(err))
-				}
-				return
-			}
-
-			for _, membership := range memberships {
-				membership := membership
-				go func() {
-					svc, ok := ctl.NetworkServices(dao.GetRootCert(membership.Certificate).Key)
-					if !ok {
-						logger.Debug("publishing video swarm failed", zap.Error(errors.New("unknown network")))
-					}
-
-					if err := v.PublishSwarm(svc); err != nil {
-						logger.Debug("publishing video swarm failed", zap.Error(err))
-					}
-				}()
-			}
-
-			go func() {
-				<-c.CloseNotify()
-				logger.Debug("rtmp stream closed", zap.String("key", a.Key))
-				v.Stop()
-			}()
-		},
-	}
-	go func() {
-		if err := rtmp.Listen(); err != nil {
-			logger.Fatal("rtmp server listen failed", zap.Error(err))
-		}
-	}()
 }
 
 func initProfileStore() (*dao.ProfileStore, error) {

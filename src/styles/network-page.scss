@@ -9,6 +9,11 @@
   display: inline-block;
 }
 
+.page_body {
+  overflow: auto;
+  flex: 1;
+}
+
 .network_page {
   padding: 20px;
 }
@@ -21,6 +26,10 @@
     border: 1px solid $slate-500;
     background: $slate-300;
     padding: 20px;
+    width: 80vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    display: block;
   }
 
   &__modal_mask {

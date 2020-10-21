@@ -214,17 +214,20 @@ func (m *webRTCMediator) SendICECandidate(candidate []byte) error {
 	return m.network.SendProto(m.id, vnic.PeerExchangePort, vnic.PeerExchangePort, msg)
 }
 
-// NewPeerExchange ...
-func NewPeerExchange(logger *zap.Logger, network *Network) *PeerExchange {
-	return &PeerExchange{
+type PeerExchange interface {
+	Connect(hostID kademlia.ID) error
+}
+
+func newPeerExchange(logger *zap.Logger, network *Network) *peerExchange {
+	return &peerExchange{
 		logger:    logger,
 		network:   network,
 		mediators: map[kademlia.ID]*webRTCMediator{},
 	}
 }
 
-// PeerExchange ...
-type PeerExchange struct {
+// peerExchange ...
+type peerExchange struct {
 	logger        *zap.Logger
 	network       *Network
 	mediatorsLock sync.Mutex
@@ -232,7 +235,7 @@ type PeerExchange struct {
 }
 
 // HandleMessage ...
-func (s *PeerExchange) HandleMessage(msg *Message) (bool, error) {
+func (s *peerExchange) HandleMessage(msg *Message) (bool, error) {
 	if !msg.Header.DstID.Equals(s.network.host.ID()) || msg.Hops() == 0 {
 		return true, nil
 	}
@@ -261,9 +264,9 @@ func (s *PeerExchange) HandleMessage(msg *Message) (bool, error) {
 }
 
 // Connect create mediator to negotiate connection with peer
-func (s *PeerExchange) Connect(hostID kademlia.ID) error {
+func (s *peerExchange) Connect(hostID kademlia.ID) error {
 	// TODO: handle races
-	if s.network.hasLink(hostID) {
+	if s.network.HasPeer(hostID) {
 		return nil
 	}
 
@@ -293,7 +296,7 @@ func (s *PeerExchange) Connect(hostID kademlia.ID) error {
 	return nil
 }
 
-func (s *PeerExchange) sendCallbackRequest(hostID kademlia.ID) error {
+func (s *peerExchange) sendCallbackRequest(hostID kademlia.ID) error {
 	msg := &pb.PeerExchangeMessage{
 		Body: &pb.PeerExchangeMessage_CallbackRequest_{
 			CallbackRequest: &pb.PeerExchangeMessage_CallbackRequest{},
@@ -302,7 +305,7 @@ func (s *PeerExchange) sendCallbackRequest(hostID kademlia.ID) error {
 	return s.network.SendProto(hostID, vnic.PeerExchangePort, vnic.PeerExchangePort, msg)
 }
 
-func (s *PeerExchange) handleCallbackRequest(m *pb.PeerExchangeMessage_CallbackRequest, msg *Message) error {
+func (s *peerExchange) handleCallbackRequest(m *pb.PeerExchangeMessage_CallbackRequest, msg *Message) error {
 	go func() {
 		if err := s.dial(newWebRTCMediator(msg.FromHostID(), s.network)); err != nil {
 			s.logger.Debug(
@@ -314,7 +317,7 @@ func (s *PeerExchange) handleCallbackRequest(m *pb.PeerExchangeMessage_CallbackR
 	return nil
 }
 
-func (s *PeerExchange) handleOffer(m *pb.PeerExchangeMessage_Offer, msg *Message) error {
+func (s *peerExchange) handleOffer(m *pb.PeerExchangeMessage_Offer, msg *Message) error {
 	s.logger.Debug(
 		"handling offer",
 		zap.Stringer("host", msg.FromHostID()),
@@ -330,7 +333,7 @@ func (s *PeerExchange) handleOffer(m *pb.PeerExchangeMessage_Offer, msg *Message
 	return nil
 }
 
-func (s *PeerExchange) dial(t *webRTCMediator) error {
+func (s *peerExchange) dial(t *webRTCMediator) error {
 	if _, ok := s.mediators[t.id]; ok {
 		return errors.New("duplicate connection attempt")
 	}
@@ -365,7 +368,7 @@ func (s *PeerExchange) dial(t *webRTCMediator) error {
 	return err
 }
 
-func (s *PeerExchange) handleAnswer(m *pb.PeerExchangeMessage_Answer, msg *Message) error {
+func (s *peerExchange) handleAnswer(m *pb.PeerExchangeMessage_Answer, msg *Message) error {
 	t, ok := s.mediators[msg.FromHostID()]
 	if !ok {
 		return fmt.Errorf("no mediator to handle answer from %s", msg.FromHostID())
@@ -374,7 +377,7 @@ func (s *PeerExchange) handleAnswer(m *pb.PeerExchangeMessage_Answer, msg *Messa
 	return t.SetAnswer(m.MediationId, m.Data)
 }
 
-func (s *PeerExchange) handleICECandidate(m *pb.PeerExchangeMessage_IceCandidate, msg *Message) error {
+func (s *peerExchange) handleICECandidate(m *pb.PeerExchangeMessage_IceCandidate, msg *Message) error {
 	t, ok := s.mediators[msg.FromHostID()]
 	if !ok || t.remoteMediationID != m.MediationId {
 		return fmt.Errorf("no mediator to handle ice candidate from %s", msg.FromHostID())

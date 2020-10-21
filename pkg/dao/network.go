@@ -13,8 +13,8 @@ func prefixNetworkKey(id uint64) string {
 	return networkPrefix + strconv.FormatUint(id, 10)
 }
 
-// InsertNetwork ...
-func InsertNetwork(s kv.RWStore, v *pb.Network) error {
+// UpsertNetwork ...
+func UpsertNetwork(s kv.RWStore, v *pb.Network) error {
 	return s.Update(func(tx kv.RWTx) (err error) {
 		return tx.Put(prefixNetworkKey(v.Id), v)
 	})
@@ -45,29 +45,92 @@ func GetNetworks(s kv.Store) (v []*pb.Network, err error) {
 	return
 }
 
+// NewNetworkCertificate ...
+func NewNetworkCertificate(network *pb.Network) (*pb.Certificate, error) {
+	return NewSelfSignedCertificate(network.Key, pb.KeyUsage_KEY_USAGE_SIGN, defaultCertTTL, WithSubject(network.Name))
+}
+
 // NewNetwork ...
-func NewNetwork(name string) (*pb.Network, error) {
+func NewNetwork(name string, icon *pb.NetworkIcon, profile *pb.Profile) (*pb.Network, error) {
 	id, err := GenerateSnowflake()
 	if err != nil {
 		return nil, err
 	}
+
 	key, err := GenerateKey()
 	if err != nil {
 		return nil, err
 	}
-	network := &pb.Network{
-		Id:   id,
-		Name: name,
-		Key:  key,
-	}
-	csr, err := NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN, WithSubject(name))
+
+	networkCert, err := NewSelfSignedCertificate(key, pb.KeyUsage_KEY_USAGE_SIGN, defaultCertTTL, WithSubject(name))
 	if err != nil {
 		return nil, err
 	}
 
-	network.Certificate, err = SignCertificateRequest(csr, defaultCertTTL, key)
+	csr, err := NewCertificateRequest(
+		profile.Key,
+		pb.KeyUsage_KEY_USAGE_PEER|pb.KeyUsage_KEY_USAGE_SIGN,
+		WithSubject(profile.Name),
+	)
 	if err != nil {
 		return nil, err
 	}
-	return network, nil
+	cert, err := SignCertificateRequest(csr, defaultCertTTL, key)
+	if err != nil {
+		return nil, err
+	}
+	cert.ParentOneof = &pb.Certificate_Parent{Parent: networkCert}
+
+	return &pb.Network{
+		Id:          id,
+		Name:        name,
+		Key:         key,
+		Icon:        icon,
+		Certificate: cert,
+	}, nil
+}
+
+// NewNetworkFromInvitationV0 generates a network from a network invitation
+func NewNetworkFromInvitationV0(invitation *pb.InvitationV0, profile *pb.Profile) (*pb.Network, error) {
+	id, err := GenerateSnowflake()
+	if err != nil {
+		return nil, err
+	}
+
+	if err = VerifyCertificate(invitation.Certificate); err != nil {
+		return nil, err
+	}
+	csr, err := NewCertificateRequest(profile.Key, pb.KeyUsage_KEY_USAGE_PEER, WithSubject(profile.Name))
+	if err != nil {
+		return nil, err
+	}
+	peerCert, err := SignCertificateRequest(csr, defaultCertTTL, invitation.Key)
+	if err != nil {
+		return nil, err
+	}
+	peerCert.ParentOneof = &pb.Certificate_Parent{Parent: invitation.Certificate}
+
+	return &pb.Network{
+		Id:          id,
+		Name:        GetRootCert(invitation.Certificate).Subject,
+		Certificate: peerCert,
+	}, nil
+}
+
+// NewNetworkFromCertificate generates a network from a network invitation
+func NewNetworkFromCertificate(cert *pb.Certificate) (*pb.Network, error) {
+	id, err := GenerateSnowflake()
+	if err != nil {
+		return nil, err
+	}
+
+	if err = VerifyCertificate(cert); err != nil {
+		return nil, err
+	}
+
+	return &pb.Network{
+		Id:          id,
+		Name:        GetRootCert(cert).Subject,
+		Certificate: cert,
+	}, nil
 }
