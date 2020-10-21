@@ -1,14 +1,11 @@
 package vnic
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log"
-	"path"
 	"reflect"
-	"runtime"
 	"sync"
 	"time"
 
@@ -71,6 +68,14 @@ type HostOption func(h *Host) error
 // PeerHandler ...
 type PeerHandler func(p *Peer)
 
+// WithLabel ...
+func WithLabel(label string) HostOption {
+	return func(h *Host) error {
+		h.label = label
+		return nil
+	}
+}
+
 // New ...
 func New(logger *zap.Logger, profileKey *pb.Key, options ...HostOption) (*Host, error) {
 	hostKey, err := dao.GenerateKey()
@@ -108,6 +113,7 @@ type Host struct {
 	logger           *zap.Logger
 	profileKey       *pb.Key
 	key              *pb.Key
+	label            string
 	interfaces       []Interface
 	peerHandlersLock sync.Mutex
 	peerHandlers     []PeerHandler
@@ -131,11 +137,6 @@ func (h *Host) Close() {
 	})
 }
 
-// Logger ...
-func (h *Host) Logger() *zap.Logger {
-	return h.logger
-}
-
 // ID ...
 func (h *Host) ID() kademlia.ID {
 	return kademlia.MustUnmarshalID(h.key.Public)
@@ -153,7 +154,7 @@ func (h *Host) Cert() (*pb.Certificate, error) {
 		return nil, fmt.Errorf("generating init cert failed: %w", err)
 	}
 
-	csr, err := dao.NewCertificateRequest(h.key, pb.KeyUsage_KEY_USAGE_SIGN)
+	csr, err := dao.NewCertificateRequest(h.key, pb.KeyUsage_KEY_USAGE_SIGN, dao.WithSubject(h.label))
 	if err != nil {
 		return nil, err
 	}
@@ -348,18 +349,4 @@ func (l *instrumentedLink) Write(p []byte) (int, error) {
 	n, err := l.Link.Write(p)
 	linkWriteBytes.Add(float64(n))
 	return n, err
-}
-
-func jsonDump(i interface{}) {
-	_, file, line, _ := runtime.Caller(1)
-	b, err := json.MarshalIndent(i, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf(
-		"%s %s:%d: %s\n",
-		time.Now().Format("2006/01/02 15:04:05.000000"),
-		path.Base(file),
-		line, string(b),
-	)
 }

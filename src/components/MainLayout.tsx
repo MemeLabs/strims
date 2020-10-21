@@ -19,10 +19,8 @@ import {
   FiCloud,
   FiHome,
   FiPlus,
-  FiPlusCircle,
   FiSearch,
   FiUser,
-  FiVideo,
 } from "react-icons/fi";
 import { Link, useHistory } from "react-router-dom";
 import { useToggle } from "react-use";
@@ -30,7 +28,7 @@ import usePortal from "react-useportal";
 
 import { useCall, useClient } from "../contexts/Api";
 import { useTheme } from "../contexts/Theme";
-import { CreateNetworkResponse, INetworkMembership } from "../lib/pb";
+import { CreateNetworkResponse, ICertificate, INetwork } from "../lib/pb";
 import AddNetworkModal from "./AddNetworkModal";
 
 const NetworkAddButton: React.FunctionComponent<React.ComponentProps<"button">> = ({
@@ -59,13 +57,16 @@ const NetworkAddButton: React.FunctionComponent<React.ComponentProps<"button">> 
   );
 };
 
+const rootCertificate = (cert: ICertificate): ICertificate =>
+  cert.parent ? rootCertificate(cert.parent) : cert;
+
 const NetworkNav = () => {
   const [expanded, toggleExpanded] = useToggle(false);
-  const [networkMemberships, setNetworkMemberships] = React.useState<INetworkMembership[]>([]);
+  const [networks, setNetworks] = React.useState<INetwork[]>([]);
   const [state, { setNavOrder }] = useTheme();
 
-  const [{ error, loading }] = useCall("getNetworkMemberships", {
-    onComplete: (res) => setNetworkMemberships(res.networkMemberships),
+  const [{ error, loading }] = useCall("network", "list", {
+    onComplete: (res) => setNetworks(res.networks),
   });
 
   const onDragEnd = React.useCallback((result: DropResult, provided: ResponderProvided) => {
@@ -73,7 +74,7 @@ const NetworkNav = () => {
       return;
     }
 
-    setNetworkMemberships((prev) => {
+    setNetworks((prev) => {
       const next = Array.from(prev);
       const [target] = next.splice(result.source.index, 1);
       next.splice(result.destination.index, 0, target);
@@ -99,8 +100,8 @@ const NetworkNav = () => {
           <Droppable droppableId="networks">
             {(provided, snapshot) => (
               <div ref={provided.innerRef} {...provided.droppableProps}>
-                {networkMemberships.map((membership, i) => (
-                  <Draggable draggableId={`network-${membership.id}`} index={i} key={membership.id}>
+                {networks.map((network, i) => (
+                  <Draggable draggableId={`network-${network.id}`} index={i} key={network.id}>
                     {(provided, snapshot) => (
                       <div
                         ref={provided.innerRef}
@@ -110,21 +111,21 @@ const NetworkNav = () => {
                         <Tooltip
                           placement="right"
                           trigger={["hover"]}
-                          overlay={membership.name}
+                          overlay={network.name}
                           {...(expanded ? { visible: false } : {})}
                         >
                           <Link
                             to={`/directory/${Base64.fromUint8Array(
-                              membership.caCertificate.key,
+                              rootCertificate(network.certificate).key,
                               true
                             )}`}
                             className="main_layout__left__link"
                           >
                             <div className="main_layout__left__link__gem">
-                              {membership.name.substr(0, 1)}
+                              {network.name.substr(0, 1)}
                             </div>
                             <div className="main_layout__left__link__text">
-                              <span>{membership.name}</span>
+                              <span>{network.name}</span>
                             </div>
                           </Link>
                         </Tooltip>

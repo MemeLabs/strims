@@ -1,5 +1,6 @@
 package vnic
 
+// WebRTCScheme webrtc url scheme
 const WebRTCScheme = "webrtc"
 
 // NewWebRTCInterface ...

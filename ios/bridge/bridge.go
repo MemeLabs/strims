@@ -11,6 +11,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/service"
+	"github.com/MemeLabs/go-ppspp/pkg/services/network"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -53,7 +54,7 @@ func NewGoSide(s SwiftSide) (*GoSide, error) {
 			if err != nil {
 				return nil, err
 			}
-			return vpn.New(logger, vnicHost, vpn.NewBrokerFactory(logger))
+			return vpn.New(logger, vnicHost, network.NewBrokerFactory(logger))
 		},
 	})
 	if err != nil {

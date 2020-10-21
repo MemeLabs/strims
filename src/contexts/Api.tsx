@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import Client from "../lib/api/frontendRPCClient";
+import Client from "../lib/api";
 
 export const ClientContext = React.createContext<Client>(null);
 
@@ -10,12 +10,10 @@ type AnyFunction = (...arg: any) => any;
 type FunctionPropertyNames<T> = { [K in keyof T]: T[K] extends AnyFunction ? K : never }[keyof T];
 type ResultType<T extends AnyFunction> = ReturnType<T> extends Promise<infer U> ? U : ReturnType<T>;
 
-type ClientMethodName = FunctionPropertyNames<Client>;
-
-export interface Options<T extends ClientMethodName> {
+export interface Options<S extends keyof Client, M extends FunctionPropertyNames<Client[S]>> {
   skip?: boolean;
-  args?: Parameters<Client[T]>;
-  onComplete?: (data: ResultType<Client[T]>) => void;
+  args?: Parameters<Client[S][M]>;
+  onComplete?: (data: ResultType<Client[S][M]>) => void;
   onError?: (error: Error) => void;
 }
 
@@ -25,9 +23,13 @@ const defaultOptions = {
 
 export const useClient = () => React.useContext(ClientContext);
 
-export const useCall = <T extends ClientMethodName>(methodName: T, options: Options<T> = {}) => {
-  type Arguments = Parameters<Client[T]>;
-  type Result = ResultType<Client[T]>;
+export const useCall = <S extends keyof Client, M extends FunctionPropertyNames<Client[S]>>(
+  serviceName: S,
+  methodName: M,
+  options: Options<S, M> = {}
+) => {
+  type Arguments = Parameters<Client[S][M]>;
+  type Result = ResultType<Client[S][M]>;
   interface State {
     value?: Result;
     error?: Error;
@@ -81,7 +83,13 @@ export const useCall = <T extends ClientMethodName>(methodName: T, options: Opti
 
   const call = (...args: Arguments) => {
     /* eslint-disable prefer-spread */
-    const value = client[methodName].apply(client, args);
+    const service = client[serviceName];
+    const method = service?.[methodName];
+    if (method === undefined) {
+      throw new Error(`undefined api method ${serviceName}.${methodName as string}`);
+    }
+
+    const value = (method as AnyFunction).apply(service, args);
     if (value instanceof Promise) {
       setState((prev) => ({
         ...prev,
@@ -103,9 +111,10 @@ export const useCall = <T extends ClientMethodName>(methodName: T, options: Opti
   return [state, call] as [State, (...arg: Arguments) => void];
 };
 
-export const useLazyCall = <T extends ClientMethodName>(
-  methodName: T,
-  options: Options<T> = {}
+export const useLazyCall = <S extends keyof Client, M extends FunctionPropertyNames<Client[S]>>(
+  serviceName: S,
+  methodName: M,
+  options: Options<S, M> = {}
 ) => {
-  return useCall(methodName, { ...options, skip: true });
+  return useCall(serviceName, methodName, { ...options, skip: true });
 };

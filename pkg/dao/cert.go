@@ -93,6 +93,7 @@ func SignCertificateRequest(
 		Key:          csr.Key,
 		KeyType:      csr.KeyType,
 		KeyUsage:     csr.KeyUsage,
+		Subject:      csr.Subject,
 		NotBefore:    uint64(now.Unix()),
 		NotAfter:     uint64(now.Add(validDuration).Unix()),
 		SerialNumber: make([]byte, 16),
@@ -153,8 +154,9 @@ func NewSelfSignedCertificate(
 	key *pb.Key,
 	usage pb.KeyUsage,
 	validDuration time.Duration,
+	opts ...CertificateRequestOption,
 ) (*pb.Certificate, error) {
-	csr, err := NewCertificateRequest(key, usage)
+	csr, err := NewCertificateRequest(key, usage, opts...)
 	if err != nil {
 		return nil, err
 	}

@@ -38,8 +38,8 @@ message GetProfileRequest {
 message GetProfileResponse {
   Profile profile = 2;
 }
-message GetProfilesRequest {}
-message GetProfilesResponse {
+message ListProfilesRequest {}
+message ListProfilesResponse {
   repeated ProfileSummary profiles = 1;
 }
 message LoadSessionRequest {
@@ -79,19 +79,10 @@ message GetNetworkRequest {
 message GetNetworkResponse {
   Network network = 1;
 }
-message GetNetworksRequest {}
-message GetNetworksResponse {
+message ListNetworksRequest {}
+message ListNetworksResponse {
   repeated Network networks = 1;
 }
-
-message GetNetworkMembershipsRequest {}
-message GetNetworkMembershipsResponse {
-  repeated NetworkMembership network_memberships = 1;
-}
-message DeleteNetworkMembershipRequest {
-  uint64 id = 1;
-}
-message DeleteNetworkMembershipResponse {}
 
 message StorageKey {
   KDFType kdf_type = 1;
@@ -124,13 +115,13 @@ message Certificate {
   bytes key = 1;
   KeyType key_type = 2;
   uint32 key_usage = 3;
-  string subject = 9;
-  uint64 not_before = 4;
-  uint64 not_after = 5;
-  bytes serial_number = 6;
-  bytes signature = 7;
+  string subject = 4;
+  uint64 not_before = 5;
+  uint64 not_after = 6;
+  bytes serial_number = 7;
+  bytes signature = 8;
   oneof parent_oneof {
-    Certificate parent = 8;
+    Certificate parent = 9;
   }
 }
 
@@ -140,7 +131,6 @@ message Profile {
   bytes secret = 3;
   Key key = 4;
   repeated Network networks = 5;
-  repeated NetworkMembership network_memberships = 6;
 }
 
 message ProfileSummary {
@@ -153,6 +143,7 @@ message Network {
   string name = 2;
   Key key = 3;
   Certificate certificate = 4;
+  NetworkIcon icon = 5;
 }
 
 message NetworkMembership {
@@ -215,15 +206,15 @@ message InvitationV0 {
   string network_name = 4;
 }
 
-message CreateNetworkMembershipFromInvitationRequest {
+message CreateNetworkFromInvitationRequest {
   oneof invitation {
     string invitation_b64 = 1;
     bytes invitation_bytes = 2;
   }
 }
 
-message CreateNetworkMembershipFromInvitationResponse {
-  NetworkMembership membership = 1;
+message CreateNetworkFromInvitationResponse {
+  Network network = 1;
 }
 
 // ---
@@ -231,4 +222,28 @@ message CreateNetworkMembershipFromInvitationResponse {
 message Mutex {
   int64 eol = 1;
   bytes token = 2;
+}
+
+service Profile {
+  rpc Create(CreateProfileRequest) returns (CreateProfileResponse);
+  rpc Load(LoadProfileRequest) returns (LoadProfileResponse);
+  rpc Get(GetProfileRequest) returns (GetProfileResponse);
+  rpc Update(UpdateProfileRequest) returns (UpdateProfileResponse);
+  rpc Delete(DeleteProfileRequest) returns (DeleteProfileResponse);
+  rpc List(ListProfilesRequest) returns (ListProfilesResponse);
+  rpc LoadSession(LoadSessionRequest) returns (LoadSessionResponse);
+}
+
+service Network {
+  rpc Create(CreateNetworkRequest) returns (CreateNetworkResponse);
+  rpc Update(UpdateNetworkRequest) returns (UpdateNetworkResponse);
+  rpc Delete(DeleteNetworkRequest) returns (DeleteNetworkResponse);
+  rpc Get(GetNetworkRequest) returns (GetNetworkResponse);
+  rpc List(ListNetworksRequest) returns (ListNetworksResponse);
+  rpc CreateInvitation(CreateNetworkInvitationRequest) returns (CreateNetworkInvitationResponse);
+  rpc CreateFromInvitation(CreateNetworkFromInvitationRequest) returns (CreateNetworkFromInvitationResponse);
+  rpc StartVPN(StartVPNRequest) returns (stream NetworkEvent);
+  rpc StopVPN(StopVPNRequest) returns (StopVPNResponse);
+  rpc GetDirectoryEvents(GetDirectoryEventsRequest) returns (stream DirectoryServerEvent);
+  rpc TestDirectoryPublish(TestDirectoryPublishRequest) returns (TestDirectoryPublishResponse);
 }

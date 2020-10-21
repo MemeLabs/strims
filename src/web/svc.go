@@ -13,10 +13,11 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/frontend"
 	"github.com/MemeLabs/go-ppspp/pkg/gobridge"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
-	"github.com/MemeLabs/go-ppspp/pkg/service"
+	"github.com/MemeLabs/go-ppspp/pkg/services/network"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/go-ppspp/pkg/wasmio"
@@ -85,32 +86,33 @@ func newLogger(bridge js.Value) *zap.Logger {
 func initDefault(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
 
-	vpnBrokerClient := vpn.NewBrokerFactoryClient(logger, wasmio.NewWorkerProxy(bridge, "broker"))
-
-	srv, err := service.New(service.Options{
+	srv := frontend.Server{
 		Store:  wasmio.NewKVStore(bridge),
 		Logger: logger,
 		NewVPNHost: func(key *pb.Key) (*vpn.Host, error) {
-			ws := vnic.NewWSInterface(logger, bridge)
-			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, bridge))
-			vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
+			vnicHost, err := vnic.New(
+				logger,
+				key,
+				vnic.WithInterface(vnic.NewWSInterface(logger, bridge)),
+				vnic.WithInterface(vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, bridge))),
+			)
 			if err != nil {
 				return nil, err
 			}
-			return vpn.New(logger, vnicHost, vpnBrokerClient)
+			return vpn.New(logger, vnicHost)
 		},
-	})
-	if err != nil {
-		log.Fatalf("error creating service: %s", err)
+		BrokerFactory: network.NewBrokerFactoryClient(logger, wasmio.NewWorkerProxy(bridge, "broker")),
 	}
 
-	srv.Listen(context.Background(), bus)
+	if err := srv.Listen(context.Background(), bus); err != nil {
+		logger.Fatal("server closed with error", zap.Error(err))
+	}
 }
 
 func initBroker(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
 
 	host := rpc.NewHost(logger)
-	host.RegisterService("NetworkBroker", vpn.NewBrokerFactoryService(logger))
+	host.RegisterService("NetworkBroker", network.NewBrokerFactoryService(logger))
 	host.Listen(context.Background(), bus)
 }

@@ -32,14 +32,18 @@ const peerIndexMaxSize = 5120
 
 var nextPeerIndexID uint32
 
-// NewPeerIndex ...
-func NewPeerIndex(logger *zap.Logger, n *Network, store *PeerIndexStore) *PeerIndex {
+type PeerIndex interface {
+	Publish(ctx context.Context, key, salt []byte, port uint16) error
+	Search(ctx context.Context, key, salt []byte) (<-chan *PeerIndexHost, error)
+}
+
+func newPeerIndex(logger *zap.Logger, n *Network, store *PeerIndexStore) *peerIndex {
 	id := atomic.AddUint32(&nextPeerIndexID, 1)
 	if id == 0 {
 		panic("peer index id overflow")
 	}
 
-	return &PeerIndex{
+	return &peerIndex{
 		logger:  logger,
 		id:      id,
 		store:   store,
@@ -48,7 +52,7 @@ func NewPeerIndex(logger *zap.Logger, n *Network, store *PeerIndexStore) *PeerIn
 }
 
 // PeerIndex ...
-type PeerIndex struct {
+type peerIndex struct {
 	logger              *zap.Logger
 	id                  uint32
 	store               *PeerIndexStore
@@ -57,7 +61,7 @@ type PeerIndex struct {
 }
 
 // HandleMessage ...
-func (s *PeerIndex) HandleMessage(msg *Message) (forward bool, err error) {
+func (s *peerIndex) HandleMessage(msg *Message) (forward bool, err error) {
 	var m pb.PeerIndexMessage
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
 		return true, err
@@ -83,7 +87,7 @@ func (s *PeerIndex) HandleMessage(msg *Message) (forward bool, err error) {
 	return true, err
 }
 
-func (s *PeerIndex) handlePublish(r *pb.PeerIndexMessage_Record) error {
+func (s *peerIndex) handlePublish(r *pb.PeerIndexMessage_Record) error {
 	if !verifyPeerIndexRecord(r) {
 		return errors.New("invalid record signature")
 	}
@@ -91,7 +95,7 @@ func (s *PeerIndex) handlePublish(r *pb.PeerIndexMessage_Record) error {
 	return s.store.Insert(s.id, r)
 }
 
-func (s *PeerIndex) handleUnpublish(r *pb.PeerIndexMessage_Record) error {
+func (s *peerIndex) handleUnpublish(r *pb.PeerIndexMessage_Record) error {
 	if !verifyPeerIndexRecord(r) {
 		return errors.New("invalid record signature")
 	}
@@ -99,7 +103,7 @@ func (s *PeerIndex) handleUnpublish(r *pb.PeerIndexMessage_Record) error {
 	return s.store.Remove(s.id, r)
 }
 
-func (s *PeerIndex) handleSearchRequest(m *pb.PeerIndexMessage_SearchRequest, originHostID kademlia.ID) error {
+func (s *peerIndex) handleSearchRequest(m *pb.PeerIndexMessage_SearchRequest, originHostID kademlia.ID) error {
 	records := s.store.Closest(s.id, originHostID, m.Hash)
 	if len(records) == 0 {
 		return nil
@@ -116,7 +120,7 @@ func (s *PeerIndex) handleSearchRequest(m *pb.PeerIndexMessage_SearchRequest, or
 	return s.network.SendProto(originHostID, vnic.PeerIndexPort, vnic.PeerIndexPort, msg)
 }
 
-func (s *PeerIndex) handleSearchResponse(m *pb.PeerIndexMessage_SearchResponse) error {
+func (s *peerIndex) handleSearchResponse(m *pb.PeerIndexMessage_SearchResponse) error {
 	for _, r := range m.Records {
 		if !verifyPeerIndexRecord(r) {
 			continue
@@ -129,7 +133,7 @@ func (s *PeerIndex) handleSearchResponse(m *pb.PeerIndexMessage_SearchResponse) 
 	return nil
 }
 
-func (s *PeerIndex) Publish(ctx context.Context, key, salt []byte, port uint16) error {
+func (s *peerIndex) Publish(ctx context.Context, key, salt []byte, port uint16) error {
 	s.logger.Debug(
 		"publishing peer index item",
 		logutil.ByteHex("key", key),
@@ -140,7 +144,7 @@ func (s *PeerIndex) Publish(ctx context.Context, key, salt []byte, port uint16) 
 	return err
 }
 
-func (s *PeerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerIndexHost, error) {
+func (s *peerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerIndexHost, error) {
 	hash := peerIndexRecordHash(key, salt)
 	target, err := kademlia.UnmarshalID(hash)
 	if err != nil {
@@ -250,8 +254,8 @@ func (p *peerIndexItem) Deadline() time.Time {
 	return time.Unix(p.Record().Timestamp, 0).Add(peerIndexMaxRecordAge)
 }
 
-// NewPeerIndexStore ...
-func NewPeerIndexStore(ctx context.Context, logger *zap.Logger, hostID kademlia.ID) *PeerIndexStore {
+// newPeerIndexStore ...
+func newPeerIndexStore(ctx context.Context, logger *zap.Logger, hostID kademlia.ID) *PeerIndexStore {
 	p := &PeerIndexStore{
 		logger:       logger,
 		hostID:       hostID,
