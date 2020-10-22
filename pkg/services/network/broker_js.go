@@ -4,9 +4,9 @@ package network
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
-	"io"
 	"sync"
 	"sync/atomic"
 
@@ -17,7 +17,13 @@ import (
 	"go.uber.org/zap"
 )
 
-var errPeeerIDNotFound = errors.New("peer id not found")
+// errors ...
+var (
+	ErrProxyIDNotFound = errors.New("proxy id not found")
+	ErrProxyClosed     = errors.New("proxy closed")
+	ErrResponseClosed  = errors.New("response closed unexpectedly")
+	ErrUnexpectedEvent = errors.New("unexpected event type")
+)
 
 // NewBrokerProxyService constructs a new BrokerFactoryService
 func NewBrokerProxyService(logger *zap.Logger) *BrokerProxyService {
@@ -33,111 +39,147 @@ func NewBrokerProxyService(logger *zap.Logger) *BrokerProxyService {
 // offload them to a separate web worker.
 type BrokerProxyService struct {
 	logger     *zap.Logger
-	peers      sync.Map
+	helpers    sync.Map
 	nextPeerID uint64
 	broker     Broker
 }
 
 // Open ...
 func (s *BrokerProxyService) Open(ctx context.Context, r *pb.BrokerProxyRequest) (<-chan *pb.BrokerProxyEvent, error) {
-	ch := make(chan *pb.BrokerProxyEvent, 1)
-
-	r0, w0 := io.Pipe()
-	r1, w1 := io.Pipe()
-
-	p := &brokerProxyServiceHelper{
+	ch := make(chan *pb.BrokerProxyEvent)
+	rw := &brokerProxyServiceReadWriter{
+		ch:       ch,
+		readable: make(chan struct{}),
+	}
+	h := &brokerProxyServiceHelper{
 		broker: s.broker,
-		conn:   bufio.NewReadWriter(bufio.NewReader(r0), bufio.NewWriterSize(w1, int(r.ConnMtu))),
-		w:      w0,
+		conn:   bufio.NewReadWriter(bufio.NewReader(rw), bufio.NewWriterSize(rw, int(r.ConnMtu))),
+		rw:     rw,
 	}
 
 	pid := atomic.AddUint64(&s.nextPeerID, 1)
-	s.peers.Store(pid, p)
-
-	ch <- &pb.BrokerProxyEvent{
-		Body: &pb.BrokerProxyEvent_Open_{
-			Open: &pb.BrokerProxyEvent_Open{
-				PeerId: pid,
-			},
-		},
-	}
+	s.helpers.Store(pid, h)
 
 	go func() {
-		defer func() {
-			s.peers.Delete(pid)
-			close(ch)
-		}()
-
-		b := make([]byte, r.ConnMtu)
-		for {
-			n, err := r1.Read(b)
-			if err != nil {
-				return
-			}
-
-			ch <- &pb.BrokerProxyEvent{
-				Body: &pb.BrokerProxyEvent_Data_{
-					Data: &pb.BrokerProxyEvent_Data{
-						Data: b[:n],
-					},
+		ch <- &pb.BrokerProxyEvent{
+			Body: &pb.BrokerProxyEvent_Open_{
+				Open: &pb.BrokerProxyEvent_Open{
+					ProxyId: pid,
 				},
-			}
+			},
 		}
+
+		<-ctx.Done()
+		s.helpers.Delete(pid)
+		rw.Close()
 	}()
 
 	return ch, nil
 }
 
 // SendKeys ...
-func (s *BrokerProxyService) SendKeys(ctx context.Context, req *pb.BrokerProxySendKeysRequest) (*pb.BrokerProxySendKeysResponse, error) {
-	pi, ok := s.peers.Load(req.PeerId)
+func (s *BrokerProxyService) SendKeys(ctx context.Context, r *pb.BrokerProxySendKeysRequest) (*pb.BrokerProxySendKeysResponse, error) {
+	pi, ok := s.helpers.Load(r.ProxyId)
 	if !ok {
-		return nil, errPeeerIDNotFound
+		return nil, ErrProxyIDNotFound
 	}
 
-	err := pi.(*brokerProxyServiceHelper).SendKeys(req.Keys)
-	return &pb.BrokerProxySendKeysResponse{}, err
+	if err := pi.(*brokerProxyServiceHelper).SendKeys(r.Keys); err != nil {
+		return nil, err
+	}
+	return &pb.BrokerProxySendKeysResponse{}, nil
 }
 
 // ReceiveKeys ...
-func (s *BrokerProxyService) ReceiveKeys(ctx context.Context, req *pb.BrokerProxyReceiveKeysRequest) (*pb.BrokerProxyReceiveKeysResponse, error) {
-	pi, ok := s.peers.Load(req.PeerId)
+func (s *BrokerProxyService) ReceiveKeys(ctx context.Context, r *pb.BrokerProxyReceiveKeysRequest) (*pb.BrokerProxyReceiveKeysResponse, error) {
+	pi, ok := s.helpers.Load(r.ProxyId)
 	if !ok {
-		return nil, errPeeerIDNotFound
+		return nil, ErrProxyIDNotFound
 	}
 
-	keys, err := pi.(*brokerProxyServiceHelper).ReceiveKeys(req.Keys)
-	return &pb.BrokerProxyReceiveKeysResponse{Keys: keys}, err
+	keys, err := pi.(*brokerProxyServiceHelper).ReceiveKeys(r.Keys)
+	if err != nil {
+		return nil, err
+	}
+	return &pb.BrokerProxyReceiveKeysResponse{Keys: keys}, nil
 }
 
 // Data ...
 func (s *BrokerProxyService) Data(ctx context.Context, r *pb.BrokerProxyDataRequest) (*pb.BrokerProxyDataResponse, error) {
-	pi, ok := s.peers.Load(r.PeerId)
+	pi, ok := s.helpers.Load(r.ProxyId)
 	if !ok {
-		return nil, errPeeerIDNotFound
+		return nil, ErrProxyIDNotFound
 	}
 
-	if _, err := pi.(*brokerProxyServiceHelper).w.Write(r.Data); err != nil {
-		return nil, err
-	}
-
+	pi.(*brokerProxyServiceHelper).rw.Data(r.Data)
 	return &pb.BrokerProxyDataResponse{}, nil
 }
 
 type brokerProxyServiceHelper struct {
 	broker Broker
 	conn   *bufio.ReadWriter
-	w      io.Writer
+	rw     *brokerProxyServiceReadWriter
 }
 
 // SendKeys ...
 func (h *brokerProxyServiceHelper) SendKeys(keys [][]byte) error {
+	defer h.rw.Drain()
 	return h.broker.SendKeys(h.conn, keys)
 }
 
 // ReceiveKeys ...
 func (h *brokerProxyServiceHelper) ReceiveKeys(keys [][]byte) ([][]byte, error) {
+	defer h.rw.Drain()
 	return h.broker.ReceiveKeys(h.conn, keys)
+}
+
+type brokerProxyServiceReadWriter struct {
+	rb       bytes.Buffer
+	ch       chan *pb.BrokerProxyEvent
+	readable chan struct{}
+}
+
+func (r *brokerProxyServiceReadWriter) Data(p []byte) {
+	r.rb.Write(p)
+	r.readable <- struct{}{}
+}
+
+func (r *brokerProxyServiceReadWriter) Read(p []byte) (int, error) {
+	if r.rb.Len() == 0 {
+		r.ch <- &pb.BrokerProxyEvent{
+			Body: &pb.BrokerProxyEvent_Read_{
+				Read: &pb.BrokerProxyEvent_Read{},
+			},
+		}
+		if _, ok := <-r.readable; !ok {
+			return 0, ErrProxyClosed
+		}
+	}
+	return r.rb.Read(p)
+}
+
+func (r *brokerProxyServiceReadWriter) Write(p []byte) (int, error) {
+	r.ch <- &pb.BrokerProxyEvent{
+		Body: &pb.BrokerProxyEvent_Data_{
+			Data: &pb.BrokerProxyEvent_Data{
+				Data: append(make([]byte, 0, len(p)), p...),
+			},
+		},
+	}
+	return len(p), nil
+}
+
+func (r *brokerProxyServiceReadWriter) Drain() {
+	r.ch <- &pb.BrokerProxyEvent{
+		Body: &pb.BrokerProxyEvent_Drain_{
+			Drain: &pb.BrokerProxyEvent_Drain{},
+		},
+	}
+}
+
+func (r *brokerProxyServiceReadWriter) Close() error {
+	close(r.readable)
+	return nil
 }
 
 // NewBrokerProxyClient ....
@@ -187,20 +229,21 @@ func (h *BrokerProxyClient) proxy(conn ReadWriteFlusher) (*brokerProxyClientHelp
 	e, ok := <-events
 	if !ok {
 		cancel()
-		return nil, errors.New("response closed unexpectedly")
+		return nil, ErrResponseClosed
 	}
 	o, ok := e.Body.(*pb.BrokerProxyEvent_Open_)
 	if !ok {
 		cancel()
-		return nil, errors.New("unexpected event type")
+		return nil, ErrUnexpectedEvent
 	}
 
 	p := &brokerProxyClientHelper{
 		ctx:    ctx,
 		cancel: cancel,
-		id:     o.Open.PeerId,
+		id:     o.Open.ProxyId,
 		client: h.client,
 		conn:   conn,
+		read:   make(chan struct{}, 1),
 	}
 
 	go p.doEventPump(events)
@@ -215,6 +258,7 @@ type brokerProxyClientHelper struct {
 	id     uint64
 	client *api.BrokerProxyClient
 	conn   ReadWriteFlusher
+	read   chan struct{}
 }
 
 func (p *brokerProxyClientHelper) doEventPump(events chan *pb.BrokerProxyEvent) {
@@ -226,15 +270,16 @@ func (p *brokerProxyClientHelper) doEventPump(events chan *pb.BrokerProxyEvent) 
 			if !ok {
 				return
 			}
-			b, ok := e.Body.(*pb.BrokerProxyEvent_Data_)
-			if !ok {
-				return
-			}
-			if _, err := p.conn.Write(b.Data.Data); err != nil {
-				return
-			}
-			if err := p.conn.Flush(); err != nil {
-				return
+			switch body := e.Body.(type) {
+			case *pb.BrokerProxyEvent_Data_:
+				if _, err := p.conn.Write(body.Data.Data); err != nil {
+					return
+				}
+				if err := p.conn.Flush(); err != nil {
+					return
+				}
+			case *pb.BrokerProxyEvent_Read_:
+				p.read <- struct{}{}
 			}
 		}
 	}
@@ -243,17 +288,22 @@ func (p *brokerProxyClientHelper) doEventPump(events chan *pb.BrokerProxyEvent) 
 func (p *brokerProxyClientHelper) doReadPump() {
 	b := make([]byte, connMTU(p.conn))
 	for {
-		n, err := p.conn.Read(b)
-		if err != nil {
+		select {
+		case <-p.ctx.Done():
 			return
-		}
+		case <-p.read:
+			n, err := p.conn.Read(b)
+			if err != nil {
+				return
+			}
 
-		req := &pb.BrokerProxyDataRequest{
-			PeerId: p.id,
-			Data:   b[:n],
-		}
-		if err := p.client.Data(p.ctx, req, &pb.BrokerProxyDataResponse{}); err != nil {
-			return
+			req := &pb.BrokerProxyDataRequest{
+				ProxyId: p.id,
+				Data:    b[:n],
+			}
+			if err := p.client.Data(p.ctx, req, &pb.BrokerProxyDataResponse{}); err != nil {
+				return
+			}
 		}
 	}
 }
@@ -261,8 +311,8 @@ func (p *brokerProxyClientHelper) doReadPump() {
 // SendKeys ...
 func (p *brokerProxyClientHelper) SendKeys(keys [][]byte) error {
 	req := &pb.BrokerProxySendKeysRequest{
-		PeerId: p.id,
-		Keys:   keys,
+		ProxyId: p.id,
+		Keys:    keys,
 	}
 	return p.client.SendKeys(p.ctx, req, &pb.BrokerProxySendKeysResponse{})
 }
@@ -270,8 +320,8 @@ func (p *brokerProxyClientHelper) SendKeys(keys [][]byte) error {
 // ReceiveKeys ...
 func (p *brokerProxyClientHelper) ReceiveKeys(keys [][]byte) ([][]byte, error) {
 	req := &pb.BrokerProxyReceiveKeysRequest{
-		PeerId: p.id,
-		Keys:   keys,
+		ProxyId: p.id,
+		Keys:    keys,
 	}
 	res := &pb.BrokerProxyReceiveKeysResponse{}
 	if err := p.client.ReceiveKeys(p.ctx, req, res); err != nil {

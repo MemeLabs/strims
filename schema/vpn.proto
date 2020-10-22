@@ -84,28 +84,34 @@ message BrokerProxyRequest {
 
 message BrokerProxyEvent {
   message Open {
-    uint64 peer_id = 1;
+    uint64 proxy_id = 1;
   }
 
   message Data {
     bytes data = 1;
   }
 
+  message Read {}
+
+  message Drain {}
+
   oneof body {
     Open open = 1;
     Data data = 2;
+    Read read = 3;
+    Drain drain = 4;
   }
 }
 
 message BrokerProxySendKeysRequest {
-  uint64 peer_id = 1;
+  uint64 proxy_id = 1;
   repeated bytes keys = 2;
 }
 
 message BrokerProxySendKeysResponse {}
 
 message BrokerProxyReceiveKeysRequest {
-  uint64 peer_id = 1;
+  uint64 proxy_id = 1;
   repeated bytes keys = 2;
 }
 
@@ -114,7 +120,7 @@ message BrokerProxyReceiveKeysResponse {
 }
 
 message BrokerProxyDataRequest {
-  uint64 peer_id = 1;
+  uint64 proxy_id = 1;
   bytes data = 2;
 }
 

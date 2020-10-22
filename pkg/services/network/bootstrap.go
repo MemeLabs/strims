@@ -34,6 +34,7 @@ var (
 	ErrNetworkIDBounds          = errors.New("network id out of range")
 )
 
+// Broker negotiates common networks with peers.
 type Broker interface {
 	SendKeys(c ReadWriteFlusher, keys [][]byte) error
 	ReceiveKeys(c ReadWriteFlusher, keys [][]byte) ([][]byte, error)
@@ -71,14 +72,15 @@ func (h *PeerHandler) handlePeer(p *vnic.Peer) {
 
 func newBootstrap(logger *zap.Logger, broker Broker, host *vpn.Host, peer *vnic.Peer) *bootstrap {
 	h := &bootstrap{
-		logger:   logger,
-		broker:   broker,
-		host:     host,
-		peer:     peer,
-		links:    make(map[*vpn.Network]struct{}),
-		peerInit: make(chan *pb.NetworkHandshake_Init, 1),
-		bindings: make(chan *pb.NetworkHandshake_NetworkBindings),
-		ch:       peer.Channel(vnic.NetworkInitPort),
+		logger:     logger,
+		broker:     broker,
+		host:       host,
+		peer:       peer,
+		links:      make(map[*vpn.Network]struct{}),
+		peerInit:   make(chan *pb.NetworkHandshake_Init, 1),
+		bindings:   make(chan *pb.NetworkHandshake_NetworkBindings),
+		conn:       peer.Channel(vnic.NetworkInitPort),
+		brokerConn: peer.Channel(vnic.NetworkBrokerPort),
 	}
 
 	go h.run()
@@ -87,15 +89,16 @@ func newBootstrap(logger *zap.Logger, broker Broker, host *vpn.Host, peer *vnic.
 }
 
 type bootstrap struct {
-	logger   *zap.Logger
-	broker   Broker
-	host     *vpn.Host
-	peer     *vnic.Peer
-	links    map[*vpn.Network]struct{}
-	syncing  int32
-	peerInit chan *pb.NetworkHandshake_Init
-	bindings chan *pb.NetworkHandshake_NetworkBindings
-	ch       *vnic.FrameReadWriter
+	logger     *zap.Logger
+	broker     Broker
+	host       *vpn.Host
+	peer       *vnic.Peer
+	links      map[*vpn.Network]struct{}
+	syncing    int32
+	peerInit   chan *pb.NetworkHandshake_Init
+	bindings   chan *pb.NetworkHandshake_NetworkBindings
+	conn       *vnic.FrameReadWriter
+	brokerConn *vnic.FrameReadWriter
 }
 
 func (h *bootstrap) run() {
@@ -135,7 +138,7 @@ func (h *bootstrap) removeNetworkLinks() {
 func (h *bootstrap) readHandshakes() error {
 	for {
 		var handshake pb.NetworkHandshake
-		if err := protoutil.ReadStream(h.ch, &handshake); err != nil {
+		if err := protoutil.ReadStream(h.conn, &handshake); err != nil {
 			return err
 		}
 
@@ -153,11 +156,11 @@ func (h *bootstrap) readHandshakes() error {
 }
 
 func (h *bootstrap) send(msg protoreflect.ProtoMessage) error {
-	err := protoutil.WriteStream(h.ch, msg)
+	err := protoutil.WriteStream(h.conn, msg)
 	if err != nil {
 		return err
 	}
-	return h.ch.Flush()
+	return h.conn.Flush()
 }
 
 func (h *bootstrap) sync() {
@@ -166,8 +169,6 @@ func (h *bootstrap) sync() {
 	}
 
 	keys := h.host.NetworkKeys()
-	ch := h.peer.Channel(vnic.NetworkBrokerPort)
-
 	err := h.send(&pb.NetworkHandshake{
 		Body: &pb.NetworkHandshake_Init_{
 			Init: &pb.NetworkHandshake_Init{
@@ -182,30 +183,33 @@ func (h *bootstrap) sync() {
 	}
 
 	go func() {
-		if err := h.exchangeBindings(ch, keys); err != nil {
+		if err := h.exchangeBindings(keys); err != nil {
 			h.logger.Debug("sync failedd", zap.Error(err))
 		}
-		h.peer.CloseChannel(ch)
 		atomic.StoreInt32(&h.syncing, 0)
 	}()
 }
 
-func (h *bootstrap) exchangeBindings(ch *vnic.FrameReadWriter, keys [][]byte) error {
+func (h *bootstrap) exchangeBindings(keys [][]byte) error {
 	select {
 	case <-time.After(time.Second * 10):
 		return errors.New("timeout")
 	case peerInit := <-h.peerInit:
+		if len(keys) == 0 || peerInit.KeyCount == 0 {
+			return nil
+		}
+
 		preferSend := h.peer.HostID().Less(h.host.VNIC().ID())
 		if len(keys) > int(peerInit.KeyCount) || (len(keys) == int(peerInit.KeyCount) && preferSend) {
-			return h.exchangeBindingsAsSender(ch, keys)
+			return h.exchangeBindingsAsSender(keys)
 		} else {
-			return h.exchangeBindingsAsReceiver(ch, keys)
+			return h.exchangeBindingsAsReceiver(keys)
 		}
 	}
 }
 
-func (h *bootstrap) exchangeBindingsAsReceiver(ch *vnic.FrameReadWriter, keys [][]byte) error {
-	keys, err := h.broker.ReceiveKeys(ch, keys)
+func (h *bootstrap) exchangeBindingsAsReceiver(keys [][]byte) error {
+	keys, err := h.broker.ReceiveKeys(h.brokerConn, keys)
 	if err != nil {
 		return err
 	}
@@ -220,8 +224,8 @@ func (h *bootstrap) exchangeBindingsAsReceiver(ch *vnic.FrameReadWriter, keys []
 	return h.handleNetworkBindings(networkBindings, peerNetworkBindings.NetworkBindings)
 }
 
-func (h *bootstrap) exchangeBindingsAsSender(ch *vnic.FrameReadWriter, keys [][]byte) error {
-	if err := h.broker.SendKeys(ch, keys); err != nil {
+func (h *bootstrap) exchangeBindingsAsSender(keys [][]byte) error {
+	if err := h.broker.SendKeys(h.brokerConn, keys); err != nil {
 		return err
 	}
 	peerNetworkBindings := <-h.bindings
@@ -261,7 +265,7 @@ func (h *bootstrap) sendNetworkBindings(keys [][]byte) ([]*pb.NetworkHandshake_N
 			},
 		)
 	}
-	err := protoutil.WriteStream(h.ch, &pb.NetworkHandshake{
+	err := protoutil.WriteStream(h.conn, &pb.NetworkHandshake{
 		Body: &pb.NetworkHandshake_NetworkBindings_{
 			NetworkBindings: &pb.NetworkHandshake_NetworkBindings{
 				NetworkBindings: bindings,
@@ -271,7 +275,7 @@ func (h *bootstrap) sendNetworkBindings(keys [][]byte) ([]*pb.NetworkHandshake_N
 	if err != nil {
 		return nil, err
 	}
-	if err := h.ch.Flush(); err != nil {
+	if err := h.conn.Flush(); err != nil {
 		return nil, err
 	}
 	return bindings, nil

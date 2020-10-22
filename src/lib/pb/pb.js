@@ -42015,6 +42015,8 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
      * @interface IBrokerProxyEvent
      * @property {BrokerProxyEvent.IOpen|null} [open] BrokerProxyEvent open
      * @property {BrokerProxyEvent.IData|null} [data] BrokerProxyEvent data
+     * @property {BrokerProxyEvent.IRead|null} [read] BrokerProxyEvent read
+     * @property {BrokerProxyEvent.IDrain|null} [drain] BrokerProxyEvent drain
      */
 
     /**
@@ -42048,17 +42050,33 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
      */
     BrokerProxyEvent.prototype.data = null;
 
+    /**
+     * BrokerProxyEvent read.
+     * @member {BrokerProxyEvent.IRead|null|undefined} read
+     * @memberof BrokerProxyEvent
+     * @instance
+     */
+    BrokerProxyEvent.prototype.read = null;
+
+    /**
+     * BrokerProxyEvent drain.
+     * @member {BrokerProxyEvent.IDrain|null|undefined} drain
+     * @memberof BrokerProxyEvent
+     * @instance
+     */
+    BrokerProxyEvent.prototype.drain = null;
+
     // OneOf field names bound to virtual getters and setters
     let $oneOfFields;
 
     /**
      * BrokerProxyEvent body.
-     * @member {"open"|"data"|undefined} body
+     * @member {"open"|"data"|"read"|"drain"|undefined} body
      * @memberof BrokerProxyEvent
      * @instance
      */
     Object.defineProperty(BrokerProxyEvent.prototype, "body", {
-        get: $util.oneOfGetter($oneOfFields = ["open", "data"]),
+        get: $util.oneOfGetter($oneOfFields = ["open", "data", "read", "drain"]),
         set: $util.oneOfSetter($oneOfFields)
     });
 
@@ -42090,6 +42108,10 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
             $root.BrokerProxyEvent.Open.encode(message.open, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         if (message.data != null && Object.hasOwnProperty.call(message, "data"))
             $root.BrokerProxyEvent.Data.encode(message.data, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        if (message.read != null && Object.hasOwnProperty.call(message, "read"))
+            $root.BrokerProxyEvent.Read.encode(message.read, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+        if (message.drain != null && Object.hasOwnProperty.call(message, "drain"))
+            $root.BrokerProxyEvent.Drain.encode(message.drain, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
         return writer;
     };
 
@@ -42129,6 +42151,12 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
                 break;
             case 2:
                 message.data = $root.BrokerProxyEvent.Data.decode(reader, reader.uint32());
+                break;
+            case 3:
+                message.read = $root.BrokerProxyEvent.Read.decode(reader, reader.uint32());
+                break;
+            case 4:
+                message.drain = $root.BrokerProxyEvent.Drain.decode(reader, reader.uint32());
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -42184,6 +42212,26 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
                     return "data." + error;
             }
         }
+        if (message.read != null && message.hasOwnProperty("read")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.BrokerProxyEvent.Read.verify(message.read);
+                if (error)
+                    return "read." + error;
+            }
+        }
+        if (message.drain != null && message.hasOwnProperty("drain")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.BrokerProxyEvent.Drain.verify(message.drain);
+                if (error)
+                    return "drain." + error;
+            }
+        }
         return null;
     };
 
@@ -42208,6 +42256,16 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
             if (typeof object.data !== "object")
                 throw TypeError(".BrokerProxyEvent.data: object expected");
             message.data = $root.BrokerProxyEvent.Data.fromObject(object.data);
+        }
+        if (object.read != null) {
+            if (typeof object.read !== "object")
+                throw TypeError(".BrokerProxyEvent.read: object expected");
+            message.read = $root.BrokerProxyEvent.Read.fromObject(object.read);
+        }
+        if (object.drain != null) {
+            if (typeof object.drain !== "object")
+                throw TypeError(".BrokerProxyEvent.drain: object expected");
+            message.drain = $root.BrokerProxyEvent.Drain.fromObject(object.drain);
         }
         return message;
     };
@@ -42235,6 +42293,16 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
             if (options.oneofs)
                 object.body = "data";
         }
+        if (message.read != null && message.hasOwnProperty("read")) {
+            object.read = $root.BrokerProxyEvent.Read.toObject(message.read, options);
+            if (options.oneofs)
+                object.body = "read";
+        }
+        if (message.drain != null && message.hasOwnProperty("drain")) {
+            object.drain = $root.BrokerProxyEvent.Drain.toObject(message.drain, options);
+            if (options.oneofs)
+                object.body = "drain";
+        }
         return object;
     };
 
@@ -42255,7 +42323,7 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
          * Properties of an Open.
          * @memberof BrokerProxyEvent
          * @interface IOpen
-         * @property {number|null} [peerId] Open peerId
+         * @property {number|null} [proxyId] Open proxyId
          */
 
         /**
@@ -42274,12 +42342,12 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
         }
 
         /**
-         * Open peerId.
-         * @member {number} peerId
+         * Open proxyId.
+         * @member {number} proxyId
          * @memberof BrokerProxyEvent.Open
          * @instance
          */
-        Open.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+        Open.prototype.proxyId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
         /**
          * Creates a new Open instance using the specified properties.
@@ -42305,8 +42373,8 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
         Open.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.peerId != null && Object.hasOwnProperty.call(message, "peerId"))
-                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.peerId);
+            if (message.proxyId != null && Object.hasOwnProperty.call(message, "proxyId"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.proxyId);
             return writer;
         };
 
@@ -42342,7 +42410,7 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
                 case 1:
-                    message.peerId = reader.uint64();
+                    message.proxyId = reader.uint64();
                     break;
                 default:
                     reader.skipType(tag & 7);
@@ -42379,9 +42447,9 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
         Open.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.peerId != null && message.hasOwnProperty("peerId"))
-                if (!$util.isInteger(message.peerId) && !(message.peerId && $util.isInteger(message.peerId.low) && $util.isInteger(message.peerId.high)))
-                    return "peerId: integer|Long expected";
+            if (message.proxyId != null && message.hasOwnProperty("proxyId"))
+                if (!$util.isInteger(message.proxyId) && !(message.proxyId && $util.isInteger(message.proxyId.low) && $util.isInteger(message.proxyId.high)))
+                    return "proxyId: integer|Long expected";
             return null;
         };
 
@@ -42397,15 +42465,15 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
             if (object instanceof $root.BrokerProxyEvent.Open)
                 return object;
             let message = new $root.BrokerProxyEvent.Open();
-            if (object.peerId != null)
+            if (object.proxyId != null)
                 if ($util.Long)
-                    (message.peerId = $util.Long.fromValue(object.peerId)).unsigned = true;
-                else if (typeof object.peerId === "string")
-                    message.peerId = parseInt(object.peerId, 10);
-                else if (typeof object.peerId === "number")
-                    message.peerId = object.peerId;
-                else if (typeof object.peerId === "object")
-                    message.peerId = new $util.LongBits(object.peerId.low >>> 0, object.peerId.high >>> 0).toNumber(true);
+                    (message.proxyId = $util.Long.fromValue(object.proxyId)).unsigned = true;
+                else if (typeof object.proxyId === "string")
+                    message.proxyId = parseInt(object.proxyId, 10);
+                else if (typeof object.proxyId === "number")
+                    message.proxyId = object.proxyId;
+                else if (typeof object.proxyId === "object")
+                    message.proxyId = new $util.LongBits(object.proxyId.low >>> 0, object.proxyId.high >>> 0).toNumber(true);
             return message;
         };
 
@@ -42425,14 +42493,14 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
             if (options.defaults)
                 if ($util.Long) {
                     let long = new $util.Long(0, 0, true);
-                    object.peerId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                    object.proxyId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
                 } else
-                    object.peerId = options.longs === String ? "0" : 0;
-            if (message.peerId != null && message.hasOwnProperty("peerId"))
-                if (typeof message.peerId === "number")
-                    object.peerId = options.longs === String ? String(message.peerId) : message.peerId;
+                    object.proxyId = options.longs === String ? "0" : 0;
+            if (message.proxyId != null && message.hasOwnProperty("proxyId"))
+                if (typeof message.proxyId === "number")
+                    object.proxyId = options.longs === String ? String(message.proxyId) : message.proxyId;
                 else
-                    object.peerId = options.longs === String ? $util.Long.prototype.toString.call(message.peerId) : options.longs === Number ? new $util.LongBits(message.peerId.low >>> 0, message.peerId.high >>> 0).toNumber(true) : message.peerId;
+                    object.proxyId = options.longs === String ? $util.Long.prototype.toString.call(message.proxyId) : options.longs === Number ? new $util.LongBits(message.proxyId.low >>> 0, message.proxyId.high >>> 0).toNumber(true) : message.proxyId;
             return object;
         };
 
@@ -42646,6 +42714,326 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
         return Data;
     })();
 
+    BrokerProxyEvent.Read = (function() {
+
+        /**
+         * Properties of a Read.
+         * @memberof BrokerProxyEvent
+         * @interface IRead
+         */
+
+        /**
+         * Constructs a new Read.
+         * @memberof BrokerProxyEvent
+         * @classdesc Represents a Read.
+         * @implements IRead
+         * @constructor
+         * @param {BrokerProxyEvent.IRead=} [properties] Properties to set
+         */
+        function Read(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Creates a new Read instance using the specified properties.
+         * @function create
+         * @memberof BrokerProxyEvent.Read
+         * @static
+         * @param {BrokerProxyEvent.IRead=} [properties] Properties to set
+         * @returns {BrokerProxyEvent.Read} Read instance
+         */
+        Read.create = function create(properties) {
+            return new Read(properties);
+        };
+
+        /**
+         * Encodes the specified Read message. Does not implicitly {@link BrokerProxyEvent.Read.verify|verify} messages.
+         * @function encode
+         * @memberof BrokerProxyEvent.Read
+         * @static
+         * @param {BrokerProxyEvent.IRead} message Read message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Read.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Read message, length delimited. Does not implicitly {@link BrokerProxyEvent.Read.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof BrokerProxyEvent.Read
+         * @static
+         * @param {BrokerProxyEvent.IRead} message Read message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Read.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Read message from the specified reader or buffer.
+         * @function decode
+         * @memberof BrokerProxyEvent.Read
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {BrokerProxyEvent.Read} Read
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Read.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyEvent.Read();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Read message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof BrokerProxyEvent.Read
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {BrokerProxyEvent.Read} Read
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Read.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Read message.
+         * @function verify
+         * @memberof BrokerProxyEvent.Read
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Read.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            return null;
+        };
+
+        /**
+         * Creates a Read message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof BrokerProxyEvent.Read
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {BrokerProxyEvent.Read} Read
+         */
+        Read.fromObject = function fromObject(object) {
+            if (object instanceof $root.BrokerProxyEvent.Read)
+                return object;
+            return new $root.BrokerProxyEvent.Read();
+        };
+
+        /**
+         * Creates a plain object from a Read message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof BrokerProxyEvent.Read
+         * @static
+         * @param {BrokerProxyEvent.Read} message Read
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Read.toObject = function toObject() {
+            return {};
+        };
+
+        /**
+         * Converts this Read to JSON.
+         * @function toJSON
+         * @memberof BrokerProxyEvent.Read
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Read.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Read;
+    })();
+
+    BrokerProxyEvent.Drain = (function() {
+
+        /**
+         * Properties of a Drain.
+         * @memberof BrokerProxyEvent
+         * @interface IDrain
+         */
+
+        /**
+         * Constructs a new Drain.
+         * @memberof BrokerProxyEvent
+         * @classdesc Represents a Drain.
+         * @implements IDrain
+         * @constructor
+         * @param {BrokerProxyEvent.IDrain=} [properties] Properties to set
+         */
+        function Drain(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Creates a new Drain instance using the specified properties.
+         * @function create
+         * @memberof BrokerProxyEvent.Drain
+         * @static
+         * @param {BrokerProxyEvent.IDrain=} [properties] Properties to set
+         * @returns {BrokerProxyEvent.Drain} Drain instance
+         */
+        Drain.create = function create(properties) {
+            return new Drain(properties);
+        };
+
+        /**
+         * Encodes the specified Drain message. Does not implicitly {@link BrokerProxyEvent.Drain.verify|verify} messages.
+         * @function encode
+         * @memberof BrokerProxyEvent.Drain
+         * @static
+         * @param {BrokerProxyEvent.IDrain} message Drain message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Drain.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Drain message, length delimited. Does not implicitly {@link BrokerProxyEvent.Drain.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof BrokerProxyEvent.Drain
+         * @static
+         * @param {BrokerProxyEvent.IDrain} message Drain message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Drain.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Drain message from the specified reader or buffer.
+         * @function decode
+         * @memberof BrokerProxyEvent.Drain
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {BrokerProxyEvent.Drain} Drain
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Drain.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyEvent.Drain();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Drain message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof BrokerProxyEvent.Drain
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {BrokerProxyEvent.Drain} Drain
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Drain.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Drain message.
+         * @function verify
+         * @memberof BrokerProxyEvent.Drain
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Drain.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            return null;
+        };
+
+        /**
+         * Creates a Drain message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof BrokerProxyEvent.Drain
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {BrokerProxyEvent.Drain} Drain
+         */
+        Drain.fromObject = function fromObject(object) {
+            if (object instanceof $root.BrokerProxyEvent.Drain)
+                return object;
+            return new $root.BrokerProxyEvent.Drain();
+        };
+
+        /**
+         * Creates a plain object from a Drain message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof BrokerProxyEvent.Drain
+         * @static
+         * @param {BrokerProxyEvent.Drain} message Drain
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Drain.toObject = function toObject() {
+            return {};
+        };
+
+        /**
+         * Converts this Drain to JSON.
+         * @function toJSON
+         * @memberof BrokerProxyEvent.Drain
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Drain.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Drain;
+    })();
+
     return BrokerProxyEvent;
 })();
 
@@ -42655,7 +43043,7 @@ export const BrokerProxySendKeysRequest = $root.BrokerProxySendKeysRequest = (()
      * Properties of a BrokerProxySendKeysRequest.
      * @exports IBrokerProxySendKeysRequest
      * @interface IBrokerProxySendKeysRequest
-     * @property {number|null} [peerId] BrokerProxySendKeysRequest peerId
+     * @property {number|null} [proxyId] BrokerProxySendKeysRequest proxyId
      * @property {Array.<Uint8Array>|null} [keys] BrokerProxySendKeysRequest keys
      */
 
@@ -42676,12 +43064,12 @@ export const BrokerProxySendKeysRequest = $root.BrokerProxySendKeysRequest = (()
     }
 
     /**
-     * BrokerProxySendKeysRequest peerId.
-     * @member {number} peerId
+     * BrokerProxySendKeysRequest proxyId.
+     * @member {number} proxyId
      * @memberof BrokerProxySendKeysRequest
      * @instance
      */
-    BrokerProxySendKeysRequest.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+    BrokerProxySendKeysRequest.prototype.proxyId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
      * BrokerProxySendKeysRequest keys.
@@ -42715,8 +43103,8 @@ export const BrokerProxySendKeysRequest = $root.BrokerProxySendKeysRequest = (()
     BrokerProxySendKeysRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.peerId != null && Object.hasOwnProperty.call(message, "peerId"))
-            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.peerId);
+        if (message.proxyId != null && Object.hasOwnProperty.call(message, "proxyId"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.proxyId);
         if (message.keys != null && message.keys.length)
             for (let i = 0; i < message.keys.length; ++i)
                 writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.keys[i]);
@@ -42755,7 +43143,7 @@ export const BrokerProxySendKeysRequest = $root.BrokerProxySendKeysRequest = (()
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.peerId = reader.uint64();
+                message.proxyId = reader.uint64();
                 break;
             case 2:
                 if (!(message.keys && message.keys.length))
@@ -42797,9 +43185,9 @@ export const BrokerProxySendKeysRequest = $root.BrokerProxySendKeysRequest = (()
     BrokerProxySendKeysRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.peerId != null && message.hasOwnProperty("peerId"))
-            if (!$util.isInteger(message.peerId) && !(message.peerId && $util.isInteger(message.peerId.low) && $util.isInteger(message.peerId.high)))
-                return "peerId: integer|Long expected";
+        if (message.proxyId != null && message.hasOwnProperty("proxyId"))
+            if (!$util.isInteger(message.proxyId) && !(message.proxyId && $util.isInteger(message.proxyId.low) && $util.isInteger(message.proxyId.high)))
+                return "proxyId: integer|Long expected";
         if (message.keys != null && message.hasOwnProperty("keys")) {
             if (!Array.isArray(message.keys))
                 return "keys: array expected";
@@ -42822,15 +43210,15 @@ export const BrokerProxySendKeysRequest = $root.BrokerProxySendKeysRequest = (()
         if (object instanceof $root.BrokerProxySendKeysRequest)
             return object;
         let message = new $root.BrokerProxySendKeysRequest();
-        if (object.peerId != null)
+        if (object.proxyId != null)
             if ($util.Long)
-                (message.peerId = $util.Long.fromValue(object.peerId)).unsigned = true;
-            else if (typeof object.peerId === "string")
-                message.peerId = parseInt(object.peerId, 10);
-            else if (typeof object.peerId === "number")
-                message.peerId = object.peerId;
-            else if (typeof object.peerId === "object")
-                message.peerId = new $util.LongBits(object.peerId.low >>> 0, object.peerId.high >>> 0).toNumber(true);
+                (message.proxyId = $util.Long.fromValue(object.proxyId)).unsigned = true;
+            else if (typeof object.proxyId === "string")
+                message.proxyId = parseInt(object.proxyId, 10);
+            else if (typeof object.proxyId === "number")
+                message.proxyId = object.proxyId;
+            else if (typeof object.proxyId === "object")
+                message.proxyId = new $util.LongBits(object.proxyId.low >>> 0, object.proxyId.high >>> 0).toNumber(true);
         if (object.keys) {
             if (!Array.isArray(object.keys))
                 throw TypeError(".BrokerProxySendKeysRequest.keys: array expected");
@@ -42862,14 +43250,14 @@ export const BrokerProxySendKeysRequest = $root.BrokerProxySendKeysRequest = (()
         if (options.defaults)
             if ($util.Long) {
                 let long = new $util.Long(0, 0, true);
-                object.peerId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                object.proxyId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
             } else
-                object.peerId = options.longs === String ? "0" : 0;
-        if (message.peerId != null && message.hasOwnProperty("peerId"))
-            if (typeof message.peerId === "number")
-                object.peerId = options.longs === String ? String(message.peerId) : message.peerId;
+                object.proxyId = options.longs === String ? "0" : 0;
+        if (message.proxyId != null && message.hasOwnProperty("proxyId"))
+            if (typeof message.proxyId === "number")
+                object.proxyId = options.longs === String ? String(message.proxyId) : message.proxyId;
             else
-                object.peerId = options.longs === String ? $util.Long.prototype.toString.call(message.peerId) : options.longs === Number ? new $util.LongBits(message.peerId.low >>> 0, message.peerId.high >>> 0).toNumber(true) : message.peerId;
+                object.proxyId = options.longs === String ? $util.Long.prototype.toString.call(message.proxyId) : options.longs === Number ? new $util.LongBits(message.proxyId.low >>> 0, message.proxyId.high >>> 0).toNumber(true) : message.proxyId;
         if (message.keys && message.keys.length) {
             object.keys = [];
             for (let j = 0; j < message.keys.length; ++j)
@@ -43058,7 +43446,7 @@ export const BrokerProxyReceiveKeysRequest = $root.BrokerProxyReceiveKeysRequest
      * Properties of a BrokerProxyReceiveKeysRequest.
      * @exports IBrokerProxyReceiveKeysRequest
      * @interface IBrokerProxyReceiveKeysRequest
-     * @property {number|null} [peerId] BrokerProxyReceiveKeysRequest peerId
+     * @property {number|null} [proxyId] BrokerProxyReceiveKeysRequest proxyId
      * @property {Array.<Uint8Array>|null} [keys] BrokerProxyReceiveKeysRequest keys
      */
 
@@ -43079,12 +43467,12 @@ export const BrokerProxyReceiveKeysRequest = $root.BrokerProxyReceiveKeysRequest
     }
 
     /**
-     * BrokerProxyReceiveKeysRequest peerId.
-     * @member {number} peerId
+     * BrokerProxyReceiveKeysRequest proxyId.
+     * @member {number} proxyId
      * @memberof BrokerProxyReceiveKeysRequest
      * @instance
      */
-    BrokerProxyReceiveKeysRequest.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+    BrokerProxyReceiveKeysRequest.prototype.proxyId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
      * BrokerProxyReceiveKeysRequest keys.
@@ -43118,8 +43506,8 @@ export const BrokerProxyReceiveKeysRequest = $root.BrokerProxyReceiveKeysRequest
     BrokerProxyReceiveKeysRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.peerId != null && Object.hasOwnProperty.call(message, "peerId"))
-            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.peerId);
+        if (message.proxyId != null && Object.hasOwnProperty.call(message, "proxyId"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.proxyId);
         if (message.keys != null && message.keys.length)
             for (let i = 0; i < message.keys.length; ++i)
                 writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.keys[i]);
@@ -43158,7 +43546,7 @@ export const BrokerProxyReceiveKeysRequest = $root.BrokerProxyReceiveKeysRequest
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.peerId = reader.uint64();
+                message.proxyId = reader.uint64();
                 break;
             case 2:
                 if (!(message.keys && message.keys.length))
@@ -43200,9 +43588,9 @@ export const BrokerProxyReceiveKeysRequest = $root.BrokerProxyReceiveKeysRequest
     BrokerProxyReceiveKeysRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.peerId != null && message.hasOwnProperty("peerId"))
-            if (!$util.isInteger(message.peerId) && !(message.peerId && $util.isInteger(message.peerId.low) && $util.isInteger(message.peerId.high)))
-                return "peerId: integer|Long expected";
+        if (message.proxyId != null && message.hasOwnProperty("proxyId"))
+            if (!$util.isInteger(message.proxyId) && !(message.proxyId && $util.isInteger(message.proxyId.low) && $util.isInteger(message.proxyId.high)))
+                return "proxyId: integer|Long expected";
         if (message.keys != null && message.hasOwnProperty("keys")) {
             if (!Array.isArray(message.keys))
                 return "keys: array expected";
@@ -43225,15 +43613,15 @@ export const BrokerProxyReceiveKeysRequest = $root.BrokerProxyReceiveKeysRequest
         if (object instanceof $root.BrokerProxyReceiveKeysRequest)
             return object;
         let message = new $root.BrokerProxyReceiveKeysRequest();
-        if (object.peerId != null)
+        if (object.proxyId != null)
             if ($util.Long)
-                (message.peerId = $util.Long.fromValue(object.peerId)).unsigned = true;
-            else if (typeof object.peerId === "string")
-                message.peerId = parseInt(object.peerId, 10);
-            else if (typeof object.peerId === "number")
-                message.peerId = object.peerId;
-            else if (typeof object.peerId === "object")
-                message.peerId = new $util.LongBits(object.peerId.low >>> 0, object.peerId.high >>> 0).toNumber(true);
+                (message.proxyId = $util.Long.fromValue(object.proxyId)).unsigned = true;
+            else if (typeof object.proxyId === "string")
+                message.proxyId = parseInt(object.proxyId, 10);
+            else if (typeof object.proxyId === "number")
+                message.proxyId = object.proxyId;
+            else if (typeof object.proxyId === "object")
+                message.proxyId = new $util.LongBits(object.proxyId.low >>> 0, object.proxyId.high >>> 0).toNumber(true);
         if (object.keys) {
             if (!Array.isArray(object.keys))
                 throw TypeError(".BrokerProxyReceiveKeysRequest.keys: array expected");
@@ -43265,14 +43653,14 @@ export const BrokerProxyReceiveKeysRequest = $root.BrokerProxyReceiveKeysRequest
         if (options.defaults)
             if ($util.Long) {
                 let long = new $util.Long(0, 0, true);
-                object.peerId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                object.proxyId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
             } else
-                object.peerId = options.longs === String ? "0" : 0;
-        if (message.peerId != null && message.hasOwnProperty("peerId"))
-            if (typeof message.peerId === "number")
-                object.peerId = options.longs === String ? String(message.peerId) : message.peerId;
+                object.proxyId = options.longs === String ? "0" : 0;
+        if (message.proxyId != null && message.hasOwnProperty("proxyId"))
+            if (typeof message.proxyId === "number")
+                object.proxyId = options.longs === String ? String(message.proxyId) : message.proxyId;
             else
-                object.peerId = options.longs === String ? $util.Long.prototype.toString.call(message.peerId) : options.longs === Number ? new $util.LongBits(message.peerId.low >>> 0, message.peerId.high >>> 0).toNumber(true) : message.peerId;
+                object.proxyId = options.longs === String ? $util.Long.prototype.toString.call(message.proxyId) : options.longs === Number ? new $util.LongBits(message.proxyId.low >>> 0, message.proxyId.high >>> 0).toNumber(true) : message.proxyId;
         if (message.keys && message.keys.length) {
             object.keys = [];
             for (let j = 0; j < message.keys.length; ++j)
@@ -43507,7 +43895,7 @@ export const BrokerProxyDataRequest = $root.BrokerProxyDataRequest = (() => {
      * Properties of a BrokerProxyDataRequest.
      * @exports IBrokerProxyDataRequest
      * @interface IBrokerProxyDataRequest
-     * @property {number|null} [peerId] BrokerProxyDataRequest peerId
+     * @property {number|null} [proxyId] BrokerProxyDataRequest proxyId
      * @property {Uint8Array|null} [data] BrokerProxyDataRequest data
      */
 
@@ -43527,12 +43915,12 @@ export const BrokerProxyDataRequest = $root.BrokerProxyDataRequest = (() => {
     }
 
     /**
-     * BrokerProxyDataRequest peerId.
-     * @member {number} peerId
+     * BrokerProxyDataRequest proxyId.
+     * @member {number} proxyId
      * @memberof BrokerProxyDataRequest
      * @instance
      */
-    BrokerProxyDataRequest.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+    BrokerProxyDataRequest.prototype.proxyId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
      * BrokerProxyDataRequest data.
@@ -43566,8 +43954,8 @@ export const BrokerProxyDataRequest = $root.BrokerProxyDataRequest = (() => {
     BrokerProxyDataRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.peerId != null && Object.hasOwnProperty.call(message, "peerId"))
-            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.peerId);
+        if (message.proxyId != null && Object.hasOwnProperty.call(message, "proxyId"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.proxyId);
         if (message.data != null && Object.hasOwnProperty.call(message, "data"))
             writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.data);
         return writer;
@@ -43605,7 +43993,7 @@ export const BrokerProxyDataRequest = $root.BrokerProxyDataRequest = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.peerId = reader.uint64();
+                message.proxyId = reader.uint64();
                 break;
             case 2:
                 message.data = reader.bytes();
@@ -43645,9 +44033,9 @@ export const BrokerProxyDataRequest = $root.BrokerProxyDataRequest = (() => {
     BrokerProxyDataRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.peerId != null && message.hasOwnProperty("peerId"))
-            if (!$util.isInteger(message.peerId) && !(message.peerId && $util.isInteger(message.peerId.low) && $util.isInteger(message.peerId.high)))
-                return "peerId: integer|Long expected";
+        if (message.proxyId != null && message.hasOwnProperty("proxyId"))
+            if (!$util.isInteger(message.proxyId) && !(message.proxyId && $util.isInteger(message.proxyId.low) && $util.isInteger(message.proxyId.high)))
+                return "proxyId: integer|Long expected";
         if (message.data != null && message.hasOwnProperty("data"))
             if (!(message.data && typeof message.data.length === "number" || $util.isString(message.data)))
                 return "data: buffer expected";
@@ -43666,15 +44054,15 @@ export const BrokerProxyDataRequest = $root.BrokerProxyDataRequest = (() => {
         if (object instanceof $root.BrokerProxyDataRequest)
             return object;
         let message = new $root.BrokerProxyDataRequest();
-        if (object.peerId != null)
+        if (object.proxyId != null)
             if ($util.Long)
-                (message.peerId = $util.Long.fromValue(object.peerId)).unsigned = true;
-            else if (typeof object.peerId === "string")
-                message.peerId = parseInt(object.peerId, 10);
-            else if (typeof object.peerId === "number")
-                message.peerId = object.peerId;
-            else if (typeof object.peerId === "object")
-                message.peerId = new $util.LongBits(object.peerId.low >>> 0, object.peerId.high >>> 0).toNumber(true);
+                (message.proxyId = $util.Long.fromValue(object.proxyId)).unsigned = true;
+            else if (typeof object.proxyId === "string")
+                message.proxyId = parseInt(object.proxyId, 10);
+            else if (typeof object.proxyId === "number")
+                message.proxyId = object.proxyId;
+            else if (typeof object.proxyId === "object")
+                message.proxyId = new $util.LongBits(object.proxyId.low >>> 0, object.proxyId.high >>> 0).toNumber(true);
         if (object.data != null)
             if (typeof object.data === "string")
                 $util.base64.decode(object.data, message.data = $util.newBuffer($util.base64.length(object.data)), 0);
@@ -43699,9 +44087,9 @@ export const BrokerProxyDataRequest = $root.BrokerProxyDataRequest = (() => {
         if (options.defaults) {
             if ($util.Long) {
                 let long = new $util.Long(0, 0, true);
-                object.peerId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                object.proxyId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
             } else
-                object.peerId = options.longs === String ? "0" : 0;
+                object.proxyId = options.longs === String ? "0" : 0;
             if (options.bytes === String)
                 object.data = "";
             else {
@@ -43710,11 +44098,11 @@ export const BrokerProxyDataRequest = $root.BrokerProxyDataRequest = (() => {
                     object.data = $util.newBuffer(object.data);
             }
         }
-        if (message.peerId != null && message.hasOwnProperty("peerId"))
-            if (typeof message.peerId === "number")
-                object.peerId = options.longs === String ? String(message.peerId) : message.peerId;
+        if (message.proxyId != null && message.hasOwnProperty("proxyId"))
+            if (typeof message.proxyId === "number")
+                object.proxyId = options.longs === String ? String(message.proxyId) : message.proxyId;
             else
-                object.peerId = options.longs === String ? $util.Long.prototype.toString.call(message.peerId) : options.longs === Number ? new $util.LongBits(message.peerId.low >>> 0, message.peerId.high >>> 0).toNumber(true) : message.peerId;
+                object.proxyId = options.longs === String ? $util.Long.prototype.toString.call(message.proxyId) : options.longs === Number ? new $util.LongBits(message.proxyId.low >>> 0, message.proxyId.high >>> 0).toNumber(true) : message.proxyId;
         if (message.data != null && message.hasOwnProperty("data"))
             object.data = options.bytes === String ? $util.base64.encode(message.data, 0, message.data.length) : options.bytes === Array ? Array.prototype.slice.call(message.data) : message.data;
         return object;
