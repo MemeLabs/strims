@@ -18262,6 +18262,12 @@ export interface IBrokerProxyEvent {
 
     /** BrokerProxyEvent data */
     data?: (BrokerProxyEvent.IData|null);
+
+    /** BrokerProxyEvent read */
+    read?: (BrokerProxyEvent.IRead|null);
+
+    /** BrokerProxyEvent drain */
+    drain?: (BrokerProxyEvent.IDrain|null);
 }
 
 /** Represents a BrokerProxyEvent. */
@@ -18279,8 +18285,14 @@ export class BrokerProxyEvent implements IBrokerProxyEvent {
     /** BrokerProxyEvent data. */
     public data?: (BrokerProxyEvent.IData|null);
 
+    /** BrokerProxyEvent read. */
+    public read?: (BrokerProxyEvent.IRead|null);
+
+    /** BrokerProxyEvent drain. */
+    public drain?: (BrokerProxyEvent.IDrain|null);
+
     /** BrokerProxyEvent body. */
-    public body?: ("open"|"data");
+    public body?: ("open"|"data"|"read"|"drain");
 
     /**
      * Creates a new BrokerProxyEvent instance using the specified properties.
@@ -18358,8 +18370,8 @@ export namespace BrokerProxyEvent {
     /** Properties of an Open. */
     interface IOpen {
 
-        /** Open peerId */
-        peerId?: (number|null);
+        /** Open proxyId */
+        proxyId?: (number|null);
     }
 
     /** Represents an Open. */
@@ -18371,8 +18383,8 @@ export namespace BrokerProxyEvent {
          */
         constructor(properties?: BrokerProxyEvent.IOpen);
 
-        /** Open peerId. */
-        public peerId: number;
+        /** Open proxyId. */
+        public proxyId: number;
 
         /**
          * Creates a new Open instance using the specified properties.
@@ -18534,13 +18546,181 @@ export namespace BrokerProxyEvent {
          */
         public toJSON(): { [k: string]: any };
     }
+
+    /** Properties of a Read. */
+    interface IRead {
+    }
+
+    /** Represents a Read. */
+    class Read implements IRead {
+
+        /**
+         * Constructs a new Read.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: BrokerProxyEvent.IRead);
+
+        /**
+         * Creates a new Read instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Read instance
+         */
+        public static create(properties?: BrokerProxyEvent.IRead): BrokerProxyEvent.Read;
+
+        /**
+         * Encodes the specified Read message. Does not implicitly {@link BrokerProxyEvent.Read.verify|verify} messages.
+         * @param message Read message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: BrokerProxyEvent.IRead, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Read message, length delimited. Does not implicitly {@link BrokerProxyEvent.Read.verify|verify} messages.
+         * @param message Read message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: BrokerProxyEvent.IRead, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a Read message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Read
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyEvent.Read;
+
+        /**
+         * Decodes a Read message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Read
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyEvent.Read;
+
+        /**
+         * Verifies a Read message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a Read message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Read
+         */
+        public static fromObject(object: { [k: string]: any }): BrokerProxyEvent.Read;
+
+        /**
+         * Creates a plain object from a Read message. Also converts values to other types if specified.
+         * @param message Read
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: BrokerProxyEvent.Read, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Read to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a Drain. */
+    interface IDrain {
+    }
+
+    /** Represents a Drain. */
+    class Drain implements IDrain {
+
+        /**
+         * Constructs a new Drain.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: BrokerProxyEvent.IDrain);
+
+        /**
+         * Creates a new Drain instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Drain instance
+         */
+        public static create(properties?: BrokerProxyEvent.IDrain): BrokerProxyEvent.Drain;
+
+        /**
+         * Encodes the specified Drain message. Does not implicitly {@link BrokerProxyEvent.Drain.verify|verify} messages.
+         * @param message Drain message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: BrokerProxyEvent.IDrain, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Drain message, length delimited. Does not implicitly {@link BrokerProxyEvent.Drain.verify|verify} messages.
+         * @param message Drain message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: BrokerProxyEvent.IDrain, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a Drain message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Drain
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyEvent.Drain;
+
+        /**
+         * Decodes a Drain message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Drain
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyEvent.Drain;
+
+        /**
+         * Verifies a Drain message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a Drain message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Drain
+         */
+        public static fromObject(object: { [k: string]: any }): BrokerProxyEvent.Drain;
+
+        /**
+         * Creates a plain object from a Drain message. Also converts values to other types if specified.
+         * @param message Drain
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: BrokerProxyEvent.Drain, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Drain to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
 }
 
 /** Properties of a BrokerProxySendKeysRequest. */
 export interface IBrokerProxySendKeysRequest {
 
-    /** BrokerProxySendKeysRequest peerId */
-    peerId?: (number|null);
+    /** BrokerProxySendKeysRequest proxyId */
+    proxyId?: (number|null);
 
     /** BrokerProxySendKeysRequest keys */
     keys?: (Uint8Array[]|null);
@@ -18555,8 +18735,8 @@ export class BrokerProxySendKeysRequest implements IBrokerProxySendKeysRequest {
      */
     constructor(properties?: IBrokerProxySendKeysRequest);
 
-    /** BrokerProxySendKeysRequest peerId. */
-    public peerId: number;
+    /** BrokerProxySendKeysRequest proxyId. */
+    public proxyId: number;
 
     /** BrokerProxySendKeysRequest keys. */
     public keys: Uint8Array[];
@@ -18719,8 +18899,8 @@ export class BrokerProxySendKeysResponse implements IBrokerProxySendKeysResponse
 /** Properties of a BrokerProxyReceiveKeysRequest. */
 export interface IBrokerProxyReceiveKeysRequest {
 
-    /** BrokerProxyReceiveKeysRequest peerId */
-    peerId?: (number|null);
+    /** BrokerProxyReceiveKeysRequest proxyId */
+    proxyId?: (number|null);
 
     /** BrokerProxyReceiveKeysRequest keys */
     keys?: (Uint8Array[]|null);
@@ -18735,8 +18915,8 @@ export class BrokerProxyReceiveKeysRequest implements IBrokerProxyReceiveKeysReq
      */
     constructor(properties?: IBrokerProxyReceiveKeysRequest);
 
-    /** BrokerProxyReceiveKeysRequest peerId. */
-    public peerId: number;
+    /** BrokerProxyReceiveKeysRequest proxyId. */
+    public proxyId: number;
 
     /** BrokerProxyReceiveKeysRequest keys. */
     public keys: Uint8Array[];
@@ -18905,8 +19085,8 @@ export class BrokerProxyReceiveKeysResponse implements IBrokerProxyReceiveKeysRe
 /** Properties of a BrokerProxyDataRequest. */
 export interface IBrokerProxyDataRequest {
 
-    /** BrokerProxyDataRequest peerId */
-    peerId?: (number|null);
+    /** BrokerProxyDataRequest proxyId */
+    proxyId?: (number|null);
 
     /** BrokerProxyDataRequest data */
     data?: (Uint8Array|null);
@@ -18921,8 +19101,8 @@ export class BrokerProxyDataRequest implements IBrokerProxyDataRequest {
      */
     constructor(properties?: IBrokerProxyDataRequest);
 
-    /** BrokerProxyDataRequest peerId. */
-    public peerId: number;
+    /** BrokerProxyDataRequest proxyId. */
+    public proxyId: number;
 
     /** BrokerProxyDataRequest data. */
     public data: Uint8Array;
