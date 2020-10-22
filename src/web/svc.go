@@ -13,6 +13,7 @@ import (
 	"syscall/js"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/frontend"
 	"github.com/MemeLabs/go-ppspp/pkg/gobridge"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
@@ -101,7 +102,7 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 			}
 			return vpn.New(logger, vnicHost)
 		},
-		BrokerFactory: network.NewBrokerFactoryClient(logger, wasmio.NewWorkerProxy(bridge, "broker")),
+		Broker: network.NewBrokerProxyClient(logger, wasmio.NewWorkerProxy(bridge, "broker")),
 	}
 
 	if err := srv.Listen(context.Background(), bus); err != nil {
@@ -113,6 +114,6 @@ func initBroker(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
 
 	host := rpc.NewHost(logger)
-	host.RegisterService("NetworkBroker", network.NewBrokerFactoryService(logger))
+	api.RegisterBrokerProxyService(host, network.NewBrokerProxyService(logger))
 	host.Listen(context.Background(), bus)
 }

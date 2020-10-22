@@ -514,7 +514,7 @@ func (*NetworkHandshake_CertificateUpgradeRequest_) isNetworkHandshake_Body() {}
 
 func (*NetworkHandshake_CertificateUpgradeResponse_) isNetworkHandshake_Body() {}
 
-type BrokerPeerRequest struct {
+type BrokerProxyRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -522,8 +522,8 @@ type BrokerPeerRequest struct {
 	ConnMtu int32 `protobuf:"varint,1,opt,name=conn_mtu,json=connMtu,proto3" json:"conn_mtu,omitempty"`
 }
 
-func (x *BrokerPeerRequest) Reset() {
-	*x = BrokerPeerRequest{}
+func (x *BrokerProxyRequest) Reset() {
+	*x = BrokerProxyRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_vpn_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -531,13 +531,13 @@ func (x *BrokerPeerRequest) Reset() {
 	}
 }
 
-func (x *BrokerPeerRequest) String() string {
+func (x *BrokerProxyRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BrokerPeerRequest) ProtoMessage() {}
+func (*BrokerProxyRequest) ProtoMessage() {}
 
-func (x *BrokerPeerRequest) ProtoReflect() protoreflect.Message {
+func (x *BrokerProxyRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_vpn_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -549,33 +549,31 @@ func (x *BrokerPeerRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BrokerPeerRequest.ProtoReflect.Descriptor instead.
-func (*BrokerPeerRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use BrokerProxyRequest.ProtoReflect.Descriptor instead.
+func (*BrokerProxyRequest) Descriptor() ([]byte, []int) {
 	return file_vpn_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *BrokerPeerRequest) GetConnMtu() int32 {
+func (x *BrokerProxyRequest) GetConnMtu() int32 {
 	if x != nil {
 		return x.ConnMtu
 	}
 	return 0
 }
 
-type BrokerPeerEvent struct {
+type BrokerProxyEvent struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
 	// Types that are assignable to Body:
-	//	*BrokerPeerEvent_Open_
-	//	*BrokerPeerEvent_Data_
-	//	*BrokerPeerEvent_InitRequired_
-	//	*BrokerPeerEvent_Keys_
-	Body isBrokerPeerEvent_Body `protobuf_oneof:"body"`
+	//	*BrokerProxyEvent_Open_
+	//	*BrokerProxyEvent_Data_
+	Body isBrokerProxyEvent_Body `protobuf_oneof:"body"`
 }
 
-func (x *BrokerPeerEvent) Reset() {
-	*x = BrokerPeerEvent{}
+func (x *BrokerProxyEvent) Reset() {
+	*x = BrokerProxyEvent{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_vpn_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -583,13 +581,13 @@ func (x *BrokerPeerEvent) Reset() {
 	}
 }
 
-func (x *BrokerPeerEvent) String() string {
+func (x *BrokerProxyEvent) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BrokerPeerEvent) ProtoMessage() {}
+func (*BrokerProxyEvent) ProtoMessage() {}
 
-func (x *BrokerPeerEvent) ProtoReflect() protoreflect.Message {
+func (x *BrokerProxyEvent) ProtoReflect() protoreflect.Message {
 	mi := &file_vpn_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -601,86 +599,59 @@ func (x *BrokerPeerEvent) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BrokerPeerEvent.ProtoReflect.Descriptor instead.
-func (*BrokerPeerEvent) Descriptor() ([]byte, []int) {
+// Deprecated: Use BrokerProxyEvent.ProtoReflect.Descriptor instead.
+func (*BrokerProxyEvent) Descriptor() ([]byte, []int) {
 	return file_vpn_proto_rawDescGZIP(), []int{9}
 }
 
-func (m *BrokerPeerEvent) GetBody() isBrokerPeerEvent_Body {
+func (m *BrokerProxyEvent) GetBody() isBrokerProxyEvent_Body {
 	if m != nil {
 		return m.Body
 	}
 	return nil
 }
 
-func (x *BrokerPeerEvent) GetOpen() *BrokerPeerEvent_Open {
-	if x, ok := x.GetBody().(*BrokerPeerEvent_Open_); ok {
+func (x *BrokerProxyEvent) GetOpen() *BrokerProxyEvent_Open {
+	if x, ok := x.GetBody().(*BrokerProxyEvent_Open_); ok {
 		return x.Open
 	}
 	return nil
 }
 
-func (x *BrokerPeerEvent) GetData() *BrokerPeerEvent_Data {
-	if x, ok := x.GetBody().(*BrokerPeerEvent_Data_); ok {
+func (x *BrokerProxyEvent) GetData() *BrokerProxyEvent_Data {
+	if x, ok := x.GetBody().(*BrokerProxyEvent_Data_); ok {
 		return x.Data
 	}
 	return nil
 }
 
-func (x *BrokerPeerEvent) GetInitRequired() *BrokerPeerEvent_InitRequired {
-	if x, ok := x.GetBody().(*BrokerPeerEvent_InitRequired_); ok {
-		return x.InitRequired
-	}
-	return nil
+type isBrokerProxyEvent_Body interface {
+	isBrokerProxyEvent_Body()
 }
 
-func (x *BrokerPeerEvent) GetKeys() *BrokerPeerEvent_Keys {
-	if x, ok := x.GetBody().(*BrokerPeerEvent_Keys_); ok {
-		return x.Keys
-	}
-	return nil
+type BrokerProxyEvent_Open_ struct {
+	Open *BrokerProxyEvent_Open `protobuf:"bytes,1,opt,name=open,proto3,oneof"`
 }
 
-type isBrokerPeerEvent_Body interface {
-	isBrokerPeerEvent_Body()
+type BrokerProxyEvent_Data_ struct {
+	Data *BrokerProxyEvent_Data `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
 }
 
-type BrokerPeerEvent_Open_ struct {
-	Open *BrokerPeerEvent_Open `protobuf:"bytes,1,opt,name=open,proto3,oneof"`
-}
+func (*BrokerProxyEvent_Open_) isBrokerProxyEvent_Body() {}
 
-type BrokerPeerEvent_Data_ struct {
-	Data *BrokerPeerEvent_Data `protobuf:"bytes,2,opt,name=data,proto3,oneof"`
-}
+func (*BrokerProxyEvent_Data_) isBrokerProxyEvent_Body() {}
 
-type BrokerPeerEvent_InitRequired_ struct {
-	InitRequired *BrokerPeerEvent_InitRequired `protobuf:"bytes,3,opt,name=init_required,json=initRequired,proto3,oneof"`
-}
-
-type BrokerPeerEvent_Keys_ struct {
-	Keys *BrokerPeerEvent_Keys `protobuf:"bytes,4,opt,name=keys,proto3,oneof"`
-}
-
-func (*BrokerPeerEvent_Open_) isBrokerPeerEvent_Body() {}
-
-func (*BrokerPeerEvent_Data_) isBrokerPeerEvent_Body() {}
-
-func (*BrokerPeerEvent_InitRequired_) isBrokerPeerEvent_Body() {}
-
-func (*BrokerPeerEvent_Keys_) isBrokerPeerEvent_Body() {}
-
-type BrokerPeerInitRequest struct {
+type BrokerProxySendKeysRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	PeerId       uint64   `protobuf:"varint,1,opt,name=peer_id,json=peerId,proto3" json:"peer_id,omitempty"`
-	PreferSender bool     `protobuf:"varint,2,opt,name=prefer_sender,json=preferSender,proto3" json:"prefer_sender,omitempty"`
-	Keys         [][]byte `protobuf:"bytes,3,rep,name=keys,proto3" json:"keys,omitempty"`
+	PeerId uint64   `protobuf:"varint,1,opt,name=peer_id,json=peerId,proto3" json:"peer_id,omitempty"`
+	Keys   [][]byte `protobuf:"bytes,2,rep,name=keys,proto3" json:"keys,omitempty"`
 }
 
-func (x *BrokerPeerInitRequest) Reset() {
-	*x = BrokerPeerInitRequest{}
+func (x *BrokerProxySendKeysRequest) Reset() {
+	*x = BrokerProxySendKeysRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_vpn_proto_msgTypes[10]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -688,13 +659,13 @@ func (x *BrokerPeerInitRequest) Reset() {
 	}
 }
 
-func (x *BrokerPeerInitRequest) String() string {
+func (x *BrokerProxySendKeysRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BrokerPeerInitRequest) ProtoMessage() {}
+func (*BrokerProxySendKeysRequest) ProtoMessage() {}
 
-func (x *BrokerPeerInitRequest) ProtoReflect() protoreflect.Message {
+func (x *BrokerProxySendKeysRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_vpn_proto_msgTypes[10]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -706,43 +677,33 @@ func (x *BrokerPeerInitRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BrokerPeerInitRequest.ProtoReflect.Descriptor instead.
-func (*BrokerPeerInitRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use BrokerProxySendKeysRequest.ProtoReflect.Descriptor instead.
+func (*BrokerProxySendKeysRequest) Descriptor() ([]byte, []int) {
 	return file_vpn_proto_rawDescGZIP(), []int{10}
 }
 
-func (x *BrokerPeerInitRequest) GetPeerId() uint64 {
+func (x *BrokerProxySendKeysRequest) GetPeerId() uint64 {
 	if x != nil {
 		return x.PeerId
 	}
 	return 0
 }
 
-func (x *BrokerPeerInitRequest) GetPreferSender() bool {
-	if x != nil {
-		return x.PreferSender
-	}
-	return false
-}
-
-func (x *BrokerPeerInitRequest) GetKeys() [][]byte {
+func (x *BrokerProxySendKeysRequest) GetKeys() [][]byte {
 	if x != nil {
 		return x.Keys
 	}
 	return nil
 }
 
-type BrokerPeerDataRequest struct {
+type BrokerProxySendKeysResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
-
-	PeerId uint64 `protobuf:"varint,1,opt,name=peer_id,json=peerId,proto3" json:"peer_id,omitempty"`
-	Data   []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
 }
 
-func (x *BrokerPeerDataRequest) Reset() {
-	*x = BrokerPeerDataRequest{}
+func (x *BrokerProxySendKeysResponse) Reset() {
+	*x = BrokerProxySendKeysResponse{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_vpn_proto_msgTypes[11]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -750,13 +711,13 @@ func (x *BrokerPeerDataRequest) Reset() {
 	}
 }
 
-func (x *BrokerPeerDataRequest) String() string {
+func (x *BrokerProxySendKeysResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BrokerPeerDataRequest) ProtoMessage() {}
+func (*BrokerProxySendKeysResponse) ProtoMessage() {}
 
-func (x *BrokerPeerDataRequest) ProtoReflect() protoreflect.Message {
+func (x *BrokerProxySendKeysResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_vpn_proto_msgTypes[11]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -768,23 +729,204 @@ func (x *BrokerPeerDataRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BrokerPeerDataRequest.ProtoReflect.Descriptor instead.
-func (*BrokerPeerDataRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use BrokerProxySendKeysResponse.ProtoReflect.Descriptor instead.
+func (*BrokerProxySendKeysResponse) Descriptor() ([]byte, []int) {
 	return file_vpn_proto_rawDescGZIP(), []int{11}
 }
 
-func (x *BrokerPeerDataRequest) GetPeerId() uint64 {
+type BrokerProxyReceiveKeysRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	PeerId uint64   `protobuf:"varint,1,opt,name=peer_id,json=peerId,proto3" json:"peer_id,omitempty"`
+	Keys   [][]byte `protobuf:"bytes,2,rep,name=keys,proto3" json:"keys,omitempty"`
+}
+
+func (x *BrokerProxyReceiveKeysRequest) Reset() {
+	*x = BrokerProxyReceiveKeysRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_vpn_proto_msgTypes[12]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BrokerProxyReceiveKeysRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrokerProxyReceiveKeysRequest) ProtoMessage() {}
+
+func (x *BrokerProxyReceiveKeysRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vpn_proto_msgTypes[12]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrokerProxyReceiveKeysRequest.ProtoReflect.Descriptor instead.
+func (*BrokerProxyReceiveKeysRequest) Descriptor() ([]byte, []int) {
+	return file_vpn_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *BrokerProxyReceiveKeysRequest) GetPeerId() uint64 {
 	if x != nil {
 		return x.PeerId
 	}
 	return 0
 }
 
-func (x *BrokerPeerDataRequest) GetData() []byte {
+func (x *BrokerProxyReceiveKeysRequest) GetKeys() [][]byte {
+	if x != nil {
+		return x.Keys
+	}
+	return nil
+}
+
+type BrokerProxyReceiveKeysResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Keys [][]byte `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
+}
+
+func (x *BrokerProxyReceiveKeysResponse) Reset() {
+	*x = BrokerProxyReceiveKeysResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_vpn_proto_msgTypes[13]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BrokerProxyReceiveKeysResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrokerProxyReceiveKeysResponse) ProtoMessage() {}
+
+func (x *BrokerProxyReceiveKeysResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vpn_proto_msgTypes[13]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrokerProxyReceiveKeysResponse.ProtoReflect.Descriptor instead.
+func (*BrokerProxyReceiveKeysResponse) Descriptor() ([]byte, []int) {
+	return file_vpn_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *BrokerProxyReceiveKeysResponse) GetKeys() [][]byte {
+	if x != nil {
+		return x.Keys
+	}
+	return nil
+}
+
+type BrokerProxyDataRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	PeerId uint64 `protobuf:"varint,1,opt,name=peer_id,json=peerId,proto3" json:"peer_id,omitempty"`
+	Data   []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+}
+
+func (x *BrokerProxyDataRequest) Reset() {
+	*x = BrokerProxyDataRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_vpn_proto_msgTypes[14]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BrokerProxyDataRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrokerProxyDataRequest) ProtoMessage() {}
+
+func (x *BrokerProxyDataRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_vpn_proto_msgTypes[14]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrokerProxyDataRequest.ProtoReflect.Descriptor instead.
+func (*BrokerProxyDataRequest) Descriptor() ([]byte, []int) {
+	return file_vpn_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *BrokerProxyDataRequest) GetPeerId() uint64 {
+	if x != nil {
+		return x.PeerId
+	}
+	return 0
+}
+
+func (x *BrokerProxyDataRequest) GetData() []byte {
 	if x != nil {
 		return x.Data
 	}
 	return nil
+}
+
+type BrokerProxyDataResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *BrokerProxyDataResponse) Reset() {
+	*x = BrokerProxyDataResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_vpn_proto_msgTypes[15]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *BrokerProxyDataResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*BrokerProxyDataResponse) ProtoMessage() {}
+
+func (x *BrokerProxyDataResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vpn_proto_msgTypes[15]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use BrokerProxyDataResponse.ProtoReflect.Descriptor instead.
+func (*BrokerProxyDataResponse) Descriptor() ([]byte, []int) {
+	return file_vpn_proto_rawDescGZIP(), []int{15}
 }
 
 type BootstrapClient struct {
@@ -801,7 +943,7 @@ type BootstrapClient struct {
 func (x *BootstrapClient) Reset() {
 	*x = BootstrapClient{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[12]
+		mi := &file_vpn_proto_msgTypes[16]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -814,7 +956,7 @@ func (x *BootstrapClient) String() string {
 func (*BootstrapClient) ProtoMessage() {}
 
 func (x *BootstrapClient) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[12]
+	mi := &file_vpn_proto_msgTypes[16]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -827,7 +969,7 @@ func (x *BootstrapClient) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapClient.ProtoReflect.Descriptor instead.
 func (*BootstrapClient) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{12}
+	return file_vpn_proto_rawDescGZIP(), []int{16}
 }
 
 func (x *BootstrapClient) GetId() uint64 {
@@ -873,7 +1015,7 @@ type BootstrapClientWebSocketOptions struct {
 func (x *BootstrapClientWebSocketOptions) Reset() {
 	*x = BootstrapClientWebSocketOptions{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[13]
+		mi := &file_vpn_proto_msgTypes[17]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -886,7 +1028,7 @@ func (x *BootstrapClientWebSocketOptions) String() string {
 func (*BootstrapClientWebSocketOptions) ProtoMessage() {}
 
 func (x *BootstrapClientWebSocketOptions) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[13]
+	mi := &file_vpn_proto_msgTypes[17]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -899,7 +1041,7 @@ func (x *BootstrapClientWebSocketOptions) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapClientWebSocketOptions.ProtoReflect.Descriptor instead.
 func (*BootstrapClientWebSocketOptions) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{13}
+	return file_vpn_proto_rawDescGZIP(), []int{17}
 }
 
 func (x *BootstrapClientWebSocketOptions) GetUrl() string {
@@ -929,7 +1071,7 @@ type CreateBootstrapClientRequest struct {
 func (x *CreateBootstrapClientRequest) Reset() {
 	*x = CreateBootstrapClientRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[14]
+		mi := &file_vpn_proto_msgTypes[18]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -942,7 +1084,7 @@ func (x *CreateBootstrapClientRequest) String() string {
 func (*CreateBootstrapClientRequest) ProtoMessage() {}
 
 func (x *CreateBootstrapClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[14]
+	mi := &file_vpn_proto_msgTypes[18]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -955,7 +1097,7 @@ func (x *CreateBootstrapClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBootstrapClientRequest.ProtoReflect.Descriptor instead.
 func (*CreateBootstrapClientRequest) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{14}
+	return file_vpn_proto_rawDescGZIP(), []int{18}
 }
 
 func (m *CreateBootstrapClientRequest) GetClientOptions() isCreateBootstrapClientRequest_ClientOptions {
@@ -994,7 +1136,7 @@ type CreateBootstrapClientResponse struct {
 func (x *CreateBootstrapClientResponse) Reset() {
 	*x = CreateBootstrapClientResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[15]
+		mi := &file_vpn_proto_msgTypes[19]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1007,7 +1149,7 @@ func (x *CreateBootstrapClientResponse) String() string {
 func (*CreateBootstrapClientResponse) ProtoMessage() {}
 
 func (x *CreateBootstrapClientResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[15]
+	mi := &file_vpn_proto_msgTypes[19]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1020,7 +1162,7 @@ func (x *CreateBootstrapClientResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CreateBootstrapClientResponse.ProtoReflect.Descriptor instead.
 func (*CreateBootstrapClientResponse) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{15}
+	return file_vpn_proto_rawDescGZIP(), []int{19}
 }
 
 func (x *CreateBootstrapClientResponse) GetBootstrapClient() *BootstrapClient {
@@ -1044,7 +1186,7 @@ type UpdateBootstrapClientRequest struct {
 func (x *UpdateBootstrapClientRequest) Reset() {
 	*x = UpdateBootstrapClientRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[16]
+		mi := &file_vpn_proto_msgTypes[20]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1057,7 +1199,7 @@ func (x *UpdateBootstrapClientRequest) String() string {
 func (*UpdateBootstrapClientRequest) ProtoMessage() {}
 
 func (x *UpdateBootstrapClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[16]
+	mi := &file_vpn_proto_msgTypes[20]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1070,7 +1212,7 @@ func (x *UpdateBootstrapClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateBootstrapClientRequest.ProtoReflect.Descriptor instead.
 func (*UpdateBootstrapClientRequest) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{16}
+	return file_vpn_proto_rawDescGZIP(), []int{20}
 }
 
 func (x *UpdateBootstrapClientRequest) GetId() uint64 {
@@ -1116,7 +1258,7 @@ type UpdateBootstrapClientResponse struct {
 func (x *UpdateBootstrapClientResponse) Reset() {
 	*x = UpdateBootstrapClientResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[17]
+		mi := &file_vpn_proto_msgTypes[21]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1129,7 +1271,7 @@ func (x *UpdateBootstrapClientResponse) String() string {
 func (*UpdateBootstrapClientResponse) ProtoMessage() {}
 
 func (x *UpdateBootstrapClientResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[17]
+	mi := &file_vpn_proto_msgTypes[21]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1142,7 +1284,7 @@ func (x *UpdateBootstrapClientResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateBootstrapClientResponse.ProtoReflect.Descriptor instead.
 func (*UpdateBootstrapClientResponse) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{17}
+	return file_vpn_proto_rawDescGZIP(), []int{21}
 }
 
 func (x *UpdateBootstrapClientResponse) GetBootstrapClient() *BootstrapClient {
@@ -1163,7 +1305,7 @@ type DeleteBootstrapClientRequest struct {
 func (x *DeleteBootstrapClientRequest) Reset() {
 	*x = DeleteBootstrapClientRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[18]
+		mi := &file_vpn_proto_msgTypes[22]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1176,7 +1318,7 @@ func (x *DeleteBootstrapClientRequest) String() string {
 func (*DeleteBootstrapClientRequest) ProtoMessage() {}
 
 func (x *DeleteBootstrapClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[18]
+	mi := &file_vpn_proto_msgTypes[22]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1189,7 +1331,7 @@ func (x *DeleteBootstrapClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBootstrapClientRequest.ProtoReflect.Descriptor instead.
 func (*DeleteBootstrapClientRequest) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{18}
+	return file_vpn_proto_rawDescGZIP(), []int{22}
 }
 
 func (x *DeleteBootstrapClientRequest) GetId() uint64 {
@@ -1208,7 +1350,7 @@ type DeleteBootstrapClientResponse struct {
 func (x *DeleteBootstrapClientResponse) Reset() {
 	*x = DeleteBootstrapClientResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[19]
+		mi := &file_vpn_proto_msgTypes[23]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1221,7 +1363,7 @@ func (x *DeleteBootstrapClientResponse) String() string {
 func (*DeleteBootstrapClientResponse) ProtoMessage() {}
 
 func (x *DeleteBootstrapClientResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[19]
+	mi := &file_vpn_proto_msgTypes[23]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1234,7 +1376,7 @@ func (x *DeleteBootstrapClientResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteBootstrapClientResponse.ProtoReflect.Descriptor instead.
 func (*DeleteBootstrapClientResponse) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{19}
+	return file_vpn_proto_rawDescGZIP(), []int{23}
 }
 
 type GetBootstrapClientRequest struct {
@@ -1248,7 +1390,7 @@ type GetBootstrapClientRequest struct {
 func (x *GetBootstrapClientRequest) Reset() {
 	*x = GetBootstrapClientRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[20]
+		mi := &file_vpn_proto_msgTypes[24]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1261,7 +1403,7 @@ func (x *GetBootstrapClientRequest) String() string {
 func (*GetBootstrapClientRequest) ProtoMessage() {}
 
 func (x *GetBootstrapClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[20]
+	mi := &file_vpn_proto_msgTypes[24]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1274,7 +1416,7 @@ func (x *GetBootstrapClientRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBootstrapClientRequest.ProtoReflect.Descriptor instead.
 func (*GetBootstrapClientRequest) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{20}
+	return file_vpn_proto_rawDescGZIP(), []int{24}
 }
 
 func (x *GetBootstrapClientRequest) GetId() uint64 {
@@ -1295,7 +1437,7 @@ type GetBootstrapClientResponse struct {
 func (x *GetBootstrapClientResponse) Reset() {
 	*x = GetBootstrapClientResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[21]
+		mi := &file_vpn_proto_msgTypes[25]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1308,7 +1450,7 @@ func (x *GetBootstrapClientResponse) String() string {
 func (*GetBootstrapClientResponse) ProtoMessage() {}
 
 func (x *GetBootstrapClientResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[21]
+	mi := &file_vpn_proto_msgTypes[25]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1321,7 +1463,7 @@ func (x *GetBootstrapClientResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetBootstrapClientResponse.ProtoReflect.Descriptor instead.
 func (*GetBootstrapClientResponse) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{21}
+	return file_vpn_proto_rawDescGZIP(), []int{25}
 }
 
 func (x *GetBootstrapClientResponse) GetBootstrapClient() *BootstrapClient {
@@ -1340,7 +1482,7 @@ type ListBootstrapClientsRequest struct {
 func (x *ListBootstrapClientsRequest) Reset() {
 	*x = ListBootstrapClientsRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[22]
+		mi := &file_vpn_proto_msgTypes[26]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1353,7 +1495,7 @@ func (x *ListBootstrapClientsRequest) String() string {
 func (*ListBootstrapClientsRequest) ProtoMessage() {}
 
 func (x *ListBootstrapClientsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[22]
+	mi := &file_vpn_proto_msgTypes[26]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1366,7 +1508,7 @@ func (x *ListBootstrapClientsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBootstrapClientsRequest.ProtoReflect.Descriptor instead.
 func (*ListBootstrapClientsRequest) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{22}
+	return file_vpn_proto_rawDescGZIP(), []int{26}
 }
 
 type ListBootstrapClientsResponse struct {
@@ -1380,7 +1522,7 @@ type ListBootstrapClientsResponse struct {
 func (x *ListBootstrapClientsResponse) Reset() {
 	*x = ListBootstrapClientsResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[23]
+		mi := &file_vpn_proto_msgTypes[27]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1393,7 +1535,7 @@ func (x *ListBootstrapClientsResponse) String() string {
 func (*ListBootstrapClientsResponse) ProtoMessage() {}
 
 func (x *ListBootstrapClientsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[23]
+	mi := &file_vpn_proto_msgTypes[27]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1406,7 +1548,7 @@ func (x *ListBootstrapClientsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBootstrapClientsResponse.ProtoReflect.Descriptor instead.
 func (*ListBootstrapClientsResponse) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{23}
+	return file_vpn_proto_rawDescGZIP(), []int{27}
 }
 
 func (x *ListBootstrapClientsResponse) GetBootstrapClients() []*BootstrapClient {
@@ -1425,7 +1567,7 @@ type ListBootstrapPeersRequest struct {
 func (x *ListBootstrapPeersRequest) Reset() {
 	*x = ListBootstrapPeersRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[24]
+		mi := &file_vpn_proto_msgTypes[28]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1438,7 +1580,7 @@ func (x *ListBootstrapPeersRequest) String() string {
 func (*ListBootstrapPeersRequest) ProtoMessage() {}
 
 func (x *ListBootstrapPeersRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[24]
+	mi := &file_vpn_proto_msgTypes[28]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1451,7 +1593,7 @@ func (x *ListBootstrapPeersRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBootstrapPeersRequest.ProtoReflect.Descriptor instead.
 func (*ListBootstrapPeersRequest) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{24}
+	return file_vpn_proto_rawDescGZIP(), []int{28}
 }
 
 type ListBootstrapPeersResponse struct {
@@ -1465,7 +1607,7 @@ type ListBootstrapPeersResponse struct {
 func (x *ListBootstrapPeersResponse) Reset() {
 	*x = ListBootstrapPeersResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[25]
+		mi := &file_vpn_proto_msgTypes[29]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1478,7 +1620,7 @@ func (x *ListBootstrapPeersResponse) String() string {
 func (*ListBootstrapPeersResponse) ProtoMessage() {}
 
 func (x *ListBootstrapPeersResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[25]
+	mi := &file_vpn_proto_msgTypes[29]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1491,7 +1633,7 @@ func (x *ListBootstrapPeersResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListBootstrapPeersResponse.ProtoReflect.Descriptor instead.
 func (*ListBootstrapPeersResponse) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{25}
+	return file_vpn_proto_rawDescGZIP(), []int{29}
 }
 
 func (x *ListBootstrapPeersResponse) GetPeers() []*BootstrapPeer {
@@ -1513,7 +1655,7 @@ type BootstrapPeer struct {
 func (x *BootstrapPeer) Reset() {
 	*x = BootstrapPeer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[26]
+		mi := &file_vpn_proto_msgTypes[30]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1526,7 +1668,7 @@ func (x *BootstrapPeer) String() string {
 func (*BootstrapPeer) ProtoMessage() {}
 
 func (x *BootstrapPeer) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[26]
+	mi := &file_vpn_proto_msgTypes[30]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1539,7 +1681,7 @@ func (x *BootstrapPeer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapPeer.ProtoReflect.Descriptor instead.
 func (*BootstrapPeer) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{26}
+	return file_vpn_proto_rawDescGZIP(), []int{30}
 }
 
 func (x *BootstrapPeer) GetHostId() []byte {
@@ -1571,7 +1713,7 @@ type BootstrapServiceMessage struct {
 func (x *BootstrapServiceMessage) Reset() {
 	*x = BootstrapServiceMessage{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[27]
+		mi := &file_vpn_proto_msgTypes[31]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1584,7 +1726,7 @@ func (x *BootstrapServiceMessage) String() string {
 func (*BootstrapServiceMessage) ProtoMessage() {}
 
 func (x *BootstrapServiceMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[27]
+	mi := &file_vpn_proto_msgTypes[31]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1597,7 +1739,7 @@ func (x *BootstrapServiceMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use BootstrapServiceMessage.ProtoReflect.Descriptor instead.
 func (*BootstrapServiceMessage) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{27}
+	return file_vpn_proto_rawDescGZIP(), []int{31}
 }
 
 func (m *BootstrapServiceMessage) GetBody() isBootstrapServiceMessage_Body {
@@ -1662,7 +1804,7 @@ type PublishNetworkToBootstrapPeerRequest struct {
 func (x *PublishNetworkToBootstrapPeerRequest) Reset() {
 	*x = PublishNetworkToBootstrapPeerRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[28]
+		mi := &file_vpn_proto_msgTypes[32]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1675,7 +1817,7 @@ func (x *PublishNetworkToBootstrapPeerRequest) String() string {
 func (*PublishNetworkToBootstrapPeerRequest) ProtoMessage() {}
 
 func (x *PublishNetworkToBootstrapPeerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[28]
+	mi := &file_vpn_proto_msgTypes[32]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1688,7 +1830,7 @@ func (x *PublishNetworkToBootstrapPeerRequest) ProtoReflect() protoreflect.Messa
 
 // Deprecated: Use PublishNetworkToBootstrapPeerRequest.ProtoReflect.Descriptor instead.
 func (*PublishNetworkToBootstrapPeerRequest) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{28}
+	return file_vpn_proto_rawDescGZIP(), []int{32}
 }
 
 func (x *PublishNetworkToBootstrapPeerRequest) GetHostId() []byte {
@@ -1714,7 +1856,7 @@ type PublishNetworkToBootstrapPeerResponse struct {
 func (x *PublishNetworkToBootstrapPeerResponse) Reset() {
 	*x = PublishNetworkToBootstrapPeerResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[29]
+		mi := &file_vpn_proto_msgTypes[33]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1727,7 +1869,7 @@ func (x *PublishNetworkToBootstrapPeerResponse) String() string {
 func (*PublishNetworkToBootstrapPeerResponse) ProtoMessage() {}
 
 func (x *PublishNetworkToBootstrapPeerResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[29]
+	mi := &file_vpn_proto_msgTypes[33]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1740,7 +1882,7 @@ func (x *PublishNetworkToBootstrapPeerResponse) ProtoReflect() protoreflect.Mess
 
 // Deprecated: Use PublishNetworkToBootstrapPeerResponse.ProtoReflect.Descriptor instead.
 func (*PublishNetworkToBootstrapPeerResponse) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{29}
+	return file_vpn_proto_rawDescGZIP(), []int{33}
 }
 
 type PeerExchangeMessage struct {
@@ -1761,7 +1903,7 @@ type PeerExchangeMessage struct {
 func (x *PeerExchangeMessage) Reset() {
 	*x = PeerExchangeMessage{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[30]
+		mi := &file_vpn_proto_msgTypes[34]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1774,7 +1916,7 @@ func (x *PeerExchangeMessage) String() string {
 func (*PeerExchangeMessage) ProtoMessage() {}
 
 func (x *PeerExchangeMessage) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[30]
+	mi := &file_vpn_proto_msgTypes[34]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1787,7 +1929,7 @@ func (x *PeerExchangeMessage) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerExchangeMessage.ProtoReflect.Descriptor instead.
 func (*PeerExchangeMessage) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{30}
+	return file_vpn_proto_rawDescGZIP(), []int{34}
 }
 
 func (m *PeerExchangeMessage) GetBody() isPeerExchangeMessage_Body {
@@ -1891,7 +2033,7 @@ type NetworkEvent_NetworkOpen struct {
 func (x *NetworkEvent_NetworkOpen) Reset() {
 	*x = NetworkEvent_NetworkOpen{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[31]
+		mi := &file_vpn_proto_msgTypes[35]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1904,7 +2046,7 @@ func (x *NetworkEvent_NetworkOpen) String() string {
 func (*NetworkEvent_NetworkOpen) ProtoMessage() {}
 
 func (x *NetworkEvent_NetworkOpen) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[31]
+	mi := &file_vpn_proto_msgTypes[35]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1945,7 +2087,7 @@ type NetworkEvent_NetworkClose struct {
 func (x *NetworkEvent_NetworkClose) Reset() {
 	*x = NetworkEvent_NetworkClose{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[32]
+		mi := &file_vpn_proto_msgTypes[36]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1958,7 +2100,7 @@ func (x *NetworkEvent_NetworkClose) String() string {
 func (*NetworkEvent_NetworkClose) ProtoMessage() {}
 
 func (x *NetworkEvent_NetworkClose) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[32]
+	mi := &file_vpn_proto_msgTypes[36]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1992,7 +2134,7 @@ type NetworkHandshake_Init struct {
 func (x *NetworkHandshake_Init) Reset() {
 	*x = NetworkHandshake_Init{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[33]
+		mi := &file_vpn_proto_msgTypes[37]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2005,7 +2147,7 @@ func (x *NetworkHandshake_Init) String() string {
 func (*NetworkHandshake_Init) ProtoMessage() {}
 
 func (x *NetworkHandshake_Init) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[33]
+	mi := &file_vpn_proto_msgTypes[37]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2040,7 +2182,7 @@ type NetworkHandshake_NetworkBinding struct {
 func (x *NetworkHandshake_NetworkBinding) Reset() {
 	*x = NetworkHandshake_NetworkBinding{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[34]
+		mi := &file_vpn_proto_msgTypes[38]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2053,7 +2195,7 @@ func (x *NetworkHandshake_NetworkBinding) String() string {
 func (*NetworkHandshake_NetworkBinding) ProtoMessage() {}
 
 func (x *NetworkHandshake_NetworkBinding) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[34]
+	mi := &file_vpn_proto_msgTypes[38]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2094,7 +2236,7 @@ type NetworkHandshake_NetworkBindings struct {
 func (x *NetworkHandshake_NetworkBindings) Reset() {
 	*x = NetworkHandshake_NetworkBindings{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[35]
+		mi := &file_vpn_proto_msgTypes[39]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2107,7 +2249,7 @@ func (x *NetworkHandshake_NetworkBindings) String() string {
 func (*NetworkHandshake_NetworkBindings) ProtoMessage() {}
 
 func (x *NetworkHandshake_NetworkBindings) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[35]
+	mi := &file_vpn_proto_msgTypes[39]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2141,7 +2283,7 @@ type NetworkHandshake_CertificateUpgradeOffer struct {
 func (x *NetworkHandshake_CertificateUpgradeOffer) Reset() {
 	*x = NetworkHandshake_CertificateUpgradeOffer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[36]
+		mi := &file_vpn_proto_msgTypes[40]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2154,7 +2296,7 @@ func (x *NetworkHandshake_CertificateUpgradeOffer) String() string {
 func (*NetworkHandshake_CertificateUpgradeOffer) ProtoMessage() {}
 
 func (x *NetworkHandshake_CertificateUpgradeOffer) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[36]
+	mi := &file_vpn_proto_msgTypes[40]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2188,7 +2330,7 @@ type NetworkHandshake_CertificateUpgradeRequest struct {
 func (x *NetworkHandshake_CertificateUpgradeRequest) Reset() {
 	*x = NetworkHandshake_CertificateUpgradeRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[37]
+		mi := &file_vpn_proto_msgTypes[41]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2201,7 +2343,7 @@ func (x *NetworkHandshake_CertificateUpgradeRequest) String() string {
 func (*NetworkHandshake_CertificateUpgradeRequest) ProtoMessage() {}
 
 func (x *NetworkHandshake_CertificateUpgradeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[37]
+	mi := &file_vpn_proto_msgTypes[41]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2235,7 +2377,7 @@ type NetworkHandshake_CertificateUpgradeResponse struct {
 func (x *NetworkHandshake_CertificateUpgradeResponse) Reset() {
 	*x = NetworkHandshake_CertificateUpgradeResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[38]
+		mi := &file_vpn_proto_msgTypes[42]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2248,7 +2390,7 @@ func (x *NetworkHandshake_CertificateUpgradeResponse) String() string {
 func (*NetworkHandshake_CertificateUpgradeResponse) ProtoMessage() {}
 
 func (x *NetworkHandshake_CertificateUpgradeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[38]
+	mi := &file_vpn_proto_msgTypes[42]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2271,7 +2413,7 @@ func (x *NetworkHandshake_CertificateUpgradeResponse) GetCertificates() []*Certi
 	return nil
 }
 
-type BrokerPeerEvent_Open struct {
+type BrokerProxyEvent_Open struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -2279,23 +2421,23 @@ type BrokerPeerEvent_Open struct {
 	PeerId uint64 `protobuf:"varint,1,opt,name=peer_id,json=peerId,proto3" json:"peer_id,omitempty"`
 }
 
-func (x *BrokerPeerEvent_Open) Reset() {
-	*x = BrokerPeerEvent_Open{}
+func (x *BrokerProxyEvent_Open) Reset() {
+	*x = BrokerProxyEvent_Open{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[39]
+		mi := &file_vpn_proto_msgTypes[43]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
 }
 
-func (x *BrokerPeerEvent_Open) String() string {
+func (x *BrokerProxyEvent_Open) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BrokerPeerEvent_Open) ProtoMessage() {}
+func (*BrokerProxyEvent_Open) ProtoMessage() {}
 
-func (x *BrokerPeerEvent_Open) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[39]
+func (x *BrokerProxyEvent_Open) ProtoReflect() protoreflect.Message {
+	mi := &file_vpn_proto_msgTypes[43]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2306,19 +2448,19 @@ func (x *BrokerPeerEvent_Open) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BrokerPeerEvent_Open.ProtoReflect.Descriptor instead.
-func (*BrokerPeerEvent_Open) Descriptor() ([]byte, []int) {
+// Deprecated: Use BrokerProxyEvent_Open.ProtoReflect.Descriptor instead.
+func (*BrokerProxyEvent_Open) Descriptor() ([]byte, []int) {
 	return file_vpn_proto_rawDescGZIP(), []int{9, 0}
 }
 
-func (x *BrokerPeerEvent_Open) GetPeerId() uint64 {
+func (x *BrokerProxyEvent_Open) GetPeerId() uint64 {
 	if x != nil {
 		return x.PeerId
 	}
 	return 0
 }
 
-type BrokerPeerEvent_Data struct {
+type BrokerProxyEvent_Data struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -2326,23 +2468,23 @@ type BrokerPeerEvent_Data struct {
 	Data []byte `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
 }
 
-func (x *BrokerPeerEvent_Data) Reset() {
-	*x = BrokerPeerEvent_Data{}
+func (x *BrokerProxyEvent_Data) Reset() {
+	*x = BrokerProxyEvent_Data{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[40]
+		mi := &file_vpn_proto_msgTypes[44]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
 }
 
-func (x *BrokerPeerEvent_Data) String() string {
+func (x *BrokerProxyEvent_Data) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BrokerPeerEvent_Data) ProtoMessage() {}
+func (*BrokerProxyEvent_Data) ProtoMessage() {}
 
-func (x *BrokerPeerEvent_Data) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[40]
+func (x *BrokerProxyEvent_Data) ProtoReflect() protoreflect.Message {
+	mi := &file_vpn_proto_msgTypes[44]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2353,108 +2495,14 @@ func (x *BrokerPeerEvent_Data) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BrokerPeerEvent_Data.ProtoReflect.Descriptor instead.
-func (*BrokerPeerEvent_Data) Descriptor() ([]byte, []int) {
+// Deprecated: Use BrokerProxyEvent_Data.ProtoReflect.Descriptor instead.
+func (*BrokerProxyEvent_Data) Descriptor() ([]byte, []int) {
 	return file_vpn_proto_rawDescGZIP(), []int{9, 1}
 }
 
-func (x *BrokerPeerEvent_Data) GetData() []byte {
+func (x *BrokerProxyEvent_Data) GetData() []byte {
 	if x != nil {
 		return x.Data
-	}
-	return nil
-}
-
-type BrokerPeerEvent_InitRequired struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Data []byte `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-}
-
-func (x *BrokerPeerEvent_InitRequired) Reset() {
-	*x = BrokerPeerEvent_InitRequired{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[41]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *BrokerPeerEvent_InitRequired) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BrokerPeerEvent_InitRequired) ProtoMessage() {}
-
-func (x *BrokerPeerEvent_InitRequired) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[41]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BrokerPeerEvent_InitRequired.ProtoReflect.Descriptor instead.
-func (*BrokerPeerEvent_InitRequired) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{9, 2}
-}
-
-func (x *BrokerPeerEvent_InitRequired) GetData() []byte {
-	if x != nil {
-		return x.Data
-	}
-	return nil
-}
-
-type BrokerPeerEvent_Keys struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Keys [][]byte `protobuf:"bytes,1,rep,name=keys,proto3" json:"keys,omitempty"`
-}
-
-func (x *BrokerPeerEvent_Keys) Reset() {
-	*x = BrokerPeerEvent_Keys{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[42]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *BrokerPeerEvent_Keys) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BrokerPeerEvent_Keys) ProtoMessage() {}
-
-func (x *BrokerPeerEvent_Keys) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[42]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BrokerPeerEvent_Keys.ProtoReflect.Descriptor instead.
-func (*BrokerPeerEvent_Keys) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{9, 3}
-}
-
-func (x *BrokerPeerEvent_Keys) GetKeys() [][]byte {
-	if x != nil {
-		return x.Keys
 	}
 	return nil
 }
@@ -2468,7 +2516,7 @@ type BootstrapServiceMessage_BrokerOffer struct {
 func (x *BootstrapServiceMessage_BrokerOffer) Reset() {
 	*x = BootstrapServiceMessage_BrokerOffer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[43]
+		mi := &file_vpn_proto_msgTypes[45]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2481,7 +2529,7 @@ func (x *BootstrapServiceMessage_BrokerOffer) String() string {
 func (*BootstrapServiceMessage_BrokerOffer) ProtoMessage() {}
 
 func (x *BootstrapServiceMessage_BrokerOffer) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[43]
+	mi := &file_vpn_proto_msgTypes[45]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2494,7 +2542,7 @@ func (x *BootstrapServiceMessage_BrokerOffer) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use BootstrapServiceMessage_BrokerOffer.ProtoReflect.Descriptor instead.
 func (*BootstrapServiceMessage_BrokerOffer) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{27, 0}
+	return file_vpn_proto_rawDescGZIP(), []int{31, 0}
 }
 
 type BootstrapServiceMessage_PublishRequest struct {
@@ -2509,7 +2557,7 @@ type BootstrapServiceMessage_PublishRequest struct {
 func (x *BootstrapServiceMessage_PublishRequest) Reset() {
 	*x = BootstrapServiceMessage_PublishRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[44]
+		mi := &file_vpn_proto_msgTypes[46]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2522,7 +2570,7 @@ func (x *BootstrapServiceMessage_PublishRequest) String() string {
 func (*BootstrapServiceMessage_PublishRequest) ProtoMessage() {}
 
 func (x *BootstrapServiceMessage_PublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[44]
+	mi := &file_vpn_proto_msgTypes[46]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2535,7 +2583,7 @@ func (x *BootstrapServiceMessage_PublishRequest) ProtoReflect() protoreflect.Mes
 
 // Deprecated: Use BootstrapServiceMessage_PublishRequest.ProtoReflect.Descriptor instead.
 func (*BootstrapServiceMessage_PublishRequest) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{27, 1}
+	return file_vpn_proto_rawDescGZIP(), []int{31, 1}
 }
 
 func (x *BootstrapServiceMessage_PublishRequest) GetName() string {
@@ -2565,7 +2613,7 @@ type BootstrapServiceMessage_PublishResponse struct {
 func (x *BootstrapServiceMessage_PublishResponse) Reset() {
 	*x = BootstrapServiceMessage_PublishResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[45]
+		mi := &file_vpn_proto_msgTypes[47]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2578,7 +2626,7 @@ func (x *BootstrapServiceMessage_PublishResponse) String() string {
 func (*BootstrapServiceMessage_PublishResponse) ProtoMessage() {}
 
 func (x *BootstrapServiceMessage_PublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[45]
+	mi := &file_vpn_proto_msgTypes[47]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2591,7 +2639,7 @@ func (x *BootstrapServiceMessage_PublishResponse) ProtoReflect() protoreflect.Me
 
 // Deprecated: Use BootstrapServiceMessage_PublishResponse.ProtoReflect.Descriptor instead.
 func (*BootstrapServiceMessage_PublishResponse) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{27, 2}
+	return file_vpn_proto_rawDescGZIP(), []int{31, 2}
 }
 
 func (m *BootstrapServiceMessage_PublishResponse) GetBody() isBootstrapServiceMessage_PublishResponse_Body {
@@ -2630,7 +2678,7 @@ type PeerExchangeMessage_Request struct {
 func (x *PeerExchangeMessage_Request) Reset() {
 	*x = PeerExchangeMessage_Request{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[46]
+		mi := &file_vpn_proto_msgTypes[48]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2643,7 +2691,7 @@ func (x *PeerExchangeMessage_Request) String() string {
 func (*PeerExchangeMessage_Request) ProtoMessage() {}
 
 func (x *PeerExchangeMessage_Request) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[46]
+	mi := &file_vpn_proto_msgTypes[48]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2656,7 +2704,7 @@ func (x *PeerExchangeMessage_Request) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerExchangeMessage_Request.ProtoReflect.Descriptor instead.
 func (*PeerExchangeMessage_Request) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{30, 0}
+	return file_vpn_proto_rawDescGZIP(), []int{34, 0}
 }
 
 func (x *PeerExchangeMessage_Request) GetCount() uint32 {
@@ -2677,7 +2725,7 @@ type PeerExchangeMessage_Response struct {
 func (x *PeerExchangeMessage_Response) Reset() {
 	*x = PeerExchangeMessage_Response{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[47]
+		mi := &file_vpn_proto_msgTypes[49]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2690,7 +2738,7 @@ func (x *PeerExchangeMessage_Response) String() string {
 func (*PeerExchangeMessage_Response) ProtoMessage() {}
 
 func (x *PeerExchangeMessage_Response) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[47]
+	mi := &file_vpn_proto_msgTypes[49]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2703,7 +2751,7 @@ func (x *PeerExchangeMessage_Response) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerExchangeMessage_Response.ProtoReflect.Descriptor instead.
 func (*PeerExchangeMessage_Response) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{30, 1}
+	return file_vpn_proto_rawDescGZIP(), []int{34, 1}
 }
 
 func (x *PeerExchangeMessage_Response) GetIds() [][]byte {
@@ -2725,7 +2773,7 @@ type PeerExchangeMessage_Offer struct {
 func (x *PeerExchangeMessage_Offer) Reset() {
 	*x = PeerExchangeMessage_Offer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[48]
+		mi := &file_vpn_proto_msgTypes[50]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2738,7 +2786,7 @@ func (x *PeerExchangeMessage_Offer) String() string {
 func (*PeerExchangeMessage_Offer) ProtoMessage() {}
 
 func (x *PeerExchangeMessage_Offer) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[48]
+	mi := &file_vpn_proto_msgTypes[50]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2751,7 +2799,7 @@ func (x *PeerExchangeMessage_Offer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerExchangeMessage_Offer.ProtoReflect.Descriptor instead.
 func (*PeerExchangeMessage_Offer) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{30, 2}
+	return file_vpn_proto_rawDescGZIP(), []int{34, 2}
 }
 
 func (x *PeerExchangeMessage_Offer) GetMediationId() uint64 {
@@ -2780,7 +2828,7 @@ type PeerExchangeMessage_Answer struct {
 func (x *PeerExchangeMessage_Answer) Reset() {
 	*x = PeerExchangeMessage_Answer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[49]
+		mi := &file_vpn_proto_msgTypes[51]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2793,7 +2841,7 @@ func (x *PeerExchangeMessage_Answer) String() string {
 func (*PeerExchangeMessage_Answer) ProtoMessage() {}
 
 func (x *PeerExchangeMessage_Answer) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[49]
+	mi := &file_vpn_proto_msgTypes[51]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2806,7 +2854,7 @@ func (x *PeerExchangeMessage_Answer) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerExchangeMessage_Answer.ProtoReflect.Descriptor instead.
 func (*PeerExchangeMessage_Answer) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{30, 3}
+	return file_vpn_proto_rawDescGZIP(), []int{34, 3}
 }
 
 func (x *PeerExchangeMessage_Answer) GetMediationId() uint64 {
@@ -2836,7 +2884,7 @@ type PeerExchangeMessage_IceCandidate struct {
 func (x *PeerExchangeMessage_IceCandidate) Reset() {
 	*x = PeerExchangeMessage_IceCandidate{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[50]
+		mi := &file_vpn_proto_msgTypes[52]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2849,7 +2897,7 @@ func (x *PeerExchangeMessage_IceCandidate) String() string {
 func (*PeerExchangeMessage_IceCandidate) ProtoMessage() {}
 
 func (x *PeerExchangeMessage_IceCandidate) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[50]
+	mi := &file_vpn_proto_msgTypes[52]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2862,7 +2910,7 @@ func (x *PeerExchangeMessage_IceCandidate) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use PeerExchangeMessage_IceCandidate.ProtoReflect.Descriptor instead.
 func (*PeerExchangeMessage_IceCandidate) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{30, 4}
+	return file_vpn_proto_rawDescGZIP(), []int{34, 4}
 }
 
 func (x *PeerExchangeMessage_IceCandidate) GetMediationId() uint64 {
@@ -2895,7 +2943,7 @@ type PeerExchangeMessage_CallbackRequest struct {
 func (x *PeerExchangeMessage_CallbackRequest) Reset() {
 	*x = PeerExchangeMessage_CallbackRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[51]
+		mi := &file_vpn_proto_msgTypes[53]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2908,7 +2956,7 @@ func (x *PeerExchangeMessage_CallbackRequest) String() string {
 func (*PeerExchangeMessage_CallbackRequest) ProtoMessage() {}
 
 func (x *PeerExchangeMessage_CallbackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[51]
+	mi := &file_vpn_proto_msgTypes[53]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2921,7 +2969,7 @@ func (x *PeerExchangeMessage_CallbackRequest) ProtoReflect() protoreflect.Messag
 
 // Deprecated: Use PeerExchangeMessage_CallbackRequest.ProtoReflect.Descriptor instead.
 func (*PeerExchangeMessage_CallbackRequest) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{30, 5}
+	return file_vpn_proto_rawDescGZIP(), []int{34, 5}
 }
 
 var File_vpn_proto protoreflect.FileDescriptor
@@ -3026,44 +3074,43 @@ var file_vpn_proto_rawDesc = []byte{
 	0x6e, 0x73, 0x65, 0x12, 0x30, 0x0a, 0x0c, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61,
 	0x74, 0x65, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32, 0x0c, 0x2e, 0x43, 0x65, 0x72, 0x74,
 	0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x52, 0x0c, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69,
-	0x63, 0x61, 0x74, 0x65, 0x73, 0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0x2e, 0x0a,
-	0x11, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x65, 0x65, 0x72, 0x52, 0x65, 0x71, 0x75, 0x65,
-	0x73, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x63, 0x6f, 0x6e, 0x6e, 0x5f, 0x6d, 0x74, 0x75, 0x18, 0x01,
-	0x20, 0x01, 0x28, 0x05, 0x52, 0x07, 0x63, 0x6f, 0x6e, 0x6e, 0x4d, 0x74, 0x75, 0x22, 0xe3, 0x02,
-	0x0a, 0x0f, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x65, 0x65, 0x72, 0x45, 0x76, 0x65, 0x6e,
-	0x74, 0x12, 0x2b, 0x0a, 0x04, 0x6f, 0x70, 0x65, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x15, 0x2e, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x65, 0x65, 0x72, 0x45, 0x76, 0x65, 0x6e,
-	0x74, 0x2e, 0x4f, 0x70, 0x65, 0x6e, 0x48, 0x00, 0x52, 0x04, 0x6f, 0x70, 0x65, 0x6e, 0x12, 0x2b,
-	0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x15, 0x2e, 0x42,
-	0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x65, 0x65, 0x72, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x2e, 0x44,
-	0x61, 0x74, 0x61, 0x48, 0x00, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x12, 0x44, 0x0a, 0x0d, 0x69,
-	0x6e, 0x69, 0x74, 0x5f, 0x72, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x18, 0x03, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x65, 0x65, 0x72, 0x45,
-	0x76, 0x65, 0x6e, 0x74, 0x2e, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65,
-	0x64, 0x48, 0x00, 0x52, 0x0c, 0x69, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65,
-	0x64, 0x12, 0x2b, 0x0a, 0x04, 0x6b, 0x65, 0x79, 0x73, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x15, 0x2e, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x65, 0x65, 0x72, 0x45, 0x76, 0x65, 0x6e,
-	0x74, 0x2e, 0x4b, 0x65, 0x79, 0x73, 0x48, 0x00, 0x52, 0x04, 0x6b, 0x65, 0x79, 0x73, 0x1a, 0x1f,
-	0x0a, 0x04, 0x4f, 0x70, 0x65, 0x6e, 0x12, 0x17, 0x0a, 0x07, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x69,
-	0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x06, 0x70, 0x65, 0x65, 0x72, 0x49, 0x64, 0x1a,
-	0x1a, 0x0a, 0x04, 0x44, 0x61, 0x74, 0x61, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18,
-	0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x1a, 0x22, 0x0a, 0x0c, 0x49,
-	0x6e, 0x69, 0x74, 0x52, 0x65, 0x71, 0x75, 0x69, 0x72, 0x65, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x64,
-	0x61, 0x74, 0x61, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x1a,
-	0x1a, 0x0a, 0x04, 0x4b, 0x65, 0x79, 0x73, 0x12, 0x12, 0x0a, 0x04, 0x6b, 0x65, 0x79, 0x73, 0x18,
-	0x01, 0x20, 0x03, 0x28, 0x0c, 0x52, 0x04, 0x6b, 0x65, 0x79, 0x73, 0x42, 0x06, 0x0a, 0x04, 0x62,
-	0x6f, 0x64, 0x79, 0x22, 0x69, 0x0a, 0x15, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x65, 0x65,
-	0x72, 0x49, 0x6e, 0x69, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x17, 0x0a, 0x07,
-	0x70, 0x65, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x06, 0x70,
-	0x65, 0x65, 0x72, 0x49, 0x64, 0x12, 0x23, 0x0a, 0x0d, 0x70, 0x72, 0x65, 0x66, 0x65, 0x72, 0x5f,
-	0x73, 0x65, 0x6e, 0x64, 0x65, 0x72, 0x18, 0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x0c, 0x70, 0x72,
-	0x65, 0x66, 0x65, 0x72, 0x53, 0x65, 0x6e, 0x64, 0x65, 0x72, 0x12, 0x12, 0x0a, 0x04, 0x6b, 0x65,
-	0x79, 0x73, 0x18, 0x03, 0x20, 0x03, 0x28, 0x0c, 0x52, 0x04, 0x6b, 0x65, 0x79, 0x73, 0x22, 0x44,
-	0x0a, 0x15, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x65, 0x65, 0x72, 0x44, 0x61, 0x74, 0x61,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x17, 0x0a, 0x07, 0x70, 0x65, 0x65, 0x72, 0x5f,
+	0x63, 0x61, 0x74, 0x65, 0x73, 0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0x2f, 0x0a,
+	0x12, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x12, 0x19, 0x0a, 0x08, 0x63, 0x6f, 0x6e, 0x6e, 0x5f, 0x6d, 0x74, 0x75, 0x18,
+	0x01, 0x20, 0x01, 0x28, 0x05, 0x52, 0x07, 0x63, 0x6f, 0x6e, 0x6e, 0x4d, 0x74, 0x75, 0x22, 0xb3,
+	0x01, 0x0a, 0x10, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x45, 0x76,
+	0x65, 0x6e, 0x74, 0x12, 0x2c, 0x0a, 0x04, 0x6f, 0x70, 0x65, 0x6e, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x0b, 0x32, 0x16, 0x2e, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x45,
+	0x76, 0x65, 0x6e, 0x74, 0x2e, 0x4f, 0x70, 0x65, 0x6e, 0x48, 0x00, 0x52, 0x04, 0x6f, 0x70, 0x65,
+	0x6e, 0x12, 0x2c, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32,
+	0x16, 0x2e, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x45, 0x76, 0x65,
+	0x6e, 0x74, 0x2e, 0x44, 0x61, 0x74, 0x61, 0x48, 0x00, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x1a,
+	0x1f, 0x0a, 0x04, 0x4f, 0x70, 0x65, 0x6e, 0x12, 0x17, 0x0a, 0x07, 0x70, 0x65, 0x65, 0x72, 0x5f,
 	0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x06, 0x70, 0x65, 0x65, 0x72, 0x49, 0x64,
-	0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04,
-	0x64, 0x61, 0x74, 0x61, 0x22, 0x84, 0x01, 0x0a, 0x0f, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72,
+	0x1a, 0x1a, 0x0a, 0x04, 0x44, 0x61, 0x74, 0x61, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x42, 0x06, 0x0a, 0x04,
+	0x62, 0x6f, 0x64, 0x79, 0x22, 0x49, 0x0a, 0x1a, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x72,
+	0x6f, 0x78, 0x79, 0x53, 0x65, 0x6e, 0x64, 0x4b, 0x65, 0x79, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x12, 0x17, 0x0a, 0x07, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x04, 0x52, 0x06, 0x70, 0x65, 0x65, 0x72, 0x49, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x6b,
+	0x65, 0x79, 0x73, 0x18, 0x02, 0x20, 0x03, 0x28, 0x0c, 0x52, 0x04, 0x6b, 0x65, 0x79, 0x73, 0x22,
+	0x1d, 0x0a, 0x1b, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x53, 0x65,
+	0x6e, 0x64, 0x4b, 0x65, 0x79, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x4c,
+	0x0a, 0x1d, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x52, 0x65, 0x63,
+	0x65, 0x69, 0x76, 0x65, 0x4b, 0x65, 0x79, 0x73, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x17, 0x0a, 0x07, 0x70, 0x65, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04,
+	0x52, 0x06, 0x70, 0x65, 0x65, 0x72, 0x49, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x6b, 0x65, 0x79, 0x73,
+	0x18, 0x02, 0x20, 0x03, 0x28, 0x0c, 0x52, 0x04, 0x6b, 0x65, 0x79, 0x73, 0x22, 0x34, 0x0a, 0x1e,
+	0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x52, 0x65, 0x63, 0x65, 0x69,
+	0x76, 0x65, 0x4b, 0x65, 0x79, 0x73, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x12,
+	0x0a, 0x04, 0x6b, 0x65, 0x79, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0c, 0x52, 0x04, 0x6b, 0x65,
+	0x79, 0x73, 0x22, 0x45, 0x0a, 0x16, 0x42, 0x72, 0x6f, 0x6b, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x78,
+	0x79, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x17, 0x0a, 0x07,
+	0x70, 0x65, 0x65, 0x72, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x06, 0x70,
+	0x65, 0x65, 0x72, 0x49, 0x64, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x02, 0x20,
+	0x01, 0x28, 0x0c, 0x52, 0x04, 0x64, 0x61, 0x74, 0x61, 0x22, 0x19, 0x0a, 0x17, 0x42, 0x72, 0x6f,
+	0x6b, 0x65, 0x72, 0x50, 0x72, 0x6f, 0x78, 0x79, 0x44, 0x61, 0x74, 0x61, 0x52, 0x65, 0x73, 0x70,
+	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x84, 0x01, 0x0a, 0x0f, 0x42, 0x6f, 0x6f, 0x74, 0x73, 0x74, 0x72,
 	0x61, 0x70, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01,
 	0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x12, 0x4f, 0x0a, 0x11, 0x77, 0x65, 0x62, 0x73,
 	0x6f, 0x63, 0x6b, 0x65, 0x74, 0x5f, 0x6f, 0x70, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x18, 0x02, 0x20,
@@ -3240,7 +3287,7 @@ func file_vpn_proto_rawDescGZIP() []byte {
 	return file_vpn_proto_rawDescData
 }
 
-var file_vpn_proto_msgTypes = make([]protoimpl.MessageInfo, 52)
+var file_vpn_proto_msgTypes = make([]protoimpl.MessageInfo, 54)
 var file_vpn_proto_goTypes = []interface{}{
 	(*StartVPNRequest)(nil),                             // 0: StartVPNRequest
 	(*StartVPNResponse)(nil),                            // 1: StartVPNResponse
@@ -3250,93 +3297,93 @@ var file_vpn_proto_goTypes = []interface{}{
 	(*NetworkAddress)(nil),                              // 5: NetworkAddress
 	(*PeerInit)(nil),                                    // 6: PeerInit
 	(*NetworkHandshake)(nil),                            // 7: NetworkHandshake
-	(*BrokerPeerRequest)(nil),                           // 8: BrokerPeerRequest
-	(*BrokerPeerEvent)(nil),                             // 9: BrokerPeerEvent
-	(*BrokerPeerInitRequest)(nil),                       // 10: BrokerPeerInitRequest
-	(*BrokerPeerDataRequest)(nil),                       // 11: BrokerPeerDataRequest
-	(*BootstrapClient)(nil),                             // 12: BootstrapClient
-	(*BootstrapClientWebSocketOptions)(nil),             // 13: BootstrapClientWebSocketOptions
-	(*CreateBootstrapClientRequest)(nil),                // 14: CreateBootstrapClientRequest
-	(*CreateBootstrapClientResponse)(nil),               // 15: CreateBootstrapClientResponse
-	(*UpdateBootstrapClientRequest)(nil),                // 16: UpdateBootstrapClientRequest
-	(*UpdateBootstrapClientResponse)(nil),               // 17: UpdateBootstrapClientResponse
-	(*DeleteBootstrapClientRequest)(nil),                // 18: DeleteBootstrapClientRequest
-	(*DeleteBootstrapClientResponse)(nil),               // 19: DeleteBootstrapClientResponse
-	(*GetBootstrapClientRequest)(nil),                   // 20: GetBootstrapClientRequest
-	(*GetBootstrapClientResponse)(nil),                  // 21: GetBootstrapClientResponse
-	(*ListBootstrapClientsRequest)(nil),                 // 22: ListBootstrapClientsRequest
-	(*ListBootstrapClientsResponse)(nil),                // 23: ListBootstrapClientsResponse
-	(*ListBootstrapPeersRequest)(nil),                   // 24: ListBootstrapPeersRequest
-	(*ListBootstrapPeersResponse)(nil),                  // 25: ListBootstrapPeersResponse
-	(*BootstrapPeer)(nil),                               // 26: BootstrapPeer
-	(*BootstrapServiceMessage)(nil),                     // 27: BootstrapServiceMessage
-	(*PublishNetworkToBootstrapPeerRequest)(nil),        // 28: PublishNetworkToBootstrapPeerRequest
-	(*PublishNetworkToBootstrapPeerResponse)(nil),       // 29: PublishNetworkToBootstrapPeerResponse
-	(*PeerExchangeMessage)(nil),                         // 30: PeerExchangeMessage
-	(*NetworkEvent_NetworkOpen)(nil),                    // 31: NetworkEvent.NetworkOpen
-	(*NetworkEvent_NetworkClose)(nil),                   // 32: NetworkEvent.NetworkClose
-	(*NetworkHandshake_Init)(nil),                       // 33: NetworkHandshake.Init
-	(*NetworkHandshake_NetworkBinding)(nil),             // 34: NetworkHandshake.NetworkBinding
-	(*NetworkHandshake_NetworkBindings)(nil),            // 35: NetworkHandshake.NetworkBindings
-	(*NetworkHandshake_CertificateUpgradeOffer)(nil),    // 36: NetworkHandshake.CertificateUpgradeOffer
-	(*NetworkHandshake_CertificateUpgradeRequest)(nil),  // 37: NetworkHandshake.CertificateUpgradeRequest
-	(*NetworkHandshake_CertificateUpgradeResponse)(nil), // 38: NetworkHandshake.CertificateUpgradeResponse
-	(*BrokerPeerEvent_Open)(nil),                        // 39: BrokerPeerEvent.Open
-	(*BrokerPeerEvent_Data)(nil),                        // 40: BrokerPeerEvent.Data
-	(*BrokerPeerEvent_InitRequired)(nil),                // 41: BrokerPeerEvent.InitRequired
-	(*BrokerPeerEvent_Keys)(nil),                        // 42: BrokerPeerEvent.Keys
-	(*BootstrapServiceMessage_BrokerOffer)(nil),         // 43: BootstrapServiceMessage.BrokerOffer
-	(*BootstrapServiceMessage_PublishRequest)(nil),      // 44: BootstrapServiceMessage.PublishRequest
-	(*BootstrapServiceMessage_PublishResponse)(nil),     // 45: BootstrapServiceMessage.PublishResponse
-	(*PeerExchangeMessage_Request)(nil),                 // 46: PeerExchangeMessage.Request
-	(*PeerExchangeMessage_Response)(nil),                // 47: PeerExchangeMessage.Response
-	(*PeerExchangeMessage_Offer)(nil),                   // 48: PeerExchangeMessage.Offer
-	(*PeerExchangeMessage_Answer)(nil),                  // 49: PeerExchangeMessage.Answer
-	(*PeerExchangeMessage_IceCandidate)(nil),            // 50: PeerExchangeMessage.IceCandidate
-	(*PeerExchangeMessage_CallbackRequest)(nil),         // 51: PeerExchangeMessage.CallbackRequest
-	(*Certificate)(nil),                                 // 52: Certificate
-	(*Network)(nil),                                     // 53: Network
+	(*BrokerProxyRequest)(nil),                          // 8: BrokerProxyRequest
+	(*BrokerProxyEvent)(nil),                            // 9: BrokerProxyEvent
+	(*BrokerProxySendKeysRequest)(nil),                  // 10: BrokerProxySendKeysRequest
+	(*BrokerProxySendKeysResponse)(nil),                 // 11: BrokerProxySendKeysResponse
+	(*BrokerProxyReceiveKeysRequest)(nil),               // 12: BrokerProxyReceiveKeysRequest
+	(*BrokerProxyReceiveKeysResponse)(nil),              // 13: BrokerProxyReceiveKeysResponse
+	(*BrokerProxyDataRequest)(nil),                      // 14: BrokerProxyDataRequest
+	(*BrokerProxyDataResponse)(nil),                     // 15: BrokerProxyDataResponse
+	(*BootstrapClient)(nil),                             // 16: BootstrapClient
+	(*BootstrapClientWebSocketOptions)(nil),             // 17: BootstrapClientWebSocketOptions
+	(*CreateBootstrapClientRequest)(nil),                // 18: CreateBootstrapClientRequest
+	(*CreateBootstrapClientResponse)(nil),               // 19: CreateBootstrapClientResponse
+	(*UpdateBootstrapClientRequest)(nil),                // 20: UpdateBootstrapClientRequest
+	(*UpdateBootstrapClientResponse)(nil),               // 21: UpdateBootstrapClientResponse
+	(*DeleteBootstrapClientRequest)(nil),                // 22: DeleteBootstrapClientRequest
+	(*DeleteBootstrapClientResponse)(nil),               // 23: DeleteBootstrapClientResponse
+	(*GetBootstrapClientRequest)(nil),                   // 24: GetBootstrapClientRequest
+	(*GetBootstrapClientResponse)(nil),                  // 25: GetBootstrapClientResponse
+	(*ListBootstrapClientsRequest)(nil),                 // 26: ListBootstrapClientsRequest
+	(*ListBootstrapClientsResponse)(nil),                // 27: ListBootstrapClientsResponse
+	(*ListBootstrapPeersRequest)(nil),                   // 28: ListBootstrapPeersRequest
+	(*ListBootstrapPeersResponse)(nil),                  // 29: ListBootstrapPeersResponse
+	(*BootstrapPeer)(nil),                               // 30: BootstrapPeer
+	(*BootstrapServiceMessage)(nil),                     // 31: BootstrapServiceMessage
+	(*PublishNetworkToBootstrapPeerRequest)(nil),        // 32: PublishNetworkToBootstrapPeerRequest
+	(*PublishNetworkToBootstrapPeerResponse)(nil),       // 33: PublishNetworkToBootstrapPeerResponse
+	(*PeerExchangeMessage)(nil),                         // 34: PeerExchangeMessage
+	(*NetworkEvent_NetworkOpen)(nil),                    // 35: NetworkEvent.NetworkOpen
+	(*NetworkEvent_NetworkClose)(nil),                   // 36: NetworkEvent.NetworkClose
+	(*NetworkHandshake_Init)(nil),                       // 37: NetworkHandshake.Init
+	(*NetworkHandshake_NetworkBinding)(nil),             // 38: NetworkHandshake.NetworkBinding
+	(*NetworkHandshake_NetworkBindings)(nil),            // 39: NetworkHandshake.NetworkBindings
+	(*NetworkHandshake_CertificateUpgradeOffer)(nil),    // 40: NetworkHandshake.CertificateUpgradeOffer
+	(*NetworkHandshake_CertificateUpgradeRequest)(nil),  // 41: NetworkHandshake.CertificateUpgradeRequest
+	(*NetworkHandshake_CertificateUpgradeResponse)(nil), // 42: NetworkHandshake.CertificateUpgradeResponse
+	(*BrokerProxyEvent_Open)(nil),                       // 43: BrokerProxyEvent.Open
+	(*BrokerProxyEvent_Data)(nil),                       // 44: BrokerProxyEvent.Data
+	(*BootstrapServiceMessage_BrokerOffer)(nil),         // 45: BootstrapServiceMessage.BrokerOffer
+	(*BootstrapServiceMessage_PublishRequest)(nil),      // 46: BootstrapServiceMessage.PublishRequest
+	(*BootstrapServiceMessage_PublishResponse)(nil),     // 47: BootstrapServiceMessage.PublishResponse
+	(*PeerExchangeMessage_Request)(nil),                 // 48: PeerExchangeMessage.Request
+	(*PeerExchangeMessage_Response)(nil),                // 49: PeerExchangeMessage.Response
+	(*PeerExchangeMessage_Offer)(nil),                   // 50: PeerExchangeMessage.Offer
+	(*PeerExchangeMessage_Answer)(nil),                  // 51: PeerExchangeMessage.Answer
+	(*PeerExchangeMessage_IceCandidate)(nil),            // 52: PeerExchangeMessage.IceCandidate
+	(*PeerExchangeMessage_CallbackRequest)(nil),         // 53: PeerExchangeMessage.CallbackRequest
+	(*Certificate)(nil),                                 // 54: Certificate
+	(*Network)(nil),                                     // 55: Network
 }
 var file_vpn_proto_depIdxs = []int32{
-	31, // 0: NetworkEvent.network_open:type_name -> NetworkEvent.NetworkOpen
-	32, // 1: NetworkEvent.network_close:type_name -> NetworkEvent.NetworkClose
-	52, // 2: PeerInit.certificate:type_name -> Certificate
-	33, // 3: NetworkHandshake.init:type_name -> NetworkHandshake.Init
-	35, // 4: NetworkHandshake.network_bindings:type_name -> NetworkHandshake.NetworkBindings
-	36, // 5: NetworkHandshake.certificate_upgrade_offer:type_name -> NetworkHandshake.CertificateUpgradeOffer
-	37, // 6: NetworkHandshake.certificate_upgrade_request:type_name -> NetworkHandshake.CertificateUpgradeRequest
-	38, // 7: NetworkHandshake.certificate_upgrade_response:type_name -> NetworkHandshake.CertificateUpgradeResponse
-	39, // 8: BrokerPeerEvent.open:type_name -> BrokerPeerEvent.Open
-	40, // 9: BrokerPeerEvent.data:type_name -> BrokerPeerEvent.Data
-	41, // 10: BrokerPeerEvent.init_required:type_name -> BrokerPeerEvent.InitRequired
-	42, // 11: BrokerPeerEvent.keys:type_name -> BrokerPeerEvent.Keys
-	13, // 12: BootstrapClient.websocket_options:type_name -> BootstrapClientWebSocketOptions
-	13, // 13: CreateBootstrapClientRequest.websocket_options:type_name -> BootstrapClientWebSocketOptions
-	12, // 14: CreateBootstrapClientResponse.bootstrap_client:type_name -> BootstrapClient
-	13, // 15: UpdateBootstrapClientRequest.websocket_options:type_name -> BootstrapClientWebSocketOptions
-	12, // 16: UpdateBootstrapClientResponse.bootstrap_client:type_name -> BootstrapClient
-	12, // 17: GetBootstrapClientResponse.bootstrap_client:type_name -> BootstrapClient
-	12, // 18: ListBootstrapClientsResponse.bootstrap_clients:type_name -> BootstrapClient
-	26, // 19: ListBootstrapPeersResponse.peers:type_name -> BootstrapPeer
-	43, // 20: BootstrapServiceMessage.broker_offer:type_name -> BootstrapServiceMessage.BrokerOffer
-	44, // 21: BootstrapServiceMessage.publish_request:type_name -> BootstrapServiceMessage.PublishRequest
-	45, // 22: BootstrapServiceMessage.publish_response:type_name -> BootstrapServiceMessage.PublishResponse
-	53, // 23: PublishNetworkToBootstrapPeerRequest.network:type_name -> Network
-	46, // 24: PeerExchangeMessage.request:type_name -> PeerExchangeMessage.Request
-	47, // 25: PeerExchangeMessage.response:type_name -> PeerExchangeMessage.Response
-	48, // 26: PeerExchangeMessage.offer:type_name -> PeerExchangeMessage.Offer
-	49, // 27: PeerExchangeMessage.answer:type_name -> PeerExchangeMessage.Answer
-	50, // 28: PeerExchangeMessage.ice_candidate:type_name -> PeerExchangeMessage.IceCandidate
-	51, // 29: PeerExchangeMessage.callback_request:type_name -> PeerExchangeMessage.CallbackRequest
-	52, // 30: NetworkHandshake.NetworkBinding.certificate:type_name -> Certificate
-	34, // 31: NetworkHandshake.NetworkBindings.network_bindings:type_name -> NetworkHandshake.NetworkBinding
-	52, // 32: NetworkHandshake.CertificateUpgradeResponse.certificates:type_name -> Certificate
-	52, // 33: BootstrapServiceMessage.PublishRequest.certificate:type_name -> Certificate
-	34, // [34:34] is the sub-list for method output_type
-	34, // [34:34] is the sub-list for method input_type
-	34, // [34:34] is the sub-list for extension type_name
-	34, // [34:34] is the sub-list for extension extendee
-	0,  // [0:34] is the sub-list for field type_name
+	35, // 0: NetworkEvent.network_open:type_name -> NetworkEvent.NetworkOpen
+	36, // 1: NetworkEvent.network_close:type_name -> NetworkEvent.NetworkClose
+	54, // 2: PeerInit.certificate:type_name -> Certificate
+	37, // 3: NetworkHandshake.init:type_name -> NetworkHandshake.Init
+	39, // 4: NetworkHandshake.network_bindings:type_name -> NetworkHandshake.NetworkBindings
+	40, // 5: NetworkHandshake.certificate_upgrade_offer:type_name -> NetworkHandshake.CertificateUpgradeOffer
+	41, // 6: NetworkHandshake.certificate_upgrade_request:type_name -> NetworkHandshake.CertificateUpgradeRequest
+	42, // 7: NetworkHandshake.certificate_upgrade_response:type_name -> NetworkHandshake.CertificateUpgradeResponse
+	43, // 8: BrokerProxyEvent.open:type_name -> BrokerProxyEvent.Open
+	44, // 9: BrokerProxyEvent.data:type_name -> BrokerProxyEvent.Data
+	17, // 10: BootstrapClient.websocket_options:type_name -> BootstrapClientWebSocketOptions
+	17, // 11: CreateBootstrapClientRequest.websocket_options:type_name -> BootstrapClientWebSocketOptions
+	16, // 12: CreateBootstrapClientResponse.bootstrap_client:type_name -> BootstrapClient
+	17, // 13: UpdateBootstrapClientRequest.websocket_options:type_name -> BootstrapClientWebSocketOptions
+	16, // 14: UpdateBootstrapClientResponse.bootstrap_client:type_name -> BootstrapClient
+	16, // 15: GetBootstrapClientResponse.bootstrap_client:type_name -> BootstrapClient
+	16, // 16: ListBootstrapClientsResponse.bootstrap_clients:type_name -> BootstrapClient
+	30, // 17: ListBootstrapPeersResponse.peers:type_name -> BootstrapPeer
+	45, // 18: BootstrapServiceMessage.broker_offer:type_name -> BootstrapServiceMessage.BrokerOffer
+	46, // 19: BootstrapServiceMessage.publish_request:type_name -> BootstrapServiceMessage.PublishRequest
+	47, // 20: BootstrapServiceMessage.publish_response:type_name -> BootstrapServiceMessage.PublishResponse
+	55, // 21: PublishNetworkToBootstrapPeerRequest.network:type_name -> Network
+	48, // 22: PeerExchangeMessage.request:type_name -> PeerExchangeMessage.Request
+	49, // 23: PeerExchangeMessage.response:type_name -> PeerExchangeMessage.Response
+	50, // 24: PeerExchangeMessage.offer:type_name -> PeerExchangeMessage.Offer
+	51, // 25: PeerExchangeMessage.answer:type_name -> PeerExchangeMessage.Answer
+	52, // 26: PeerExchangeMessage.ice_candidate:type_name -> PeerExchangeMessage.IceCandidate
+	53, // 27: PeerExchangeMessage.callback_request:type_name -> PeerExchangeMessage.CallbackRequest
+	54, // 28: NetworkHandshake.NetworkBinding.certificate:type_name -> Certificate
+	38, // 29: NetworkHandshake.NetworkBindings.network_bindings:type_name -> NetworkHandshake.NetworkBinding
+	54, // 30: NetworkHandshake.CertificateUpgradeResponse.certificates:type_name -> Certificate
+	54, // 31: BootstrapServiceMessage.PublishRequest.certificate:type_name -> Certificate
+	32, // [32:32] is the sub-list for method output_type
+	32, // [32:32] is the sub-list for method input_type
+	32, // [32:32] is the sub-list for extension type_name
+	32, // [32:32] is the sub-list for extension extendee
+	0,  // [0:32] is the sub-list for field type_name
 }
 
 func init() { file_vpn_proto_init() }
@@ -3443,7 +3490,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BrokerPeerRequest); i {
+			switch v := v.(*BrokerProxyRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3455,7 +3502,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BrokerPeerEvent); i {
+			switch v := v.(*BrokerProxyEvent); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3467,7 +3514,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BrokerPeerInitRequest); i {
+			switch v := v.(*BrokerProxySendKeysRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3479,7 +3526,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BrokerPeerDataRequest); i {
+			switch v := v.(*BrokerProxySendKeysResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3491,7 +3538,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapClient); i {
+			switch v := v.(*BrokerProxyReceiveKeysRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3503,7 +3550,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapClientWebSocketOptions); i {
+			switch v := v.(*BrokerProxyReceiveKeysResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3515,7 +3562,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CreateBootstrapClientRequest); i {
+			switch v := v.(*BrokerProxyDataRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3527,7 +3574,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CreateBootstrapClientResponse); i {
+			switch v := v.(*BrokerProxyDataResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3539,7 +3586,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateBootstrapClientRequest); i {
+			switch v := v.(*BootstrapClient); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3551,7 +3598,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*UpdateBootstrapClientResponse); i {
+			switch v := v.(*BootstrapClientWebSocketOptions); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3563,7 +3610,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteBootstrapClientRequest); i {
+			switch v := v.(*CreateBootstrapClientRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3575,7 +3622,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DeleteBootstrapClientResponse); i {
+			switch v := v.(*CreateBootstrapClientResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3587,7 +3634,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetBootstrapClientRequest); i {
+			switch v := v.(*UpdateBootstrapClientRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3599,7 +3646,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*GetBootstrapClientResponse); i {
+			switch v := v.(*UpdateBootstrapClientResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3611,7 +3658,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListBootstrapClientsRequest); i {
+			switch v := v.(*DeleteBootstrapClientRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3623,7 +3670,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListBootstrapClientsResponse); i {
+			switch v := v.(*DeleteBootstrapClientResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3635,7 +3682,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListBootstrapPeersRequest); i {
+			switch v := v.(*GetBootstrapClientRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3647,7 +3694,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ListBootstrapPeersResponse); i {
+			switch v := v.(*GetBootstrapClientResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3659,7 +3706,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapPeer); i {
+			switch v := v.(*ListBootstrapClientsRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3671,7 +3718,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapServiceMessage); i {
+			switch v := v.(*ListBootstrapClientsResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3683,7 +3730,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PublishNetworkToBootstrapPeerRequest); i {
+			switch v := v.(*ListBootstrapPeersRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3695,7 +3742,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PublishNetworkToBootstrapPeerResponse); i {
+			switch v := v.(*ListBootstrapPeersResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3707,7 +3754,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[30].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerExchangeMessage); i {
+			switch v := v.(*BootstrapPeer); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3719,7 +3766,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[31].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkEvent_NetworkOpen); i {
+			switch v := v.(*BootstrapServiceMessage); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3731,7 +3778,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[32].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkEvent_NetworkClose); i {
+			switch v := v.(*PublishNetworkToBootstrapPeerRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3743,7 +3790,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[33].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_Init); i {
+			switch v := v.(*PublishNetworkToBootstrapPeerResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3755,7 +3802,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[34].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_NetworkBinding); i {
+			switch v := v.(*PeerExchangeMessage); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3767,7 +3814,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[35].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_NetworkBindings); i {
+			switch v := v.(*NetworkEvent_NetworkOpen); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3779,7 +3826,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[36].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_CertificateUpgradeOffer); i {
+			switch v := v.(*NetworkEvent_NetworkClose); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3791,7 +3838,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[37].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_CertificateUpgradeRequest); i {
+			switch v := v.(*NetworkHandshake_Init); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3803,7 +3850,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[38].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_CertificateUpgradeResponse); i {
+			switch v := v.(*NetworkHandshake_NetworkBinding); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3815,7 +3862,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[39].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BrokerPeerEvent_Open); i {
+			switch v := v.(*NetworkHandshake_NetworkBindings); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3827,7 +3874,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[40].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BrokerPeerEvent_Data); i {
+			switch v := v.(*NetworkHandshake_CertificateUpgradeOffer); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3839,7 +3886,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[41].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BrokerPeerEvent_InitRequired); i {
+			switch v := v.(*NetworkHandshake_CertificateUpgradeRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3851,7 +3898,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[42].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BrokerPeerEvent_Keys); i {
+			switch v := v.(*NetworkHandshake_CertificateUpgradeResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3863,7 +3910,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[43].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapServiceMessage_BrokerOffer); i {
+			switch v := v.(*BrokerProxyEvent_Open); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3875,7 +3922,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[44].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapServiceMessage_PublishRequest); i {
+			switch v := v.(*BrokerProxyEvent_Data); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3887,7 +3934,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[45].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapServiceMessage_PublishResponse); i {
+			switch v := v.(*BootstrapServiceMessage_BrokerOffer); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3899,7 +3946,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[46].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerExchangeMessage_Request); i {
+			switch v := v.(*BootstrapServiceMessage_PublishRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3911,7 +3958,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[47].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerExchangeMessage_Response); i {
+			switch v := v.(*BootstrapServiceMessage_PublishResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3923,7 +3970,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[48].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerExchangeMessage_Offer); i {
+			switch v := v.(*PeerExchangeMessage_Request); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3935,7 +3982,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[49].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerExchangeMessage_Answer); i {
+			switch v := v.(*PeerExchangeMessage_Response); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3947,7 +3994,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[50].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerExchangeMessage_IceCandidate); i {
+			switch v := v.(*PeerExchangeMessage_Offer); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -3959,6 +4006,30 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[51].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*PeerExchangeMessage_Answer); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_vpn_proto_msgTypes[52].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*PeerExchangeMessage_IceCandidate); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_vpn_proto_msgTypes[53].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*PeerExchangeMessage_CallbackRequest); i {
 			case 0:
 				return &v.state
@@ -3983,26 +4054,24 @@ func file_vpn_proto_init() {
 		(*NetworkHandshake_CertificateUpgradeResponse_)(nil),
 	}
 	file_vpn_proto_msgTypes[9].OneofWrappers = []interface{}{
-		(*BrokerPeerEvent_Open_)(nil),
-		(*BrokerPeerEvent_Data_)(nil),
-		(*BrokerPeerEvent_InitRequired_)(nil),
-		(*BrokerPeerEvent_Keys_)(nil),
-	}
-	file_vpn_proto_msgTypes[12].OneofWrappers = []interface{}{
-		(*BootstrapClient_WebsocketOptions)(nil),
-	}
-	file_vpn_proto_msgTypes[14].OneofWrappers = []interface{}{
-		(*CreateBootstrapClientRequest_WebsocketOptions)(nil),
+		(*BrokerProxyEvent_Open_)(nil),
+		(*BrokerProxyEvent_Data_)(nil),
 	}
 	file_vpn_proto_msgTypes[16].OneofWrappers = []interface{}{
+		(*BootstrapClient_WebsocketOptions)(nil),
+	}
+	file_vpn_proto_msgTypes[18].OneofWrappers = []interface{}{
+		(*CreateBootstrapClientRequest_WebsocketOptions)(nil),
+	}
+	file_vpn_proto_msgTypes[20].OneofWrappers = []interface{}{
 		(*UpdateBootstrapClientRequest_WebsocketOptions)(nil),
 	}
-	file_vpn_proto_msgTypes[27].OneofWrappers = []interface{}{
+	file_vpn_proto_msgTypes[31].OneofWrappers = []interface{}{
 		(*BootstrapServiceMessage_BrokerOffer_)(nil),
 		(*BootstrapServiceMessage_PublishRequest_)(nil),
 		(*BootstrapServiceMessage_PublishResponse_)(nil),
 	}
-	file_vpn_proto_msgTypes[30].OneofWrappers = []interface{}{
+	file_vpn_proto_msgTypes[34].OneofWrappers = []interface{}{
 		(*PeerExchangeMessage_Request_)(nil),
 		(*PeerExchangeMessage_Response_)(nil),
 		(*PeerExchangeMessage_Offer_)(nil),
@@ -4010,7 +4079,7 @@ func file_vpn_proto_init() {
 		(*PeerExchangeMessage_IceCandidate_)(nil),
 		(*PeerExchangeMessage_CallbackRequest_)(nil),
 	}
-	file_vpn_proto_msgTypes[45].OneofWrappers = []interface{}{
+	file_vpn_proto_msgTypes[47].OneofWrappers = []interface{}{
 		(*BootstrapServiceMessage_PublishResponse_Error)(nil),
 	}
 	type x struct{}
@@ -4019,7 +4088,7 @@ func file_vpn_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_vpn_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   52,
+			NumMessages:   54,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

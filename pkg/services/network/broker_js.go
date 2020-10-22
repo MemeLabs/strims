@@ -10,6 +10,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/wasmio"
@@ -18,89 +19,54 @@ import (
 
 var errPeeerIDNotFound = errors.New("peer id not found")
 
-// NewBrokerFactoryService constructs a new BrokerFactoryService
-func NewBrokerFactoryService(logger *zap.Logger) *BrokerFactoryService {
-	return &BrokerFactoryService{
+// NewBrokerProxyService constructs a new BrokerFactoryService
+func NewBrokerProxyService(logger *zap.Logger) *BrokerProxyService {
+	return &BrokerProxyService{
 		logger: logger,
-		brokerFactory: &brokerFactory{
-			logger: logger,
-		},
+		broker: NewBroker(logger),
 	}
 }
 
-// BrokerFactoryService provides an RPC service interface for the broker
+// BrokerProxyService provides an RPC service interface for the broker
 // factory. The cryptographic operations required for private set intersection
 // are expensive. To keep from blocking time sensitive network transfers we
 // offload them to a separate web worker.
-type BrokerFactoryService struct {
-	logger        *zap.Logger
-	peers         sync.Map
-	nextPeerID    uint64
-	brokerFactory *brokerFactory
+type BrokerProxyService struct {
+	logger     *zap.Logger
+	peers      sync.Map
+	nextPeerID uint64
+	broker     Broker
 }
 
-// BrokerPeer ...
-func (s *BrokerFactoryService) BrokerPeer(ctx context.Context, r *pb.BrokerPeerRequest) (<-chan *pb.BrokerPeerEvent, error) {
-	ch := make(chan *pb.BrokerPeerEvent, 1)
+// Open ...
+func (s *BrokerProxyService) Open(ctx context.Context, r *pb.BrokerProxyRequest) (<-chan *pb.BrokerProxyEvent, error) {
+	ch := make(chan *pb.BrokerProxyEvent, 1)
 
 	r0, w0 := io.Pipe()
 	r1, w1 := io.Pipe()
-	c := bufio.NewReadWriter(bufio.NewReader(r0), bufio.NewWriterSize(w1, int(r.ConnMtu)))
 
-	broker, err := s.brokerFactory.Broker(c)
-	if err != nil {
-		return nil, err
-	}
-
-	p := &brokerServicePeer{
-		p: broker,
-		w: w0,
+	p := &brokerProxyServiceHelper{
+		broker: s.broker,
+		conn:   bufio.NewReadWriter(bufio.NewReader(r0), bufio.NewWriterSize(w1, int(r.ConnMtu))),
+		w:      w0,
 	}
 
 	pid := atomic.AddUint64(&s.nextPeerID, 1)
 	s.peers.Store(pid, p)
 
-	ch <- &pb.BrokerPeerEvent{
-		Body: &pb.BrokerPeerEvent_Open_{
-			Open: &pb.BrokerPeerEvent_Open{
+	ch <- &pb.BrokerProxyEvent{
+		Body: &pb.BrokerProxyEvent_Open_{
+			Open: &pb.BrokerProxyEvent_Open{
 				PeerId: pid,
 			},
 		},
 	}
 
-	cancel := onceFunc(func() {
-		p.p.Close()
-		s.peers.Delete(pid)
-		close(ch)
-	})
-
 	go func() {
-		defer cancel()
-
-		for {
-			select {
-			case keys := <-broker.Keys():
-				ch <- &pb.BrokerPeerEvent{
-					Body: &pb.BrokerPeerEvent_Keys_{
-						Keys: &pb.BrokerPeerEvent_Keys{
-							Keys: keys,
-						},
-					},
-				}
-			case <-broker.InitRequired():
-				ch <- &pb.BrokerPeerEvent{
-					Body: &pb.BrokerPeerEvent_InitRequired_{
-						InitRequired: &pb.BrokerPeerEvent_InitRequired{},
-					},
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	go func() {
-		defer cancel()
+		defer func() {
+			s.peers.Delete(pid)
+			close(ch)
+		}()
 
 		b := make([]byte, r.ConnMtu)
 		for {
@@ -109,9 +75,9 @@ func (s *BrokerFactoryService) BrokerPeer(ctx context.Context, r *pb.BrokerPeerR
 				return
 			}
 
-			ch <- &pb.BrokerPeerEvent{
-				Body: &pb.BrokerPeerEvent_Data_{
-					Data: &pb.BrokerPeerEvent_Data{
+			ch <- &pb.BrokerProxyEvent{
+				Body: &pb.BrokerProxyEvent_Data_{
+					Data: &pb.BrokerProxyEvent_Data{
 						Data: b[:n],
 					},
 				},
@@ -122,55 +88,98 @@ func (s *BrokerFactoryService) BrokerPeer(ctx context.Context, r *pb.BrokerPeerR
 	return ch, nil
 }
 
-// Init ...
-func (s *BrokerFactoryService) Init(ctx context.Context, r *pb.BrokerPeerInitRequest) error {
-	pi, ok := s.peers.Load(r.PeerId)
+// SendKeys ...
+func (s *BrokerProxyService) SendKeys(ctx context.Context, req *pb.BrokerProxySendKeysRequest) (*pb.BrokerProxySendKeysResponse, error) {
+	pi, ok := s.peers.Load(req.PeerId)
 	if !ok {
-		return errPeeerIDNotFound
+		return nil, errPeeerIDNotFound
 	}
 
-	return pi.(*brokerServicePeer).p.Init(r.PreferSender, r.Keys)
+	err := pi.(*brokerProxyServiceHelper).SendKeys(req.Keys)
+	return &pb.BrokerProxySendKeysResponse{}, err
+}
+
+// ReceiveKeys ...
+func (s *BrokerProxyService) ReceiveKeys(ctx context.Context, req *pb.BrokerProxyReceiveKeysRequest) (*pb.BrokerProxyReceiveKeysResponse, error) {
+	pi, ok := s.peers.Load(req.PeerId)
+	if !ok {
+		return nil, errPeeerIDNotFound
+	}
+
+	keys, err := pi.(*brokerProxyServiceHelper).ReceiveKeys(req.Keys)
+	return &pb.BrokerProxyReceiveKeysResponse{Keys: keys}, err
 }
 
 // Data ...
-func (s *BrokerFactoryService) Data(ctx context.Context, r *pb.BrokerPeerDataRequest) error {
+func (s *BrokerProxyService) Data(ctx context.Context, r *pb.BrokerProxyDataRequest) (*pb.BrokerProxyDataResponse, error) {
 	pi, ok := s.peers.Load(r.PeerId)
 	if !ok {
-		return errPeeerIDNotFound
+		return nil, errPeeerIDNotFound
 	}
 
-	_, err := pi.(*brokerServicePeer).w.Write(r.Data)
-	return err
+	if _, err := pi.(*brokerProxyServiceHelper).w.Write(r.Data); err != nil {
+		return nil, err
+	}
+
+	return &pb.BrokerProxyDataResponse{}, nil
 }
 
-type brokerServicePeer struct {
-	p Broker
-	w io.WriteCloser
+type brokerProxyServiceHelper struct {
+	broker Broker
+	conn   *bufio.ReadWriter
+	w      io.Writer
 }
 
-// NewBrokerFactoryClient ....
-func NewBrokerFactoryClient(logger *zap.Logger, bus *wasmio.Bus) BrokerFactory {
-	client := rpc.NewClient(logger, bus)
+// SendKeys ...
+func (h *brokerProxyServiceHelper) SendKeys(keys [][]byte) error {
+	return h.broker.SendKeys(h.conn, keys)
+}
 
-	return &brokerFactoryClient{
+// ReceiveKeys ...
+func (h *brokerProxyServiceHelper) ReceiveKeys(keys [][]byte) ([][]byte, error) {
+	return h.broker.ReceiveKeys(h.conn, keys)
+}
+
+// NewBrokerProxyClient ....
+func NewBrokerProxyClient(logger *zap.Logger, bus *wasmio.Bus) *BrokerProxyClient {
+	return &BrokerProxyClient{
 		logger: logger,
-		client: client,
+		client: api.NewBrokerProxyClient(rpc.NewClient(logger, bus)),
 	}
 }
 
-// brokerFactoryClient ...
-type brokerFactoryClient struct {
+// BrokerProxyClient ...
+type BrokerProxyClient struct {
 	logger *zap.Logger
-	client *rpc.Client
+	client *api.BrokerProxyClient
 }
 
-// Broker ...
-func (h *brokerFactoryClient) Broker(conn ReadWriteFlusher) (Broker, error) {
+// SendKeys ...
+func (h *BrokerProxyClient) SendKeys(c ReadWriteFlusher, keys [][]byte) error {
+	proxy, err := h.proxy(c)
+	if err != nil {
+		return err
+	}
+	defer proxy.Close()
+	return proxy.SendKeys(keys)
+}
+
+// ReceiveKeys ...
+func (h *BrokerProxyClient) ReceiveKeys(c ReadWriteFlusher, keys [][]byte) ([][]byte, error) {
+	proxy, err := h.proxy(c)
+	if err != nil {
+		return nil, err
+	}
+	defer proxy.Close()
+	return proxy.ReceiveKeys(keys)
+}
+
+func (h *BrokerProxyClient) proxy(conn ReadWriteFlusher) (*brokerProxyClientHelper, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	req := &pb.BrokerPeerRequest{ConnMtu: int32(connMTU(conn))}
-	events := make(chan *pb.BrokerPeerEvent, 1)
-	if err := h.client.CallStreaming(ctx, "NetworkBroker/BrokerPeer", req, events); err != nil {
+	req := &pb.BrokerProxyRequest{ConnMtu: int32(connMTU(conn))}
+	events := make(chan *pb.BrokerProxyEvent, 1)
+	if err := h.client.Open(ctx, req, events); err != nil {
 		cancel()
 		return nil, err
 	}
@@ -180,70 +189,58 @@ func (h *brokerFactoryClient) Broker(conn ReadWriteFlusher) (Broker, error) {
 		cancel()
 		return nil, errors.New("response closed unexpectedly")
 	}
-	o, ok := e.Body.(*pb.BrokerPeerEvent_Open_)
+	o, ok := e.Body.(*pb.BrokerProxyEvent_Open_)
 	if !ok {
 		cancel()
 		return nil, errors.New("unexpected event type")
 	}
-	return newBrokerProxy(o.Open.PeerId, h.client, conn, events, cancel), nil
-}
 
-func newBrokerProxy(
-	id uint64,
-	client *rpc.Client,
-	conn ReadWriteFlusher,
-	events chan *pb.BrokerPeerEvent,
-	cancel func(),
-) *brokerProxy {
-	p := &brokerProxy{
-		id:           id,
-		client:       client,
-		conn:         conn,
-		cancel:       cancel,
-		initRequired: make(chan struct{}),
-		keys:         make(chan [][]byte),
+	p := &brokerProxyClientHelper{
+		ctx:    ctx,
+		cancel: cancel,
+		id:     o.Open.PeerId,
+		client: h.client,
+		conn:   conn,
 	}
 
 	go p.doEventPump(events)
 	go p.doReadPump()
 
-	return p
+	return p, nil
 }
 
-type brokerProxy struct {
-	id           uint64
-	client       *rpc.Client
-	conn         ReadWriteFlusher
-	cancel       func()
-	initRequired chan struct{}
-	keys         chan [][]byte
+type brokerProxyClientHelper struct {
+	ctx    context.Context
+	cancel context.CancelFunc
+	id     uint64
+	client *api.BrokerProxyClient
+	conn   ReadWriteFlusher
 }
 
-func (p *brokerProxy) doEventPump(events chan *pb.BrokerPeerEvent) {
-	defer p.cancel()
-
-	for e := range events {
-		switch b := e.Body.(type) {
-		case *pb.BrokerPeerEvent_InitRequired_:
-			p.initRequired <- struct{}{}
-		case *pb.BrokerPeerEvent_Data_:
+func (p *brokerProxyClientHelper) doEventPump(events chan *pb.BrokerProxyEvent) {
+	for {
+		select {
+		case <-p.ctx.Done():
+			return
+		case e, ok := <-events:
+			if !ok {
+				return
+			}
+			b, ok := e.Body.(*pb.BrokerProxyEvent_Data_)
+			if !ok {
+				return
+			}
 			if _, err := p.conn.Write(b.Data.Data); err != nil {
 				return
 			}
 			if err := p.conn.Flush(); err != nil {
 				return
 			}
-		case *pb.BrokerPeerEvent_Keys_:
-			p.keys <- b.Keys.Keys
-		default:
-			return
 		}
 	}
 }
 
-func (p *brokerProxy) doReadPump() {
-	defer p.cancel()
-
+func (p *brokerProxyClientHelper) doReadPump() {
 	b := make([]byte, connMTU(p.conn))
 	for {
 		n, err := p.conn.Read(b)
@@ -251,35 +248,39 @@ func (p *brokerProxy) doReadPump() {
 			return
 		}
 
-		req := &pb.BrokerPeerDataRequest{
+		req := &pb.BrokerProxyDataRequest{
 			PeerId: p.id,
 			Data:   b[:n],
 		}
-		if err := p.client.Call(context.Background(), "NetworkBroker/Data", req); err != nil {
+		if err := p.client.Data(p.ctx, req, &pb.BrokerProxyDataResponse{}); err != nil {
 			return
 		}
 	}
 }
 
-// Init ...
-func (p *brokerProxy) Init(preferSender bool, keys [][]byte) error {
-	req := &pb.BrokerPeerInitRequest{
-		PeerId:       p.id,
-		PreferSender: preferSender,
-		Keys:         keys,
+// SendKeys ...
+func (p *brokerProxyClientHelper) SendKeys(keys [][]byte) error {
+	req := &pb.BrokerProxySendKeysRequest{
+		PeerId: p.id,
+		Keys:   keys,
 	}
-	return p.client.Call(context.Background(), "NetworkBroker/Init", req)
+	return p.client.SendKeys(p.ctx, req, &pb.BrokerProxySendKeysResponse{})
 }
 
-func (p *brokerProxy) InitRequired() <-chan struct{} {
-	return p.initRequired
+// ReceiveKeys ...
+func (p *brokerProxyClientHelper) ReceiveKeys(keys [][]byte) ([][]byte, error) {
+	req := &pb.BrokerProxyReceiveKeysRequest{
+		PeerId: p.id,
+		Keys:   keys,
+	}
+	res := &pb.BrokerProxyReceiveKeysResponse{}
+	if err := p.client.ReceiveKeys(p.ctx, req, res); err != nil {
+		return nil, err
+	}
+	return res.Keys, nil
 }
 
-func (p *brokerProxy) Keys() <-chan [][]byte {
-	return p.keys
-}
-
-func (p *brokerProxy) Close() {
+func (p *brokerProxyClientHelper) Close() {
 	p.cancel()
 }
 
@@ -294,9 +295,4 @@ func connMTU(ci interface{}) int {
 		return c.MTU()
 	}
 	return defaultMTU
-}
-
-func onceFunc(f func()) func() {
-	var once sync.Once
-	return func() { once.Do(f) }
 }

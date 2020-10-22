@@ -41820,24 +41820,24 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
     return NetworkHandshake;
 })();
 
-export const BrokerPeerRequest = $root.BrokerPeerRequest = (() => {
+export const BrokerProxyRequest = $root.BrokerProxyRequest = (() => {
 
     /**
-     * Properties of a BrokerPeerRequest.
-     * @exports IBrokerPeerRequest
-     * @interface IBrokerPeerRequest
-     * @property {number|null} [connMtu] BrokerPeerRequest connMtu
+     * Properties of a BrokerProxyRequest.
+     * @exports IBrokerProxyRequest
+     * @interface IBrokerProxyRequest
+     * @property {number|null} [connMtu] BrokerProxyRequest connMtu
      */
 
     /**
-     * Constructs a new BrokerPeerRequest.
-     * @exports BrokerPeerRequest
-     * @classdesc Represents a BrokerPeerRequest.
-     * @implements IBrokerPeerRequest
+     * Constructs a new BrokerProxyRequest.
+     * @exports BrokerProxyRequest
+     * @classdesc Represents a BrokerProxyRequest.
+     * @implements IBrokerProxyRequest
      * @constructor
-     * @param {IBrokerPeerRequest=} [properties] Properties to set
+     * @param {IBrokerProxyRequest=} [properties] Properties to set
      */
-    function BrokerPeerRequest(properties) {
+    function BrokerProxyRequest(properties) {
         if (properties)
             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
@@ -41845,35 +41845,35 @@ export const BrokerPeerRequest = $root.BrokerPeerRequest = (() => {
     }
 
     /**
-     * BrokerPeerRequest connMtu.
+     * BrokerProxyRequest connMtu.
      * @member {number} connMtu
-     * @memberof BrokerPeerRequest
+     * @memberof BrokerProxyRequest
      * @instance
      */
-    BrokerPeerRequest.prototype.connMtu = 0;
+    BrokerProxyRequest.prototype.connMtu = 0;
 
     /**
-     * Creates a new BrokerPeerRequest instance using the specified properties.
+     * Creates a new BrokerProxyRequest instance using the specified properties.
      * @function create
-     * @memberof BrokerPeerRequest
+     * @memberof BrokerProxyRequest
      * @static
-     * @param {IBrokerPeerRequest=} [properties] Properties to set
-     * @returns {BrokerPeerRequest} BrokerPeerRequest instance
+     * @param {IBrokerProxyRequest=} [properties] Properties to set
+     * @returns {BrokerProxyRequest} BrokerProxyRequest instance
      */
-    BrokerPeerRequest.create = function create(properties) {
-        return new BrokerPeerRequest(properties);
+    BrokerProxyRequest.create = function create(properties) {
+        return new BrokerProxyRequest(properties);
     };
 
     /**
-     * Encodes the specified BrokerPeerRequest message. Does not implicitly {@link BrokerPeerRequest.verify|verify} messages.
+     * Encodes the specified BrokerProxyRequest message. Does not implicitly {@link BrokerProxyRequest.verify|verify} messages.
      * @function encode
-     * @memberof BrokerPeerRequest
+     * @memberof BrokerProxyRequest
      * @static
-     * @param {IBrokerPeerRequest} message BrokerPeerRequest message or plain object to encode
+     * @param {IBrokerProxyRequest} message BrokerProxyRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    BrokerPeerRequest.encode = function encode(message, writer) {
+    BrokerProxyRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
         if (message.connMtu != null && Object.hasOwnProperty.call(message, "connMtu"))
@@ -41882,33 +41882,33 @@ export const BrokerPeerRequest = $root.BrokerPeerRequest = (() => {
     };
 
     /**
-     * Encodes the specified BrokerPeerRequest message, length delimited. Does not implicitly {@link BrokerPeerRequest.verify|verify} messages.
+     * Encodes the specified BrokerProxyRequest message, length delimited. Does not implicitly {@link BrokerProxyRequest.verify|verify} messages.
      * @function encodeDelimited
-     * @memberof BrokerPeerRequest
+     * @memberof BrokerProxyRequest
      * @static
-     * @param {IBrokerPeerRequest} message BrokerPeerRequest message or plain object to encode
+     * @param {IBrokerProxyRequest} message BrokerProxyRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    BrokerPeerRequest.encodeDelimited = function encodeDelimited(message, writer) {
+    BrokerProxyRequest.encodeDelimited = function encodeDelimited(message, writer) {
         return this.encode(message, writer).ldelim();
     };
 
     /**
-     * Decodes a BrokerPeerRequest message from the specified reader or buffer.
+     * Decodes a BrokerProxyRequest message from the specified reader or buffer.
      * @function decode
-     * @memberof BrokerPeerRequest
+     * @memberof BrokerProxyRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @param {number} [length] Message length if known beforehand
-     * @returns {BrokerPeerRequest} BrokerPeerRequest
+     * @returns {BrokerProxyRequest} BrokerProxyRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    BrokerPeerRequest.decode = function decode(reader, length) {
+    BrokerProxyRequest.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerPeerRequest();
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyRequest();
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
@@ -41924,30 +41924,30 @@ export const BrokerPeerRequest = $root.BrokerPeerRequest = (() => {
     };
 
     /**
-     * Decodes a BrokerPeerRequest message from the specified reader or buffer, length delimited.
+     * Decodes a BrokerProxyRequest message from the specified reader or buffer, length delimited.
      * @function decodeDelimited
-     * @memberof BrokerPeerRequest
+     * @memberof BrokerProxyRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {BrokerPeerRequest} BrokerPeerRequest
+     * @returns {BrokerProxyRequest} BrokerProxyRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    BrokerPeerRequest.decodeDelimited = function decodeDelimited(reader) {
+    BrokerProxyRequest.decodeDelimited = function decodeDelimited(reader) {
         if (!(reader instanceof $Reader))
             reader = new $Reader(reader);
         return this.decode(reader, reader.uint32());
     };
 
     /**
-     * Verifies a BrokerPeerRequest message.
+     * Verifies a BrokerProxyRequest message.
      * @function verify
-     * @memberof BrokerPeerRequest
+     * @memberof BrokerProxyRequest
      * @static
      * @param {Object.<string,*>} message Plain object to verify
      * @returns {string|null} `null` if valid, otherwise the reason why it is not
      */
-    BrokerPeerRequest.verify = function verify(message) {
+    BrokerProxyRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
         if (message.connMtu != null && message.hasOwnProperty("connMtu"))
@@ -41957,32 +41957,32 @@ export const BrokerPeerRequest = $root.BrokerPeerRequest = (() => {
     };
 
     /**
-     * Creates a BrokerPeerRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a BrokerProxyRequest message from a plain object. Also converts values to their respective internal types.
      * @function fromObject
-     * @memberof BrokerPeerRequest
+     * @memberof BrokerProxyRequest
      * @static
      * @param {Object.<string,*>} object Plain object
-     * @returns {BrokerPeerRequest} BrokerPeerRequest
+     * @returns {BrokerProxyRequest} BrokerProxyRequest
      */
-    BrokerPeerRequest.fromObject = function fromObject(object) {
-        if (object instanceof $root.BrokerPeerRequest)
+    BrokerProxyRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.BrokerProxyRequest)
             return object;
-        let message = new $root.BrokerPeerRequest();
+        let message = new $root.BrokerProxyRequest();
         if (object.connMtu != null)
             message.connMtu = object.connMtu | 0;
         return message;
     };
 
     /**
-     * Creates a plain object from a BrokerPeerRequest message. Also converts values to other types if specified.
+     * Creates a plain object from a BrokerProxyRequest message. Also converts values to other types if specified.
      * @function toObject
-     * @memberof BrokerPeerRequest
+     * @memberof BrokerProxyRequest
      * @static
-     * @param {BrokerPeerRequest} message BrokerPeerRequest
+     * @param {BrokerProxyRequest} message BrokerProxyRequest
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    BrokerPeerRequest.toObject = function toObject(message, options) {
+    BrokerProxyRequest.toObject = function toObject(message, options) {
         if (!options)
             options = {};
         let object = {};
@@ -41994,40 +41994,38 @@ export const BrokerPeerRequest = $root.BrokerPeerRequest = (() => {
     };
 
     /**
-     * Converts this BrokerPeerRequest to JSON.
+     * Converts this BrokerProxyRequest to JSON.
      * @function toJSON
-     * @memberof BrokerPeerRequest
+     * @memberof BrokerProxyRequest
      * @instance
      * @returns {Object.<string,*>} JSON object
      */
-    BrokerPeerRequest.prototype.toJSON = function toJSON() {
+    BrokerProxyRequest.prototype.toJSON = function toJSON() {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
 
-    return BrokerPeerRequest;
+    return BrokerProxyRequest;
 })();
 
-export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
+export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
 
     /**
-     * Properties of a BrokerPeerEvent.
-     * @exports IBrokerPeerEvent
-     * @interface IBrokerPeerEvent
-     * @property {BrokerPeerEvent.IOpen|null} [open] BrokerPeerEvent open
-     * @property {BrokerPeerEvent.IData|null} [data] BrokerPeerEvent data
-     * @property {BrokerPeerEvent.IInitRequired|null} [initRequired] BrokerPeerEvent initRequired
-     * @property {BrokerPeerEvent.IKeys|null} [keys] BrokerPeerEvent keys
+     * Properties of a BrokerProxyEvent.
+     * @exports IBrokerProxyEvent
+     * @interface IBrokerProxyEvent
+     * @property {BrokerProxyEvent.IOpen|null} [open] BrokerProxyEvent open
+     * @property {BrokerProxyEvent.IData|null} [data] BrokerProxyEvent data
      */
 
     /**
-     * Constructs a new BrokerPeerEvent.
-     * @exports BrokerPeerEvent
-     * @classdesc Represents a BrokerPeerEvent.
-     * @implements IBrokerPeerEvent
+     * Constructs a new BrokerProxyEvent.
+     * @exports BrokerProxyEvent
+     * @classdesc Represents a BrokerProxyEvent.
+     * @implements IBrokerProxyEvent
      * @constructor
-     * @param {IBrokerPeerEvent=} [properties] Properties to set
+     * @param {IBrokerProxyEvent=} [properties] Properties to set
      */
-    function BrokerPeerEvent(properties) {
+    function BrokerProxyEvent(properties) {
         if (properties)
             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
@@ -42035,128 +42033,102 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
     }
 
     /**
-     * BrokerPeerEvent open.
-     * @member {BrokerPeerEvent.IOpen|null|undefined} open
-     * @memberof BrokerPeerEvent
+     * BrokerProxyEvent open.
+     * @member {BrokerProxyEvent.IOpen|null|undefined} open
+     * @memberof BrokerProxyEvent
      * @instance
      */
-    BrokerPeerEvent.prototype.open = null;
+    BrokerProxyEvent.prototype.open = null;
 
     /**
-     * BrokerPeerEvent data.
-     * @member {BrokerPeerEvent.IData|null|undefined} data
-     * @memberof BrokerPeerEvent
+     * BrokerProxyEvent data.
+     * @member {BrokerProxyEvent.IData|null|undefined} data
+     * @memberof BrokerProxyEvent
      * @instance
      */
-    BrokerPeerEvent.prototype.data = null;
-
-    /**
-     * BrokerPeerEvent initRequired.
-     * @member {BrokerPeerEvent.IInitRequired|null|undefined} initRequired
-     * @memberof BrokerPeerEvent
-     * @instance
-     */
-    BrokerPeerEvent.prototype.initRequired = null;
-
-    /**
-     * BrokerPeerEvent keys.
-     * @member {BrokerPeerEvent.IKeys|null|undefined} keys
-     * @memberof BrokerPeerEvent
-     * @instance
-     */
-    BrokerPeerEvent.prototype.keys = null;
+    BrokerProxyEvent.prototype.data = null;
 
     // OneOf field names bound to virtual getters and setters
     let $oneOfFields;
 
     /**
-     * BrokerPeerEvent body.
-     * @member {"open"|"data"|"initRequired"|"keys"|undefined} body
-     * @memberof BrokerPeerEvent
+     * BrokerProxyEvent body.
+     * @member {"open"|"data"|undefined} body
+     * @memberof BrokerProxyEvent
      * @instance
      */
-    Object.defineProperty(BrokerPeerEvent.prototype, "body", {
-        get: $util.oneOfGetter($oneOfFields = ["open", "data", "initRequired", "keys"]),
+    Object.defineProperty(BrokerProxyEvent.prototype, "body", {
+        get: $util.oneOfGetter($oneOfFields = ["open", "data"]),
         set: $util.oneOfSetter($oneOfFields)
     });
 
     /**
-     * Creates a new BrokerPeerEvent instance using the specified properties.
+     * Creates a new BrokerProxyEvent instance using the specified properties.
      * @function create
-     * @memberof BrokerPeerEvent
+     * @memberof BrokerProxyEvent
      * @static
-     * @param {IBrokerPeerEvent=} [properties] Properties to set
-     * @returns {BrokerPeerEvent} BrokerPeerEvent instance
+     * @param {IBrokerProxyEvent=} [properties] Properties to set
+     * @returns {BrokerProxyEvent} BrokerProxyEvent instance
      */
-    BrokerPeerEvent.create = function create(properties) {
-        return new BrokerPeerEvent(properties);
+    BrokerProxyEvent.create = function create(properties) {
+        return new BrokerProxyEvent(properties);
     };
 
     /**
-     * Encodes the specified BrokerPeerEvent message. Does not implicitly {@link BrokerPeerEvent.verify|verify} messages.
+     * Encodes the specified BrokerProxyEvent message. Does not implicitly {@link BrokerProxyEvent.verify|verify} messages.
      * @function encode
-     * @memberof BrokerPeerEvent
+     * @memberof BrokerProxyEvent
      * @static
-     * @param {IBrokerPeerEvent} message BrokerPeerEvent message or plain object to encode
+     * @param {IBrokerProxyEvent} message BrokerProxyEvent message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    BrokerPeerEvent.encode = function encode(message, writer) {
+    BrokerProxyEvent.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
         if (message.open != null && Object.hasOwnProperty.call(message, "open"))
-            $root.BrokerPeerEvent.Open.encode(message.open, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            $root.BrokerProxyEvent.Open.encode(message.open, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         if (message.data != null && Object.hasOwnProperty.call(message, "data"))
-            $root.BrokerPeerEvent.Data.encode(message.data, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-        if (message.initRequired != null && Object.hasOwnProperty.call(message, "initRequired"))
-            $root.BrokerPeerEvent.InitRequired.encode(message.initRequired, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-        if (message.keys != null && Object.hasOwnProperty.call(message, "keys"))
-            $root.BrokerPeerEvent.Keys.encode(message.keys, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+            $root.BrokerProxyEvent.Data.encode(message.data, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
         return writer;
     };
 
     /**
-     * Encodes the specified BrokerPeerEvent message, length delimited. Does not implicitly {@link BrokerPeerEvent.verify|verify} messages.
+     * Encodes the specified BrokerProxyEvent message, length delimited. Does not implicitly {@link BrokerProxyEvent.verify|verify} messages.
      * @function encodeDelimited
-     * @memberof BrokerPeerEvent
+     * @memberof BrokerProxyEvent
      * @static
-     * @param {IBrokerPeerEvent} message BrokerPeerEvent message or plain object to encode
+     * @param {IBrokerProxyEvent} message BrokerProxyEvent message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    BrokerPeerEvent.encodeDelimited = function encodeDelimited(message, writer) {
+    BrokerProxyEvent.encodeDelimited = function encodeDelimited(message, writer) {
         return this.encode(message, writer).ldelim();
     };
 
     /**
-     * Decodes a BrokerPeerEvent message from the specified reader or buffer.
+     * Decodes a BrokerProxyEvent message from the specified reader or buffer.
      * @function decode
-     * @memberof BrokerPeerEvent
+     * @memberof BrokerProxyEvent
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @param {number} [length] Message length if known beforehand
-     * @returns {BrokerPeerEvent} BrokerPeerEvent
+     * @returns {BrokerProxyEvent} BrokerProxyEvent
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    BrokerPeerEvent.decode = function decode(reader, length) {
+    BrokerProxyEvent.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerPeerEvent();
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyEvent();
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.open = $root.BrokerPeerEvent.Open.decode(reader, reader.uint32());
+                message.open = $root.BrokerProxyEvent.Open.decode(reader, reader.uint32());
                 break;
             case 2:
-                message.data = $root.BrokerPeerEvent.Data.decode(reader, reader.uint32());
-                break;
-            case 3:
-                message.initRequired = $root.BrokerPeerEvent.InitRequired.decode(reader, reader.uint32());
-                break;
-            case 4:
-                message.keys = $root.BrokerPeerEvent.Keys.decode(reader, reader.uint32());
+                message.data = $root.BrokerProxyEvent.Data.decode(reader, reader.uint32());
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -42167,37 +42139,37 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
     };
 
     /**
-     * Decodes a BrokerPeerEvent message from the specified reader or buffer, length delimited.
+     * Decodes a BrokerProxyEvent message from the specified reader or buffer, length delimited.
      * @function decodeDelimited
-     * @memberof BrokerPeerEvent
+     * @memberof BrokerProxyEvent
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {BrokerPeerEvent} BrokerPeerEvent
+     * @returns {BrokerProxyEvent} BrokerProxyEvent
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    BrokerPeerEvent.decodeDelimited = function decodeDelimited(reader) {
+    BrokerProxyEvent.decodeDelimited = function decodeDelimited(reader) {
         if (!(reader instanceof $Reader))
             reader = new $Reader(reader);
         return this.decode(reader, reader.uint32());
     };
 
     /**
-     * Verifies a BrokerPeerEvent message.
+     * Verifies a BrokerProxyEvent message.
      * @function verify
-     * @memberof BrokerPeerEvent
+     * @memberof BrokerProxyEvent
      * @static
      * @param {Object.<string,*>} message Plain object to verify
      * @returns {string|null} `null` if valid, otherwise the reason why it is not
      */
-    BrokerPeerEvent.verify = function verify(message) {
+    BrokerProxyEvent.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
         let properties = {};
         if (message.open != null && message.hasOwnProperty("open")) {
             properties.body = 1;
             {
-                let error = $root.BrokerPeerEvent.Open.verify(message.open);
+                let error = $root.BrokerProxyEvent.Open.verify(message.open);
                 if (error)
                     return "open." + error;
             }
@@ -42207,132 +42179,92 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
                 return "body: multiple values";
             properties.body = 1;
             {
-                let error = $root.BrokerPeerEvent.Data.verify(message.data);
+                let error = $root.BrokerProxyEvent.Data.verify(message.data);
                 if (error)
                     return "data." + error;
-            }
-        }
-        if (message.initRequired != null && message.hasOwnProperty("initRequired")) {
-            if (properties.body === 1)
-                return "body: multiple values";
-            properties.body = 1;
-            {
-                let error = $root.BrokerPeerEvent.InitRequired.verify(message.initRequired);
-                if (error)
-                    return "initRequired." + error;
-            }
-        }
-        if (message.keys != null && message.hasOwnProperty("keys")) {
-            if (properties.body === 1)
-                return "body: multiple values";
-            properties.body = 1;
-            {
-                let error = $root.BrokerPeerEvent.Keys.verify(message.keys);
-                if (error)
-                    return "keys." + error;
             }
         }
         return null;
     };
 
     /**
-     * Creates a BrokerPeerEvent message from a plain object. Also converts values to their respective internal types.
+     * Creates a BrokerProxyEvent message from a plain object. Also converts values to their respective internal types.
      * @function fromObject
-     * @memberof BrokerPeerEvent
+     * @memberof BrokerProxyEvent
      * @static
      * @param {Object.<string,*>} object Plain object
-     * @returns {BrokerPeerEvent} BrokerPeerEvent
+     * @returns {BrokerProxyEvent} BrokerProxyEvent
      */
-    BrokerPeerEvent.fromObject = function fromObject(object) {
-        if (object instanceof $root.BrokerPeerEvent)
+    BrokerProxyEvent.fromObject = function fromObject(object) {
+        if (object instanceof $root.BrokerProxyEvent)
             return object;
-        let message = new $root.BrokerPeerEvent();
+        let message = new $root.BrokerProxyEvent();
         if (object.open != null) {
             if (typeof object.open !== "object")
-                throw TypeError(".BrokerPeerEvent.open: object expected");
-            message.open = $root.BrokerPeerEvent.Open.fromObject(object.open);
+                throw TypeError(".BrokerProxyEvent.open: object expected");
+            message.open = $root.BrokerProxyEvent.Open.fromObject(object.open);
         }
         if (object.data != null) {
             if (typeof object.data !== "object")
-                throw TypeError(".BrokerPeerEvent.data: object expected");
-            message.data = $root.BrokerPeerEvent.Data.fromObject(object.data);
-        }
-        if (object.initRequired != null) {
-            if (typeof object.initRequired !== "object")
-                throw TypeError(".BrokerPeerEvent.initRequired: object expected");
-            message.initRequired = $root.BrokerPeerEvent.InitRequired.fromObject(object.initRequired);
-        }
-        if (object.keys != null) {
-            if (typeof object.keys !== "object")
-                throw TypeError(".BrokerPeerEvent.keys: object expected");
-            message.keys = $root.BrokerPeerEvent.Keys.fromObject(object.keys);
+                throw TypeError(".BrokerProxyEvent.data: object expected");
+            message.data = $root.BrokerProxyEvent.Data.fromObject(object.data);
         }
         return message;
     };
 
     /**
-     * Creates a plain object from a BrokerPeerEvent message. Also converts values to other types if specified.
+     * Creates a plain object from a BrokerProxyEvent message. Also converts values to other types if specified.
      * @function toObject
-     * @memberof BrokerPeerEvent
+     * @memberof BrokerProxyEvent
      * @static
-     * @param {BrokerPeerEvent} message BrokerPeerEvent
+     * @param {BrokerProxyEvent} message BrokerProxyEvent
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    BrokerPeerEvent.toObject = function toObject(message, options) {
+    BrokerProxyEvent.toObject = function toObject(message, options) {
         if (!options)
             options = {};
         let object = {};
         if (message.open != null && message.hasOwnProperty("open")) {
-            object.open = $root.BrokerPeerEvent.Open.toObject(message.open, options);
+            object.open = $root.BrokerProxyEvent.Open.toObject(message.open, options);
             if (options.oneofs)
                 object.body = "open";
         }
         if (message.data != null && message.hasOwnProperty("data")) {
-            object.data = $root.BrokerPeerEvent.Data.toObject(message.data, options);
+            object.data = $root.BrokerProxyEvent.Data.toObject(message.data, options);
             if (options.oneofs)
                 object.body = "data";
-        }
-        if (message.initRequired != null && message.hasOwnProperty("initRequired")) {
-            object.initRequired = $root.BrokerPeerEvent.InitRequired.toObject(message.initRequired, options);
-            if (options.oneofs)
-                object.body = "initRequired";
-        }
-        if (message.keys != null && message.hasOwnProperty("keys")) {
-            object.keys = $root.BrokerPeerEvent.Keys.toObject(message.keys, options);
-            if (options.oneofs)
-                object.body = "keys";
         }
         return object;
     };
 
     /**
-     * Converts this BrokerPeerEvent to JSON.
+     * Converts this BrokerProxyEvent to JSON.
      * @function toJSON
-     * @memberof BrokerPeerEvent
+     * @memberof BrokerProxyEvent
      * @instance
      * @returns {Object.<string,*>} JSON object
      */
-    BrokerPeerEvent.prototype.toJSON = function toJSON() {
+    BrokerProxyEvent.prototype.toJSON = function toJSON() {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
 
-    BrokerPeerEvent.Open = (function() {
+    BrokerProxyEvent.Open = (function() {
 
         /**
          * Properties of an Open.
-         * @memberof BrokerPeerEvent
+         * @memberof BrokerProxyEvent
          * @interface IOpen
          * @property {number|null} [peerId] Open peerId
          */
 
         /**
          * Constructs a new Open.
-         * @memberof BrokerPeerEvent
+         * @memberof BrokerProxyEvent
          * @classdesc Represents an Open.
          * @implements IOpen
          * @constructor
-         * @param {BrokerPeerEvent.IOpen=} [properties] Properties to set
+         * @param {BrokerProxyEvent.IOpen=} [properties] Properties to set
          */
         function Open(properties) {
             if (properties)
@@ -42344,7 +42276,7 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Open peerId.
          * @member {number} peerId
-         * @memberof BrokerPeerEvent.Open
+         * @memberof BrokerProxyEvent.Open
          * @instance
          */
         Open.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
@@ -42352,21 +42284,21 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Creates a new Open instance using the specified properties.
          * @function create
-         * @memberof BrokerPeerEvent.Open
+         * @memberof BrokerProxyEvent.Open
          * @static
-         * @param {BrokerPeerEvent.IOpen=} [properties] Properties to set
-         * @returns {BrokerPeerEvent.Open} Open instance
+         * @param {BrokerProxyEvent.IOpen=} [properties] Properties to set
+         * @returns {BrokerProxyEvent.Open} Open instance
          */
         Open.create = function create(properties) {
             return new Open(properties);
         };
 
         /**
-         * Encodes the specified Open message. Does not implicitly {@link BrokerPeerEvent.Open.verify|verify} messages.
+         * Encodes the specified Open message. Does not implicitly {@link BrokerProxyEvent.Open.verify|verify} messages.
          * @function encode
-         * @memberof BrokerPeerEvent.Open
+         * @memberof BrokerProxyEvent.Open
          * @static
-         * @param {BrokerPeerEvent.IOpen} message Open message or plain object to encode
+         * @param {BrokerProxyEvent.IOpen} message Open message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -42379,11 +42311,11 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         };
 
         /**
-         * Encodes the specified Open message, length delimited. Does not implicitly {@link BrokerPeerEvent.Open.verify|verify} messages.
+         * Encodes the specified Open message, length delimited. Does not implicitly {@link BrokerProxyEvent.Open.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof BrokerPeerEvent.Open
+         * @memberof BrokerProxyEvent.Open
          * @static
-         * @param {BrokerPeerEvent.IOpen} message Open message or plain object to encode
+         * @param {BrokerProxyEvent.IOpen} message Open message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -42394,18 +42326,18 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Decodes an Open message from the specified reader or buffer.
          * @function decode
-         * @memberof BrokerPeerEvent.Open
+         * @memberof BrokerProxyEvent.Open
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {BrokerPeerEvent.Open} Open
+         * @returns {BrokerProxyEvent.Open} Open
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
         Open.decode = function decode(reader, length) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerPeerEvent.Open();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyEvent.Open();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
@@ -42423,10 +42355,10 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Decodes an Open message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof BrokerPeerEvent.Open
+         * @memberof BrokerProxyEvent.Open
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {BrokerPeerEvent.Open} Open
+         * @returns {BrokerProxyEvent.Open} Open
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
@@ -42439,7 +42371,7 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Verifies an Open message.
          * @function verify
-         * @memberof BrokerPeerEvent.Open
+         * @memberof BrokerProxyEvent.Open
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
@@ -42456,15 +42388,15 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Creates an Open message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof BrokerPeerEvent.Open
+         * @memberof BrokerProxyEvent.Open
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {BrokerPeerEvent.Open} Open
+         * @returns {BrokerProxyEvent.Open} Open
          */
         Open.fromObject = function fromObject(object) {
-            if (object instanceof $root.BrokerPeerEvent.Open)
+            if (object instanceof $root.BrokerProxyEvent.Open)
                 return object;
-            let message = new $root.BrokerPeerEvent.Open();
+            let message = new $root.BrokerProxyEvent.Open();
             if (object.peerId != null)
                 if ($util.Long)
                     (message.peerId = $util.Long.fromValue(object.peerId)).unsigned = true;
@@ -42480,9 +42412,9 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Creates a plain object from an Open message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof BrokerPeerEvent.Open
+         * @memberof BrokerProxyEvent.Open
          * @static
-         * @param {BrokerPeerEvent.Open} message Open
+         * @param {BrokerProxyEvent.Open} message Open
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
@@ -42507,7 +42439,7 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Converts this Open to JSON.
          * @function toJSON
-         * @memberof BrokerPeerEvent.Open
+         * @memberof BrokerProxyEvent.Open
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
@@ -42518,22 +42450,22 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         return Open;
     })();
 
-    BrokerPeerEvent.Data = (function() {
+    BrokerProxyEvent.Data = (function() {
 
         /**
          * Properties of a Data.
-         * @memberof BrokerPeerEvent
+         * @memberof BrokerProxyEvent
          * @interface IData
          * @property {Uint8Array|null} [data] Data data
          */
 
         /**
          * Constructs a new Data.
-         * @memberof BrokerPeerEvent
+         * @memberof BrokerProxyEvent
          * @classdesc Represents a Data.
          * @implements IData
          * @constructor
-         * @param {BrokerPeerEvent.IData=} [properties] Properties to set
+         * @param {BrokerProxyEvent.IData=} [properties] Properties to set
          */
         function Data(properties) {
             if (properties)
@@ -42545,7 +42477,7 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Data data.
          * @member {Uint8Array} data
-         * @memberof BrokerPeerEvent.Data
+         * @memberof BrokerProxyEvent.Data
          * @instance
          */
         Data.prototype.data = $util.newBuffer([]);
@@ -42553,21 +42485,21 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Creates a new Data instance using the specified properties.
          * @function create
-         * @memberof BrokerPeerEvent.Data
+         * @memberof BrokerProxyEvent.Data
          * @static
-         * @param {BrokerPeerEvent.IData=} [properties] Properties to set
-         * @returns {BrokerPeerEvent.Data} Data instance
+         * @param {BrokerProxyEvent.IData=} [properties] Properties to set
+         * @returns {BrokerProxyEvent.Data} Data instance
          */
         Data.create = function create(properties) {
             return new Data(properties);
         };
 
         /**
-         * Encodes the specified Data message. Does not implicitly {@link BrokerPeerEvent.Data.verify|verify} messages.
+         * Encodes the specified Data message. Does not implicitly {@link BrokerProxyEvent.Data.verify|verify} messages.
          * @function encode
-         * @memberof BrokerPeerEvent.Data
+         * @memberof BrokerProxyEvent.Data
          * @static
-         * @param {BrokerPeerEvent.IData} message Data message or plain object to encode
+         * @param {BrokerProxyEvent.IData} message Data message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -42580,11 +42512,11 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         };
 
         /**
-         * Encodes the specified Data message, length delimited. Does not implicitly {@link BrokerPeerEvent.Data.verify|verify} messages.
+         * Encodes the specified Data message, length delimited. Does not implicitly {@link BrokerProxyEvent.Data.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof BrokerPeerEvent.Data
+         * @memberof BrokerProxyEvent.Data
          * @static
-         * @param {BrokerPeerEvent.IData} message Data message or plain object to encode
+         * @param {BrokerProxyEvent.IData} message Data message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -42595,18 +42527,18 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Decodes a Data message from the specified reader or buffer.
          * @function decode
-         * @memberof BrokerPeerEvent.Data
+         * @memberof BrokerProxyEvent.Data
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {BrokerPeerEvent.Data} Data
+         * @returns {BrokerProxyEvent.Data} Data
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
         Data.decode = function decode(reader, length) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerPeerEvent.Data();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyEvent.Data();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
@@ -42624,10 +42556,10 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Decodes a Data message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof BrokerPeerEvent.Data
+         * @memberof BrokerProxyEvent.Data
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {BrokerPeerEvent.Data} Data
+         * @returns {BrokerProxyEvent.Data} Data
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
@@ -42640,7 +42572,7 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Verifies a Data message.
          * @function verify
-         * @memberof BrokerPeerEvent.Data
+         * @memberof BrokerProxyEvent.Data
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
@@ -42657,15 +42589,15 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Creates a Data message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof BrokerPeerEvent.Data
+         * @memberof BrokerProxyEvent.Data
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {BrokerPeerEvent.Data} Data
+         * @returns {BrokerProxyEvent.Data} Data
          */
         Data.fromObject = function fromObject(object) {
-            if (object instanceof $root.BrokerPeerEvent.Data)
+            if (object instanceof $root.BrokerProxyEvent.Data)
                 return object;
-            let message = new $root.BrokerPeerEvent.Data();
+            let message = new $root.BrokerProxyEvent.Data();
             if (object.data != null)
                 if (typeof object.data === "string")
                     $util.base64.decode(object.data, message.data = $util.newBuffer($util.base64.length(object.data)), 0);
@@ -42677,9 +42609,9 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Creates a plain object from a Data message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof BrokerPeerEvent.Data
+         * @memberof BrokerProxyEvent.Data
          * @static
-         * @param {BrokerPeerEvent.Data} message Data
+         * @param {BrokerProxyEvent.Data} message Data
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
@@ -42703,7 +42635,7 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         /**
          * Converts this Data to JSON.
          * @function toJSON
-         * @memberof BrokerPeerEvent.Data
+         * @memberof BrokerProxyEvent.Data
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
@@ -42714,431 +42646,28 @@ export const BrokerPeerEvent = $root.BrokerPeerEvent = (() => {
         return Data;
     })();
 
-    BrokerPeerEvent.InitRequired = (function() {
-
-        /**
-         * Properties of an InitRequired.
-         * @memberof BrokerPeerEvent
-         * @interface IInitRequired
-         * @property {Uint8Array|null} [data] InitRequired data
-         */
-
-        /**
-         * Constructs a new InitRequired.
-         * @memberof BrokerPeerEvent
-         * @classdesc Represents an InitRequired.
-         * @implements IInitRequired
-         * @constructor
-         * @param {BrokerPeerEvent.IInitRequired=} [properties] Properties to set
-         */
-        function InitRequired(properties) {
-            if (properties)
-                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    if (properties[keys[i]] != null)
-                        this[keys[i]] = properties[keys[i]];
-        }
-
-        /**
-         * InitRequired data.
-         * @member {Uint8Array} data
-         * @memberof BrokerPeerEvent.InitRequired
-         * @instance
-         */
-        InitRequired.prototype.data = $util.newBuffer([]);
-
-        /**
-         * Creates a new InitRequired instance using the specified properties.
-         * @function create
-         * @memberof BrokerPeerEvent.InitRequired
-         * @static
-         * @param {BrokerPeerEvent.IInitRequired=} [properties] Properties to set
-         * @returns {BrokerPeerEvent.InitRequired} InitRequired instance
-         */
-        InitRequired.create = function create(properties) {
-            return new InitRequired(properties);
-        };
-
-        /**
-         * Encodes the specified InitRequired message. Does not implicitly {@link BrokerPeerEvent.InitRequired.verify|verify} messages.
-         * @function encode
-         * @memberof BrokerPeerEvent.InitRequired
-         * @static
-         * @param {BrokerPeerEvent.IInitRequired} message InitRequired message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        InitRequired.encode = function encode(message, writer) {
-            if (!writer)
-                writer = $Writer.create();
-            if (message.data != null && Object.hasOwnProperty.call(message, "data"))
-                writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.data);
-            return writer;
-        };
-
-        /**
-         * Encodes the specified InitRequired message, length delimited. Does not implicitly {@link BrokerPeerEvent.InitRequired.verify|verify} messages.
-         * @function encodeDelimited
-         * @memberof BrokerPeerEvent.InitRequired
-         * @static
-         * @param {BrokerPeerEvent.IInitRequired} message InitRequired message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        InitRequired.encodeDelimited = function encodeDelimited(message, writer) {
-            return this.encode(message, writer).ldelim();
-        };
-
-        /**
-         * Decodes an InitRequired message from the specified reader or buffer.
-         * @function decode
-         * @memberof BrokerPeerEvent.InitRequired
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @param {number} [length] Message length if known beforehand
-         * @returns {BrokerPeerEvent.InitRequired} InitRequired
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        InitRequired.decode = function decode(reader, length) {
-            if (!(reader instanceof $Reader))
-                reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerPeerEvent.InitRequired();
-            while (reader.pos < end) {
-                let tag = reader.uint32();
-                switch (tag >>> 3) {
-                case 1:
-                    message.data = reader.bytes();
-                    break;
-                default:
-                    reader.skipType(tag & 7);
-                    break;
-                }
-            }
-            return message;
-        };
-
-        /**
-         * Decodes an InitRequired message from the specified reader or buffer, length delimited.
-         * @function decodeDelimited
-         * @memberof BrokerPeerEvent.InitRequired
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {BrokerPeerEvent.InitRequired} InitRequired
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        InitRequired.decodeDelimited = function decodeDelimited(reader) {
-            if (!(reader instanceof $Reader))
-                reader = new $Reader(reader);
-            return this.decode(reader, reader.uint32());
-        };
-
-        /**
-         * Verifies an InitRequired message.
-         * @function verify
-         * @memberof BrokerPeerEvent.InitRequired
-         * @static
-         * @param {Object.<string,*>} message Plain object to verify
-         * @returns {string|null} `null` if valid, otherwise the reason why it is not
-         */
-        InitRequired.verify = function verify(message) {
-            if (typeof message !== "object" || message === null)
-                return "object expected";
-            if (message.data != null && message.hasOwnProperty("data"))
-                if (!(message.data && typeof message.data.length === "number" || $util.isString(message.data)))
-                    return "data: buffer expected";
-            return null;
-        };
-
-        /**
-         * Creates an InitRequired message from a plain object. Also converts values to their respective internal types.
-         * @function fromObject
-         * @memberof BrokerPeerEvent.InitRequired
-         * @static
-         * @param {Object.<string,*>} object Plain object
-         * @returns {BrokerPeerEvent.InitRequired} InitRequired
-         */
-        InitRequired.fromObject = function fromObject(object) {
-            if (object instanceof $root.BrokerPeerEvent.InitRequired)
-                return object;
-            let message = new $root.BrokerPeerEvent.InitRequired();
-            if (object.data != null)
-                if (typeof object.data === "string")
-                    $util.base64.decode(object.data, message.data = $util.newBuffer($util.base64.length(object.data)), 0);
-                else if (object.data.length)
-                    message.data = object.data;
-            return message;
-        };
-
-        /**
-         * Creates a plain object from an InitRequired message. Also converts values to other types if specified.
-         * @function toObject
-         * @memberof BrokerPeerEvent.InitRequired
-         * @static
-         * @param {BrokerPeerEvent.InitRequired} message InitRequired
-         * @param {$protobuf.IConversionOptions} [options] Conversion options
-         * @returns {Object.<string,*>} Plain object
-         */
-        InitRequired.toObject = function toObject(message, options) {
-            if (!options)
-                options = {};
-            let object = {};
-            if (options.defaults)
-                if (options.bytes === String)
-                    object.data = "";
-                else {
-                    object.data = [];
-                    if (options.bytes !== Array)
-                        object.data = $util.newBuffer(object.data);
-                }
-            if (message.data != null && message.hasOwnProperty("data"))
-                object.data = options.bytes === String ? $util.base64.encode(message.data, 0, message.data.length) : options.bytes === Array ? Array.prototype.slice.call(message.data) : message.data;
-            return object;
-        };
-
-        /**
-         * Converts this InitRequired to JSON.
-         * @function toJSON
-         * @memberof BrokerPeerEvent.InitRequired
-         * @instance
-         * @returns {Object.<string,*>} JSON object
-         */
-        InitRequired.prototype.toJSON = function toJSON() {
-            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-        };
-
-        return InitRequired;
-    })();
-
-    BrokerPeerEvent.Keys = (function() {
-
-        /**
-         * Properties of a Keys.
-         * @memberof BrokerPeerEvent
-         * @interface IKeys
-         * @property {Array.<Uint8Array>|null} [keys] Keys keys
-         */
-
-        /**
-         * Constructs a new Keys.
-         * @memberof BrokerPeerEvent
-         * @classdesc Represents a Keys.
-         * @implements IKeys
-         * @constructor
-         * @param {BrokerPeerEvent.IKeys=} [properties] Properties to set
-         */
-        function Keys(properties) {
-            this.keys = [];
-            if (properties)
-                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    if (properties[keys[i]] != null)
-                        this[keys[i]] = properties[keys[i]];
-        }
-
-        /**
-         * Keys keys.
-         * @member {Array.<Uint8Array>} keys
-         * @memberof BrokerPeerEvent.Keys
-         * @instance
-         */
-        Keys.prototype.keys = $util.emptyArray;
-
-        /**
-         * Creates a new Keys instance using the specified properties.
-         * @function create
-         * @memberof BrokerPeerEvent.Keys
-         * @static
-         * @param {BrokerPeerEvent.IKeys=} [properties] Properties to set
-         * @returns {BrokerPeerEvent.Keys} Keys instance
-         */
-        Keys.create = function create(properties) {
-            return new Keys(properties);
-        };
-
-        /**
-         * Encodes the specified Keys message. Does not implicitly {@link BrokerPeerEvent.Keys.verify|verify} messages.
-         * @function encode
-         * @memberof BrokerPeerEvent.Keys
-         * @static
-         * @param {BrokerPeerEvent.IKeys} message Keys message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        Keys.encode = function encode(message, writer) {
-            if (!writer)
-                writer = $Writer.create();
-            if (message.keys != null && message.keys.length)
-                for (let i = 0; i < message.keys.length; ++i)
-                    writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.keys[i]);
-            return writer;
-        };
-
-        /**
-         * Encodes the specified Keys message, length delimited. Does not implicitly {@link BrokerPeerEvent.Keys.verify|verify} messages.
-         * @function encodeDelimited
-         * @memberof BrokerPeerEvent.Keys
-         * @static
-         * @param {BrokerPeerEvent.IKeys} message Keys message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        Keys.encodeDelimited = function encodeDelimited(message, writer) {
-            return this.encode(message, writer).ldelim();
-        };
-
-        /**
-         * Decodes a Keys message from the specified reader or buffer.
-         * @function decode
-         * @memberof BrokerPeerEvent.Keys
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @param {number} [length] Message length if known beforehand
-         * @returns {BrokerPeerEvent.Keys} Keys
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        Keys.decode = function decode(reader, length) {
-            if (!(reader instanceof $Reader))
-                reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerPeerEvent.Keys();
-            while (reader.pos < end) {
-                let tag = reader.uint32();
-                switch (tag >>> 3) {
-                case 1:
-                    if (!(message.keys && message.keys.length))
-                        message.keys = [];
-                    message.keys.push(reader.bytes());
-                    break;
-                default:
-                    reader.skipType(tag & 7);
-                    break;
-                }
-            }
-            return message;
-        };
-
-        /**
-         * Decodes a Keys message from the specified reader or buffer, length delimited.
-         * @function decodeDelimited
-         * @memberof BrokerPeerEvent.Keys
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {BrokerPeerEvent.Keys} Keys
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        Keys.decodeDelimited = function decodeDelimited(reader) {
-            if (!(reader instanceof $Reader))
-                reader = new $Reader(reader);
-            return this.decode(reader, reader.uint32());
-        };
-
-        /**
-         * Verifies a Keys message.
-         * @function verify
-         * @memberof BrokerPeerEvent.Keys
-         * @static
-         * @param {Object.<string,*>} message Plain object to verify
-         * @returns {string|null} `null` if valid, otherwise the reason why it is not
-         */
-        Keys.verify = function verify(message) {
-            if (typeof message !== "object" || message === null)
-                return "object expected";
-            if (message.keys != null && message.hasOwnProperty("keys")) {
-                if (!Array.isArray(message.keys))
-                    return "keys: array expected";
-                for (let i = 0; i < message.keys.length; ++i)
-                    if (!(message.keys[i] && typeof message.keys[i].length === "number" || $util.isString(message.keys[i])))
-                        return "keys: buffer[] expected";
-            }
-            return null;
-        };
-
-        /**
-         * Creates a Keys message from a plain object. Also converts values to their respective internal types.
-         * @function fromObject
-         * @memberof BrokerPeerEvent.Keys
-         * @static
-         * @param {Object.<string,*>} object Plain object
-         * @returns {BrokerPeerEvent.Keys} Keys
-         */
-        Keys.fromObject = function fromObject(object) {
-            if (object instanceof $root.BrokerPeerEvent.Keys)
-                return object;
-            let message = new $root.BrokerPeerEvent.Keys();
-            if (object.keys) {
-                if (!Array.isArray(object.keys))
-                    throw TypeError(".BrokerPeerEvent.Keys.keys: array expected");
-                message.keys = [];
-                for (let i = 0; i < object.keys.length; ++i)
-                    if (typeof object.keys[i] === "string")
-                        $util.base64.decode(object.keys[i], message.keys[i] = $util.newBuffer($util.base64.length(object.keys[i])), 0);
-                    else if (object.keys[i].length)
-                        message.keys[i] = object.keys[i];
-            }
-            return message;
-        };
-
-        /**
-         * Creates a plain object from a Keys message. Also converts values to other types if specified.
-         * @function toObject
-         * @memberof BrokerPeerEvent.Keys
-         * @static
-         * @param {BrokerPeerEvent.Keys} message Keys
-         * @param {$protobuf.IConversionOptions} [options] Conversion options
-         * @returns {Object.<string,*>} Plain object
-         */
-        Keys.toObject = function toObject(message, options) {
-            if (!options)
-                options = {};
-            let object = {};
-            if (options.arrays || options.defaults)
-                object.keys = [];
-            if (message.keys && message.keys.length) {
-                object.keys = [];
-                for (let j = 0; j < message.keys.length; ++j)
-                    object.keys[j] = options.bytes === String ? $util.base64.encode(message.keys[j], 0, message.keys[j].length) : options.bytes === Array ? Array.prototype.slice.call(message.keys[j]) : message.keys[j];
-            }
-            return object;
-        };
-
-        /**
-         * Converts this Keys to JSON.
-         * @function toJSON
-         * @memberof BrokerPeerEvent.Keys
-         * @instance
-         * @returns {Object.<string,*>} JSON object
-         */
-        Keys.prototype.toJSON = function toJSON() {
-            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-        };
-
-        return Keys;
-    })();
-
-    return BrokerPeerEvent;
+    return BrokerProxyEvent;
 })();
 
-export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
+export const BrokerProxySendKeysRequest = $root.BrokerProxySendKeysRequest = (() => {
 
     /**
-     * Properties of a BrokerPeerInitRequest.
-     * @exports IBrokerPeerInitRequest
-     * @interface IBrokerPeerInitRequest
-     * @property {number|null} [peerId] BrokerPeerInitRequest peerId
-     * @property {boolean|null} [preferSender] BrokerPeerInitRequest preferSender
-     * @property {Array.<Uint8Array>|null} [keys] BrokerPeerInitRequest keys
+     * Properties of a BrokerProxySendKeysRequest.
+     * @exports IBrokerProxySendKeysRequest
+     * @interface IBrokerProxySendKeysRequest
+     * @property {number|null} [peerId] BrokerProxySendKeysRequest peerId
+     * @property {Array.<Uint8Array>|null} [keys] BrokerProxySendKeysRequest keys
      */
 
     /**
-     * Constructs a new BrokerPeerInitRequest.
-     * @exports BrokerPeerInitRequest
-     * @classdesc Represents a BrokerPeerInitRequest.
-     * @implements IBrokerPeerInitRequest
+     * Constructs a new BrokerProxySendKeysRequest.
+     * @exports BrokerProxySendKeysRequest
+     * @classdesc Represents a BrokerProxySendKeysRequest.
+     * @implements IBrokerProxySendKeysRequest
      * @constructor
-     * @param {IBrokerPeerInitRequest=} [properties] Properties to set
+     * @param {IBrokerProxySendKeysRequest=} [properties] Properties to set
      */
-    function BrokerPeerInitRequest(properties) {
+    function BrokerProxySendKeysRequest(properties) {
         this.keys = [];
         if (properties)
             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
@@ -43147,91 +42676,81 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
     }
 
     /**
-     * BrokerPeerInitRequest peerId.
+     * BrokerProxySendKeysRequest peerId.
      * @member {number} peerId
-     * @memberof BrokerPeerInitRequest
+     * @memberof BrokerProxySendKeysRequest
      * @instance
      */
-    BrokerPeerInitRequest.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+    BrokerProxySendKeysRequest.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
-     * BrokerPeerInitRequest preferSender.
-     * @member {boolean} preferSender
-     * @memberof BrokerPeerInitRequest
-     * @instance
-     */
-    BrokerPeerInitRequest.prototype.preferSender = false;
-
-    /**
-     * BrokerPeerInitRequest keys.
+     * BrokerProxySendKeysRequest keys.
      * @member {Array.<Uint8Array>} keys
-     * @memberof BrokerPeerInitRequest
+     * @memberof BrokerProxySendKeysRequest
      * @instance
      */
-    BrokerPeerInitRequest.prototype.keys = $util.emptyArray;
+    BrokerProxySendKeysRequest.prototype.keys = $util.emptyArray;
 
     /**
-     * Creates a new BrokerPeerInitRequest instance using the specified properties.
+     * Creates a new BrokerProxySendKeysRequest instance using the specified properties.
      * @function create
-     * @memberof BrokerPeerInitRequest
+     * @memberof BrokerProxySendKeysRequest
      * @static
-     * @param {IBrokerPeerInitRequest=} [properties] Properties to set
-     * @returns {BrokerPeerInitRequest} BrokerPeerInitRequest instance
+     * @param {IBrokerProxySendKeysRequest=} [properties] Properties to set
+     * @returns {BrokerProxySendKeysRequest} BrokerProxySendKeysRequest instance
      */
-    BrokerPeerInitRequest.create = function create(properties) {
-        return new BrokerPeerInitRequest(properties);
+    BrokerProxySendKeysRequest.create = function create(properties) {
+        return new BrokerProxySendKeysRequest(properties);
     };
 
     /**
-     * Encodes the specified BrokerPeerInitRequest message. Does not implicitly {@link BrokerPeerInitRequest.verify|verify} messages.
+     * Encodes the specified BrokerProxySendKeysRequest message. Does not implicitly {@link BrokerProxySendKeysRequest.verify|verify} messages.
      * @function encode
-     * @memberof BrokerPeerInitRequest
+     * @memberof BrokerProxySendKeysRequest
      * @static
-     * @param {IBrokerPeerInitRequest} message BrokerPeerInitRequest message or plain object to encode
+     * @param {IBrokerProxySendKeysRequest} message BrokerProxySendKeysRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    BrokerPeerInitRequest.encode = function encode(message, writer) {
+    BrokerProxySendKeysRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
         if (message.peerId != null && Object.hasOwnProperty.call(message, "peerId"))
             writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.peerId);
-        if (message.preferSender != null && Object.hasOwnProperty.call(message, "preferSender"))
-            writer.uint32(/* id 2, wireType 0 =*/16).bool(message.preferSender);
         if (message.keys != null && message.keys.length)
             for (let i = 0; i < message.keys.length; ++i)
-                writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.keys[i]);
+                writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.keys[i]);
         return writer;
     };
 
     /**
-     * Encodes the specified BrokerPeerInitRequest message, length delimited. Does not implicitly {@link BrokerPeerInitRequest.verify|verify} messages.
+     * Encodes the specified BrokerProxySendKeysRequest message, length delimited. Does not implicitly {@link BrokerProxySendKeysRequest.verify|verify} messages.
      * @function encodeDelimited
-     * @memberof BrokerPeerInitRequest
+     * @memberof BrokerProxySendKeysRequest
      * @static
-     * @param {IBrokerPeerInitRequest} message BrokerPeerInitRequest message or plain object to encode
+     * @param {IBrokerProxySendKeysRequest} message BrokerProxySendKeysRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    BrokerPeerInitRequest.encodeDelimited = function encodeDelimited(message, writer) {
+    BrokerProxySendKeysRequest.encodeDelimited = function encodeDelimited(message, writer) {
         return this.encode(message, writer).ldelim();
     };
 
     /**
-     * Decodes a BrokerPeerInitRequest message from the specified reader or buffer.
+     * Decodes a BrokerProxySendKeysRequest message from the specified reader or buffer.
      * @function decode
-     * @memberof BrokerPeerInitRequest
+     * @memberof BrokerProxySendKeysRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @param {number} [length] Message length if known beforehand
-     * @returns {BrokerPeerInitRequest} BrokerPeerInitRequest
+     * @returns {BrokerProxySendKeysRequest} BrokerProxySendKeysRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    BrokerPeerInitRequest.decode = function decode(reader, length) {
+    BrokerProxySendKeysRequest.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerPeerInitRequest();
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxySendKeysRequest();
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
@@ -43239,9 +42758,6 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
                 message.peerId = reader.uint64();
                 break;
             case 2:
-                message.preferSender = reader.bool();
-                break;
-            case 3:
                 if (!(message.keys && message.keys.length))
                     message.keys = [];
                 message.keys.push(reader.bytes());
@@ -43255,38 +42771,35 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
     };
 
     /**
-     * Decodes a BrokerPeerInitRequest message from the specified reader or buffer, length delimited.
+     * Decodes a BrokerProxySendKeysRequest message from the specified reader or buffer, length delimited.
      * @function decodeDelimited
-     * @memberof BrokerPeerInitRequest
+     * @memberof BrokerProxySendKeysRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {BrokerPeerInitRequest} BrokerPeerInitRequest
+     * @returns {BrokerProxySendKeysRequest} BrokerProxySendKeysRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    BrokerPeerInitRequest.decodeDelimited = function decodeDelimited(reader) {
+    BrokerProxySendKeysRequest.decodeDelimited = function decodeDelimited(reader) {
         if (!(reader instanceof $Reader))
             reader = new $Reader(reader);
         return this.decode(reader, reader.uint32());
     };
 
     /**
-     * Verifies a BrokerPeerInitRequest message.
+     * Verifies a BrokerProxySendKeysRequest message.
      * @function verify
-     * @memberof BrokerPeerInitRequest
+     * @memberof BrokerProxySendKeysRequest
      * @static
      * @param {Object.<string,*>} message Plain object to verify
      * @returns {string|null} `null` if valid, otherwise the reason why it is not
      */
-    BrokerPeerInitRequest.verify = function verify(message) {
+    BrokerProxySendKeysRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
         if (message.peerId != null && message.hasOwnProperty("peerId"))
             if (!$util.isInteger(message.peerId) && !(message.peerId && $util.isInteger(message.peerId.low) && $util.isInteger(message.peerId.high)))
                 return "peerId: integer|Long expected";
-        if (message.preferSender != null && message.hasOwnProperty("preferSender"))
-            if (typeof message.preferSender !== "boolean")
-                return "preferSender: boolean expected";
         if (message.keys != null && message.hasOwnProperty("keys")) {
             if (!Array.isArray(message.keys))
                 return "keys: array expected";
@@ -43298,17 +42811,17 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
     };
 
     /**
-     * Creates a BrokerPeerInitRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a BrokerProxySendKeysRequest message from a plain object. Also converts values to their respective internal types.
      * @function fromObject
-     * @memberof BrokerPeerInitRequest
+     * @memberof BrokerProxySendKeysRequest
      * @static
      * @param {Object.<string,*>} object Plain object
-     * @returns {BrokerPeerInitRequest} BrokerPeerInitRequest
+     * @returns {BrokerProxySendKeysRequest} BrokerProxySendKeysRequest
      */
-    BrokerPeerInitRequest.fromObject = function fromObject(object) {
-        if (object instanceof $root.BrokerPeerInitRequest)
+    BrokerProxySendKeysRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.BrokerProxySendKeysRequest)
             return object;
-        let message = new $root.BrokerPeerInitRequest();
+        let message = new $root.BrokerProxySendKeysRequest();
         if (object.peerId != null)
             if ($util.Long)
                 (message.peerId = $util.Long.fromValue(object.peerId)).unsigned = true;
@@ -43318,11 +42831,9 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
                 message.peerId = object.peerId;
             else if (typeof object.peerId === "object")
                 message.peerId = new $util.LongBits(object.peerId.low >>> 0, object.peerId.high >>> 0).toNumber(true);
-        if (object.preferSender != null)
-            message.preferSender = Boolean(object.preferSender);
         if (object.keys) {
             if (!Array.isArray(object.keys))
-                throw TypeError(".BrokerPeerInitRequest.keys: array expected");
+                throw TypeError(".BrokerProxySendKeysRequest.keys: array expected");
             message.keys = [];
             for (let i = 0; i < object.keys.length; ++i)
                 if (typeof object.keys[i] === "string")
@@ -43334,35 +42845,31 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
     };
 
     /**
-     * Creates a plain object from a BrokerPeerInitRequest message. Also converts values to other types if specified.
+     * Creates a plain object from a BrokerProxySendKeysRequest message. Also converts values to other types if specified.
      * @function toObject
-     * @memberof BrokerPeerInitRequest
+     * @memberof BrokerProxySendKeysRequest
      * @static
-     * @param {BrokerPeerInitRequest} message BrokerPeerInitRequest
+     * @param {BrokerProxySendKeysRequest} message BrokerProxySendKeysRequest
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    BrokerPeerInitRequest.toObject = function toObject(message, options) {
+    BrokerProxySendKeysRequest.toObject = function toObject(message, options) {
         if (!options)
             options = {};
         let object = {};
         if (options.arrays || options.defaults)
             object.keys = [];
-        if (options.defaults) {
+        if (options.defaults)
             if ($util.Long) {
                 let long = new $util.Long(0, 0, true);
                 object.peerId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
             } else
                 object.peerId = options.longs === String ? "0" : 0;
-            object.preferSender = false;
-        }
         if (message.peerId != null && message.hasOwnProperty("peerId"))
             if (typeof message.peerId === "number")
                 object.peerId = options.longs === String ? String(message.peerId) : message.peerId;
             else
                 object.peerId = options.longs === String ? $util.Long.prototype.toString.call(message.peerId) : options.longs === Number ? new $util.LongBits(message.peerId.low >>> 0, message.peerId.high >>> 0).toNumber(true) : message.peerId;
-        if (message.preferSender != null && message.hasOwnProperty("preferSender"))
-            object.preferSender = message.preferSender;
         if (message.keys && message.keys.length) {
             object.keys = [];
             for (let j = 0; j < message.keys.length; ++j)
@@ -43372,38 +42879,36 @@ export const BrokerPeerInitRequest = $root.BrokerPeerInitRequest = (() => {
     };
 
     /**
-     * Converts this BrokerPeerInitRequest to JSON.
+     * Converts this BrokerProxySendKeysRequest to JSON.
      * @function toJSON
-     * @memberof BrokerPeerInitRequest
+     * @memberof BrokerProxySendKeysRequest
      * @instance
      * @returns {Object.<string,*>} JSON object
      */
-    BrokerPeerInitRequest.prototype.toJSON = function toJSON() {
+    BrokerProxySendKeysRequest.prototype.toJSON = function toJSON() {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
 
-    return BrokerPeerInitRequest;
+    return BrokerProxySendKeysRequest;
 })();
 
-export const BrokerPeerDataRequest = $root.BrokerPeerDataRequest = (() => {
+export const BrokerProxySendKeysResponse = $root.BrokerProxySendKeysResponse = (() => {
 
     /**
-     * Properties of a BrokerPeerDataRequest.
-     * @exports IBrokerPeerDataRequest
-     * @interface IBrokerPeerDataRequest
-     * @property {number|null} [peerId] BrokerPeerDataRequest peerId
-     * @property {Uint8Array|null} [data] BrokerPeerDataRequest data
+     * Properties of a BrokerProxySendKeysResponse.
+     * @exports IBrokerProxySendKeysResponse
+     * @interface IBrokerProxySendKeysResponse
      */
 
     /**
-     * Constructs a new BrokerPeerDataRequest.
-     * @exports BrokerPeerDataRequest
-     * @classdesc Represents a BrokerPeerDataRequest.
-     * @implements IBrokerPeerDataRequest
+     * Constructs a new BrokerProxySendKeysResponse.
+     * @exports BrokerProxySendKeysResponse
+     * @classdesc Represents a BrokerProxySendKeysResponse.
+     * @implements IBrokerProxySendKeysResponse
      * @constructor
-     * @param {IBrokerPeerDataRequest=} [properties] Properties to set
+     * @param {IBrokerProxySendKeysResponse=} [properties] Properties to set
      */
-    function BrokerPeerDataRequest(properties) {
+    function BrokerProxySendKeysResponse(properties) {
         if (properties)
             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
@@ -43411,43 +42916,654 @@ export const BrokerPeerDataRequest = $root.BrokerPeerDataRequest = (() => {
     }
 
     /**
-     * BrokerPeerDataRequest peerId.
-     * @member {number} peerId
-     * @memberof BrokerPeerDataRequest
-     * @instance
-     */
-    BrokerPeerDataRequest.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
-
-    /**
-     * BrokerPeerDataRequest data.
-     * @member {Uint8Array} data
-     * @memberof BrokerPeerDataRequest
-     * @instance
-     */
-    BrokerPeerDataRequest.prototype.data = $util.newBuffer([]);
-
-    /**
-     * Creates a new BrokerPeerDataRequest instance using the specified properties.
+     * Creates a new BrokerProxySendKeysResponse instance using the specified properties.
      * @function create
-     * @memberof BrokerPeerDataRequest
+     * @memberof BrokerProxySendKeysResponse
      * @static
-     * @param {IBrokerPeerDataRequest=} [properties] Properties to set
-     * @returns {BrokerPeerDataRequest} BrokerPeerDataRequest instance
+     * @param {IBrokerProxySendKeysResponse=} [properties] Properties to set
+     * @returns {BrokerProxySendKeysResponse} BrokerProxySendKeysResponse instance
      */
-    BrokerPeerDataRequest.create = function create(properties) {
-        return new BrokerPeerDataRequest(properties);
+    BrokerProxySendKeysResponse.create = function create(properties) {
+        return new BrokerProxySendKeysResponse(properties);
     };
 
     /**
-     * Encodes the specified BrokerPeerDataRequest message. Does not implicitly {@link BrokerPeerDataRequest.verify|verify} messages.
+     * Encodes the specified BrokerProxySendKeysResponse message. Does not implicitly {@link BrokerProxySendKeysResponse.verify|verify} messages.
      * @function encode
-     * @memberof BrokerPeerDataRequest
+     * @memberof BrokerProxySendKeysResponse
      * @static
-     * @param {IBrokerPeerDataRequest} message BrokerPeerDataRequest message or plain object to encode
+     * @param {IBrokerProxySendKeysResponse} message BrokerProxySendKeysResponse message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    BrokerPeerDataRequest.encode = function encode(message, writer) {
+    BrokerProxySendKeysResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified BrokerProxySendKeysResponse message, length delimited. Does not implicitly {@link BrokerProxySendKeysResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof BrokerProxySendKeysResponse
+     * @static
+     * @param {IBrokerProxySendKeysResponse} message BrokerProxySendKeysResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BrokerProxySendKeysResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a BrokerProxySendKeysResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof BrokerProxySendKeysResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {BrokerProxySendKeysResponse} BrokerProxySendKeysResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BrokerProxySendKeysResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxySendKeysResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a BrokerProxySendKeysResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof BrokerProxySendKeysResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {BrokerProxySendKeysResponse} BrokerProxySendKeysResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BrokerProxySendKeysResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a BrokerProxySendKeysResponse message.
+     * @function verify
+     * @memberof BrokerProxySendKeysResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    BrokerProxySendKeysResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a BrokerProxySendKeysResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof BrokerProxySendKeysResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {BrokerProxySendKeysResponse} BrokerProxySendKeysResponse
+     */
+    BrokerProxySendKeysResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.BrokerProxySendKeysResponse)
+            return object;
+        return new $root.BrokerProxySendKeysResponse();
+    };
+
+    /**
+     * Creates a plain object from a BrokerProxySendKeysResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof BrokerProxySendKeysResponse
+     * @static
+     * @param {BrokerProxySendKeysResponse} message BrokerProxySendKeysResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    BrokerProxySendKeysResponse.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this BrokerProxySendKeysResponse to JSON.
+     * @function toJSON
+     * @memberof BrokerProxySendKeysResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    BrokerProxySendKeysResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return BrokerProxySendKeysResponse;
+})();
+
+export const BrokerProxyReceiveKeysRequest = $root.BrokerProxyReceiveKeysRequest = (() => {
+
+    /**
+     * Properties of a BrokerProxyReceiveKeysRequest.
+     * @exports IBrokerProxyReceiveKeysRequest
+     * @interface IBrokerProxyReceiveKeysRequest
+     * @property {number|null} [peerId] BrokerProxyReceiveKeysRequest peerId
+     * @property {Array.<Uint8Array>|null} [keys] BrokerProxyReceiveKeysRequest keys
+     */
+
+    /**
+     * Constructs a new BrokerProxyReceiveKeysRequest.
+     * @exports BrokerProxyReceiveKeysRequest
+     * @classdesc Represents a BrokerProxyReceiveKeysRequest.
+     * @implements IBrokerProxyReceiveKeysRequest
+     * @constructor
+     * @param {IBrokerProxyReceiveKeysRequest=} [properties] Properties to set
+     */
+    function BrokerProxyReceiveKeysRequest(properties) {
+        this.keys = [];
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * BrokerProxyReceiveKeysRequest peerId.
+     * @member {number} peerId
+     * @memberof BrokerProxyReceiveKeysRequest
+     * @instance
+     */
+    BrokerProxyReceiveKeysRequest.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * BrokerProxyReceiveKeysRequest keys.
+     * @member {Array.<Uint8Array>} keys
+     * @memberof BrokerProxyReceiveKeysRequest
+     * @instance
+     */
+    BrokerProxyReceiveKeysRequest.prototype.keys = $util.emptyArray;
+
+    /**
+     * Creates a new BrokerProxyReceiveKeysRequest instance using the specified properties.
+     * @function create
+     * @memberof BrokerProxyReceiveKeysRequest
+     * @static
+     * @param {IBrokerProxyReceiveKeysRequest=} [properties] Properties to set
+     * @returns {BrokerProxyReceiveKeysRequest} BrokerProxyReceiveKeysRequest instance
+     */
+    BrokerProxyReceiveKeysRequest.create = function create(properties) {
+        return new BrokerProxyReceiveKeysRequest(properties);
+    };
+
+    /**
+     * Encodes the specified BrokerProxyReceiveKeysRequest message. Does not implicitly {@link BrokerProxyReceiveKeysRequest.verify|verify} messages.
+     * @function encode
+     * @memberof BrokerProxyReceiveKeysRequest
+     * @static
+     * @param {IBrokerProxyReceiveKeysRequest} message BrokerProxyReceiveKeysRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BrokerProxyReceiveKeysRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.peerId != null && Object.hasOwnProperty.call(message, "peerId"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.peerId);
+        if (message.keys != null && message.keys.length)
+            for (let i = 0; i < message.keys.length; ++i)
+                writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.keys[i]);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified BrokerProxyReceiveKeysRequest message, length delimited. Does not implicitly {@link BrokerProxyReceiveKeysRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof BrokerProxyReceiveKeysRequest
+     * @static
+     * @param {IBrokerProxyReceiveKeysRequest} message BrokerProxyReceiveKeysRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BrokerProxyReceiveKeysRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a BrokerProxyReceiveKeysRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof BrokerProxyReceiveKeysRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {BrokerProxyReceiveKeysRequest} BrokerProxyReceiveKeysRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BrokerProxyReceiveKeysRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyReceiveKeysRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.peerId = reader.uint64();
+                break;
+            case 2:
+                if (!(message.keys && message.keys.length))
+                    message.keys = [];
+                message.keys.push(reader.bytes());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a BrokerProxyReceiveKeysRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof BrokerProxyReceiveKeysRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {BrokerProxyReceiveKeysRequest} BrokerProxyReceiveKeysRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BrokerProxyReceiveKeysRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a BrokerProxyReceiveKeysRequest message.
+     * @function verify
+     * @memberof BrokerProxyReceiveKeysRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    BrokerProxyReceiveKeysRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.peerId != null && message.hasOwnProperty("peerId"))
+            if (!$util.isInteger(message.peerId) && !(message.peerId && $util.isInteger(message.peerId.low) && $util.isInteger(message.peerId.high)))
+                return "peerId: integer|Long expected";
+        if (message.keys != null && message.hasOwnProperty("keys")) {
+            if (!Array.isArray(message.keys))
+                return "keys: array expected";
+            for (let i = 0; i < message.keys.length; ++i)
+                if (!(message.keys[i] && typeof message.keys[i].length === "number" || $util.isString(message.keys[i])))
+                    return "keys: buffer[] expected";
+        }
+        return null;
+    };
+
+    /**
+     * Creates a BrokerProxyReceiveKeysRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof BrokerProxyReceiveKeysRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {BrokerProxyReceiveKeysRequest} BrokerProxyReceiveKeysRequest
+     */
+    BrokerProxyReceiveKeysRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.BrokerProxyReceiveKeysRequest)
+            return object;
+        let message = new $root.BrokerProxyReceiveKeysRequest();
+        if (object.peerId != null)
+            if ($util.Long)
+                (message.peerId = $util.Long.fromValue(object.peerId)).unsigned = true;
+            else if (typeof object.peerId === "string")
+                message.peerId = parseInt(object.peerId, 10);
+            else if (typeof object.peerId === "number")
+                message.peerId = object.peerId;
+            else if (typeof object.peerId === "object")
+                message.peerId = new $util.LongBits(object.peerId.low >>> 0, object.peerId.high >>> 0).toNumber(true);
+        if (object.keys) {
+            if (!Array.isArray(object.keys))
+                throw TypeError(".BrokerProxyReceiveKeysRequest.keys: array expected");
+            message.keys = [];
+            for (let i = 0; i < object.keys.length; ++i)
+                if (typeof object.keys[i] === "string")
+                    $util.base64.decode(object.keys[i], message.keys[i] = $util.newBuffer($util.base64.length(object.keys[i])), 0);
+                else if (object.keys[i].length)
+                    message.keys[i] = object.keys[i];
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a BrokerProxyReceiveKeysRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof BrokerProxyReceiveKeysRequest
+     * @static
+     * @param {BrokerProxyReceiveKeysRequest} message BrokerProxyReceiveKeysRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    BrokerProxyReceiveKeysRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.arrays || options.defaults)
+            object.keys = [];
+        if (options.defaults)
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.peerId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.peerId = options.longs === String ? "0" : 0;
+        if (message.peerId != null && message.hasOwnProperty("peerId"))
+            if (typeof message.peerId === "number")
+                object.peerId = options.longs === String ? String(message.peerId) : message.peerId;
+            else
+                object.peerId = options.longs === String ? $util.Long.prototype.toString.call(message.peerId) : options.longs === Number ? new $util.LongBits(message.peerId.low >>> 0, message.peerId.high >>> 0).toNumber(true) : message.peerId;
+        if (message.keys && message.keys.length) {
+            object.keys = [];
+            for (let j = 0; j < message.keys.length; ++j)
+                object.keys[j] = options.bytes === String ? $util.base64.encode(message.keys[j], 0, message.keys[j].length) : options.bytes === Array ? Array.prototype.slice.call(message.keys[j]) : message.keys[j];
+        }
+        return object;
+    };
+
+    /**
+     * Converts this BrokerProxyReceiveKeysRequest to JSON.
+     * @function toJSON
+     * @memberof BrokerProxyReceiveKeysRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    BrokerProxyReceiveKeysRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return BrokerProxyReceiveKeysRequest;
+})();
+
+export const BrokerProxyReceiveKeysResponse = $root.BrokerProxyReceiveKeysResponse = (() => {
+
+    /**
+     * Properties of a BrokerProxyReceiveKeysResponse.
+     * @exports IBrokerProxyReceiveKeysResponse
+     * @interface IBrokerProxyReceiveKeysResponse
+     * @property {Array.<Uint8Array>|null} [keys] BrokerProxyReceiveKeysResponse keys
+     */
+
+    /**
+     * Constructs a new BrokerProxyReceiveKeysResponse.
+     * @exports BrokerProxyReceiveKeysResponse
+     * @classdesc Represents a BrokerProxyReceiveKeysResponse.
+     * @implements IBrokerProxyReceiveKeysResponse
+     * @constructor
+     * @param {IBrokerProxyReceiveKeysResponse=} [properties] Properties to set
+     */
+    function BrokerProxyReceiveKeysResponse(properties) {
+        this.keys = [];
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * BrokerProxyReceiveKeysResponse keys.
+     * @member {Array.<Uint8Array>} keys
+     * @memberof BrokerProxyReceiveKeysResponse
+     * @instance
+     */
+    BrokerProxyReceiveKeysResponse.prototype.keys = $util.emptyArray;
+
+    /**
+     * Creates a new BrokerProxyReceiveKeysResponse instance using the specified properties.
+     * @function create
+     * @memberof BrokerProxyReceiveKeysResponse
+     * @static
+     * @param {IBrokerProxyReceiveKeysResponse=} [properties] Properties to set
+     * @returns {BrokerProxyReceiveKeysResponse} BrokerProxyReceiveKeysResponse instance
+     */
+    BrokerProxyReceiveKeysResponse.create = function create(properties) {
+        return new BrokerProxyReceiveKeysResponse(properties);
+    };
+
+    /**
+     * Encodes the specified BrokerProxyReceiveKeysResponse message. Does not implicitly {@link BrokerProxyReceiveKeysResponse.verify|verify} messages.
+     * @function encode
+     * @memberof BrokerProxyReceiveKeysResponse
+     * @static
+     * @param {IBrokerProxyReceiveKeysResponse} message BrokerProxyReceiveKeysResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BrokerProxyReceiveKeysResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.keys != null && message.keys.length)
+            for (let i = 0; i < message.keys.length; ++i)
+                writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.keys[i]);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified BrokerProxyReceiveKeysResponse message, length delimited. Does not implicitly {@link BrokerProxyReceiveKeysResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof BrokerProxyReceiveKeysResponse
+     * @static
+     * @param {IBrokerProxyReceiveKeysResponse} message BrokerProxyReceiveKeysResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BrokerProxyReceiveKeysResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a BrokerProxyReceiveKeysResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof BrokerProxyReceiveKeysResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {BrokerProxyReceiveKeysResponse} BrokerProxyReceiveKeysResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BrokerProxyReceiveKeysResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyReceiveKeysResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                if (!(message.keys && message.keys.length))
+                    message.keys = [];
+                message.keys.push(reader.bytes());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a BrokerProxyReceiveKeysResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof BrokerProxyReceiveKeysResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {BrokerProxyReceiveKeysResponse} BrokerProxyReceiveKeysResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BrokerProxyReceiveKeysResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a BrokerProxyReceiveKeysResponse message.
+     * @function verify
+     * @memberof BrokerProxyReceiveKeysResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    BrokerProxyReceiveKeysResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.keys != null && message.hasOwnProperty("keys")) {
+            if (!Array.isArray(message.keys))
+                return "keys: array expected";
+            for (let i = 0; i < message.keys.length; ++i)
+                if (!(message.keys[i] && typeof message.keys[i].length === "number" || $util.isString(message.keys[i])))
+                    return "keys: buffer[] expected";
+        }
+        return null;
+    };
+
+    /**
+     * Creates a BrokerProxyReceiveKeysResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof BrokerProxyReceiveKeysResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {BrokerProxyReceiveKeysResponse} BrokerProxyReceiveKeysResponse
+     */
+    BrokerProxyReceiveKeysResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.BrokerProxyReceiveKeysResponse)
+            return object;
+        let message = new $root.BrokerProxyReceiveKeysResponse();
+        if (object.keys) {
+            if (!Array.isArray(object.keys))
+                throw TypeError(".BrokerProxyReceiveKeysResponse.keys: array expected");
+            message.keys = [];
+            for (let i = 0; i < object.keys.length; ++i)
+                if (typeof object.keys[i] === "string")
+                    $util.base64.decode(object.keys[i], message.keys[i] = $util.newBuffer($util.base64.length(object.keys[i])), 0);
+                else if (object.keys[i].length)
+                    message.keys[i] = object.keys[i];
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a BrokerProxyReceiveKeysResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof BrokerProxyReceiveKeysResponse
+     * @static
+     * @param {BrokerProxyReceiveKeysResponse} message BrokerProxyReceiveKeysResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    BrokerProxyReceiveKeysResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.arrays || options.defaults)
+            object.keys = [];
+        if (message.keys && message.keys.length) {
+            object.keys = [];
+            for (let j = 0; j < message.keys.length; ++j)
+                object.keys[j] = options.bytes === String ? $util.base64.encode(message.keys[j], 0, message.keys[j].length) : options.bytes === Array ? Array.prototype.slice.call(message.keys[j]) : message.keys[j];
+        }
+        return object;
+    };
+
+    /**
+     * Converts this BrokerProxyReceiveKeysResponse to JSON.
+     * @function toJSON
+     * @memberof BrokerProxyReceiveKeysResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    BrokerProxyReceiveKeysResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return BrokerProxyReceiveKeysResponse;
+})();
+
+export const BrokerProxyDataRequest = $root.BrokerProxyDataRequest = (() => {
+
+    /**
+     * Properties of a BrokerProxyDataRequest.
+     * @exports IBrokerProxyDataRequest
+     * @interface IBrokerProxyDataRequest
+     * @property {number|null} [peerId] BrokerProxyDataRequest peerId
+     * @property {Uint8Array|null} [data] BrokerProxyDataRequest data
+     */
+
+    /**
+     * Constructs a new BrokerProxyDataRequest.
+     * @exports BrokerProxyDataRequest
+     * @classdesc Represents a BrokerProxyDataRequest.
+     * @implements IBrokerProxyDataRequest
+     * @constructor
+     * @param {IBrokerProxyDataRequest=} [properties] Properties to set
+     */
+    function BrokerProxyDataRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * BrokerProxyDataRequest peerId.
+     * @member {number} peerId
+     * @memberof BrokerProxyDataRequest
+     * @instance
+     */
+    BrokerProxyDataRequest.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * BrokerProxyDataRequest data.
+     * @member {Uint8Array} data
+     * @memberof BrokerProxyDataRequest
+     * @instance
+     */
+    BrokerProxyDataRequest.prototype.data = $util.newBuffer([]);
+
+    /**
+     * Creates a new BrokerProxyDataRequest instance using the specified properties.
+     * @function create
+     * @memberof BrokerProxyDataRequest
+     * @static
+     * @param {IBrokerProxyDataRequest=} [properties] Properties to set
+     * @returns {BrokerProxyDataRequest} BrokerProxyDataRequest instance
+     */
+    BrokerProxyDataRequest.create = function create(properties) {
+        return new BrokerProxyDataRequest(properties);
+    };
+
+    /**
+     * Encodes the specified BrokerProxyDataRequest message. Does not implicitly {@link BrokerProxyDataRequest.verify|verify} messages.
+     * @function encode
+     * @memberof BrokerProxyDataRequest
+     * @static
+     * @param {IBrokerProxyDataRequest} message BrokerProxyDataRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BrokerProxyDataRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
         if (message.peerId != null && Object.hasOwnProperty.call(message, "peerId"))
@@ -43458,33 +43574,33 @@ export const BrokerPeerDataRequest = $root.BrokerPeerDataRequest = (() => {
     };
 
     /**
-     * Encodes the specified BrokerPeerDataRequest message, length delimited. Does not implicitly {@link BrokerPeerDataRequest.verify|verify} messages.
+     * Encodes the specified BrokerProxyDataRequest message, length delimited. Does not implicitly {@link BrokerProxyDataRequest.verify|verify} messages.
      * @function encodeDelimited
-     * @memberof BrokerPeerDataRequest
+     * @memberof BrokerProxyDataRequest
      * @static
-     * @param {IBrokerPeerDataRequest} message BrokerPeerDataRequest message or plain object to encode
+     * @param {IBrokerProxyDataRequest} message BrokerProxyDataRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    BrokerPeerDataRequest.encodeDelimited = function encodeDelimited(message, writer) {
+    BrokerProxyDataRequest.encodeDelimited = function encodeDelimited(message, writer) {
         return this.encode(message, writer).ldelim();
     };
 
     /**
-     * Decodes a BrokerPeerDataRequest message from the specified reader or buffer.
+     * Decodes a BrokerProxyDataRequest message from the specified reader or buffer.
      * @function decode
-     * @memberof BrokerPeerDataRequest
+     * @memberof BrokerProxyDataRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @param {number} [length] Message length if known beforehand
-     * @returns {BrokerPeerDataRequest} BrokerPeerDataRequest
+     * @returns {BrokerProxyDataRequest} BrokerProxyDataRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    BrokerPeerDataRequest.decode = function decode(reader, length) {
+    BrokerProxyDataRequest.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerPeerDataRequest();
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyDataRequest();
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
@@ -43503,30 +43619,30 @@ export const BrokerPeerDataRequest = $root.BrokerPeerDataRequest = (() => {
     };
 
     /**
-     * Decodes a BrokerPeerDataRequest message from the specified reader or buffer, length delimited.
+     * Decodes a BrokerProxyDataRequest message from the specified reader or buffer, length delimited.
      * @function decodeDelimited
-     * @memberof BrokerPeerDataRequest
+     * @memberof BrokerProxyDataRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {BrokerPeerDataRequest} BrokerPeerDataRequest
+     * @returns {BrokerProxyDataRequest} BrokerProxyDataRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    BrokerPeerDataRequest.decodeDelimited = function decodeDelimited(reader) {
+    BrokerProxyDataRequest.decodeDelimited = function decodeDelimited(reader) {
         if (!(reader instanceof $Reader))
             reader = new $Reader(reader);
         return this.decode(reader, reader.uint32());
     };
 
     /**
-     * Verifies a BrokerPeerDataRequest message.
+     * Verifies a BrokerProxyDataRequest message.
      * @function verify
-     * @memberof BrokerPeerDataRequest
+     * @memberof BrokerProxyDataRequest
      * @static
      * @param {Object.<string,*>} message Plain object to verify
      * @returns {string|null} `null` if valid, otherwise the reason why it is not
      */
-    BrokerPeerDataRequest.verify = function verify(message) {
+    BrokerProxyDataRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
         if (message.peerId != null && message.hasOwnProperty("peerId"))
@@ -43539,17 +43655,17 @@ export const BrokerPeerDataRequest = $root.BrokerPeerDataRequest = (() => {
     };
 
     /**
-     * Creates a BrokerPeerDataRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a BrokerProxyDataRequest message from a plain object. Also converts values to their respective internal types.
      * @function fromObject
-     * @memberof BrokerPeerDataRequest
+     * @memberof BrokerProxyDataRequest
      * @static
      * @param {Object.<string,*>} object Plain object
-     * @returns {BrokerPeerDataRequest} BrokerPeerDataRequest
+     * @returns {BrokerProxyDataRequest} BrokerProxyDataRequest
      */
-    BrokerPeerDataRequest.fromObject = function fromObject(object) {
-        if (object instanceof $root.BrokerPeerDataRequest)
+    BrokerProxyDataRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.BrokerProxyDataRequest)
             return object;
-        let message = new $root.BrokerPeerDataRequest();
+        let message = new $root.BrokerProxyDataRequest();
         if (object.peerId != null)
             if ($util.Long)
                 (message.peerId = $util.Long.fromValue(object.peerId)).unsigned = true;
@@ -43568,15 +43684,15 @@ export const BrokerPeerDataRequest = $root.BrokerPeerDataRequest = (() => {
     };
 
     /**
-     * Creates a plain object from a BrokerPeerDataRequest message. Also converts values to other types if specified.
+     * Creates a plain object from a BrokerProxyDataRequest message. Also converts values to other types if specified.
      * @function toObject
-     * @memberof BrokerPeerDataRequest
+     * @memberof BrokerProxyDataRequest
      * @static
-     * @param {BrokerPeerDataRequest} message BrokerPeerDataRequest
+     * @param {BrokerProxyDataRequest} message BrokerProxyDataRequest
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    BrokerPeerDataRequest.toObject = function toObject(message, options) {
+    BrokerProxyDataRequest.toObject = function toObject(message, options) {
         if (!options)
             options = {};
         let object = {};
@@ -43605,17 +43721,177 @@ export const BrokerPeerDataRequest = $root.BrokerPeerDataRequest = (() => {
     };
 
     /**
-     * Converts this BrokerPeerDataRequest to JSON.
+     * Converts this BrokerProxyDataRequest to JSON.
      * @function toJSON
-     * @memberof BrokerPeerDataRequest
+     * @memberof BrokerProxyDataRequest
      * @instance
      * @returns {Object.<string,*>} JSON object
      */
-    BrokerPeerDataRequest.prototype.toJSON = function toJSON() {
+    BrokerProxyDataRequest.prototype.toJSON = function toJSON() {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
 
-    return BrokerPeerDataRequest;
+    return BrokerProxyDataRequest;
+})();
+
+export const BrokerProxyDataResponse = $root.BrokerProxyDataResponse = (() => {
+
+    /**
+     * Properties of a BrokerProxyDataResponse.
+     * @exports IBrokerProxyDataResponse
+     * @interface IBrokerProxyDataResponse
+     */
+
+    /**
+     * Constructs a new BrokerProxyDataResponse.
+     * @exports BrokerProxyDataResponse
+     * @classdesc Represents a BrokerProxyDataResponse.
+     * @implements IBrokerProxyDataResponse
+     * @constructor
+     * @param {IBrokerProxyDataResponse=} [properties] Properties to set
+     */
+    function BrokerProxyDataResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new BrokerProxyDataResponse instance using the specified properties.
+     * @function create
+     * @memberof BrokerProxyDataResponse
+     * @static
+     * @param {IBrokerProxyDataResponse=} [properties] Properties to set
+     * @returns {BrokerProxyDataResponse} BrokerProxyDataResponse instance
+     */
+    BrokerProxyDataResponse.create = function create(properties) {
+        return new BrokerProxyDataResponse(properties);
+    };
+
+    /**
+     * Encodes the specified BrokerProxyDataResponse message. Does not implicitly {@link BrokerProxyDataResponse.verify|verify} messages.
+     * @function encode
+     * @memberof BrokerProxyDataResponse
+     * @static
+     * @param {IBrokerProxyDataResponse} message BrokerProxyDataResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BrokerProxyDataResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified BrokerProxyDataResponse message, length delimited. Does not implicitly {@link BrokerProxyDataResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof BrokerProxyDataResponse
+     * @static
+     * @param {IBrokerProxyDataResponse} message BrokerProxyDataResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BrokerProxyDataResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a BrokerProxyDataResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof BrokerProxyDataResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {BrokerProxyDataResponse} BrokerProxyDataResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BrokerProxyDataResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyDataResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a BrokerProxyDataResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof BrokerProxyDataResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {BrokerProxyDataResponse} BrokerProxyDataResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BrokerProxyDataResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a BrokerProxyDataResponse message.
+     * @function verify
+     * @memberof BrokerProxyDataResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    BrokerProxyDataResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a BrokerProxyDataResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof BrokerProxyDataResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {BrokerProxyDataResponse} BrokerProxyDataResponse
+     */
+    BrokerProxyDataResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.BrokerProxyDataResponse)
+            return object;
+        return new $root.BrokerProxyDataResponse();
+    };
+
+    /**
+     * Creates a plain object from a BrokerProxyDataResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof BrokerProxyDataResponse
+     * @static
+     * @param {BrokerProxyDataResponse} message BrokerProxyDataResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    BrokerProxyDataResponse.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this BrokerProxyDataResponse to JSON.
+     * @function toJSON
+     * @memberof BrokerProxyDataResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    BrokerProxyDataResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return BrokerProxyDataResponse;
 })();
 
 export const BootstrapClient = $root.BootstrapClient = (() => {

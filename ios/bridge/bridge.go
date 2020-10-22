@@ -48,14 +48,18 @@ func NewGoSide(s SwiftSide) (*GoSide, error) {
 		Store:  kv,
 		Logger: logger,
 		NewVPNHost: func(key *pb.Key) (*vpn.Host, error) {
-			ws := vnic.NewWSInterface(logger, "")
-			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, nil))
-			vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
+			vnicHost, err := vnic.New(
+				logger,
+				key,
+				vnic.WithInterface(vnic.NewWSInterface(logger, "")),
+				vnic.WithInterface(vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, nil))),
+			)
 			if err != nil {
 				return nil, err
 			}
-			return vpn.New(logger, vnicHost, network.NewBrokerFactory(logger))
+			return vpn.New(logger, vnicHost)
 		},
+		Broker: network.NewBroker(logger),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("error creating service: %w", err)

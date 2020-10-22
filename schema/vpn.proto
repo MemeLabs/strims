@@ -78,11 +78,11 @@ message NetworkHandshake {
   }
 }
 
-message BrokerPeerRequest {
+message BrokerProxyRequest {
   int32 conn_mtu = 1;
 }
 
-message BrokerPeerEvent {
+message BrokerProxyEvent {
   message Open {
     uint64 peer_id = 1;
   }
@@ -91,31 +91,40 @@ message BrokerPeerEvent {
     bytes data = 1;
   }
 
-  message InitRequired {
-    bytes data = 1;
-  }
-
-  message Keys {
-    repeated bytes keys = 1;
-  }
-
   oneof body {
     Open open = 1;
     Data data = 2;
-    InitRequired init_required = 3;
-    Keys keys = 4;
   }
 }
 
-message BrokerPeerInitRequest {
+message BrokerProxySendKeysRequest {
   uint64 peer_id = 1;
-  bool prefer_sender = 2;
-  repeated bytes keys = 3;
+  repeated bytes keys = 2;
 }
 
-message BrokerPeerDataRequest {
+message BrokerProxySendKeysResponse {}
+
+message BrokerProxyReceiveKeysRequest {
+  uint64 peer_id = 1;
+  repeated bytes keys = 2;
+}
+
+message BrokerProxyReceiveKeysResponse {
+  repeated bytes keys = 1;
+}
+
+message BrokerProxyDataRequest {
   uint64 peer_id = 1;
   bytes data = 2;
+}
+
+message BrokerProxyDataResponse {}
+
+service BrokerProxy {
+  rpc Open(BrokerProxyRequest) returns (stream BrokerProxyEvent);
+  rpc SendKeys(BrokerProxySendKeysRequest) returns (BrokerProxySendKeysResponse);
+  rpc ReceiveKeys(BrokerProxyReceiveKeysRequest) returns (BrokerProxyReceiveKeysResponse);
+  rpc Data(BrokerProxyDataRequest) returns (BrokerProxyDataResponse);
 }
 
 message BootstrapClient {

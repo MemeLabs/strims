@@ -41,8 +41,7 @@ func (s *swarmPeerSwarmItem) Ports() (uint16, uint16, bool) {
 }
 
 func newSwarmPeer(peer *vnic.Peer) *swarmPeer {
-	rw := vnic.NewFrameReadWriter(peer.Link, vnic.SwarmPort, peer.Link.MTU())
-	peer.SetHandler(vnic.SwarmPort, rw.HandleFrame)
+	rw := peer.Channel(vnic.SwarmPort)
 
 	return &swarmPeer{
 		peer:       peer,

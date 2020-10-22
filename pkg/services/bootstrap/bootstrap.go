@@ -131,17 +131,12 @@ func newPeer(
 	s := &peer{
 		logger:   logger,
 		vnicPeer: vnicPeer,
-		ch:       vnic.NewFrameReadWriter(vnicPeer.Link, vnic.BootstrapPort, vnicPeer.Link.MTU()),
+		ch:       vnicPeer.Channel(vnic.BootstrapPort),
 		store:    store,
 		vpn:      vpn,
 	}
 
-	vnicPeer.SetHandler(vnic.BootstrapPort, s.ch.HandleFrame)
-	go func() {
-		s.readMessages()
-
-		vnicPeer.RemoveHandler(vnic.BootstrapPort)
-	}()
+	go s.readMessages()
 
 	return s
 }
