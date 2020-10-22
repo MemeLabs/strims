@@ -56,8 +56,9 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 			if err != nil {
 				return nil, err
 			}
-			return vpn.New(d.logger, vnicHost, network.NewBrokerFactory(d.logger))
+			return vpn.New(d.logger, vnicHost)
 		},
+		Broker: network.NewBroker(d.logger),
 	})
 	if err != nil {
 		log.Fatal(err)

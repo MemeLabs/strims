@@ -18164,208 +18164,196 @@ export namespace NetworkHandshake {
     }
 }
 
-/** Properties of a BrokerPeerRequest. */
-export interface IBrokerPeerRequest {
+/** Properties of a BrokerProxyRequest. */
+export interface IBrokerProxyRequest {
 
-    /** BrokerPeerRequest connMtu */
+    /** BrokerProxyRequest connMtu */
     connMtu?: (number|null);
 }
 
-/** Represents a BrokerPeerRequest. */
-export class BrokerPeerRequest implements IBrokerPeerRequest {
+/** Represents a BrokerProxyRequest. */
+export class BrokerProxyRequest implements IBrokerProxyRequest {
 
     /**
-     * Constructs a new BrokerPeerRequest.
+     * Constructs a new BrokerProxyRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IBrokerPeerRequest);
+    constructor(properties?: IBrokerProxyRequest);
 
-    /** BrokerPeerRequest connMtu. */
+    /** BrokerProxyRequest connMtu. */
     public connMtu: number;
 
     /**
-     * Creates a new BrokerPeerRequest instance using the specified properties.
+     * Creates a new BrokerProxyRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns BrokerPeerRequest instance
+     * @returns BrokerProxyRequest instance
      */
-    public static create(properties?: IBrokerPeerRequest): BrokerPeerRequest;
+    public static create(properties?: IBrokerProxyRequest): BrokerProxyRequest;
 
     /**
-     * Encodes the specified BrokerPeerRequest message. Does not implicitly {@link BrokerPeerRequest.verify|verify} messages.
-     * @param message BrokerPeerRequest message or plain object to encode
+     * Encodes the specified BrokerProxyRequest message. Does not implicitly {@link BrokerProxyRequest.verify|verify} messages.
+     * @param message BrokerProxyRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IBrokerPeerRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IBrokerProxyRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified BrokerPeerRequest message, length delimited. Does not implicitly {@link BrokerPeerRequest.verify|verify} messages.
-     * @param message BrokerPeerRequest message or plain object to encode
+     * Encodes the specified BrokerProxyRequest message, length delimited. Does not implicitly {@link BrokerProxyRequest.verify|verify} messages.
+     * @param message BrokerProxyRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IBrokerPeerRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IBrokerProxyRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a BrokerPeerRequest message from the specified reader or buffer.
+     * Decodes a BrokerProxyRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns BrokerPeerRequest
+     * @returns BrokerProxyRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerPeerRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyRequest;
 
     /**
-     * Decodes a BrokerPeerRequest message from the specified reader or buffer, length delimited.
+     * Decodes a BrokerProxyRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns BrokerPeerRequest
+     * @returns BrokerProxyRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerPeerRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyRequest;
 
     /**
-     * Verifies a BrokerPeerRequest message.
+     * Verifies a BrokerProxyRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a BrokerPeerRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a BrokerProxyRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns BrokerPeerRequest
+     * @returns BrokerProxyRequest
      */
-    public static fromObject(object: { [k: string]: any }): BrokerPeerRequest;
+    public static fromObject(object: { [k: string]: any }): BrokerProxyRequest;
 
     /**
-     * Creates a plain object from a BrokerPeerRequest message. Also converts values to other types if specified.
-     * @param message BrokerPeerRequest
+     * Creates a plain object from a BrokerProxyRequest message. Also converts values to other types if specified.
+     * @param message BrokerProxyRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: BrokerPeerRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: BrokerProxyRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this BrokerPeerRequest to JSON.
+     * Converts this BrokerProxyRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a BrokerPeerEvent. */
-export interface IBrokerPeerEvent {
+/** Properties of a BrokerProxyEvent. */
+export interface IBrokerProxyEvent {
 
-    /** BrokerPeerEvent open */
-    open?: (BrokerPeerEvent.IOpen|null);
+    /** BrokerProxyEvent open */
+    open?: (BrokerProxyEvent.IOpen|null);
 
-    /** BrokerPeerEvent data */
-    data?: (BrokerPeerEvent.IData|null);
-
-    /** BrokerPeerEvent initRequired */
-    initRequired?: (BrokerPeerEvent.IInitRequired|null);
-
-    /** BrokerPeerEvent keys */
-    keys?: (BrokerPeerEvent.IKeys|null);
+    /** BrokerProxyEvent data */
+    data?: (BrokerProxyEvent.IData|null);
 }
 
-/** Represents a BrokerPeerEvent. */
-export class BrokerPeerEvent implements IBrokerPeerEvent {
+/** Represents a BrokerProxyEvent. */
+export class BrokerProxyEvent implements IBrokerProxyEvent {
 
     /**
-     * Constructs a new BrokerPeerEvent.
+     * Constructs a new BrokerProxyEvent.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IBrokerPeerEvent);
+    constructor(properties?: IBrokerProxyEvent);
 
-    /** BrokerPeerEvent open. */
-    public open?: (BrokerPeerEvent.IOpen|null);
+    /** BrokerProxyEvent open. */
+    public open?: (BrokerProxyEvent.IOpen|null);
 
-    /** BrokerPeerEvent data. */
-    public data?: (BrokerPeerEvent.IData|null);
+    /** BrokerProxyEvent data. */
+    public data?: (BrokerProxyEvent.IData|null);
 
-    /** BrokerPeerEvent initRequired. */
-    public initRequired?: (BrokerPeerEvent.IInitRequired|null);
-
-    /** BrokerPeerEvent keys. */
-    public keys?: (BrokerPeerEvent.IKeys|null);
-
-    /** BrokerPeerEvent body. */
-    public body?: ("open"|"data"|"initRequired"|"keys");
+    /** BrokerProxyEvent body. */
+    public body?: ("open"|"data");
 
     /**
-     * Creates a new BrokerPeerEvent instance using the specified properties.
+     * Creates a new BrokerProxyEvent instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns BrokerPeerEvent instance
+     * @returns BrokerProxyEvent instance
      */
-    public static create(properties?: IBrokerPeerEvent): BrokerPeerEvent;
+    public static create(properties?: IBrokerProxyEvent): BrokerProxyEvent;
 
     /**
-     * Encodes the specified BrokerPeerEvent message. Does not implicitly {@link BrokerPeerEvent.verify|verify} messages.
-     * @param message BrokerPeerEvent message or plain object to encode
+     * Encodes the specified BrokerProxyEvent message. Does not implicitly {@link BrokerProxyEvent.verify|verify} messages.
+     * @param message BrokerProxyEvent message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IBrokerPeerEvent, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IBrokerProxyEvent, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified BrokerPeerEvent message, length delimited. Does not implicitly {@link BrokerPeerEvent.verify|verify} messages.
-     * @param message BrokerPeerEvent message or plain object to encode
+     * Encodes the specified BrokerProxyEvent message, length delimited. Does not implicitly {@link BrokerProxyEvent.verify|verify} messages.
+     * @param message BrokerProxyEvent message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IBrokerPeerEvent, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IBrokerProxyEvent, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a BrokerPeerEvent message from the specified reader or buffer.
+     * Decodes a BrokerProxyEvent message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns BrokerPeerEvent
+     * @returns BrokerProxyEvent
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerPeerEvent;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyEvent;
 
     /**
-     * Decodes a BrokerPeerEvent message from the specified reader or buffer, length delimited.
+     * Decodes a BrokerProxyEvent message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns BrokerPeerEvent
+     * @returns BrokerProxyEvent
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerPeerEvent;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyEvent;
 
     /**
-     * Verifies a BrokerPeerEvent message.
+     * Verifies a BrokerProxyEvent message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a BrokerPeerEvent message from a plain object. Also converts values to their respective internal types.
+     * Creates a BrokerProxyEvent message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns BrokerPeerEvent
+     * @returns BrokerProxyEvent
      */
-    public static fromObject(object: { [k: string]: any }): BrokerPeerEvent;
+    public static fromObject(object: { [k: string]: any }): BrokerProxyEvent;
 
     /**
-     * Creates a plain object from a BrokerPeerEvent message. Also converts values to other types if specified.
-     * @param message BrokerPeerEvent
+     * Creates a plain object from a BrokerProxyEvent message. Also converts values to other types if specified.
+     * @param message BrokerProxyEvent
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: BrokerPeerEvent, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: BrokerProxyEvent, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this BrokerPeerEvent to JSON.
+     * Converts this BrokerProxyEvent to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-export namespace BrokerPeerEvent {
+export namespace BrokerProxyEvent {
 
     /** Properties of an Open. */
     interface IOpen {
@@ -18381,7 +18369,7 @@ export namespace BrokerPeerEvent {
          * Constructs a new Open.
          * @param [properties] Properties to set
          */
-        constructor(properties?: BrokerPeerEvent.IOpen);
+        constructor(properties?: BrokerProxyEvent.IOpen);
 
         /** Open peerId. */
         public peerId: number;
@@ -18391,23 +18379,23 @@ export namespace BrokerPeerEvent {
          * @param [properties] Properties to set
          * @returns Open instance
          */
-        public static create(properties?: BrokerPeerEvent.IOpen): BrokerPeerEvent.Open;
+        public static create(properties?: BrokerProxyEvent.IOpen): BrokerProxyEvent.Open;
 
         /**
-         * Encodes the specified Open message. Does not implicitly {@link BrokerPeerEvent.Open.verify|verify} messages.
+         * Encodes the specified Open message. Does not implicitly {@link BrokerProxyEvent.Open.verify|verify} messages.
          * @param message Open message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encode(message: BrokerPeerEvent.IOpen, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encode(message: BrokerProxyEvent.IOpen, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Encodes the specified Open message, length delimited. Does not implicitly {@link BrokerPeerEvent.Open.verify|verify} messages.
+         * Encodes the specified Open message, length delimited. Does not implicitly {@link BrokerProxyEvent.Open.verify|verify} messages.
          * @param message Open message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encodeDelimited(message: BrokerPeerEvent.IOpen, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encodeDelimited(message: BrokerProxyEvent.IOpen, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
          * Decodes an Open message from the specified reader or buffer.
@@ -18417,7 +18405,7 @@ export namespace BrokerPeerEvent {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerPeerEvent.Open;
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyEvent.Open;
 
         /**
          * Decodes an Open message from the specified reader or buffer, length delimited.
@@ -18426,7 +18414,7 @@ export namespace BrokerPeerEvent {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerPeerEvent.Open;
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyEvent.Open;
 
         /**
          * Verifies an Open message.
@@ -18440,7 +18428,7 @@ export namespace BrokerPeerEvent {
          * @param object Plain object
          * @returns Open
          */
-        public static fromObject(object: { [k: string]: any }): BrokerPeerEvent.Open;
+        public static fromObject(object: { [k: string]: any }): BrokerProxyEvent.Open;
 
         /**
          * Creates a plain object from an Open message. Also converts values to other types if specified.
@@ -18448,7 +18436,7 @@ export namespace BrokerPeerEvent {
          * @param [options] Conversion options
          * @returns Plain object
          */
-        public static toObject(message: BrokerPeerEvent.Open, options?: $protobuf.IConversionOptions): { [k: string]: any };
+        public static toObject(message: BrokerProxyEvent.Open, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
         /**
          * Converts this Open to JSON.
@@ -18471,7 +18459,7 @@ export namespace BrokerPeerEvent {
          * Constructs a new Data.
          * @param [properties] Properties to set
          */
-        constructor(properties?: BrokerPeerEvent.IData);
+        constructor(properties?: BrokerProxyEvent.IData);
 
         /** Data data. */
         public data: Uint8Array;
@@ -18481,23 +18469,23 @@ export namespace BrokerPeerEvent {
          * @param [properties] Properties to set
          * @returns Data instance
          */
-        public static create(properties?: BrokerPeerEvent.IData): BrokerPeerEvent.Data;
+        public static create(properties?: BrokerProxyEvent.IData): BrokerProxyEvent.Data;
 
         /**
-         * Encodes the specified Data message. Does not implicitly {@link BrokerPeerEvent.Data.verify|verify} messages.
+         * Encodes the specified Data message. Does not implicitly {@link BrokerProxyEvent.Data.verify|verify} messages.
          * @param message Data message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encode(message: BrokerPeerEvent.IData, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encode(message: BrokerProxyEvent.IData, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Encodes the specified Data message, length delimited. Does not implicitly {@link BrokerPeerEvent.Data.verify|verify} messages.
+         * Encodes the specified Data message, length delimited. Does not implicitly {@link BrokerProxyEvent.Data.verify|verify} messages.
          * @param message Data message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encodeDelimited(message: BrokerPeerEvent.IData, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encodeDelimited(message: BrokerProxyEvent.IData, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
          * Decodes a Data message from the specified reader or buffer.
@@ -18507,7 +18495,7 @@ export namespace BrokerPeerEvent {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerPeerEvent.Data;
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyEvent.Data;
 
         /**
          * Decodes a Data message from the specified reader or buffer, length delimited.
@@ -18516,7 +18504,7 @@ export namespace BrokerPeerEvent {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerPeerEvent.Data;
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyEvent.Data;
 
         /**
          * Verifies a Data message.
@@ -18530,7 +18518,7 @@ export namespace BrokerPeerEvent {
          * @param object Plain object
          * @returns Data
          */
-        public static fromObject(object: { [k: string]: any }): BrokerPeerEvent.Data;
+        public static fromObject(object: { [k: string]: any }): BrokerProxyEvent.Data;
 
         /**
          * Creates a plain object from a Data message. Also converts values to other types if specified.
@@ -18538,7 +18526,7 @@ export namespace BrokerPeerEvent {
          * @param [options] Conversion options
          * @returns Plain object
          */
-        public static toObject(message: BrokerPeerEvent.Data, options?: $protobuf.IConversionOptions): { [k: string]: any };
+        public static toObject(message: BrokerProxyEvent.Data, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
         /**
          * Converts this Data to JSON.
@@ -18546,381 +18534,549 @@ export namespace BrokerPeerEvent {
          */
         public toJSON(): { [k: string]: any };
     }
-
-    /** Properties of an InitRequired. */
-    interface IInitRequired {
-
-        /** InitRequired data */
-        data?: (Uint8Array|null);
-    }
-
-    /** Represents an InitRequired. */
-    class InitRequired implements IInitRequired {
-
-        /**
-         * Constructs a new InitRequired.
-         * @param [properties] Properties to set
-         */
-        constructor(properties?: BrokerPeerEvent.IInitRequired);
-
-        /** InitRequired data. */
-        public data: Uint8Array;
-
-        /**
-         * Creates a new InitRequired instance using the specified properties.
-         * @param [properties] Properties to set
-         * @returns InitRequired instance
-         */
-        public static create(properties?: BrokerPeerEvent.IInitRequired): BrokerPeerEvent.InitRequired;
-
-        /**
-         * Encodes the specified InitRequired message. Does not implicitly {@link BrokerPeerEvent.InitRequired.verify|verify} messages.
-         * @param message InitRequired message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encode(message: BrokerPeerEvent.IInitRequired, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Encodes the specified InitRequired message, length delimited. Does not implicitly {@link BrokerPeerEvent.InitRequired.verify|verify} messages.
-         * @param message InitRequired message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encodeDelimited(message: BrokerPeerEvent.IInitRequired, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Decodes an InitRequired message from the specified reader or buffer.
-         * @param reader Reader or buffer to decode from
-         * @param [length] Message length if known beforehand
-         * @returns InitRequired
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerPeerEvent.InitRequired;
-
-        /**
-         * Decodes an InitRequired message from the specified reader or buffer, length delimited.
-         * @param reader Reader or buffer to decode from
-         * @returns InitRequired
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerPeerEvent.InitRequired;
-
-        /**
-         * Verifies an InitRequired message.
-         * @param message Plain object to verify
-         * @returns `null` if valid, otherwise the reason why it is not
-         */
-        public static verify(message: { [k: string]: any }): (string|null);
-
-        /**
-         * Creates an InitRequired message from a plain object. Also converts values to their respective internal types.
-         * @param object Plain object
-         * @returns InitRequired
-         */
-        public static fromObject(object: { [k: string]: any }): BrokerPeerEvent.InitRequired;
-
-        /**
-         * Creates a plain object from an InitRequired message. Also converts values to other types if specified.
-         * @param message InitRequired
-         * @param [options] Conversion options
-         * @returns Plain object
-         */
-        public static toObject(message: BrokerPeerEvent.InitRequired, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-        /**
-         * Converts this InitRequired to JSON.
-         * @returns JSON object
-         */
-        public toJSON(): { [k: string]: any };
-    }
-
-    /** Properties of a Keys. */
-    interface IKeys {
-
-        /** Keys keys */
-        keys?: (Uint8Array[]|null);
-    }
-
-    /** Represents a Keys. */
-    class Keys implements IKeys {
-
-        /**
-         * Constructs a new Keys.
-         * @param [properties] Properties to set
-         */
-        constructor(properties?: BrokerPeerEvent.IKeys);
-
-        /** Keys keys. */
-        public keys: Uint8Array[];
-
-        /**
-         * Creates a new Keys instance using the specified properties.
-         * @param [properties] Properties to set
-         * @returns Keys instance
-         */
-        public static create(properties?: BrokerPeerEvent.IKeys): BrokerPeerEvent.Keys;
-
-        /**
-         * Encodes the specified Keys message. Does not implicitly {@link BrokerPeerEvent.Keys.verify|verify} messages.
-         * @param message Keys message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encode(message: BrokerPeerEvent.IKeys, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Encodes the specified Keys message, length delimited. Does not implicitly {@link BrokerPeerEvent.Keys.verify|verify} messages.
-         * @param message Keys message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encodeDelimited(message: BrokerPeerEvent.IKeys, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Decodes a Keys message from the specified reader or buffer.
-         * @param reader Reader or buffer to decode from
-         * @param [length] Message length if known beforehand
-         * @returns Keys
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerPeerEvent.Keys;
-
-        /**
-         * Decodes a Keys message from the specified reader or buffer, length delimited.
-         * @param reader Reader or buffer to decode from
-         * @returns Keys
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerPeerEvent.Keys;
-
-        /**
-         * Verifies a Keys message.
-         * @param message Plain object to verify
-         * @returns `null` if valid, otherwise the reason why it is not
-         */
-        public static verify(message: { [k: string]: any }): (string|null);
-
-        /**
-         * Creates a Keys message from a plain object. Also converts values to their respective internal types.
-         * @param object Plain object
-         * @returns Keys
-         */
-        public static fromObject(object: { [k: string]: any }): BrokerPeerEvent.Keys;
-
-        /**
-         * Creates a plain object from a Keys message. Also converts values to other types if specified.
-         * @param message Keys
-         * @param [options] Conversion options
-         * @returns Plain object
-         */
-        public static toObject(message: BrokerPeerEvent.Keys, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-        /**
-         * Converts this Keys to JSON.
-         * @returns JSON object
-         */
-        public toJSON(): { [k: string]: any };
-    }
 }
 
-/** Properties of a BrokerPeerInitRequest. */
-export interface IBrokerPeerInitRequest {
+/** Properties of a BrokerProxySendKeysRequest. */
+export interface IBrokerProxySendKeysRequest {
 
-    /** BrokerPeerInitRequest peerId */
+    /** BrokerProxySendKeysRequest peerId */
     peerId?: (number|null);
 
-    /** BrokerPeerInitRequest preferSender */
-    preferSender?: (boolean|null);
-
-    /** BrokerPeerInitRequest keys */
+    /** BrokerProxySendKeysRequest keys */
     keys?: (Uint8Array[]|null);
 }
 
-/** Represents a BrokerPeerInitRequest. */
-export class BrokerPeerInitRequest implements IBrokerPeerInitRequest {
+/** Represents a BrokerProxySendKeysRequest. */
+export class BrokerProxySendKeysRequest implements IBrokerProxySendKeysRequest {
 
     /**
-     * Constructs a new BrokerPeerInitRequest.
+     * Constructs a new BrokerProxySendKeysRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IBrokerPeerInitRequest);
+    constructor(properties?: IBrokerProxySendKeysRequest);
 
-    /** BrokerPeerInitRequest peerId. */
+    /** BrokerProxySendKeysRequest peerId. */
     public peerId: number;
 
-    /** BrokerPeerInitRequest preferSender. */
-    public preferSender: boolean;
-
-    /** BrokerPeerInitRequest keys. */
+    /** BrokerProxySendKeysRequest keys. */
     public keys: Uint8Array[];
 
     /**
-     * Creates a new BrokerPeerInitRequest instance using the specified properties.
+     * Creates a new BrokerProxySendKeysRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns BrokerPeerInitRequest instance
+     * @returns BrokerProxySendKeysRequest instance
      */
-    public static create(properties?: IBrokerPeerInitRequest): BrokerPeerInitRequest;
+    public static create(properties?: IBrokerProxySendKeysRequest): BrokerProxySendKeysRequest;
 
     /**
-     * Encodes the specified BrokerPeerInitRequest message. Does not implicitly {@link BrokerPeerInitRequest.verify|verify} messages.
-     * @param message BrokerPeerInitRequest message or plain object to encode
+     * Encodes the specified BrokerProxySendKeysRequest message. Does not implicitly {@link BrokerProxySendKeysRequest.verify|verify} messages.
+     * @param message BrokerProxySendKeysRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IBrokerPeerInitRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IBrokerProxySendKeysRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified BrokerPeerInitRequest message, length delimited. Does not implicitly {@link BrokerPeerInitRequest.verify|verify} messages.
-     * @param message BrokerPeerInitRequest message or plain object to encode
+     * Encodes the specified BrokerProxySendKeysRequest message, length delimited. Does not implicitly {@link BrokerProxySendKeysRequest.verify|verify} messages.
+     * @param message BrokerProxySendKeysRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IBrokerPeerInitRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IBrokerProxySendKeysRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a BrokerPeerInitRequest message from the specified reader or buffer.
+     * Decodes a BrokerProxySendKeysRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns BrokerPeerInitRequest
+     * @returns BrokerProxySendKeysRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerPeerInitRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxySendKeysRequest;
 
     /**
-     * Decodes a BrokerPeerInitRequest message from the specified reader or buffer, length delimited.
+     * Decodes a BrokerProxySendKeysRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns BrokerPeerInitRequest
+     * @returns BrokerProxySendKeysRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerPeerInitRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxySendKeysRequest;
 
     /**
-     * Verifies a BrokerPeerInitRequest message.
+     * Verifies a BrokerProxySendKeysRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a BrokerPeerInitRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a BrokerProxySendKeysRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns BrokerPeerInitRequest
+     * @returns BrokerProxySendKeysRequest
      */
-    public static fromObject(object: { [k: string]: any }): BrokerPeerInitRequest;
+    public static fromObject(object: { [k: string]: any }): BrokerProxySendKeysRequest;
 
     /**
-     * Creates a plain object from a BrokerPeerInitRequest message. Also converts values to other types if specified.
-     * @param message BrokerPeerInitRequest
+     * Creates a plain object from a BrokerProxySendKeysRequest message. Also converts values to other types if specified.
+     * @param message BrokerProxySendKeysRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: BrokerPeerInitRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: BrokerProxySendKeysRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this BrokerPeerInitRequest to JSON.
+     * Converts this BrokerProxySendKeysRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a BrokerPeerDataRequest. */
-export interface IBrokerPeerDataRequest {
-
-    /** BrokerPeerDataRequest peerId */
-    peerId?: (number|null);
-
-    /** BrokerPeerDataRequest data */
-    data?: (Uint8Array|null);
+/** Properties of a BrokerProxySendKeysResponse. */
+export interface IBrokerProxySendKeysResponse {
 }
 
-/** Represents a BrokerPeerDataRequest. */
-export class BrokerPeerDataRequest implements IBrokerPeerDataRequest {
+/** Represents a BrokerProxySendKeysResponse. */
+export class BrokerProxySendKeysResponse implements IBrokerProxySendKeysResponse {
 
     /**
-     * Constructs a new BrokerPeerDataRequest.
+     * Constructs a new BrokerProxySendKeysResponse.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IBrokerPeerDataRequest);
-
-    /** BrokerPeerDataRequest peerId. */
-    public peerId: number;
-
-    /** BrokerPeerDataRequest data. */
-    public data: Uint8Array;
+    constructor(properties?: IBrokerProxySendKeysResponse);
 
     /**
-     * Creates a new BrokerPeerDataRequest instance using the specified properties.
+     * Creates a new BrokerProxySendKeysResponse instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns BrokerPeerDataRequest instance
+     * @returns BrokerProxySendKeysResponse instance
      */
-    public static create(properties?: IBrokerPeerDataRequest): BrokerPeerDataRequest;
+    public static create(properties?: IBrokerProxySendKeysResponse): BrokerProxySendKeysResponse;
 
     /**
-     * Encodes the specified BrokerPeerDataRequest message. Does not implicitly {@link BrokerPeerDataRequest.verify|verify} messages.
-     * @param message BrokerPeerDataRequest message or plain object to encode
+     * Encodes the specified BrokerProxySendKeysResponse message. Does not implicitly {@link BrokerProxySendKeysResponse.verify|verify} messages.
+     * @param message BrokerProxySendKeysResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IBrokerPeerDataRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IBrokerProxySendKeysResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified BrokerPeerDataRequest message, length delimited. Does not implicitly {@link BrokerPeerDataRequest.verify|verify} messages.
-     * @param message BrokerPeerDataRequest message or plain object to encode
+     * Encodes the specified BrokerProxySendKeysResponse message, length delimited. Does not implicitly {@link BrokerProxySendKeysResponse.verify|verify} messages.
+     * @param message BrokerProxySendKeysResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IBrokerPeerDataRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IBrokerProxySendKeysResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a BrokerPeerDataRequest message from the specified reader or buffer.
+     * Decodes a BrokerProxySendKeysResponse message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns BrokerPeerDataRequest
+     * @returns BrokerProxySendKeysResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerPeerDataRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxySendKeysResponse;
 
     /**
-     * Decodes a BrokerPeerDataRequest message from the specified reader or buffer, length delimited.
+     * Decodes a BrokerProxySendKeysResponse message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns BrokerPeerDataRequest
+     * @returns BrokerProxySendKeysResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerPeerDataRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxySendKeysResponse;
 
     /**
-     * Verifies a BrokerPeerDataRequest message.
+     * Verifies a BrokerProxySendKeysResponse message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a BrokerPeerDataRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a BrokerProxySendKeysResponse message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns BrokerPeerDataRequest
+     * @returns BrokerProxySendKeysResponse
      */
-    public static fromObject(object: { [k: string]: any }): BrokerPeerDataRequest;
+    public static fromObject(object: { [k: string]: any }): BrokerProxySendKeysResponse;
 
     /**
-     * Creates a plain object from a BrokerPeerDataRequest message. Also converts values to other types if specified.
-     * @param message BrokerPeerDataRequest
+     * Creates a plain object from a BrokerProxySendKeysResponse message. Also converts values to other types if specified.
+     * @param message BrokerProxySendKeysResponse
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: BrokerPeerDataRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: BrokerProxySendKeysResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this BrokerPeerDataRequest to JSON.
+     * Converts this BrokerProxySendKeysResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BrokerProxyReceiveKeysRequest. */
+export interface IBrokerProxyReceiveKeysRequest {
+
+    /** BrokerProxyReceiveKeysRequest peerId */
+    peerId?: (number|null);
+
+    /** BrokerProxyReceiveKeysRequest keys */
+    keys?: (Uint8Array[]|null);
+}
+
+/** Represents a BrokerProxyReceiveKeysRequest. */
+export class BrokerProxyReceiveKeysRequest implements IBrokerProxyReceiveKeysRequest {
+
+    /**
+     * Constructs a new BrokerProxyReceiveKeysRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBrokerProxyReceiveKeysRequest);
+
+    /** BrokerProxyReceiveKeysRequest peerId. */
+    public peerId: number;
+
+    /** BrokerProxyReceiveKeysRequest keys. */
+    public keys: Uint8Array[];
+
+    /**
+     * Creates a new BrokerProxyReceiveKeysRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BrokerProxyReceiveKeysRequest instance
+     */
+    public static create(properties?: IBrokerProxyReceiveKeysRequest): BrokerProxyReceiveKeysRequest;
+
+    /**
+     * Encodes the specified BrokerProxyReceiveKeysRequest message. Does not implicitly {@link BrokerProxyReceiveKeysRequest.verify|verify} messages.
+     * @param message BrokerProxyReceiveKeysRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBrokerProxyReceiveKeysRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BrokerProxyReceiveKeysRequest message, length delimited. Does not implicitly {@link BrokerProxyReceiveKeysRequest.verify|verify} messages.
+     * @param message BrokerProxyReceiveKeysRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBrokerProxyReceiveKeysRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BrokerProxyReceiveKeysRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BrokerProxyReceiveKeysRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyReceiveKeysRequest;
+
+    /**
+     * Decodes a BrokerProxyReceiveKeysRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BrokerProxyReceiveKeysRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyReceiveKeysRequest;
+
+    /**
+     * Verifies a BrokerProxyReceiveKeysRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BrokerProxyReceiveKeysRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BrokerProxyReceiveKeysRequest
+     */
+    public static fromObject(object: { [k: string]: any }): BrokerProxyReceiveKeysRequest;
+
+    /**
+     * Creates a plain object from a BrokerProxyReceiveKeysRequest message. Also converts values to other types if specified.
+     * @param message BrokerProxyReceiveKeysRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BrokerProxyReceiveKeysRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BrokerProxyReceiveKeysRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BrokerProxyReceiveKeysResponse. */
+export interface IBrokerProxyReceiveKeysResponse {
+
+    /** BrokerProxyReceiveKeysResponse keys */
+    keys?: (Uint8Array[]|null);
+}
+
+/** Represents a BrokerProxyReceiveKeysResponse. */
+export class BrokerProxyReceiveKeysResponse implements IBrokerProxyReceiveKeysResponse {
+
+    /**
+     * Constructs a new BrokerProxyReceiveKeysResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBrokerProxyReceiveKeysResponse);
+
+    /** BrokerProxyReceiveKeysResponse keys. */
+    public keys: Uint8Array[];
+
+    /**
+     * Creates a new BrokerProxyReceiveKeysResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BrokerProxyReceiveKeysResponse instance
+     */
+    public static create(properties?: IBrokerProxyReceiveKeysResponse): BrokerProxyReceiveKeysResponse;
+
+    /**
+     * Encodes the specified BrokerProxyReceiveKeysResponse message. Does not implicitly {@link BrokerProxyReceiveKeysResponse.verify|verify} messages.
+     * @param message BrokerProxyReceiveKeysResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBrokerProxyReceiveKeysResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BrokerProxyReceiveKeysResponse message, length delimited. Does not implicitly {@link BrokerProxyReceiveKeysResponse.verify|verify} messages.
+     * @param message BrokerProxyReceiveKeysResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBrokerProxyReceiveKeysResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BrokerProxyReceiveKeysResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BrokerProxyReceiveKeysResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyReceiveKeysResponse;
+
+    /**
+     * Decodes a BrokerProxyReceiveKeysResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BrokerProxyReceiveKeysResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyReceiveKeysResponse;
+
+    /**
+     * Verifies a BrokerProxyReceiveKeysResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BrokerProxyReceiveKeysResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BrokerProxyReceiveKeysResponse
+     */
+    public static fromObject(object: { [k: string]: any }): BrokerProxyReceiveKeysResponse;
+
+    /**
+     * Creates a plain object from a BrokerProxyReceiveKeysResponse message. Also converts values to other types if specified.
+     * @param message BrokerProxyReceiveKeysResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BrokerProxyReceiveKeysResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BrokerProxyReceiveKeysResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BrokerProxyDataRequest. */
+export interface IBrokerProxyDataRequest {
+
+    /** BrokerProxyDataRequest peerId */
+    peerId?: (number|null);
+
+    /** BrokerProxyDataRequest data */
+    data?: (Uint8Array|null);
+}
+
+/** Represents a BrokerProxyDataRequest. */
+export class BrokerProxyDataRequest implements IBrokerProxyDataRequest {
+
+    /**
+     * Constructs a new BrokerProxyDataRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBrokerProxyDataRequest);
+
+    /** BrokerProxyDataRequest peerId. */
+    public peerId: number;
+
+    /** BrokerProxyDataRequest data. */
+    public data: Uint8Array;
+
+    /**
+     * Creates a new BrokerProxyDataRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BrokerProxyDataRequest instance
+     */
+    public static create(properties?: IBrokerProxyDataRequest): BrokerProxyDataRequest;
+
+    /**
+     * Encodes the specified BrokerProxyDataRequest message. Does not implicitly {@link BrokerProxyDataRequest.verify|verify} messages.
+     * @param message BrokerProxyDataRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBrokerProxyDataRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BrokerProxyDataRequest message, length delimited. Does not implicitly {@link BrokerProxyDataRequest.verify|verify} messages.
+     * @param message BrokerProxyDataRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBrokerProxyDataRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BrokerProxyDataRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BrokerProxyDataRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyDataRequest;
+
+    /**
+     * Decodes a BrokerProxyDataRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BrokerProxyDataRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyDataRequest;
+
+    /**
+     * Verifies a BrokerProxyDataRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BrokerProxyDataRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BrokerProxyDataRequest
+     */
+    public static fromObject(object: { [k: string]: any }): BrokerProxyDataRequest;
+
+    /**
+     * Creates a plain object from a BrokerProxyDataRequest message. Also converts values to other types if specified.
+     * @param message BrokerProxyDataRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BrokerProxyDataRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BrokerProxyDataRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BrokerProxyDataResponse. */
+export interface IBrokerProxyDataResponse {
+}
+
+/** Represents a BrokerProxyDataResponse. */
+export class BrokerProxyDataResponse implements IBrokerProxyDataResponse {
+
+    /**
+     * Constructs a new BrokerProxyDataResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBrokerProxyDataResponse);
+
+    /**
+     * Creates a new BrokerProxyDataResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BrokerProxyDataResponse instance
+     */
+    public static create(properties?: IBrokerProxyDataResponse): BrokerProxyDataResponse;
+
+    /**
+     * Encodes the specified BrokerProxyDataResponse message. Does not implicitly {@link BrokerProxyDataResponse.verify|verify} messages.
+     * @param message BrokerProxyDataResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBrokerProxyDataResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BrokerProxyDataResponse message, length delimited. Does not implicitly {@link BrokerProxyDataResponse.verify|verify} messages.
+     * @param message BrokerProxyDataResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBrokerProxyDataResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BrokerProxyDataResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BrokerProxyDataResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyDataResponse;
+
+    /**
+     * Decodes a BrokerProxyDataResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BrokerProxyDataResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyDataResponse;
+
+    /**
+     * Verifies a BrokerProxyDataResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BrokerProxyDataResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BrokerProxyDataResponse
+     */
+    public static fromObject(object: { [k: string]: any }): BrokerProxyDataResponse;
+
+    /**
+     * Creates a plain object from a BrokerProxyDataResponse message. Also converts values to other types if specified.
+     * @param message BrokerProxyDataResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BrokerProxyDataResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BrokerProxyDataResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };

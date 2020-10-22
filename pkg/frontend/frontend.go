@@ -28,15 +28,15 @@ type VPNFunc func(key *pb.Key) (*vpn.Host, error)
 
 // Server ...
 type Server struct {
-	Store         kv.BlobStore
-	Logger        *zap.Logger
-	NewVPNHost    VPNFunc
-	BrokerFactory network.BrokerFactory
+	Store      kv.BlobStore
+	Logger     *zap.Logger
+	NewVPNHost VPNFunc
+	Broker     network.Broker
 }
 
 // Listen ...
 func (s *Server) Listen(ctx context.Context, rw io.ReadWriter) error {
-	c := New(s.Logger, s.NewVPNHost, s.BrokerFactory)
+	c := New(s.Logger, s.NewVPNHost, s.Broker)
 	if err := c.initProfileService(ctx, s.Logger, s.Store, s.NewVPNHost); err != nil {
 		return err
 	}
@@ -46,21 +46,21 @@ func (s *Server) Listen(ctx context.Context, rw io.ReadWriter) error {
 }
 
 // New ...
-func New(logger *zap.Logger, newVPN VPNFunc, brokerFactory network.BrokerFactory) *Instance {
+func New(logger *zap.Logger, newVPN VPNFunc, broker network.Broker) *Instance {
 	return &Instance{
-		logger:        logger,
-		host:          rpc.NewHost(logger),
-		newVPN:        newVPN,
-		brokerFactory: brokerFactory,
+		logger: logger,
+		host:   rpc.NewHost(logger),
+		newVPN: newVPN,
+		broker: broker,
 	}
 }
 
 // Instance ...
 type Instance struct {
-	logger        *zap.Logger
-	host          *rpc.Host
-	newVPN        VPNFunc
-	brokerFactory network.BrokerFactory
+	logger *zap.Logger
+	host   *rpc.Host
+	newVPN VPNFunc
+	broker network.Broker
 
 	profile *pb.Profile
 	store   *dao.ProfileStore
@@ -100,7 +100,7 @@ func (c *Instance) Init(ctx context.Context, profile *pb.Profile, store *dao.Pro
 	}
 
 	// TODO: put this somewhere
-	network.NewPeerHandler(c.logger, c.brokerFactory, vpnHost)
+	network.NewPeerHandler(c.logger, c.broker, vpnHost)
 
 	c.Network, err = newNetworkService(ctx, c.logger, profile, store, vpnHost)
 	if err != nil {

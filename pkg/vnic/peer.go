@@ -191,5 +191,18 @@ func (p *Peer) ReleasePort(port uint16) {
 	delete(p.reservations, port)
 }
 
+// Channel ...
+func (p *Peer) Channel(port uint16) *FrameReadWriter {
+	f := NewFrameReadWriter(p.Link, port, p.Link.MTU())
+	p.SetHandler(port, f.HandleFrame)
+	return f
+}
+
+// CloseChannel ...
+func (p *Peer) CloseChannel(f *FrameReadWriter) error {
+	p.RemoveHandler(f.port)
+	return f.Close()
+}
+
 // FrameHandler ...
 type FrameHandler func(p *Peer, f Frame) error

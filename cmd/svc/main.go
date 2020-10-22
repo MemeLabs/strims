@@ -106,7 +106,7 @@ func main() {
 		return vpn.New(logger, vnicHost)
 	}
 
-	c := frontend.New(logger, newVPN, network.NewBrokerFactory(logger))
+	c := frontend.New(logger, newVPN, network.NewBroker(logger))
 	if err := c.Init(context.Background(), profile, store); err != nil {
 		logger.Fatal("frontend instance init failed", zap.Error(err))
 	}

@@ -613,12 +613,12 @@ func (c *NickServClient) Command(ctx context.Context, msg *pb.NickServRPCCommand
 		return nil, err
 	}
 
-	msg.RequestId = rid
+	// msg.RequestId = rid
 
-	msgBytes, err := proto.Marshal(msg)
-	if err != nil {
-		return nil, err
-	}
+	// msgBytes, err := proto.Marshal(msg)
+	// if err != nil {
+	// 	return nil, err
+	// }
 
 	// addr, ok := c.hostAddr.Load().(*hostAddr)
 	// if !ok {
