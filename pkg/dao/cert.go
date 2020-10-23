@@ -179,7 +179,7 @@ func CertIsExpired(cert *pb.Certificate) bool {
 
 // serializeCertificate returns a stable byte representation of a certificate
 func serializeCertificate(cert *pb.Certificate) ([]byte, int) {
-	b := make([]byte, 24+len(cert.Key)+len(cert.SerialNumber))
+	b := make([]byte, 24+len(cert.Key)+len(cert.Subject)+len(cert.SerialNumber))
 
 	n := copy(b, cert.Key)
 	binary.BigEndian.PutUint32(b[n:], uint32(cert.KeyType))
