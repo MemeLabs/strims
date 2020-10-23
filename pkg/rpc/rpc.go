@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"reflect"
 	"sync"
 	"sync/atomic"
@@ -38,10 +37,15 @@ type callKey struct {
 	id uint64
 }
 
-func handleCallback(c *conn, m *pb.Call) {
+func handleCallback(logger *zap.Logger, c *conn, m *pb.Call) {
 	ci, ok := c.callbacks.Load(m.ParentId)
 	if !ok {
-		log.Println("dropped message without handler...", m)
+		logger.Debug(
+			"callback handler not found",
+			zap.Uint64("id", m.Id),
+			zap.Uint64("parentId", m.ParentId),
+			zap.Stringer("argument", m.Argument),
+		)
 		return
 	}
 	ci.(chan *pb.Call) <- m

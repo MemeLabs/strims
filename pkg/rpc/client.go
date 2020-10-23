@@ -45,7 +45,7 @@ func (c *Client) readCalls(r io.Reader) error {
 		}
 
 		if m.Method == callbackMethod {
-			go handleCallback(c.conn, m)
+			go handleCallback(c.logger, c.conn, m)
 		}
 
 		if err := c.ctx.Err(); err != nil {

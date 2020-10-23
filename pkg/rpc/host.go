@@ -48,7 +48,7 @@ func (h *Host) Listen(ctx context.Context, rw io.ReadWriter) {
 
 		switch m.Method {
 		case callbackMethod:
-			go handleCallback(c, m)
+			go handleCallback(h.logger, c, m)
 		case cancelMethod:
 			go handleCancel(c, m)
 		default:
