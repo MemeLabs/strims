@@ -46,6 +46,8 @@ type BrokerProxyService struct {
 
 // Open ...
 func (s *BrokerProxyService) Open(ctx context.Context, r *pb.BrokerProxyRequest) (<-chan *pb.BrokerProxyEvent, error) {
+	ctx, cancel := context.WithCancel(ctx)
+
 	ch := make(chan *pb.BrokerProxyEvent)
 	rw := &brokerProxyServiceReadWriter{
 		ch:       ch,
@@ -55,6 +57,7 @@ func (s *BrokerProxyService) Open(ctx context.Context, r *pb.BrokerProxyRequest)
 		broker: s.broker,
 		conn:   bufio.NewReadWriter(bufio.NewReader(rw), bufio.NewWriterSize(rw, int(r.ConnMtu))),
 		rw:     rw,
+		cancel: cancel,
 	}
 
 	pid := atomic.AddUint64(&s.nextPeerID, 1)
@@ -115,22 +118,37 @@ func (s *BrokerProxyService) Data(ctx context.Context, r *pb.BrokerProxyDataRequ
 	return &pb.BrokerProxyDataResponse{}, nil
 }
 
+// Close ...
+func (s *BrokerProxyService) Close(ctx context.Context, r *pb.BrokerProxyCloseRequest) (*pb.BrokerProxyCloseResponse, error) {
+	pi, ok := s.helpers.Load(r.ProxyId)
+	if !ok {
+		return nil, ErrProxyIDNotFound
+	}
+
+	pi.(*brokerProxyServiceHelper).Close()
+	return &pb.BrokerProxyCloseResponse{}, nil
+}
+
 type brokerProxyServiceHelper struct {
 	broker Broker
 	conn   *bufio.ReadWriter
 	rw     *brokerProxyServiceReadWriter
+	cancel context.CancelFunc
 }
 
 // SendKeys ...
 func (h *brokerProxyServiceHelper) SendKeys(keys [][]byte) error {
-	defer h.rw.Drain()
 	return h.broker.SendKeys(h.conn, keys)
 }
 
 // ReceiveKeys ...
 func (h *brokerProxyServiceHelper) ReceiveKeys(keys [][]byte) ([][]byte, error) {
-	defer h.rw.Drain()
 	return h.broker.ReceiveKeys(h.conn, keys)
+}
+
+// Close ...
+func (h *brokerProxyServiceHelper) Close() {
+	h.cancel()
 }
 
 type brokerProxyServiceReadWriter struct {
@@ -167,14 +185,6 @@ func (r *brokerProxyServiceReadWriter) Write(p []byte) (int, error) {
 		},
 	}
 	return len(p), nil
-}
-
-func (r *brokerProxyServiceReadWriter) Drain() {
-	r.ch <- &pb.BrokerProxyEvent{
-		Body: &pb.BrokerProxyEvent_Drain_{
-			Drain: &pb.BrokerProxyEvent_Drain{},
-		},
-	}
 }
 
 func (r *brokerProxyServiceReadWriter) Close() error {
@@ -262,6 +272,8 @@ type brokerProxyClientHelper struct {
 }
 
 func (p *brokerProxyClientHelper) doEventPump(events chan *pb.BrokerProxyEvent) {
+	defer p.cancel()
+
 	for {
 		select {
 		case <-p.ctx.Done():
@@ -286,6 +298,8 @@ func (p *brokerProxyClientHelper) doEventPump(events chan *pb.BrokerProxyEvent) 
 }
 
 func (p *brokerProxyClientHelper) doReadPump() {
+	defer p.cancel()
+
 	b := make([]byte, connMTU(p.conn))
 	for {
 		select {
@@ -330,8 +344,9 @@ func (p *brokerProxyClientHelper) ReceiveKeys(keys [][]byte) ([][]byte, error) {
 	return res.Keys, nil
 }
 
-func (p *brokerProxyClientHelper) Close() {
-	p.cancel()
+func (p *brokerProxyClientHelper) Close() error {
+	req := &pb.BrokerProxyCloseRequest{ProxyId: p.id}
+	return p.client.Close(p.ctx, req, &pb.BrokerProxyCloseResponse{})
 }
 
 const defaultMTU = 16 * 1024

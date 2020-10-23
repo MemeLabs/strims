@@ -250,7 +250,7 @@ public struct PBPublishSwarmResponse {
   public init() {}
 }
 
-public struct PBVideoServerOpenRequest {
+public struct PBOpenVideoServerRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -272,7 +272,7 @@ public struct PBVideoServerOpenResponse {
   public init() {}
 }
 
-public struct PBVideoServerWriteRequest {
+public struct PBWriteToVideoServerRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -288,7 +288,7 @@ public struct PBVideoServerWriteRequest {
   public init() {}
 }
 
-public struct PBVideoServerWriteResponse {
+public struct PBWriteToVideoServerResponse {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -298,7 +298,7 @@ public struct PBVideoServerWriteResponse {
   public init() {}
 }
 
-public struct PBVideoClientOpenRequest {
+public struct PBOpenVideoClientRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1073,8 +1073,8 @@ extension PBPublishSwarmResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageI
   }
 }
 
-extension PBVideoServerOpenRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "VideoServerOpenRequest"
+extension PBOpenVideoServerRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "OpenVideoServerRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1086,7 +1086,7 @@ extension PBVideoServerOpenRequest: SwiftProtobuf.Message, SwiftProtobuf._Messag
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBVideoServerOpenRequest, rhs: PBVideoServerOpenRequest) -> Bool {
+  public static func ==(lhs: PBOpenVideoServerRequest, rhs: PBOpenVideoServerRequest) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1121,8 +1121,8 @@ extension PBVideoServerOpenResponse: SwiftProtobuf.Message, SwiftProtobuf._Messa
   }
 }
 
-extension PBVideoServerWriteRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "VideoServerWriteRequest"
+extension PBWriteToVideoServerRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "WriteToVideoServerRequest"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "id"),
     2: .same(proto: "data"),
@@ -1153,7 +1153,7 @@ extension PBVideoServerWriteRequest: SwiftProtobuf.Message, SwiftProtobuf._Messa
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBVideoServerWriteRequest, rhs: PBVideoServerWriteRequest) -> Bool {
+  public static func ==(lhs: PBWriteToVideoServerRequest, rhs: PBWriteToVideoServerRequest) -> Bool {
     if lhs.id != rhs.id {return false}
     if lhs.data != rhs.data {return false}
     if lhs.flush != rhs.flush {return false}
@@ -1162,8 +1162,8 @@ extension PBVideoServerWriteRequest: SwiftProtobuf.Message, SwiftProtobuf._Messa
   }
 }
 
-extension PBVideoServerWriteResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "VideoServerWriteResponse"
+extension PBWriteToVideoServerResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "WriteToVideoServerResponse"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1175,14 +1175,14 @@ extension PBVideoServerWriteResponse: SwiftProtobuf.Message, SwiftProtobuf._Mess
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBVideoServerWriteResponse, rhs: PBVideoServerWriteResponse) -> Bool {
+  public static func ==(lhs: PBWriteToVideoServerResponse, rhs: PBWriteToVideoServerResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBVideoClientOpenRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "VideoClientOpenRequest"
+extension PBOpenVideoClientRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "OpenVideoClientRequest"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .standard(proto: "swarm_key"),
     2: .standard(proto: "emit_data"),
@@ -1208,7 +1208,7 @@ extension PBVideoClientOpenRequest: SwiftProtobuf.Message, SwiftProtobuf._Messag
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBVideoClientOpenRequest, rhs: PBVideoClientOpenRequest) -> Bool {
+  public static func ==(lhs: PBOpenVideoClientRequest, rhs: PBOpenVideoClientRequest) -> Bool {
     if lhs.swarmKey != rhs.swarmKey {return false}
     if lhs.emitData != rhs.emitData {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}

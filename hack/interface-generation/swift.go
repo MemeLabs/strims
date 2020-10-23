@@ -24,9 +24,15 @@ func (g *SwiftGen) Template() *template.Template {
 import Foundation
 import PromiseKit
 
-class {{.Name}}Client: RPCClient {
+class {{.Name}}Client {
+  private var client: RPCClient
+
+  init(_ client: RPCClient) {
+    self.client = client
+  }
+
   {{range .Elements}}public func {{.Name | ToCamel}}(_ arg: PB{{.RequestType}} = PB{{.RequestType}}()) {{if .StreamsReturns}}throws -> RPCResponseStream{{else}}-> Promise{{end}}<PB{{.ReturnsType}}> {
-    return{{if .StreamsReturns}} try{{end}} self.{{if .StreamsReturns}}callStreaming{{else}}callUnary{{end}}("{{$.Name}}/{{.Name | ToPascal}}", arg)
+    return{{if .StreamsReturns}} try{{end}} self.client.{{if .StreamsReturns}}callStreaming{{else}}callUnary{{end}}("{{$.Name}}/{{.Name | ToPascal}}", arg)
   }
   {{end}}
 }

@@ -93,13 +93,10 @@ message BrokerProxyEvent {
 
   message Read {}
 
-  message Drain {}
-
   oneof body {
     Open open = 1;
     Data data = 2;
     Read read = 3;
-    Drain drain = 4;
   }
 }
 
@@ -126,11 +123,18 @@ message BrokerProxyDataRequest {
 
 message BrokerProxyDataResponse {}
 
+message BrokerProxyCloseRequest {
+  uint64 proxy_id = 1;
+}
+
+message BrokerProxyCloseResponse {}
+
 service BrokerProxy {
   rpc Open(BrokerProxyRequest) returns (stream BrokerProxyEvent);
   rpc SendKeys(BrokerProxySendKeysRequest) returns (BrokerProxySendKeysResponse);
   rpc ReceiveKeys(BrokerProxyReceiveKeysRequest) returns (BrokerProxyReceiveKeysResponse);
   rpc Data(BrokerProxyDataRequest) returns (BrokerProxyDataResponse);
+  rpc Close(BrokerProxyCloseRequest) returns (BrokerProxyCloseResponse);
 }
 
 message BootstrapClient {

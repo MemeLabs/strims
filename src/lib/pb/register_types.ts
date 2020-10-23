@@ -137,6 +137,8 @@ registerType("BrokerProxyReceiveKeysRequest", pb.BrokerProxyReceiveKeysRequest);
 registerType("BrokerProxyReceiveKeysResponse", pb.BrokerProxyReceiveKeysResponse);
 registerType("BrokerProxyDataRequest", pb.BrokerProxyDataRequest);
 registerType("BrokerProxyDataResponse", pb.BrokerProxyDataResponse);
+registerType("BrokerProxyCloseRequest", pb.BrokerProxyCloseRequest);
+registerType("BrokerProxyCloseResponse", pb.BrokerProxyCloseResponse);
 registerType("BootstrapClient", pb.BootstrapClient);
 registerType("BootstrapClientWebSocketOptions", pb.BootstrapClientWebSocketOptions);
 registerType("CreateBootstrapClientRequest", pb.CreateBootstrapClientRequest);

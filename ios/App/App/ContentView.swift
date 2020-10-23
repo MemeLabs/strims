@@ -63,11 +63,11 @@ struct ContentView: View {
   @State private var videoURL: String?
 
   var body: some View {
-    let client = FrontendRPCClient()
+    let client = FrontendClient()
 
     let handleCreateProfile: () -> Void = {
       firstly {
-        client.createProfile(
+        client.profile.create(
           PBCreateProfileRequest.with {
             $0.name = "test"
             $0.password = "test"
@@ -83,9 +83,9 @@ struct ContentView: View {
 
     let handleLogin: () -> Void = {
       firstly {
-        client.getProfiles(PBGetProfilesRequest())
+        client.profile.list()
       }.then { res in
-        client.loadProfile(
+        client.profile.load(
           PBLoadProfileRequest.with {
             $0.id = res.profiles[0].id
             $0.name = "test"
@@ -102,7 +102,7 @@ struct ContentView: View {
 
     let handleCreateBootstrapClient: () -> Void = {
       firstly {
-        client.createBootstrapClient(
+        client.bootstrap.createClient(
           PBCreateBootstrapClientRequest.with {
             $0.clientOptions = PBCreateBootstrapClientRequest.OneOf_ClientOptions.websocketOptions(
               PBBootstrapClientWebSocketOptions.with {
@@ -122,8 +122,8 @@ struct ContentView: View {
 
     let handleLoadInviteCert: () -> Void = {
       firstly {
-        client.createNetworkMembershipFromInvitation(
-          PBCreateNetworkMembershipFromInvitationRequest.with {
+        client.network.createFromInvitation(
+          PBCreateNetworkFromInvitationRequest.with {
             $0.invitationB64 =
               "EoADCmYIARJA3+jPfL6RMfY8aLFZRDYdmzY5s8gsuEvzrLNOM+KQxDtU0VEHnhGkPOp8mryKzh5ISz1dpRr8xD2kcZMIZ+dNRhogVNFRB54RpDzqfJq8is4eSEs9XaUa/MQ9pHGTCGfnTUYSjwIKIFTRUQeeEaQ86nyavIrOHkhLPV2lGvzEPaRxkwhn501GEAEYBiCH8ob6BSiH56v6BTIQTKUyIcq6qpRJYxpU4CVm0zpAIcPsy2/eBc/FLAp62xJka2WVrWqa8JdnYscnOh80REVOPSQbJ5s1uXQRUqJ8hwUUCMw7rPRhP29ZTV8ZGTznCEKGAQogHVmKdL3JUzXvjh3BQ8tFqFCvzPp7Wxe4ak2yWbjSj/cQARgEINb+kfcFKNbMm5UGMhCGDUmvQDYLYehxX3XjVz/EOkAixCMT3+O7tBwyhTEid0bCtxNkpAN6FkrSHdOiIkAv4wWp/OJ3UzlWpYGaA01wO27gUIEb+82rUyDdOGibKKwEIgR0ZXN0"
           }
@@ -138,7 +138,7 @@ struct ContentView: View {
 
     let handleCreateNetwork: () -> Void = {
       firstly {
-        client.createNetwork(
+        client.network.create(
           PBCreateNetworkRequest.with {
             $0.name = "test"
           }
@@ -153,7 +153,7 @@ struct ContentView: View {
 
     let handleStartVPN: () -> Void = {
       do {
-        let vpn = try client.startVPN()
+        let vpn = try client.network.startVPN()
         vpn.delegate = { event, eventType in
           switch eventType {
           case RPCEvent.data:
@@ -184,14 +184,14 @@ struct ContentView: View {
 
     let publishSwarm: (UInt64) -> Void = { id in
       firstly {
-        client.getNetworkMemberships()
-      }.then { memberships in
+        client.network.list()
+      }.then { networks in
         when(
-          fulfilled: memberships.networkMemberships.map { membership in
-            client.publishSwarm(
+          fulfilled: networks.networks.map { network in
+            client.video.publishSwarm(
               PBPublishSwarmRequest.with {
                 $0.id = id
-                $0.networkKey = rootCert(membership.certificate).key
+                $0.networkKey = rootCert(network.certificate).key
               }
             )
           } as [Promise<PBPublishSwarmResponse>]
@@ -205,7 +205,7 @@ struct ContentView: View {
 
     let startHLSEgress: (UInt64) -> Void = { id in
       firstly {
-        client.startHLSEgress(
+        client.video.startHLSEgress(
           PBStartHLSEgressRequest.with {
             $0.videoID = id
           }
@@ -223,7 +223,7 @@ struct ContentView: View {
 
     let handleJoinVideoSwarm: () -> Void = {
       do {
-        let client = try client.openVideoClient()
+        let client = try client.video.openClient()
         client.delegate = { event, eventType in
           switch eventType {
           case RPCEvent.data:

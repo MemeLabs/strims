@@ -339,7 +339,7 @@ public struct PBGetProfileResponse {
   fileprivate var _profile: PBProfile? = nil
 }
 
-public struct PBGetProfilesRequest {
+public struct PBListProfilesRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -349,7 +349,7 @@ public struct PBGetProfilesRequest {
   public init() {}
 }
 
-public struct PBGetProfilesResponse {
+public struct PBListProfilesResponse {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -396,6 +396,20 @@ public struct PBLoadSessionResponse {
   fileprivate var _profile: PBProfile? = nil
 }
 
+public struct PBNetworkIcon {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var data: Data = Data()
+
+  public var type: String = String()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
 public struct PBCreateNetworkRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
@@ -403,9 +417,20 @@ public struct PBCreateNetworkRequest {
 
   public var name: String = String()
 
+  public var icon: PBNetworkIcon {
+    get {return _icon ?? PBNetworkIcon()}
+    set {_icon = newValue}
+  }
+  /// Returns true if `icon` has been explicitly set.
+  public var hasIcon: Bool {return self._icon != nil}
+  /// Clears the value of `icon`. Subsequent reads from it will return its default value.
+  public mutating func clearIcon() {self._icon = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
+
+  fileprivate var _icon: PBNetworkIcon? = nil
 }
 
 public struct PBCreateNetworkResponse {
@@ -519,7 +544,7 @@ public struct PBGetNetworkResponse {
   fileprivate var _network: PBNetwork? = nil
 }
 
-public struct PBGetNetworksRequest {
+public struct PBListNetworksRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -529,56 +554,12 @@ public struct PBGetNetworksRequest {
   public init() {}
 }
 
-public struct PBGetNetworksResponse {
+public struct PBListNetworksResponse {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
   public var networks: [PBNetwork] = []
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-}
-
-public struct PBGetNetworkMembershipsRequest {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-}
-
-public struct PBGetNetworkMembershipsResponse {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var networkMemberships: [PBNetworkMembership] = []
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-}
-
-public struct PBDeleteNetworkMembershipRequest {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
-
-  public var id: UInt64 = 0
-
-  public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-  public init() {}
-}
-
-public struct PBDeleteNetworkMembershipResponse {
-  // SwiftProtobuf.Message conformance is added in an extension below. See the
-  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-  // methods supported on all messages.
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -770,8 +751,6 @@ public struct PBProfile {
 
   public var networks: [PBNetwork] = []
 
-  public var networkMemberships: [PBNetworkMembership] = []
-
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
@@ -820,12 +799,22 @@ public struct PBNetwork {
   /// Clears the value of `certificate`. Subsequent reads from it will return its default value.
   public mutating func clearCertificate() {self._certificate = nil}
 
+  public var icon: PBNetworkIcon {
+    get {return _icon ?? PBNetworkIcon()}
+    set {_icon = newValue}
+  }
+  /// Returns true if `icon` has been explicitly set.
+  public var hasIcon: Bool {return self._icon != nil}
+  /// Clears the value of `icon`. Subsequent reads from it will return its default value.
+  public mutating func clearIcon() {self._icon = nil}
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
   fileprivate var _key: PBKey? = nil
   fileprivate var _certificate: PBCertificate? = nil
+  fileprivate var _icon: PBNetworkIcon? = nil
 }
 
 public struct PBNetworkMembership {
@@ -972,12 +961,12 @@ public struct PBInvitationV0 {
   fileprivate var _certificate: PBCertificate? = nil
 }
 
-public struct PBCreateNetworkMembershipFromInvitationRequest {
+public struct PBCreateNetworkFromInvitationRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var invitation: PBCreateNetworkMembershipFromInvitationRequest.OneOf_Invitation? = nil
+  public var invitation: PBCreateNetworkFromInvitationRequest.OneOf_Invitation? = nil
 
   public var invitationB64: String {
     get {
@@ -1002,7 +991,7 @@ public struct PBCreateNetworkMembershipFromInvitationRequest {
     case invitationBytes(Data)
 
   #if !swift(>=4.1)
-    public static func ==(lhs: PBCreateNetworkMembershipFromInvitationRequest.OneOf_Invitation, rhs: PBCreateNetworkMembershipFromInvitationRequest.OneOf_Invitation) -> Bool {
+    public static func ==(lhs: PBCreateNetworkFromInvitationRequest.OneOf_Invitation, rhs: PBCreateNetworkFromInvitationRequest.OneOf_Invitation) -> Bool {
       switch (lhs, rhs) {
       case (.invitationB64(let l), .invitationB64(let r)): return l == r
       case (.invitationBytes(let l), .invitationBytes(let r)): return l == r
@@ -1015,25 +1004,25 @@ public struct PBCreateNetworkMembershipFromInvitationRequest {
   public init() {}
 }
 
-public struct PBCreateNetworkMembershipFromInvitationResponse {
+public struct PBCreateNetworkFromInvitationResponse {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var membership: PBNetworkMembership {
-    get {return _membership ?? PBNetworkMembership()}
-    set {_membership = newValue}
+  public var network: PBNetwork {
+    get {return _network ?? PBNetwork()}
+    set {_network = newValue}
   }
-  /// Returns true if `membership` has been explicitly set.
-  public var hasMembership: Bool {return self._membership != nil}
-  /// Clears the value of `membership`. Subsequent reads from it will return its default value.
-  public mutating func clearMembership() {self._membership = nil}
+  /// Returns true if `network` has been explicitly set.
+  public var hasNetwork: Bool {return self._network != nil}
+  /// Clears the value of `network`. Subsequent reads from it will return its default value.
+  public mutating func clearNetwork() {self._network = nil}
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public init() {}
 
-  fileprivate var _membership: PBNetworkMembership? = nil
+  fileprivate var _network: PBNetwork? = nil
 }
 
 public struct PBMutex {
@@ -1394,8 +1383,8 @@ extension PBGetProfileResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
   }
 }
 
-extension PBGetProfilesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GetProfilesRequest"
+extension PBListProfilesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "ListProfilesRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1407,14 +1396,14 @@ extension PBGetProfilesRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBGetProfilesRequest, rhs: PBGetProfilesRequest) -> Bool {
+  public static func ==(lhs: PBListProfilesRequest, rhs: PBListProfilesRequest) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBGetProfilesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GetProfilesResponse"
+extension PBListProfilesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "ListProfilesResponse"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "profiles"),
   ]
@@ -1435,7 +1424,7 @@ extension PBGetProfilesResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBGetProfilesResponse, rhs: PBGetProfilesResponse) -> Bool {
+  public static func ==(lhs: PBListProfilesResponse, rhs: PBListProfilesResponse) -> Bool {
     if lhs.profiles != rhs.profiles {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
@@ -1506,16 +1495,53 @@ extension PBLoadSessionResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
   }
 }
 
+extension PBNetworkIcon: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "NetworkIcon"
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .same(proto: "data"),
+    2: .same(proto: "type"),
+  ]
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      switch fieldNumber {
+      case 1: try decoder.decodeSingularBytesField(value: &self.data)
+      case 2: try decoder.decodeSingularStringField(value: &self.type)
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.data.isEmpty {
+      try visitor.visitSingularBytesField(value: self.data, fieldNumber: 1)
+    }
+    if !self.type.isEmpty {
+      try visitor.visitSingularStringField(value: self.type, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: PBNetworkIcon, rhs: PBNetworkIcon) -> Bool {
+    if lhs.data != rhs.data {return false}
+    if lhs.type != rhs.type {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
 extension PBCreateNetworkRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
   public static let protoMessageName: String = "CreateNetworkRequest"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "name"),
+    2: .same(proto: "icon"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       switch fieldNumber {
       case 1: try decoder.decodeSingularStringField(value: &self.name)
+      case 2: try decoder.decodeSingularMessageField(value: &self._icon)
       default: break
       }
     }
@@ -1525,11 +1551,15 @@ extension PBCreateNetworkRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     if !self.name.isEmpty {
       try visitor.visitSingularStringField(value: self.name, fieldNumber: 1)
     }
+    if let v = self._icon {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
   public static func ==(lhs: PBCreateNetworkRequest, rhs: PBCreateNetworkRequest) -> Bool {
     if lhs.name != rhs.name {return false}
+    if lhs._icon != rhs._icon {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -1734,8 +1764,8 @@ extension PBGetNetworkResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
   }
 }
 
-extension PBGetNetworksRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GetNetworksRequest"
+extension PBListNetworksRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "ListNetworksRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1747,14 +1777,14 @@ extension PBGetNetworksRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImp
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBGetNetworksRequest, rhs: PBGetNetworksRequest) -> Bool {
+  public static func ==(lhs: PBListNetworksRequest, rhs: PBListNetworksRequest) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBGetNetworksResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GetNetworksResponse"
+extension PBListNetworksResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "ListNetworksResponse"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "networks"),
   ]
@@ -1775,104 +1805,8 @@ extension PBGetNetworksResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageIm
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBGetNetworksResponse, rhs: PBGetNetworksResponse) -> Bool {
+  public static func ==(lhs: PBListNetworksResponse, rhs: PBListNetworksResponse) -> Bool {
     if lhs.networks != rhs.networks {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension PBGetNetworkMembershipsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GetNetworkMembershipsRequest"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let _ = try decoder.nextFieldNumber() {
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: PBGetNetworkMembershipsRequest, rhs: PBGetNetworkMembershipsRequest) -> Bool {
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension PBGetNetworkMembershipsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GetNetworkMembershipsResponse"
-  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .standard(proto: "network_memberships"),
-  ]
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      switch fieldNumber {
-      case 1: try decoder.decodeRepeatedMessageField(value: &self.networkMemberships)
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.networkMemberships.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.networkMemberships, fieldNumber: 1)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: PBGetNetworkMembershipsResponse, rhs: PBGetNetworkMembershipsResponse) -> Bool {
-    if lhs.networkMemberships != rhs.networkMemberships {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension PBDeleteNetworkMembershipRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "DeleteNetworkMembershipRequest"
-  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .same(proto: "id"),
-  ]
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      switch fieldNumber {
-      case 1: try decoder.decodeSingularUInt64Field(value: &self.id)
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.id != 0 {
-      try visitor.visitSingularUInt64Field(value: self.id, fieldNumber: 1)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: PBDeleteNetworkMembershipRequest, rhs: PBDeleteNetworkMembershipRequest) -> Bool {
-    if lhs.id != rhs.id {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension PBDeleteNetworkMembershipResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "DeleteNetworkMembershipResponse"
-  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let _ = try decoder.nextFieldNumber() {
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: PBDeleteNetworkMembershipResponse, rhs: PBDeleteNetworkMembershipResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2061,12 +1995,12 @@ extension PBCertificate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
     1: .same(proto: "key"),
     2: .standard(proto: "key_type"),
     3: .standard(proto: "key_usage"),
-    9: .same(proto: "subject"),
-    4: .standard(proto: "not_before"),
-    5: .standard(proto: "not_after"),
-    6: .standard(proto: "serial_number"),
-    7: .same(proto: "signature"),
-    8: .same(proto: "parent"),
+    4: .same(proto: "subject"),
+    5: .standard(proto: "not_before"),
+    6: .standard(proto: "not_after"),
+    7: .standard(proto: "serial_number"),
+    8: .same(proto: "signature"),
+    9: .same(proto: "parent"),
   ]
 
   fileprivate class _StorageClass {
@@ -2112,11 +2046,12 @@ extension PBCertificate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
         case 1: try decoder.decodeSingularBytesField(value: &_storage._key)
         case 2: try decoder.decodeSingularEnumField(value: &_storage._keyType)
         case 3: try decoder.decodeSingularUInt32Field(value: &_storage._keyUsage)
-        case 4: try decoder.decodeSingularUInt64Field(value: &_storage._notBefore)
-        case 5: try decoder.decodeSingularUInt64Field(value: &_storage._notAfter)
-        case 6: try decoder.decodeSingularBytesField(value: &_storage._serialNumber)
-        case 7: try decoder.decodeSingularBytesField(value: &_storage._signature)
-        case 8:
+        case 4: try decoder.decodeSingularStringField(value: &_storage._subject)
+        case 5: try decoder.decodeSingularUInt64Field(value: &_storage._notBefore)
+        case 6: try decoder.decodeSingularUInt64Field(value: &_storage._notAfter)
+        case 7: try decoder.decodeSingularBytesField(value: &_storage._serialNumber)
+        case 8: try decoder.decodeSingularBytesField(value: &_storage._signature)
+        case 9:
           var v: PBCertificate?
           if let current = _storage._parentOneof {
             try decoder.handleConflictingOneOf()
@@ -2124,7 +2059,6 @@ extension PBCertificate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
           }
           try decoder.decodeSingularMessageField(value: &v)
           if let v = v {_storage._parentOneof = .parent(v)}
-        case 9: try decoder.decodeSingularStringField(value: &_storage._subject)
         default: break
         }
       }
@@ -2142,23 +2076,23 @@ extension PBCertificate: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementa
       if _storage._keyUsage != 0 {
         try visitor.visitSingularUInt32Field(value: _storage._keyUsage, fieldNumber: 3)
       }
+      if !_storage._subject.isEmpty {
+        try visitor.visitSingularStringField(value: _storage._subject, fieldNumber: 4)
+      }
       if _storage._notBefore != 0 {
-        try visitor.visitSingularUInt64Field(value: _storage._notBefore, fieldNumber: 4)
+        try visitor.visitSingularUInt64Field(value: _storage._notBefore, fieldNumber: 5)
       }
       if _storage._notAfter != 0 {
-        try visitor.visitSingularUInt64Field(value: _storage._notAfter, fieldNumber: 5)
+        try visitor.visitSingularUInt64Field(value: _storage._notAfter, fieldNumber: 6)
       }
       if !_storage._serialNumber.isEmpty {
-        try visitor.visitSingularBytesField(value: _storage._serialNumber, fieldNumber: 6)
+        try visitor.visitSingularBytesField(value: _storage._serialNumber, fieldNumber: 7)
       }
       if !_storage._signature.isEmpty {
-        try visitor.visitSingularBytesField(value: _storage._signature, fieldNumber: 7)
+        try visitor.visitSingularBytesField(value: _storage._signature, fieldNumber: 8)
       }
       if case .parent(let v)? = _storage._parentOneof {
-        try visitor.visitSingularMessageField(value: v, fieldNumber: 8)
-      }
-      if !_storage._subject.isEmpty {
-        try visitor.visitSingularStringField(value: _storage._subject, fieldNumber: 9)
+        try visitor.visitSingularMessageField(value: v, fieldNumber: 9)
       }
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -2195,7 +2129,6 @@ extension PBProfile: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementation
     3: .same(proto: "secret"),
     4: .same(proto: "key"),
     5: .same(proto: "networks"),
-    6: .standard(proto: "network_memberships"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -2206,7 +2139,6 @@ extension PBProfile: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementation
       case 3: try decoder.decodeSingularBytesField(value: &self.secret)
       case 4: try decoder.decodeSingularMessageField(value: &self._key)
       case 5: try decoder.decodeRepeatedMessageField(value: &self.networks)
-      case 6: try decoder.decodeRepeatedMessageField(value: &self.networkMemberships)
       default: break
       }
     }
@@ -2228,9 +2160,6 @@ extension PBProfile: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementation
     if !self.networks.isEmpty {
       try visitor.visitRepeatedMessageField(value: self.networks, fieldNumber: 5)
     }
-    if !self.networkMemberships.isEmpty {
-      try visitor.visitRepeatedMessageField(value: self.networkMemberships, fieldNumber: 6)
-    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2240,7 +2169,6 @@ extension PBProfile: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementation
     if lhs.secret != rhs.secret {return false}
     if lhs._key != rhs._key {return false}
     if lhs.networks != rhs.networks {return false}
-    if lhs.networkMemberships != rhs.networkMemberships {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2288,6 +2216,7 @@ extension PBNetwork: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementation
     2: .same(proto: "name"),
     3: .same(proto: "key"),
     4: .same(proto: "certificate"),
+    5: .same(proto: "icon"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -2297,6 +2226,7 @@ extension PBNetwork: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementation
       case 2: try decoder.decodeSingularStringField(value: &self.name)
       case 3: try decoder.decodeSingularMessageField(value: &self._key)
       case 4: try decoder.decodeSingularMessageField(value: &self._certificate)
+      case 5: try decoder.decodeSingularMessageField(value: &self._icon)
       default: break
       }
     }
@@ -2315,6 +2245,9 @@ extension PBNetwork: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementation
     if let v = self._certificate {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
     }
+    if let v = self._icon {
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
+    }
     try unknownFields.traverse(visitor: &visitor)
   }
 
@@ -2323,6 +2256,7 @@ extension PBNetwork: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementation
     if lhs.name != rhs.name {return false}
     if lhs._key != rhs._key {return false}
     if lhs._certificate != rhs._certificate {return false}
+    if lhs._icon != rhs._icon {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2545,8 +2479,8 @@ extension PBInvitationV0: SwiftProtobuf.Message, SwiftProtobuf._MessageImplement
   }
 }
 
-extension PBCreateNetworkMembershipFromInvitationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "CreateNetworkMembershipFromInvitationRequest"
+extension PBCreateNetworkFromInvitationRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "CreateNetworkFromInvitationRequest"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .standard(proto: "invitation_b64"),
     2: .standard(proto: "invitation_bytes"),
@@ -2581,37 +2515,37 @@ extension PBCreateNetworkMembershipFromInvitationRequest: SwiftProtobuf.Message,
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBCreateNetworkMembershipFromInvitationRequest, rhs: PBCreateNetworkMembershipFromInvitationRequest) -> Bool {
+  public static func ==(lhs: PBCreateNetworkFromInvitationRequest, rhs: PBCreateNetworkFromInvitationRequest) -> Bool {
     if lhs.invitation != rhs.invitation {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBCreateNetworkMembershipFromInvitationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "CreateNetworkMembershipFromInvitationResponse"
+extension PBCreateNetworkFromInvitationResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "CreateNetworkFromInvitationResponse"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .same(proto: "membership"),
+    1: .same(proto: "network"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       switch fieldNumber {
-      case 1: try decoder.decodeSingularMessageField(value: &self._membership)
+      case 1: try decoder.decodeSingularMessageField(value: &self._network)
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if let v = self._membership {
+    if let v = self._network {
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBCreateNetworkMembershipFromInvitationResponse, rhs: PBCreateNetworkMembershipFromInvitationResponse) -> Bool {
-    if lhs._membership != rhs._membership {return false}
+  public static func ==(lhs: PBCreateNetworkFromInvitationResponse, rhs: PBCreateNetworkFromInvitationResponse) -> Bool {
+    if lhs._network != rhs._network {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }

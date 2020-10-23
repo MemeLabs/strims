@@ -9,12 +9,18 @@
 import Foundation
 import PromiseKit
 
-class DebugClient: RPCClient {
+class DebugClient {
+  private var client: RPCClient
+
+  init(_ client: RPCClient) {
+    self.client = client
+  }
+
   public func pProf(_ arg: PBPProfRequest = PBPProfRequest()) -> Promise<PBPProfResponse> {
-    return self.callUnary("Debug/PProf", arg)
+    return self.client.callUnary("Debug/PProf", arg)
   }
   public func readMetrics(_ arg: PBReadMetricsRequest = PBReadMetricsRequest()) -> Promise<PBReadMetricsResponse> {
-    return self.callUnary("Debug/ReadMetrics", arg)
+    return self.client.callUnary("Debug/ReadMetrics", arg)
   }
-  
+
 }
