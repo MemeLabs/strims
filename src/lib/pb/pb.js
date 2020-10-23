@@ -42016,7 +42016,6 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
      * @property {BrokerProxyEvent.IOpen|null} [open] BrokerProxyEvent open
      * @property {BrokerProxyEvent.IData|null} [data] BrokerProxyEvent data
      * @property {BrokerProxyEvent.IRead|null} [read] BrokerProxyEvent read
-     * @property {BrokerProxyEvent.IDrain|null} [drain] BrokerProxyEvent drain
      */
 
     /**
@@ -42058,25 +42057,17 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
      */
     BrokerProxyEvent.prototype.read = null;
 
-    /**
-     * BrokerProxyEvent drain.
-     * @member {BrokerProxyEvent.IDrain|null|undefined} drain
-     * @memberof BrokerProxyEvent
-     * @instance
-     */
-    BrokerProxyEvent.prototype.drain = null;
-
     // OneOf field names bound to virtual getters and setters
     let $oneOfFields;
 
     /**
      * BrokerProxyEvent body.
-     * @member {"open"|"data"|"read"|"drain"|undefined} body
+     * @member {"open"|"data"|"read"|undefined} body
      * @memberof BrokerProxyEvent
      * @instance
      */
     Object.defineProperty(BrokerProxyEvent.prototype, "body", {
-        get: $util.oneOfGetter($oneOfFields = ["open", "data", "read", "drain"]),
+        get: $util.oneOfGetter($oneOfFields = ["open", "data", "read"]),
         set: $util.oneOfSetter($oneOfFields)
     });
 
@@ -42110,8 +42101,6 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
             $root.BrokerProxyEvent.Data.encode(message.data, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
         if (message.read != null && Object.hasOwnProperty.call(message, "read"))
             $root.BrokerProxyEvent.Read.encode(message.read, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-        if (message.drain != null && Object.hasOwnProperty.call(message, "drain"))
-            $root.BrokerProxyEvent.Drain.encode(message.drain, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
         return writer;
     };
 
@@ -42154,9 +42143,6 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
                 break;
             case 3:
                 message.read = $root.BrokerProxyEvent.Read.decode(reader, reader.uint32());
-                break;
-            case 4:
-                message.drain = $root.BrokerProxyEvent.Drain.decode(reader, reader.uint32());
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -42222,16 +42208,6 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
                     return "read." + error;
             }
         }
-        if (message.drain != null && message.hasOwnProperty("drain")) {
-            if (properties.body === 1)
-                return "body: multiple values";
-            properties.body = 1;
-            {
-                let error = $root.BrokerProxyEvent.Drain.verify(message.drain);
-                if (error)
-                    return "drain." + error;
-            }
-        }
         return null;
     };
 
@@ -42261,11 +42237,6 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
             if (typeof object.read !== "object")
                 throw TypeError(".BrokerProxyEvent.read: object expected");
             message.read = $root.BrokerProxyEvent.Read.fromObject(object.read);
-        }
-        if (object.drain != null) {
-            if (typeof object.drain !== "object")
-                throw TypeError(".BrokerProxyEvent.drain: object expected");
-            message.drain = $root.BrokerProxyEvent.Drain.fromObject(object.drain);
         }
         return message;
     };
@@ -42297,11 +42268,6 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
             object.read = $root.BrokerProxyEvent.Read.toObject(message.read, options);
             if (options.oneofs)
                 object.body = "read";
-        }
-        if (message.drain != null && message.hasOwnProperty("drain")) {
-            object.drain = $root.BrokerProxyEvent.Drain.toObject(message.drain, options);
-            if (options.oneofs)
-                object.body = "drain";
         }
         return object;
     };
@@ -42872,166 +42838,6 @@ export const BrokerProxyEvent = $root.BrokerProxyEvent = (() => {
         };
 
         return Read;
-    })();
-
-    BrokerProxyEvent.Drain = (function() {
-
-        /**
-         * Properties of a Drain.
-         * @memberof BrokerProxyEvent
-         * @interface IDrain
-         */
-
-        /**
-         * Constructs a new Drain.
-         * @memberof BrokerProxyEvent
-         * @classdesc Represents a Drain.
-         * @implements IDrain
-         * @constructor
-         * @param {BrokerProxyEvent.IDrain=} [properties] Properties to set
-         */
-        function Drain(properties) {
-            if (properties)
-                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                    if (properties[keys[i]] != null)
-                        this[keys[i]] = properties[keys[i]];
-        }
-
-        /**
-         * Creates a new Drain instance using the specified properties.
-         * @function create
-         * @memberof BrokerProxyEvent.Drain
-         * @static
-         * @param {BrokerProxyEvent.IDrain=} [properties] Properties to set
-         * @returns {BrokerProxyEvent.Drain} Drain instance
-         */
-        Drain.create = function create(properties) {
-            return new Drain(properties);
-        };
-
-        /**
-         * Encodes the specified Drain message. Does not implicitly {@link BrokerProxyEvent.Drain.verify|verify} messages.
-         * @function encode
-         * @memberof BrokerProxyEvent.Drain
-         * @static
-         * @param {BrokerProxyEvent.IDrain} message Drain message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        Drain.encode = function encode(message, writer) {
-            if (!writer)
-                writer = $Writer.create();
-            return writer;
-        };
-
-        /**
-         * Encodes the specified Drain message, length delimited. Does not implicitly {@link BrokerProxyEvent.Drain.verify|verify} messages.
-         * @function encodeDelimited
-         * @memberof BrokerProxyEvent.Drain
-         * @static
-         * @param {BrokerProxyEvent.IDrain} message Drain message or plain object to encode
-         * @param {$protobuf.Writer} [writer] Writer to encode to
-         * @returns {$protobuf.Writer} Writer
-         */
-        Drain.encodeDelimited = function encodeDelimited(message, writer) {
-            return this.encode(message, writer).ldelim();
-        };
-
-        /**
-         * Decodes a Drain message from the specified reader or buffer.
-         * @function decode
-         * @memberof BrokerProxyEvent.Drain
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @param {number} [length] Message length if known beforehand
-         * @returns {BrokerProxyEvent.Drain} Drain
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        Drain.decode = function decode(reader, length) {
-            if (!(reader instanceof $Reader))
-                reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyEvent.Drain();
-            while (reader.pos < end) {
-                let tag = reader.uint32();
-                switch (tag >>> 3) {
-                default:
-                    reader.skipType(tag & 7);
-                    break;
-                }
-            }
-            return message;
-        };
-
-        /**
-         * Decodes a Drain message from the specified reader or buffer, length delimited.
-         * @function decodeDelimited
-         * @memberof BrokerProxyEvent.Drain
-         * @static
-         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {BrokerProxyEvent.Drain} Drain
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        Drain.decodeDelimited = function decodeDelimited(reader) {
-            if (!(reader instanceof $Reader))
-                reader = new $Reader(reader);
-            return this.decode(reader, reader.uint32());
-        };
-
-        /**
-         * Verifies a Drain message.
-         * @function verify
-         * @memberof BrokerProxyEvent.Drain
-         * @static
-         * @param {Object.<string,*>} message Plain object to verify
-         * @returns {string|null} `null` if valid, otherwise the reason why it is not
-         */
-        Drain.verify = function verify(message) {
-            if (typeof message !== "object" || message === null)
-                return "object expected";
-            return null;
-        };
-
-        /**
-         * Creates a Drain message from a plain object. Also converts values to their respective internal types.
-         * @function fromObject
-         * @memberof BrokerProxyEvent.Drain
-         * @static
-         * @param {Object.<string,*>} object Plain object
-         * @returns {BrokerProxyEvent.Drain} Drain
-         */
-        Drain.fromObject = function fromObject(object) {
-            if (object instanceof $root.BrokerProxyEvent.Drain)
-                return object;
-            return new $root.BrokerProxyEvent.Drain();
-        };
-
-        /**
-         * Creates a plain object from a Drain message. Also converts values to other types if specified.
-         * @function toObject
-         * @memberof BrokerProxyEvent.Drain
-         * @static
-         * @param {BrokerProxyEvent.Drain} message Drain
-         * @param {$protobuf.IConversionOptions} [options] Conversion options
-         * @returns {Object.<string,*>} Plain object
-         */
-        Drain.toObject = function toObject() {
-            return {};
-        };
-
-        /**
-         * Converts this Drain to JSON.
-         * @function toJSON
-         * @memberof BrokerProxyEvent.Drain
-         * @instance
-         * @returns {Object.<string,*>} JSON object
-         */
-        Drain.prototype.toJSON = function toJSON() {
-            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-        };
-
-        return Drain;
     })();
 
     return BrokerProxyEvent;
@@ -44280,6 +44086,367 @@ export const BrokerProxyDataResponse = $root.BrokerProxyDataResponse = (() => {
     };
 
     return BrokerProxyDataResponse;
+})();
+
+export const BrokerProxyCloseRequest = $root.BrokerProxyCloseRequest = (() => {
+
+    /**
+     * Properties of a BrokerProxyCloseRequest.
+     * @exports IBrokerProxyCloseRequest
+     * @interface IBrokerProxyCloseRequest
+     * @property {number|null} [proxyId] BrokerProxyCloseRequest proxyId
+     */
+
+    /**
+     * Constructs a new BrokerProxyCloseRequest.
+     * @exports BrokerProxyCloseRequest
+     * @classdesc Represents a BrokerProxyCloseRequest.
+     * @implements IBrokerProxyCloseRequest
+     * @constructor
+     * @param {IBrokerProxyCloseRequest=} [properties] Properties to set
+     */
+    function BrokerProxyCloseRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * BrokerProxyCloseRequest proxyId.
+     * @member {number} proxyId
+     * @memberof BrokerProxyCloseRequest
+     * @instance
+     */
+    BrokerProxyCloseRequest.prototype.proxyId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * Creates a new BrokerProxyCloseRequest instance using the specified properties.
+     * @function create
+     * @memberof BrokerProxyCloseRequest
+     * @static
+     * @param {IBrokerProxyCloseRequest=} [properties] Properties to set
+     * @returns {BrokerProxyCloseRequest} BrokerProxyCloseRequest instance
+     */
+    BrokerProxyCloseRequest.create = function create(properties) {
+        return new BrokerProxyCloseRequest(properties);
+    };
+
+    /**
+     * Encodes the specified BrokerProxyCloseRequest message. Does not implicitly {@link BrokerProxyCloseRequest.verify|verify} messages.
+     * @function encode
+     * @memberof BrokerProxyCloseRequest
+     * @static
+     * @param {IBrokerProxyCloseRequest} message BrokerProxyCloseRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BrokerProxyCloseRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.proxyId != null && Object.hasOwnProperty.call(message, "proxyId"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.proxyId);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified BrokerProxyCloseRequest message, length delimited. Does not implicitly {@link BrokerProxyCloseRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof BrokerProxyCloseRequest
+     * @static
+     * @param {IBrokerProxyCloseRequest} message BrokerProxyCloseRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BrokerProxyCloseRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a BrokerProxyCloseRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof BrokerProxyCloseRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {BrokerProxyCloseRequest} BrokerProxyCloseRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BrokerProxyCloseRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyCloseRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.proxyId = reader.uint64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a BrokerProxyCloseRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof BrokerProxyCloseRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {BrokerProxyCloseRequest} BrokerProxyCloseRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BrokerProxyCloseRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a BrokerProxyCloseRequest message.
+     * @function verify
+     * @memberof BrokerProxyCloseRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    BrokerProxyCloseRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.proxyId != null && message.hasOwnProperty("proxyId"))
+            if (!$util.isInteger(message.proxyId) && !(message.proxyId && $util.isInteger(message.proxyId.low) && $util.isInteger(message.proxyId.high)))
+                return "proxyId: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates a BrokerProxyCloseRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof BrokerProxyCloseRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {BrokerProxyCloseRequest} BrokerProxyCloseRequest
+     */
+    BrokerProxyCloseRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.BrokerProxyCloseRequest)
+            return object;
+        let message = new $root.BrokerProxyCloseRequest();
+        if (object.proxyId != null)
+            if ($util.Long)
+                (message.proxyId = $util.Long.fromValue(object.proxyId)).unsigned = true;
+            else if (typeof object.proxyId === "string")
+                message.proxyId = parseInt(object.proxyId, 10);
+            else if (typeof object.proxyId === "number")
+                message.proxyId = object.proxyId;
+            else if (typeof object.proxyId === "object")
+                message.proxyId = new $util.LongBits(object.proxyId.low >>> 0, object.proxyId.high >>> 0).toNumber(true);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a BrokerProxyCloseRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof BrokerProxyCloseRequest
+     * @static
+     * @param {BrokerProxyCloseRequest} message BrokerProxyCloseRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    BrokerProxyCloseRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.proxyId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.proxyId = options.longs === String ? "0" : 0;
+        if (message.proxyId != null && message.hasOwnProperty("proxyId"))
+            if (typeof message.proxyId === "number")
+                object.proxyId = options.longs === String ? String(message.proxyId) : message.proxyId;
+            else
+                object.proxyId = options.longs === String ? $util.Long.prototype.toString.call(message.proxyId) : options.longs === Number ? new $util.LongBits(message.proxyId.low >>> 0, message.proxyId.high >>> 0).toNumber(true) : message.proxyId;
+        return object;
+    };
+
+    /**
+     * Converts this BrokerProxyCloseRequest to JSON.
+     * @function toJSON
+     * @memberof BrokerProxyCloseRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    BrokerProxyCloseRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return BrokerProxyCloseRequest;
+})();
+
+export const BrokerProxyCloseResponse = $root.BrokerProxyCloseResponse = (() => {
+
+    /**
+     * Properties of a BrokerProxyCloseResponse.
+     * @exports IBrokerProxyCloseResponse
+     * @interface IBrokerProxyCloseResponse
+     */
+
+    /**
+     * Constructs a new BrokerProxyCloseResponse.
+     * @exports BrokerProxyCloseResponse
+     * @classdesc Represents a BrokerProxyCloseResponse.
+     * @implements IBrokerProxyCloseResponse
+     * @constructor
+     * @param {IBrokerProxyCloseResponse=} [properties] Properties to set
+     */
+    function BrokerProxyCloseResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new BrokerProxyCloseResponse instance using the specified properties.
+     * @function create
+     * @memberof BrokerProxyCloseResponse
+     * @static
+     * @param {IBrokerProxyCloseResponse=} [properties] Properties to set
+     * @returns {BrokerProxyCloseResponse} BrokerProxyCloseResponse instance
+     */
+    BrokerProxyCloseResponse.create = function create(properties) {
+        return new BrokerProxyCloseResponse(properties);
+    };
+
+    /**
+     * Encodes the specified BrokerProxyCloseResponse message. Does not implicitly {@link BrokerProxyCloseResponse.verify|verify} messages.
+     * @function encode
+     * @memberof BrokerProxyCloseResponse
+     * @static
+     * @param {IBrokerProxyCloseResponse} message BrokerProxyCloseResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BrokerProxyCloseResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified BrokerProxyCloseResponse message, length delimited. Does not implicitly {@link BrokerProxyCloseResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof BrokerProxyCloseResponse
+     * @static
+     * @param {IBrokerProxyCloseResponse} message BrokerProxyCloseResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BrokerProxyCloseResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a BrokerProxyCloseResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof BrokerProxyCloseResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {BrokerProxyCloseResponse} BrokerProxyCloseResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BrokerProxyCloseResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BrokerProxyCloseResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a BrokerProxyCloseResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof BrokerProxyCloseResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {BrokerProxyCloseResponse} BrokerProxyCloseResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BrokerProxyCloseResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a BrokerProxyCloseResponse message.
+     * @function verify
+     * @memberof BrokerProxyCloseResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    BrokerProxyCloseResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a BrokerProxyCloseResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof BrokerProxyCloseResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {BrokerProxyCloseResponse} BrokerProxyCloseResponse
+     */
+    BrokerProxyCloseResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.BrokerProxyCloseResponse)
+            return object;
+        return new $root.BrokerProxyCloseResponse();
+    };
+
+    /**
+     * Creates a plain object from a BrokerProxyCloseResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof BrokerProxyCloseResponse
+     * @static
+     * @param {BrokerProxyCloseResponse} message BrokerProxyCloseResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    BrokerProxyCloseResponse.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this BrokerProxyCloseResponse to JSON.
+     * @function toJSON
+     * @memberof BrokerProxyCloseResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    BrokerProxyCloseResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return BrokerProxyCloseResponse;
 })();
 
 export const BootstrapClient = $root.BootstrapClient = (() => {

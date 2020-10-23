@@ -18265,9 +18265,6 @@ export interface IBrokerProxyEvent {
 
     /** BrokerProxyEvent read */
     read?: (BrokerProxyEvent.IRead|null);
-
-    /** BrokerProxyEvent drain */
-    drain?: (BrokerProxyEvent.IDrain|null);
 }
 
 /** Represents a BrokerProxyEvent. */
@@ -18288,11 +18285,8 @@ export class BrokerProxyEvent implements IBrokerProxyEvent {
     /** BrokerProxyEvent read. */
     public read?: (BrokerProxyEvent.IRead|null);
 
-    /** BrokerProxyEvent drain. */
-    public drain?: (BrokerProxyEvent.IDrain|null);
-
     /** BrokerProxyEvent body. */
-    public body?: ("open"|"data"|"read"|"drain");
+    public body?: ("open"|"data"|"read");
 
     /**
      * Creates a new BrokerProxyEvent instance using the specified properties.
@@ -18626,90 +18620,6 @@ export namespace BrokerProxyEvent {
 
         /**
          * Converts this Read to JSON.
-         * @returns JSON object
-         */
-        public toJSON(): { [k: string]: any };
-    }
-
-    /** Properties of a Drain. */
-    interface IDrain {
-    }
-
-    /** Represents a Drain. */
-    class Drain implements IDrain {
-
-        /**
-         * Constructs a new Drain.
-         * @param [properties] Properties to set
-         */
-        constructor(properties?: BrokerProxyEvent.IDrain);
-
-        /**
-         * Creates a new Drain instance using the specified properties.
-         * @param [properties] Properties to set
-         * @returns Drain instance
-         */
-        public static create(properties?: BrokerProxyEvent.IDrain): BrokerProxyEvent.Drain;
-
-        /**
-         * Encodes the specified Drain message. Does not implicitly {@link BrokerProxyEvent.Drain.verify|verify} messages.
-         * @param message Drain message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encode(message: BrokerProxyEvent.IDrain, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Encodes the specified Drain message, length delimited. Does not implicitly {@link BrokerProxyEvent.Drain.verify|verify} messages.
-         * @param message Drain message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encodeDelimited(message: BrokerProxyEvent.IDrain, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Decodes a Drain message from the specified reader or buffer.
-         * @param reader Reader or buffer to decode from
-         * @param [length] Message length if known beforehand
-         * @returns Drain
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyEvent.Drain;
-
-        /**
-         * Decodes a Drain message from the specified reader or buffer, length delimited.
-         * @param reader Reader or buffer to decode from
-         * @returns Drain
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyEvent.Drain;
-
-        /**
-         * Verifies a Drain message.
-         * @param message Plain object to verify
-         * @returns `null` if valid, otherwise the reason why it is not
-         */
-        public static verify(message: { [k: string]: any }): (string|null);
-
-        /**
-         * Creates a Drain message from a plain object. Also converts values to their respective internal types.
-         * @param object Plain object
-         * @returns Drain
-         */
-        public static fromObject(object: { [k: string]: any }): BrokerProxyEvent.Drain;
-
-        /**
-         * Creates a plain object from a Drain message. Also converts values to other types if specified.
-         * @param message Drain
-         * @param [options] Conversion options
-         * @returns Plain object
-         */
-        public static toObject(message: BrokerProxyEvent.Drain, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-        /**
-         * Converts this Drain to JSON.
          * @returns JSON object
          */
         public toJSON(): { [k: string]: any };
@@ -19257,6 +19167,180 @@ export class BrokerProxyDataResponse implements IBrokerProxyDataResponse {
 
     /**
      * Converts this BrokerProxyDataResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BrokerProxyCloseRequest. */
+export interface IBrokerProxyCloseRequest {
+
+    /** BrokerProxyCloseRequest proxyId */
+    proxyId?: (number|null);
+}
+
+/** Represents a BrokerProxyCloseRequest. */
+export class BrokerProxyCloseRequest implements IBrokerProxyCloseRequest {
+
+    /**
+     * Constructs a new BrokerProxyCloseRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBrokerProxyCloseRequest);
+
+    /** BrokerProxyCloseRequest proxyId. */
+    public proxyId: number;
+
+    /**
+     * Creates a new BrokerProxyCloseRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BrokerProxyCloseRequest instance
+     */
+    public static create(properties?: IBrokerProxyCloseRequest): BrokerProxyCloseRequest;
+
+    /**
+     * Encodes the specified BrokerProxyCloseRequest message. Does not implicitly {@link BrokerProxyCloseRequest.verify|verify} messages.
+     * @param message BrokerProxyCloseRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBrokerProxyCloseRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BrokerProxyCloseRequest message, length delimited. Does not implicitly {@link BrokerProxyCloseRequest.verify|verify} messages.
+     * @param message BrokerProxyCloseRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBrokerProxyCloseRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BrokerProxyCloseRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BrokerProxyCloseRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyCloseRequest;
+
+    /**
+     * Decodes a BrokerProxyCloseRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BrokerProxyCloseRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyCloseRequest;
+
+    /**
+     * Verifies a BrokerProxyCloseRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BrokerProxyCloseRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BrokerProxyCloseRequest
+     */
+    public static fromObject(object: { [k: string]: any }): BrokerProxyCloseRequest;
+
+    /**
+     * Creates a plain object from a BrokerProxyCloseRequest message. Also converts values to other types if specified.
+     * @param message BrokerProxyCloseRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BrokerProxyCloseRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BrokerProxyCloseRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BrokerProxyCloseResponse. */
+export interface IBrokerProxyCloseResponse {
+}
+
+/** Represents a BrokerProxyCloseResponse. */
+export class BrokerProxyCloseResponse implements IBrokerProxyCloseResponse {
+
+    /**
+     * Constructs a new BrokerProxyCloseResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBrokerProxyCloseResponse);
+
+    /**
+     * Creates a new BrokerProxyCloseResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BrokerProxyCloseResponse instance
+     */
+    public static create(properties?: IBrokerProxyCloseResponse): BrokerProxyCloseResponse;
+
+    /**
+     * Encodes the specified BrokerProxyCloseResponse message. Does not implicitly {@link BrokerProxyCloseResponse.verify|verify} messages.
+     * @param message BrokerProxyCloseResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBrokerProxyCloseResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BrokerProxyCloseResponse message, length delimited. Does not implicitly {@link BrokerProxyCloseResponse.verify|verify} messages.
+     * @param message BrokerProxyCloseResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBrokerProxyCloseResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BrokerProxyCloseResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BrokerProxyCloseResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BrokerProxyCloseResponse;
+
+    /**
+     * Decodes a BrokerProxyCloseResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BrokerProxyCloseResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BrokerProxyCloseResponse;
+
+    /**
+     * Verifies a BrokerProxyCloseResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BrokerProxyCloseResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BrokerProxyCloseResponse
+     */
+    public static fromObject(object: { [k: string]: any }): BrokerProxyCloseResponse;
+
+    /**
+     * Creates a plain object from a BrokerProxyCloseResponse message. Also converts values to other types if specified.
+     * @param message BrokerProxyCloseResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BrokerProxyCloseResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BrokerProxyCloseResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };

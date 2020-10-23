@@ -195,17 +195,47 @@ public struct PBNetworkHandshake {
     set {body = .networkBindings(newValue)}
   }
 
+  public var certificateUpgradeOffer: PBNetworkHandshake.CertificateUpgradeOffer {
+    get {
+      if case .certificateUpgradeOffer(let v)? = body {return v}
+      return PBNetworkHandshake.CertificateUpgradeOffer()
+    }
+    set {body = .certificateUpgradeOffer(newValue)}
+  }
+
+  public var certificateUpgradeRequest: PBNetworkHandshake.CertificateUpgradeRequest {
+    get {
+      if case .certificateUpgradeRequest(let v)? = body {return v}
+      return PBNetworkHandshake.CertificateUpgradeRequest()
+    }
+    set {body = .certificateUpgradeRequest(newValue)}
+  }
+
+  public var certificateUpgradeResponse: PBNetworkHandshake.CertificateUpgradeResponse {
+    get {
+      if case .certificateUpgradeResponse(let v)? = body {return v}
+      return PBNetworkHandshake.CertificateUpgradeResponse()
+    }
+    set {body = .certificateUpgradeResponse(newValue)}
+  }
+
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Body: Equatable {
     case init_p(PBNetworkHandshake.Init)
     case networkBindings(PBNetworkHandshake.NetworkBindings)
+    case certificateUpgradeOffer(PBNetworkHandshake.CertificateUpgradeOffer)
+    case certificateUpgradeRequest(PBNetworkHandshake.CertificateUpgradeRequest)
+    case certificateUpgradeResponse(PBNetworkHandshake.CertificateUpgradeResponse)
 
   #if !swift(>=4.1)
     public static func ==(lhs: PBNetworkHandshake.OneOf_Body, rhs: PBNetworkHandshake.OneOf_Body) -> Bool {
       switch (lhs, rhs) {
       case (.init_p(let l), .init_p(let r)): return l == r
       case (.networkBindings(let l), .networkBindings(let r)): return l == r
+      case (.certificateUpgradeOffer(let l), .certificateUpgradeOffer(let r)): return l == r
+      case (.certificateUpgradeRequest(let l), .certificateUpgradeRequest(let r)): return l == r
+      case (.certificateUpgradeResponse(let l), .certificateUpgradeResponse(let r)): return l == r
       default: return false
       }
     }
@@ -259,10 +289,46 @@ public struct PBNetworkHandshake {
     public init() {}
   }
 
+  public struct CertificateUpgradeOffer {
+    // SwiftProtobuf.Message conformance is added in an extension below. See the
+    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+    // methods supported on all messages.
+
+    public var networkKeys: [Data] = []
+
+    public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+    public init() {}
+  }
+
+  public struct CertificateUpgradeRequest {
+    // SwiftProtobuf.Message conformance is added in an extension below. See the
+    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+    // methods supported on all messages.
+
+    public var networkKeys: [Data] = []
+
+    public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+    public init() {}
+  }
+
+  public struct CertificateUpgradeResponse {
+    // SwiftProtobuf.Message conformance is added in an extension below. See the
+    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+    // methods supported on all messages.
+
+    public var certificates: [PBCertificate] = []
+
+    public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+    public init() {}
+  }
+
   public init() {}
 }
 
-public struct PBBrokerPeerRequest {
+public struct PBBrokerProxyRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -274,60 +340,50 @@ public struct PBBrokerPeerRequest {
   public init() {}
 }
 
-public struct PBBrokerPeerEvent {
+public struct PBBrokerProxyEvent {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var body: PBBrokerPeerEvent.OneOf_Body? = nil
+  public var body: PBBrokerProxyEvent.OneOf_Body? = nil
 
-  public var `open`: PBBrokerPeerEvent.Open {
+  public var `open`: PBBrokerProxyEvent.Open {
     get {
       if case .open(let v)? = body {return v}
-      return PBBrokerPeerEvent.Open()
+      return PBBrokerProxyEvent.Open()
     }
     set {body = .open(newValue)}
   }
 
-  public var data: PBBrokerPeerEvent.DataMessage {
+  public var data: PBBrokerProxyEvent.DataMessage {
     get {
       if case .data(let v)? = body {return v}
-      return PBBrokerPeerEvent.DataMessage()
+      return PBBrokerProxyEvent.DataMessage()
     }
     set {body = .data(newValue)}
   }
 
-  public var initRequired: PBBrokerPeerEvent.InitRequired {
+  public var read: PBBrokerProxyEvent.Read {
     get {
-      if case .initRequired(let v)? = body {return v}
-      return PBBrokerPeerEvent.InitRequired()
+      if case .read(let v)? = body {return v}
+      return PBBrokerProxyEvent.Read()
     }
-    set {body = .initRequired(newValue)}
-  }
-
-  public var keys: PBBrokerPeerEvent.Keys {
-    get {
-      if case .keys(let v)? = body {return v}
-      return PBBrokerPeerEvent.Keys()
-    }
-    set {body = .keys(newValue)}
+    set {body = .read(newValue)}
   }
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Body: Equatable {
-    case `open`(PBBrokerPeerEvent.Open)
-    case data(PBBrokerPeerEvent.DataMessage)
-    case initRequired(PBBrokerPeerEvent.InitRequired)
-    case keys(PBBrokerPeerEvent.Keys)
+    case `open`(PBBrokerProxyEvent.Open)
+    case data(PBBrokerProxyEvent.DataMessage)
+    case read(PBBrokerProxyEvent.Read)
 
   #if !swift(>=4.1)
-    public static func ==(lhs: PBBrokerPeerEvent.OneOf_Body, rhs: PBBrokerPeerEvent.OneOf_Body) -> Bool {
+    public static func ==(lhs: PBBrokerProxyEvent.OneOf_Body, rhs: PBBrokerProxyEvent.OneOf_Body) -> Bool {
       switch (lhs, rhs) {
       case (.open(let l), .open(let r)): return l == r
       case (.data(let l), .data(let r)): return l == r
-      case (.initRequired(let l), .initRequired(let r)): return l == r
-      case (.keys(let l), .keys(let r)): return l == r
+      case (.read(let l), .read(let r)): return l == r
       default: return false
       }
     }
@@ -339,7 +395,7 @@ public struct PBBrokerPeerEvent {
     // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
     // methods supported on all messages.
 
-    public var peerID: UInt64 = 0
+    public var proxyID: UInt64 = 0
 
     public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -358,24 +414,10 @@ public struct PBBrokerPeerEvent {
     public init() {}
   }
 
-  public struct InitRequired {
+  public struct Read {
     // SwiftProtobuf.Message conformance is added in an extension below. See the
     // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
     // methods supported on all messages.
-
-    public var data: Data = Data()
-
-    public var unknownFields = SwiftProtobuf.UnknownStorage()
-
-    public init() {}
-  }
-
-  public struct Keys {
-    // SwiftProtobuf.Message conformance is added in an extension below. See the
-    // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
-    // methods supported on all messages.
-
-    public var keys: [Data] = []
 
     public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -385,14 +427,12 @@ public struct PBBrokerPeerEvent {
   public init() {}
 }
 
-public struct PBBrokerPeerInitRequest {
+public struct PBBrokerProxySendKeysRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var peerID: UInt64 = 0
-
-  public var preferSender: Bool = false
+  public var proxyID: UInt64 = 0
 
   public var keys: [Data] = []
 
@@ -401,14 +441,82 @@ public struct PBBrokerPeerInitRequest {
   public init() {}
 }
 
-public struct PBBrokerPeerDataRequest {
+public struct PBBrokerProxySendKeysResponse {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var peerID: UInt64 = 0
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct PBBrokerProxyReceiveKeysRequest {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var proxyID: UInt64 = 0
+
+  public var keys: [Data] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct PBBrokerProxyReceiveKeysResponse {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var keys: [Data] = []
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct PBBrokerProxyDataRequest {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var proxyID: UInt64 = 0
 
   public var data: Data = Data()
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct PBBrokerProxyDataResponse {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct PBBrokerProxyCloseRequest {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
+
+  public var proxyID: UInt64 = 0
+
+  public var unknownFields = SwiftProtobuf.UnknownStorage()
+
+  public init() {}
+}
+
+public struct PBBrokerProxyCloseResponse {
+  // SwiftProtobuf.Message conformance is added in an extension below. See the
+  // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
+  // methods supported on all messages.
 
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
@@ -626,7 +734,7 @@ public struct PBGetBootstrapClientResponse {
   fileprivate var _bootstrapClient: PBBootstrapClient? = nil
 }
 
-public struct PBGetBootstrapClientsRequest {
+public struct PBListBootstrapClientsRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -636,7 +744,7 @@ public struct PBGetBootstrapClientsRequest {
   public init() {}
 }
 
-public struct PBGetBootstrapClientsResponse {
+public struct PBListBootstrapClientsResponse {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -648,7 +756,7 @@ public struct PBGetBootstrapClientsResponse {
   public init() {}
 }
 
-public struct PBGetBootstrapPeersRequest {
+public struct PBListBootstrapPeersRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -658,7 +766,7 @@ public struct PBGetBootstrapPeersRequest {
   public init() {}
 }
 
-public struct PBGetBootstrapPeersResponse {
+public struct PBListBootstrapPeersResponse {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1284,6 +1392,9 @@ extension PBNetworkHandshake: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "init"),
     2: .standard(proto: "network_bindings"),
+    3: .standard(proto: "certificate_upgrade_offer"),
+    4: .standard(proto: "certificate_upgrade_request"),
+    5: .standard(proto: "certificate_upgrade_response"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1305,6 +1416,30 @@ extension PBNetworkHandshake: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
         }
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.body = .networkBindings(v)}
+      case 3:
+        var v: PBNetworkHandshake.CertificateUpgradeOffer?
+        if let current = self.body {
+          try decoder.handleConflictingOneOf()
+          if case .certificateUpgradeOffer(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {self.body = .certificateUpgradeOffer(v)}
+      case 4:
+        var v: PBNetworkHandshake.CertificateUpgradeRequest?
+        if let current = self.body {
+          try decoder.handleConflictingOneOf()
+          if case .certificateUpgradeRequest(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {self.body = .certificateUpgradeRequest(v)}
+      case 5:
+        var v: PBNetworkHandshake.CertificateUpgradeResponse?
+        if let current = self.body {
+          try decoder.handleConflictingOneOf()
+          if case .certificateUpgradeResponse(let m) = current {v = m}
+        }
+        try decoder.decodeSingularMessageField(value: &v)
+        if let v = v {self.body = .certificateUpgradeResponse(v)}
       default: break
       }
     }
@@ -1316,6 +1451,12 @@ extension PBNetworkHandshake: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
     case .networkBindings(let v)?:
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
+    case .certificateUpgradeOffer(let v)?:
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
+    case .certificateUpgradeRequest(let v)?:
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
+    case .certificateUpgradeResponse(let v)?:
+      try visitor.visitSingularMessageField(value: v, fieldNumber: 5)
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
@@ -1421,8 +1562,95 @@ extension PBNetworkHandshake.NetworkBindings: SwiftProtobuf.Message, SwiftProtob
   }
 }
 
-extension PBBrokerPeerRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "BrokerPeerRequest"
+extension PBNetworkHandshake.CertificateUpgradeOffer: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBNetworkHandshake.protoMessageName + ".CertificateUpgradeOffer"
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .standard(proto: "network_keys"),
+  ]
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      switch fieldNumber {
+      case 1: try decoder.decodeRepeatedBytesField(value: &self.networkKeys)
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.networkKeys.isEmpty {
+      try visitor.visitRepeatedBytesField(value: self.networkKeys, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: PBNetworkHandshake.CertificateUpgradeOffer, rhs: PBNetworkHandshake.CertificateUpgradeOffer) -> Bool {
+    if lhs.networkKeys != rhs.networkKeys {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension PBNetworkHandshake.CertificateUpgradeRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBNetworkHandshake.protoMessageName + ".CertificateUpgradeRequest"
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .standard(proto: "network_keys"),
+  ]
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      switch fieldNumber {
+      case 1: try decoder.decodeRepeatedBytesField(value: &self.networkKeys)
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.networkKeys.isEmpty {
+      try visitor.visitRepeatedBytesField(value: self.networkKeys, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: PBNetworkHandshake.CertificateUpgradeRequest, rhs: PBNetworkHandshake.CertificateUpgradeRequest) -> Bool {
+    if lhs.networkKeys != rhs.networkKeys {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension PBNetworkHandshake.CertificateUpgradeResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBNetworkHandshake.protoMessageName + ".CertificateUpgradeResponse"
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .same(proto: "certificates"),
+  ]
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      switch fieldNumber {
+      case 1: try decoder.decodeRepeatedMessageField(value: &self.certificates)
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if !self.certificates.isEmpty {
+      try visitor.visitRepeatedMessageField(value: self.certificates, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: PBNetworkHandshake.CertificateUpgradeResponse, rhs: PBNetworkHandshake.CertificateUpgradeResponse) -> Bool {
+    if lhs.certificates != rhs.certificates {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension PBBrokerProxyRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "BrokerProxyRequest"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .standard(proto: "conn_mtu"),
   ]
@@ -1443,27 +1671,26 @@ extension PBBrokerPeerRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImpl
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBBrokerPeerRequest, rhs: PBBrokerPeerRequest) -> Bool {
+  public static func ==(lhs: PBBrokerProxyRequest, rhs: PBBrokerProxyRequest) -> Bool {
     if lhs.connMtu != rhs.connMtu {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBBrokerPeerEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "BrokerPeerEvent"
+extension PBBrokerProxyEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "BrokerProxyEvent"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "open"),
     2: .same(proto: "data"),
-    3: .standard(proto: "init_required"),
-    4: .same(proto: "keys"),
+    3: .same(proto: "read"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       switch fieldNumber {
       case 1:
-        var v: PBBrokerPeerEvent.Open?
+        var v: PBBrokerProxyEvent.Open?
         if let current = self.body {
           try decoder.handleConflictingOneOf()
           if case .open(let m) = current {v = m}
@@ -1471,7 +1698,7 @@ extension PBBrokerPeerEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.body = .open(v)}
       case 2:
-        var v: PBBrokerPeerEvent.DataMessage?
+        var v: PBBrokerProxyEvent.DataMessage?
         if let current = self.body {
           try decoder.handleConflictingOneOf()
           if case .data(let m) = current {v = m}
@@ -1479,21 +1706,13 @@ extension PBBrokerPeerEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.body = .data(v)}
       case 3:
-        var v: PBBrokerPeerEvent.InitRequired?
+        var v: PBBrokerProxyEvent.Read?
         if let current = self.body {
           try decoder.handleConflictingOneOf()
-          if case .initRequired(let m) = current {v = m}
+          if case .read(let m) = current {v = m}
         }
         try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {self.body = .initRequired(v)}
-      case 4:
-        var v: PBBrokerPeerEvent.Keys?
-        if let current = self.body {
-          try decoder.handleConflictingOneOf()
-          if case .keys(let m) = current {v = m}
-        }
-        try decoder.decodeSingularMessageField(value: &v)
-        if let v = v {self.body = .keys(v)}
+        if let v = v {self.body = .read(v)}
       default: break
       }
     }
@@ -1505,82 +1724,51 @@ extension PBBrokerPeerEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplem
       try visitor.visitSingularMessageField(value: v, fieldNumber: 1)
     case .data(let v)?:
       try visitor.visitSingularMessageField(value: v, fieldNumber: 2)
-    case .initRequired(let v)?:
+    case .read(let v)?:
       try visitor.visitSingularMessageField(value: v, fieldNumber: 3)
-    case .keys(let v)?:
-      try visitor.visitSingularMessageField(value: v, fieldNumber: 4)
     case nil: break
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBBrokerPeerEvent, rhs: PBBrokerPeerEvent) -> Bool {
+  public static func ==(lhs: PBBrokerProxyEvent, rhs: PBBrokerProxyEvent) -> Bool {
     if lhs.body != rhs.body {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBBrokerPeerEvent.Open: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = PBBrokerPeerEvent.protoMessageName + ".Open"
+extension PBBrokerProxyEvent.Open: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBBrokerProxyEvent.protoMessageName + ".Open"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .standard(proto: "peer_id"),
+    1: .standard(proto: "proxy_id"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       switch fieldNumber {
-      case 1: try decoder.decodeSingularUInt64Field(value: &self.peerID)
+      case 1: try decoder.decodeSingularUInt64Field(value: &self.proxyID)
       default: break
       }
     }
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.peerID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.peerID, fieldNumber: 1)
+    if self.proxyID != 0 {
+      try visitor.visitSingularUInt64Field(value: self.proxyID, fieldNumber: 1)
     }
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBBrokerPeerEvent.Open, rhs: PBBrokerPeerEvent.Open) -> Bool {
-    if lhs.peerID != rhs.peerID {return false}
+  public static func ==(lhs: PBBrokerProxyEvent.Open, rhs: PBBrokerProxyEvent.Open) -> Bool {
+    if lhs.proxyID != rhs.proxyID {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBBrokerPeerEvent.DataMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = PBBrokerPeerEvent.protoMessageName + ".Data"
-  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .same(proto: "data"),
-  ]
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      switch fieldNumber {
-      case 1: try decoder.decodeSingularBytesField(value: &self.data)
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if !self.data.isEmpty {
-      try visitor.visitSingularBytesField(value: self.data, fieldNumber: 1)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: PBBrokerPeerEvent.DataMessage, rhs: PBBrokerPeerEvent.DataMessage) -> Bool {
-    if lhs.data != rhs.data {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension PBBrokerPeerEvent.InitRequired: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = PBBrokerPeerEvent.protoMessageName + ".InitRequired"
+extension PBBrokerProxyEvent.DataMessage: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBBrokerProxyEvent.protoMessageName + ".Data"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "data"),
   ]
@@ -1601,15 +1789,123 @@ extension PBBrokerPeerEvent.InitRequired: SwiftProtobuf.Message, SwiftProtobuf._
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBBrokerPeerEvent.InitRequired, rhs: PBBrokerPeerEvent.InitRequired) -> Bool {
+  public static func ==(lhs: PBBrokerProxyEvent.DataMessage, rhs: PBBrokerProxyEvent.DataMessage) -> Bool {
     if lhs.data != rhs.data {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBBrokerPeerEvent.Keys: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = PBBrokerPeerEvent.protoMessageName + ".Keys"
+extension PBBrokerProxyEvent.Read: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBBrokerProxyEvent.protoMessageName + ".Read"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let _ = try decoder.nextFieldNumber() {
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: PBBrokerProxyEvent.Read, rhs: PBBrokerProxyEvent.Read) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension PBBrokerProxySendKeysRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "BrokerProxySendKeysRequest"
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .standard(proto: "proxy_id"),
+    2: .same(proto: "keys"),
+  ]
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      switch fieldNumber {
+      case 1: try decoder.decodeSingularUInt64Field(value: &self.proxyID)
+      case 2: try decoder.decodeRepeatedBytesField(value: &self.keys)
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.proxyID != 0 {
+      try visitor.visitSingularUInt64Field(value: self.proxyID, fieldNumber: 1)
+    }
+    if !self.keys.isEmpty {
+      try visitor.visitRepeatedBytesField(value: self.keys, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: PBBrokerProxySendKeysRequest, rhs: PBBrokerProxySendKeysRequest) -> Bool {
+    if lhs.proxyID != rhs.proxyID {return false}
+    if lhs.keys != rhs.keys {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension PBBrokerProxySendKeysResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "BrokerProxySendKeysResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let _ = try decoder.nextFieldNumber() {
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: PBBrokerProxySendKeysResponse, rhs: PBBrokerProxySendKeysResponse) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension PBBrokerProxyReceiveKeysRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "BrokerProxyReceiveKeysRequest"
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .standard(proto: "proxy_id"),
+    2: .same(proto: "keys"),
+  ]
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      switch fieldNumber {
+      case 1: try decoder.decodeSingularUInt64Field(value: &self.proxyID)
+      case 2: try decoder.decodeRepeatedBytesField(value: &self.keys)
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.proxyID != 0 {
+      try visitor.visitSingularUInt64Field(value: self.proxyID, fieldNumber: 1)
+    }
+    if !self.keys.isEmpty {
+      try visitor.visitRepeatedBytesField(value: self.keys, fieldNumber: 2)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: PBBrokerProxyReceiveKeysRequest, rhs: PBBrokerProxyReceiveKeysRequest) -> Bool {
+    if lhs.proxyID != rhs.proxyID {return false}
+    if lhs.keys != rhs.keys {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension PBBrokerProxyReceiveKeysResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "BrokerProxyReceiveKeysResponse"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "keys"),
   ]
@@ -1630,65 +1926,24 @@ extension PBBrokerPeerEvent.Keys: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBBrokerPeerEvent.Keys, rhs: PBBrokerPeerEvent.Keys) -> Bool {
+  public static func ==(lhs: PBBrokerProxyReceiveKeysResponse, rhs: PBBrokerProxyReceiveKeysResponse) -> Bool {
     if lhs.keys != rhs.keys {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBBrokerPeerInitRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "BrokerPeerInitRequest"
+extension PBBrokerProxyDataRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "BrokerProxyDataRequest"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .standard(proto: "peer_id"),
-    2: .standard(proto: "prefer_sender"),
-    3: .same(proto: "keys"),
-  ]
-
-  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
-    while let fieldNumber = try decoder.nextFieldNumber() {
-      switch fieldNumber {
-      case 1: try decoder.decodeSingularUInt64Field(value: &self.peerID)
-      case 2: try decoder.decodeSingularBoolField(value: &self.preferSender)
-      case 3: try decoder.decodeRepeatedBytesField(value: &self.keys)
-      default: break
-      }
-    }
-  }
-
-  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.peerID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.peerID, fieldNumber: 1)
-    }
-    if self.preferSender != false {
-      try visitor.visitSingularBoolField(value: self.preferSender, fieldNumber: 2)
-    }
-    if !self.keys.isEmpty {
-      try visitor.visitRepeatedBytesField(value: self.keys, fieldNumber: 3)
-    }
-    try unknownFields.traverse(visitor: &visitor)
-  }
-
-  public static func ==(lhs: PBBrokerPeerInitRequest, rhs: PBBrokerPeerInitRequest) -> Bool {
-    if lhs.peerID != rhs.peerID {return false}
-    if lhs.preferSender != rhs.preferSender {return false}
-    if lhs.keys != rhs.keys {return false}
-    if lhs.unknownFields != rhs.unknownFields {return false}
-    return true
-  }
-}
-
-extension PBBrokerPeerDataRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "BrokerPeerDataRequest"
-  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
-    1: .standard(proto: "peer_id"),
+    1: .standard(proto: "proxy_id"),
     2: .same(proto: "data"),
   ]
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
     while let fieldNumber = try decoder.nextFieldNumber() {
       switch fieldNumber {
-      case 1: try decoder.decodeSingularUInt64Field(value: &self.peerID)
+      case 1: try decoder.decodeSingularUInt64Field(value: &self.proxyID)
       case 2: try decoder.decodeSingularBytesField(value: &self.data)
       default: break
       }
@@ -1696,8 +1951,8 @@ extension PBBrokerPeerDataRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
   }
 
   public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
-    if self.peerID != 0 {
-      try visitor.visitSingularUInt64Field(value: self.peerID, fieldNumber: 1)
+    if self.proxyID != 0 {
+      try visitor.visitSingularUInt64Field(value: self.proxyID, fieldNumber: 1)
     }
     if !self.data.isEmpty {
       try visitor.visitSingularBytesField(value: self.data, fieldNumber: 2)
@@ -1705,9 +1960,76 @@ extension PBBrokerPeerDataRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBBrokerPeerDataRequest, rhs: PBBrokerPeerDataRequest) -> Bool {
-    if lhs.peerID != rhs.peerID {return false}
+  public static func ==(lhs: PBBrokerProxyDataRequest, rhs: PBBrokerProxyDataRequest) -> Bool {
+    if lhs.proxyID != rhs.proxyID {return false}
     if lhs.data != rhs.data {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension PBBrokerProxyDataResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "BrokerProxyDataResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let _ = try decoder.nextFieldNumber() {
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: PBBrokerProxyDataResponse, rhs: PBBrokerProxyDataResponse) -> Bool {
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension PBBrokerProxyCloseRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "BrokerProxyCloseRequest"
+  public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
+    1: .standard(proto: "proxy_id"),
+  ]
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let fieldNumber = try decoder.nextFieldNumber() {
+      switch fieldNumber {
+      case 1: try decoder.decodeSingularUInt64Field(value: &self.proxyID)
+      default: break
+      }
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    if self.proxyID != 0 {
+      try visitor.visitSingularUInt64Field(value: self.proxyID, fieldNumber: 1)
+    }
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: PBBrokerProxyCloseRequest, rhs: PBBrokerProxyCloseRequest) -> Bool {
+    if lhs.proxyID != rhs.proxyID {return false}
+    if lhs.unknownFields != rhs.unknownFields {return false}
+    return true
+  }
+}
+
+extension PBBrokerProxyCloseResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "BrokerProxyCloseResponse"
+  public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
+
+  public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
+    while let _ = try decoder.nextFieldNumber() {
+    }
+  }
+
+  public func traverse<V: SwiftProtobuf.Visitor>(visitor: inout V) throws {
+    try unknownFields.traverse(visitor: &visitor)
+  }
+
+  public static func ==(lhs: PBBrokerProxyCloseResponse, rhs: PBBrokerProxyCloseResponse) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
@@ -2032,8 +2354,8 @@ extension PBGetBootstrapClientResponse: SwiftProtobuf.Message, SwiftProtobuf._Me
   }
 }
 
-extension PBGetBootstrapClientsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GetBootstrapClientsRequest"
+extension PBListBootstrapClientsRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "ListBootstrapClientsRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -2045,14 +2367,14 @@ extension PBGetBootstrapClientsRequest: SwiftProtobuf.Message, SwiftProtobuf._Me
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBGetBootstrapClientsRequest, rhs: PBGetBootstrapClientsRequest) -> Bool {
+  public static func ==(lhs: PBListBootstrapClientsRequest, rhs: PBListBootstrapClientsRequest) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBGetBootstrapClientsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GetBootstrapClientsResponse"
+extension PBListBootstrapClientsResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "ListBootstrapClientsResponse"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .standard(proto: "bootstrap_clients"),
   ]
@@ -2073,15 +2395,15 @@ extension PBGetBootstrapClientsResponse: SwiftProtobuf.Message, SwiftProtobuf._M
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBGetBootstrapClientsResponse, rhs: PBGetBootstrapClientsResponse) -> Bool {
+  public static func ==(lhs: PBListBootstrapClientsResponse, rhs: PBListBootstrapClientsResponse) -> Bool {
     if lhs.bootstrapClients != rhs.bootstrapClients {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBGetBootstrapPeersRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GetBootstrapPeersRequest"
+extension PBListBootstrapPeersRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "ListBootstrapPeersRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -2093,14 +2415,14 @@ extension PBGetBootstrapPeersRequest: SwiftProtobuf.Message, SwiftProtobuf._Mess
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBGetBootstrapPeersRequest, rhs: PBGetBootstrapPeersRequest) -> Bool {
+  public static func ==(lhs: PBListBootstrapPeersRequest, rhs: PBListBootstrapPeersRequest) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBGetBootstrapPeersResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GetBootstrapPeersResponse"
+extension PBListBootstrapPeersResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "ListBootstrapPeersResponse"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "peers"),
   ]
@@ -2121,7 +2443,7 @@ extension PBGetBootstrapPeersResponse: SwiftProtobuf.Message, SwiftProtobuf._Mes
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBGetBootstrapPeersResponse, rhs: PBGetBootstrapPeersResponse) -> Bool {
+  public static func ==(lhs: PBListBootstrapPeersResponse, rhs: PBListBootstrapPeersResponse) -> Bool {
     if lhs.peers != rhs.peers {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

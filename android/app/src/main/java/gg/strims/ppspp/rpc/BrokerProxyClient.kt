@@ -23,4 +23,9 @@ class BrokerProxyClient(filepath: String) : RPCClient(filepath) {
     ): BrokerProxyDataResponse =
         this.callUnary("BrokerProxy/Data", arg)
 
+    suspend fun close(
+        arg: BrokerProxyCloseRequest = BrokerProxyCloseRequest()
+    ): BrokerProxyCloseResponse =
+        this.callUnary("BrokerProxy/Close", arg)
+
 }

@@ -28,6 +28,10 @@ type BrokerProxyService interface {
 		ctx context.Context,
 		req *pb.BrokerProxyDataRequest,
 	) (*pb.BrokerProxyDataResponse, error)
+	Close(
+		ctx context.Context,
+		req *pb.BrokerProxyCloseRequest,
+	) (*pb.BrokerProxyCloseResponse, error)
 }
 
 type BrokerProxyClient struct {
@@ -73,4 +77,13 @@ func (c *BrokerProxyClient) Data(
 	res *pb.BrokerProxyDataResponse,
 ) error {
 	return c.client.CallUnary(ctx, "BrokerProxy/Data", req, res)
+}
+
+// Close ...
+func (c *BrokerProxyClient) Close(
+	ctx context.Context,
+	req *pb.BrokerProxyCloseRequest,
+	res *pb.BrokerProxyCloseResponse,
+) error {
+	return c.client.CallUnary(ctx, "BrokerProxy/Close", req, res)
 }

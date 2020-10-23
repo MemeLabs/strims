@@ -165,7 +165,7 @@ public struct PBGetChatServerResponse {
   fileprivate var _chatServer: PBChatServer? = nil
 }
 
-public struct PBGetChatServersRequest {
+public struct PBListChatServersRequest {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -175,7 +175,7 @@ public struct PBGetChatServersRequest {
   public init() {}
 }
 
-public struct PBGetChatServersResponse {
+public struct PBListChatServersResponse {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
@@ -1019,8 +1019,8 @@ extension PBGetChatServerResponse: SwiftProtobuf.Message, SwiftProtobuf._Message
   }
 }
 
-extension PBGetChatServersRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GetChatServersRequest"
+extension PBListChatServersRequest: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "ListChatServersRequest"
   public static let _protobuf_nameMap = SwiftProtobuf._NameMap()
 
   public mutating func decodeMessage<D: SwiftProtobuf.Decoder>(decoder: inout D) throws {
@@ -1032,14 +1032,14 @@ extension PBGetChatServersRequest: SwiftProtobuf.Message, SwiftProtobuf._Message
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBGetChatServersRequest, rhs: PBGetChatServersRequest) -> Bool {
+  public static func ==(lhs: PBListChatServersRequest, rhs: PBListChatServersRequest) -> Bool {
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBGetChatServersResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "GetChatServersResponse"
+extension PBListChatServersResponse: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "ListChatServersResponse"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .standard(proto: "chat_servers"),
   ]
@@ -1060,7 +1060,7 @@ extension PBGetChatServersResponse: SwiftProtobuf.Message, SwiftProtobuf._Messag
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBGetChatServersResponse, rhs: PBGetChatServersResponse) -> Bool {
+  public static func ==(lhs: PBListChatServersResponse, rhs: PBListChatServersResponse) -> Bool {
     if lhs.chatServers != rhs.chatServers {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

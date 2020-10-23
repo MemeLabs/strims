@@ -31,4 +31,11 @@ export default class BrokerProxy {
       this.host.call("BrokerProxy/Data", new pb.BrokerProxyDataRequest(arg))
     );
   }
+  public close(
+    arg: pb.IBrokerProxyCloseRequest = new pb.BrokerProxyCloseRequest()
+  ): Promise<pb.BrokerProxyCloseResponse> {
+    return this.host.expectOne(
+      this.host.call("BrokerProxy/Close", new pb.BrokerProxyCloseRequest(arg))
+    );
+  }
 }
