@@ -99,7 +99,7 @@ export const AvatarInput = ({
   control: Control<Record<string, any>>;
   maxSize?: number;
 }) => {
-  const [previewUrl, setPreviewUrl] = React.useState("");
+  const [previewUrl, setPreviewUrl] = React.useState<string>();
   React.useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
 
   return (

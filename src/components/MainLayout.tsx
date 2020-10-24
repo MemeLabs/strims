@@ -28,6 +28,7 @@ import usePortal from "react-useportal";
 
 import { useCall, useClient } from "../contexts/Api";
 import { useTheme } from "../contexts/Theme";
+import useObjectURL from "../hooks/useObjectURL";
 import { CreateNetworkResponse, ICertificate, INetwork } from "../lib/pb";
 import AddNetworkModal from "./AddNetworkModal";
 
@@ -59,6 +60,31 @@ const NetworkAddButton: React.FunctionComponent<React.ComponentProps<"button">> 
 
 const rootCertificate = (cert: ICertificate): ICertificate =>
   cert.parent ? rootCertificate(cert.parent) : cert;
+
+interface NetworkGemProps {
+  network: INetwork;
+}
+
+const NetworkGem: React.FC<NetworkGemProps> = ({ network }) => {
+  const { icon } = network;
+  const gemClassName = clsx({
+    "main_layout__left__link__gem": true,
+    "main_layout__left__link__gem--with_icon": !!icon,
+    "main_layout__left__link__gem--without_icon": !icon,
+  });
+
+  if (icon) {
+    const url = useObjectURL(icon.type, icon.data);
+    return <div className={gemClassName} style={{ backgroundImage: `url(${url})` }} />;
+  }
+
+  const backgroundColor = "green";
+  return (
+    <div className={gemClassName} style={{ backgroundColor }}>
+      {network.name.substr(0, 1)}
+    </div>
+  );
+};
 
 const NetworkNav = () => {
   const [expanded, toggleExpanded] = useToggle(false);
@@ -121,9 +147,7 @@ const NetworkNav = () => {
                             )}`}
                             className="main_layout__left__link"
                           >
-                            <div className="main_layout__left__link__gem">
-                              {network.name.substr(0, 1)}
-                            </div>
+                            <NetworkGem network={network} />
                             <div className="main_layout__left__link__text">
                               <span>{network.name}</span>
                             </div>
