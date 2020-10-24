@@ -121,7 +121,9 @@
 
     &__link__gem {
       flex: 0 0 30px;
-      background: green;
+      background-size: contain;
+      background-repeat: no-repeat;
+      background-position: center;
       border-radius: 50%;
       height: 30px;
       line-height: 30px;

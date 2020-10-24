@@ -102,7 +102,6 @@ module.exports = (env, argv) => {
     optimization: {
       minimizer: [
         new TerserPlugin({
-          cache: true,
           parallel: true,
         }),
       ],
@@ -169,11 +168,15 @@ module.exports = (env, argv) => {
       },
       resolve: {
         extensions: [".go", ".tsx", ".ts", ".js"],
+        // fallback: {
+        //   "fs": false,
+        //   "stream": require.resolve("stream-browserify"),
+        //   "buffer": require.resolve("buffer"),
+        // },
       },
       optimization: {
         minimizer: [
           new TerserPlugin({
-            cache: true,
             parallel: true,
           }),
         ],
