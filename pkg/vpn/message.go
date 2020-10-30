@@ -3,6 +3,7 @@ package vpn
 import (
 	"crypto/ed25519"
 	"encoding/binary"
+	"encoding/hex"
 	"errors"
 	"io"
 
@@ -109,7 +110,13 @@ type Message struct {
 	Trailers Trailers
 }
 
+// MessageID ...
 type MessageID [2 + kademlia.IDLength]byte
+
+// String ...
+func (m MessageID) String() string {
+	return hex.EncodeToString(m[:])
+}
 
 // ID ...
 func (m *Message) ID() (id MessageID) {

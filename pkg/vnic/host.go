@@ -5,13 +5,11 @@ import (
 	"fmt"
 	"io"
 	"log"
-	"reflect"
 	"sync"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/petar/GoLLRB/llrb"
 	"github.com/prometheus/client_golang/prometheus"
@@ -185,12 +183,12 @@ func (h *Host) AddLink(c Link) {
 			return
 		}
 
-		h.logger.Debug(
-			"created peer",
-			logutil.ByteHex("peer", p.Certificate.Key),
-			zap.String("type", reflect.TypeOf(c).String()),
-			zap.Int("mtu", c.MTU()),
-		)
+		// h.logger.Debug(
+		// 	"created peer",
+		// 	logutil.ByteHex("peer", p.Certificate.Key),
+		// 	zap.String("type", reflect.TypeOf(c).String()),
+		// 	zap.Int("mtu", c.MTU()),
+		// )
 
 		h.handlePeer(p)
 
@@ -218,6 +216,19 @@ func (h *Host) GetPeer(hostID kademlia.ID) (*Peer, bool) {
 	h.peersLock.Lock()
 	defer h.peersLock.Unlock()
 	return h.peers.Get(hostID)
+}
+
+// Peers ...
+func (h *Host) Peers() []*Peer {
+	h.peersLock.Lock()
+	defer h.peersLock.Unlock()
+
+	peers := []*Peer{}
+	h.peers.Each(func(p *Peer) bool {
+		peers = append(peers, p)
+		return true
+	})
+	return peers
 }
 
 func (h *Host) handlePeer(p *Peer) {

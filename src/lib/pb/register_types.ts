@@ -158,3 +158,4 @@ registerType("BootstrapServiceMessage", pb.BootstrapServiceMessage);
 registerType("PublishNetworkToBootstrapPeerRequest", pb.PublishNetworkToBootstrapPeerRequest);
 registerType("PublishNetworkToBootstrapPeerResponse", pb.PublishNetworkToBootstrapPeerResponse);
 registerType("PeerExchangeMessage", pb.PeerExchangeMessage);
+registerType("CAMessage", pb.CAMessage);

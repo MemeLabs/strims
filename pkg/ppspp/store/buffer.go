@@ -75,6 +75,7 @@ func (s *Buffer) set(b binmap.Bin, d []byte) {
 
 	s.bins.Set(b)
 	if !b.Contains(s.next) {
+		// TODO: if s.next < s.tail() s.readable <- ErrDiscontinuity
 		return
 	}
 
@@ -165,6 +166,7 @@ func (s *Buffer) Offset() uint64 {
 func (s *Buffer) Read(p []byte) (int, error) {
 	s.lock.Lock()
 	if s.next == s.prev {
+		// HAX: sync.Cond is broken https://github.com/golang/go/issues/21165
 		s.lock.Unlock()
 		<-s.readable
 		s.lock.Lock()

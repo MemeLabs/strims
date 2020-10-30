@@ -14993,6 +14993,7 @@ export const HashTableMessage = $root.HashTableMessage = (() => {
          * @interface IGetRequest
          * @property {number|null} [requestId] GetRequest requestId
          * @property {Uint8Array|null} [hash] GetRequest hash
+         * @property {number|null} [ifModifiedSince] GetRequest ifModifiedSince
          */
 
         /**
@@ -15027,6 +15028,14 @@ export const HashTableMessage = $root.HashTableMessage = (() => {
         GetRequest.prototype.hash = $util.newBuffer([]);
 
         /**
+         * GetRequest ifModifiedSince.
+         * @member {number} ifModifiedSince
+         * @memberof HashTableMessage.GetRequest
+         * @instance
+         */
+        GetRequest.prototype.ifModifiedSince = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+        /**
          * Creates a new GetRequest instance using the specified properties.
          * @function create
          * @memberof HashTableMessage.GetRequest
@@ -15054,6 +15063,8 @@ export const HashTableMessage = $root.HashTableMessage = (() => {
                 writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.requestId);
             if (message.hash != null && Object.hasOwnProperty.call(message, "hash"))
                 writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.hash);
+            if (message.ifModifiedSince != null && Object.hasOwnProperty.call(message, "ifModifiedSince"))
+                writer.uint32(/* id 3, wireType 0 =*/24).int64(message.ifModifiedSince);
             return writer;
         };
 
@@ -15093,6 +15104,9 @@ export const HashTableMessage = $root.HashTableMessage = (() => {
                     break;
                 case 2:
                     message.hash = reader.bytes();
+                    break;
+                case 3:
+                    message.ifModifiedSince = reader.int64();
                     break;
                 default:
                     reader.skipType(tag & 7);
@@ -15135,6 +15149,9 @@ export const HashTableMessage = $root.HashTableMessage = (() => {
             if (message.hash != null && message.hasOwnProperty("hash"))
                 if (!(message.hash && typeof message.hash.length === "number" || $util.isString(message.hash)))
                     return "hash: buffer expected";
+            if (message.ifModifiedSince != null && message.hasOwnProperty("ifModifiedSince"))
+                if (!$util.isInteger(message.ifModifiedSince) && !(message.ifModifiedSince && $util.isInteger(message.ifModifiedSince.low) && $util.isInteger(message.ifModifiedSince.high)))
+                    return "ifModifiedSince: integer|Long expected";
             return null;
         };
 
@@ -15164,6 +15181,15 @@ export const HashTableMessage = $root.HashTableMessage = (() => {
                     $util.base64.decode(object.hash, message.hash = $util.newBuffer($util.base64.length(object.hash)), 0);
                 else if (object.hash.length)
                     message.hash = object.hash;
+            if (object.ifModifiedSince != null)
+                if ($util.Long)
+                    (message.ifModifiedSince = $util.Long.fromValue(object.ifModifiedSince)).unsigned = false;
+                else if (typeof object.ifModifiedSince === "string")
+                    message.ifModifiedSince = parseInt(object.ifModifiedSince, 10);
+                else if (typeof object.ifModifiedSince === "number")
+                    message.ifModifiedSince = object.ifModifiedSince;
+                else if (typeof object.ifModifiedSince === "object")
+                    message.ifModifiedSince = new $util.LongBits(object.ifModifiedSince.low >>> 0, object.ifModifiedSince.high >>> 0).toNumber();
             return message;
         };
 
@@ -15193,6 +15219,11 @@ export const HashTableMessage = $root.HashTableMessage = (() => {
                     if (options.bytes !== Array)
                         object.hash = $util.newBuffer(object.hash);
                 }
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, false);
+                    object.ifModifiedSince = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.ifModifiedSince = options.longs === String ? "0" : 0;
             }
             if (message.requestId != null && message.hasOwnProperty("requestId"))
                 if (typeof message.requestId === "number")
@@ -15201,6 +15232,11 @@ export const HashTableMessage = $root.HashTableMessage = (() => {
                     object.requestId = options.longs === String ? $util.Long.prototype.toString.call(message.requestId) : options.longs === Number ? new $util.LongBits(message.requestId.low >>> 0, message.requestId.high >>> 0).toNumber(true) : message.requestId;
             if (message.hash != null && message.hasOwnProperty("hash"))
                 object.hash = options.bytes === String ? $util.base64.encode(message.hash, 0, message.hash.length) : options.bytes === Array ? Array.prototype.slice.call(message.hash) : message.hash;
+            if (message.ifModifiedSince != null && message.hasOwnProperty("ifModifiedSince"))
+                if (typeof message.ifModifiedSince === "number")
+                    object.ifModifiedSince = options.longs === String ? String(message.ifModifiedSince) : message.ifModifiedSince;
+                else
+                    object.ifModifiedSince = options.longs === String ? $util.Long.prototype.toString.call(message.ifModifiedSince) : options.longs === Number ? new $util.LongBits(message.ifModifiedSince.low >>> 0, message.ifModifiedSince.high >>> 0).toNumber() : message.ifModifiedSince;
             return object;
         };
 
@@ -40254,6 +40290,7 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
      * @property {NetworkHandshake.ICertificateUpgradeOffer|null} [certificateUpgradeOffer] NetworkHandshake certificateUpgradeOffer
      * @property {NetworkHandshake.ICertificateUpgradeRequest|null} [certificateUpgradeRequest] NetworkHandshake certificateUpgradeRequest
      * @property {NetworkHandshake.ICertificateUpgradeResponse|null} [certificateUpgradeResponse] NetworkHandshake certificateUpgradeResponse
+     * @property {NetworkHandshake.ICertificateUpdate|null} [certificateUpdate] NetworkHandshake certificateUpdate
      */
 
     /**
@@ -40311,17 +40348,25 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
      */
     NetworkHandshake.prototype.certificateUpgradeResponse = null;
 
+    /**
+     * NetworkHandshake certificateUpdate.
+     * @member {NetworkHandshake.ICertificateUpdate|null|undefined} certificateUpdate
+     * @memberof NetworkHandshake
+     * @instance
+     */
+    NetworkHandshake.prototype.certificateUpdate = null;
+
     // OneOf field names bound to virtual getters and setters
     let $oneOfFields;
 
     /**
      * NetworkHandshake body.
-     * @member {"init"|"networkBindings"|"certificateUpgradeOffer"|"certificateUpgradeRequest"|"certificateUpgradeResponse"|undefined} body
+     * @member {"init"|"networkBindings"|"certificateUpgradeOffer"|"certificateUpgradeRequest"|"certificateUpgradeResponse"|"certificateUpdate"|undefined} body
      * @memberof NetworkHandshake
      * @instance
      */
     Object.defineProperty(NetworkHandshake.prototype, "body", {
-        get: $util.oneOfGetter($oneOfFields = ["init", "networkBindings", "certificateUpgradeOffer", "certificateUpgradeRequest", "certificateUpgradeResponse"]),
+        get: $util.oneOfGetter($oneOfFields = ["init", "networkBindings", "certificateUpgradeOffer", "certificateUpgradeRequest", "certificateUpgradeResponse", "certificateUpdate"]),
         set: $util.oneOfSetter($oneOfFields)
     });
 
@@ -40359,6 +40404,8 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             $root.NetworkHandshake.CertificateUpgradeRequest.encode(message.certificateUpgradeRequest, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
         if (message.certificateUpgradeResponse != null && Object.hasOwnProperty.call(message, "certificateUpgradeResponse"))
             $root.NetworkHandshake.CertificateUpgradeResponse.encode(message.certificateUpgradeResponse, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
+        if (message.certificateUpdate != null && Object.hasOwnProperty.call(message, "certificateUpdate"))
+            $root.NetworkHandshake.CertificateUpdate.encode(message.certificateUpdate, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
         return writer;
     };
 
@@ -40407,6 +40454,9 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
                 break;
             case 5:
                 message.certificateUpgradeResponse = $root.NetworkHandshake.CertificateUpgradeResponse.decode(reader, reader.uint32());
+                break;
+            case 6:
+                message.certificateUpdate = $root.NetworkHandshake.CertificateUpdate.decode(reader, reader.uint32());
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -40492,6 +40542,16 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
                     return "certificateUpgradeResponse." + error;
             }
         }
+        if (message.certificateUpdate != null && message.hasOwnProperty("certificateUpdate")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.NetworkHandshake.CertificateUpdate.verify(message.certificateUpdate);
+                if (error)
+                    return "certificateUpdate." + error;
+            }
+        }
         return null;
     };
 
@@ -40531,6 +40591,11 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (typeof object.certificateUpgradeResponse !== "object")
                 throw TypeError(".NetworkHandshake.certificateUpgradeResponse: object expected");
             message.certificateUpgradeResponse = $root.NetworkHandshake.CertificateUpgradeResponse.fromObject(object.certificateUpgradeResponse);
+        }
+        if (object.certificateUpdate != null) {
+            if (typeof object.certificateUpdate !== "object")
+                throw TypeError(".NetworkHandshake.certificateUpdate: object expected");
+            message.certificateUpdate = $root.NetworkHandshake.CertificateUpdate.fromObject(object.certificateUpdate);
         }
         return message;
     };
@@ -40572,6 +40637,11 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             object.certificateUpgradeResponse = $root.NetworkHandshake.CertificateUpgradeResponse.toObject(message.certificateUpgradeResponse, options);
             if (options.oneofs)
                 object.body = "certificateUpgradeResponse";
+        }
+        if (message.certificateUpdate != null && message.hasOwnProperty("certificateUpdate")) {
+            object.certificateUpdate = $root.NetworkHandshake.CertificateUpdate.toObject(message.certificateUpdate, options);
+            if (options.oneofs)
+                object.body = "certificateUpdate";
         }
         return object;
     };
@@ -41409,7 +41479,7 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
          * Properties of a CertificateUpgradeRequest.
          * @memberof NetworkHandshake
          * @interface ICertificateUpgradeRequest
-         * @property {Array.<Uint8Array>|null} [networkKeys] CertificateUpgradeRequest networkKeys
+         * @property {Array.<ICertificate>|null} [networkKeys] CertificateUpgradeRequest networkKeys
          */
 
         /**
@@ -41430,7 +41500,7 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
 
         /**
          * CertificateUpgradeRequest networkKeys.
-         * @member {Array.<Uint8Array>} networkKeys
+         * @member {Array.<ICertificate>} networkKeys
          * @memberof NetworkHandshake.CertificateUpgradeRequest
          * @instance
          */
@@ -41462,7 +41532,7 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
                 writer = $Writer.create();
             if (message.networkKeys != null && message.networkKeys.length)
                 for (let i = 0; i < message.networkKeys.length; ++i)
-                    writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.networkKeys[i]);
+                    $root.Certificate.encode(message.networkKeys[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
             return writer;
         };
 
@@ -41500,7 +41570,7 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
                 case 1:
                     if (!(message.networkKeys && message.networkKeys.length))
                         message.networkKeys = [];
-                    message.networkKeys.push(reader.bytes());
+                    message.networkKeys.push($root.Certificate.decode(reader, reader.uint32()));
                     break;
                 default:
                     reader.skipType(tag & 7);
@@ -41540,9 +41610,11 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (message.networkKeys != null && message.hasOwnProperty("networkKeys")) {
                 if (!Array.isArray(message.networkKeys))
                     return "networkKeys: array expected";
-                for (let i = 0; i < message.networkKeys.length; ++i)
-                    if (!(message.networkKeys[i] && typeof message.networkKeys[i].length === "number" || $util.isString(message.networkKeys[i])))
-                        return "networkKeys: buffer[] expected";
+                for (let i = 0; i < message.networkKeys.length; ++i) {
+                    let error = $root.Certificate.verify(message.networkKeys[i]);
+                    if (error)
+                        return "networkKeys." + error;
+                }
             }
             return null;
         };
@@ -41563,11 +41635,11 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
                 if (!Array.isArray(object.networkKeys))
                     throw TypeError(".NetworkHandshake.CertificateUpgradeRequest.networkKeys: array expected");
                 message.networkKeys = [];
-                for (let i = 0; i < object.networkKeys.length; ++i)
-                    if (typeof object.networkKeys[i] === "string")
-                        $util.base64.decode(object.networkKeys[i], message.networkKeys[i] = $util.newBuffer($util.base64.length(object.networkKeys[i])), 0);
-                    else if (object.networkKeys[i].length)
-                        message.networkKeys[i] = object.networkKeys[i];
+                for (let i = 0; i < object.networkKeys.length; ++i) {
+                    if (typeof object.networkKeys[i] !== "object")
+                        throw TypeError(".NetworkHandshake.CertificateUpgradeRequest.networkKeys: object expected");
+                    message.networkKeys[i] = $root.Certificate.fromObject(object.networkKeys[i]);
+                }
             }
             return message;
         };
@@ -41590,7 +41662,7 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (message.networkKeys && message.networkKeys.length) {
                 object.networkKeys = [];
                 for (let j = 0; j < message.networkKeys.length; ++j)
-                    object.networkKeys[j] = options.bytes === String ? $util.base64.encode(message.networkKeys[j], 0, message.networkKeys[j].length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKeys[j]) : message.networkKeys[j];
+                    object.networkKeys[j] = $root.Certificate.toObject(message.networkKeys[j], options);
             }
             return object;
         };
@@ -41815,6 +41887,214 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         };
 
         return CertificateUpgradeResponse;
+    })();
+
+    NetworkHandshake.CertificateUpdate = (function() {
+
+        /**
+         * Properties of a CertificateUpdate.
+         * @memberof NetworkHandshake
+         * @interface ICertificateUpdate
+         * @property {Array.<ICertificate>|null} [certificates] CertificateUpdate certificates
+         */
+
+        /**
+         * Constructs a new CertificateUpdate.
+         * @memberof NetworkHandshake
+         * @classdesc Represents a CertificateUpdate.
+         * @implements ICertificateUpdate
+         * @constructor
+         * @param {NetworkHandshake.ICertificateUpdate=} [properties] Properties to set
+         */
+        function CertificateUpdate(properties) {
+            this.certificates = [];
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * CertificateUpdate certificates.
+         * @member {Array.<ICertificate>} certificates
+         * @memberof NetworkHandshake.CertificateUpdate
+         * @instance
+         */
+        CertificateUpdate.prototype.certificates = $util.emptyArray;
+
+        /**
+         * Creates a new CertificateUpdate instance using the specified properties.
+         * @function create
+         * @memberof NetworkHandshake.CertificateUpdate
+         * @static
+         * @param {NetworkHandshake.ICertificateUpdate=} [properties] Properties to set
+         * @returns {NetworkHandshake.CertificateUpdate} CertificateUpdate instance
+         */
+        CertificateUpdate.create = function create(properties) {
+            return new CertificateUpdate(properties);
+        };
+
+        /**
+         * Encodes the specified CertificateUpdate message. Does not implicitly {@link NetworkHandshake.CertificateUpdate.verify|verify} messages.
+         * @function encode
+         * @memberof NetworkHandshake.CertificateUpdate
+         * @static
+         * @param {NetworkHandshake.ICertificateUpdate} message CertificateUpdate message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        CertificateUpdate.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.certificates != null && message.certificates.length)
+                for (let i = 0; i < message.certificates.length; ++i)
+                    $root.Certificate.encode(message.certificates[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified CertificateUpdate message, length delimited. Does not implicitly {@link NetworkHandshake.CertificateUpdate.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof NetworkHandshake.CertificateUpdate
+         * @static
+         * @param {NetworkHandshake.ICertificateUpdate} message CertificateUpdate message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        CertificateUpdate.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a CertificateUpdate message from the specified reader or buffer.
+         * @function decode
+         * @memberof NetworkHandshake.CertificateUpdate
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {NetworkHandshake.CertificateUpdate} CertificateUpdate
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        CertificateUpdate.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkHandshake.CertificateUpdate();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    if (!(message.certificates && message.certificates.length))
+                        message.certificates = [];
+                    message.certificates.push($root.Certificate.decode(reader, reader.uint32()));
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a CertificateUpdate message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof NetworkHandshake.CertificateUpdate
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {NetworkHandshake.CertificateUpdate} CertificateUpdate
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        CertificateUpdate.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a CertificateUpdate message.
+         * @function verify
+         * @memberof NetworkHandshake.CertificateUpdate
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        CertificateUpdate.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.certificates != null && message.hasOwnProperty("certificates")) {
+                if (!Array.isArray(message.certificates))
+                    return "certificates: array expected";
+                for (let i = 0; i < message.certificates.length; ++i) {
+                    let error = $root.Certificate.verify(message.certificates[i]);
+                    if (error)
+                        return "certificates." + error;
+                }
+            }
+            return null;
+        };
+
+        /**
+         * Creates a CertificateUpdate message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof NetworkHandshake.CertificateUpdate
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {NetworkHandshake.CertificateUpdate} CertificateUpdate
+         */
+        CertificateUpdate.fromObject = function fromObject(object) {
+            if (object instanceof $root.NetworkHandshake.CertificateUpdate)
+                return object;
+            let message = new $root.NetworkHandshake.CertificateUpdate();
+            if (object.certificates) {
+                if (!Array.isArray(object.certificates))
+                    throw TypeError(".NetworkHandshake.CertificateUpdate.certificates: array expected");
+                message.certificates = [];
+                for (let i = 0; i < object.certificates.length; ++i) {
+                    if (typeof object.certificates[i] !== "object")
+                        throw TypeError(".NetworkHandshake.CertificateUpdate.certificates: object expected");
+                    message.certificates[i] = $root.Certificate.fromObject(object.certificates[i]);
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a CertificateUpdate message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof NetworkHandshake.CertificateUpdate
+         * @static
+         * @param {NetworkHandshake.CertificateUpdate} message CertificateUpdate
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        CertificateUpdate.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.arrays || options.defaults)
+                object.certificates = [];
+            if (message.certificates && message.certificates.length) {
+                object.certificates = [];
+                for (let j = 0; j < message.certificates.length; ++j)
+                    object.certificates[j] = $root.Certificate.toObject(message.certificates[j], options);
+            }
+            return object;
+        };
+
+        /**
+         * Converts this CertificateUpdate to JSON.
+         * @function toJSON
+         * @memberof NetworkHandshake.CertificateUpdate
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        CertificateUpdate.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return CertificateUpdate;
     })();
 
     return NetworkHandshake;
@@ -50369,6 +50649,691 @@ export const PeerExchangeMessage = $root.PeerExchangeMessage = (() => {
     })();
 
     return PeerExchangeMessage;
+})();
+
+export const CAMessage = $root.CAMessage = (() => {
+
+    /**
+     * Properties of a CAMessage.
+     * @exports ICAMessage
+     * @interface ICAMessage
+     * @property {string|null} [error] CAMessage error
+     * @property {CAMessage.IUpgradeRequest|null} [upgradeRequest] CAMessage upgradeRequest
+     * @property {CAMessage.IUpgradeRequest|null} [upgradeResponse] CAMessage upgradeResponse
+     */
+
+    /**
+     * Constructs a new CAMessage.
+     * @exports CAMessage
+     * @classdesc Represents a CAMessage.
+     * @implements ICAMessage
+     * @constructor
+     * @param {ICAMessage=} [properties] Properties to set
+     */
+    function CAMessage(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * CAMessage error.
+     * @member {string} error
+     * @memberof CAMessage
+     * @instance
+     */
+    CAMessage.prototype.error = "";
+
+    /**
+     * CAMessage upgradeRequest.
+     * @member {CAMessage.IUpgradeRequest|null|undefined} upgradeRequest
+     * @memberof CAMessage
+     * @instance
+     */
+    CAMessage.prototype.upgradeRequest = null;
+
+    /**
+     * CAMessage upgradeResponse.
+     * @member {CAMessage.IUpgradeRequest|null|undefined} upgradeResponse
+     * @memberof CAMessage
+     * @instance
+     */
+    CAMessage.prototype.upgradeResponse = null;
+
+    // OneOf field names bound to virtual getters and setters
+    let $oneOfFields;
+
+    /**
+     * CAMessage body.
+     * @member {"error"|"upgradeRequest"|"upgradeResponse"|undefined} body
+     * @memberof CAMessage
+     * @instance
+     */
+    Object.defineProperty(CAMessage.prototype, "body", {
+        get: $util.oneOfGetter($oneOfFields = ["error", "upgradeRequest", "upgradeResponse"]),
+        set: $util.oneOfSetter($oneOfFields)
+    });
+
+    /**
+     * Creates a new CAMessage instance using the specified properties.
+     * @function create
+     * @memberof CAMessage
+     * @static
+     * @param {ICAMessage=} [properties] Properties to set
+     * @returns {CAMessage} CAMessage instance
+     */
+    CAMessage.create = function create(properties) {
+        return new CAMessage(properties);
+    };
+
+    /**
+     * Encodes the specified CAMessage message. Does not implicitly {@link CAMessage.verify|verify} messages.
+     * @function encode
+     * @memberof CAMessage
+     * @static
+     * @param {ICAMessage} message CAMessage message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    CAMessage.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.error != null && Object.hasOwnProperty.call(message, "error"))
+            writer.uint32(/* id 1, wireType 2 =*/10).string(message.error);
+        if (message.upgradeRequest != null && Object.hasOwnProperty.call(message, "upgradeRequest"))
+            $root.CAMessage.UpgradeRequest.encode(message.upgradeRequest, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        if (message.upgradeResponse != null && Object.hasOwnProperty.call(message, "upgradeResponse"))
+            $root.CAMessage.UpgradeRequest.encode(message.upgradeResponse, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified CAMessage message, length delimited. Does not implicitly {@link CAMessage.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof CAMessage
+     * @static
+     * @param {ICAMessage} message CAMessage message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    CAMessage.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a CAMessage message from the specified reader or buffer.
+     * @function decode
+     * @memberof CAMessage
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {CAMessage} CAMessage
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    CAMessage.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.CAMessage();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.error = reader.string();
+                break;
+            case 2:
+                message.upgradeRequest = $root.CAMessage.UpgradeRequest.decode(reader, reader.uint32());
+                break;
+            case 3:
+                message.upgradeResponse = $root.CAMessage.UpgradeRequest.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a CAMessage message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof CAMessage
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {CAMessage} CAMessage
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    CAMessage.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a CAMessage message.
+     * @function verify
+     * @memberof CAMessage
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    CAMessage.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        let properties = {};
+        if (message.error != null && message.hasOwnProperty("error")) {
+            properties.body = 1;
+            if (!$util.isString(message.error))
+                return "error: string expected";
+        }
+        if (message.upgradeRequest != null && message.hasOwnProperty("upgradeRequest")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.CAMessage.UpgradeRequest.verify(message.upgradeRequest);
+                if (error)
+                    return "upgradeRequest." + error;
+            }
+        }
+        if (message.upgradeResponse != null && message.hasOwnProperty("upgradeResponse")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.CAMessage.UpgradeRequest.verify(message.upgradeResponse);
+                if (error)
+                    return "upgradeResponse." + error;
+            }
+        }
+        return null;
+    };
+
+    /**
+     * Creates a CAMessage message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof CAMessage
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {CAMessage} CAMessage
+     */
+    CAMessage.fromObject = function fromObject(object) {
+        if (object instanceof $root.CAMessage)
+            return object;
+        let message = new $root.CAMessage();
+        if (object.error != null)
+            message.error = String(object.error);
+        if (object.upgradeRequest != null) {
+            if (typeof object.upgradeRequest !== "object")
+                throw TypeError(".CAMessage.upgradeRequest: object expected");
+            message.upgradeRequest = $root.CAMessage.UpgradeRequest.fromObject(object.upgradeRequest);
+        }
+        if (object.upgradeResponse != null) {
+            if (typeof object.upgradeResponse !== "object")
+                throw TypeError(".CAMessage.upgradeResponse: object expected");
+            message.upgradeResponse = $root.CAMessage.UpgradeRequest.fromObject(object.upgradeResponse);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a CAMessage message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof CAMessage
+     * @static
+     * @param {CAMessage} message CAMessage
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    CAMessage.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (message.error != null && message.hasOwnProperty("error")) {
+            object.error = message.error;
+            if (options.oneofs)
+                object.body = "error";
+        }
+        if (message.upgradeRequest != null && message.hasOwnProperty("upgradeRequest")) {
+            object.upgradeRequest = $root.CAMessage.UpgradeRequest.toObject(message.upgradeRequest, options);
+            if (options.oneofs)
+                object.body = "upgradeRequest";
+        }
+        if (message.upgradeResponse != null && message.hasOwnProperty("upgradeResponse")) {
+            object.upgradeResponse = $root.CAMessage.UpgradeRequest.toObject(message.upgradeResponse, options);
+            if (options.oneofs)
+                object.body = "upgradeResponse";
+        }
+        return object;
+    };
+
+    /**
+     * Converts this CAMessage to JSON.
+     * @function toJSON
+     * @memberof CAMessage
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    CAMessage.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    CAMessage.UpgradeRequest = (function() {
+
+        /**
+         * Properties of an UpgradeRequest.
+         * @memberof CAMessage
+         * @interface IUpgradeRequest
+         * @property {ICertificate|null} [inviteCertificate] UpgradeRequest inviteCertificate
+         * @property {ICertificateRequest|null} [certificateRequest] UpgradeRequest certificateRequest
+         */
+
+        /**
+         * Constructs a new UpgradeRequest.
+         * @memberof CAMessage
+         * @classdesc Represents an UpgradeRequest.
+         * @implements IUpgradeRequest
+         * @constructor
+         * @param {CAMessage.IUpgradeRequest=} [properties] Properties to set
+         */
+        function UpgradeRequest(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * UpgradeRequest inviteCertificate.
+         * @member {ICertificate|null|undefined} inviteCertificate
+         * @memberof CAMessage.UpgradeRequest
+         * @instance
+         */
+        UpgradeRequest.prototype.inviteCertificate = null;
+
+        /**
+         * UpgradeRequest certificateRequest.
+         * @member {ICertificateRequest|null|undefined} certificateRequest
+         * @memberof CAMessage.UpgradeRequest
+         * @instance
+         */
+        UpgradeRequest.prototype.certificateRequest = null;
+
+        /**
+         * Creates a new UpgradeRequest instance using the specified properties.
+         * @function create
+         * @memberof CAMessage.UpgradeRequest
+         * @static
+         * @param {CAMessage.IUpgradeRequest=} [properties] Properties to set
+         * @returns {CAMessage.UpgradeRequest} UpgradeRequest instance
+         */
+        UpgradeRequest.create = function create(properties) {
+            return new UpgradeRequest(properties);
+        };
+
+        /**
+         * Encodes the specified UpgradeRequest message. Does not implicitly {@link CAMessage.UpgradeRequest.verify|verify} messages.
+         * @function encode
+         * @memberof CAMessage.UpgradeRequest
+         * @static
+         * @param {CAMessage.IUpgradeRequest} message UpgradeRequest message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        UpgradeRequest.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.inviteCertificate != null && Object.hasOwnProperty.call(message, "inviteCertificate"))
+                $root.Certificate.encode(message.inviteCertificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            if (message.certificateRequest != null && Object.hasOwnProperty.call(message, "certificateRequest"))
+                $root.CertificateRequest.encode(message.certificateRequest, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified UpgradeRequest message, length delimited. Does not implicitly {@link CAMessage.UpgradeRequest.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof CAMessage.UpgradeRequest
+         * @static
+         * @param {CAMessage.IUpgradeRequest} message UpgradeRequest message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        UpgradeRequest.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes an UpgradeRequest message from the specified reader or buffer.
+         * @function decode
+         * @memberof CAMessage.UpgradeRequest
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {CAMessage.UpgradeRequest} UpgradeRequest
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        UpgradeRequest.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.CAMessage.UpgradeRequest();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.inviteCertificate = $root.Certificate.decode(reader, reader.uint32());
+                    break;
+                case 2:
+                    message.certificateRequest = $root.CertificateRequest.decode(reader, reader.uint32());
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes an UpgradeRequest message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof CAMessage.UpgradeRequest
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {CAMessage.UpgradeRequest} UpgradeRequest
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        UpgradeRequest.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies an UpgradeRequest message.
+         * @function verify
+         * @memberof CAMessage.UpgradeRequest
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        UpgradeRequest.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.inviteCertificate != null && message.hasOwnProperty("inviteCertificate")) {
+                let error = $root.Certificate.verify(message.inviteCertificate);
+                if (error)
+                    return "inviteCertificate." + error;
+            }
+            if (message.certificateRequest != null && message.hasOwnProperty("certificateRequest")) {
+                let error = $root.CertificateRequest.verify(message.certificateRequest);
+                if (error)
+                    return "certificateRequest." + error;
+            }
+            return null;
+        };
+
+        /**
+         * Creates an UpgradeRequest message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof CAMessage.UpgradeRequest
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {CAMessage.UpgradeRequest} UpgradeRequest
+         */
+        UpgradeRequest.fromObject = function fromObject(object) {
+            if (object instanceof $root.CAMessage.UpgradeRequest)
+                return object;
+            let message = new $root.CAMessage.UpgradeRequest();
+            if (object.inviteCertificate != null) {
+                if (typeof object.inviteCertificate !== "object")
+                    throw TypeError(".CAMessage.UpgradeRequest.inviteCertificate: object expected");
+                message.inviteCertificate = $root.Certificate.fromObject(object.inviteCertificate);
+            }
+            if (object.certificateRequest != null) {
+                if (typeof object.certificateRequest !== "object")
+                    throw TypeError(".CAMessage.UpgradeRequest.certificateRequest: object expected");
+                message.certificateRequest = $root.CertificateRequest.fromObject(object.certificateRequest);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from an UpgradeRequest message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof CAMessage.UpgradeRequest
+         * @static
+         * @param {CAMessage.UpgradeRequest} message UpgradeRequest
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        UpgradeRequest.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                object.inviteCertificate = null;
+                object.certificateRequest = null;
+            }
+            if (message.inviteCertificate != null && message.hasOwnProperty("inviteCertificate"))
+                object.inviteCertificate = $root.Certificate.toObject(message.inviteCertificate, options);
+            if (message.certificateRequest != null && message.hasOwnProperty("certificateRequest"))
+                object.certificateRequest = $root.CertificateRequest.toObject(message.certificateRequest, options);
+            return object;
+        };
+
+        /**
+         * Converts this UpgradeRequest to JSON.
+         * @function toJSON
+         * @memberof CAMessage.UpgradeRequest
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        UpgradeRequest.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return UpgradeRequest;
+    })();
+
+    CAMessage.UpgradeResponse = (function() {
+
+        /**
+         * Properties of an UpgradeResponse.
+         * @memberof CAMessage
+         * @interface IUpgradeResponse
+         * @property {ICertificate|null} [certificate] UpgradeResponse certificate
+         */
+
+        /**
+         * Constructs a new UpgradeResponse.
+         * @memberof CAMessage
+         * @classdesc Represents an UpgradeResponse.
+         * @implements IUpgradeResponse
+         * @constructor
+         * @param {CAMessage.IUpgradeResponse=} [properties] Properties to set
+         */
+        function UpgradeResponse(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * UpgradeResponse certificate.
+         * @member {ICertificate|null|undefined} certificate
+         * @memberof CAMessage.UpgradeResponse
+         * @instance
+         */
+        UpgradeResponse.prototype.certificate = null;
+
+        /**
+         * Creates a new UpgradeResponse instance using the specified properties.
+         * @function create
+         * @memberof CAMessage.UpgradeResponse
+         * @static
+         * @param {CAMessage.IUpgradeResponse=} [properties] Properties to set
+         * @returns {CAMessage.UpgradeResponse} UpgradeResponse instance
+         */
+        UpgradeResponse.create = function create(properties) {
+            return new UpgradeResponse(properties);
+        };
+
+        /**
+         * Encodes the specified UpgradeResponse message. Does not implicitly {@link CAMessage.UpgradeResponse.verify|verify} messages.
+         * @function encode
+         * @memberof CAMessage.UpgradeResponse
+         * @static
+         * @param {CAMessage.IUpgradeResponse} message UpgradeResponse message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        UpgradeResponse.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
+                $root.Certificate.encode(message.certificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified UpgradeResponse message, length delimited. Does not implicitly {@link CAMessage.UpgradeResponse.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof CAMessage.UpgradeResponse
+         * @static
+         * @param {CAMessage.IUpgradeResponse} message UpgradeResponse message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        UpgradeResponse.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes an UpgradeResponse message from the specified reader or buffer.
+         * @function decode
+         * @memberof CAMessage.UpgradeResponse
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {CAMessage.UpgradeResponse} UpgradeResponse
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        UpgradeResponse.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.CAMessage.UpgradeResponse();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.certificate = $root.Certificate.decode(reader, reader.uint32());
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes an UpgradeResponse message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof CAMessage.UpgradeResponse
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {CAMessage.UpgradeResponse} UpgradeResponse
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        UpgradeResponse.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies an UpgradeResponse message.
+         * @function verify
+         * @memberof CAMessage.UpgradeResponse
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        UpgradeResponse.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.certificate != null && message.hasOwnProperty("certificate")) {
+                let error = $root.Certificate.verify(message.certificate);
+                if (error)
+                    return "certificate." + error;
+            }
+            return null;
+        };
+
+        /**
+         * Creates an UpgradeResponse message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof CAMessage.UpgradeResponse
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {CAMessage.UpgradeResponse} UpgradeResponse
+         */
+        UpgradeResponse.fromObject = function fromObject(object) {
+            if (object instanceof $root.CAMessage.UpgradeResponse)
+                return object;
+            let message = new $root.CAMessage.UpgradeResponse();
+            if (object.certificate != null) {
+                if (typeof object.certificate !== "object")
+                    throw TypeError(".CAMessage.UpgradeResponse.certificate: object expected");
+                message.certificate = $root.Certificate.fromObject(object.certificate);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from an UpgradeResponse message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof CAMessage.UpgradeResponse
+         * @static
+         * @param {CAMessage.UpgradeResponse} message UpgradeResponse
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        UpgradeResponse.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                object.certificate = null;
+            if (message.certificate != null && message.hasOwnProperty("certificate"))
+                object.certificate = $root.Certificate.toObject(message.certificate, options);
+            return object;
+        };
+
+        /**
+         * Converts this UpgradeResponse to JSON.
+         * @function toJSON
+         * @memberof CAMessage.UpgradeResponse
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        UpgradeResponse.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return UpgradeResponse;
+    })();
+
+    return CAMessage;
 })();
 
 /**

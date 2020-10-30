@@ -1,27 +1,10 @@
 package kademlia
 
 import (
-	"container/heap"
-	"math"
+	"math/bits"
+	"sort"
 	"sync"
 )
-
-var bucketBits []ID
-
-func init() {
-	bucketBits = make([]ID, idBitLength)
-	l := len(bucketBits[0])
-
-	for i := 0; i < idBitLength; i++ {
-		j := idBitLength - i - 1
-		b := j / 64
-		for k := b; k < l; k++ {
-			bucketBits[j][k] = math.MaxUint64
-		}
-		bucketBits[j][b] = 1 << (i & 63)
-		bucketBits[j][b] |= (bucketBits[j][b] - 1)
-	}
-}
 
 // Interface ...
 type Interface interface {
@@ -127,70 +110,42 @@ func (k *KBucket) Remove(id ID) bool {
 }
 
 func (k *KBucket) idBucket(id ID) int {
-	v := k.id.XOr(id)
-	for i, b := range bucketBits {
-		if b.Less(v) {
-			return i
+	for i, v := range k.id.XOr(id) {
+		if v != 0 {
+			return i*64 + bits.LeadingZeros64(v)
 		}
 	}
-	return 0
+	return idBitLength - 1
 }
 
-// // Closest ...
-// func (k *KBucket) Closest(id ID, is []Interface) (n int) {
-// 	h := nodeHeapPool.Get().(*nodeHeap)
-// 	defer nodeHeapPool.Put(h)
-
-// 	h.Reset()
-// 	for _, b := range k.b {
-// 		for _, bn := range b {
-// 			h.HeapPush(nodeHeapItem{bn, bn.ID().XOr(id)})
-// 		}
-// 	}
-
-// 	for n < len(is) {
-// 		v, ok := h.HeapPop()
-// 		if !ok {
-// 			return
-// 		}
-// 		is[n] = v.Interface
-// 		n++
-// 	}
-// 	return
-// }
-
 // Closest ...
-func (k *KBucket) Closest(id ID, is []Interface) (n int) {
+func (k *KBucket) Closest(id ID, is []Interface) int {
 	f := NewFilter(id)
 	defer f.Free()
 
-	for _, b := range k.b {
-		for _, bn := range b {
-			f.Push(bn)
+	i := k.idBucket(id)
+	f.Push(k.b[i]...)
+	for l, r := i, i; f.Len() < len(is) && (l >= 0 || r < len(k.b)); {
+		if l--; l >= 0 {
+			f.Push(k.b[l]...)
+		}
+		if r++; r < len(k.b) {
+			f.Push(k.b[r]...)
 		}
 	}
 
-	for n < len(is) {
-		v, ok := f.Pop()
-		if !ok {
-			return
-		}
-		is[n] = v
-		n++
-	}
-	return
+	return f.Copy(is)
 }
 
 // Get ...
 func (k *KBucket) Get(id ID) (Interface, bool) {
-	var ifs [1]Interface
-	if n := k.Closest(id, ifs[:]); n == 0 {
-		return nil, false
+	i := k.idBucket(id)
+	for j, n := range k.b[i] {
+		if n.ID().Equals(id) {
+			return k.b[i][j], true
+		}
 	}
-	if !id.Equals(ifs[0].ID()) {
-		return nil, false
-	}
-	return ifs[0], true
+	return nil, false
 }
 
 // Empty ...
@@ -200,88 +155,89 @@ func (k *KBucket) Empty() bool {
 
 // NewFilter ...
 func NewFilter(id ID) Filter {
-	h := nodeHeapPool.Get().(*nodeHeap)
-	h.Reset()
+	s := filterSlicePool.Get().(*filterSlice)
+	*s = (*s)[:0]
 	return Filter{
-		id:   id,
-		heap: h,
+		id:    id,
+		items: s,
 	}
 }
 
 // Filter ...
 type Filter struct {
-	id   ID
-	heap *nodeHeap
+	id    ID
+	items *filterSlice
+	dirty bool
 }
 
 // Push ...
-func (s *Filter) Push(n Interface) {
-	s.heap.HeapPush(nodeHeapItem{n, n.ID().XOr(s.id)})
+func (s *Filter) Push(ns ...Interface) {
+	for _, n := range ns {
+		*s.items = append(*s.items, filterSliceItem{n, n.ID().XOr(s.id)})
+	}
+	s.dirty = true
+}
+
+// Len ...
+func (s *Filter) Len() int {
+	return s.items.Len()
+}
+
+// Sort ...
+func (s *Filter) Sort() {
+	if s.dirty {
+		sort.Sort(*s.items)
+		s.dirty = false
+	}
 }
 
 // Pop ...
 func (s *Filter) Pop() (Interface, bool) {
-	v, ok := s.heap.HeapPop()
-	if !ok {
+	s.Sort()
+
+	n := len(*s.items)
+	if n == 0 {
 		return nil, false
 	}
-	return v.Interface, true
+	out := (*s.items)[n-1]
+	(*s.items) = (*s.items)[:n-1]
+	return out, true
+}
+
+// Copy ...
+func (s *Filter) Copy(out []Interface) int {
+	s.Sort()
+
+	l := len(*s.items)
+	n := l
+	if n > len(out) {
+		n = len(out)
+	}
+
+	for i := 0; i < n; i++ {
+		out[i] = (*s.items)[l-i-1].Interface
+	}
+	return n
 }
 
 // Free ...
 func (s *Filter) Free() {
-	nodeHeapPool.Put(s.heap)
+	filterSlicePool.Put(s.items)
 }
 
-var nodeHeapPool = sync.Pool{
+var filterSlicePool = sync.Pool{
 	New: func() interface{} {
-		return &nodeHeap{}
+		return &filterSlice{}
 	},
 }
 
-type nodeHeapItem struct {
+type filterSliceItem struct {
 	Interface
 	d ID
 }
 
-type nodeHeap []nodeHeapItem
+type filterSlice []filterSliceItem
 
-func (h *nodeHeap) Reset() {
-	*h = (*h)[:0]
-}
-
-func (h *nodeHeap) HeapPush(e nodeHeapItem) {
-	i := len(*h)
-	*h = append(*h, e)
-
-	// use fix instead of heap.Push because the interface{} argument to push
-	// confuses escape detection and forces the caller to heap allocate the
-	// new value
-	heap.Fix(h, i)
-}
-
-func (h *nodeHeap) HeapPop() (nodeHeapItem, bool) {
-	v := h.Pop()
-	if v == nil {
-		return nodeHeapItem{}, false
-	}
-	return v.(nodeHeapItem), true
-}
-
-func (h nodeHeap) Len() int           { return len(h) }
-func (h nodeHeap) Less(i, j int) bool { return h[j].d.Less(h[i].d) }
-func (h nodeHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
-
-func (h *nodeHeap) Push(v interface{}) {
-	*h = append(*h, v.(nodeHeapItem))
-}
-
-func (h *nodeHeap) Pop() interface{} {
-	n := len(*h)
-	if n == 0 {
-		return nil
-	}
-	v := (*h)[n-1]
-	*h = (*h)[0 : n-1]
-	return v
-}
+func (h filterSlice) Len() int           { return len(h) }
+func (h filterSlice) Less(i, j int) bool { return h[j].d.Less(h[i].d) }
+func (h filterSlice) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }

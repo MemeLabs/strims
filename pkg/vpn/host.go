@@ -16,7 +16,7 @@ import (
 )
 
 const reservedPortCount = 1000
-const recentMessageIDHistoryLength = 10000
+const recentMessageIDHistoryLength = 100000
 const maxMessageHops = 5
 const maxMessageReplicas = 5
 

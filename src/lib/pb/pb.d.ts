@@ -6477,6 +6477,9 @@ export namespace HashTableMessage {
 
         /** GetRequest hash */
         hash?: (Uint8Array|null);
+
+        /** GetRequest ifModifiedSince */
+        ifModifiedSince?: (number|null);
     }
 
     /** Represents a GetRequest. */
@@ -6493,6 +6496,9 @@ export namespace HashTableMessage {
 
         /** GetRequest hash. */
         public hash: Uint8Array;
+
+        /** GetRequest ifModifiedSince. */
+        public ifModifiedSince: number;
 
         /**
          * Creates a new GetRequest instance using the specified properties.
@@ -17515,6 +17521,9 @@ export interface INetworkHandshake {
 
     /** NetworkHandshake certificateUpgradeResponse */
     certificateUpgradeResponse?: (NetworkHandshake.ICertificateUpgradeResponse|null);
+
+    /** NetworkHandshake certificateUpdate */
+    certificateUpdate?: (NetworkHandshake.ICertificateUpdate|null);
 }
 
 /** Represents a NetworkHandshake. */
@@ -17541,8 +17550,11 @@ export class NetworkHandshake implements INetworkHandshake {
     /** NetworkHandshake certificateUpgradeResponse. */
     public certificateUpgradeResponse?: (NetworkHandshake.ICertificateUpgradeResponse|null);
 
+    /** NetworkHandshake certificateUpdate. */
+    public certificateUpdate?: (NetworkHandshake.ICertificateUpdate|null);
+
     /** NetworkHandshake body. */
-    public body?: ("init"|"networkBindings"|"certificateUpgradeOffer"|"certificateUpgradeRequest"|"certificateUpgradeResponse");
+    public body?: ("init"|"networkBindings"|"certificateUpgradeOffer"|"certificateUpgradeRequest"|"certificateUpgradeResponse"|"certificateUpdate");
 
     /**
      * Creates a new NetworkHandshake instance using the specified properties.
@@ -17987,7 +17999,7 @@ export namespace NetworkHandshake {
     interface ICertificateUpgradeRequest {
 
         /** CertificateUpgradeRequest networkKeys */
-        networkKeys?: (Uint8Array[]|null);
+        networkKeys?: (ICertificate[]|null);
     }
 
     /** Represents a CertificateUpgradeRequest. */
@@ -18000,7 +18012,7 @@ export namespace NetworkHandshake {
         constructor(properties?: NetworkHandshake.ICertificateUpgradeRequest);
 
         /** CertificateUpgradeRequest networkKeys. */
-        public networkKeys: Uint8Array[];
+        public networkKeys: ICertificate[];
 
         /**
          * Creates a new CertificateUpgradeRequest instance using the specified properties.
@@ -18158,6 +18170,96 @@ export namespace NetworkHandshake {
 
         /**
          * Converts this CertificateUpgradeResponse to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a CertificateUpdate. */
+    interface ICertificateUpdate {
+
+        /** CertificateUpdate certificates */
+        certificates?: (ICertificate[]|null);
+    }
+
+    /** Represents a CertificateUpdate. */
+    class CertificateUpdate implements ICertificateUpdate {
+
+        /**
+         * Constructs a new CertificateUpdate.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: NetworkHandshake.ICertificateUpdate);
+
+        /** CertificateUpdate certificates. */
+        public certificates: ICertificate[];
+
+        /**
+         * Creates a new CertificateUpdate instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns CertificateUpdate instance
+         */
+        public static create(properties?: NetworkHandshake.ICertificateUpdate): NetworkHandshake.CertificateUpdate;
+
+        /**
+         * Encodes the specified CertificateUpdate message. Does not implicitly {@link NetworkHandshake.CertificateUpdate.verify|verify} messages.
+         * @param message CertificateUpdate message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: NetworkHandshake.ICertificateUpdate, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified CertificateUpdate message, length delimited. Does not implicitly {@link NetworkHandshake.CertificateUpdate.verify|verify} messages.
+         * @param message CertificateUpdate message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: NetworkHandshake.ICertificateUpdate, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a CertificateUpdate message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns CertificateUpdate
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkHandshake.CertificateUpdate;
+
+        /**
+         * Decodes a CertificateUpdate message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns CertificateUpdate
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkHandshake.CertificateUpdate;
+
+        /**
+         * Verifies a CertificateUpdate message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a CertificateUpdate message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns CertificateUpdate
+         */
+        public static fromObject(object: { [k: string]: any }): NetworkHandshake.CertificateUpdate;
+
+        /**
+         * Creates a plain object from a CertificateUpdate message. Also converts values to other types if specified.
+         * @param message CertificateUpdate
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: NetworkHandshake.CertificateUpdate, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this CertificateUpdate to JSON.
          * @returns JSON object
          */
         public toJSON(): { [k: string]: any };
@@ -21950,6 +22052,300 @@ export namespace PeerExchangeMessage {
 
         /**
          * Converts this CallbackRequest to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+}
+
+/** Properties of a CAMessage. */
+export interface ICAMessage {
+
+    /** CAMessage error */
+    error?: (string|null);
+
+    /** CAMessage upgradeRequest */
+    upgradeRequest?: (CAMessage.IUpgradeRequest|null);
+
+    /** CAMessage upgradeResponse */
+    upgradeResponse?: (CAMessage.IUpgradeRequest|null);
+}
+
+/** Represents a CAMessage. */
+export class CAMessage implements ICAMessage {
+
+    /**
+     * Constructs a new CAMessage.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ICAMessage);
+
+    /** CAMessage error. */
+    public error: string;
+
+    /** CAMessage upgradeRequest. */
+    public upgradeRequest?: (CAMessage.IUpgradeRequest|null);
+
+    /** CAMessage upgradeResponse. */
+    public upgradeResponse?: (CAMessage.IUpgradeRequest|null);
+
+    /** CAMessage body. */
+    public body?: ("error"|"upgradeRequest"|"upgradeResponse");
+
+    /**
+     * Creates a new CAMessage instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns CAMessage instance
+     */
+    public static create(properties?: ICAMessage): CAMessage;
+
+    /**
+     * Encodes the specified CAMessage message. Does not implicitly {@link CAMessage.verify|verify} messages.
+     * @param message CAMessage message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ICAMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified CAMessage message, length delimited. Does not implicitly {@link CAMessage.verify|verify} messages.
+     * @param message CAMessage message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ICAMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a CAMessage message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns CAMessage
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CAMessage;
+
+    /**
+     * Decodes a CAMessage message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns CAMessage
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CAMessage;
+
+    /**
+     * Verifies a CAMessage message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a CAMessage message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns CAMessage
+     */
+    public static fromObject(object: { [k: string]: any }): CAMessage;
+
+    /**
+     * Creates a plain object from a CAMessage message. Also converts values to other types if specified.
+     * @param message CAMessage
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: CAMessage, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this CAMessage to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+export namespace CAMessage {
+
+    /** Properties of an UpgradeRequest. */
+    interface IUpgradeRequest {
+
+        /** UpgradeRequest inviteCertificate */
+        inviteCertificate?: (ICertificate|null);
+
+        /** UpgradeRequest certificateRequest */
+        certificateRequest?: (ICertificateRequest|null);
+    }
+
+    /** Represents an UpgradeRequest. */
+    class UpgradeRequest implements IUpgradeRequest {
+
+        /**
+         * Constructs a new UpgradeRequest.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: CAMessage.IUpgradeRequest);
+
+        /** UpgradeRequest inviteCertificate. */
+        public inviteCertificate?: (ICertificate|null);
+
+        /** UpgradeRequest certificateRequest. */
+        public certificateRequest?: (ICertificateRequest|null);
+
+        /**
+         * Creates a new UpgradeRequest instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns UpgradeRequest instance
+         */
+        public static create(properties?: CAMessage.IUpgradeRequest): CAMessage.UpgradeRequest;
+
+        /**
+         * Encodes the specified UpgradeRequest message. Does not implicitly {@link CAMessage.UpgradeRequest.verify|verify} messages.
+         * @param message UpgradeRequest message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: CAMessage.IUpgradeRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified UpgradeRequest message, length delimited. Does not implicitly {@link CAMessage.UpgradeRequest.verify|verify} messages.
+         * @param message UpgradeRequest message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: CAMessage.IUpgradeRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes an UpgradeRequest message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns UpgradeRequest
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CAMessage.UpgradeRequest;
+
+        /**
+         * Decodes an UpgradeRequest message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns UpgradeRequest
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CAMessage.UpgradeRequest;
+
+        /**
+         * Verifies an UpgradeRequest message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates an UpgradeRequest message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns UpgradeRequest
+         */
+        public static fromObject(object: { [k: string]: any }): CAMessage.UpgradeRequest;
+
+        /**
+         * Creates a plain object from an UpgradeRequest message. Also converts values to other types if specified.
+         * @param message UpgradeRequest
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: CAMessage.UpgradeRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this UpgradeRequest to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of an UpgradeResponse. */
+    interface IUpgradeResponse {
+
+        /** UpgradeResponse certificate */
+        certificate?: (ICertificate|null);
+    }
+
+    /** Represents an UpgradeResponse. */
+    class UpgradeResponse implements IUpgradeResponse {
+
+        /**
+         * Constructs a new UpgradeResponse.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: CAMessage.IUpgradeResponse);
+
+        /** UpgradeResponse certificate. */
+        public certificate?: (ICertificate|null);
+
+        /**
+         * Creates a new UpgradeResponse instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns UpgradeResponse instance
+         */
+        public static create(properties?: CAMessage.IUpgradeResponse): CAMessage.UpgradeResponse;
+
+        /**
+         * Encodes the specified UpgradeResponse message. Does not implicitly {@link CAMessage.UpgradeResponse.verify|verify} messages.
+         * @param message UpgradeResponse message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: CAMessage.IUpgradeResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified UpgradeResponse message, length delimited. Does not implicitly {@link CAMessage.UpgradeResponse.verify|verify} messages.
+         * @param message UpgradeResponse message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: CAMessage.IUpgradeResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes an UpgradeResponse message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns UpgradeResponse
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CAMessage.UpgradeResponse;
+
+        /**
+         * Decodes an UpgradeResponse message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns UpgradeResponse
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CAMessage.UpgradeResponse;
+
+        /**
+         * Verifies an UpgradeResponse message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates an UpgradeResponse message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns UpgradeResponse
+         */
+        public static fromObject(object: { [k: string]: any }): CAMessage.UpgradeResponse;
+
+        /**
+         * Creates a plain object from an UpgradeResponse message. Also converts values to other types if specified.
+         * @param message UpgradeResponse
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: CAMessage.UpgradeResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this UpgradeResponse to JSON.
          * @returns JSON object
          */
         public toJSON(): { [k: string]: any };

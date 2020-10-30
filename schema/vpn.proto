@@ -62,10 +62,14 @@ message NetworkHandshake {
   }
 
   message CertificateUpgradeRequest {
-    repeated bytes network_keys = 1;
+    repeated Certificate network_keys = 1;
   }
 
   message CertificateUpgradeResponse {
+    repeated Certificate certificates = 1;
+  }
+
+  message CertificateUpdate {
     repeated Certificate certificates = 1;
   }
 
@@ -75,6 +79,7 @@ message NetworkHandshake {
     CertificateUpgradeOffer certificate_upgrade_offer = 3;
     CertificateUpgradeRequest certificate_upgrade_request = 4;
     CertificateUpgradeResponse certificate_upgrade_response = 5;
+    CertificateUpdate certificate_update = 6;
   }
 }
 
@@ -262,4 +267,21 @@ service Bootstrap {
   rpc ListClients(ListBootstrapClientsRequest) returns (ListBootstrapClientsResponse);
   rpc ListPeers(ListBootstrapPeersRequest) returns (ListBootstrapPeersResponse);
   rpc PublishNetworkToPeer(PublishNetworkToBootstrapPeerRequest) returns (PublishNetworkToBootstrapPeerResponse);
+}
+
+message CAMessage {
+  message UpgradeRequest {
+    Certificate invite_certificate = 1;
+    CertificateRequest certificate_request = 2;
+  }
+
+  message UpgradeResponse {
+    Certificate certificate = 1;
+  }
+
+  oneof body {
+    string error = 1;
+    UpgradeRequest upgrade_request = 2;
+    UpgradeRequest upgrade_response = 3;
+  }
 }

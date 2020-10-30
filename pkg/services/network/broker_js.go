@@ -48,9 +48,9 @@ type BrokerProxyService struct {
 func (s *BrokerProxyService) Open(ctx context.Context, r *pb.BrokerProxyRequest) (<-chan *pb.BrokerProxyEvent, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
-	ch := make(chan *pb.BrokerProxyEvent)
+	events := make(chan *pb.BrokerProxyEvent)
 	rw := &brokerProxyServiceReadWriter{
-		ch:       ch,
+		events:   events,
 		readable: make(chan struct{}),
 	}
 	h := &brokerProxyServiceHelper{
@@ -64,7 +64,7 @@ func (s *BrokerProxyService) Open(ctx context.Context, r *pb.BrokerProxyRequest)
 	s.helpers.Store(pid, h)
 
 	go func() {
-		ch <- &pb.BrokerProxyEvent{
+		events <- &pb.BrokerProxyEvent{
 			Body: &pb.BrokerProxyEvent_Open_{
 				Open: &pb.BrokerProxyEvent_Open{
 					ProxyId: pid,
@@ -77,7 +77,7 @@ func (s *BrokerProxyService) Open(ctx context.Context, r *pb.BrokerProxyRequest)
 		rw.Close()
 	}()
 
-	return ch, nil
+	return events, nil
 }
 
 // SendKeys ...
@@ -153,7 +153,7 @@ func (h *brokerProxyServiceHelper) Close() {
 
 type brokerProxyServiceReadWriter struct {
 	rb       bytes.Buffer
-	ch       chan *pb.BrokerProxyEvent
+	events   chan *pb.BrokerProxyEvent
 	readable chan struct{}
 }
 
@@ -164,7 +164,7 @@ func (r *brokerProxyServiceReadWriter) Data(p []byte) {
 
 func (r *brokerProxyServiceReadWriter) Read(p []byte) (int, error) {
 	if r.rb.Len() == 0 {
-		r.ch <- &pb.BrokerProxyEvent{
+		r.events <- &pb.BrokerProxyEvent{
 			Body: &pb.BrokerProxyEvent_Read_{
 				Read: &pb.BrokerProxyEvent_Read{},
 			},
@@ -177,7 +177,7 @@ func (r *brokerProxyServiceReadWriter) Read(p []byte) (int, error) {
 }
 
 func (r *brokerProxyServiceReadWriter) Write(p []byte) (int, error) {
-	r.ch <- &pb.BrokerProxyEvent{
+	r.events <- &pb.BrokerProxyEvent{
 		Body: &pb.BrokerProxyEvent_Data_{
 			Data: &pb.BrokerProxyEvent_Data{
 				Data: append(make([]byte, 0, len(p)), p...),

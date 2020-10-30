@@ -1,5 +1,10 @@
 package ppspptest
 
+import (
+	"sync"
+	"sync/atomic"
+)
+
 const connMTU = 1 << 14
 
 // Conn ...
@@ -56,4 +61,49 @@ func (c *conn) MTU() int {
 // Read ...
 func (c *conn) Read(p []byte) (int, error) {
 	return c.r.Read(p)
+}
+
+// NewUnbufferedConnPair ...
+func NewUnbufferedConnPair() (Conn, Conn) {
+	ar, aw := newBufPipe()
+	br, bw := newBufPipe()
+
+	return &unbufferedConn{conn: conn{ar, bw}}, &unbufferedConn{conn: conn{br, aw}}
+}
+
+var reading, writing int64
+
+type unbufferedConn struct {
+	mu sync.Mutex
+	conn
+}
+
+func (c *unbufferedConn) Read(p []byte) (int, error) {
+	atomic.AddInt64(&reading, 1)
+	defer atomic.AddInt64(&reading, -1)
+	return c.conn.Read(p)
+}
+
+func (c *unbufferedConn) Write(p []byte) (int, error) {
+	atomic.AddInt64(&writing, 1)
+	defer atomic.AddInt64(&writing, -1)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	n, err := c.conn.Write(p)
+	if err != nil {
+		return 0, err
+	}
+	if err := c.conn.Flush(); err != nil {
+		return 0, err
+	}
+	return n, nil
+}
+
+func Reading() int64 {
+	return atomic.LoadInt64(&reading)
+}
+
+func Writing() int64 {
+	return atomic.LoadInt64(&writing)
 }
