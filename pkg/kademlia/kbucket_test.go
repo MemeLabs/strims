@@ -1,8 +1,9 @@
 package kademlia
 
 import (
-	"log"
 	"testing"
+
+	"github.com/tj/assert"
 )
 
 type node ID
@@ -21,11 +22,10 @@ func TestKBucket(t *testing.T) {
 	}
 
 	id, _ = NewID()
-	ids := make([]Interface, 5)
+	ids := make([]Interface, 20)
 	n := b.Closest(id, ids)
-	for i := 0; i < n; i++ {
-		vv := ids[i]
-		log.Println(vv.ID().XOr(id))
+	for i := 1; i < n; i++ {
+		assert.True(t, ids[i-1].ID().XOr(id).Less(ids[i].ID().XOr(id)))
 	}
 }
 
@@ -43,7 +43,7 @@ func BenchmarkKBucket(b *testing.B) {
 		ids[i], _ = NewID()
 	}
 
-	is := make([]Interface, 3)
+	is := make([]Interface, 5)
 
 	b.ResetTimer()
 

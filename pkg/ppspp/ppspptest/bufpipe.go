@@ -10,7 +10,7 @@ var errBufPipeClosed = errors.New("io on closed bufPipe")
 
 func newBufPipe() (*bufPipeReader, *bufPipeWriter) {
 	b := &bufPipe{close: make(chan struct{})}
-	ch := make(chan int, 128)
+	ch := make(chan int, 1024)
 	return &bufPipeReader{ch: ch, buf: b}, &bufPipeWriter{ch: ch, buf: b}
 }
 

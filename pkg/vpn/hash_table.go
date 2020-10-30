@@ -13,6 +13,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
@@ -31,9 +32,10 @@ const hashTableMaxSize = 5120
 
 var nextHashTableID uint32
 
+// HashTable ...
 type HashTable interface {
 	Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error)
-	Get(ctx context.Context, key, salt []byte) (<-chan *HashTableValue, error)
+	Get(ctx context.Context, key, salt []byte, options ...HashTableOption) (<-chan []byte, error)
 }
 
 func newHashTable(logger *zap.Logger, n *Network, store *HashTableStore) *hashTable {
@@ -61,6 +63,10 @@ type hashTable struct {
 
 // HandleMessage ...
 func (s *hashTable) HandleMessage(msg *Message) (forward bool, err error) {
+	if len(msg.Trailers) == 0 {
+		return true, nil
+	}
+
 	var m pb.HashTableMessage
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
 		return true, err
@@ -72,11 +78,7 @@ func (s *hashTable) HandleMessage(msg *Message) (forward bool, err error) {
 	case *pb.HashTableMessage_Unpublish_:
 		err = s.handleUnpublish(b.Unpublish.Record)
 	case *pb.HashTableMessage_GetRequest_:
-		originHostID := s.network.host.ID()
-		if len(msg.Trailers) != 0 {
-			originHostID = msg.Trailers[0].HostID
-		}
-		err = s.handleGetRequest(b.GetRequest, originHostID)
+		err = s.handleGetRequest(b.GetRequest, msg.Trailers[0].HostID)
 	case *pb.HashTableMessage_GetResponse_:
 		err = s.handleGetResponse(b.GetResponse)
 	default:
@@ -91,7 +93,8 @@ func (s *hashTable) handlePublish(r *pb.HashTableMessage_Record) error {
 		return errors.New("invalid record signature")
 	}
 
-	return s.store.Insert(s.id, r)
+	s.store.Upsert(s.id, r)
+	return nil
 }
 
 func (s *hashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
@@ -105,6 +108,10 @@ func (s *hashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
 func (s *hashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHostID kademlia.ID) error {
 	record := s.store.Get(s.id, m.Hash)
 	if record == nil {
+		return nil
+	}
+
+	if record.Timestamp <= m.IfModifiedSince {
 		return nil
 	}
 
@@ -124,10 +131,17 @@ func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse) error 
 		return nil
 	}
 
-	if err := s.store.Insert(s.id, m.Record); err != nil {
-		return err
+	if !s.store.Upsert(s.id, m.Record) {
+		return nil
 	}
-	sendHashTableGetResponse(&s.searchResponseChans, m.RequestId, m.Record)
+
+	if ch, ok := s.searchResponseChans.Load(m.RequestId); ok {
+		select {
+		case ch.(chan []byte) <- m.Record.Value:
+		default:
+		}
+	}
+
 	return nil
 }
 
@@ -136,8 +150,28 @@ func (s *hashTable) Set(ctx context.Context, key *pb.Key, salt, value []byte) (*
 	return newHashTablePublisher(ctx, s.logger, s.network, key, salt, value)
 }
 
+type hashTableGetOptions struct {
+	disableCache bool
+	cacheOnly    bool
+}
+
+// HashTableOption ...
+type HashTableOption func(*hashTableGetOptions)
+
+// DisableCache ...
+func DisableCache() func(*hashTableGetOptions) {
+	return func(opts *hashTableGetOptions) {
+		opts.disableCache = true
+	}
+}
+
 // Get ...
-func (s *hashTable) Get(ctx context.Context, key, salt []byte) (<-chan *HashTableValue, error) {
+func (s *hashTable) Get(ctx context.Context, key, salt []byte, options ...HashTableOption) (<-chan []byte, error) {
+	var opts hashTableGetOptions
+	for _, opt := range options {
+		opt(&opts)
+	}
+
 	hash := hashTableRecordHash(key, salt)
 	target, err := kademlia.UnmarshalID(hash)
 	if err != nil {
@@ -149,19 +183,31 @@ func (s *hashTable) Get(ctx context.Context, key, salt []byte) (<-chan *HashTabl
 		return nil, err
 	}
 
-	msg := &pb.HashTableMessage{
-		Body: &pb.HashTableMessage_GetRequest_{
-			GetRequest: &pb.HashTableMessage_GetRequest{
-				RequestId: rid,
-				Hash:      hash,
-			},
-		},
-	}
-	if err := s.network.SendProto(target, vnic.HashTablePort, vnic.HashTablePort, msg); err != nil {
-		return nil, err
+	var timestamp int64
+	values := make(chan []byte, 32)
+
+	if !opts.disableCache {
+		if record := s.store.Get(s.id, hash); record != nil {
+			timestamp = record.Timestamp
+			values <- record.Value
+		}
 	}
 
-	values := make(chan *HashTableValue, 32)
+	if opts.disableCache || iotime.Load().After(time.Unix(timestamp, 0).Add(hashTableSetInterval)) {
+		msg := &pb.HashTableMessage{
+			Body: &pb.HashTableMessage_GetRequest_{
+				GetRequest: &pb.HashTableMessage_GetRequest{
+					RequestId:       rid,
+					Hash:            hash,
+					IfModifiedSince: timestamp,
+				},
+			},
+		}
+		if err := s.network.SendProto(target, vnic.HashTablePort, vnic.HashTablePort, msg); err != nil {
+			return nil, err
+		}
+	}
+
 	s.searchResponseChans.Store(rid, values)
 	go func() {
 		<-ctx.Done()
@@ -257,8 +303,8 @@ func (p *HashTableStore) tick(t time.Time) {
 	}
 }
 
-// Insert ...
-func (p *HashTableStore) Insert(hashTableID uint32, r *pb.HashTableMessage_Record) error {
+// Upsert ...
+func (p *HashTableStore) Upsert(hashTableID uint32, r *pb.HashTableMessage_Record) bool {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -278,11 +324,11 @@ func (p *HashTableStore) Insert(hashTableID uint32, r *pb.HashTableMessage_Recor
 		if p.records.Len() > hashTableMaxSize {
 			p.records.Delete(p.records.Max())
 		}
-		return nil
+		return true
 	}
 
 	if prev.Record().Timestamp > r.Timestamp {
-		return errors.New("new record older than existing message")
+		return false
 	}
 
 	p.logger.Debug(
@@ -290,9 +336,11 @@ func (p *HashTableStore) Insert(hashTableID uint32, r *pb.HashTableMessage_Recor
 		logutil.ByteHex("key", r.Key),
 		logutil.ByteHex("salt", r.Salt),
 	)
+
+	modified := bytes.Equal(prev.Record().Value, r.Value)
 	prev.SetRecord(r)
 
-	return nil
+	return modified
 }
 
 // Remove ...
@@ -337,36 +385,25 @@ func hashTableRecordHash(key, salt []byte) []byte {
 	return hash.Sum(nil)
 }
 
-// HashTableValue ...
-type HashTableValue struct {
-	Timestamp time.Time
-	Value     []byte
-}
-
 type hashTableGetReceiver struct {
 	requestID uint64
 	chans     *sync.Map
-	hosts     chan *HashTableValue
+	values    chan []byte
 	closeOnce sync.Once
 }
 
-func (p *hashTableGetReceiver) Values() <-chan *HashTableValue {
-	return p.hosts
+func (p *hashTableGetReceiver) Values() <-chan []byte {
+	return p.values
 }
 
-func sendHashTableGetResponse(chans *sync.Map, requestID uint64, r *pb.HashTableMessage_Record) bool {
+func sendHashTableGetResponse(chans *sync.Map, requestID uint64, v []byte) bool {
 	ch, ok := chans.Load(requestID)
 	if !ok {
 		return false
 	}
 
-	h := &HashTableValue{
-		Timestamp: time.Unix(r.Timestamp, 0),
-		Value:     r.Value,
-	}
-
 	select {
-	case ch.(chan *HashTableValue) <- h:
+	case ch.(chan []byte) <- v:
 		return true
 	default:
 		return false

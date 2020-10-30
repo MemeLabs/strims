@@ -13,6 +13,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	lru "github.com/hashicorp/golang-lru"
+	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
@@ -28,7 +29,56 @@ func newNetwork(logger *zap.Logger, host *vnic.Host, certificate *pb.Certificate
 		handlers:         map[uint16]MessageHandler{},
 		reservations:     map[uint16]struct{}{},
 		done:             make(chan struct{}),
+		nextHop:          newNextHopMap(),
 	}
+}
+
+func newNextHopMap() *nextHopMap {
+	return &nextHopMap{
+		v: llrb.New(),
+	}
+}
+
+type nextHopMap struct {
+	mu sync.Mutex
+	v  *llrb.LLRB
+}
+
+func (m *nextHopMap) Insert(target, nextHop kademlia.ID, distance int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	prev := m.v.Get(&nextHopMapItem{target: target})
+	if prev, ok := prev.(*nextHopMapItem); ok {
+		if prev.distance <= distance {
+			return
+		}
+	}
+	m.v.ReplaceOrInsert(&nextHopMapItem{target, nextHop, distance})
+}
+
+func (m *nextHopMap) Get(target kademlia.ID) (kademlia.ID, bool) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	vi := m.v.Get(&nextHopMapItem{target: target})
+	if v, ok := vi.(*nextHopMapItem); ok {
+		return v.nextHop, true
+	}
+	return kademlia.ID{}, false
+}
+
+type nextHopMapItem struct {
+	target   kademlia.ID
+	nextHop  kademlia.ID
+	distance int
+}
+
+func (h *nextHopMapItem) Less(o llrb.Item) bool {
+	if o, ok := o.(*nextHopMapItem); ok {
+		return h.target.Less(o.target)
+	}
+	return !o.Less(h)
 }
 
 // Network ...
@@ -47,6 +97,7 @@ type Network struct {
 	reservationsLock sync.Mutex
 	reservations     map[uint16]struct{}
 	connections      []*networkLink
+	nextHop          *nextHopMap
 }
 
 // SetHandler ...
@@ -178,17 +229,22 @@ func (n *Network) handleFrame(_ *vnic.Peer, f vnic.Frame) error {
 		return nil
 	}
 
+	lastHopIndex := len(m.Trailers) - 1
+	for i := 0; i < lastHopIndex; i++ {
+		n.nextHop.Insert(m.Trailers[i].HostID, m.Trailers[lastHopIndex].HostID, lastHopIndex-i)
+	}
+
 	return n.handleMessage(&m)
 }
 
 // Send ...
 func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
-	n.logger.Debug(
-		"sending message",
-		zap.Stringer("dst", id),
-		zap.Uint16("srcPort", srcPort),
-		zap.Uint16("dstPort", port),
-	)
+	// n.logger.Debug(
+	// 	"sending message",
+	// 	zap.Stringer("dst", id),
+	// 	zap.Uint16("srcPort", srcPort),
+	// 	zap.Uint16("dstPort", port),
+	// )
 	return n.handleMessage(&Message{
 		Header: MessageHeader{
 			DstID:   id,
@@ -216,16 +272,16 @@ func (n *Network) SendProto(id kademlia.ID, port, srcPort uint16, msg proto.Mess
 
 func (n *Network) handleMessage(m *Message) error {
 	if m.Header.DstID.Equals(n.host.ID()) {
-		var src kademlia.ID
-		if len(m.Trailers) != 0 {
-			src = m.Trailers[0].HostID
-		}
-		n.logger.Debug(
-			"received message",
-			zap.Stringer("src", src),
-			zap.Uint16("srcPort", m.Header.SrcPort),
-			zap.Uint16("dstPort", m.Header.DstPort),
-		)
+		// var src kademlia.ID
+		// if len(m.Trailers) != 0 {
+		// 	src = m.Trailers[0].HostID
+		// }
+		// n.logger.Debug(
+		// 	"received message",
+		// 	zap.Stringer("src", src),
+		// 	zap.Uint16("srcPort", m.Header.SrcPort),
+		// 	zap.Uint16("dstPort", m.Header.DstPort),
+		// )
 		_, err := n.callHandler(m)
 		return err
 	}
@@ -243,7 +299,7 @@ func (n *Network) handleMessage(m *Message) error {
 	}
 
 	if m.Hops() >= maxMessageHops {
-		n.logger.Debug("dropping message after too many hops")
+		// n.logger.Debug("dropping message after too many hops")
 		return nil
 	}
 
@@ -270,6 +326,27 @@ func (n *Network) sendMessage(m *Message) error {
 	ln := n.links.Closest(m.Header.DstID, conns[:])
 	n.linksLock.Unlock()
 
+	_, test := n.links.Get(m.Header.DstID)
+	if ln != 0 && !conns[0].ID().Equals(m.Header.DstID) && test {
+		panic("but why")
+	}
+
+	if ln != 0 && conns[0].ID().Equals(m.Header.DstID) {
+		ln = 1
+		// log.Println("using direct route")
+	} else if id, ok := n.nextHop.Get(m.Header.DstID); ok {
+		if conn, ok := n.links.Get(id); ok {
+			if ln > 0 {
+				copy(conns[1:], conns[:ln-1])
+			}
+			conns[0] = conn
+			// ln = 1
+			// log.Println("using known route", conn.ID().String())
+		} else {
+			// log.Println("no conn for known route")
+		}
+	}
+
 	var k int
 	for _, li := range conns[:ln] {
 		l := li.(*networkLink)
@@ -278,15 +355,18 @@ func (n *Network) sendMessage(m *Message) error {
 			continue
 		}
 
+		// n.logger.Debug("writing frame", zap.Stringer("id", l.ID()))
+		l.writeLock.Lock()
 		if _, err := l.WriteFrame(*b); err != nil {
 			n.logger.Debug("failed to write frame", zap.Error(err))
 		}
+		l.writeLock.Unlock()
 
 		if m.Header.DstID.Equals(l.ID()) {
 			break
 		}
 
-		if k++; k >= maxMessageHops {
+		if k++; k >= maxMessageReplicas-len(m.Trailers) {
 			break
 		}
 	}
@@ -301,8 +381,9 @@ type MessageHandler interface {
 
 // TODO: handle eviction
 type networkLink struct {
-	peer *vnic.Peer
-	port uint16
+	peer      *vnic.Peer
+	port      uint16
+	writeLock sync.Mutex
 	*vnic.FrameWriter
 }
 
