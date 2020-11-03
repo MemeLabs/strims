@@ -2,6 +2,7 @@ package dao
 
 import (
 	"strconv"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
@@ -132,5 +133,30 @@ func NewNetworkFromCertificate(cert *pb.Certificate) (*pb.Network, error) {
 		Id:          id,
 		Name:        GetRootCert(cert).Subject,
 		Certificate: cert,
+	}, nil
+}
+
+// NewInvitationV0 ...
+func NewInvitationV0(key *pb.Key, cert *pb.Certificate) (*pb.InvitationV0, error) {
+	inviteKey, err := GenerateKey()
+	if err != nil {
+		return nil, err
+	}
+
+	validDuration := time.Hour * 24 * 7 // seven days
+
+	inviteCSR, err := NewCertificateRequest(inviteKey, pb.KeyUsage_KEY_USAGE_SIGN)
+	if err != nil {
+		return nil, err
+	}
+	inviteCert, err := SignCertificateRequest(inviteCSR, validDuration, key)
+	if err != nil {
+		return nil, err
+	}
+	inviteCert.ParentOneof = &pb.Certificate_Parent{Parent: cert}
+
+	return &pb.InvitationV0{
+		Key:         inviteKey,
+		Certificate: inviteCert,
 	}, nil
 }

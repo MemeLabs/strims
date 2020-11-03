@@ -4,13 +4,14 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
-func RegisterNetworkService(host *rpc.Host, service NetworkService) {
+// RegisterNetworkService ...
+func RegisterNetworkService(host ServiceRegistry, service NetworkService) {
 	host.RegisterService("Network", service)
 }
 
+// NetworkService ...
 type NetworkService interface {
 	Create(
 		ctx context.Context,
@@ -58,12 +59,13 @@ type NetworkService interface {
 	) (*pb.TestDirectoryPublishResponse, error)
 }
 
+// NetworkClient ...
 type NetworkClient struct {
-	client *rpc.Client
+	client StreamCaller
 }
 
-// New ...
-func NewNetworkClient(client *rpc.Client) *NetworkClient {
+// NewNetworkClient ...
+func NewNetworkClient(client StreamCaller) *NetworkClient {
 	return &NetworkClient{client}
 }
 

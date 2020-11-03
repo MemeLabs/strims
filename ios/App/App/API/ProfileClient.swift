@@ -37,5 +37,5 @@ class ProfileClient {
   public func loadSession(_ arg: PBLoadSessionRequest = PBLoadSessionRequest()) -> Promise<PBLoadSessionResponse> {
     return self.client.callUnary("Profile/LoadSession", arg)
   }
-
+  
 }

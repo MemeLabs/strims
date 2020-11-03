@@ -22058,298 +22058,190 @@ export namespace PeerExchangeMessage {
     }
 }
 
-/** Properties of a CAMessage. */
-export interface ICAMessage {
+/** Properties of a CARenewRequest. */
+export interface ICARenewRequest {
 
-    /** CAMessage error */
-    error?: (string|null);
+    /** CARenewRequest inviteCertificate */
+    inviteCertificate?: (ICertificate|null);
 
-    /** CAMessage upgradeRequest */
-    upgradeRequest?: (CAMessage.IUpgradeRequest|null);
-
-    /** CAMessage upgradeResponse */
-    upgradeResponse?: (CAMessage.IUpgradeRequest|null);
+    /** CARenewRequest certificateRequest */
+    certificateRequest?: (ICertificateRequest|null);
 }
 
-/** Represents a CAMessage. */
-export class CAMessage implements ICAMessage {
+/** Represents a CARenewRequest. */
+export class CARenewRequest implements ICARenewRequest {
 
     /**
-     * Constructs a new CAMessage.
+     * Constructs a new CARenewRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: ICAMessage);
+    constructor(properties?: ICARenewRequest);
 
-    /** CAMessage error. */
-    public error: string;
+    /** CARenewRequest inviteCertificate. */
+    public inviteCertificate?: (ICertificate|null);
 
-    /** CAMessage upgradeRequest. */
-    public upgradeRequest?: (CAMessage.IUpgradeRequest|null);
-
-    /** CAMessage upgradeResponse. */
-    public upgradeResponse?: (CAMessage.IUpgradeRequest|null);
-
-    /** CAMessage body. */
-    public body?: ("error"|"upgradeRequest"|"upgradeResponse");
+    /** CARenewRequest certificateRequest. */
+    public certificateRequest?: (ICertificateRequest|null);
 
     /**
-     * Creates a new CAMessage instance using the specified properties.
+     * Creates a new CARenewRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns CAMessage instance
+     * @returns CARenewRequest instance
      */
-    public static create(properties?: ICAMessage): CAMessage;
+    public static create(properties?: ICARenewRequest): CARenewRequest;
 
     /**
-     * Encodes the specified CAMessage message. Does not implicitly {@link CAMessage.verify|verify} messages.
-     * @param message CAMessage message or plain object to encode
+     * Encodes the specified CARenewRequest message. Does not implicitly {@link CARenewRequest.verify|verify} messages.
+     * @param message CARenewRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: ICAMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: ICARenewRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified CAMessage message, length delimited. Does not implicitly {@link CAMessage.verify|verify} messages.
-     * @param message CAMessage message or plain object to encode
+     * Encodes the specified CARenewRequest message, length delimited. Does not implicitly {@link CARenewRequest.verify|verify} messages.
+     * @param message CARenewRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: ICAMessage, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: ICARenewRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a CAMessage message from the specified reader or buffer.
+     * Decodes a CARenewRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns CAMessage
+     * @returns CARenewRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CAMessage;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CARenewRequest;
 
     /**
-     * Decodes a CAMessage message from the specified reader or buffer, length delimited.
+     * Decodes a CARenewRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns CAMessage
+     * @returns CARenewRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CAMessage;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CARenewRequest;
 
     /**
-     * Verifies a CAMessage message.
+     * Verifies a CARenewRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a CAMessage message from a plain object. Also converts values to their respective internal types.
+     * Creates a CARenewRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns CAMessage
+     * @returns CARenewRequest
      */
-    public static fromObject(object: { [k: string]: any }): CAMessage;
+    public static fromObject(object: { [k: string]: any }): CARenewRequest;
 
     /**
-     * Creates a plain object from a CAMessage message. Also converts values to other types if specified.
-     * @param message CAMessage
+     * Creates a plain object from a CARenewRequest message. Also converts values to other types if specified.
+     * @param message CARenewRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: CAMessage, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: CARenewRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this CAMessage to JSON.
+     * Converts this CARenewRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-export namespace CAMessage {
+/** Properties of a CARenewResponse. */
+export interface ICARenewResponse {
 
-    /** Properties of an UpgradeRequest. */
-    interface IUpgradeRequest {
+    /** CARenewResponse certificate */
+    certificate?: (ICertificate|null);
+}
 
-        /** UpgradeRequest inviteCertificate */
-        inviteCertificate?: (ICertificate|null);
+/** Represents a CARenewResponse. */
+export class CARenewResponse implements ICARenewResponse {
 
-        /** UpgradeRequest certificateRequest */
-        certificateRequest?: (ICertificateRequest|null);
-    }
+    /**
+     * Constructs a new CARenewResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ICARenewResponse);
 
-    /** Represents an UpgradeRequest. */
-    class UpgradeRequest implements IUpgradeRequest {
+    /** CARenewResponse certificate. */
+    public certificate?: (ICertificate|null);
 
-        /**
-         * Constructs a new UpgradeRequest.
-         * @param [properties] Properties to set
-         */
-        constructor(properties?: CAMessage.IUpgradeRequest);
+    /**
+     * Creates a new CARenewResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns CARenewResponse instance
+     */
+    public static create(properties?: ICARenewResponse): CARenewResponse;
 
-        /** UpgradeRequest inviteCertificate. */
-        public inviteCertificate?: (ICertificate|null);
+    /**
+     * Encodes the specified CARenewResponse message. Does not implicitly {@link CARenewResponse.verify|verify} messages.
+     * @param message CARenewResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ICARenewResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
-        /** UpgradeRequest certificateRequest. */
-        public certificateRequest?: (ICertificateRequest|null);
+    /**
+     * Encodes the specified CARenewResponse message, length delimited. Does not implicitly {@link CARenewResponse.verify|verify} messages.
+     * @param message CARenewResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ICARenewResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
-        /**
-         * Creates a new UpgradeRequest instance using the specified properties.
-         * @param [properties] Properties to set
-         * @returns UpgradeRequest instance
-         */
-        public static create(properties?: CAMessage.IUpgradeRequest): CAMessage.UpgradeRequest;
+    /**
+     * Decodes a CARenewResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns CARenewResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CARenewResponse;
 
-        /**
-         * Encodes the specified UpgradeRequest message. Does not implicitly {@link CAMessage.UpgradeRequest.verify|verify} messages.
-         * @param message UpgradeRequest message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encode(message: CAMessage.IUpgradeRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    /**
+     * Decodes a CARenewResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns CARenewResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CARenewResponse;
 
-        /**
-         * Encodes the specified UpgradeRequest message, length delimited. Does not implicitly {@link CAMessage.UpgradeRequest.verify|verify} messages.
-         * @param message UpgradeRequest message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encodeDelimited(message: CAMessage.IUpgradeRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    /**
+     * Verifies a CARenewResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
 
-        /**
-         * Decodes an UpgradeRequest message from the specified reader or buffer.
-         * @param reader Reader or buffer to decode from
-         * @param [length] Message length if known beforehand
-         * @returns UpgradeRequest
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CAMessage.UpgradeRequest;
+    /**
+     * Creates a CARenewResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns CARenewResponse
+     */
+    public static fromObject(object: { [k: string]: any }): CARenewResponse;
 
-        /**
-         * Decodes an UpgradeRequest message from the specified reader or buffer, length delimited.
-         * @param reader Reader or buffer to decode from
-         * @returns UpgradeRequest
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CAMessage.UpgradeRequest;
+    /**
+     * Creates a plain object from a CARenewResponse message. Also converts values to other types if specified.
+     * @param message CARenewResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: CARenewResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
-        /**
-         * Verifies an UpgradeRequest message.
-         * @param message Plain object to verify
-         * @returns `null` if valid, otherwise the reason why it is not
-         */
-        public static verify(message: { [k: string]: any }): (string|null);
-
-        /**
-         * Creates an UpgradeRequest message from a plain object. Also converts values to their respective internal types.
-         * @param object Plain object
-         * @returns UpgradeRequest
-         */
-        public static fromObject(object: { [k: string]: any }): CAMessage.UpgradeRequest;
-
-        /**
-         * Creates a plain object from an UpgradeRequest message. Also converts values to other types if specified.
-         * @param message UpgradeRequest
-         * @param [options] Conversion options
-         * @returns Plain object
-         */
-        public static toObject(message: CAMessage.UpgradeRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-        /**
-         * Converts this UpgradeRequest to JSON.
-         * @returns JSON object
-         */
-        public toJSON(): { [k: string]: any };
-    }
-
-    /** Properties of an UpgradeResponse. */
-    interface IUpgradeResponse {
-
-        /** UpgradeResponse certificate */
-        certificate?: (ICertificate|null);
-    }
-
-    /** Represents an UpgradeResponse. */
-    class UpgradeResponse implements IUpgradeResponse {
-
-        /**
-         * Constructs a new UpgradeResponse.
-         * @param [properties] Properties to set
-         */
-        constructor(properties?: CAMessage.IUpgradeResponse);
-
-        /** UpgradeResponse certificate. */
-        public certificate?: (ICertificate|null);
-
-        /**
-         * Creates a new UpgradeResponse instance using the specified properties.
-         * @param [properties] Properties to set
-         * @returns UpgradeResponse instance
-         */
-        public static create(properties?: CAMessage.IUpgradeResponse): CAMessage.UpgradeResponse;
-
-        /**
-         * Encodes the specified UpgradeResponse message. Does not implicitly {@link CAMessage.UpgradeResponse.verify|verify} messages.
-         * @param message UpgradeResponse message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encode(message: CAMessage.IUpgradeResponse, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Encodes the specified UpgradeResponse message, length delimited. Does not implicitly {@link CAMessage.UpgradeResponse.verify|verify} messages.
-         * @param message UpgradeResponse message or plain object to encode
-         * @param [writer] Writer to encode to
-         * @returns Writer
-         */
-        public static encodeDelimited(message: CAMessage.IUpgradeResponse, writer?: $protobuf.Writer): $protobuf.Writer;
-
-        /**
-         * Decodes an UpgradeResponse message from the specified reader or buffer.
-         * @param reader Reader or buffer to decode from
-         * @param [length] Message length if known beforehand
-         * @returns UpgradeResponse
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CAMessage.UpgradeResponse;
-
-        /**
-         * Decodes an UpgradeResponse message from the specified reader or buffer, length delimited.
-         * @param reader Reader or buffer to decode from
-         * @returns UpgradeResponse
-         * @throws {Error} If the payload is not a reader or valid buffer
-         * @throws {$protobuf.util.ProtocolError} If required fields are missing
-         */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CAMessage.UpgradeResponse;
-
-        /**
-         * Verifies an UpgradeResponse message.
-         * @param message Plain object to verify
-         * @returns `null` if valid, otherwise the reason why it is not
-         */
-        public static verify(message: { [k: string]: any }): (string|null);
-
-        /**
-         * Creates an UpgradeResponse message from a plain object. Also converts values to their respective internal types.
-         * @param object Plain object
-         * @returns UpgradeResponse
-         */
-        public static fromObject(object: { [k: string]: any }): CAMessage.UpgradeResponse;
-
-        /**
-         * Creates a plain object from an UpgradeResponse message. Also converts values to other types if specified.
-         * @param message UpgradeResponse
-         * @param [options] Conversion options
-         * @returns Plain object
-         */
-        public static toObject(message: CAMessage.UpgradeResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-        /**
-         * Converts this UpgradeResponse to JSON.
-         * @returns JSON object
-         */
-        public toJSON(): { [k: string]: any };
-    }
+    /**
+     * Converts this CARenewResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
 }
 
 /** SwarmEventType enum. */

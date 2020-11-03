@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
@@ -109,28 +108,12 @@ func (s *networkService) List(ctx context.Context, r *pb.ListNetworksRequest) (*
 
 // CreateInvitation ...
 func (s *networkService) CreateInvitation(ctx context.Context, r *pb.CreateNetworkInvitationRequest) (*pb.CreateNetworkInvitationResponse, error) {
-	key, err := dao.GenerateKey()
+	invitation, err := dao.NewInvitationV0(r.SigningKey, r.SigningCert)
 	if err != nil {
 		return nil, err
 	}
 
-	validDuration := time.Hour * 24 * 7 // seven days
-
-	inviteCSR, err := dao.NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN)
-	if err != nil {
-		return nil, err
-	}
-	inviteCert, err := dao.SignCertificateRequest(inviteCSR, validDuration, r.SigningKey)
-	if err != nil {
-		return nil, err
-	}
-	inviteCert.ParentOneof = &pb.Certificate_Parent{Parent: r.SigningCert}
-
-	b, err := proto.Marshal(&pb.InvitationV0{
-		Key:         key,
-		Certificate: inviteCert,
-		NetworkName: r.NetworkName,
-	})
+	b, err := proto.Marshal(invitation)
 	if err != nil {
 		return nil, err
 	}

@@ -1,8 +1,9 @@
-package network
+package rpc
 
 import (
 	"context"
 	"errors"
+	"fmt"
 	"math"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
@@ -44,13 +45,13 @@ func PublishHostAddr(ctx context.Context, c *vpn.Client, key *pb.Key, salt []byt
 func GetHostAddr(ctx context.Context, c *vpn.Client, key, salt []byte) (*HostAddr, error) {
 	values, err := c.HashTable.Get(ctx, key, salt)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("address request failed: %w", ctx.Err())
 	}
 
 	addr := &pb.NetworkAddress{}
 	select {
 	case <-ctx.Done():
-		return nil, ctx.Err()
+		return nil, fmt.Errorf("no address received: %w", ctx.Err())
 	case v := <-values:
 		if err := proto.Unmarshal(v, addr); err != nil {
 			return nil, err
@@ -59,7 +60,7 @@ func GetHostAddr(ctx context.Context, c *vpn.Client, key, salt []byte) (*HostAdd
 
 	hostID, err := kademlia.UnmarshalID(addr.HostId)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("malformed address: %w", err)
 	}
 
 	if addr.Port > math.MaxUint16 {

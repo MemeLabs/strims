@@ -37,5 +37,5 @@ class VideoClient {
   public func stopHLSEgress(_ arg: PBStopHLSEgressRequest = PBStopHLSEgressRequest()) -> Promise<PBStopHLSEgressResponse> {
     return self.client.callUnary("Video/StopHLSEgress", arg)
   }
-
+  
 }

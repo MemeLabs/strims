@@ -28,10 +28,12 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
-func Register{{.Name}}Service(host *rpc.Host, service {{.Name}}Service) {
+// Register{{.Name}}Service ...
+func Register{{.Name}}Service(host ServiceRegistry, service {{.Name}}Service) {
 	host.RegisterService("{{.Name}}", service);
 }
 
+// {{.Name}}Service ...
 type {{.Name}}Service interface {
 {{range .Elements}}  {{.Name | ToPascal}} (
 	  ctx context.Context,
@@ -39,12 +41,16 @@ type {{.Name}}Service interface {
   ) ({{if .StreamsReturns}}<-chan {{end}}*pb.{{.ReturnsType}}, error)
 {{end}}}
 
+{{$callerType := "UnaryCaller"}}
+{{range .Elements}}{{if .StreamsReturns}}{{$callerType = "StreamCaller"}}{{end}}{{end}}
+
+// {{.Name}}Client ...
 type {{.Name}}Client struct {
-	client  *rpc.Client
+	client  {{$callerType}}
 }
 
-// New ...
-func New{{.Name}}Client(client *rpc.Client) *{{.Name}}Client {
+// New{{.Name}}Client ...
+func New{{.Name}}Client(client {{$callerType}}) *{{.Name}}Client {
 	return &{{.Name}}Client{client}
 }
 {{range .Elements}}

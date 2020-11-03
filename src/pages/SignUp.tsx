@@ -9,7 +9,7 @@ import { useProfile } from "../contexts/Profile";
 import * as pb from "../lib/pb";
 
 const SignUpPage = () => {
-  const [getProfilesRes] = useCall("getProfiles");
+  const [getProfilesRes] = useCall("profile", "list");
   const [{ profile, error, loading }, profileActions] = useProfile();
   const isLocalAccountsEmpty = !getProfilesRes.loading && !getProfilesRes.value?.profiles.length;
   const { register, handleSubmit, errors } = useForm({

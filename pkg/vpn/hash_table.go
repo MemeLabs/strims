@@ -80,7 +80,7 @@ func (s *hashTable) HandleMessage(msg *Message) (forward bool, err error) {
 	case *pb.HashTableMessage_GetRequest_:
 		err = s.handleGetRequest(b.GetRequest, msg.Trailers[0].HostID)
 	case *pb.HashTableMessage_GetResponse_:
-		err = s.handleGetResponse(b.GetResponse)
+		err = s.handleGetResponse(b.GetResponse, msg.Header.DstID)
 	default:
 		err = errors.New("unexpected message type")
 	}
@@ -107,11 +107,7 @@ func (s *hashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
 
 func (s *hashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHostID kademlia.ID) error {
 	record := s.store.Get(s.id, m.Hash)
-	if record == nil {
-		return nil
-	}
-
-	if record.Timestamp <= m.IfModifiedSince {
+	if record == nil || record.Timestamp <= m.IfModifiedSince {
 		return nil
 	}
 
@@ -126,12 +122,16 @@ func (s *hashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHo
 	return s.network.SendProto(originHostID, vnic.HashTablePort, vnic.HashTablePort, msg)
 }
 
-func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse) error {
+func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse, target kademlia.ID) error {
 	if !verifyHashTableRecord(m.Record) {
 		return nil
 	}
 
 	if !s.store.Upsert(s.id, m.Record) {
+		return nil
+	}
+
+	if !s.network.host.ID().Equals(target) {
 		return nil
 	}
 
@@ -312,11 +312,11 @@ func (p *HashTableStore) Upsert(hashTableID uint32, r *pb.HashTableMessage_Recor
 
 	prev, ok := p.records.Get(item).(*hashTableItem)
 	if !ok {
-		p.logger.Debug(
-			"inserting hash table item",
-			logutil.ByteHex("key", r.Key),
-			logutil.ByteHex("salt", r.Salt),
-		)
+		// p.logger.Debug(
+		// 	"inserting hash table item",
+		// 	logutil.ByteHex("key", r.Key),
+		// 	logutil.ByteHex("salt", r.Salt),
+		// )
 
 		p.records.ReplaceOrInsert(item)
 		p.discardQueue.Push(item)
@@ -331,11 +331,11 @@ func (p *HashTableStore) Upsert(hashTableID uint32, r *pb.HashTableMessage_Recor
 		return false
 	}
 
-	p.logger.Debug(
-		"updating hash table item",
-		logutil.ByteHex("key", r.Key),
-		logutil.ByteHex("salt", r.Salt),
-	)
+	// p.logger.Debug(
+	// 	"updating hash table item",
+	// 	logutil.ByteHex("key", r.Key),
+	// 	logutil.ByteHex("salt", r.Salt),
+	// )
 
 	modified := bytes.Equal(prev.Record().Value, r.Value)
 	prev.SetRecord(r)

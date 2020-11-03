@@ -4,13 +4,14 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
-func RegisterChatService(host *rpc.Host, service ChatService) {
+// RegisterChatService ...
+func RegisterChatService(host ServiceRegistry, service ChatService) {
 	host.RegisterService("Chat", service)
 }
 
+// ChatService ...
 type ChatService interface {
 	CreateServer(
 		ctx context.Context,
@@ -46,12 +47,13 @@ type ChatService interface {
 	) (*pb.CallChatClientResponse, error)
 }
 
+// ChatClient ...
 type ChatClient struct {
-	client *rpc.Client
+	client StreamCaller
 }
 
-// New ...
-func NewChatClient(client *rpc.Client) *ChatClient {
+// NewChatClient ...
+func NewChatClient(client StreamCaller) *ChatClient {
 	return &ChatClient{client}
 }
 
