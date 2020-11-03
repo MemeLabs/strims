@@ -1,6 +1,5 @@
 import clsx from "clsx";
 import * as React from "react";
-import AvatarEditor from "react-avatar-editor";
 import Dropzone from "react-dropzone";
 import { Control, Controller } from "react-hook-form";
 import { FiAlertTriangle } from "react-icons/fi";

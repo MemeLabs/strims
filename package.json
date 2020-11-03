@@ -94,7 +94,7 @@
     "slate-react": "^0.59.0",
     "stream-browserify": "^3.0.0",
     "style-loader": "^2.0.0",
-    "terser-webpack-plugin": "^5.0.1",
+    "terser-webpack-plugin": "^4.2.3",
     "ts-ebml": "^2.0.2",
     "ts-loader": "^8.0.7",
     "ts-protoc-gen": "^0.13.0",

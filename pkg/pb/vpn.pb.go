@@ -2134,20 +2134,17 @@ func (*PeerExchangeMessage_IceCandidate_) isPeerExchangeMessage_Body() {}
 
 func (*PeerExchangeMessage_CallbackRequest_) isPeerExchangeMessage_Body() {}
 
-type CAMessage struct {
+type CARenewRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
 
-	// Types that are assignable to Body:
-	//	*CAMessage_Error
-	//	*CAMessage_UpgradeRequest_
-	//	*CAMessage_UpgradeResponse_
-	Body isCAMessage_Body `protobuf_oneof:"body"`
+	InviteCertificate  *Certificate        `protobuf:"bytes,1,opt,name=invite_certificate,json=inviteCertificate,proto3" json:"invite_certificate,omitempty"`
+	CertificateRequest *CertificateRequest `protobuf:"bytes,2,opt,name=certificate_request,json=certificateRequest,proto3" json:"certificate_request,omitempty"`
 }
 
-func (x *CAMessage) Reset() {
-	*x = CAMessage{}
+func (x *CARenewRequest) Reset() {
+	*x = CARenewRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_vpn_proto_msgTypes[37]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2155,13 +2152,13 @@ func (x *CAMessage) Reset() {
 	}
 }
 
-func (x *CAMessage) String() string {
+func (x *CARenewRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*CAMessage) ProtoMessage() {}
+func (*CARenewRequest) ProtoMessage() {}
 
-func (x *CAMessage) ProtoReflect() protoreflect.Message {
+func (x *CARenewRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_vpn_proto_msgTypes[37]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -2173,60 +2170,71 @@ func (x *CAMessage) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use CAMessage.ProtoReflect.Descriptor instead.
-func (*CAMessage) Descriptor() ([]byte, []int) {
+// Deprecated: Use CARenewRequest.ProtoReflect.Descriptor instead.
+func (*CARenewRequest) Descriptor() ([]byte, []int) {
 	return file_vpn_proto_rawDescGZIP(), []int{37}
 }
 
-func (m *CAMessage) GetBody() isCAMessage_Body {
-	if m != nil {
-		return m.Body
+func (x *CARenewRequest) GetInviteCertificate() *Certificate {
+	if x != nil {
+		return x.InviteCertificate
 	}
 	return nil
 }
 
-func (x *CAMessage) GetError() string {
-	if x, ok := x.GetBody().(*CAMessage_Error); ok {
-		return x.Error
-	}
-	return ""
-}
-
-func (x *CAMessage) GetUpgradeRequest() *CAMessage_UpgradeRequest {
-	if x, ok := x.GetBody().(*CAMessage_UpgradeRequest_); ok {
-		return x.UpgradeRequest
+func (x *CARenewRequest) GetCertificateRequest() *CertificateRequest {
+	if x != nil {
+		return x.CertificateRequest
 	}
 	return nil
 }
 
-func (x *CAMessage) GetUpgradeResponse() *CAMessage_UpgradeRequest {
-	if x, ok := x.GetBody().(*CAMessage_UpgradeResponse_); ok {
-		return x.UpgradeResponse
+type CARenewResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Certificate *Certificate `protobuf:"bytes,1,opt,name=certificate,proto3" json:"certificate,omitempty"`
+}
+
+func (x *CARenewResponse) Reset() {
+	*x = CARenewResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_vpn_proto_msgTypes[38]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *CARenewResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*CARenewResponse) ProtoMessage() {}
+
+func (x *CARenewResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_vpn_proto_msgTypes[38]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use CARenewResponse.ProtoReflect.Descriptor instead.
+func (*CARenewResponse) Descriptor() ([]byte, []int) {
+	return file_vpn_proto_rawDescGZIP(), []int{38}
+}
+
+func (x *CARenewResponse) GetCertificate() *Certificate {
+	if x != nil {
+		return x.Certificate
 	}
 	return nil
 }
-
-type isCAMessage_Body interface {
-	isCAMessage_Body()
-}
-
-type CAMessage_Error struct {
-	Error string `protobuf:"bytes,1,opt,name=error,proto3,oneof"`
-}
-
-type CAMessage_UpgradeRequest_ struct {
-	UpgradeRequest *CAMessage_UpgradeRequest `protobuf:"bytes,2,opt,name=upgrade_request,json=upgradeRequest,proto3,oneof"`
-}
-
-type CAMessage_UpgradeResponse_ struct {
-	UpgradeResponse *CAMessage_UpgradeRequest `protobuf:"bytes,3,opt,name=upgrade_response,json=upgradeResponse,proto3,oneof"`
-}
-
-func (*CAMessage_Error) isCAMessage_Body() {}
-
-func (*CAMessage_UpgradeRequest_) isCAMessage_Body() {}
-
-func (*CAMessage_UpgradeResponse_) isCAMessage_Body() {}
 
 type NetworkEvent_NetworkOpen struct {
 	state         protoimpl.MessageState
@@ -2240,7 +2248,7 @@ type NetworkEvent_NetworkOpen struct {
 func (x *NetworkEvent_NetworkOpen) Reset() {
 	*x = NetworkEvent_NetworkOpen{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[38]
+		mi := &file_vpn_proto_msgTypes[39]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2253,7 +2261,7 @@ func (x *NetworkEvent_NetworkOpen) String() string {
 func (*NetworkEvent_NetworkOpen) ProtoMessage() {}
 
 func (x *NetworkEvent_NetworkOpen) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[38]
+	mi := &file_vpn_proto_msgTypes[39]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2294,7 +2302,7 @@ type NetworkEvent_NetworkClose struct {
 func (x *NetworkEvent_NetworkClose) Reset() {
 	*x = NetworkEvent_NetworkClose{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[39]
+		mi := &file_vpn_proto_msgTypes[40]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2307,7 +2315,7 @@ func (x *NetworkEvent_NetworkClose) String() string {
 func (*NetworkEvent_NetworkClose) ProtoMessage() {}
 
 func (x *NetworkEvent_NetworkClose) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[39]
+	mi := &file_vpn_proto_msgTypes[40]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2341,7 +2349,7 @@ type NetworkHandshake_Init struct {
 func (x *NetworkHandshake_Init) Reset() {
 	*x = NetworkHandshake_Init{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[40]
+		mi := &file_vpn_proto_msgTypes[41]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2354,7 +2362,7 @@ func (x *NetworkHandshake_Init) String() string {
 func (*NetworkHandshake_Init) ProtoMessage() {}
 
 func (x *NetworkHandshake_Init) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[40]
+	mi := &file_vpn_proto_msgTypes[41]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2389,7 +2397,7 @@ type NetworkHandshake_NetworkBinding struct {
 func (x *NetworkHandshake_NetworkBinding) Reset() {
 	*x = NetworkHandshake_NetworkBinding{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[41]
+		mi := &file_vpn_proto_msgTypes[42]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2402,7 +2410,7 @@ func (x *NetworkHandshake_NetworkBinding) String() string {
 func (*NetworkHandshake_NetworkBinding) ProtoMessage() {}
 
 func (x *NetworkHandshake_NetworkBinding) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[41]
+	mi := &file_vpn_proto_msgTypes[42]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2443,7 +2451,7 @@ type NetworkHandshake_NetworkBindings struct {
 func (x *NetworkHandshake_NetworkBindings) Reset() {
 	*x = NetworkHandshake_NetworkBindings{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[42]
+		mi := &file_vpn_proto_msgTypes[43]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2456,7 +2464,7 @@ func (x *NetworkHandshake_NetworkBindings) String() string {
 func (*NetworkHandshake_NetworkBindings) ProtoMessage() {}
 
 func (x *NetworkHandshake_NetworkBindings) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[42]
+	mi := &file_vpn_proto_msgTypes[43]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2490,7 +2498,7 @@ type NetworkHandshake_CertificateUpgradeOffer struct {
 func (x *NetworkHandshake_CertificateUpgradeOffer) Reset() {
 	*x = NetworkHandshake_CertificateUpgradeOffer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[43]
+		mi := &file_vpn_proto_msgTypes[44]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2503,7 +2511,7 @@ func (x *NetworkHandshake_CertificateUpgradeOffer) String() string {
 func (*NetworkHandshake_CertificateUpgradeOffer) ProtoMessage() {}
 
 func (x *NetworkHandshake_CertificateUpgradeOffer) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[43]
+	mi := &file_vpn_proto_msgTypes[44]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2537,7 +2545,7 @@ type NetworkHandshake_CertificateUpgradeRequest struct {
 func (x *NetworkHandshake_CertificateUpgradeRequest) Reset() {
 	*x = NetworkHandshake_CertificateUpgradeRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[44]
+		mi := &file_vpn_proto_msgTypes[45]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2550,7 +2558,7 @@ func (x *NetworkHandshake_CertificateUpgradeRequest) String() string {
 func (*NetworkHandshake_CertificateUpgradeRequest) ProtoMessage() {}
 
 func (x *NetworkHandshake_CertificateUpgradeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[44]
+	mi := &file_vpn_proto_msgTypes[45]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2584,7 +2592,7 @@ type NetworkHandshake_CertificateUpgradeResponse struct {
 func (x *NetworkHandshake_CertificateUpgradeResponse) Reset() {
 	*x = NetworkHandshake_CertificateUpgradeResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[45]
+		mi := &file_vpn_proto_msgTypes[46]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2597,7 +2605,7 @@ func (x *NetworkHandshake_CertificateUpgradeResponse) String() string {
 func (*NetworkHandshake_CertificateUpgradeResponse) ProtoMessage() {}
 
 func (x *NetworkHandshake_CertificateUpgradeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[45]
+	mi := &file_vpn_proto_msgTypes[46]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2631,7 +2639,7 @@ type NetworkHandshake_CertificateUpdate struct {
 func (x *NetworkHandshake_CertificateUpdate) Reset() {
 	*x = NetworkHandshake_CertificateUpdate{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[46]
+		mi := &file_vpn_proto_msgTypes[47]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2644,7 +2652,7 @@ func (x *NetworkHandshake_CertificateUpdate) String() string {
 func (*NetworkHandshake_CertificateUpdate) ProtoMessage() {}
 
 func (x *NetworkHandshake_CertificateUpdate) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[46]
+	mi := &file_vpn_proto_msgTypes[47]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2678,7 +2686,7 @@ type BrokerProxyEvent_Open struct {
 func (x *BrokerProxyEvent_Open) Reset() {
 	*x = BrokerProxyEvent_Open{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[47]
+		mi := &file_vpn_proto_msgTypes[48]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2691,7 +2699,7 @@ func (x *BrokerProxyEvent_Open) String() string {
 func (*BrokerProxyEvent_Open) ProtoMessage() {}
 
 func (x *BrokerProxyEvent_Open) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[47]
+	mi := &file_vpn_proto_msgTypes[48]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2725,7 +2733,7 @@ type BrokerProxyEvent_Data struct {
 func (x *BrokerProxyEvent_Data) Reset() {
 	*x = BrokerProxyEvent_Data{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[48]
+		mi := &file_vpn_proto_msgTypes[49]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2738,7 +2746,7 @@ func (x *BrokerProxyEvent_Data) String() string {
 func (*BrokerProxyEvent_Data) ProtoMessage() {}
 
 func (x *BrokerProxyEvent_Data) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[48]
+	mi := &file_vpn_proto_msgTypes[49]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2770,7 +2778,7 @@ type BrokerProxyEvent_Read struct {
 func (x *BrokerProxyEvent_Read) Reset() {
 	*x = BrokerProxyEvent_Read{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[49]
+		mi := &file_vpn_proto_msgTypes[50]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2783,7 +2791,7 @@ func (x *BrokerProxyEvent_Read) String() string {
 func (*BrokerProxyEvent_Read) ProtoMessage() {}
 
 func (x *BrokerProxyEvent_Read) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[49]
+	mi := &file_vpn_proto_msgTypes[50]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2808,7 +2816,7 @@ type BootstrapServiceMessage_BrokerOffer struct {
 func (x *BootstrapServiceMessage_BrokerOffer) Reset() {
 	*x = BootstrapServiceMessage_BrokerOffer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[50]
+		mi := &file_vpn_proto_msgTypes[51]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2821,7 +2829,7 @@ func (x *BootstrapServiceMessage_BrokerOffer) String() string {
 func (*BootstrapServiceMessage_BrokerOffer) ProtoMessage() {}
 
 func (x *BootstrapServiceMessage_BrokerOffer) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[50]
+	mi := &file_vpn_proto_msgTypes[51]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2849,7 +2857,7 @@ type BootstrapServiceMessage_PublishRequest struct {
 func (x *BootstrapServiceMessage_PublishRequest) Reset() {
 	*x = BootstrapServiceMessage_PublishRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[51]
+		mi := &file_vpn_proto_msgTypes[52]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2862,7 +2870,7 @@ func (x *BootstrapServiceMessage_PublishRequest) String() string {
 func (*BootstrapServiceMessage_PublishRequest) ProtoMessage() {}
 
 func (x *BootstrapServiceMessage_PublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[51]
+	mi := &file_vpn_proto_msgTypes[52]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2905,7 +2913,7 @@ type BootstrapServiceMessage_PublishResponse struct {
 func (x *BootstrapServiceMessage_PublishResponse) Reset() {
 	*x = BootstrapServiceMessage_PublishResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[52]
+		mi := &file_vpn_proto_msgTypes[53]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2918,7 +2926,7 @@ func (x *BootstrapServiceMessage_PublishResponse) String() string {
 func (*BootstrapServiceMessage_PublishResponse) ProtoMessage() {}
 
 func (x *BootstrapServiceMessage_PublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[52]
+	mi := &file_vpn_proto_msgTypes[53]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -2970,7 +2978,7 @@ type PeerExchangeMessage_Request struct {
 func (x *PeerExchangeMessage_Request) Reset() {
 	*x = PeerExchangeMessage_Request{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[53]
+		mi := &file_vpn_proto_msgTypes[54]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -2983,7 +2991,7 @@ func (x *PeerExchangeMessage_Request) String() string {
 func (*PeerExchangeMessage_Request) ProtoMessage() {}
 
 func (x *PeerExchangeMessage_Request) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[53]
+	mi := &file_vpn_proto_msgTypes[54]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3017,7 +3025,7 @@ type PeerExchangeMessage_Response struct {
 func (x *PeerExchangeMessage_Response) Reset() {
 	*x = PeerExchangeMessage_Response{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[54]
+		mi := &file_vpn_proto_msgTypes[55]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3030,7 +3038,7 @@ func (x *PeerExchangeMessage_Response) String() string {
 func (*PeerExchangeMessage_Response) ProtoMessage() {}
 
 func (x *PeerExchangeMessage_Response) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[54]
+	mi := &file_vpn_proto_msgTypes[55]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3065,7 +3073,7 @@ type PeerExchangeMessage_Offer struct {
 func (x *PeerExchangeMessage_Offer) Reset() {
 	*x = PeerExchangeMessage_Offer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[55]
+		mi := &file_vpn_proto_msgTypes[56]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3078,7 +3086,7 @@ func (x *PeerExchangeMessage_Offer) String() string {
 func (*PeerExchangeMessage_Offer) ProtoMessage() {}
 
 func (x *PeerExchangeMessage_Offer) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[55]
+	mi := &file_vpn_proto_msgTypes[56]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3120,7 +3128,7 @@ type PeerExchangeMessage_Answer struct {
 func (x *PeerExchangeMessage_Answer) Reset() {
 	*x = PeerExchangeMessage_Answer{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[56]
+		mi := &file_vpn_proto_msgTypes[57]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3133,7 +3141,7 @@ func (x *PeerExchangeMessage_Answer) String() string {
 func (*PeerExchangeMessage_Answer) ProtoMessage() {}
 
 func (x *PeerExchangeMessage_Answer) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[56]
+	mi := &file_vpn_proto_msgTypes[57]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3176,7 +3184,7 @@ type PeerExchangeMessage_IceCandidate struct {
 func (x *PeerExchangeMessage_IceCandidate) Reset() {
 	*x = PeerExchangeMessage_IceCandidate{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[57]
+		mi := &file_vpn_proto_msgTypes[58]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3189,7 +3197,7 @@ func (x *PeerExchangeMessage_IceCandidate) String() string {
 func (*PeerExchangeMessage_IceCandidate) ProtoMessage() {}
 
 func (x *PeerExchangeMessage_IceCandidate) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[57]
+	mi := &file_vpn_proto_msgTypes[58]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3235,7 +3243,7 @@ type PeerExchangeMessage_CallbackRequest struct {
 func (x *PeerExchangeMessage_CallbackRequest) Reset() {
 	*x = PeerExchangeMessage_CallbackRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[58]
+		mi := &file_vpn_proto_msgTypes[59]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -3248,7 +3256,7 @@ func (x *PeerExchangeMessage_CallbackRequest) String() string {
 func (*PeerExchangeMessage_CallbackRequest) ProtoMessage() {}
 
 func (x *PeerExchangeMessage_CallbackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[58]
+	mi := &file_vpn_proto_msgTypes[59]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -3262,108 +3270,6 @@ func (x *PeerExchangeMessage_CallbackRequest) ProtoReflect() protoreflect.Messag
 // Deprecated: Use PeerExchangeMessage_CallbackRequest.ProtoReflect.Descriptor instead.
 func (*PeerExchangeMessage_CallbackRequest) Descriptor() ([]byte, []int) {
 	return file_vpn_proto_rawDescGZIP(), []int{36, 5}
-}
-
-type CAMessage_UpgradeRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	InviteCertificate  *Certificate        `protobuf:"bytes,1,opt,name=invite_certificate,json=inviteCertificate,proto3" json:"invite_certificate,omitempty"`
-	CertificateRequest *CertificateRequest `protobuf:"bytes,2,opt,name=certificate_request,json=certificateRequest,proto3" json:"certificate_request,omitempty"`
-}
-
-func (x *CAMessage_UpgradeRequest) Reset() {
-	*x = CAMessage_UpgradeRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[59]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *CAMessage_UpgradeRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CAMessage_UpgradeRequest) ProtoMessage() {}
-
-func (x *CAMessage_UpgradeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[59]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CAMessage_UpgradeRequest.ProtoReflect.Descriptor instead.
-func (*CAMessage_UpgradeRequest) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{37, 0}
-}
-
-func (x *CAMessage_UpgradeRequest) GetInviteCertificate() *Certificate {
-	if x != nil {
-		return x.InviteCertificate
-	}
-	return nil
-}
-
-func (x *CAMessage_UpgradeRequest) GetCertificateRequest() *CertificateRequest {
-	if x != nil {
-		return x.CertificateRequest
-	}
-	return nil
-}
-
-type CAMessage_UpgradeResponse struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Certificate *Certificate `protobuf:"bytes,1,opt,name=certificate,proto3" json:"certificate,omitempty"`
-}
-
-func (x *CAMessage_UpgradeResponse) Reset() {
-	*x = CAMessage_UpgradeResponse{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_vpn_proto_msgTypes[60]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *CAMessage_UpgradeResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CAMessage_UpgradeResponse) ProtoMessage() {}
-
-func (x *CAMessage_UpgradeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_vpn_proto_msgTypes[60]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CAMessage_UpgradeResponse.ProtoReflect.Descriptor instead.
-func (*CAMessage_UpgradeResponse) Descriptor() ([]byte, []int) {
-	return file_vpn_proto_rawDescGZIP(), []int{37, 1}
-}
-
-func (x *CAMessage_UpgradeResponse) GetCertificate() *Certificate {
-	if x != nil {
-		return x.Certificate
-	}
-	return nil
 }
 
 var File_vpn_proto protoreflect.FileDescriptor
@@ -3681,37 +3587,25 @@ var file_vpn_proto_rawDesc = []byte{
 	0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x61, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x04,
 	0x64, 0x61, 0x74, 0x61, 0x1a, 0x11, 0x0a, 0x0f, 0x43, 0x61, 0x6c, 0x6c, 0x62, 0x61, 0x63, 0x6b,
 	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22,
-	0x92, 0x03, 0x0a, 0x09, 0x43, 0x41, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x12, 0x16, 0x0a,
-	0x05, 0x65, 0x72, 0x72, 0x6f, 0x72, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x48, 0x00, 0x52, 0x05,
-	0x65, 0x72, 0x72, 0x6f, 0x72, 0x12, 0x44, 0x0a, 0x0f, 0x75, 0x70, 0x67, 0x72, 0x61, 0x64, 0x65,
-	0x5f, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x19,
-	0x2e, 0x43, 0x41, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x2e, 0x55, 0x70, 0x67, 0x72, 0x61,
-	0x64, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x48, 0x00, 0x52, 0x0e, 0x75, 0x70, 0x67,
-	0x72, 0x61, 0x64, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x46, 0x0a, 0x10, 0x75,
-	0x70, 0x67, 0x72, 0x61, 0x64, 0x65, 0x5f, 0x72, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x18,
-	0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x19, 0x2e, 0x43, 0x41, 0x4d, 0x65, 0x73, 0x73, 0x61, 0x67,
-	0x65, 0x2e, 0x55, 0x70, 0x67, 0x72, 0x61, 0x64, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
-	0x48, 0x00, 0x52, 0x0f, 0x75, 0x70, 0x67, 0x72, 0x61, 0x64, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f,
-	0x6e, 0x73, 0x65, 0x1a, 0x93, 0x01, 0x0a, 0x0e, 0x55, 0x70, 0x67, 0x72, 0x61, 0x64, 0x65, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x3b, 0x0a, 0x12, 0x69, 0x6e, 0x76, 0x69, 0x74, 0x65,
-	0x5f, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x0c, 0x2e, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65,
-	0x52, 0x11, 0x69, 0x6e, 0x76, 0x69, 0x74, 0x65, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63,
-	0x61, 0x74, 0x65, 0x12, 0x44, 0x0a, 0x13, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61,
-	0x74, 0x65, 0x5f, 0x72, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b,
-	0x32, 0x13, 0x2e, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x52, 0x12, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61,
-	0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x1a, 0x41, 0x0a, 0x0f, 0x55, 0x70, 0x67,
-	0x72, 0x61, 0x64, 0x65, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2e, 0x0a, 0x0b,
-	0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x0b, 0x32, 0x0c, 0x2e, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x52,
-	0x0b, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x42, 0x06, 0x0a, 0x04,
-	0x62, 0x6f, 0x64, 0x79, 0x42, 0x44, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d,
-	0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x5a, 0x26, 0x67,
-	0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61,
-	0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f, 0x70, 0x6b, 0x67, 0x2f,
-	0x70, 0x62, 0x3b, 0x70, 0x62, 0xba, 0x02, 0x02, 0x50, 0x42, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x33,
+	0x93, 0x01, 0x0a, 0x0e, 0x43, 0x41, 0x52, 0x65, 0x6e, 0x65, 0x77, 0x52, 0x65, 0x71, 0x75, 0x65,
+	0x73, 0x74, 0x12, 0x3b, 0x0a, 0x12, 0x69, 0x6e, 0x76, 0x69, 0x74, 0x65, 0x5f, 0x63, 0x65, 0x72,
+	0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0c,
+	0x2e, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x52, 0x11, 0x69, 0x6e,
+	0x76, 0x69, 0x74, 0x65, 0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x12,
+	0x44, 0x0a, 0x13, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x5f, 0x72,
+	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x13, 0x2e, 0x43,
+	0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x74, 0x52, 0x12, 0x63, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x52, 0x65,
+	0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x41, 0x0a, 0x0f, 0x43, 0x41, 0x52, 0x65, 0x6e, 0x65, 0x77,
+	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x2e, 0x0a, 0x0b, 0x63, 0x65, 0x72, 0x74,
+	0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0c, 0x2e,
+	0x43, 0x65, 0x72, 0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x52, 0x0b, 0x63, 0x65, 0x72,
+	0x74, 0x69, 0x66, 0x69, 0x63, 0x61, 0x74, 0x65, 0x42, 0x44, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73,
+	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65,
+	0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f,
+	0x70, 0x6b, 0x67, 0x2f, 0x70, 0x62, 0x3b, 0x70, 0x62, 0xba, 0x02, 0x02, 0x50, 0x42, 0x62, 0x06,
+	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -3726,7 +3620,7 @@ func file_vpn_proto_rawDescGZIP() []byte {
 	return file_vpn_proto_rawDescData
 }
 
-var file_vpn_proto_msgTypes = make([]protoimpl.MessageInfo, 61)
+var file_vpn_proto_msgTypes = make([]protoimpl.MessageInfo, 60)
 var file_vpn_proto_goTypes = []interface{}{
 	(*StartVPNRequest)(nil),                             // 0: StartVPNRequest
 	(*StartVPNResponse)(nil),                            // 1: StartVPNResponse
@@ -3765,47 +3659,46 @@ var file_vpn_proto_goTypes = []interface{}{
 	(*PublishNetworkToBootstrapPeerRequest)(nil),        // 34: PublishNetworkToBootstrapPeerRequest
 	(*PublishNetworkToBootstrapPeerResponse)(nil),       // 35: PublishNetworkToBootstrapPeerResponse
 	(*PeerExchangeMessage)(nil),                         // 36: PeerExchangeMessage
-	(*CAMessage)(nil),                                   // 37: CAMessage
-	(*NetworkEvent_NetworkOpen)(nil),                    // 38: NetworkEvent.NetworkOpen
-	(*NetworkEvent_NetworkClose)(nil),                   // 39: NetworkEvent.NetworkClose
-	(*NetworkHandshake_Init)(nil),                       // 40: NetworkHandshake.Init
-	(*NetworkHandshake_NetworkBinding)(nil),             // 41: NetworkHandshake.NetworkBinding
-	(*NetworkHandshake_NetworkBindings)(nil),            // 42: NetworkHandshake.NetworkBindings
-	(*NetworkHandshake_CertificateUpgradeOffer)(nil),    // 43: NetworkHandshake.CertificateUpgradeOffer
-	(*NetworkHandshake_CertificateUpgradeRequest)(nil),  // 44: NetworkHandshake.CertificateUpgradeRequest
-	(*NetworkHandshake_CertificateUpgradeResponse)(nil), // 45: NetworkHandshake.CertificateUpgradeResponse
-	(*NetworkHandshake_CertificateUpdate)(nil),          // 46: NetworkHandshake.CertificateUpdate
-	(*BrokerProxyEvent_Open)(nil),                       // 47: BrokerProxyEvent.Open
-	(*BrokerProxyEvent_Data)(nil),                       // 48: BrokerProxyEvent.Data
-	(*BrokerProxyEvent_Read)(nil),                       // 49: BrokerProxyEvent.Read
-	(*BootstrapServiceMessage_BrokerOffer)(nil),         // 50: BootstrapServiceMessage.BrokerOffer
-	(*BootstrapServiceMessage_PublishRequest)(nil),      // 51: BootstrapServiceMessage.PublishRequest
-	(*BootstrapServiceMessage_PublishResponse)(nil),     // 52: BootstrapServiceMessage.PublishResponse
-	(*PeerExchangeMessage_Request)(nil),                 // 53: PeerExchangeMessage.Request
-	(*PeerExchangeMessage_Response)(nil),                // 54: PeerExchangeMessage.Response
-	(*PeerExchangeMessage_Offer)(nil),                   // 55: PeerExchangeMessage.Offer
-	(*PeerExchangeMessage_Answer)(nil),                  // 56: PeerExchangeMessage.Answer
-	(*PeerExchangeMessage_IceCandidate)(nil),            // 57: PeerExchangeMessage.IceCandidate
-	(*PeerExchangeMessage_CallbackRequest)(nil),         // 58: PeerExchangeMessage.CallbackRequest
-	(*CAMessage_UpgradeRequest)(nil),                    // 59: CAMessage.UpgradeRequest
-	(*CAMessage_UpgradeResponse)(nil),                   // 60: CAMessage.UpgradeResponse
-	(*Certificate)(nil),                                 // 61: Certificate
-	(*Network)(nil),                                     // 62: Network
-	(*CertificateRequest)(nil),                          // 63: CertificateRequest
+	(*CARenewRequest)(nil),                              // 37: CARenewRequest
+	(*CARenewResponse)(nil),                             // 38: CARenewResponse
+	(*NetworkEvent_NetworkOpen)(nil),                    // 39: NetworkEvent.NetworkOpen
+	(*NetworkEvent_NetworkClose)(nil),                   // 40: NetworkEvent.NetworkClose
+	(*NetworkHandshake_Init)(nil),                       // 41: NetworkHandshake.Init
+	(*NetworkHandshake_NetworkBinding)(nil),             // 42: NetworkHandshake.NetworkBinding
+	(*NetworkHandshake_NetworkBindings)(nil),            // 43: NetworkHandshake.NetworkBindings
+	(*NetworkHandshake_CertificateUpgradeOffer)(nil),    // 44: NetworkHandshake.CertificateUpgradeOffer
+	(*NetworkHandshake_CertificateUpgradeRequest)(nil),  // 45: NetworkHandshake.CertificateUpgradeRequest
+	(*NetworkHandshake_CertificateUpgradeResponse)(nil), // 46: NetworkHandshake.CertificateUpgradeResponse
+	(*NetworkHandshake_CertificateUpdate)(nil),          // 47: NetworkHandshake.CertificateUpdate
+	(*BrokerProxyEvent_Open)(nil),                       // 48: BrokerProxyEvent.Open
+	(*BrokerProxyEvent_Data)(nil),                       // 49: BrokerProxyEvent.Data
+	(*BrokerProxyEvent_Read)(nil),                       // 50: BrokerProxyEvent.Read
+	(*BootstrapServiceMessage_BrokerOffer)(nil),         // 51: BootstrapServiceMessage.BrokerOffer
+	(*BootstrapServiceMessage_PublishRequest)(nil),      // 52: BootstrapServiceMessage.PublishRequest
+	(*BootstrapServiceMessage_PublishResponse)(nil),     // 53: BootstrapServiceMessage.PublishResponse
+	(*PeerExchangeMessage_Request)(nil),                 // 54: PeerExchangeMessage.Request
+	(*PeerExchangeMessage_Response)(nil),                // 55: PeerExchangeMessage.Response
+	(*PeerExchangeMessage_Offer)(nil),                   // 56: PeerExchangeMessage.Offer
+	(*PeerExchangeMessage_Answer)(nil),                  // 57: PeerExchangeMessage.Answer
+	(*PeerExchangeMessage_IceCandidate)(nil),            // 58: PeerExchangeMessage.IceCandidate
+	(*PeerExchangeMessage_CallbackRequest)(nil),         // 59: PeerExchangeMessage.CallbackRequest
+	(*Certificate)(nil),                                 // 60: Certificate
+	(*Network)(nil),                                     // 61: Network
+	(*CertificateRequest)(nil),                          // 62: CertificateRequest
 }
 var file_vpn_proto_depIdxs = []int32{
-	38, // 0: NetworkEvent.network_open:type_name -> NetworkEvent.NetworkOpen
-	39, // 1: NetworkEvent.network_close:type_name -> NetworkEvent.NetworkClose
-	61, // 2: PeerInit.certificate:type_name -> Certificate
-	40, // 3: NetworkHandshake.init:type_name -> NetworkHandshake.Init
-	42, // 4: NetworkHandshake.network_bindings:type_name -> NetworkHandshake.NetworkBindings
-	43, // 5: NetworkHandshake.certificate_upgrade_offer:type_name -> NetworkHandshake.CertificateUpgradeOffer
-	44, // 6: NetworkHandshake.certificate_upgrade_request:type_name -> NetworkHandshake.CertificateUpgradeRequest
-	45, // 7: NetworkHandshake.certificate_upgrade_response:type_name -> NetworkHandshake.CertificateUpgradeResponse
-	46, // 8: NetworkHandshake.certificate_update:type_name -> NetworkHandshake.CertificateUpdate
-	47, // 9: BrokerProxyEvent.open:type_name -> BrokerProxyEvent.Open
-	48, // 10: BrokerProxyEvent.data:type_name -> BrokerProxyEvent.Data
-	49, // 11: BrokerProxyEvent.read:type_name -> BrokerProxyEvent.Read
+	39, // 0: NetworkEvent.network_open:type_name -> NetworkEvent.NetworkOpen
+	40, // 1: NetworkEvent.network_close:type_name -> NetworkEvent.NetworkClose
+	60, // 2: PeerInit.certificate:type_name -> Certificate
+	41, // 3: NetworkHandshake.init:type_name -> NetworkHandshake.Init
+	43, // 4: NetworkHandshake.network_bindings:type_name -> NetworkHandshake.NetworkBindings
+	44, // 5: NetworkHandshake.certificate_upgrade_offer:type_name -> NetworkHandshake.CertificateUpgradeOffer
+	45, // 6: NetworkHandshake.certificate_upgrade_request:type_name -> NetworkHandshake.CertificateUpgradeRequest
+	46, // 7: NetworkHandshake.certificate_upgrade_response:type_name -> NetworkHandshake.CertificateUpgradeResponse
+	47, // 8: NetworkHandshake.certificate_update:type_name -> NetworkHandshake.CertificateUpdate
+	48, // 9: BrokerProxyEvent.open:type_name -> BrokerProxyEvent.Open
+	49, // 10: BrokerProxyEvent.data:type_name -> BrokerProxyEvent.Data
+	50, // 11: BrokerProxyEvent.read:type_name -> BrokerProxyEvent.Read
 	19, // 12: BootstrapClient.websocket_options:type_name -> BootstrapClientWebSocketOptions
 	19, // 13: CreateBootstrapClientRequest.websocket_options:type_name -> BootstrapClientWebSocketOptions
 	18, // 14: CreateBootstrapClientResponse.bootstrap_client:type_name -> BootstrapClient
@@ -3814,32 +3707,30 @@ var file_vpn_proto_depIdxs = []int32{
 	18, // 17: GetBootstrapClientResponse.bootstrap_client:type_name -> BootstrapClient
 	18, // 18: ListBootstrapClientsResponse.bootstrap_clients:type_name -> BootstrapClient
 	32, // 19: ListBootstrapPeersResponse.peers:type_name -> BootstrapPeer
-	50, // 20: BootstrapServiceMessage.broker_offer:type_name -> BootstrapServiceMessage.BrokerOffer
-	51, // 21: BootstrapServiceMessage.publish_request:type_name -> BootstrapServiceMessage.PublishRequest
-	52, // 22: BootstrapServiceMessage.publish_response:type_name -> BootstrapServiceMessage.PublishResponse
-	62, // 23: PublishNetworkToBootstrapPeerRequest.network:type_name -> Network
-	53, // 24: PeerExchangeMessage.request:type_name -> PeerExchangeMessage.Request
-	54, // 25: PeerExchangeMessage.response:type_name -> PeerExchangeMessage.Response
-	55, // 26: PeerExchangeMessage.offer:type_name -> PeerExchangeMessage.Offer
-	56, // 27: PeerExchangeMessage.answer:type_name -> PeerExchangeMessage.Answer
-	57, // 28: PeerExchangeMessage.ice_candidate:type_name -> PeerExchangeMessage.IceCandidate
-	58, // 29: PeerExchangeMessage.callback_request:type_name -> PeerExchangeMessage.CallbackRequest
-	59, // 30: CAMessage.upgrade_request:type_name -> CAMessage.UpgradeRequest
-	59, // 31: CAMessage.upgrade_response:type_name -> CAMessage.UpgradeRequest
-	61, // 32: NetworkHandshake.NetworkBinding.certificate:type_name -> Certificate
-	41, // 33: NetworkHandshake.NetworkBindings.network_bindings:type_name -> NetworkHandshake.NetworkBinding
-	61, // 34: NetworkHandshake.CertificateUpgradeRequest.network_keys:type_name -> Certificate
-	61, // 35: NetworkHandshake.CertificateUpgradeResponse.certificates:type_name -> Certificate
-	61, // 36: NetworkHandshake.CertificateUpdate.certificates:type_name -> Certificate
-	61, // 37: BootstrapServiceMessage.PublishRequest.certificate:type_name -> Certificate
-	61, // 38: CAMessage.UpgradeRequest.invite_certificate:type_name -> Certificate
-	63, // 39: CAMessage.UpgradeRequest.certificate_request:type_name -> CertificateRequest
-	61, // 40: CAMessage.UpgradeResponse.certificate:type_name -> Certificate
-	41, // [41:41] is the sub-list for method output_type
-	41, // [41:41] is the sub-list for method input_type
-	41, // [41:41] is the sub-list for extension type_name
-	41, // [41:41] is the sub-list for extension extendee
-	0,  // [0:41] is the sub-list for field type_name
+	51, // 20: BootstrapServiceMessage.broker_offer:type_name -> BootstrapServiceMessage.BrokerOffer
+	52, // 21: BootstrapServiceMessage.publish_request:type_name -> BootstrapServiceMessage.PublishRequest
+	53, // 22: BootstrapServiceMessage.publish_response:type_name -> BootstrapServiceMessage.PublishResponse
+	61, // 23: PublishNetworkToBootstrapPeerRequest.network:type_name -> Network
+	54, // 24: PeerExchangeMessage.request:type_name -> PeerExchangeMessage.Request
+	55, // 25: PeerExchangeMessage.response:type_name -> PeerExchangeMessage.Response
+	56, // 26: PeerExchangeMessage.offer:type_name -> PeerExchangeMessage.Offer
+	57, // 27: PeerExchangeMessage.answer:type_name -> PeerExchangeMessage.Answer
+	58, // 28: PeerExchangeMessage.ice_candidate:type_name -> PeerExchangeMessage.IceCandidate
+	59, // 29: PeerExchangeMessage.callback_request:type_name -> PeerExchangeMessage.CallbackRequest
+	60, // 30: CARenewRequest.invite_certificate:type_name -> Certificate
+	62, // 31: CARenewRequest.certificate_request:type_name -> CertificateRequest
+	60, // 32: CARenewResponse.certificate:type_name -> Certificate
+	60, // 33: NetworkHandshake.NetworkBinding.certificate:type_name -> Certificate
+	42, // 34: NetworkHandshake.NetworkBindings.network_bindings:type_name -> NetworkHandshake.NetworkBinding
+	60, // 35: NetworkHandshake.CertificateUpgradeRequest.network_keys:type_name -> Certificate
+	60, // 36: NetworkHandshake.CertificateUpgradeResponse.certificates:type_name -> Certificate
+	60, // 37: NetworkHandshake.CertificateUpdate.certificates:type_name -> Certificate
+	60, // 38: BootstrapServiceMessage.PublishRequest.certificate:type_name -> Certificate
+	39, // [39:39] is the sub-list for method output_type
+	39, // [39:39] is the sub-list for method input_type
+	39, // [39:39] is the sub-list for extension type_name
+	39, // [39:39] is the sub-list for extension extendee
+	0,  // [0:39] is the sub-list for field type_name
 }
 
 func init() { file_vpn_proto_init() }
@@ -4294,7 +4185,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[37].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CAMessage); i {
+			switch v := v.(*CARenewRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4306,7 +4197,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[38].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkEvent_NetworkOpen); i {
+			switch v := v.(*CARenewResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4318,7 +4209,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[39].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkEvent_NetworkClose); i {
+			switch v := v.(*NetworkEvent_NetworkOpen); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4330,7 +4221,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[40].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_Init); i {
+			switch v := v.(*NetworkEvent_NetworkClose); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4342,7 +4233,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[41].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_NetworkBinding); i {
+			switch v := v.(*NetworkHandshake_Init); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4354,7 +4245,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[42].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_NetworkBindings); i {
+			switch v := v.(*NetworkHandshake_NetworkBinding); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4366,7 +4257,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[43].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_CertificateUpgradeOffer); i {
+			switch v := v.(*NetworkHandshake_NetworkBindings); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4378,7 +4269,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[44].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_CertificateUpgradeRequest); i {
+			switch v := v.(*NetworkHandshake_CertificateUpgradeOffer); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4390,7 +4281,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[45].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_CertificateUpgradeResponse); i {
+			switch v := v.(*NetworkHandshake_CertificateUpgradeRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4402,7 +4293,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[46].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*NetworkHandshake_CertificateUpdate); i {
+			switch v := v.(*NetworkHandshake_CertificateUpgradeResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4414,7 +4305,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[47].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BrokerProxyEvent_Open); i {
+			switch v := v.(*NetworkHandshake_CertificateUpdate); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4426,7 +4317,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[48].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BrokerProxyEvent_Data); i {
+			switch v := v.(*BrokerProxyEvent_Open); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4438,7 +4329,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[49].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BrokerProxyEvent_Read); i {
+			switch v := v.(*BrokerProxyEvent_Data); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4450,7 +4341,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[50].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapServiceMessage_BrokerOffer); i {
+			switch v := v.(*BrokerProxyEvent_Read); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4462,7 +4353,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[51].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapServiceMessage_PublishRequest); i {
+			switch v := v.(*BootstrapServiceMessage_BrokerOffer); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4474,7 +4365,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[52].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*BootstrapServiceMessage_PublishResponse); i {
+			switch v := v.(*BootstrapServiceMessage_PublishRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4486,7 +4377,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[53].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerExchangeMessage_Request); i {
+			switch v := v.(*BootstrapServiceMessage_PublishResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4498,7 +4389,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[54].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerExchangeMessage_Response); i {
+			switch v := v.(*PeerExchangeMessage_Request); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4510,7 +4401,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[55].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerExchangeMessage_Offer); i {
+			switch v := v.(*PeerExchangeMessage_Response); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4522,7 +4413,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[56].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerExchangeMessage_Answer); i {
+			switch v := v.(*PeerExchangeMessage_Offer); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4534,7 +4425,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[57].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerExchangeMessage_IceCandidate); i {
+			switch v := v.(*PeerExchangeMessage_Answer); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4546,7 +4437,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[58].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*PeerExchangeMessage_CallbackRequest); i {
+			switch v := v.(*PeerExchangeMessage_IceCandidate); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4558,19 +4449,7 @@ func file_vpn_proto_init() {
 			}
 		}
 		file_vpn_proto_msgTypes[59].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CAMessage_UpgradeRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_vpn_proto_msgTypes[60].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CAMessage_UpgradeResponse); i {
+			switch v := v.(*PeerExchangeMessage_CallbackRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -4621,12 +4500,7 @@ func file_vpn_proto_init() {
 		(*PeerExchangeMessage_IceCandidate_)(nil),
 		(*PeerExchangeMessage_CallbackRequest_)(nil),
 	}
-	file_vpn_proto_msgTypes[37].OneofWrappers = []interface{}{
-		(*CAMessage_Error)(nil),
-		(*CAMessage_UpgradeRequest_)(nil),
-		(*CAMessage_UpgradeResponse_)(nil),
-	}
-	file_vpn_proto_msgTypes[52].OneofWrappers = []interface{}{
+	file_vpn_proto_msgTypes[53].OneofWrappers = []interface{}{
 		(*BootstrapServiceMessage_PublishResponse_Error)(nil),
 	}
 	type x struct{}
@@ -4635,7 +4509,7 @@ func file_vpn_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_vpn_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   61,
+			NumMessages:   60,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

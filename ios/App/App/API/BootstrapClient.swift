@@ -37,5 +37,5 @@ class BootstrapClient {
   public func publishNetworkToPeer(_ arg: PBPublishNetworkToBootstrapPeerRequest = PBPublishNetworkToBootstrapPeerRequest()) -> Promise<PBPublishNetworkToBootstrapPeerResponse> {
     return self.client.callUnary("Bootstrap/PublishNetworkToPeer", arg)
   }
-
+  
 }

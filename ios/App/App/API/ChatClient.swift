@@ -40,5 +40,5 @@ class ChatClient {
   public func callClient(_ arg: PBCallChatClientRequest = PBCallChatClientRequest()) -> Promise<PBCallChatClientResponse> {
     return self.client.callUnary("Chat/CallClient", arg)
   }
-
+  
 }

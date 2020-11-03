@@ -31,5 +31,5 @@ class BrokerProxyClient {
   public func close(_ arg: PBBrokerProxyCloseRequest = PBBrokerProxyCloseRequest()) -> Promise<PBBrokerProxyCloseResponse> {
     return self.client.callUnary("BrokerProxy/Close", arg)
   }
-
+  
 }

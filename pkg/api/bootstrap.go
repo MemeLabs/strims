@@ -4,13 +4,14 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
-func RegisterBootstrapService(host *rpc.Host, service BootstrapService) {
+// RegisterBootstrapService ...
+func RegisterBootstrapService(host ServiceRegistry, service BootstrapService) {
 	host.RegisterService("Bootstrap", service)
 }
 
+// BootstrapService ...
 type BootstrapService interface {
 	CreateClient(
 		ctx context.Context,
@@ -42,12 +43,13 @@ type BootstrapService interface {
 	) (*pb.PublishNetworkToBootstrapPeerResponse, error)
 }
 
+// BootstrapClient ...
 type BootstrapClient struct {
-	client *rpc.Client
+	client UnaryCaller
 }
 
-// New ...
-func NewBootstrapClient(client *rpc.Client) *BootstrapClient {
+// NewBootstrapClient ...
+func NewBootstrapClient(client UnaryCaller) *BootstrapClient {
 	return &BootstrapClient{client}
 }
 

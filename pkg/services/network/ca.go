@@ -2,142 +2,78 @@ package network
 
 import (
 	"context"
-	"errors"
-	"reflect"
+	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/services/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
 )
 
-var caAddrSalt = []byte("ca:addr")
-var caNetworkPort = 14
+var caSalt = []byte("ca:addr")
+
+const clientTimeout = time.Second * 5
 
 // NewCA ...
-func NewCA(ctx context.Context, logger *zap.Logger, client *vpn.Client, key *pb.Key) (*CA, error) {
-	ctx, cancel := context.WithCancel(ctx)
+func NewCA(ctx context.Context, logger *zap.Logger, client *vpn.Client, network *pb.Network) (*CA, error) {
 	ca := &CA{
-		ctx:    ctx,
-		cancel: cancel,
-		logger: logger,
-		key:    key,
-		client: client,
+		logger:  logger,
+		network: network,
 	}
 
-	var err error
-	ca.port, err = client.Network.ReservePort()
+	host, err := rpc.NewHost(logger, client, network.Key, caSalt)
 	if err != nil {
 		return nil, err
 	}
 
-	go ca.stop()
-
-	if err := ca.run(); err != nil {
-		cancel()
-	}
+	api.RegisterCAService(host, ca)
 
 	return ca, nil
 }
 
 // CA ...
 type CA struct {
-	ctx    context.Context
-	cancel context.CancelFunc
-	logger *zap.Logger
-	key    *pb.Key
-	client *vpn.Client
-	port   uint16
+	logger  *zap.Logger
+	network *pb.Network
+
 	// invite policy
 	// certificate revocation stream
 	// certificate transparency list?
 }
 
-func (s *CA) run() error {
-	err := PublishLocalHostAddr(s.ctx, s.client, s.key, caAddrSalt, s.port)
+// Renew ...
+func (s *CA) Renew(ctxt context.Context, req *pb.CARenewRequest) (*pb.CARenewResponse, error) {
+	err := dao.VerifyCertificateRequest(req.CertificateRequest, pb.KeyUsage_KEY_USAGE_PEER|pb.KeyUsage_KEY_USAGE_SIGN)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return s.client.Network.SetHandler(s.port, s)
-}
+	// TODO: check subject (nick) availability
+	// TODO: verify invitation policy
 
-func (s *CA) stop() {
-	<-s.ctx.Done()
-	s.client.Network.RemoveHandler(s.port)
-	s.client.Network.ReleasePort(s.port)
-}
-
-// HandleMessage ...
-func (s *CA) HandleMessage(msg *vpn.Message) (forward bool, err error) {
-	var m pb.CAMessage
-	if err := proto.Unmarshal(msg.Body, &m); err != nil {
-		return true, err
-	}
-
-	var resp proto.Message
-
-	switch b := m.Body.(type) {
-	case *pb.CAMessage_UpgradeRequest_:
-		resp, err = s.handleUpgradeRequest(b.UpgradeRequest)
-	default:
-		err = errors.New("unexpected message type")
-	}
-
+	networkCert, err := dao.NewSelfSignedCertificate(s.network.Key, pb.KeyUsage_KEY_USAGE_SIGN, time.Hour*24, dao.WithSubject(s.network.Name))
 	if err != nil {
-		s.logger.Error("failed to handle nickerv message",
-			// zap.Uint64("requestID", m.RequestId),
-			zap.String("requestType", reflect.TypeOf(m.Body).Name()),
-			zap.Error(err),
-		)
-
-		resp = &pb.CAMessage{
-			Body: &pb.CAMessage_Error{
-				Error: err.Error(),
-			},
-		}
+		return nil, err
 	}
 
-	// TODO: return some errors that can occur during handling
+	cert, err := dao.SignCertificateRequest(req.CertificateRequest, time.Hour*24, s.network.Key)
+	if err != nil {
+		return nil, err
+	}
+	cert.ParentOneof = &pb.Certificate_Parent{Parent: networkCert}
 
-	return false, s.send(resp, msg.Trailers[0].HostID, msg.Header.SrcPort, msg.Header.DstPort)
-}
-
-func (s *CA) send(msg proto.Message, dstID kademlia.ID, dstPort, srcPort uint16) error {
-	return s.client.Network.SendProto(dstID, dstPort, srcPort, msg)
-}
-
-func (s *CA) handleUpgradeRequest(req *pb.CAMessage_UpgradeRequest) (*pb.CAMessage, error) {
-	return nil, nil
+	return &pb.CARenewResponse{Certificate: cert}, nil
 }
 
 // NewCAClient ...
-func NewCAClient(logger *zap.Logger, client *vpn.Client) *CAClient {
-	return &CAClient{
-		logger: logger,
-		client: client,
-	}
-}
-
-// CAClient ...
-type CAClient struct {
-	logger *zap.Logger
-	client *vpn.Client
-	key    []byte
-	port   uint16
-}
-
-func (s *CAClient) send(ctx context.Context, msg proto.Message) error {
-	addr, err := GetHostAddr(ctx, s.client, s.key, caAddrSalt)
+func NewCAClient(logger *zap.Logger, client *vpn.Client) (*api.CAClient, error) {
+	key := dao.GetRootCert(client.Network.Certificate()).Key
+	c, err := rpc.NewClient(logger, client, key, caSalt)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
-	return s.client.Network.SendProto(addr.HostID, addr.Port, s.port, msg)
-}
-
-// RequestUpgrade ...
-func (s *CAClient) RequestUpgrade() {
-
+	return api.NewCAClient(c), nil
 }

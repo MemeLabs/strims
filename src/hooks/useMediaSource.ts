@@ -30,7 +30,7 @@ const useMediaSource = ({ networkKey, swarmKey, mimeType, videoRef }: MediaSourc
     const decoder = new Decoder();
     let started = false;
 
-    const clientEvents = client.openVideoClient({
+    const clientEvents = client.video.openClient({
       swarmKey,
       emitData: true,
     });
@@ -38,7 +38,7 @@ const useMediaSource = ({ networkKey, swarmKey, mimeType, videoRef }: MediaSourc
       switch (e.body) {
         case "open":
           // TODO: do this in the service
-          client.publishSwarm({ id: e.open.id, networkKey });
+          client.video.publishSwarm({ id: e.open.id, networkKey });
           break;
         case "data":
           decoder.write(e.data.data);

@@ -269,19 +269,15 @@ service Bootstrap {
   rpc PublishNetworkToPeer(PublishNetworkToBootstrapPeerRequest) returns (PublishNetworkToBootstrapPeerResponse);
 }
 
-message CAMessage {
-  message UpgradeRequest {
-    Certificate invite_certificate = 1;
-    CertificateRequest certificate_request = 2;
-  }
+message CARenewRequest {
+  Certificate invite_certificate = 1;
+  CertificateRequest certificate_request = 2;
+}
 
-  message UpgradeResponse {
-    Certificate certificate = 1;
-  }
+message CARenewResponse {
+  Certificate certificate = 1;
+}
 
-  oneof body {
-    string error = 1;
-    UpgradeRequest upgrade_request = 2;
-    UpgradeRequest upgrade_response = 3;
-  }
+service CA {
+  rpc Renew(CARenewRequest) returns (CARenewResponse);
 }

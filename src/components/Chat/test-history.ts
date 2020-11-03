@@ -1,7 +1,7 @@
 import { PassThrough } from "stream";
 
-import { Readable as GenericReadable } from "../../lib/api/stream";
 import { ChatClientEvent, MessageEntities } from "../../lib/pb";
+import { Readable as GenericReadable } from "../../lib/rpc/stream";
 
 const history = [
   'MSG {"nick":"guwapguwapguwap","features":[],"timestamp":1599345629214,"data":"Ph4t3 I sentence you to 10 years in body shaming jail PepoBan","entities":{"emotes":[{"name":"PepoBan","bounds":{"start":54,"end":61}}],"nicks":[{"nick":"Ph4t3","bounds":{"start":0,"end":5}}]}}',

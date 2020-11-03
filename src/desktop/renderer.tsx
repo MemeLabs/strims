@@ -4,7 +4,7 @@ import storage from "electron-json-storage";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 
-import Client from "../lib/api/frontendRPCClient";
+import Client from "../lib/api";
 import App from "../root/App";
 
 const p2p = spawn("./dist/desktop/p2p");

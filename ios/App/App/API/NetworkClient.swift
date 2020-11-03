@@ -49,5 +49,5 @@ class NetworkClient {
   public func testDirectoryPublish(_ arg: PBTestDirectoryPublishRequest = PBTestDirectoryPublishRequest()) -> Promise<PBTestDirectoryPublishResponse> {
     return self.client.callUnary("Network/TestDirectoryPublish", arg)
   }
-
+  
 }
