@@ -7,7 +7,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/services/rpc"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
@@ -23,12 +23,15 @@ func NewCA(ctx context.Context, logger *zap.Logger, client *vpn.Client, network 
 		network: network,
 	}
 
-	host, err := rpc.NewHost(logger, client, network.Key, caSalt)
-	if err != nil {
-		return nil, err
-	}
-
+	host := rpc.NewServer(logger)
 	api.RegisterCAService(host, ca)
+
+	go host.Listen(ctx, &rpc.VPNServerDialer{
+		Logger: logger,
+		Client: client,
+		Key:    network.Key,
+		Salt:   caSalt,
+	})
 
 	return ca, nil
 }
@@ -70,10 +73,15 @@ func (s *CA) Renew(ctxt context.Context, req *pb.CARenewRequest) (*pb.CARenewRes
 // NewCAClient ...
 func NewCAClient(logger *zap.Logger, client *vpn.Client) (*api.CAClient, error) {
 	key := dao.GetRootCert(client.Network.Certificate()).Key
-	c, err := rpc.NewClient(logger, client, key, caSalt)
+	rpcClient, err := rpc.NewClient(&rpc.VPNDialer{
+		Logger: logger,
+		Client: client,
+		Key:    key,
+		Salt:   caSalt,
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	return api.NewCAClient(c), nil
+	return api.NewCAClient(rpcClient), nil
 }

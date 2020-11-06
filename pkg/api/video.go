@@ -4,11 +4,18 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterVideoService ...
 func RegisterVideoService(host ServiceRegistry, service VideoService) {
-	host.RegisterService("Video", service)
+	host.RegisterMethod("Video/OpenClient", service.OpenClient)
+	host.RegisterMethod("Video/OpenServer", service.OpenServer)
+	host.RegisterMethod("Video/WriteToServer", service.WriteToServer)
+	host.RegisterMethod("Video/PublishSwarm", service.PublishSwarm)
+	host.RegisterMethod("Video/StartRTMPIngress", service.StartRTMPIngress)
+	host.RegisterMethod("Video/StartHLSEgress", service.StartHLSEgress)
+	host.RegisterMethod("Video/StopHLSEgress", service.StopHLSEgress)
 }
 
 // VideoService ...
@@ -45,11 +52,11 @@ type VideoService interface {
 
 // VideoClient ...
 type VideoClient struct {
-	client StreamCaller
+	client *rpc.Client
 }
 
 // NewVideoClient ...
-func NewVideoClient(client StreamCaller) *VideoClient {
+func NewVideoClient(client *rpc.Client) *VideoClient {
 	return &VideoClient{client}
 }
 

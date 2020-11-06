@@ -2,13 +2,8 @@ package frontend
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"io"
-	"path"
-	"runtime"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
@@ -36,20 +31,23 @@ type Server struct {
 
 // Listen ...
 func (s *Server) Listen(ctx context.Context, rw io.ReadWriter) error {
-	c := New(s.Logger, s.NewVPNHost, s.Broker)
-	if err := c.initProfileService(ctx, s.Logger, s.Store, s.NewVPNHost); err != nil {
+	server := rpc.NewServer(s.Logger)
+	c := New(s.Logger, server, s.NewVPNHost, s.Broker)
+	if err := c.initProfileService(ctx, s.Store, s.NewVPNHost); err != nil {
 		return err
 	}
 
-	c.host.Listen(ctx, rw)
-	return nil
+	return server.Listen(ctx, &rpc.RWDialer{
+		Logger:     s.Logger,
+		ReadWriter: rw,
+	})
 }
 
 // New ...
-func New(logger *zap.Logger, newVPN VPNFunc, broker network.Broker) *Instance {
+func New(logger *zap.Logger, server *rpc.Server, newVPN VPNFunc, broker network.Broker) *Instance {
 	return &Instance{
 		logger: logger,
-		host:   rpc.NewHost(logger),
+		server: server,
 		newVPN: newVPN,
 		broker: broker,
 	}
@@ -58,7 +56,7 @@ func New(logger *zap.Logger, newVPN VPNFunc, broker network.Broker) *Instance {
 // Instance ...
 type Instance struct {
 	logger *zap.Logger
-	host   *rpc.Host
+	server *rpc.Server
 	newVPN VPNFunc
 	broker network.Broker
 
@@ -73,21 +71,21 @@ type Instance struct {
 	Video     api.VideoService
 }
 
-func (c *Instance) initProfileService(ctx context.Context, logger *zap.Logger, store kv.BlobStore, newVPN VPNFunc) error {
+func (c *Instance) initProfileService(ctx context.Context, store kv.BlobStore, newVPN VPNFunc) error {
 	init := func(profile *pb.Profile, store *dao.ProfileStore) error {
 		if err := c.Init(ctx, profile, store); err != nil {
 			return err
 		}
-		c.registerServices(c.host)
+		c.registerServices()
 		return nil
 	}
 
 	var err error
-	c.Profile, err = newProfileService(ctx, logger, store, init)
+	c.Profile, err = newProfileService(ctx, c.logger, store, init)
 	if err != nil {
 		return err
 	}
-	api.RegisterProfileService(c.host, c.Profile)
+	api.RegisterProfileService(c.server, c.Profile)
 
 	return nil
 }
@@ -119,24 +117,10 @@ func (c *Instance) Init(ctx context.Context, profile *pb.Profile, store *dao.Pro
 	return nil
 }
 
-func (c *Instance) registerServices(host *rpc.Host) {
-	api.RegisterNetworkService(host, c.Network)
-	api.RegisterDebugService(host, c.Debug)
-	api.RegisterBootstrapService(host, c.Bootstrap)
-	api.RegisterChatService(host, c.Chat)
-	api.RegisterVideoService(host, c.Video)
-}
-
-func jsonDump(i interface{}) {
-	_, file, line, _ := runtime.Caller(1)
-	b, err := json.MarshalIndent(i, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf(
-		"%s %s:%d: %s\n",
-		time.Now().Format("2006/01/02 15:04:05.000000"),
-		path.Base(file),
-		line, string(b),
-	)
+func (c *Instance) registerServices() {
+	api.RegisterNetworkService(c.server, c.Network)
+	api.RegisterDebugService(c.server, c.Debug)
+	api.RegisterBootstrapService(c.server, c.Bootstrap)
+	// api.RegisterChatService(c.server, c.Chat)
+	// api.RegisterVideoService(c.server, c.Video)
 }

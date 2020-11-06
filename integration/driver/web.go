@@ -128,6 +128,7 @@ func newTestClientBridgeServer(logger *zap.Logger) *testClientBridgeServer {
 	return &testClientBridgeServer{
 		logger:  logger,
 		Clients: make(chan *rpc.Client, 1),
+		done:    make(chan struct{}),
 	}
 }
 
@@ -136,6 +137,7 @@ type testClientBridgeServer struct {
 	upgrader websocket.Upgrader
 	server   http.Server
 	Clients  chan *rpc.Client
+	done     chan struct{}
 }
 
 func (t *testClientBridgeServer) Run() error {
@@ -150,6 +152,7 @@ func (t *testClientBridgeServer) Run() error {
 func (t *testClientBridgeServer) Close() {
 	t.server.Close()
 	close(t.Clients)
+	close(t.done)
 }
 
 func (t *testClientBridgeServer) handleRequest(w http.ResponseWriter, r *http.Request) {
@@ -160,11 +163,19 @@ func (t *testClientBridgeServer) handleRequest(w http.ResponseWriter, r *http.Re
 	}
 
 	rw := vnic.NewWSReadWriter(c)
-	client := rpc.NewClient(t.logger, rw)
+	client, err := rpc.NewClient(&rpc.RWDialer{
+		Logger:     t.logger,
+		ReadWriter: rw,
+	})
+	if err != nil {
+		log.Println("client:", err)
+		return
+	}
 
 	t.Clients <- client
 
-	<-client.Done()
+	<-t.done
+
 	rw.Close()
 }
 

@@ -4,11 +4,18 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterProfileService ...
 func RegisterProfileService(host ServiceRegistry, service ProfileService) {
-	host.RegisterService("Profile", service)
+	host.RegisterMethod("Profile/Create", service.Create)
+	host.RegisterMethod("Profile/Load", service.Load)
+	host.RegisterMethod("Profile/Get", service.Get)
+	host.RegisterMethod("Profile/Update", service.Update)
+	host.RegisterMethod("Profile/Delete", service.Delete)
+	host.RegisterMethod("Profile/List", service.List)
+	host.RegisterMethod("Profile/LoadSession", service.LoadSession)
 }
 
 // ProfileService ...
@@ -45,11 +52,11 @@ type ProfileService interface {
 
 // ProfileClient ...
 type ProfileClient struct {
-	client UnaryCaller
+	client *rpc.Client
 }
 
 // NewProfileClient ...
-func NewProfileClient(client UnaryCaller) *ProfileClient {
+func NewProfileClient(client *rpc.Client) *ProfileClient {
 	return &ProfileClient{client}
 }
 

@@ -4,11 +4,12 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterCAService ...
 func RegisterCAService(host ServiceRegistry, service CAService) {
-	host.RegisterService("CA", service)
+	host.RegisterMethod("CA/Renew", service.Renew)
 }
 
 // CAService ...
@@ -21,11 +22,11 @@ type CAService interface {
 
 // CAClient ...
 type CAClient struct {
-	client UnaryCaller
+	client *rpc.Client
 }
 
 // NewCAClient ...
-func NewCAClient(client UnaryCaller) *CAClient {
+func NewCAClient(client *rpc.Client) *CAClient {
 	return &CAClient{client}
 }
 

@@ -4,11 +4,18 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterBootstrapService ...
 func RegisterBootstrapService(host ServiceRegistry, service BootstrapService) {
-	host.RegisterService("Bootstrap", service)
+	host.RegisterMethod("Bootstrap/CreateClient", service.CreateClient)
+	host.RegisterMethod("Bootstrap/UpdateClient", service.UpdateClient)
+	host.RegisterMethod("Bootstrap/DeleteClient", service.DeleteClient)
+	host.RegisterMethod("Bootstrap/GetClient", service.GetClient)
+	host.RegisterMethod("Bootstrap/ListClients", service.ListClients)
+	host.RegisterMethod("Bootstrap/ListPeers", service.ListPeers)
+	host.RegisterMethod("Bootstrap/PublishNetworkToPeer", service.PublishNetworkToPeer)
 }
 
 // BootstrapService ...
@@ -45,11 +52,11 @@ type BootstrapService interface {
 
 // BootstrapClient ...
 type BootstrapClient struct {
-	client UnaryCaller
+	client *rpc.Client
 }
 
 // NewBootstrapClient ...
-func NewBootstrapClient(client UnaryCaller) *BootstrapClient {
+func NewBootstrapClient(client *rpc.Client) *BootstrapClient {
 	return &BootstrapClient{client}
 }
 

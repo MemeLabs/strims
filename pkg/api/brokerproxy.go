@@ -4,11 +4,16 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterBrokerProxyService ...
 func RegisterBrokerProxyService(host ServiceRegistry, service BrokerProxyService) {
-	host.RegisterService("BrokerProxy", service)
+	host.RegisterMethod("BrokerProxy/Open", service.Open)
+	host.RegisterMethod("BrokerProxy/SendKeys", service.SendKeys)
+	host.RegisterMethod("BrokerProxy/ReceiveKeys", service.ReceiveKeys)
+	host.RegisterMethod("BrokerProxy/Data", service.Data)
+	host.RegisterMethod("BrokerProxy/Close", service.Close)
 }
 
 // BrokerProxyService ...
@@ -37,11 +42,11 @@ type BrokerProxyService interface {
 
 // BrokerProxyClient ...
 type BrokerProxyClient struct {
-	client StreamCaller
+	client *rpc.Client
 }
 
 // NewBrokerProxyClient ...
-func NewBrokerProxyClient(client StreamCaller) *BrokerProxyClient {
+func NewBrokerProxyClient(client *rpc.Client) *BrokerProxyClient {
 	return &BrokerProxyClient{client}
 }
 
