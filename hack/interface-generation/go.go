@@ -30,8 +30,8 @@ import (
 
 // Register{{.Name}}Service ...
 func Register{{.Name}}Service(host ServiceRegistry, service {{.Name}}Service) {
-	host.RegisterService("{{.Name}}", service);
-}
+{{range .Elements}}  host.RegisterMethod("{{$.Name}}/{{.Name}}", service.{{.Name}})
+{{end}}}
 
 // {{.Name}}Service ...
 type {{.Name}}Service interface {
@@ -41,16 +41,13 @@ type {{.Name}}Service interface {
   ) ({{if .StreamsReturns}}<-chan {{end}}*pb.{{.ReturnsType}}, error)
 {{end}}}
 
-{{$callerType := "UnaryCaller"}}
-{{range .Elements}}{{if .StreamsReturns}}{{$callerType = "StreamCaller"}}{{end}}{{end}}
-
 // {{.Name}}Client ...
 type {{.Name}}Client struct {
-	client  {{$callerType}}
+	client  *rpc.Client
 }
 
 // New{{.Name}}Client ...
-func New{{.Name}}Client(client {{$callerType}}) *{{.Name}}Client {
+func New{{.Name}}Client(client *rpc.Client) *{{.Name}}Client {
 	return &{{.Name}}Client{client}
 }
 {{range .Elements}}

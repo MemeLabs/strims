@@ -4,11 +4,13 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterDebugService ...
 func RegisterDebugService(host ServiceRegistry, service DebugService) {
-	host.RegisterService("Debug", service)
+	host.RegisterMethod("Debug/PProf", service.PProf)
+	host.RegisterMethod("Debug/ReadMetrics", service.ReadMetrics)
 }
 
 // DebugService ...
@@ -25,11 +27,11 @@ type DebugService interface {
 
 // DebugClient ...
 type DebugClient struct {
-	client UnaryCaller
+	client *rpc.Client
 }
 
 // NewDebugClient ...
-func NewDebugClient(client UnaryCaller) *DebugClient {
+func NewDebugClient(client *rpc.Client) *DebugClient {
 	return &DebugClient{client}
 }
 

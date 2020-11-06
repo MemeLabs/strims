@@ -69,7 +69,13 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 
 	go srv.Listen(context.Background(), readWriter{hr, cw})
 
-	client := rpc.NewClient(d.logger, readWriter{cr, hw})
+	client, err := rpc.NewClient(&rpc.RWDialer{
+		Logger:     d.logger,
+		ReadWriter: readWriter{cr, hw},
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
 	d.clients = append(d.clients, nativeDriverClient{file, client})
 	return client
 }
@@ -78,14 +84,14 @@ func (d *nativeDriver) Close() {
 	d.closeOnce.Do(func() {
 		for _, c := range d.clients {
 			os.RemoveAll(c.file)
-			c.client.Close()
+			// c.client.Close()
 		}
 	})
 }
 
 type readWriter struct {
 	io.Reader
-	io.Writer
+	io.WriteCloser
 }
 
 func tempFile() string {

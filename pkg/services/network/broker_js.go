@@ -193,11 +193,19 @@ func (r *brokerProxyServiceReadWriter) Close() error {
 }
 
 // NewBrokerProxyClient ....
-func NewBrokerProxyClient(logger *zap.Logger, bus *wasmio.Bus) *BrokerProxyClient {
+func NewBrokerProxyClient(logger *zap.Logger, bus *wasmio.Bus) (*BrokerProxyClient, error) {
+	client, err := rpc.NewClient(&rpc.RWDialer{
+		Logger:     logger,
+		ReadWriter: bus,
+	})
+	if err != nil {
+		return nil, err
+	}
+
 	return &BrokerProxyClient{
 		logger: logger,
-		client: api.NewBrokerProxyClient(rpc.NewClient(logger, bus)),
-	}
+		client: api.NewBrokerProxyClient(client),
+	}, nil
 }
 
 // BrokerProxyClient ...

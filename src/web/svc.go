@@ -87,6 +87,11 @@ func newLogger(bridge js.Value) *zap.Logger {
 func initDefault(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
 
+	broker, err := network.NewBrokerProxyClient(logger, wasmio.NewWorkerProxy(bridge, "broker"))
+	if err != nil {
+		logger.Fatal("broker proxy init failed", zap.Error(err))
+	}
+
 	srv := frontend.Server{
 		Store:  wasmio.NewKVStore(bridge),
 		Logger: logger,
@@ -102,7 +107,7 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 			}
 			return vpn.New(logger, vnicHost)
 		},
-		Broker: network.NewBrokerProxyClient(logger, wasmio.NewWorkerProxy(bridge, "broker")),
+		Broker: broker,
 	}
 
 	if err := srv.Listen(context.Background(), bus); err != nil {
@@ -113,7 +118,10 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 func initBroker(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
 
-	host := rpc.NewHost(logger)
-	api.RegisterBrokerProxyService(host, network.NewBrokerProxyService(logger))
-	host.Listen(context.Background(), bus)
+	server := rpc.NewServer(logger)
+	api.RegisterBrokerProxyService(server, network.NewBrokerProxyService(logger))
+	server.Listen(context.Background(), &rpc.RWDialer{
+		Logger:     logger,
+		ReadWriter: bus,
+	})
 }
