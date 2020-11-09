@@ -11,7 +11,7 @@ import (
 
 var nextSnowflakeID uint64
 
-// generate a 53 bit locally unique id
+// GenerateSnowflake generate a 53 bit locally unique id
 func GenerateSnowflake() (uint64, error) {
 	seconds := uint64(time.Since(time.Date(2020, 0, 0, 0, 0, 0, 0, time.UTC)) / time.Second)
 	sequence := atomic.AddUint64(&nextSnowflakeID, 1) << 32

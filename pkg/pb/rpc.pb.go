@@ -258,6 +258,202 @@ func (*Close) Descriptor() ([]byte, []int) {
 	return file_rpc_proto_rawDescGZIP(), []int{4}
 }
 
+type RPCCallUnaryRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id uint64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *RPCCallUnaryRequest) Reset() {
+	*x = RPCCallUnaryRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_rpc_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RPCCallUnaryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RPCCallUnaryRequest) ProtoMessage() {}
+
+func (x *RPCCallUnaryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RPCCallUnaryRequest.ProtoReflect.Descriptor instead.
+func (*RPCCallUnaryRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *RPCCallUnaryRequest) GetId() uint64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type RPCCallUnaryResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id uint64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *RPCCallUnaryResponse) Reset() {
+	*x = RPCCallUnaryResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_rpc_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RPCCallUnaryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RPCCallUnaryResponse) ProtoMessage() {}
+
+func (x *RPCCallUnaryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RPCCallUnaryResponse.ProtoReflect.Descriptor instead.
+func (*RPCCallUnaryResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *RPCCallUnaryResponse) GetId() uint64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+type RPCCallStreamRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id    uint64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+	Count uint64 `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"`
+}
+
+func (x *RPCCallStreamRequest) Reset() {
+	*x = RPCCallStreamRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_rpc_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RPCCallStreamRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RPCCallStreamRequest) ProtoMessage() {}
+
+func (x *RPCCallStreamRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RPCCallStreamRequest.ProtoReflect.Descriptor instead.
+func (*RPCCallStreamRequest) Descriptor() ([]byte, []int) {
+	return file_rpc_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *RPCCallStreamRequest) GetId() uint64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
+func (x *RPCCallStreamRequest) GetCount() uint64 {
+	if x != nil {
+		return x.Count
+	}
+	return 0
+}
+
+type RPCCallStreamResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Id uint64 `protobuf:"varint,1,opt,name=id,proto3" json:"id,omitempty"`
+}
+
+func (x *RPCCallStreamResponse) Reset() {
+	*x = RPCCallStreamResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_rpc_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *RPCCallStreamResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*RPCCallStreamResponse) ProtoMessage() {}
+
+func (x *RPCCallStreamResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_rpc_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use RPCCallStreamResponse.ProtoReflect.Descriptor instead.
+func (*RPCCallStreamResponse) Descriptor() ([]byte, []int) {
+	return file_rpc_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *RPCCallStreamResponse) GetId() uint64 {
+	if x != nil {
+		return x.Id
+	}
+	return 0
+}
+
 var File_rpc_proto protoreflect.FileDescriptor
 
 var file_rpc_proto_rawDesc = []byte{
@@ -275,12 +471,23 @@ var file_rpc_proto_rawDesc = []byte{
 	0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
 	0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x08, 0x0a, 0x06, 0x43, 0x61, 0x6e, 0x63,
 	0x65, 0x6c, 0x22, 0x0b, 0x0a, 0x09, 0x55, 0x6e, 0x64, 0x65, 0x66, 0x69, 0x6e, 0x65, 0x64, 0x22,
-	0x07, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x42, 0x44, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73,
-	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65,
-	0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f,
-	0x70, 0x6b, 0x67, 0x2f, 0x70, 0x62, 0x3b, 0x70, 0x62, 0xba, 0x02, 0x02, 0x50, 0x42, 0x62, 0x06,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x07, 0x0a, 0x05, 0x43, 0x6c, 0x6f, 0x73, 0x65, 0x22, 0x25, 0x0a, 0x13, 0x52, 0x50, 0x43, 0x43,
+	0x61, 0x6c, 0x6c, 0x55, 0x6e, 0x61, 0x72, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22,
+	0x26, 0x0a, 0x14, 0x52, 0x50, 0x43, 0x43, 0x61, 0x6c, 0x6c, 0x55, 0x6e, 0x61, 0x72, 0x79, 0x52,
+	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x22, 0x3c, 0x0a, 0x14, 0x52, 0x50, 0x43, 0x43, 0x61,
+	0x6c, 0x6c, 0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12,
+	0x0e, 0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x12,
+	0x14, 0x0a, 0x05, 0x63, 0x6f, 0x75, 0x6e, 0x74, 0x18, 0x02, 0x20, 0x01, 0x28, 0x04, 0x52, 0x05,
+	0x63, 0x6f, 0x75, 0x6e, 0x74, 0x22, 0x27, 0x0a, 0x15, 0x52, 0x50, 0x43, 0x43, 0x61, 0x6c, 0x6c,
+	0x53, 0x74, 0x72, 0x65, 0x61, 0x6d, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x0e,
+	0x0a, 0x02, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x04, 0x52, 0x02, 0x69, 0x64, 0x42, 0x44,
+	0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70,
+	0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e,
+	0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d,
+	0x70, 0x70, 0x73, 0x70, 0x70, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x62, 0x3b, 0x70, 0x62, 0xba,
+	0x02, 0x02, 0x50, 0x42, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -295,17 +502,21 @@ func file_rpc_proto_rawDescGZIP() []byte {
 	return file_rpc_proto_rawDescData
 }
 
-var file_rpc_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_rpc_proto_msgTypes = make([]protoimpl.MessageInfo, 9)
 var file_rpc_proto_goTypes = []interface{}{
-	(*Call)(nil),      // 0: Call
-	(*Error)(nil),     // 1: Error
-	(*Cancel)(nil),    // 2: Cancel
-	(*Undefined)(nil), // 3: Undefined
-	(*Close)(nil),     // 4: Close
-	(*any.Any)(nil),   // 5: google.protobuf.Any
+	(*Call)(nil),                  // 0: Call
+	(*Error)(nil),                 // 1: Error
+	(*Cancel)(nil),                // 2: Cancel
+	(*Undefined)(nil),             // 3: Undefined
+	(*Close)(nil),                 // 4: Close
+	(*RPCCallUnaryRequest)(nil),   // 5: RPCCallUnaryRequest
+	(*RPCCallUnaryResponse)(nil),  // 6: RPCCallUnaryResponse
+	(*RPCCallStreamRequest)(nil),  // 7: RPCCallStreamRequest
+	(*RPCCallStreamResponse)(nil), // 8: RPCCallStreamResponse
+	(*any.Any)(nil),               // 9: google.protobuf.Any
 }
 var file_rpc_proto_depIdxs = []int32{
-	5, // 0: Call.argument:type_name -> google.protobuf.Any
+	9, // 0: Call.argument:type_name -> google.protobuf.Any
 	1, // [1:1] is the sub-list for method output_type
 	1, // [1:1] is the sub-list for method input_type
 	1, // [1:1] is the sub-list for extension type_name
@@ -379,6 +590,54 @@ func file_rpc_proto_init() {
 				return nil
 			}
 		}
+		file_rpc_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RPCCallUnaryRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_rpc_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RPCCallUnaryResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_rpc_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RPCCallStreamRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_rpc_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*RPCCallStreamResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -386,7 +645,7 @@ func file_rpc_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_rpc_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   5,
+			NumMessages:   9,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

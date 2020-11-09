@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"reflect"
 	"sync"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/golang/protobuf/proto"
@@ -15,8 +14,6 @@ import (
 )
 
 const (
-	clientTimeout = time.Second * 10
-
 	callbackMethod = "CALLBACK"
 	cancelMethod   = "CANCEL"
 
@@ -36,16 +33,15 @@ func recoverError(v interface{}) error {
 	}
 }
 
-var callBuffers = sync.Pool{
-	New: func() interface{} {
-		return proto.NewBuffer([]byte{})
-	},
-}
-
 var typeOfError = reflect.TypeOf(&pb.Error{})
 var typeOfClose = reflect.TypeOf(&pb.Close{})
-var errClose = errors.New("response closed")
-var errInvalidType = errors.New("invaild type")
+
+// ErrClose returned when the the server closes a streaming response
+var ErrClose = errors.New("response closed")
+
+// ErrInvalidType returned when the request or response type doesn't match the
+// expected value
+var ErrInvalidType = errors.New("invaild type")
 
 func newAnyMessage(a *any.Any) (proto.Message, error) {
 	n, err := ptypes.AnyMessageName(a)
@@ -54,7 +50,7 @@ func newAnyMessage(a *any.Any) (proto.Message, error) {
 	}
 	k := proto.MessageType(n)
 	if k == nil {
-		return nil, errInvalidType
+		return nil, ErrInvalidType
 	}
 	return reflect.New(k.Elem()).Interface().(proto.Message), nil
 }
@@ -71,7 +67,7 @@ func unmarshalAny(a *any.Any, v proto.Message) error {
 	case vt:
 		return ptypes.UnmarshalAny(a, v)
 	case typeOfClose:
-		return errClose
+		return ErrClose
 	case typeOfError:
 		ev := &pb.Error{}
 		if err := ptypes.UnmarshalAny(a, ev); err != nil {
@@ -85,6 +81,12 @@ func unmarshalAny(a *any.Any, v proto.Message) error {
 
 // SendFunc ...
 type SendFunc func(context.Context, *pb.Call) error
+
+var callBuffers = sync.Pool{
+	New: func() interface{} {
+		return proto.NewBuffer([]byte{})
+	},
+}
 
 func send(ctx context.Context, id, parentID uint64, method string, arg proto.Message, fn SendFunc) error {
 	b := callBuffers.Get().(*proto.Buffer)
@@ -113,9 +115,16 @@ type ResponseFunc func() error
 // Transport ...
 type Transport interface {
 	Call(*CallOut, ResponseFunc) error
+	Listen() error
 }
 
 // Dialer ...
 type Dialer interface {
 	Dial(context.Context, Dispatcher) (Transport, error)
+}
+
+// ParentCallAccessor ...
+type ParentCallAccessor interface {
+	ParentCallIn() *CallIn
+	ParentCallOut() *CallOut
 }

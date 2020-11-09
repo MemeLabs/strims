@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterBootstrapService ...
@@ -52,11 +51,11 @@ type BootstrapService interface {
 
 // BootstrapClient ...
 type BootstrapClient struct {
-	client *rpc.Client
+	client Caller
 }
 
 // NewBootstrapClient ...
-func NewBootstrapClient(client *rpc.Client) *BootstrapClient {
+func NewBootstrapClient(client Caller) *BootstrapClient {
 	return &BootstrapClient{client}
 }
 

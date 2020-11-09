@@ -13,6 +13,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/frontend"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/services/network"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -86,6 +87,8 @@ func main() {
 		panic(err)
 	}
 
+	server := rpc.NewServer(logger)
+
 	newVPN := func(key *pb.Key) (*vpn.Host, error) {
 		vnicHost, err := vnic.New(
 			logger,
@@ -106,7 +109,7 @@ func main() {
 		return vpn.New(logger, vnicHost)
 	}
 
-	c := frontend.New(logger, newVPN, network.NewBroker(logger))
+	c := frontend.New(logger, server, newVPN, network.NewBroker(logger))
 	if err := c.Init(context.Background(), profile, store); err != nil {
 		logger.Fatal("frontend instance init failed", zap.Error(err))
 	}

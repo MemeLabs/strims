@@ -163,7 +163,7 @@ func (t *testClientBridgeServer) handleRequest(w http.ResponseWriter, r *http.Re
 	}
 
 	rw := vnic.NewWSReadWriter(c)
-	client, err := rpc.NewClient(&rpc.RWDialer{
+	client, err := rpc.NewClient(t.logger, &rpc.RWDialer{
 		Logger:     t.logger,
 		ReadWriter: rw,
 	})

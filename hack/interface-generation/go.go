@@ -43,11 +43,11 @@ type {{.Name}}Service interface {
 
 // {{.Name}}Client ...
 type {{.Name}}Client struct {
-	client  *rpc.Client
+	client Caller
 }
 
 // New{{.Name}}Client ...
-func New{{.Name}}Client(client *rpc.Client) *{{.Name}}Client {
+func New{{.Name}}Client(client Caller) *{{.Name}}Client {
 	return &{{.Name}}Client{client}
 }
 {{range .Elements}}

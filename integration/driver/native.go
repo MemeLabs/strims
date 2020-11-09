@@ -69,7 +69,7 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 
 	go srv.Listen(context.Background(), readWriter{hr, cw})
 
-	client, err := rpc.NewClient(&rpc.RWDialer{
+	client, err := rpc.NewClient(d.logger, &rpc.RWDialer{
 		Logger:     d.logger,
 		ReadWriter: readWriter{cr, hw},
 	})

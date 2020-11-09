@@ -194,7 +194,7 @@ func (r *brokerProxyServiceReadWriter) Close() error {
 
 // NewBrokerProxyClient ....
 func NewBrokerProxyClient(logger *zap.Logger, bus *wasmio.Bus) (*BrokerProxyClient, error) {
-	client, err := rpc.NewClient(&rpc.RWDialer{
+	client, err := rpc.NewClient(logger, &rpc.RWDialer{
 		Logger:     logger,
 		ReadWriter: bus,
 	})
@@ -239,10 +239,13 @@ func (h *BrokerProxyClient) proxy(conn ReadWriteFlusher) (*brokerProxyClientHelp
 
 	req := &pb.BrokerProxyRequest{ConnMtu: int32(connMTU(conn))}
 	events := make(chan *pb.BrokerProxyEvent, 1)
-	if err := h.client.Open(ctx, req, events); err != nil {
-		cancel()
-		return nil, err
-	}
+	go func() {
+		if err := h.client.Open(ctx, req, events); err != nil {
+			h.logger.Debug("bootstrap proxy client closed", zap.Error(err))
+			cancel()
+		}
+		h.logger.Debug("bootstrap proxy client closed")
+	}()
 
 	e, ok := <-events
 	if !ok {
@@ -299,7 +302,10 @@ func (p *brokerProxyClientHelper) doEventPump(events chan *pb.BrokerProxyEvent) 
 					return
 				}
 			case *pb.BrokerProxyEvent_Read_:
-				p.read <- struct{}{}
+				select {
+				case p.read <- struct{}{}:
+				case <-p.ctx.Done():
+				}
 			}
 		}
 	}
@@ -352,6 +358,8 @@ func (p *brokerProxyClientHelper) ReceiveKeys(keys [][]byte) ([][]byte, error) {
 	return res.Keys, nil
 }
 
+// Close gracefully shuts down the bootstrap service helper allowing any queued
+// events to drain.
 func (p *brokerProxyClientHelper) Close() error {
 	req := &pb.BrokerProxyCloseRequest{ProxyId: p.id}
 	return p.client.Close(p.ctx, req, &pb.BrokerProxyCloseResponse{})

@@ -13406,6 +13406,372 @@ export class Close implements IClose {
     public toJSON(): { [k: string]: any };
 }
 
+/** Properties of a RPCCallUnaryRequest. */
+export interface IRPCCallUnaryRequest {
+
+    /** RPCCallUnaryRequest id */
+    id?: (number|null);
+}
+
+/** Represents a RPCCallUnaryRequest. */
+export class RPCCallUnaryRequest implements IRPCCallUnaryRequest {
+
+    /**
+     * Constructs a new RPCCallUnaryRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IRPCCallUnaryRequest);
+
+    /** RPCCallUnaryRequest id. */
+    public id: number;
+
+    /**
+     * Creates a new RPCCallUnaryRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns RPCCallUnaryRequest instance
+     */
+    public static create(properties?: IRPCCallUnaryRequest): RPCCallUnaryRequest;
+
+    /**
+     * Encodes the specified RPCCallUnaryRequest message. Does not implicitly {@link RPCCallUnaryRequest.verify|verify} messages.
+     * @param message RPCCallUnaryRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IRPCCallUnaryRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified RPCCallUnaryRequest message, length delimited. Does not implicitly {@link RPCCallUnaryRequest.verify|verify} messages.
+     * @param message RPCCallUnaryRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IRPCCallUnaryRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a RPCCallUnaryRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns RPCCallUnaryRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): RPCCallUnaryRequest;
+
+    /**
+     * Decodes a RPCCallUnaryRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns RPCCallUnaryRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): RPCCallUnaryRequest;
+
+    /**
+     * Verifies a RPCCallUnaryRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a RPCCallUnaryRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns RPCCallUnaryRequest
+     */
+    public static fromObject(object: { [k: string]: any }): RPCCallUnaryRequest;
+
+    /**
+     * Creates a plain object from a RPCCallUnaryRequest message. Also converts values to other types if specified.
+     * @param message RPCCallUnaryRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: RPCCallUnaryRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this RPCCallUnaryRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a RPCCallUnaryResponse. */
+export interface IRPCCallUnaryResponse {
+
+    /** RPCCallUnaryResponse id */
+    id?: (number|null);
+}
+
+/** Represents a RPCCallUnaryResponse. */
+export class RPCCallUnaryResponse implements IRPCCallUnaryResponse {
+
+    /**
+     * Constructs a new RPCCallUnaryResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IRPCCallUnaryResponse);
+
+    /** RPCCallUnaryResponse id. */
+    public id: number;
+
+    /**
+     * Creates a new RPCCallUnaryResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns RPCCallUnaryResponse instance
+     */
+    public static create(properties?: IRPCCallUnaryResponse): RPCCallUnaryResponse;
+
+    /**
+     * Encodes the specified RPCCallUnaryResponse message. Does not implicitly {@link RPCCallUnaryResponse.verify|verify} messages.
+     * @param message RPCCallUnaryResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IRPCCallUnaryResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified RPCCallUnaryResponse message, length delimited. Does not implicitly {@link RPCCallUnaryResponse.verify|verify} messages.
+     * @param message RPCCallUnaryResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IRPCCallUnaryResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a RPCCallUnaryResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns RPCCallUnaryResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): RPCCallUnaryResponse;
+
+    /**
+     * Decodes a RPCCallUnaryResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns RPCCallUnaryResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): RPCCallUnaryResponse;
+
+    /**
+     * Verifies a RPCCallUnaryResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a RPCCallUnaryResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns RPCCallUnaryResponse
+     */
+    public static fromObject(object: { [k: string]: any }): RPCCallUnaryResponse;
+
+    /**
+     * Creates a plain object from a RPCCallUnaryResponse message. Also converts values to other types if specified.
+     * @param message RPCCallUnaryResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: RPCCallUnaryResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this RPCCallUnaryResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a RPCCallStreamRequest. */
+export interface IRPCCallStreamRequest {
+
+    /** RPCCallStreamRequest id */
+    id?: (number|null);
+
+    /** RPCCallStreamRequest count */
+    count?: (number|null);
+}
+
+/** Represents a RPCCallStreamRequest. */
+export class RPCCallStreamRequest implements IRPCCallStreamRequest {
+
+    /**
+     * Constructs a new RPCCallStreamRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IRPCCallStreamRequest);
+
+    /** RPCCallStreamRequest id. */
+    public id: number;
+
+    /** RPCCallStreamRequest count. */
+    public count: number;
+
+    /**
+     * Creates a new RPCCallStreamRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns RPCCallStreamRequest instance
+     */
+    public static create(properties?: IRPCCallStreamRequest): RPCCallStreamRequest;
+
+    /**
+     * Encodes the specified RPCCallStreamRequest message. Does not implicitly {@link RPCCallStreamRequest.verify|verify} messages.
+     * @param message RPCCallStreamRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IRPCCallStreamRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified RPCCallStreamRequest message, length delimited. Does not implicitly {@link RPCCallStreamRequest.verify|verify} messages.
+     * @param message RPCCallStreamRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IRPCCallStreamRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a RPCCallStreamRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns RPCCallStreamRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): RPCCallStreamRequest;
+
+    /**
+     * Decodes a RPCCallStreamRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns RPCCallStreamRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): RPCCallStreamRequest;
+
+    /**
+     * Verifies a RPCCallStreamRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a RPCCallStreamRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns RPCCallStreamRequest
+     */
+    public static fromObject(object: { [k: string]: any }): RPCCallStreamRequest;
+
+    /**
+     * Creates a plain object from a RPCCallStreamRequest message. Also converts values to other types if specified.
+     * @param message RPCCallStreamRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: RPCCallStreamRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this RPCCallStreamRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a RPCCallStreamResponse. */
+export interface IRPCCallStreamResponse {
+
+    /** RPCCallStreamResponse id */
+    id?: (number|null);
+}
+
+/** Represents a RPCCallStreamResponse. */
+export class RPCCallStreamResponse implements IRPCCallStreamResponse {
+
+    /**
+     * Constructs a new RPCCallStreamResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IRPCCallStreamResponse);
+
+    /** RPCCallStreamResponse id. */
+    public id: number;
+
+    /**
+     * Creates a new RPCCallStreamResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns RPCCallStreamResponse instance
+     */
+    public static create(properties?: IRPCCallStreamResponse): RPCCallStreamResponse;
+
+    /**
+     * Encodes the specified RPCCallStreamResponse message. Does not implicitly {@link RPCCallStreamResponse.verify|verify} messages.
+     * @param message RPCCallStreamResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IRPCCallStreamResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified RPCCallStreamResponse message, length delimited. Does not implicitly {@link RPCCallStreamResponse.verify|verify} messages.
+     * @param message RPCCallStreamResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IRPCCallStreamResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a RPCCallStreamResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns RPCCallStreamResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): RPCCallStreamResponse;
+
+    /**
+     * Decodes a RPCCallStreamResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns RPCCallStreamResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): RPCCallStreamResponse;
+
+    /**
+     * Verifies a RPCCallStreamResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a RPCCallStreamResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns RPCCallStreamResponse
+     */
+    public static fromObject(object: { [k: string]: any }): RPCCallStreamResponse;
+
+    /**
+     * Creates a plain object from a RPCCallStreamResponse message. Also converts values to other types if specified.
+     * @param message RPCCallStreamResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: RPCCallStreamResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this RPCCallStreamResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
 /** Properties of a JoinSwarmRequest. */
 export interface IJoinSwarmRequest {
 

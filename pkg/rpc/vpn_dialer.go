@@ -26,7 +26,7 @@ func (d *VPNDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Transport,
 		return nil, err
 	}
 
-	c := &VPNTransport{
+	return &VPNTransport{
 		ctx:        ctx,
 		logger:     d.Logger,
 		client:     d.Client,
@@ -34,12 +34,7 @@ func (d *VPNDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Transport,
 		salt:       d.Salt,
 		port:       port,
 		dispatcher: dispatcher,
-	}
-
-	if err := d.Client.Network.SetHandler(port, c); err != nil {
-		return nil, err
-	}
-	return c, nil
+	}, nil
 }
 
 // VPNServerDialer ...
@@ -75,9 +70,6 @@ func (d *VPNServerDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Tran
 		return nil, err
 	}
 
-	if err := d.Client.Network.SetHandler(port, c); err != nil {
-		return nil, err
-	}
 	return c, nil
 }
 
@@ -89,14 +81,29 @@ type VPNTransport struct {
 	key        []byte
 	salt       []byte
 	port       uint16
-	calls      vpnCallMap
+	callsIn    vpnCallMap
+	callsOut   vpnCallMap
 	dispatcher Dispatcher
+}
+
+// Listen ...
+func (t *VPNTransport) Listen() error {
+	if err := t.client.Network.SetHandler(t.port, t); err != nil {
+		return err
+	}
+
+	<-t.ctx.Done()
+
+	t.client.Network.RemoveHandler(t.port)
+	t.client.Network.ReleasePort(t.port)
+
+	return t.ctx.Err()
 }
 
 // HandleMessage ...
 func (t *VPNTransport) HandleMessage(msg *vpn.Message) (bool, error) {
-	m := &pb.Call{}
-	if err := proto.Unmarshal(msg.Body, m); err != nil {
+	req := &pb.Call{}
+	if err := proto.Unmarshal(msg.Body, req); err != nil {
 		return false, nil
 	}
 
@@ -105,15 +112,21 @@ func (t *VPNTransport) HandleMessage(msg *vpn.Message) (bool, error) {
 		Port:   msg.Header.SrcPort,
 	}
 
-	call := NewCallIn(t.ctx, m, t.calls.Get(addr, m.ParentId))
-	t.calls.Insert(addr, call)
+	parentCallAccessor := &vpnParentCallAccessor{
+		addr:     addr,
+		id:       req.ParentId,
+		callsIn:  &t.callsIn,
+		callsOut: &t.callsOut,
+	}
+	call := NewCallIn(t.ctx, req, parentCallAccessor)
+	t.callsIn.Insert(addr, call)
 
+	go t.dispatcher.Dispatch(call)
 	go func() {
-		go t.dispatcher.Dispatch(call)
 		call.SendResponse(func(ctx context.Context, res *pb.Call) error {
 			return t.call(ctx, res, addr)
 		})
-		t.calls.Delete(addr, m.Id)
+		t.callsIn.Delete(addr, req.Id)
 	}()
 
 	return false, nil
@@ -130,8 +143,8 @@ func (t *VPNTransport) Call(call *CallOut, fn ResponseFunc) error {
 		return err
 	}
 
-	t.calls.Insert(addr, call)
-	defer t.calls.Delete(addr, call.ID())
+	t.callsOut.Insert(addr, call)
+	defer t.callsOut.Delete(addr, call.ID())
 
 	err = call.SendRequest(func(ctx context.Context, res *pb.Call) error {
 		return t.call(ctx, res, addr)
@@ -186,4 +199,19 @@ func (c *vpnCall) Less(o llrb.Item) bool {
 		return c.addr.HostID.Less(o.addr.HostID)
 	}
 	return !o.Less(c)
+}
+
+type vpnParentCallAccessor struct {
+	addr     *HostAddr
+	id       uint64
+	callsIn  *vpnCallMap
+	callsOut *vpnCallMap
+}
+
+func (a *vpnParentCallAccessor) ParentCallIn() *CallIn {
+	return a.callsOut.Get(a.addr, a.id).(*CallIn)
+}
+
+func (a *vpnParentCallAccessor) ParentCallOut() *CallOut {
+	return a.callsOut.Get(a.addr, a.id).(*CallOut)
 }

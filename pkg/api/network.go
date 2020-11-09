@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterNetworkService ...
@@ -72,11 +71,11 @@ type NetworkService interface {
 
 // NetworkClient ...
 type NetworkClient struct {
-	client *rpc.Client
+	client Caller
 }
 
 // NewNetworkClient ...
-func NewNetworkClient(client *rpc.Client) *NetworkClient {
+func NewNetworkClient(client Caller) *NetworkClient {
 	return &NetworkClient{client}
 }
 

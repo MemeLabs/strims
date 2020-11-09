@@ -27,8 +27,6 @@ func (d *RWDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Transport, 
 		dispatcher: dispatcher,
 	}
 
-	go t.Listen()
-
 	return t, nil
 }
 
@@ -37,15 +35,13 @@ type RWTransport struct {
 	ctx        context.Context
 	logger     *zap.Logger
 	rw         io.ReadWriter
-	calls      sync.Map
+	callsIn    sync.Map
+	callsOut   sync.Map
 	dispatcher Dispatcher
 }
 
 // Listen starts reading incoming calls
 func (t *RWTransport) Listen() error {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
 	var b []byte
 
 	for {
@@ -67,18 +63,23 @@ func (t *RWTransport) Listen() error {
 			continue
 		}
 
-		var parent *CallOut
-		if p, ok := t.calls.Load(req.ParentId); ok {
-			parent = p.(*CallOut)
+		parentCallAccessor := &rwParentCallAccessor{
+			id:       req.ParentId,
+			callsIn:  &t.callsIn,
+			callsOut: &t.callsOut,
 		}
-		call := NewCallIn(ctx, req, parent)
-		t.calls.Store(req.Id, call)
+		call := NewCallIn(t.ctx, req, parentCallAccessor)
+		t.callsIn.Store(req.Id, call)
 
+		go t.dispatcher.Dispatch(call)
 		go func() {
-			go t.dispatcher.Dispatch(call)
 			call.SendResponse(t.call)
-			t.calls.Delete(req.Id)
+			t.callsIn.Delete(req.Id)
 		}()
+
+		if err := t.ctx.Err(); err != nil {
+			return err
+		}
 	}
 }
 
@@ -103,12 +104,32 @@ func (t *RWTransport) call(ctx context.Context, call *pb.Call) error {
 
 // Call ...
 func (t *RWTransport) Call(call *CallOut, fn ResponseFunc) error {
-	t.calls.Store(call.ID(), call)
-	defer t.calls.Delete(call.ID())
+	t.callsOut.Store(call.ID(), call)
+	defer t.callsOut.Delete(call.ID())
 
 	if err := call.SendRequest(t.call); err != nil {
 		return err
 	}
 
 	return fn()
+}
+
+type rwParentCallAccessor struct {
+	id       uint64
+	callsIn  *sync.Map
+	callsOut *sync.Map
+}
+
+func (a *rwParentCallAccessor) ParentCallIn() *CallIn {
+	if p, ok := a.callsIn.Load(a.id); ok {
+		return p.(*CallIn)
+	}
+	return nil
+}
+
+func (a *rwParentCallAccessor) ParentCallOut() *CallOut {
+	if p, ok := a.callsOut.Load(a.id); ok {
+		return p.(*CallOut)
+	}
+	return nil
 }
