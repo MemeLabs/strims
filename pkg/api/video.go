@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterVideoService ...
@@ -52,11 +51,11 @@ type VideoService interface {
 
 // VideoClient ...
 type VideoClient struct {
-	client *rpc.Client
+	client Caller
 }
 
 // NewVideoClient ...
-func NewVideoClient(client *rpc.Client) *VideoClient {
+func NewVideoClient(client Caller) *VideoClient {
 	return &VideoClient{client}
 }
 

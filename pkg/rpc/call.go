@@ -9,6 +9,30 @@ import (
 	"github.com/golang/protobuf/proto"
 )
 
+// ResponseType ...
+type ResponseType int
+
+func (t ResponseType) String() string {
+	return responseTypeName[t]
+}
+
+// ResponseTypes ...
+const (
+	ResponseTypeNone = iota
+	ResponseTypeUndefined
+	ResponseTypeError
+	ResponseTypeStream
+	ResponseTypeValue
+)
+
+var responseTypeName = map[ResponseType]string{
+	ResponseTypeNone:      "NONE",
+	ResponseTypeUndefined: "UNDEFINED",
+	ResponseTypeError:     "ERROR",
+	ResponseTypeStream:    "STREAM",
+	ResponseTypeValue:     "VALUE",
+}
+
 // Dispatcher ...
 type Dispatcher interface {
 	Dispatch(*CallIn)
@@ -17,6 +41,17 @@ type Dispatcher interface {
 // Call ...
 type Call interface {
 	ID() uint64
+}
+
+// NewCallBase ...
+func NewCallBase(ctx context.Context) CallBase {
+	ctx, cancel := context.WithCancel(ctx)
+
+	return CallBase{
+		ctx:    ctx,
+		cancel: cancel,
+		res:    make(chan proto.Message),
+	}
 }
 
 // CallBase ...
@@ -37,25 +72,20 @@ func (c *CallBase) Cancel() {
 }
 
 // NewCallIn ...
-func NewCallIn(ctx context.Context, req *pb.Call, parent Call) *CallIn {
-	ctx, cancel := context.WithCancel(ctx)
-
+func NewCallIn(ctx context.Context, req *pb.Call, parentCallAcessor ParentCallAccessor) *CallIn {
 	return &CallIn{
-		CallBase: CallBase{
-			ctx:    ctx,
-			cancel: cancel,
-			res:    make(chan proto.Message),
-		},
-		req:    req,
-		parent: parent,
+		CallBase:           NewCallBase(ctx),
+		req:                req,
+		ParentCallAccessor: parentCallAcessor,
 	}
 }
 
 // CallIn ...
 type CallIn struct {
 	CallBase
-	req    *pb.Call
-	parent Call
+	ParentCallAccessor
+	req          *pb.Call
+	responseType ResponseType
 }
 
 // ID ...
@@ -68,9 +98,9 @@ func (c *CallIn) Method() string {
 	return c.req.Method
 }
 
-// Parent ...
-func (c *CallIn) Parent() Call {
-	return c.parent
+// ResponseType ...
+func (c *CallIn) ResponseType() ResponseType {
+	return c.responseType
 }
 
 // Argument ...
@@ -100,22 +130,30 @@ func (c *CallIn) SendResponse(fn SendFunc) error {
 	return nil
 }
 
+func (c *CallIn) returnNone() {
+	close(c.res)
+}
+
 func (c *CallIn) returnUndefined() {
+	c.responseType = ResponseTypeUndefined
 	c.res <- &pb.Undefined{}
 	close(c.res)
 }
 
 func (c *CallIn) returnError(err error) {
+	c.responseType = ResponseTypeError
 	c.res <- &pb.Error{Message: err.Error()}
 	close(c.res)
 }
 
 func (c *CallIn) returnValue(v proto.Message) {
+	c.responseType = ResponseTypeValue
 	c.res <- v
 	close(c.res)
 }
 
 func (c *CallIn) returnStream(v interface{}) {
+	c.responseType = ResponseTypeStream
 	defer close(c.res)
 
 	cases := []reflect.SelectCase{
@@ -144,35 +182,38 @@ func (c *CallIn) returnStream(v interface{}) {
 	}
 }
 
+var emptyCallOut = &CallOut{}
+
 // NewCallOut ...
 func NewCallOut(ctx context.Context, method string, arg proto.Message) (*CallOut, error) {
+	return NewCallOutWithParent(ctx, method, arg, emptyCallOut)
+}
+
+// NewCallOutWithParent ...
+func NewCallOutWithParent(ctx context.Context, method string, arg proto.Message, parent Call) (*CallOut, error) {
 	id, err := dao.GenerateSnowflake()
 	if err != nil {
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-
 	return &CallOut{
-		CallBase: CallBase{
-			ctx:    ctx,
-			cancel: cancel,
-			res:    make(chan proto.Message),
-		},
-		id:     id,
-		method: method,
-		arg:    arg,
-		errs:   make(chan error),
+		CallBase: NewCallBase(ctx),
+		id:       id,
+		parentID: parent.ID(),
+		method:   method,
+		arg:      arg,
+		errs:     make(chan error),
 	}, nil
 }
 
 // CallOut ...
 type CallOut struct {
 	CallBase
-	id     uint64
-	method string
-	arg    proto.Message
-	errs   chan error
+	id       uint64
+	parentID uint64
+	method   string
+	arg      proto.Message
+	errs     chan error
 }
 
 // ID ...
@@ -180,16 +221,22 @@ func (c *CallOut) ID() uint64 {
 	return c.id
 }
 
+// Method ...
+func (c *CallOut) Method() string {
+	return c.method
+}
+
 // SendRequest ...
 func (c *CallOut) SendRequest(fn SendFunc) error {
-	return send(c.ctx, c.id, 0, c.method, c.arg, fn)
+	return send(c.ctx, c.id, c.parentID, c.method, c.arg, fn)
 }
 
 // AssignResponse ...
 func (c *CallOut) AssignResponse(res *CallIn) {
-	for {
-		r := <-c.res
+	select {
+	case r := <-c.res:
 		c.errs <- unmarshalAny(res.req.Argument, r)
+	case <-c.ctx.Done():
 	}
 }
 
@@ -201,9 +248,6 @@ func (c *CallOut) ReadResponse(out proto.Message) error {
 			return err
 		}
 	case <-c.ctx.Done():
-		// if err := call(context.Background(), r.conn, cancelMethod, &pb.Cancel{}, withParentID(r.call.Id)); err != nil {
-		// 	r.logger.Debug("call failed", zap.Error(err))
-		// }
 		return c.ctx.Err()
 	}
 	return nil
@@ -222,7 +266,10 @@ func (c *CallOut) ReadResponseStream(res interface{}) error {
 
 	for {
 		v := reflect.New(ch.Type().Elem().Elem())
-		if err := c.ReadResponse(v.Interface().(proto.Message)); err != nil {
+		err := c.ReadResponse(v.Interface().(proto.Message))
+		if err == ErrClose {
+			return nil
+		} else if err != nil {
 			return err
 		}
 		ch.Send(v)

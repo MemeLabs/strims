@@ -22,3 +22,25 @@ message Cancel {}
 message Undefined {}
 
 message Close {}
+
+message RPCCallUnaryRequest {
+  uint64 id = 1;
+}
+
+message RPCCallUnaryResponse {
+  uint64 id = 1;
+}
+
+message RPCCallStreamRequest {
+  uint64 id = 1;
+  uint64 count = 2;
+}
+
+message RPCCallStreamResponse {
+  uint64 id = 1;
+}
+
+service RPCTest {
+  rpc CallUnary(RPCCallUnaryRequest) returns (RPCCallUnaryResponse);
+  rpc CallStream(RPCCallStreamRequest) returns (stream RPCCallStreamResponse);
+}

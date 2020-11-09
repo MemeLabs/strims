@@ -31418,6 +31418,847 @@ export const Close = $root.Close = (() => {
     return Close;
 })();
 
+export const RPCCallUnaryRequest = $root.RPCCallUnaryRequest = (() => {
+
+    /**
+     * Properties of a RPCCallUnaryRequest.
+     * @exports IRPCCallUnaryRequest
+     * @interface IRPCCallUnaryRequest
+     * @property {number|null} [id] RPCCallUnaryRequest id
+     */
+
+    /**
+     * Constructs a new RPCCallUnaryRequest.
+     * @exports RPCCallUnaryRequest
+     * @classdesc Represents a RPCCallUnaryRequest.
+     * @implements IRPCCallUnaryRequest
+     * @constructor
+     * @param {IRPCCallUnaryRequest=} [properties] Properties to set
+     */
+    function RPCCallUnaryRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * RPCCallUnaryRequest id.
+     * @member {number} id
+     * @memberof RPCCallUnaryRequest
+     * @instance
+     */
+    RPCCallUnaryRequest.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * Creates a new RPCCallUnaryRequest instance using the specified properties.
+     * @function create
+     * @memberof RPCCallUnaryRequest
+     * @static
+     * @param {IRPCCallUnaryRequest=} [properties] Properties to set
+     * @returns {RPCCallUnaryRequest} RPCCallUnaryRequest instance
+     */
+    RPCCallUnaryRequest.create = function create(properties) {
+        return new RPCCallUnaryRequest(properties);
+    };
+
+    /**
+     * Encodes the specified RPCCallUnaryRequest message. Does not implicitly {@link RPCCallUnaryRequest.verify|verify} messages.
+     * @function encode
+     * @memberof RPCCallUnaryRequest
+     * @static
+     * @param {IRPCCallUnaryRequest} message RPCCallUnaryRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    RPCCallUnaryRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified RPCCallUnaryRequest message, length delimited. Does not implicitly {@link RPCCallUnaryRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof RPCCallUnaryRequest
+     * @static
+     * @param {IRPCCallUnaryRequest} message RPCCallUnaryRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    RPCCallUnaryRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a RPCCallUnaryRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof RPCCallUnaryRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {RPCCallUnaryRequest} RPCCallUnaryRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    RPCCallUnaryRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.RPCCallUnaryRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a RPCCallUnaryRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof RPCCallUnaryRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {RPCCallUnaryRequest} RPCCallUnaryRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    RPCCallUnaryRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a RPCCallUnaryRequest message.
+     * @function verify
+     * @memberof RPCCallUnaryRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    RPCCallUnaryRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates a RPCCallUnaryRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof RPCCallUnaryRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {RPCCallUnaryRequest} RPCCallUnaryRequest
+     */
+    RPCCallUnaryRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.RPCCallUnaryRequest)
+            return object;
+        let message = new $root.RPCCallUnaryRequest();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a RPCCallUnaryRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof RPCCallUnaryRequest
+     * @static
+     * @param {RPCCallUnaryRequest} message RPCCallUnaryRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    RPCCallUnaryRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        return object;
+    };
+
+    /**
+     * Converts this RPCCallUnaryRequest to JSON.
+     * @function toJSON
+     * @memberof RPCCallUnaryRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    RPCCallUnaryRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return RPCCallUnaryRequest;
+})();
+
+export const RPCCallUnaryResponse = $root.RPCCallUnaryResponse = (() => {
+
+    /**
+     * Properties of a RPCCallUnaryResponse.
+     * @exports IRPCCallUnaryResponse
+     * @interface IRPCCallUnaryResponse
+     * @property {number|null} [id] RPCCallUnaryResponse id
+     */
+
+    /**
+     * Constructs a new RPCCallUnaryResponse.
+     * @exports RPCCallUnaryResponse
+     * @classdesc Represents a RPCCallUnaryResponse.
+     * @implements IRPCCallUnaryResponse
+     * @constructor
+     * @param {IRPCCallUnaryResponse=} [properties] Properties to set
+     */
+    function RPCCallUnaryResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * RPCCallUnaryResponse id.
+     * @member {number} id
+     * @memberof RPCCallUnaryResponse
+     * @instance
+     */
+    RPCCallUnaryResponse.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * Creates a new RPCCallUnaryResponse instance using the specified properties.
+     * @function create
+     * @memberof RPCCallUnaryResponse
+     * @static
+     * @param {IRPCCallUnaryResponse=} [properties] Properties to set
+     * @returns {RPCCallUnaryResponse} RPCCallUnaryResponse instance
+     */
+    RPCCallUnaryResponse.create = function create(properties) {
+        return new RPCCallUnaryResponse(properties);
+    };
+
+    /**
+     * Encodes the specified RPCCallUnaryResponse message. Does not implicitly {@link RPCCallUnaryResponse.verify|verify} messages.
+     * @function encode
+     * @memberof RPCCallUnaryResponse
+     * @static
+     * @param {IRPCCallUnaryResponse} message RPCCallUnaryResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    RPCCallUnaryResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified RPCCallUnaryResponse message, length delimited. Does not implicitly {@link RPCCallUnaryResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof RPCCallUnaryResponse
+     * @static
+     * @param {IRPCCallUnaryResponse} message RPCCallUnaryResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    RPCCallUnaryResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a RPCCallUnaryResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof RPCCallUnaryResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {RPCCallUnaryResponse} RPCCallUnaryResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    RPCCallUnaryResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.RPCCallUnaryResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a RPCCallUnaryResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof RPCCallUnaryResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {RPCCallUnaryResponse} RPCCallUnaryResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    RPCCallUnaryResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a RPCCallUnaryResponse message.
+     * @function verify
+     * @memberof RPCCallUnaryResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    RPCCallUnaryResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates a RPCCallUnaryResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof RPCCallUnaryResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {RPCCallUnaryResponse} RPCCallUnaryResponse
+     */
+    RPCCallUnaryResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.RPCCallUnaryResponse)
+            return object;
+        let message = new $root.RPCCallUnaryResponse();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a RPCCallUnaryResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof RPCCallUnaryResponse
+     * @static
+     * @param {RPCCallUnaryResponse} message RPCCallUnaryResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    RPCCallUnaryResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        return object;
+    };
+
+    /**
+     * Converts this RPCCallUnaryResponse to JSON.
+     * @function toJSON
+     * @memberof RPCCallUnaryResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    RPCCallUnaryResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return RPCCallUnaryResponse;
+})();
+
+export const RPCCallStreamRequest = $root.RPCCallStreamRequest = (() => {
+
+    /**
+     * Properties of a RPCCallStreamRequest.
+     * @exports IRPCCallStreamRequest
+     * @interface IRPCCallStreamRequest
+     * @property {number|null} [id] RPCCallStreamRequest id
+     * @property {number|null} [count] RPCCallStreamRequest count
+     */
+
+    /**
+     * Constructs a new RPCCallStreamRequest.
+     * @exports RPCCallStreamRequest
+     * @classdesc Represents a RPCCallStreamRequest.
+     * @implements IRPCCallStreamRequest
+     * @constructor
+     * @param {IRPCCallStreamRequest=} [properties] Properties to set
+     */
+    function RPCCallStreamRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * RPCCallStreamRequest id.
+     * @member {number} id
+     * @memberof RPCCallStreamRequest
+     * @instance
+     */
+    RPCCallStreamRequest.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * RPCCallStreamRequest count.
+     * @member {number} count
+     * @memberof RPCCallStreamRequest
+     * @instance
+     */
+    RPCCallStreamRequest.prototype.count = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * Creates a new RPCCallStreamRequest instance using the specified properties.
+     * @function create
+     * @memberof RPCCallStreamRequest
+     * @static
+     * @param {IRPCCallStreamRequest=} [properties] Properties to set
+     * @returns {RPCCallStreamRequest} RPCCallStreamRequest instance
+     */
+    RPCCallStreamRequest.create = function create(properties) {
+        return new RPCCallStreamRequest(properties);
+    };
+
+    /**
+     * Encodes the specified RPCCallStreamRequest message. Does not implicitly {@link RPCCallStreamRequest.verify|verify} messages.
+     * @function encode
+     * @memberof RPCCallStreamRequest
+     * @static
+     * @param {IRPCCallStreamRequest} message RPCCallStreamRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    RPCCallStreamRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        if (message.count != null && Object.hasOwnProperty.call(message, "count"))
+            writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.count);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified RPCCallStreamRequest message, length delimited. Does not implicitly {@link RPCCallStreamRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof RPCCallStreamRequest
+     * @static
+     * @param {IRPCCallStreamRequest} message RPCCallStreamRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    RPCCallStreamRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a RPCCallStreamRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof RPCCallStreamRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {RPCCallStreamRequest} RPCCallStreamRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    RPCCallStreamRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.RPCCallStreamRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
+            case 2:
+                message.count = reader.uint64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a RPCCallStreamRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof RPCCallStreamRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {RPCCallStreamRequest} RPCCallStreamRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    RPCCallStreamRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a RPCCallStreamRequest message.
+     * @function verify
+     * @memberof RPCCallStreamRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    RPCCallStreamRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        if (message.count != null && message.hasOwnProperty("count"))
+            if (!$util.isInteger(message.count) && !(message.count && $util.isInteger(message.count.low) && $util.isInteger(message.count.high)))
+                return "count: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates a RPCCallStreamRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof RPCCallStreamRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {RPCCallStreamRequest} RPCCallStreamRequest
+     */
+    RPCCallStreamRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.RPCCallStreamRequest)
+            return object;
+        let message = new $root.RPCCallStreamRequest();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        if (object.count != null)
+            if ($util.Long)
+                (message.count = $util.Long.fromValue(object.count)).unsigned = true;
+            else if (typeof object.count === "string")
+                message.count = parseInt(object.count, 10);
+            else if (typeof object.count === "number")
+                message.count = object.count;
+            else if (typeof object.count === "object")
+                message.count = new $util.LongBits(object.count.low >>> 0, object.count.high >>> 0).toNumber(true);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a RPCCallStreamRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof RPCCallStreamRequest
+     * @static
+     * @param {RPCCallStreamRequest} message RPCCallStreamRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    RPCCallStreamRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.count = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.count = options.longs === String ? "0" : 0;
+        }
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        if (message.count != null && message.hasOwnProperty("count"))
+            if (typeof message.count === "number")
+                object.count = options.longs === String ? String(message.count) : message.count;
+            else
+                object.count = options.longs === String ? $util.Long.prototype.toString.call(message.count) : options.longs === Number ? new $util.LongBits(message.count.low >>> 0, message.count.high >>> 0).toNumber(true) : message.count;
+        return object;
+    };
+
+    /**
+     * Converts this RPCCallStreamRequest to JSON.
+     * @function toJSON
+     * @memberof RPCCallStreamRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    RPCCallStreamRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return RPCCallStreamRequest;
+})();
+
+export const RPCCallStreamResponse = $root.RPCCallStreamResponse = (() => {
+
+    /**
+     * Properties of a RPCCallStreamResponse.
+     * @exports IRPCCallStreamResponse
+     * @interface IRPCCallStreamResponse
+     * @property {number|null} [id] RPCCallStreamResponse id
+     */
+
+    /**
+     * Constructs a new RPCCallStreamResponse.
+     * @exports RPCCallStreamResponse
+     * @classdesc Represents a RPCCallStreamResponse.
+     * @implements IRPCCallStreamResponse
+     * @constructor
+     * @param {IRPCCallStreamResponse=} [properties] Properties to set
+     */
+    function RPCCallStreamResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * RPCCallStreamResponse id.
+     * @member {number} id
+     * @memberof RPCCallStreamResponse
+     * @instance
+     */
+    RPCCallStreamResponse.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * Creates a new RPCCallStreamResponse instance using the specified properties.
+     * @function create
+     * @memberof RPCCallStreamResponse
+     * @static
+     * @param {IRPCCallStreamResponse=} [properties] Properties to set
+     * @returns {RPCCallStreamResponse} RPCCallStreamResponse instance
+     */
+    RPCCallStreamResponse.create = function create(properties) {
+        return new RPCCallStreamResponse(properties);
+    };
+
+    /**
+     * Encodes the specified RPCCallStreamResponse message. Does not implicitly {@link RPCCallStreamResponse.verify|verify} messages.
+     * @function encode
+     * @memberof RPCCallStreamResponse
+     * @static
+     * @param {IRPCCallStreamResponse} message RPCCallStreamResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    RPCCallStreamResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified RPCCallStreamResponse message, length delimited. Does not implicitly {@link RPCCallStreamResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof RPCCallStreamResponse
+     * @static
+     * @param {IRPCCallStreamResponse} message RPCCallStreamResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    RPCCallStreamResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a RPCCallStreamResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof RPCCallStreamResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {RPCCallStreamResponse} RPCCallStreamResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    RPCCallStreamResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.RPCCallStreamResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a RPCCallStreamResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof RPCCallStreamResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {RPCCallStreamResponse} RPCCallStreamResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    RPCCallStreamResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a RPCCallStreamResponse message.
+     * @function verify
+     * @memberof RPCCallStreamResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    RPCCallStreamResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates a RPCCallStreamResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof RPCCallStreamResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {RPCCallStreamResponse} RPCCallStreamResponse
+     */
+    RPCCallStreamResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.RPCCallStreamResponse)
+            return object;
+        let message = new $root.RPCCallStreamResponse();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a RPCCallStreamResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof RPCCallStreamResponse
+     * @static
+     * @param {RPCCallStreamResponse} message RPCCallStreamResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    RPCCallStreamResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        return object;
+    };
+
+    /**
+     * Converts this RPCCallStreamResponse to JSON.
+     * @function toJSON
+     * @memberof RPCCallStreamResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    RPCCallStreamResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return RPCCallStreamResponse;
+})();
+
 export const JoinSwarmRequest = $root.JoinSwarmRequest = (() => {
 
     /**

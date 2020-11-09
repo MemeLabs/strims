@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterChatService ...
@@ -57,11 +56,11 @@ type ChatService interface {
 
 // ChatClient ...
 type ChatClient struct {
-	client *rpc.Client
+	client Caller
 }
 
 // NewChatClient ...
-func NewChatClient(client *rpc.Client) *ChatClient {
+func NewChatClient(client Caller) *ChatClient {
 	return &ChatClient{client}
 }
 

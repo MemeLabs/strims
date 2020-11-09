@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterProfileService ...
@@ -52,11 +51,11 @@ type ProfileService interface {
 
 // ProfileClient ...
 type ProfileClient struct {
-	client *rpc.Client
+	client Caller
 }
 
 // NewProfileClient ...
-func NewProfileClient(client *rpc.Client) *ProfileClient {
+func NewProfileClient(client Caller) *ProfileClient {
 	return &ProfileClient{client}
 }
 

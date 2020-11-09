@@ -173,16 +173,15 @@ func (s *peer) readMessages() {
 }
 
 func (s *peer) handlePublish(r *pb.BootstrapServiceMessage_PublishRequest) error {
+	if _, err := s.vpn.AddNetwork(r.Certificate); err != nil {
+		return err
+	}
+
 	network, err := dao.NewNetworkFromCertificate(r.Certificate)
 	if err != nil {
 		return err
 	}
-	err = dao.UpsertNetwork(s.store, network)
-	if err != nil {
-		return err
-	}
-
-	if _, err = s.vpn.AddNetwork(r.Certificate); err != nil {
+	if err := dao.UpsertNetwork(s.store, network); err != nil {
 		return err
 	}
 

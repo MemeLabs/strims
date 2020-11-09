@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterBrokerProxyService ...
@@ -42,11 +41,11 @@ type BrokerProxyService interface {
 
 // BrokerProxyClient ...
 type BrokerProxyClient struct {
-	client *rpc.Client
+	client Caller
 }
 
 // NewBrokerProxyClient ...
-func NewBrokerProxyClient(client *rpc.Client) *BrokerProxyClient {
+func NewBrokerProxyClient(client Caller) *BrokerProxyClient {
 	return &BrokerProxyClient{client}
 }
 
