@@ -214,6 +214,7 @@ func (m *webRTCMediator) SendICECandidate(candidate []byte) error {
 	return m.network.SendProto(m.id, vnic.PeerExchangePort, vnic.PeerExchangePort, msg)
 }
 
+// PeerExchange ...
 type PeerExchange interface {
 	Connect(hostID kademlia.ID) error
 }
@@ -236,7 +237,7 @@ type peerExchange struct {
 
 // HandleMessage ...
 func (s *peerExchange) HandleMessage(msg *Message) (bool, error) {
-	if !msg.Header.DstID.Equals(s.network.host.ID()) || msg.Hops() == 0 {
+	if !msg.Header.DstID.Equals(s.network.host.ID()) || msg.Trailer.Hops == 0 {
 		return true, nil
 	}
 
@@ -307,7 +308,7 @@ func (s *peerExchange) sendCallbackRequest(hostID kademlia.ID) error {
 
 func (s *peerExchange) handleCallbackRequest(m *pb.PeerExchangeMessage_CallbackRequest, msg *Message) error {
 	go func() {
-		if err := s.dial(newWebRTCMediator(msg.FromHostID(), s.network)); err != nil {
+		if err := s.dial(newWebRTCMediator(msg.SrcHostID(), s.network)); err != nil {
 			s.logger.Debug(
 				"dial failed handling callback request",
 				zap.Error(err),
@@ -320,10 +321,10 @@ func (s *peerExchange) handleCallbackRequest(m *pb.PeerExchangeMessage_CallbackR
 func (s *peerExchange) handleOffer(m *pb.PeerExchangeMessage_Offer, msg *Message) error {
 	s.logger.Debug(
 		"handling offer",
-		zap.Stringer("host", msg.FromHostID()),
+		zap.Stringer("host", msg.SrcHostID()),
 	)
 	go func() {
-		if err := s.dial(newWebRTCMediatorFromOffer(msg.FromHostID(), s.network, m.MediationId, m.Data)); err != nil {
+		if err := s.dial(newWebRTCMediatorFromOffer(msg.SrcHostID(), s.network, m.MediationId, m.Data)); err != nil {
 			s.logger.Debug(
 				"dial failed for newMediatorFromOffer",
 				zap.Error(err),
@@ -369,18 +370,18 @@ func (s *peerExchange) dial(t *webRTCMediator) error {
 }
 
 func (s *peerExchange) handleAnswer(m *pb.PeerExchangeMessage_Answer, msg *Message) error {
-	t, ok := s.mediators[msg.FromHostID()]
+	t, ok := s.mediators[msg.SrcHostID()]
 	if !ok {
-		return fmt.Errorf("no mediator to handle answer from %s", msg.FromHostID())
+		return fmt.Errorf("no mediator to handle answer from %s", msg.SrcHostID())
 	}
 
 	return t.SetAnswer(m.MediationId, m.Data)
 }
 
 func (s *peerExchange) handleICECandidate(m *pb.PeerExchangeMessage_IceCandidate, msg *Message) error {
-	t, ok := s.mediators[msg.FromHostID()]
+	t, ok := s.mediators[msg.SrcHostID()]
 	if !ok || t.remoteMediationID != m.MediationId {
-		return fmt.Errorf("no mediator to handle ice candidate from %s", msg.FromHostID())
+		return fmt.Errorf("no mediator to handle ice candidate from %s", msg.SrcHostID())
 	}
 
 	done, err := t.addICECandidate(m.Index, m.Data)
@@ -388,7 +389,7 @@ func (s *peerExchange) handleICECandidate(m *pb.PeerExchangeMessage_IceCandidate
 		return err
 	}
 	if done {
-		delete(s.mediators, msg.FromHostID())
+		delete(s.mediators, msg.SrcHostID())
 	}
 	return nil
 }

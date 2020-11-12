@@ -127,7 +127,7 @@ func (s *NickServ) HandleMessage(msg *vpn.Message) (forward bool, err error) {
 		return true, err
 	}
 
-	valid := ed25519.Verify(m.SourcePublicKey, msg.Body, msg.Trailers[0].Signature)
+	valid := ed25519.Verify(m.SourcePublicKey, msg.Body, msg.Trailer.Entries[0].Signature)
 	if !valid {
 		s.logger.Warn("failed to verify message signature",
 			zap.Uint64("requestID", m.RequestId),
@@ -167,7 +167,7 @@ func (s *NickServ) HandleMessage(msg *vpn.Message) (forward bool, err error) {
 
 	// TODO: return some errors that can occur during handling
 
-	return false, s.Send(resp, msg.Trailers[0].HostID, msg.Header.SrcPort, msg.Header.DstPort)
+	return false, s.Send(resp, msg.Trailer.Entries[0].HostID, msg.Header.SrcPort, msg.Header.DstPort)
 }
 
 func (s *NickServ) Send(msg proto.Message, dstID kademlia.ID, dstPort, srcPort uint16) error {

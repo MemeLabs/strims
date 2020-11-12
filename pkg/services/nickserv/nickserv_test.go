@@ -65,8 +65,14 @@ func TestRequestFailsOnUnverifiedSignature(t *testing.T) {
 	assert.NoError(t, err)
 
 	message := &vpn.Message{
-		Body:     body,
-		Trailers: vpn.Trailers{vpn.MessageTrailer{Signature: []byte{0xAB}}},
+		Body: body,
+		Trailer: vpn.MessageTrailer{
+			Entries: []vpn.MessageTrailerEntry{
+				{
+					Signature: []byte{0xAB},
+				},
+			},
+		},
 	}
 
 	_, err = nickServ.HandleMessage(message)

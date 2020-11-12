@@ -108,7 +108,7 @@ func (t *VPNTransport) HandleMessage(msg *vpn.Message) (bool, error) {
 	}
 
 	addr := &HostAddr{
-		HostID: msg.Trailers[0].HostID,
+		HostID: msg.SrcHostID(),
 		Port:   msg.Header.SrcPort,
 	}
 
@@ -209,9 +209,15 @@ type vpnParentCallAccessor struct {
 }
 
 func (a *vpnParentCallAccessor) ParentCallIn() *CallIn {
-	return a.callsOut.Get(a.addr, a.id).(*CallIn)
+	if p := a.callsOut.Get(a.addr, a.id); p != nil {
+		return p.(*CallIn)
+	}
+	return nil
 }
 
 func (a *vpnParentCallAccessor) ParentCallOut() *CallOut {
-	return a.callsOut.Get(a.addr, a.id).(*CallOut)
+	if p := a.callsOut.Get(a.addr, a.id); p != nil {
+		return p.(*CallOut)
+	}
+	return nil
 }

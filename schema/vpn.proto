@@ -58,19 +58,24 @@ message NetworkHandshake {
   }
 
   message CertificateUpgradeOffer {
-    repeated bytes network_keys = 1;
+    bytes network_key = 1;
   }
 
   message CertificateUpgradeRequest {
-    repeated Certificate network_keys = 1;
+    Certificate certificate = 1;
+    CertificateRequest certificate_request = 2;
   }
 
   message CertificateUpgradeResponse {
-    repeated Certificate certificates = 1;
+    bytes network_key = 1;
+    oneof body {
+      Certificate certificate = 2;
+      string error = 3;
+    }
   }
 
   message CertificateUpdate {
-    repeated Certificate certificates = 1;
+    Certificate certificate = 1;
   }
 
   oneof body {
@@ -270,7 +275,7 @@ service Bootstrap {
 }
 
 message CARenewRequest {
-  Certificate invite_certificate = 1;
+  Certificate certificate = 1;
   CertificateRequest certificate_request = 2;
 }
 

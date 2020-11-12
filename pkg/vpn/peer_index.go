@@ -32,6 +32,7 @@ const peerIndexMaxSize = 5120
 
 var nextPeerIndexID uint32
 
+// PeerIndex ...
 type PeerIndex interface {
 	Publish(ctx context.Context, key, salt []byte, port uint16) error
 	Search(ctx context.Context, key, salt []byte) (<-chan *PeerIndexHost, error)
@@ -73,11 +74,7 @@ func (s *peerIndex) HandleMessage(msg *Message) (forward bool, err error) {
 	case *pb.PeerIndexMessage_Unpublish_:
 		err = s.handleUnpublish(b.Unpublish.Record)
 	case *pb.PeerIndexMessage_SearchRequest_:
-		originHostID := s.network.host.ID()
-		if len(msg.Trailers) != 0 {
-			originHostID = msg.Trailers[0].HostID
-		}
-		err = s.handleSearchRequest(b.SearchRequest, originHostID)
+		err = s.handleSearchRequest(b.SearchRequest, msg.SrcHostID())
 	case *pb.PeerIndexMessage_SearchResponse_:
 		err = s.handleSearchResponse(b.SearchResponse)
 	default:

@@ -117,6 +117,8 @@ func (c *CallIn) Argument() (interface{}, error) {
 
 // SendResponse ...
 func (c *CallIn) SendResponse(fn SendFunc) error {
+	defer c.cancel()
+
 	for res := range c.res {
 		id, err := dao.GenerateSnowflake()
 		if err != nil {

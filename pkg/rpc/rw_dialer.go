@@ -40,7 +40,7 @@ type RWTransport struct {
 	dispatcher Dispatcher
 }
 
-// Listen starts reading incoming calls
+// Listen reads incoming calls
 func (t *RWTransport) Listen() error {
 	var b []byte
 

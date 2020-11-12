@@ -9,7 +9,9 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/services/network"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -21,27 +23,36 @@ var (
 )
 
 func newNetworkService(ctx context.Context, logger *zap.Logger, profile *pb.Profile, store *dao.ProfileStore, vpnHost *vpn.Host) (api.NetworkService, error) {
-	networks, err := dao.GetNetworks(store)
-	if err != nil {
-		return nil, err
-	}
-	for _, n := range networks {
-		if _, err := vpnHost.AddNetwork(n.Certificate); err != nil {
-			return nil, err
-		}
-	}
-
 	svc := &networkService{
+		ctx:     ctx,
 		logger:  logger,
 		profile: profile,
 		store:   store,
 		vpnHost: vpnHost,
 	}
+
+	networks, err := dao.GetNetworks(store)
+	if err != nil {
+		return nil, err
+	}
+	for _, n := range networks {
+		if err := svc.startNetwork(ctx, n); err != nil {
+			cert := dao.GetRootCert(n.Certificate)
+			logger.Debug(
+				"starting network failed",
+				zap.String("networkName", cert.Subject),
+				logutil.ByteHex("networkKey", cert.Key),
+				zap.Error(err),
+			)
+		}
+	}
+
 	return svc, nil
 }
 
 // networkService ...
 type networkService struct {
+	ctx     context.Context
 	logger  *zap.Logger
 	profile *pb.Profile
 	store   *dao.ProfileStore
@@ -59,7 +70,7 @@ func (s *networkService) Create(ctx context.Context, r *pb.CreateNetworkRequest)
 		return nil, err
 	}
 
-	if _, err := s.vpnHost.AddNetwork(network.Certificate); err != nil {
+	if err := s.startNetwork(s.ctx, network); err != nil {
 		return nil, err
 	}
 
@@ -170,11 +181,11 @@ func (s *networkService) CreateFromInvitation(ctx context.Context, r *pb.CreateN
 		return nil, err
 	}
 
-	if err := dao.UpsertNetwork(s.store, network); err != nil {
+	if err := s.startNetwork(s.ctx, network); err != nil {
 		return nil, err
 	}
 
-	if _, err := s.vpnHost.AddNetwork(network.Certificate); err != nil {
+	if err := dao.UpsertNetwork(s.store, network); err != nil {
 		return nil, err
 	}
 
@@ -183,90 +194,30 @@ func (s *networkService) CreateFromInvitation(ctx context.Context, r *pb.CreateN
 	}, nil
 }
 
-type vpnKeyType struct{}
-
-var vpnKey = vpnKeyType{}
-
-type vpnData struct {
-	host *vpn.Host
-	// controller       *NetworkController
-	// bootstrapService *BootstrapService
-}
-
 // StartVPN ...
 func (s *networkService) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (<-chan *pb.NetworkEvent, error) {
-	// session, err := contextSession(ctx)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// // TODO: locking...
-	// if _, ok := session.Values.Load(vpnKey); ok {
-	// 	return nil, errors.New("vpn already running")
-	// }
-
-	// profile, err := dao.GetProfile(s.store)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// host, err := s.newVPNHost(profile.Key)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// if err := StartBootstrapClients(s.logger, host, s.store); err != nil {
-	// 	return nil, err
-	// }
-
-	// networkController, err := NewNetworkController(s.logger, host, s.store)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// bootstrapService := NewBootstrapService(
-	// 	s.logger,
-	// 	host,
-	// 	s.store,
-	// 	networkController,
-	// 	BootstrapServiceOptions{
-	// 		EnablePublishing: r.EnableBootstrapPublishing,
-	// 	},
-	// )
-
-	// session.Values.Store(vpnKey, vpnData{host, networkController, bootstrapService})
-
-	// return networkController.Events(), nil
 	return nil, errors.New("not implemented")
 }
 
 // StopVPN ...
 func (s *networkService) StopVPN(ctx context.Context, r *pb.StopVPNRequest) (*pb.StopVPNResponse, error) {
-	// if vi, ok := session.Values.Load(vpnKey); ok {
-	// 	v := vi.(vpnData)
-	// 	v.host.Close()
-	// 	session.Values.Delete(vpnKey)
-	// }
-
-	// return &pb.StopVPNResponse{}, nil
 	return nil, errors.New("not implemented")
 }
 
-// func (s *Network) startNetwork(ctx context.Context, membership *pb.NetworkMembership, network *pb.Network) error {
-// 	controller, err := s.getNetworkController(ctx)
-// 	if err != nil {
-// 		return err
-// 	}
+func (s *networkService) startNetwork(ctx context.Context, n *pb.Network) error {
+	client, err := s.vpnHost.AddNetwork(n.Certificate)
+	if err != nil {
+		return err
+	}
 
-// 	// TODO: restart/update network with new cert?
-// 	if network == nil {
-// 		_, err = controller.StartNetwork(membership.Certificate, WithMemberServices(s.logger))
-// 	} else {
-// 		store := ContextSession(ctx).ProfileStore()
-// 		_, err = controller.StartNetwork(membership.Certificate, WithOwnerServices(s.logger, store, network))
-// 	}
-// 	return err
-// }
+	if n.Key != nil {
+		_, err := network.NewCA(ctx, s.logger, client, n)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
 
 // // loads the NetworkController fron the session store
 // // TODO: move to (s *Session) getNetworkController ?

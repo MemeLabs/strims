@@ -58,18 +58,70 @@ func (m *MessageHeader) Unmarshal(b []byte) (n int, err error) {
 
 const messageTrailerLen = kademlia.IDLength + 64
 
-// Trailers represents the messages path
+// MessageTrailer represents the messages path
 // index 0 is the sender and subsequent indexes are hops
-type Trailers []MessageTrailer
-
-// MessageTrailer represents a node in the message path
 type MessageTrailer struct {
+	Hops    int
+	Entries []MessageTrailerEntry
+}
+
+// Size ...
+func (m *MessageTrailer) Size() int {
+	return m.Hops*messageTrailerLen + messageTrailerLen
+}
+
+// Unmarshal ...
+func (m *MessageTrailer) Unmarshal(b []byte) (n int, err error) {
+	m.Hops = len(b) / messageTrailerLen
+	m.Entries = make([]MessageTrailerEntry, m.Hops)
+	for i := 0; i < m.Hops; i++ {
+		d, err := m.Entries[i].Unmarshal(b[n : n+messageTrailerLen])
+		if err != nil {
+			return 0, err
+		}
+		n += d
+	}
+	return n, err
+}
+
+// Marshal ...
+func (m *MessageTrailer) Marshal(b []byte, msg []byte, host *vnic.Host) (n int, err error) {
+	for i := 0; i < m.Hops; i++ {
+		d, err := m.Entries[i].Marshal(b[n:])
+		if err != nil {
+			return 0, err
+		}
+		n += d
+	}
+
+	d, err := host.ID().Marshal(b[n:])
+	if err != nil {
+		return 0, err
+	}
+	n += d
+	n += copy(b[n:], ed25519.Sign(host.Key().Private, msg))
+
+	return n, nil
+}
+
+// Contains ...
+func (m MessageTrailer) Contains(hostID kademlia.ID) bool {
+	for i := 0; i < m.Hops; i++ {
+		if m.Entries[i].HostID.Equals(hostID) {
+			return true
+		}
+	}
+	return false
+}
+
+// MessageTrailerEntry represents a node in the message path
+type MessageTrailerEntry struct {
 	HostID    kademlia.ID
 	Signature []byte
 }
 
 // Marshal ...
-func (m *MessageTrailer) Marshal(b []byte) (n int, err error) {
+func (m *MessageTrailerEntry) Marshal(b []byte) (n int, err error) {
 	if len(b) < messageTrailerLen {
 		return 0, errBufferTooSmall
 	}
@@ -81,7 +133,7 @@ func (m *MessageTrailer) Marshal(b []byte) (n int, err error) {
 }
 
 // Unmarshal ...
-func (m *MessageTrailer) Unmarshal(b []byte) (n int, err error) {
+func (m *MessageTrailerEntry) Unmarshal(b []byte) (n int, err error) {
 	if len(b) < messageTrailerLen {
 		return 0, errBufferTooSmall
 	}
@@ -93,21 +145,11 @@ func (m *MessageTrailer) Unmarshal(b []byte) (n int, err error) {
 	return messageTrailerLen, nil
 }
 
-// Contains ...
-func (t Trailers) Contains(hostID kademlia.ID) bool {
-	for i := range t {
-		if t[i].HostID.Equals(hostID) {
-			return true
-		}
-	}
-	return false
-}
-
 // Message ...
 type Message struct {
-	Header   MessageHeader
-	Body     []byte
-	Trailers Trailers
+	Header  MessageHeader
+	Body    []byte
+	Trailer MessageTrailer
 }
 
 // MessageID ...
@@ -121,26 +163,18 @@ func (m MessageID) String() string {
 // ID ...
 func (m *Message) ID() (id MessageID) {
 	binary.BigEndian.PutUint16(id[:2], m.Header.Seq)
-	m.FromHostID().Bytes(id[2:])
+	m.SrcHostID().Bytes(id[2:])
 	return
 }
 
 // Size ...
 func (m *Message) Size() int {
-	return messageHeaderLen + len(m.Body) + (m.Hops()+1)*messageTrailerLen
+	return messageHeaderLen + len(m.Body) + m.Trailer.Size()
 }
 
-// Hops ...
-func (m *Message) Hops() int {
-	return len(m.Trailers)
-}
-
-// FromHostID ...
-func (m *Message) FromHostID() (id kademlia.ID) {
-	if len(m.Trailers) == 0 {
-		return
-	}
-	return m.Trailers[0].HostID
+// SrcHostID ...
+func (m *Message) SrcHostID() (id kademlia.ID) {
+	return m.Trailer.Entries[0].HostID
 }
 
 // Marshal ...
@@ -151,26 +185,17 @@ func (m *Message) Marshal(b []byte, host *vnic.Host) (n int, err error) {
 
 	d, err := m.Header.Marshal(b)
 	if err != nil {
-		return
+		return 0, err
 	}
 	n += d
 
 	n += copy(b[n:], m.Body)
 
-	for i := 0; i < m.Hops(); i++ {
-		d, err = m.Trailers[i].Marshal(b[n:])
-		if err != nil {
-			return
-		}
-		n += d
-	}
-
-	d, err = host.ID().Marshal(b[n:])
+	d, err = m.Trailer.Marshal(b[n:], b[:n], host)
 	if err != nil {
-		return
+		return 0, err
 	}
 	n += d
-	n += copy(b[n:], ed25519.Sign(host.Key().Private, b[:n]))
 
 	return n, nil
 }
@@ -190,14 +215,11 @@ func (m *Message) Unmarshal(b []byte) (n int, err error) {
 	m.Body = b[n:d]
 	n = d
 
-	m.Trailers = make([]MessageTrailer, (len(b)-n)/messageTrailerLen)
-	for i := 0; i < len(m.Trailers); i++ {
-		d, err = m.Trailers[i].Unmarshal(b[n : n+messageTrailerLen])
-		if err != nil {
-			return 0, err
-		}
-		n += d
+	d, err = m.Trailer.Unmarshal(b[n:])
+	if err != nil {
+		return 0, err
 	}
+	n += d
 
 	return n, nil
 }

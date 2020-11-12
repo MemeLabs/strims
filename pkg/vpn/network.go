@@ -1,7 +1,9 @@
 package vpn
 
 import (
+	"errors"
 	"fmt"
+	"log"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -219,19 +221,25 @@ func (n *Network) HasPeer(id kademlia.ID) bool {
 }
 
 // handleFrame ...
-func (n *Network) handleFrame(_ *vnic.Peer, f vnic.Frame) error {
+func (n *Network) handleFrame(p *vnic.Peer, f vnic.Frame) error {
 	var m Message
 	if _, err := m.Unmarshal(f.Body); err != nil {
 		return fmt.Errorf("failed to read message from frame: %w", err)
 	}
 
-	if ok, _ := n.recentMessageIDs.ContainsOrAdd(m.ID(), struct{}{}); ok {
-		return nil
+	lastHopIndex := m.Trailer.Hops - 1
+
+	if lastHopIndex < 0 || !m.Trailer.Entries[lastHopIndex].HostID.Equals(p.HostID()) {
+		log.Println("caught by new memes...")
+		return errors.New("message last hop trailer mismatch")
 	}
 
-	lastHopIndex := len(m.Trailers) - 1
 	for i := 0; i < lastHopIndex; i++ {
-		n.nextHop.Insert(m.Trailers[i].HostID, m.Trailers[lastHopIndex].HostID, lastHopIndex-i)
+		n.nextHop.Insert(m.Trailer.Entries[i].HostID, m.Trailer.Entries[lastHopIndex].HostID, lastHopIndex-i)
+	}
+
+	if ok, _ := n.recentMessageIDs.ContainsOrAdd(m.ID(), struct{}{}); ok {
+		return nil
 	}
 
 	return n.handleMessage(&m)
@@ -239,12 +247,12 @@ func (n *Network) handleFrame(_ *vnic.Peer, f vnic.Frame) error {
 
 // Send ...
 func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
-	// n.logger.Debug(
-	// 	"sending message",
-	// 	zap.Stringer("dst", id),
-	// 	zap.Uint16("srcPort", srcPort),
-	// 	zap.Uint16("dstPort", port),
-	// )
+	n.logger.Debug(
+		"sending message",
+		zap.Stringer("dst", id),
+		zap.Uint16("srcPort", srcPort),
+		zap.Uint16("dstPort", port),
+	)
 	return n.handleMessage(&Message{
 		Header: MessageHeader{
 			DstID:   id,
@@ -254,6 +262,13 @@ func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
 			Length:  uint16(len(b)),
 		},
 		Body: b,
+		Trailer: MessageTrailer{
+			Entries: []MessageTrailerEntry{
+				{
+					HostID: n.host.ID(),
+				},
+			},
+		},
 	})
 }
 
@@ -271,34 +286,29 @@ func (n *Network) SendProto(id kademlia.ID, port, srcPort uint16, msg proto.Mess
 }
 
 func (n *Network) handleMessage(m *Message) error {
-	if m.Header.DstID.Equals(n.host.ID()) {
-		// var src kademlia.ID
-		// if len(m.Trailers) != 0 {
-		// 	src = m.Trailers[0].HostID
-		// }
-		// n.logger.Debug(
-		// 	"received message",
-		// 	zap.Stringer("src", src),
-		// 	zap.Uint16("srcPort", m.Header.SrcPort),
-		// 	zap.Uint16("dstPort", m.Header.DstPort),
-		// )
-		_, err := n.callHandler(m)
-		return err
-	}
+	n.logger.Debug(
+		"received message",
+		zap.Stringer("src", m.SrcHostID()),
+		zap.Uint16("srcPort", m.Header.SrcPort),
+		zap.Uint16("dstPort", m.Header.DstPort),
+	)
 
 	if m.Header.DstPort < reservedPortCount {
 		forward, err := n.callHandler(m)
 		if !forward || err != nil {
 			return err
 		}
+	} else if m.Header.DstID.Equals(n.host.ID()) {
+		_, err := n.callHandler(m)
+		return err
 	}
 
-	if m.Trailers.Contains(n.host.ID()) {
+	if m.Trailer.Contains(n.host.ID()) {
 		n.logger.Debug("dropping message we've already forwarded")
 		return nil
 	}
 
-	if m.Hops() >= maxMessageHops {
+	if m.Trailer.Hops >= maxMessageHops {
 		// n.logger.Debug("dropping message after too many hops")
 		return nil
 	}
@@ -351,7 +361,7 @@ func (n *Network) sendMessage(m *Message) error {
 	for _, li := range conns[:ln] {
 		l := li.(*networkLink)
 
-		if m.Trailers.Contains(l.ID()) {
+		if m.Trailer.Contains(l.ID()) {
 			continue
 		}
 
@@ -366,7 +376,7 @@ func (n *Network) sendMessage(m *Message) error {
 			break
 		}
 
-		if k++; k >= maxMessageReplicas-len(m.Trailers) {
+		if k++; k >= maxMessageReplicas-m.Trailer.Hops {
 			break
 		}
 	}
