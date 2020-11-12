@@ -33,7 +33,7 @@ func TestCA(t *testing.T) {
 	assert.Nil(t, err)
 
 	csr, err := dao.NewCertificateRequest(
-		cluster.Nodes[0].Profile.Key,
+		cluster.Nodes[1].Profile.Key,
 		pb.KeyUsage_KEY_USAGE_PEER|pb.KeyUsage_KEY_USAGE_SIGN,
 		dao.WithSubject(cluster.Nodes[1].Profile.Name),
 	)
@@ -42,7 +42,7 @@ func TestCA(t *testing.T) {
 	assert.Nil(t, err)
 
 	req := &pb.CARenewRequest{
-		InviteCertificate:  network.Certificate,
+		Certificate:        network.Certificate,
 		CertificateRequest: csr,
 	}
 	res := &pb.CARenewResponse{}

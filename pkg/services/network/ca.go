@@ -12,7 +12,7 @@ import (
 	"go.uber.org/zap"
 )
 
-var caSalt = []byte("ca:addr")
+var caSalt = []byte("ca")
 
 const clientTimeout = time.Second * 5
 
@@ -23,10 +23,10 @@ func NewCA(ctx context.Context, logger *zap.Logger, client *vpn.Client, network 
 		network: network,
 	}
 
-	host := rpc.NewServer(logger)
-	api.RegisterCAService(host, ca)
+	server := rpc.NewServer(logger)
+	api.RegisterCAService(server, ca)
 
-	go host.Listen(ctx, &rpc.VPNServerDialer{
+	go server.Listen(ctx, &rpc.VPNServerDialer{
 		Logger: logger,
 		Client: client,
 		Key:    network.Key,
@@ -73,7 +73,7 @@ func (s *CA) Renew(ctxt context.Context, req *pb.CARenewRequest) (*pb.CARenewRes
 // NewCAClient ...
 func NewCAClient(logger *zap.Logger, client *vpn.Client) (*api.CAClient, error) {
 	key := dao.GetRootCert(client.Network.Certificate()).Key
-	rpcClient, err := rpc.NewClient(&rpc.VPNDialer{
+	rpcClient, err := rpc.NewClient(logger, &rpc.VPNDialer{
 		Logger: logger,
 		Client: client,
 		Key:    key,

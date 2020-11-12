@@ -30,8 +30,6 @@ const hashTableDiscardInterval = time.Minute
 const hashTableMaxRecordAge = 30 * time.Minute
 const hashTableMaxSize = 5120
 
-var nextHashTableID uint32
-
 // HashTable ...
 type HashTable interface {
 	Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error)
@@ -39,15 +37,9 @@ type HashTable interface {
 }
 
 func newHashTable(logger *zap.Logger, n *Network, store *HashTableStore) *hashTable {
-	id := atomic.AddUint32(&nextHashTableID, 1)
-	if id == 0 {
-		panic("hash table id overflow")
-	}
-
 	return &hashTable{
 		logger:  logger,
-		id:      id,
-		store:   store,
+		store:   store.accessor(),
 		network: n,
 	}
 }
@@ -55,15 +47,14 @@ func newHashTable(logger *zap.Logger, n *Network, store *HashTableStore) *hashTa
 // HashTable ...
 type hashTable struct {
 	logger              *zap.Logger
-	id                  uint32
-	store               *HashTableStore
+	store               *hashTableStoreAccesstor
 	network             *Network
 	searchResponseChans sync.Map
 }
 
 // HandleMessage ...
 func (s *hashTable) HandleMessage(msg *Message) (forward bool, err error) {
-	if len(msg.Trailers) == 0 {
+	if msg.Trailer.Hops == 0 {
 		return true, nil
 	}
 
@@ -78,7 +69,7 @@ func (s *hashTable) HandleMessage(msg *Message) (forward bool, err error) {
 	case *pb.HashTableMessage_Unpublish_:
 		err = s.handleUnpublish(b.Unpublish.Record)
 	case *pb.HashTableMessage_GetRequest_:
-		err = s.handleGetRequest(b.GetRequest, msg.Trailers[0].HostID)
+		err = s.handleGetRequest(b.GetRequest, msg.SrcHostID())
 	case *pb.HashTableMessage_GetResponse_:
 		err = s.handleGetResponse(b.GetResponse, msg.Header.DstID)
 	default:
@@ -93,7 +84,7 @@ func (s *hashTable) handlePublish(r *pb.HashTableMessage_Record) error {
 		return errors.New("invalid record signature")
 	}
 
-	s.store.Upsert(s.id, r)
+	s.store.upsert(r)
 	return nil
 }
 
@@ -102,11 +93,11 @@ func (s *hashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
 		return errors.New("invalid record signature")
 	}
 
-	return s.store.Remove(s.id, r)
+	return s.store.remove(r)
 }
 
 func (s *hashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHostID kademlia.ID) error {
-	record := s.store.Get(s.id, m.Hash)
+	record := s.store.get(m.Hash)
 	if record == nil || record.Timestamp <= m.IfModifiedSince {
 		return nil
 	}
@@ -127,7 +118,7 @@ func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse, target
 		return nil
 	}
 
-	if !s.store.Upsert(s.id, m.Record) {
+	if !s.store.upsert(m.Record) {
 		return nil
 	}
 
@@ -147,7 +138,7 @@ func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse, target
 
 // Set ...
 func (s *hashTable) Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error) {
-	return newHashTablePublisher(ctx, s.logger, s.network, key, salt, value)
+	return newHashTablePublisher(ctx, s.logger, s.network, s.store, key, salt, value)
 }
 
 type hashTableGetOptions struct {
@@ -187,7 +178,7 @@ func (s *hashTable) Get(ctx context.Context, key, salt []byte, options ...HashTa
 	values := make(chan []byte, 32)
 
 	if !opts.disableCache {
-		if record := s.store.Get(s.id, hash); record != nil {
+		if record := s.store.get(hash); record != nil {
 			timestamp = record.Timestamp
 			values <- record.Value
 		}
@@ -282,12 +273,25 @@ func newHashTableStore(ctx context.Context, logger *zap.Logger, hostID kademlia.
 
 // HashTableStore ...
 type HashTableStore struct {
-	logger       *zap.Logger
-	hostID       kademlia.ID
-	lock         sync.Mutex
-	records      *llrb.LLRB
-	discardQueue *timeoutQueue
-	ticker       *Ticker
+	logger         *zap.Logger
+	hostID         kademlia.ID
+	lock           sync.Mutex
+	records        *llrb.LLRB
+	discardQueue   *timeoutQueue
+	ticker         *Ticker
+	nextAccessorID uint32
+}
+
+func (p *HashTableStore) accessor() *hashTableStoreAccesstor {
+	id := atomic.AddUint32(&p.nextAccessorID, 1)
+	if id == 0 {
+		panic("hash table id overflow")
+	}
+
+	return &hashTableStoreAccesstor{
+		id:    id,
+		store: p,
+	}
 }
 
 func (p *HashTableStore) tick(t time.Time) {
@@ -303,8 +307,7 @@ func (p *HashTableStore) tick(t time.Time) {
 	}
 }
 
-// Upsert ...
-func (p *HashTableStore) Upsert(hashTableID uint32, r *pb.HashTableMessage_Record) bool {
+func (p *HashTableStore) upsert(hashTableID uint32, r *pb.HashTableMessage_Record) bool {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -312,11 +315,11 @@ func (p *HashTableStore) Upsert(hashTableID uint32, r *pb.HashTableMessage_Recor
 
 	prev, ok := p.records.Get(item).(*hashTableItem)
 	if !ok {
-		// p.logger.Debug(
-		// 	"inserting hash table item",
-		// 	logutil.ByteHex("key", r.Key),
-		// 	logutil.ByteHex("salt", r.Salt),
-		// )
+		p.logger.Debug(
+			"inserting hash table item",
+			logutil.ByteHex("key", r.Key),
+			logutil.ByteHex("salt", r.Salt),
+		)
 
 		p.records.ReplaceOrInsert(item)
 		p.discardQueue.Push(item)
@@ -331,11 +334,11 @@ func (p *HashTableStore) Upsert(hashTableID uint32, r *pb.HashTableMessage_Recor
 		return false
 	}
 
-	// p.logger.Debug(
-	// 	"updating hash table item",
-	// 	logutil.ByteHex("key", r.Key),
-	// 	logutil.ByteHex("salt", r.Salt),
-	// )
+	p.logger.Debug(
+		"updating hash table item",
+		logutil.ByteHex("key", r.Key),
+		logutil.ByteHex("salt", r.Salt),
+	)
 
 	modified := bytes.Equal(prev.Record().Value, r.Value)
 	prev.SetRecord(r)
@@ -343,8 +346,7 @@ func (p *HashTableStore) Upsert(hashTableID uint32, r *pb.HashTableMessage_Recor
 	return modified
 }
 
-// Remove ...
-func (p *HashTableStore) Remove(hashTableID uint32, r *pb.HashTableMessage_Record) error {
+func (p *HashTableStore) remove(hashTableID uint32, r *pb.HashTableMessage_Record) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -363,7 +365,7 @@ func (p *HashTableStore) Remove(hashTableID uint32, r *pb.HashTableMessage_Recor
 }
 
 // Get ...
-func (p *HashTableStore) Get(hashTableID uint32, hash []byte) *pb.HashTableMessage_Record {
+func (p *HashTableStore) get(hashTableID uint32, hash []byte) *pb.HashTableMessage_Record {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -372,6 +374,23 @@ func (p *HashTableStore) Get(hashTableID uint32, hash []byte) *pb.HashTableMessa
 		return nil
 	}
 	return item.Record()
+}
+
+type hashTableStoreAccesstor struct {
+	id    uint32
+	store *HashTableStore
+}
+
+func (p *hashTableStoreAccesstor) upsert(r *pb.HashTableMessage_Record) bool {
+	return p.store.upsert(p.id, r)
+}
+
+func (p *hashTableStoreAccesstor) remove(r *pb.HashTableMessage_Record) error {
+	return p.store.remove(p.id, r)
+}
+
+func (p *hashTableStoreAccesstor) get(hash []byte) *pb.HashTableMessage_Record {
+	return p.store.get(p.id, hash)
 }
 
 func hashTableRecordHash(key, salt []byte) []byte {
@@ -410,7 +429,7 @@ func sendHashTableGetResponse(chans *sync.Map, requestID uint64, v []byte) bool 
 	}
 }
 
-func newHashTablePublisher(ctx context.Context, logger *zap.Logger, network *Network, key *pb.Key, salt, value []byte) (*HashTablePublisher, error) {
+func newHashTablePublisher(ctx context.Context, logger *zap.Logger, network *Network, store *hashTableStoreAccesstor, key *pb.Key, salt, value []byte) (*HashTablePublisher, error) {
 	target, err := kademlia.UnmarshalID(hashTableRecordHash(key.Public, salt))
 	if err != nil {
 		return nil, err
@@ -430,6 +449,7 @@ func newHashTablePublisher(ctx context.Context, logger *zap.Logger, network *Net
 		record:  record,
 		target:  target,
 		network: network,
+		store:   store,
 		close:   cancel,
 	}
 
@@ -446,6 +466,7 @@ type HashTablePublisher struct {
 	record  *pb.HashTableMessage_Record
 	target  kademlia.ID
 	network *Network
+	store   *hashTableStoreAccesstor
 	close   context.CancelFunc
 	ticker  *Ticker
 }
@@ -474,6 +495,8 @@ func (p *HashTablePublisher) publish(t time.Time) {
 	if err := p.update(); err != nil {
 		return
 	}
+
+	p.store.upsert(p.record)
 
 	msg := &pb.HashTableMessage{
 		Body: &pb.HashTableMessage_Publish_{

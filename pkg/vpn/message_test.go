@@ -33,7 +33,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 
 	msg1 := Message{}
 	msg1.Unmarshal(b)
-	msg1.Trailers = nil
+	msg1.Trailer = MessageTrailer{}
 
 	assert.DeepEqual(t, msg, msg1)
 }

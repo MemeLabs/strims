@@ -2,6 +2,7 @@ package network
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -47,11 +48,12 @@ type ReadWriteFlusher interface {
 }
 
 // NewPeerHandler ...
-func NewPeerHandler(logger *zap.Logger, broker Broker, host *vpn.Host) *PeerHandler {
+func NewPeerHandler(logger *zap.Logger, broker Broker, host *vpn.Host, profile *pb.Profile) *PeerHandler {
 	h := &PeerHandler{
-		logger: logger,
-		broker: broker,
-		host:   host,
+		logger:  logger,
+		broker:  broker,
+		host:    host,
+		profile: profile,
 	}
 
 	host.VNIC().AddPeerHandler(h.handlePeer)
@@ -61,20 +63,22 @@ func NewPeerHandler(logger *zap.Logger, broker Broker, host *vpn.Host) *PeerHand
 
 // PeerHandler ...
 type PeerHandler struct {
-	logger *zap.Logger
-	broker Broker
-	host   *vpn.Host
+	logger  *zap.Logger
+	broker  Broker
+	host    *vpn.Host
+	profile *pb.Profile
 }
 
 func (h *PeerHandler) handlePeer(p *vnic.Peer) {
-	newBootstrap(h.logger, h.broker, h.host, p)
+	newBootstrap(h.logger, h.broker, h.host, h.profile, p)
 }
 
-func newBootstrap(logger *zap.Logger, broker Broker, host *vpn.Host, peer *vnic.Peer) *bootstrap {
+func newBootstrap(logger *zap.Logger, broker Broker, host *vpn.Host, profile *pb.Profile, peer *vnic.Peer) *bootstrap {
 	h := &bootstrap{
 		logger:     logger,
 		broker:     broker,
 		host:       host,
+		profile:    profile,
 		peer:       peer,
 		links:      make(map[*vpn.Network]struct{}),
 		peerInit:   make(chan *pb.NetworkHandshake_Init, 1),
@@ -93,6 +97,7 @@ type bootstrap struct {
 	broker     Broker
 	host       *vpn.Host
 	peer       *vnic.Peer
+	profile    *pb.Profile
 	links      map[*vpn.Network]struct{}
 	syncing    int32
 	peerInit   chan *pb.NetworkHandshake_Init
@@ -149,13 +154,124 @@ func (h *bootstrap) readHandshakes() error {
 		case *pb.NetworkHandshake_NetworkBindings_:
 			h.bindings <- body.NetworkBindings
 		case *pb.NetworkHandshake_CertificateUpgradeOffer_:
-			jsonDump(body.CertificateUpgradeOffer)
+			h.handleCertificateUpgradeOffer(body.CertificateUpgradeOffer)
 		case *pb.NetworkHandshake_CertificateUpgradeRequest_:
-			jsonDump(body.CertificateUpgradeRequest)
+			h.handleCertificateUpgradeRequest(body.CertificateUpgradeRequest)
 		case *pb.NetworkHandshake_CertificateUpgradeResponse_:
-			jsonDump(body.CertificateUpgradeResponse)
+			h.handleCertificateUpgradeResponse(body.CertificateUpgradeResponse)
+		case *pb.NetworkHandshake_CertificateUpdate_:
+			h.handleCertificateUpdate(body.CertificateUpdate)
 		}
 	}
+}
+
+func (h *bootstrap) handleCertificateUpgradeOffer(req *pb.NetworkHandshake_CertificateUpgradeOffer) error {
+	h.logger.Debug("handleCertificateUpgradeOffer")
+	jsonDump(req)
+	// TODO: deduplicate requests
+
+	csr, err := dao.NewCertificateRequest(
+		h.profile.Key,
+		pb.KeyUsage_KEY_USAGE_PEER|pb.KeyUsage_KEY_USAGE_SIGN,
+		dao.WithSubject(h.profile.Name),
+	)
+	if err != nil {
+		return err
+	}
+
+	client, ok := h.host.Client(req.NetworkKey)
+	if !ok {
+		return errors.New("network not found")
+	}
+
+	// TODO: do we need to upgrade this cert? (invite/expired)
+	// TODO: are we already upgrading this cert via some other peer?
+
+	return h.send(&pb.NetworkHandshake{
+		Body: &pb.NetworkHandshake_CertificateUpgradeRequest_{
+			CertificateUpgradeRequest: &pb.NetworkHandshake_CertificateUpgradeRequest{
+				Certificate:        client.Network.Certificate(),
+				CertificateRequest: csr,
+			},
+		},
+	})
+}
+
+func (h *bootstrap) handleCertificateUpgradeRequest(req *pb.NetworkHandshake_CertificateUpgradeRequest) error {
+	h.logger.Debug("handleCertificateUpgradeRequest")
+	jsonDump(req)
+
+	networkKey := dao.GetRootCert(req.Certificate).Key
+
+	renewReq := &pb.CARenewRequest{
+		Certificate:        req.Certificate,
+		CertificateRequest: req.CertificateRequest,
+	}
+	renewRes := &pb.CARenewResponse{}
+	err := func() error {
+		client, ok := h.host.Client(networkKey)
+		if !ok {
+			return errors.New("network not found")
+		}
+
+		caClient, err := NewCAClient(h.logger, client)
+		if err != nil {
+			return err
+		}
+
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		return caClient.Renew(ctx, renewReq, renewRes)
+	}()
+
+	res := &pb.NetworkHandshake_CertificateUpgradeResponse{
+		NetworkKey: networkKey,
+	}
+	if err != nil {
+		res.Body = &pb.NetworkHandshake_CertificateUpgradeResponse_Error{
+			Error: err.Error(),
+		}
+	} else {
+		res.Body = &pb.NetworkHandshake_CertificateUpgradeResponse_Certificate{
+			Certificate: renewRes.Certificate,
+		}
+	}
+
+	return h.send(&pb.NetworkHandshake{
+		Body: &pb.NetworkHandshake_CertificateUpgradeResponse_{
+			CertificateUpgradeResponse: res,
+		},
+	})
+}
+
+func (h *bootstrap) handleCertificateUpgradeResponse(req *pb.NetworkHandshake_CertificateUpgradeResponse) error {
+	h.logger.Debug("handleCertificateUpgradeResponse")
+	jsonDump(req)
+
+	if err := req.GetError(); err != "" {
+		// TODO: propagate to user
+		return errors.New(err)
+	}
+
+	// TODO: send to all pending peers
+	// TODO: validate cert
+	// TODO: confirm that we want to replace the cert
+
+	return h.send(&pb.NetworkHandshake{
+		Body: &pb.NetworkHandshake_CertificateUpdate_{
+			CertificateUpdate: &pb.NetworkHandshake_CertificateUpdate{
+				Certificate: req.GetCertificate(),
+			},
+		},
+	})
+}
+
+func (h *bootstrap) handleCertificateUpdate(req *pb.NetworkHandshake_CertificateUpdate) {
+	h.logger.Debug("handleCertificateUpdate")
+	jsonDump(req)
+
+	// TODO: finish binding
 }
 
 func (h *bootstrap) send(msg protoreflect.ProtoMessage) error {
@@ -313,23 +429,21 @@ func (h *bootstrap) handleNetworkBindings(networkBindings, peerNetworkBindings [
 			return ErrNetworkIDBounds
 		}
 
+		// handle invite certs
+		// TODO: also handle expired certificates
 		if !bytes.Equal(dao.GetRootCert(binding.Certificate).Key, peerBinding.Certificate.GetParent().Key) {
-			jsonDump(peerBinding)
+			// jsonDump(peerBinding)
 			err := h.send(&pb.NetworkHandshake{
 				Body: &pb.NetworkHandshake_CertificateUpgradeOffer_{
 					CertificateUpgradeOffer: &pb.NetworkHandshake_CertificateUpgradeOffer{
-						NetworkKeys: [][]byte{
-							dao.GetRootCert(binding.Certificate).Key,
-						},
+						NetworkKey: dao.GetRootCert(binding.Certificate).Key,
 					},
 				},
 			})
 			if err != nil {
-				h.logger.Debug("sync failed", zap.Error(err))
+				h.logger.Debug("cert upgrade offer failed", zap.Error(err))
 			}
 		}
-
-		// TODO: if the peer has a provisional certificate offer mediation
 
 		c, ok := h.host.Client(dao.GetRootCert(peerBinding.Certificate).Key)
 		if !ok {

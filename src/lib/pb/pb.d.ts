@@ -18274,8 +18274,8 @@ export namespace NetworkHandshake {
     /** Properties of a CertificateUpgradeOffer. */
     interface ICertificateUpgradeOffer {
 
-        /** CertificateUpgradeOffer networkKeys */
-        networkKeys?: (Uint8Array[]|null);
+        /** CertificateUpgradeOffer networkKey */
+        networkKey?: (Uint8Array|null);
     }
 
     /** Represents a CertificateUpgradeOffer. */
@@ -18287,8 +18287,8 @@ export namespace NetworkHandshake {
          */
         constructor(properties?: NetworkHandshake.ICertificateUpgradeOffer);
 
-        /** CertificateUpgradeOffer networkKeys. */
-        public networkKeys: Uint8Array[];
+        /** CertificateUpgradeOffer networkKey. */
+        public networkKey: Uint8Array;
 
         /**
          * Creates a new CertificateUpgradeOffer instance using the specified properties.
@@ -18364,8 +18364,11 @@ export namespace NetworkHandshake {
     /** Properties of a CertificateUpgradeRequest. */
     interface ICertificateUpgradeRequest {
 
-        /** CertificateUpgradeRequest networkKeys */
-        networkKeys?: (ICertificate[]|null);
+        /** CertificateUpgradeRequest certificate */
+        certificate?: (ICertificate|null);
+
+        /** CertificateUpgradeRequest certificateRequest */
+        certificateRequest?: (ICertificateRequest|null);
     }
 
     /** Represents a CertificateUpgradeRequest. */
@@ -18377,8 +18380,11 @@ export namespace NetworkHandshake {
          */
         constructor(properties?: NetworkHandshake.ICertificateUpgradeRequest);
 
-        /** CertificateUpgradeRequest networkKeys. */
-        public networkKeys: ICertificate[];
+        /** CertificateUpgradeRequest certificate. */
+        public certificate?: (ICertificate|null);
+
+        /** CertificateUpgradeRequest certificateRequest. */
+        public certificateRequest?: (ICertificateRequest|null);
 
         /**
          * Creates a new CertificateUpgradeRequest instance using the specified properties.
@@ -18454,8 +18460,14 @@ export namespace NetworkHandshake {
     /** Properties of a CertificateUpgradeResponse. */
     interface ICertificateUpgradeResponse {
 
-        /** CertificateUpgradeResponse certificates */
-        certificates?: (ICertificate[]|null);
+        /** CertificateUpgradeResponse networkKey */
+        networkKey?: (Uint8Array|null);
+
+        /** CertificateUpgradeResponse certificate */
+        certificate?: (ICertificate|null);
+
+        /** CertificateUpgradeResponse error */
+        error?: (string|null);
     }
 
     /** Represents a CertificateUpgradeResponse. */
@@ -18467,8 +18479,17 @@ export namespace NetworkHandshake {
          */
         constructor(properties?: NetworkHandshake.ICertificateUpgradeResponse);
 
-        /** CertificateUpgradeResponse certificates. */
-        public certificates: ICertificate[];
+        /** CertificateUpgradeResponse networkKey. */
+        public networkKey: Uint8Array;
+
+        /** CertificateUpgradeResponse certificate. */
+        public certificate?: (ICertificate|null);
+
+        /** CertificateUpgradeResponse error. */
+        public error: string;
+
+        /** CertificateUpgradeResponse body. */
+        public body?: ("certificate"|"error");
 
         /**
          * Creates a new CertificateUpgradeResponse instance using the specified properties.
@@ -18544,8 +18565,8 @@ export namespace NetworkHandshake {
     /** Properties of a CertificateUpdate. */
     interface ICertificateUpdate {
 
-        /** CertificateUpdate certificates */
-        certificates?: (ICertificate[]|null);
+        /** CertificateUpdate certificate */
+        certificate?: (ICertificate|null);
     }
 
     /** Represents a CertificateUpdate. */
@@ -18557,8 +18578,8 @@ export namespace NetworkHandshake {
          */
         constructor(properties?: NetworkHandshake.ICertificateUpdate);
 
-        /** CertificateUpdate certificates. */
-        public certificates: ICertificate[];
+        /** CertificateUpdate certificate. */
+        public certificate?: (ICertificate|null);
 
         /**
          * Creates a new CertificateUpdate instance using the specified properties.
@@ -22427,8 +22448,8 @@ export namespace PeerExchangeMessage {
 /** Properties of a CARenewRequest. */
 export interface ICARenewRequest {
 
-    /** CARenewRequest inviteCertificate */
-    inviteCertificate?: (ICertificate|null);
+    /** CARenewRequest certificate */
+    certificate?: (ICertificate|null);
 
     /** CARenewRequest certificateRequest */
     certificateRequest?: (ICertificateRequest|null);
@@ -22443,8 +22464,8 @@ export class CARenewRequest implements ICARenewRequest {
      */
     constructor(properties?: ICARenewRequest);
 
-    /** CARenewRequest inviteCertificate. */
-    public inviteCertificate?: (ICertificate|null);
+    /** CARenewRequest certificate. */
+    public certificate?: (ICertificate|null);
 
     /** CARenewRequest certificateRequest. */
     public certificateRequest?: (ICertificateRequest|null);

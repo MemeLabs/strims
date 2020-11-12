@@ -98,7 +98,7 @@ func (c *Instance) Init(ctx context.Context, profile *pb.Profile, store *dao.Pro
 	}
 
 	// TODO: put this somewhere
-	network.NewPeerHandler(c.logger, c.broker, vpnHost)
+	network.NewPeerHandler(c.logger, c.broker, vpnHost, profile)
 
 	c.Network, err = newNetworkService(ctx, c.logger, profile, store, vpnHost)
 	if err != nil {

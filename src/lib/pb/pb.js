@@ -42114,7 +42114,7 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
          * Properties of a CertificateUpgradeOffer.
          * @memberof NetworkHandshake
          * @interface ICertificateUpgradeOffer
-         * @property {Array.<Uint8Array>|null} [networkKeys] CertificateUpgradeOffer networkKeys
+         * @property {Uint8Array|null} [networkKey] CertificateUpgradeOffer networkKey
          */
 
         /**
@@ -42126,7 +42126,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
          * @param {NetworkHandshake.ICertificateUpgradeOffer=} [properties] Properties to set
          */
         function CertificateUpgradeOffer(properties) {
-            this.networkKeys = [];
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -42134,12 +42133,12 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         }
 
         /**
-         * CertificateUpgradeOffer networkKeys.
-         * @member {Array.<Uint8Array>} networkKeys
+         * CertificateUpgradeOffer networkKey.
+         * @member {Uint8Array} networkKey
          * @memberof NetworkHandshake.CertificateUpgradeOffer
          * @instance
          */
-        CertificateUpgradeOffer.prototype.networkKeys = $util.emptyArray;
+        CertificateUpgradeOffer.prototype.networkKey = $util.newBuffer([]);
 
         /**
          * Creates a new CertificateUpgradeOffer instance using the specified properties.
@@ -42165,9 +42164,8 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         CertificateUpgradeOffer.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.networkKeys != null && message.networkKeys.length)
-                for (let i = 0; i < message.networkKeys.length; ++i)
-                    writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.networkKeys[i]);
+            if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
+                writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.networkKey);
             return writer;
         };
 
@@ -42203,9 +42201,7 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
                 case 1:
-                    if (!(message.networkKeys && message.networkKeys.length))
-                        message.networkKeys = [];
-                    message.networkKeys.push(reader.bytes());
+                    message.networkKey = reader.bytes();
                     break;
                 default:
                     reader.skipType(tag & 7);
@@ -42242,13 +42238,9 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         CertificateUpgradeOffer.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.networkKeys != null && message.hasOwnProperty("networkKeys")) {
-                if (!Array.isArray(message.networkKeys))
-                    return "networkKeys: array expected";
-                for (let i = 0; i < message.networkKeys.length; ++i)
-                    if (!(message.networkKeys[i] && typeof message.networkKeys[i].length === "number" || $util.isString(message.networkKeys[i])))
-                        return "networkKeys: buffer[] expected";
-            }
+            if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+                if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
+                    return "networkKey: buffer expected";
             return null;
         };
 
@@ -42264,16 +42256,11 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (object instanceof $root.NetworkHandshake.CertificateUpgradeOffer)
                 return object;
             let message = new $root.NetworkHandshake.CertificateUpgradeOffer();
-            if (object.networkKeys) {
-                if (!Array.isArray(object.networkKeys))
-                    throw TypeError(".NetworkHandshake.CertificateUpgradeOffer.networkKeys: array expected");
-                message.networkKeys = [];
-                for (let i = 0; i < object.networkKeys.length; ++i)
-                    if (typeof object.networkKeys[i] === "string")
-                        $util.base64.decode(object.networkKeys[i], message.networkKeys[i] = $util.newBuffer($util.base64.length(object.networkKeys[i])), 0);
-                    else if (object.networkKeys[i].length)
-                        message.networkKeys[i] = object.networkKeys[i];
-            }
+            if (object.networkKey != null)
+                if (typeof object.networkKey === "string")
+                    $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
+                else if (object.networkKey.length)
+                    message.networkKey = object.networkKey;
             return message;
         };
 
@@ -42290,13 +42277,16 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (!options)
                 options = {};
             let object = {};
-            if (options.arrays || options.defaults)
-                object.networkKeys = [];
-            if (message.networkKeys && message.networkKeys.length) {
-                object.networkKeys = [];
-                for (let j = 0; j < message.networkKeys.length; ++j)
-                    object.networkKeys[j] = options.bytes === String ? $util.base64.encode(message.networkKeys[j], 0, message.networkKeys[j].length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKeys[j]) : message.networkKeys[j];
-            }
+            if (options.defaults)
+                if (options.bytes === String)
+                    object.networkKey = "";
+                else {
+                    object.networkKey = [];
+                    if (options.bytes !== Array)
+                        object.networkKey = $util.newBuffer(object.networkKey);
+                }
+            if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+                object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
             return object;
         };
 
@@ -42320,7 +42310,8 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
          * Properties of a CertificateUpgradeRequest.
          * @memberof NetworkHandshake
          * @interface ICertificateUpgradeRequest
-         * @property {Array.<ICertificate>|null} [networkKeys] CertificateUpgradeRequest networkKeys
+         * @property {ICertificate|null} [certificate] CertificateUpgradeRequest certificate
+         * @property {ICertificateRequest|null} [certificateRequest] CertificateUpgradeRequest certificateRequest
          */
 
         /**
@@ -42332,7 +42323,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
          * @param {NetworkHandshake.ICertificateUpgradeRequest=} [properties] Properties to set
          */
         function CertificateUpgradeRequest(properties) {
-            this.networkKeys = [];
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -42340,12 +42330,20 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         }
 
         /**
-         * CertificateUpgradeRequest networkKeys.
-         * @member {Array.<ICertificate>} networkKeys
+         * CertificateUpgradeRequest certificate.
+         * @member {ICertificate|null|undefined} certificate
          * @memberof NetworkHandshake.CertificateUpgradeRequest
          * @instance
          */
-        CertificateUpgradeRequest.prototype.networkKeys = $util.emptyArray;
+        CertificateUpgradeRequest.prototype.certificate = null;
+
+        /**
+         * CertificateUpgradeRequest certificateRequest.
+         * @member {ICertificateRequest|null|undefined} certificateRequest
+         * @memberof NetworkHandshake.CertificateUpgradeRequest
+         * @instance
+         */
+        CertificateUpgradeRequest.prototype.certificateRequest = null;
 
         /**
          * Creates a new CertificateUpgradeRequest instance using the specified properties.
@@ -42371,9 +42369,10 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         CertificateUpgradeRequest.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.networkKeys != null && message.networkKeys.length)
-                for (let i = 0; i < message.networkKeys.length; ++i)
-                    $root.Certificate.encode(message.networkKeys[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
+                $root.Certificate.encode(message.certificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            if (message.certificateRequest != null && Object.hasOwnProperty.call(message, "certificateRequest"))
+                $root.CertificateRequest.encode(message.certificateRequest, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
             return writer;
         };
 
@@ -42409,9 +42408,10 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
                 case 1:
-                    if (!(message.networkKeys && message.networkKeys.length))
-                        message.networkKeys = [];
-                    message.networkKeys.push($root.Certificate.decode(reader, reader.uint32()));
+                    message.certificate = $root.Certificate.decode(reader, reader.uint32());
+                    break;
+                case 2:
+                    message.certificateRequest = $root.CertificateRequest.decode(reader, reader.uint32());
                     break;
                 default:
                     reader.skipType(tag & 7);
@@ -42448,14 +42448,15 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         CertificateUpgradeRequest.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.networkKeys != null && message.hasOwnProperty("networkKeys")) {
-                if (!Array.isArray(message.networkKeys))
-                    return "networkKeys: array expected";
-                for (let i = 0; i < message.networkKeys.length; ++i) {
-                    let error = $root.Certificate.verify(message.networkKeys[i]);
-                    if (error)
-                        return "networkKeys." + error;
-                }
+            if (message.certificate != null && message.hasOwnProperty("certificate")) {
+                let error = $root.Certificate.verify(message.certificate);
+                if (error)
+                    return "certificate." + error;
+            }
+            if (message.certificateRequest != null && message.hasOwnProperty("certificateRequest")) {
+                let error = $root.CertificateRequest.verify(message.certificateRequest);
+                if (error)
+                    return "certificateRequest." + error;
             }
             return null;
         };
@@ -42472,15 +42473,15 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (object instanceof $root.NetworkHandshake.CertificateUpgradeRequest)
                 return object;
             let message = new $root.NetworkHandshake.CertificateUpgradeRequest();
-            if (object.networkKeys) {
-                if (!Array.isArray(object.networkKeys))
-                    throw TypeError(".NetworkHandshake.CertificateUpgradeRequest.networkKeys: array expected");
-                message.networkKeys = [];
-                for (let i = 0; i < object.networkKeys.length; ++i) {
-                    if (typeof object.networkKeys[i] !== "object")
-                        throw TypeError(".NetworkHandshake.CertificateUpgradeRequest.networkKeys: object expected");
-                    message.networkKeys[i] = $root.Certificate.fromObject(object.networkKeys[i]);
-                }
+            if (object.certificate != null) {
+                if (typeof object.certificate !== "object")
+                    throw TypeError(".NetworkHandshake.CertificateUpgradeRequest.certificate: object expected");
+                message.certificate = $root.Certificate.fromObject(object.certificate);
+            }
+            if (object.certificateRequest != null) {
+                if (typeof object.certificateRequest !== "object")
+                    throw TypeError(".NetworkHandshake.CertificateUpgradeRequest.certificateRequest: object expected");
+                message.certificateRequest = $root.CertificateRequest.fromObject(object.certificateRequest);
             }
             return message;
         };
@@ -42498,13 +42499,14 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (!options)
                 options = {};
             let object = {};
-            if (options.arrays || options.defaults)
-                object.networkKeys = [];
-            if (message.networkKeys && message.networkKeys.length) {
-                object.networkKeys = [];
-                for (let j = 0; j < message.networkKeys.length; ++j)
-                    object.networkKeys[j] = $root.Certificate.toObject(message.networkKeys[j], options);
+            if (options.defaults) {
+                object.certificate = null;
+                object.certificateRequest = null;
             }
+            if (message.certificate != null && message.hasOwnProperty("certificate"))
+                object.certificate = $root.Certificate.toObject(message.certificate, options);
+            if (message.certificateRequest != null && message.hasOwnProperty("certificateRequest"))
+                object.certificateRequest = $root.CertificateRequest.toObject(message.certificateRequest, options);
             return object;
         };
 
@@ -42528,7 +42530,9 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
          * Properties of a CertificateUpgradeResponse.
          * @memberof NetworkHandshake
          * @interface ICertificateUpgradeResponse
-         * @property {Array.<ICertificate>|null} [certificates] CertificateUpgradeResponse certificates
+         * @property {Uint8Array|null} [networkKey] CertificateUpgradeResponse networkKey
+         * @property {ICertificate|null} [certificate] CertificateUpgradeResponse certificate
+         * @property {string|null} [error] CertificateUpgradeResponse error
          */
 
         /**
@@ -42540,7 +42544,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
          * @param {NetworkHandshake.ICertificateUpgradeResponse=} [properties] Properties to set
          */
         function CertificateUpgradeResponse(properties) {
-            this.certificates = [];
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -42548,12 +42551,42 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         }
 
         /**
-         * CertificateUpgradeResponse certificates.
-         * @member {Array.<ICertificate>} certificates
+         * CertificateUpgradeResponse networkKey.
+         * @member {Uint8Array} networkKey
          * @memberof NetworkHandshake.CertificateUpgradeResponse
          * @instance
          */
-        CertificateUpgradeResponse.prototype.certificates = $util.emptyArray;
+        CertificateUpgradeResponse.prototype.networkKey = $util.newBuffer([]);
+
+        /**
+         * CertificateUpgradeResponse certificate.
+         * @member {ICertificate|null|undefined} certificate
+         * @memberof NetworkHandshake.CertificateUpgradeResponse
+         * @instance
+         */
+        CertificateUpgradeResponse.prototype.certificate = null;
+
+        /**
+         * CertificateUpgradeResponse error.
+         * @member {string} error
+         * @memberof NetworkHandshake.CertificateUpgradeResponse
+         * @instance
+         */
+        CertificateUpgradeResponse.prototype.error = "";
+
+        // OneOf field names bound to virtual getters and setters
+        let $oneOfFields;
+
+        /**
+         * CertificateUpgradeResponse body.
+         * @member {"certificate"|"error"|undefined} body
+         * @memberof NetworkHandshake.CertificateUpgradeResponse
+         * @instance
+         */
+        Object.defineProperty(CertificateUpgradeResponse.prototype, "body", {
+            get: $util.oneOfGetter($oneOfFields = ["certificate", "error"]),
+            set: $util.oneOfSetter($oneOfFields)
+        });
 
         /**
          * Creates a new CertificateUpgradeResponse instance using the specified properties.
@@ -42579,9 +42612,12 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         CertificateUpgradeResponse.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.certificates != null && message.certificates.length)
-                for (let i = 0; i < message.certificates.length; ++i)
-                    $root.Certificate.encode(message.certificates[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
+                writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.networkKey);
+            if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
+                $root.Certificate.encode(message.certificate, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            if (message.error != null && Object.hasOwnProperty.call(message, "error"))
+                writer.uint32(/* id 3, wireType 2 =*/26).string(message.error);
             return writer;
         };
 
@@ -42617,9 +42653,13 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
                 case 1:
-                    if (!(message.certificates && message.certificates.length))
-                        message.certificates = [];
-                    message.certificates.push($root.Certificate.decode(reader, reader.uint32()));
+                    message.networkKey = reader.bytes();
+                    break;
+                case 2:
+                    message.certificate = $root.Certificate.decode(reader, reader.uint32());
+                    break;
+                case 3:
+                    message.error = reader.string();
                     break;
                 default:
                     reader.skipType(tag & 7);
@@ -42656,14 +42696,24 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         CertificateUpgradeResponse.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.certificates != null && message.hasOwnProperty("certificates")) {
-                if (!Array.isArray(message.certificates))
-                    return "certificates: array expected";
-                for (let i = 0; i < message.certificates.length; ++i) {
-                    let error = $root.Certificate.verify(message.certificates[i]);
+            let properties = {};
+            if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+                if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
+                    return "networkKey: buffer expected";
+            if (message.certificate != null && message.hasOwnProperty("certificate")) {
+                properties.body = 1;
+                {
+                    let error = $root.Certificate.verify(message.certificate);
                     if (error)
-                        return "certificates." + error;
+                        return "certificate." + error;
                 }
+            }
+            if (message.error != null && message.hasOwnProperty("error")) {
+                if (properties.body === 1)
+                    return "body: multiple values";
+                properties.body = 1;
+                if (!$util.isString(message.error))
+                    return "error: string expected";
             }
             return null;
         };
@@ -42680,16 +42730,18 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (object instanceof $root.NetworkHandshake.CertificateUpgradeResponse)
                 return object;
             let message = new $root.NetworkHandshake.CertificateUpgradeResponse();
-            if (object.certificates) {
-                if (!Array.isArray(object.certificates))
-                    throw TypeError(".NetworkHandshake.CertificateUpgradeResponse.certificates: array expected");
-                message.certificates = [];
-                for (let i = 0; i < object.certificates.length; ++i) {
-                    if (typeof object.certificates[i] !== "object")
-                        throw TypeError(".NetworkHandshake.CertificateUpgradeResponse.certificates: object expected");
-                    message.certificates[i] = $root.Certificate.fromObject(object.certificates[i]);
-                }
+            if (object.networkKey != null)
+                if (typeof object.networkKey === "string")
+                    $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
+                else if (object.networkKey.length)
+                    message.networkKey = object.networkKey;
+            if (object.certificate != null) {
+                if (typeof object.certificate !== "object")
+                    throw TypeError(".NetworkHandshake.CertificateUpgradeResponse.certificate: object expected");
+                message.certificate = $root.Certificate.fromObject(object.certificate);
             }
+            if (object.error != null)
+                message.error = String(object.error);
             return message;
         };
 
@@ -42706,12 +42758,25 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (!options)
                 options = {};
             let object = {};
-            if (options.arrays || options.defaults)
-                object.certificates = [];
-            if (message.certificates && message.certificates.length) {
-                object.certificates = [];
-                for (let j = 0; j < message.certificates.length; ++j)
-                    object.certificates[j] = $root.Certificate.toObject(message.certificates[j], options);
+            if (options.defaults)
+                if (options.bytes === String)
+                    object.networkKey = "";
+                else {
+                    object.networkKey = [];
+                    if (options.bytes !== Array)
+                        object.networkKey = $util.newBuffer(object.networkKey);
+                }
+            if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+                object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
+            if (message.certificate != null && message.hasOwnProperty("certificate")) {
+                object.certificate = $root.Certificate.toObject(message.certificate, options);
+                if (options.oneofs)
+                    object.body = "certificate";
+            }
+            if (message.error != null && message.hasOwnProperty("error")) {
+                object.error = message.error;
+                if (options.oneofs)
+                    object.body = "error";
             }
             return object;
         };
@@ -42736,7 +42801,7 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
          * Properties of a CertificateUpdate.
          * @memberof NetworkHandshake
          * @interface ICertificateUpdate
-         * @property {Array.<ICertificate>|null} [certificates] CertificateUpdate certificates
+         * @property {ICertificate|null} [certificate] CertificateUpdate certificate
          */
 
         /**
@@ -42748,7 +42813,6 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
          * @param {NetworkHandshake.ICertificateUpdate=} [properties] Properties to set
          */
         function CertificateUpdate(properties) {
-            this.certificates = [];
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -42756,12 +42820,12 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         }
 
         /**
-         * CertificateUpdate certificates.
-         * @member {Array.<ICertificate>} certificates
+         * CertificateUpdate certificate.
+         * @member {ICertificate|null|undefined} certificate
          * @memberof NetworkHandshake.CertificateUpdate
          * @instance
          */
-        CertificateUpdate.prototype.certificates = $util.emptyArray;
+        CertificateUpdate.prototype.certificate = null;
 
         /**
          * Creates a new CertificateUpdate instance using the specified properties.
@@ -42787,9 +42851,8 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         CertificateUpdate.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.certificates != null && message.certificates.length)
-                for (let i = 0; i < message.certificates.length; ++i)
-                    $root.Certificate.encode(message.certificates[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
+                $root.Certificate.encode(message.certificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
             return writer;
         };
 
@@ -42825,9 +42888,7 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
                 case 1:
-                    if (!(message.certificates && message.certificates.length))
-                        message.certificates = [];
-                    message.certificates.push($root.Certificate.decode(reader, reader.uint32()));
+                    message.certificate = $root.Certificate.decode(reader, reader.uint32());
                     break;
                 default:
                     reader.skipType(tag & 7);
@@ -42864,14 +42925,10 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
         CertificateUpdate.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.certificates != null && message.hasOwnProperty("certificates")) {
-                if (!Array.isArray(message.certificates))
-                    return "certificates: array expected";
-                for (let i = 0; i < message.certificates.length; ++i) {
-                    let error = $root.Certificate.verify(message.certificates[i]);
-                    if (error)
-                        return "certificates." + error;
-                }
+            if (message.certificate != null && message.hasOwnProperty("certificate")) {
+                let error = $root.Certificate.verify(message.certificate);
+                if (error)
+                    return "certificate." + error;
             }
             return null;
         };
@@ -42888,15 +42945,10 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (object instanceof $root.NetworkHandshake.CertificateUpdate)
                 return object;
             let message = new $root.NetworkHandshake.CertificateUpdate();
-            if (object.certificates) {
-                if (!Array.isArray(object.certificates))
-                    throw TypeError(".NetworkHandshake.CertificateUpdate.certificates: array expected");
-                message.certificates = [];
-                for (let i = 0; i < object.certificates.length; ++i) {
-                    if (typeof object.certificates[i] !== "object")
-                        throw TypeError(".NetworkHandshake.CertificateUpdate.certificates: object expected");
-                    message.certificates[i] = $root.Certificate.fromObject(object.certificates[i]);
-                }
+            if (object.certificate != null) {
+                if (typeof object.certificate !== "object")
+                    throw TypeError(".NetworkHandshake.CertificateUpdate.certificate: object expected");
+                message.certificate = $root.Certificate.fromObject(object.certificate);
             }
             return message;
         };
@@ -42914,13 +42966,10 @@ export const NetworkHandshake = $root.NetworkHandshake = (() => {
             if (!options)
                 options = {};
             let object = {};
-            if (options.arrays || options.defaults)
-                object.certificates = [];
-            if (message.certificates && message.certificates.length) {
-                object.certificates = [];
-                for (let j = 0; j < message.certificates.length; ++j)
-                    object.certificates[j] = $root.Certificate.toObject(message.certificates[j], options);
-            }
+            if (options.defaults)
+                object.certificate = null;
+            if (message.certificate != null && message.hasOwnProperty("certificate"))
+                object.certificate = $root.Certificate.toObject(message.certificate, options);
             return object;
         };
 
@@ -51498,7 +51547,7 @@ export const CARenewRequest = $root.CARenewRequest = (() => {
      * Properties of a CARenewRequest.
      * @exports ICARenewRequest
      * @interface ICARenewRequest
-     * @property {ICertificate|null} [inviteCertificate] CARenewRequest inviteCertificate
+     * @property {ICertificate|null} [certificate] CARenewRequest certificate
      * @property {ICertificateRequest|null} [certificateRequest] CARenewRequest certificateRequest
      */
 
@@ -51518,12 +51567,12 @@ export const CARenewRequest = $root.CARenewRequest = (() => {
     }
 
     /**
-     * CARenewRequest inviteCertificate.
-     * @member {ICertificate|null|undefined} inviteCertificate
+     * CARenewRequest certificate.
+     * @member {ICertificate|null|undefined} certificate
      * @memberof CARenewRequest
      * @instance
      */
-    CARenewRequest.prototype.inviteCertificate = null;
+    CARenewRequest.prototype.certificate = null;
 
     /**
      * CARenewRequest certificateRequest.
@@ -51557,8 +51606,8 @@ export const CARenewRequest = $root.CARenewRequest = (() => {
     CARenewRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.inviteCertificate != null && Object.hasOwnProperty.call(message, "inviteCertificate"))
-            $root.Certificate.encode(message.inviteCertificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
+            $root.Certificate.encode(message.certificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         if (message.certificateRequest != null && Object.hasOwnProperty.call(message, "certificateRequest"))
             $root.CertificateRequest.encode(message.certificateRequest, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
         return writer;
@@ -51596,7 +51645,7 @@ export const CARenewRequest = $root.CARenewRequest = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.inviteCertificate = $root.Certificate.decode(reader, reader.uint32());
+                message.certificate = $root.Certificate.decode(reader, reader.uint32());
                 break;
             case 2:
                 message.certificateRequest = $root.CertificateRequest.decode(reader, reader.uint32());
@@ -51636,10 +51685,10 @@ export const CARenewRequest = $root.CARenewRequest = (() => {
     CARenewRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.inviteCertificate != null && message.hasOwnProperty("inviteCertificate")) {
-            let error = $root.Certificate.verify(message.inviteCertificate);
+        if (message.certificate != null && message.hasOwnProperty("certificate")) {
+            let error = $root.Certificate.verify(message.certificate);
             if (error)
-                return "inviteCertificate." + error;
+                return "certificate." + error;
         }
         if (message.certificateRequest != null && message.hasOwnProperty("certificateRequest")) {
             let error = $root.CertificateRequest.verify(message.certificateRequest);
@@ -51661,10 +51710,10 @@ export const CARenewRequest = $root.CARenewRequest = (() => {
         if (object instanceof $root.CARenewRequest)
             return object;
         let message = new $root.CARenewRequest();
-        if (object.inviteCertificate != null) {
-            if (typeof object.inviteCertificate !== "object")
-                throw TypeError(".CARenewRequest.inviteCertificate: object expected");
-            message.inviteCertificate = $root.Certificate.fromObject(object.inviteCertificate);
+        if (object.certificate != null) {
+            if (typeof object.certificate !== "object")
+                throw TypeError(".CARenewRequest.certificate: object expected");
+            message.certificate = $root.Certificate.fromObject(object.certificate);
         }
         if (object.certificateRequest != null) {
             if (typeof object.certificateRequest !== "object")
@@ -51688,11 +51737,11 @@ export const CARenewRequest = $root.CARenewRequest = (() => {
             options = {};
         let object = {};
         if (options.defaults) {
-            object.inviteCertificate = null;
+            object.certificate = null;
             object.certificateRequest = null;
         }
-        if (message.inviteCertificate != null && message.hasOwnProperty("inviteCertificate"))
-            object.inviteCertificate = $root.Certificate.toObject(message.inviteCertificate, options);
+        if (message.certificate != null && message.hasOwnProperty("certificate"))
+            object.certificate = $root.Certificate.toObject(message.certificate, options);
         if (message.certificateRequest != null && message.hasOwnProperty("certificateRequest"))
             object.certificateRequest = $root.CertificateRequest.toObject(message.certificateRequest, options);
         return object;

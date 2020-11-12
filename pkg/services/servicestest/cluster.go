@@ -15,7 +15,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func newNode(logger *zap.Logger, i int) (*Node, error) {
+func NewNode(logger *zap.Logger, i int) (*Node, error) {
 	profile, err := dao.NewProfile(fmt.Sprintf("user %d", i))
 	if err != nil {
 		return nil, err
@@ -79,7 +79,7 @@ type Cluster struct {
 // Run ...
 func (c *Cluster) Run() error {
 	for i := 0; i < c.NodeCount; i++ {
-		n, err := newNode(c.Logger, i)
+		n, err := NewNode(c.Logger, i)
 		if err != nil {
 			return err
 		}

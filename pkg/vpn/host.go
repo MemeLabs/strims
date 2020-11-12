@@ -151,6 +151,7 @@ func (h *Host) RemoveNetwork(key []byte) error {
 // 	return networks
 // }
 
+// NetworkKeys ...
 func (h *Host) NetworkKeys() [][]byte {
 	h.clientsLock.Lock()
 	defer h.clientsLock.Unlock()
