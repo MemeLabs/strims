@@ -14,6 +14,8 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/event"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
@@ -48,84 +50,86 @@ type ReadWriteFlusher interface {
 }
 
 // NewPeerHandler ...
-func NewPeerHandler(logger *zap.Logger, broker Broker, host *vpn.Host, profile *pb.Profile) *PeerHandler {
+func NewPeerHandler(logger *zap.Logger, broker Broker, host *vpn.Host, store *dao.ProfileStore, profile *pb.Profile) *PeerHandler {
 	h := &PeerHandler{
 		logger:  logger,
 		broker:  broker,
 		host:    host,
+		store:   store,
 		profile: profile,
 	}
 
 	host.VNIC().AddPeerHandler(h.handlePeer)
+
+	go h.updateCertificates()
 
 	return h
 }
 
 // PeerHandler ...
 type PeerHandler struct {
-	logger  *zap.Logger
-	broker  Broker
-	host    *vpn.Host
-	profile *pb.Profile
+	logger       *zap.Logger
+	broker       Broker
+	host         *vpn.Host
+	store        *dao.ProfileStore
+	profile      *pb.Profile
+	certificates event.Observable
 }
 
 func (h *PeerHandler) handlePeer(p *vnic.Peer) {
-	newBootstrap(h.logger, h.broker, h.host, h.profile, p)
-}
-
-func newBootstrap(logger *zap.Logger, broker Broker, host *vpn.Host, profile *pb.Profile, peer *vnic.Peer) *bootstrap {
-	h := &bootstrap{
-		logger:     logger,
-		broker:     broker,
-		host:       host,
-		profile:    profile,
-		peer:       peer,
-		links:      make(map[*vpn.Network]struct{}),
-		peerInit:   make(chan *pb.NetworkHandshake_Init, 1),
-		bindings:   make(chan *pb.NetworkHandshake_NetworkBindings),
-		conn:       peer.Channel(vnic.NetworkInitPort),
-		brokerConn: peer.Channel(vnic.NetworkBrokerPort),
+	b := &bootstrap{
+		logger:       h.logger,
+		broker:       h.broker,
+		host:         h.host,
+		profile:      h.profile,
+		peer:         p,
+		links:        make(map[*vpn.Network]*bootstrapLink),
+		handshakes:   make(chan *pb.NetworkHandshake),
+		errors:       make(chan error),
+		peerInit:     make(chan *pb.NetworkHandshake_Init, 1),
+		bindings:     make(chan *pb.NetworkHandshake_NetworkBindings),
+		certificates: &h.certificates,
+		conn:         p.Channel(vnic.NetworkInitPort),
+		brokerConn:   p.Channel(vnic.NetworkBrokerPort),
 	}
 
-	go h.run()
+	go b.run()
+}
 
-	return h
+func (h *PeerHandler) updateCertificates() {
+	certificates := make(chan *pb.Certificate, 1)
+	h.certificates.Notify(certificates)
+
+	for cert := range certificates {
+		err := h.store.Update(func(tx kv.RWTx) error {
+			network, err := dao.GetNetworkByKey(tx, dao.GetRootCert(cert).Key)
+			if err != nil {
+				return err
+			}
+			network.Certificate = cert
+			return dao.UpsertNetwork(tx, network)
+		})
+		if err != nil {
+			h.logger.Debug("error saving certificate", zap.Error(err))
+		}
+	}
 }
 
 type bootstrap struct {
-	logger     *zap.Logger
-	broker     Broker
-	host       *vpn.Host
-	peer       *vnic.Peer
-	profile    *pb.Profile
-	links      map[*vpn.Network]struct{}
-	syncing    int32
-	peerInit   chan *pb.NetworkHandshake_Init
-	bindings   chan *pb.NetworkHandshake_NetworkBindings
-	conn       *vnic.FrameReadWriter
-	brokerConn *vnic.FrameReadWriter
-}
-
-func (h *bootstrap) run() {
-	networks := make(chan *vpn.Network, 1)
-	h.host.NotifyNetwork(networks)
-
-	go func() {
-		h.sync()
-		for range networks {
-			h.sync()
-		}
-	}()
-
-	if err := h.readHandshakes(); err != nil {
-		h.logger.Error("failed to read handshake", zap.Error(err))
-	}
-
-	h.host.StopNotifyingNetwork(networks)
-	close(networks)
-
-	h.removeNetworkLinks()
-	h.peer.Close()
+	logger       *zap.Logger
+	broker       Broker
+	host         *vpn.Host
+	peer         *vnic.Peer
+	profile      *pb.Profile
+	links        map[*vpn.Network]*bootstrapLink
+	syncing      int32
+	handshakes   chan *pb.NetworkHandshake
+	errors       chan error
+	peerInit     chan *pb.NetworkHandshake_Init
+	bindings     chan *pb.NetworkHandshake_NetworkBindings
+	certificates *event.Observable
+	conn         *vnic.FrameReadWriter
+	brokerConn   *vnic.FrameReadWriter
 }
 
 func (h *bootstrap) removeNetworkLinks() {
@@ -140,36 +144,79 @@ func (h *bootstrap) removeNetworkLinks() {
 	}
 }
 
-func (h *bootstrap) readHandshakes() error {
-	for {
-		var handshake pb.NetworkHandshake
-		if err := protoutil.ReadStream(h.conn, &handshake); err != nil {
-			return err
-		}
+func (h *bootstrap) clientAndLinkForNetworkKey(networkKey []byte) (*vpn.Client, *bootstrapLink, error) {
+	client, ok := h.host.Client(networkKey)
+	if !ok {
+		return nil, nil, ErrNetworkNotFound
+	}
 
-		switch body := handshake.Body.(type) {
-		case *pb.NetworkHandshake_Init_:
-			h.peerInit <- body.Init
-			h.sync()
-		case *pb.NetworkHandshake_NetworkBindings_:
-			h.bindings <- body.NetworkBindings
-		case *pb.NetworkHandshake_CertificateUpgradeOffer_:
-			h.handleCertificateUpgradeOffer(body.CertificateUpgradeOffer)
-		case *pb.NetworkHandshake_CertificateUpgradeRequest_:
-			h.handleCertificateUpgradeRequest(body.CertificateUpgradeRequest)
-		case *pb.NetworkHandshake_CertificateUpgradeResponse_:
-			h.handleCertificateUpgradeResponse(body.CertificateUpgradeResponse)
-		case *pb.NetworkHandshake_CertificateUpdate_:
-			h.handleCertificateUpdate(body.CertificateUpdate)
+	return client, h.links[client.Network], nil
+}
+
+func (h *bootstrap) run() {
+	networks := make(chan *vpn.Network, 1)
+	h.host.NotifyNetwork(networks)
+
+	certificates := make(chan *pb.Certificate, 1)
+	h.certificates.Notify(certificates)
+
+	defer func() {
+		h.host.StopNotifyingNetwork(networks)
+		h.certificates.StopNotifying(certificates)
+
+		h.removeNetworkLinks()
+		h.peer.Close()
+	}()
+
+	go h.sync()
+	go h.readHandshakes()
+
+	for {
+		select {
+		case <-networks:
+			go h.sync()
+		case cert := <-certificates:
+			h.sendCertificateUpdate(cert)
+		case handshake := <-h.handshakes:
+			h.handleHandshake(handshake)
+		case err := <-h.errors:
+			h.logger.Error("failed to read handshake", zap.Error(err))
+			return
 		}
 	}
 }
 
-func (h *bootstrap) handleCertificateUpgradeOffer(req *pb.NetworkHandshake_CertificateUpgradeOffer) error {
-	h.logger.Debug("handleCertificateUpgradeOffer")
-	jsonDump(req)
-	// TODO: deduplicate requests
+func (h *bootstrap) readHandshakes() {
+	for {
+		handshake := &pb.NetworkHandshake{}
+		if err := protoutil.ReadStream(h.conn, handshake); err != nil {
+			h.errors <- err
+			return
+		}
+		h.handshakes <- handshake
+	}
+}
 
+func (h *bootstrap) handleHandshake(handshake *pb.NetworkHandshake) error {
+	switch body := handshake.Body.(type) {
+	case *pb.NetworkHandshake_Init_:
+		h.peerInit <- body.Init
+		go h.sync()
+	case *pb.NetworkHandshake_NetworkBindings_:
+		h.bindings <- body.NetworkBindings
+	case *pb.NetworkHandshake_CertificateUpgradeOffer_:
+		return h.handleCertificateUpgradeOffer(body.CertificateUpgradeOffer)
+	case *pb.NetworkHandshake_CertificateUpgradeRequest_:
+		return h.handleCertificateUpgradeRequest(body.CertificateUpgradeRequest)
+	case *pb.NetworkHandshake_CertificateUpgradeResponse_:
+		return h.handleCertificateUpgradeResponse(body.CertificateUpgradeResponse)
+	case *pb.NetworkHandshake_CertificateUpdate_:
+		return h.handleCertificateUpdate(body.CertificateUpdate)
+	}
+	return nil
+}
+
+func (h *bootstrap) handleCertificateUpgradeOffer(req *pb.NetworkHandshake_CertificateUpgradeOffer) error {
 	csr, err := dao.NewCertificateRequest(
 		h.profile.Key,
 		pb.KeyUsage_KEY_USAGE_PEER|pb.KeyUsage_KEY_USAGE_SIGN,
@@ -179,9 +226,9 @@ func (h *bootstrap) handleCertificateUpgradeOffer(req *pb.NetworkHandshake_Certi
 		return err
 	}
 
-	client, ok := h.host.Client(req.NetworkKey)
-	if !ok {
-		return errors.New("network not found")
+	client, _, err := h.clientAndLinkForNetworkKey(req.NetworkKey)
+	if err != nil {
+		return err
 	}
 
 	// TODO: do we need to upgrade this cert? (invite/expired)
@@ -198,9 +245,6 @@ func (h *bootstrap) handleCertificateUpgradeOffer(req *pb.NetworkHandshake_Certi
 }
 
 func (h *bootstrap) handleCertificateUpgradeRequest(req *pb.NetworkHandshake_CertificateUpgradeRequest) error {
-	h.logger.Debug("handleCertificateUpgradeRequest")
-	jsonDump(req)
-
 	networkKey := dao.GetRootCert(req.Certificate).Key
 
 	renewReq := &pb.CARenewRequest{
@@ -209,9 +253,9 @@ func (h *bootstrap) handleCertificateUpgradeRequest(req *pb.NetworkHandshake_Cer
 	}
 	renewRes := &pb.CARenewResponse{}
 	err := func() error {
-		client, ok := h.host.Client(networkKey)
-		if !ok {
-			return errors.New("network not found")
+		client, _, err := h.clientAndLinkForNetworkKey(networkKey)
+		if err != nil {
+			return err
 		}
 
 		caClient, err := NewCAClient(h.logger, client)
@@ -246,32 +290,72 @@ func (h *bootstrap) handleCertificateUpgradeRequest(req *pb.NetworkHandshake_Cer
 }
 
 func (h *bootstrap) handleCertificateUpgradeResponse(req *pb.NetworkHandshake_CertificateUpgradeResponse) error {
-	h.logger.Debug("handleCertificateUpgradeResponse")
-	jsonDump(req)
-
 	if err := req.GetError(); err != "" {
 		// TODO: propagate to user
 		return errors.New(err)
 	}
 
-	// TODO: send to all pending peers
-	// TODO: validate cert
+	cert := req.GetCertificate()
+	if err := dao.VerifyCertificate(cert); err != nil {
+		return err
+	}
+
 	// TODO: confirm that we want to replace the cert
+
+	h.certificates.Emit(cert)
+	return nil
+}
+
+func (h *bootstrap) sendCertificateUpdate(cert *pb.Certificate) error {
+	if _, link, _ := h.clientAndLinkForNetworkKey(dao.GetRootCert(cert).Key); link == nil {
+		return nil
+	}
 
 	return h.send(&pb.NetworkHandshake{
 		Body: &pb.NetworkHandshake_CertificateUpdate_{
 			CertificateUpdate: &pb.NetworkHandshake_CertificateUpdate{
-				Certificate: req.GetCertificate(),
+				Certificate: cert,
 			},
 		},
 	})
 }
 
-func (h *bootstrap) handleCertificateUpdate(req *pb.NetworkHandshake_CertificateUpdate) {
-	h.logger.Debug("handleCertificateUpdate")
-	jsonDump(req)
+func (h *bootstrap) handleCertificateUpdate(req *pb.NetworkHandshake_CertificateUpdate) error {
+	if err := dao.VerifyCertificate(req.Certificate); err != nil {
+		return err
+	}
 
-	// TODO: finish binding
+	networkKey := dao.GetRootCert(req.Certificate).Key
+
+	client, link, err := h.clientAndLinkForNetworkKey(networkKey)
+	if err != nil {
+		return err
+	}
+	if link == nil {
+		return errors.New("peer network binding not negotiated")
+	}
+	if link.open {
+		return errors.New("peer already added to network")
+	}
+
+	// handle invite certs
+	// TODO: also handle expired certificates
+	if !bytes.Equal(networkKey, req.Certificate.GetParent().Key) {
+		return errors.New("invalid peer cert")
+	}
+
+	h.logger.Debug(
+		"adding peer to network",
+		zap.Stringer("peer", h.peer.HostID()),
+		logutil.ByteHex("network", networkKey),
+		zap.Uint16("localPort", link.localPort),
+		zap.Uint16("peerPort", link.peerPort),
+	)
+
+	client.Network.AddPeer(h.peer, link.localPort, link.peerPort)
+	link.open = true
+
+	return nil
 }
 
 func (h *bootstrap) send(msg protoreflect.ProtoMessage) error {
@@ -297,16 +381,14 @@ func (h *bootstrap) sync() {
 	})
 	if err != nil {
 		atomic.StoreInt32(&h.syncing, 0)
-		h.logger.Debug("sync failed", zap.Error(err))
+		h.errors <- fmt.Errorf("sync failed: %w", err)
 		return
 	}
 
-	go func() {
-		if err := h.exchangeBindings(keys); err != nil {
-			h.logger.Debug("sync failed", zap.Error(err))
-		}
-		atomic.StoreInt32(&h.syncing, 0)
-	}()
+	if err := h.exchangeBindings(keys); err != nil {
+		h.errors <- fmt.Errorf("sync failed: %w", err)
+	}
+	atomic.StoreInt32(&h.syncing, 0)
 }
 
 func (h *bootstrap) exchangeBindings(keys [][]byte) error {
@@ -363,11 +445,11 @@ func (h *bootstrap) sendNetworkBindings(keys [][]byte) ([]*pb.NetworkHandshake_N
 	var bindings []*pb.NetworkHandshake_NetworkBinding
 
 	for _, key := range keys {
-		c, ok := h.host.Client(key)
-		if !ok {
-			return nil, ErrNetworkNotFound
+		client, link, err := h.clientAndLinkForNetworkKey(key)
+		if err != nil {
+			return nil, err
 		}
-		if _, ok := h.links[c.Network]; ok {
+		if link != nil {
 			continue
 		}
 
@@ -380,7 +462,7 @@ func (h *bootstrap) sendNetworkBindings(keys [][]byte) ([]*pb.NetworkHandshake_N
 			bindings,
 			&pb.NetworkHandshake_NetworkBinding{
 				Port:        uint32(port),
-				Certificate: c.Network.Certificate(),
+				Certificate: client.Network.Certificate(),
 			},
 		)
 	}
@@ -418,52 +500,66 @@ func (h *bootstrap) verifyNetworkBindings(bindings *pb.NetworkHandshake_NetworkB
 func (h *bootstrap) handleNetworkBindings(networkBindings, peerNetworkBindings []*pb.NetworkHandshake_NetworkBinding) error {
 	for i, peerBinding := range peerNetworkBindings {
 		binding := networkBindings[i]
+		networkKey := dao.GetRootCert(peerBinding.Certificate).Key
 
 		if !bytes.Equal(h.peer.Certificate.Key, peerBinding.Certificate.Key) {
 			return ErrNetworkOwnerMismatch
 		}
-		if !bytes.Equal(dao.GetRootCert(binding.Certificate).Key, dao.GetRootCert(peerBinding.Certificate).Key) {
+		if !bytes.Equal(dao.GetRootCert(binding.Certificate).Key, networkKey) {
 			return ErrNetworkAuthorityMismatch
 		}
 		if peerBinding.Port > uint32(math.MaxUint16) {
 			return ErrNetworkIDBounds
 		}
 
+		client, _, err := h.clientAndLinkForNetworkKey(networkKey)
+		if err != nil {
+			return err
+		}
+
+		link := &bootstrapLink{
+			localPort: uint16(binding.Port),
+			peerPort:  uint16(peerBinding.Port),
+		}
+		h.links[client.Network] = link
+
 		// handle invite certs
 		// TODO: also handle expired certificates
-		if !bytes.Equal(dao.GetRootCert(binding.Certificate).Key, peerBinding.Certificate.GetParent().Key) {
+		if !bytes.Equal(networkKey, peerBinding.Certificate.GetParent().Key) {
 			// jsonDump(peerBinding)
 			err := h.send(&pb.NetworkHandshake{
 				Body: &pb.NetworkHandshake_CertificateUpgradeOffer_{
 					CertificateUpgradeOffer: &pb.NetworkHandshake_CertificateUpgradeOffer{
-						NetworkKey: dao.GetRootCert(binding.Certificate).Key,
+						NetworkKey: networkKey,
 					},
 				},
 			})
 			if err != nil {
 				h.logger.Debug("cert upgrade offer failed", zap.Error(err))
 			}
-		}
-
-		c, ok := h.host.Client(dao.GetRootCert(peerBinding.Certificate).Key)
-		if !ok {
-			return ErrNetworkNotFound
+			continue
 		}
 
 		h.logger.Debug(
 			"adding peer to network",
 			zap.Stringer("peer", h.peer.HostID()),
-			logutil.ByteHex("network", dao.GetRootCert(peerBinding.Certificate).Key),
-			zap.Uint32("localPort", binding.Port),
-			zap.Uint32("remotePort", peerBinding.Port),
+			logutil.ByteHex("network", networkKey),
+			zap.Uint16("localPort", link.localPort),
+			zap.Uint16("peerPort", link.peerPort),
 		)
 
-		c.Network.AddPeer(h.peer, uint16(binding.Port), uint16(peerBinding.Port))
-		h.links[c.Network] = struct{}{}
+		client.Network.AddPeer(h.peer, link.localPort, link.peerPort)
+		link.open = true
 
 		// h.host.peerNetworkObservers.Emit(PeerNetwork{h.peer, c.Network})
 	}
 	return nil
+}
+
+type bootstrapLink struct {
+	localPort uint16
+	peerPort  uint16
+	open      bool
 }
 
 func jsonDump(i interface{}) {

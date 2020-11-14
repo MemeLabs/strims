@@ -114,7 +114,7 @@ func (s *swarmSwarm) TryOpenChannel(p *swarmPeer) {
 			zap.Uint16("remotePort", remotePort),
 		)
 
-		w := vnic.NewFrameWriter(p.peer.Link, remotePort, p.peer.Link.MTU())
+		w := vnic.NewFrameWriter(p.peer.Link, remotePort)
 		ch, err := ppspp.OpenChannel(s.logger, p.swarmPeer, s.swarm, w)
 		if err != nil {
 			return

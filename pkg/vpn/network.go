@@ -30,7 +30,6 @@ func newNetwork(logger *zap.Logger, host *vnic.Host, certificate *pb.Certificate
 		links:            kademlia.NewKBucket(host.ID(), 20),
 		handlers:         map[uint16]MessageHandler{},
 		reservations:     map[uint16]struct{}{},
-		done:             make(chan struct{}),
 		nextHop:          newNextHopMap(),
 	}
 }
@@ -92,8 +91,6 @@ type Network struct {
 	recentMessageIDs *lru.Cache
 	linksLock        sync.Mutex
 	links            *kademlia.KBucket
-	closeOnce        sync.Once
-	done             chan struct{}
 	handlersLock     sync.Mutex
 	handlers         map[uint16]MessageHandler
 	reservationsLock sync.Mutex
@@ -161,12 +158,13 @@ func (n *Network) ReleasePort(port uint16) {
 
 // Close ...
 func (n *Network) Close() {
-	n.closeOnce.Do(func() { close(n.done) })
-}
+	n.linksLock.Lock()
+	defer n.linksLock.Unlock()
 
-// Done ...
-func (n *Network) Done() <-chan struct{} {
-	return n.done
+	for _, link := range n.links.Slice() {
+		link.(*networkLink).peer.RemoveHandler(link.(*networkLink).port)
+	}
+	n.links.Reset()
 }
 
 // Key ...
@@ -191,7 +189,7 @@ func (n *Network) AddPeer(peer *vnic.Peer, srcPort, dstPort uint16) {
 	link := &networkLink{
 		peer:        peer,
 		port:        srcPort,
-		FrameWriter: vnic.NewFrameWriter(peer.Link, dstPort, peer.Link.MTU()),
+		FrameWriter: vnic.NewFrameWriter(peer.Link, dstPort),
 	}
 	peer.SetHandler(srcPort, n.handleFrame)
 
@@ -215,8 +213,9 @@ func (n *Network) RemovePeer(id kademlia.ID) {
 // HasPeer ...
 func (n *Network) HasPeer(id kademlia.ID) bool {
 	n.linksLock.Lock()
+	defer n.linksLock.Unlock()
+
 	_, ok := n.links.Get(id)
-	n.linksLock.Unlock()
 	return ok
 }
 
