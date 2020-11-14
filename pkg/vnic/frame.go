@@ -100,10 +100,10 @@ func (f *Frame) Free() {
 var errClosedFrameWriter = errors.New("write on closed frameReadWriter")
 
 // NewFrameReadWriter ...
-func NewFrameReadWriter(w io.Writer, port uint16, size int) *FrameReadWriter {
+func NewFrameReadWriter(w Link, port uint16) *FrameReadWriter {
 	return &FrameReadWriter{
-		FrameReader: NewFrameReader(size),
-		FrameWriter: NewFrameWriter(w, port, size),
+		FrameReader: NewFrameReader(w.MTU()),
+		FrameWriter: NewFrameWriter(w, port),
 	}
 }
 
@@ -127,19 +127,19 @@ func (f *FrameReadWriter) Close() error {
 
 // NewFrameReader ...
 func NewFrameReader(size int) *FrameReader {
-	readReader, readWriter := io.Pipe()
+	r, w := io.Pipe()
 	return &FrameReader{
-		readReader: readReader,
-		readWriter: readWriter,
-		size:       size,
+		r:    r,
+		w:    w,
+		size: size,
 	}
 }
 
 // FrameReader ...
 type FrameReader struct {
-	readReader *io.PipeReader
-	readWriter *io.PipeWriter
-	size       int
+	r    *io.PipeReader
+	w    *io.PipeWriter
+	size int
 }
 
 // MTU ...
@@ -149,29 +149,29 @@ func (b *FrameReader) MTU() int {
 
 // HandleFrame ...
 func (b *FrameReader) HandleFrame(p *Peer, f Frame) error {
-	_, err := b.readWriter.Write(f.Body)
+	_, err := b.w.Write(f.Body)
 	return err
 }
 
 // Read ...
 func (b *FrameReader) Read(p []byte) (int, error) {
-	return b.readReader.Read(p)
+	return b.r.Read(p)
 }
 
 // Close ...
 func (b *FrameReader) Close() error {
-	b.readReader.Close()
-	b.readWriter.Close()
+	b.r.Close()
+	b.w.Close()
 	return nil
 }
 
 // NewFrameWriter ...
-func NewFrameWriter(w io.Writer, port uint16, size int) *FrameWriter {
+func NewFrameWriter(w Link, port uint16) *FrameWriter {
 	return &FrameWriter{
 		w:           w,
 		port:        port,
-		size:        size,
-		writeBuffer: make([]byte, size),
+		size:        w.MTU(),
+		writeBuffer: make([]byte, w.MTU()),
 		off:         frameHeaderLen,
 	}
 }

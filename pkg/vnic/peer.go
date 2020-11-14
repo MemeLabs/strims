@@ -71,6 +71,7 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key, hostCert *pb.Certif
 		hostID:       hostID,
 		handlers:     map[uint16]FrameHandler{},
 		reservations: map[uint16]struct{}{},
+		channels:     map[uint16]*FrameReadWriter{},
 		done:         make(chan struct{}),
 	}
 	return p, nil
@@ -86,6 +87,8 @@ type Peer struct {
 	handlers         map[uint16]FrameHandler
 	reservationsLock sync.Mutex
 	reservations     map[uint16]struct{}
+	channelsLock     sync.Mutex
+	channels         map[uint16]*FrameReadWriter
 	done             chan struct{}
 	closeOnce        sync.Once
 }
@@ -122,6 +125,13 @@ func (p *Peer) Close() {
 	p.closeOnce.Do(func() {
 		close(p.done)
 		p.Link.Close()
+
+		p.channelsLock.Lock()
+		defer p.channelsLock.Unlock()
+		for port, ch := range p.channels {
+			delete(p.channels, port)
+			ch.Close()
+		}
 	})
 }
 
@@ -193,14 +203,24 @@ func (p *Peer) ReleasePort(port uint16) {
 
 // Channel ...
 func (p *Peer) Channel(port uint16) *FrameReadWriter {
-	f := NewFrameReadWriter(p.Link, port, p.Link.MTU())
+	f := NewFrameReadWriter(p.Link, port)
 	p.SetHandler(port, f.HandleFrame)
+
+	p.channelsLock.Lock()
+	defer p.channelsLock.Unlock()
+	p.channels[port] = f
+
 	return f
 }
 
 // CloseChannel ...
 func (p *Peer) CloseChannel(f *FrameReadWriter) error {
 	p.RemoveHandler(f.port)
+
+	p.channelsLock.Lock()
+	defer p.channelsLock.Unlock()
+	delete(p.channels, f.port)
+
 	return f.Close()
 }
 

@@ -42,6 +42,16 @@ func NewKBucket(id ID, k int) *KBucket {
 	return v
 }
 
+// Reset ...
+func (k *KBucket) Reset() {
+	for i, b := range k.b {
+		for j := range b {
+			b[j] = nil
+		}
+		k.b[i] = b[:0]
+	}
+}
+
 // Slice ...
 func (k *KBucket) Slice() []Interface {
 	n := 0
@@ -101,6 +111,7 @@ func (k *KBucket) Remove(id ID) bool {
 	for j, n := range k.b[i] {
 		if n.ID().Equals(id) {
 			copy(k.b[i][j:], k.b[i][j+1:])
+			k.b[i][len(k.b[i])-1] = nil
 			k.b[i] = k.b[i][:len(k.b[i])-1]
 			k.l--
 			return true

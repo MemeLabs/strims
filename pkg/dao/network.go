@@ -1,6 +1,7 @@
 package dao
 
 import (
+	"bytes"
 	"strconv"
 	"time"
 
@@ -35,6 +36,20 @@ func GetNetwork(s kv.Store, id uint64) (v *pb.Network, err error) {
 		return tx.Get(prefixNetworkKey(id), v)
 	})
 	return
+}
+
+// GetNetworkByKey ...
+func GetNetworkByKey(s kv.Store, key []byte) (*pb.Network, error) {
+	networks, err := GetNetworks(s)
+	if err != nil {
+		return nil, err
+	}
+	for _, v := range networks {
+		if bytes.Equal(GetRootCert(v.Certificate).Key, key) {
+			return v, nil
+		}
+	}
+	return nil, kv.ErrRecordNotFound
 }
 
 // GetNetworks ...
