@@ -5,23 +5,23 @@ import (
 	"sync"
 )
 
-// Observable ...
-type Observable struct {
+// Observer ...
+type Observer struct {
 	observers sync.Map
 }
 
 // Notify ...
-func (o *Observable) Notify(ch interface{}) {
+func (o *Observer) Notify(ch interface{}) {
 	o.observers.Store(ch, ch)
 }
 
 // StopNotifying ...
-func (o *Observable) StopNotifying(ch interface{}) {
+func (o *Observer) StopNotifying(ch interface{}) {
 	o.observers.Delete(ch)
 }
 
 // Emit ...
-func (o *Observable) Emit(v interface{}) {
+func (o *Observer) Emit(v interface{}) {
 	o.observers.Range(func(_ interface{}, chi interface{}) bool {
 		reflect.ValueOf(chi).Send(reflect.ValueOf(v))
 		return true
@@ -29,7 +29,7 @@ func (o *Observable) Emit(v interface{}) {
 }
 
 // Close ...
-func (o *Observable) Close() {
+func (o *Observer) Close() {
 	o.observers.Range(func(_ interface{}, chi interface{}) bool {
 		reflect.ValueOf(chi).Close()
 		return true

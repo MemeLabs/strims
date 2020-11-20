@@ -14,11 +14,11 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/frontend"
 	"github.com/MemeLabs/go-ppspp/pkg/gobridge"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
-	"github.com/MemeLabs/go-ppspp/pkg/services/network"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/go-ppspp/pkg/wasmio"

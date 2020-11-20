@@ -8594,6 +8594,1527 @@ export namespace PeerIndexMessage {
     }
 }
 
+/** Properties of a SwarmPeerAnnounceSwarmRequest. */
+export interface ISwarmPeerAnnounceSwarmRequest {
+
+    /** SwarmPeerAnnounceSwarmRequest id */
+    id?: (Uint8Array|null);
+
+    /** SwarmPeerAnnounceSwarmRequest port */
+    port?: (number|null);
+}
+
+/** Represents a SwarmPeerAnnounceSwarmRequest. */
+export class SwarmPeerAnnounceSwarmRequest implements ISwarmPeerAnnounceSwarmRequest {
+
+    /**
+     * Constructs a new SwarmPeerAnnounceSwarmRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ISwarmPeerAnnounceSwarmRequest);
+
+    /** SwarmPeerAnnounceSwarmRequest id. */
+    public id: Uint8Array;
+
+    /** SwarmPeerAnnounceSwarmRequest port. */
+    public port: number;
+
+    /**
+     * Creates a new SwarmPeerAnnounceSwarmRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns SwarmPeerAnnounceSwarmRequest instance
+     */
+    public static create(properties?: ISwarmPeerAnnounceSwarmRequest): SwarmPeerAnnounceSwarmRequest;
+
+    /**
+     * Encodes the specified SwarmPeerAnnounceSwarmRequest message. Does not implicitly {@link SwarmPeerAnnounceSwarmRequest.verify|verify} messages.
+     * @param message SwarmPeerAnnounceSwarmRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ISwarmPeerAnnounceSwarmRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified SwarmPeerAnnounceSwarmRequest message, length delimited. Does not implicitly {@link SwarmPeerAnnounceSwarmRequest.verify|verify} messages.
+     * @param message SwarmPeerAnnounceSwarmRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ISwarmPeerAnnounceSwarmRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a SwarmPeerAnnounceSwarmRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns SwarmPeerAnnounceSwarmRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): SwarmPeerAnnounceSwarmRequest;
+
+    /**
+     * Decodes a SwarmPeerAnnounceSwarmRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns SwarmPeerAnnounceSwarmRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): SwarmPeerAnnounceSwarmRequest;
+
+    /**
+     * Verifies a SwarmPeerAnnounceSwarmRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a SwarmPeerAnnounceSwarmRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns SwarmPeerAnnounceSwarmRequest
+     */
+    public static fromObject(object: { [k: string]: any }): SwarmPeerAnnounceSwarmRequest;
+
+    /**
+     * Creates a plain object from a SwarmPeerAnnounceSwarmRequest message. Also converts values to other types if specified.
+     * @param message SwarmPeerAnnounceSwarmRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: SwarmPeerAnnounceSwarmRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this SwarmPeerAnnounceSwarmRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a SwarmPeerAnnounceSwarmResponse. */
+export interface ISwarmPeerAnnounceSwarmResponse {
+
+    /** SwarmPeerAnnounceSwarmResponse port */
+    port?: (number|null);
+}
+
+/** Represents a SwarmPeerAnnounceSwarmResponse. */
+export class SwarmPeerAnnounceSwarmResponse implements ISwarmPeerAnnounceSwarmResponse {
+
+    /**
+     * Constructs a new SwarmPeerAnnounceSwarmResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ISwarmPeerAnnounceSwarmResponse);
+
+    /** SwarmPeerAnnounceSwarmResponse port. */
+    public port: number;
+
+    /** SwarmPeerAnnounceSwarmResponse body. */
+    public body?: "port";
+
+    /**
+     * Creates a new SwarmPeerAnnounceSwarmResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns SwarmPeerAnnounceSwarmResponse instance
+     */
+    public static create(properties?: ISwarmPeerAnnounceSwarmResponse): SwarmPeerAnnounceSwarmResponse;
+
+    /**
+     * Encodes the specified SwarmPeerAnnounceSwarmResponse message. Does not implicitly {@link SwarmPeerAnnounceSwarmResponse.verify|verify} messages.
+     * @param message SwarmPeerAnnounceSwarmResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ISwarmPeerAnnounceSwarmResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified SwarmPeerAnnounceSwarmResponse message, length delimited. Does not implicitly {@link SwarmPeerAnnounceSwarmResponse.verify|verify} messages.
+     * @param message SwarmPeerAnnounceSwarmResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ISwarmPeerAnnounceSwarmResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a SwarmPeerAnnounceSwarmResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns SwarmPeerAnnounceSwarmResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): SwarmPeerAnnounceSwarmResponse;
+
+    /**
+     * Decodes a SwarmPeerAnnounceSwarmResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns SwarmPeerAnnounceSwarmResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): SwarmPeerAnnounceSwarmResponse;
+
+    /**
+     * Verifies a SwarmPeerAnnounceSwarmResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a SwarmPeerAnnounceSwarmResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns SwarmPeerAnnounceSwarmResponse
+     */
+    public static fromObject(object: { [k: string]: any }): SwarmPeerAnnounceSwarmResponse;
+
+    /**
+     * Creates a plain object from a SwarmPeerAnnounceSwarmResponse message. Also converts values to other types if specified.
+     * @param message SwarmPeerAnnounceSwarmResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: SwarmPeerAnnounceSwarmResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this SwarmPeerAnnounceSwarmResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a CAPeerRenewRequest. */
+export interface ICAPeerRenewRequest {
+
+    /** CAPeerRenewRequest certificate */
+    certificate?: (ICertificate|null);
+
+    /** CAPeerRenewRequest certificateRequest */
+    certificateRequest?: (ICertificateRequest|null);
+}
+
+/** Represents a CAPeerRenewRequest. */
+export class CAPeerRenewRequest implements ICAPeerRenewRequest {
+
+    /**
+     * Constructs a new CAPeerRenewRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ICAPeerRenewRequest);
+
+    /** CAPeerRenewRequest certificate. */
+    public certificate?: (ICertificate|null);
+
+    /** CAPeerRenewRequest certificateRequest. */
+    public certificateRequest?: (ICertificateRequest|null);
+
+    /**
+     * Creates a new CAPeerRenewRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns CAPeerRenewRequest instance
+     */
+    public static create(properties?: ICAPeerRenewRequest): CAPeerRenewRequest;
+
+    /**
+     * Encodes the specified CAPeerRenewRequest message. Does not implicitly {@link CAPeerRenewRequest.verify|verify} messages.
+     * @param message CAPeerRenewRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ICAPeerRenewRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified CAPeerRenewRequest message, length delimited. Does not implicitly {@link CAPeerRenewRequest.verify|verify} messages.
+     * @param message CAPeerRenewRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ICAPeerRenewRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a CAPeerRenewRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns CAPeerRenewRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CAPeerRenewRequest;
+
+    /**
+     * Decodes a CAPeerRenewRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns CAPeerRenewRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CAPeerRenewRequest;
+
+    /**
+     * Verifies a CAPeerRenewRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a CAPeerRenewRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns CAPeerRenewRequest
+     */
+    public static fromObject(object: { [k: string]: any }): CAPeerRenewRequest;
+
+    /**
+     * Creates a plain object from a CAPeerRenewRequest message. Also converts values to other types if specified.
+     * @param message CAPeerRenewRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: CAPeerRenewRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this CAPeerRenewRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a CAPeerRenewResponse. */
+export interface ICAPeerRenewResponse {
+
+    /** CAPeerRenewResponse certificate */
+    certificate?: (ICertificate|null);
+}
+
+/** Represents a CAPeerRenewResponse. */
+export class CAPeerRenewResponse implements ICAPeerRenewResponse {
+
+    /**
+     * Constructs a new CAPeerRenewResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ICAPeerRenewResponse);
+
+    /** CAPeerRenewResponse certificate. */
+    public certificate?: (ICertificate|null);
+
+    /**
+     * Creates a new CAPeerRenewResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns CAPeerRenewResponse instance
+     */
+    public static create(properties?: ICAPeerRenewResponse): CAPeerRenewResponse;
+
+    /**
+     * Encodes the specified CAPeerRenewResponse message. Does not implicitly {@link CAPeerRenewResponse.verify|verify} messages.
+     * @param message CAPeerRenewResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ICAPeerRenewResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified CAPeerRenewResponse message, length delimited. Does not implicitly {@link CAPeerRenewResponse.verify|verify} messages.
+     * @param message CAPeerRenewResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ICAPeerRenewResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a CAPeerRenewResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns CAPeerRenewResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): CAPeerRenewResponse;
+
+    /**
+     * Decodes a CAPeerRenewResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns CAPeerRenewResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): CAPeerRenewResponse;
+
+    /**
+     * Verifies a CAPeerRenewResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a CAPeerRenewResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns CAPeerRenewResponse
+     */
+    public static fromObject(object: { [k: string]: any }): CAPeerRenewResponse;
+
+    /**
+     * Creates a plain object from a CAPeerRenewResponse message. Also converts values to other types if specified.
+     * @param message CAPeerRenewResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: CAPeerRenewResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this CAPeerRenewResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a NetworkPeerNegotiateRequest. */
+export interface INetworkPeerNegotiateRequest {
+
+    /** NetworkPeerNegotiateRequest keyCount */
+    keyCount?: (number|null);
+}
+
+/** Represents a NetworkPeerNegotiateRequest. */
+export class NetworkPeerNegotiateRequest implements INetworkPeerNegotiateRequest {
+
+    /**
+     * Constructs a new NetworkPeerNegotiateRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: INetworkPeerNegotiateRequest);
+
+    /** NetworkPeerNegotiateRequest keyCount. */
+    public keyCount: number;
+
+    /**
+     * Creates a new NetworkPeerNegotiateRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns NetworkPeerNegotiateRequest instance
+     */
+    public static create(properties?: INetworkPeerNegotiateRequest): NetworkPeerNegotiateRequest;
+
+    /**
+     * Encodes the specified NetworkPeerNegotiateRequest message. Does not implicitly {@link NetworkPeerNegotiateRequest.verify|verify} messages.
+     * @param message NetworkPeerNegotiateRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: INetworkPeerNegotiateRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified NetworkPeerNegotiateRequest message, length delimited. Does not implicitly {@link NetworkPeerNegotiateRequest.verify|verify} messages.
+     * @param message NetworkPeerNegotiateRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: INetworkPeerNegotiateRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a NetworkPeerNegotiateRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns NetworkPeerNegotiateRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkPeerNegotiateRequest;
+
+    /**
+     * Decodes a NetworkPeerNegotiateRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns NetworkPeerNegotiateRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkPeerNegotiateRequest;
+
+    /**
+     * Verifies a NetworkPeerNegotiateRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a NetworkPeerNegotiateRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns NetworkPeerNegotiateRequest
+     */
+    public static fromObject(object: { [k: string]: any }): NetworkPeerNegotiateRequest;
+
+    /**
+     * Creates a plain object from a NetworkPeerNegotiateRequest message. Also converts values to other types if specified.
+     * @param message NetworkPeerNegotiateRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: NetworkPeerNegotiateRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this NetworkPeerNegotiateRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a NetworkPeerNegotiateResponse. */
+export interface INetworkPeerNegotiateResponse {
+
+    /** NetworkPeerNegotiateResponse keyCount */
+    keyCount?: (number|null);
+}
+
+/** Represents a NetworkPeerNegotiateResponse. */
+export class NetworkPeerNegotiateResponse implements INetworkPeerNegotiateResponse {
+
+    /**
+     * Constructs a new NetworkPeerNegotiateResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: INetworkPeerNegotiateResponse);
+
+    /** NetworkPeerNegotiateResponse keyCount. */
+    public keyCount: number;
+
+    /**
+     * Creates a new NetworkPeerNegotiateResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns NetworkPeerNegotiateResponse instance
+     */
+    public static create(properties?: INetworkPeerNegotiateResponse): NetworkPeerNegotiateResponse;
+
+    /**
+     * Encodes the specified NetworkPeerNegotiateResponse message. Does not implicitly {@link NetworkPeerNegotiateResponse.verify|verify} messages.
+     * @param message NetworkPeerNegotiateResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: INetworkPeerNegotiateResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified NetworkPeerNegotiateResponse message, length delimited. Does not implicitly {@link NetworkPeerNegotiateResponse.verify|verify} messages.
+     * @param message NetworkPeerNegotiateResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: INetworkPeerNegotiateResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a NetworkPeerNegotiateResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns NetworkPeerNegotiateResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkPeerNegotiateResponse;
+
+    /**
+     * Decodes a NetworkPeerNegotiateResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns NetworkPeerNegotiateResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkPeerNegotiateResponse;
+
+    /**
+     * Verifies a NetworkPeerNegotiateResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a NetworkPeerNegotiateResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns NetworkPeerNegotiateResponse
+     */
+    public static fromObject(object: { [k: string]: any }): NetworkPeerNegotiateResponse;
+
+    /**
+     * Creates a plain object from a NetworkPeerNegotiateResponse message. Also converts values to other types if specified.
+     * @param message NetworkPeerNegotiateResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: NetworkPeerNegotiateResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this NetworkPeerNegotiateResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a NetworkPeerBinding. */
+export interface INetworkPeerBinding {
+
+    /** NetworkPeerBinding port */
+    port?: (number|null);
+
+    /** NetworkPeerBinding certificate */
+    certificate?: (ICertificate|null);
+}
+
+/** Represents a NetworkPeerBinding. */
+export class NetworkPeerBinding implements INetworkPeerBinding {
+
+    /**
+     * Constructs a new NetworkPeerBinding.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: INetworkPeerBinding);
+
+    /** NetworkPeerBinding port. */
+    public port: number;
+
+    /** NetworkPeerBinding certificate. */
+    public certificate?: (ICertificate|null);
+
+    /**
+     * Creates a new NetworkPeerBinding instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns NetworkPeerBinding instance
+     */
+    public static create(properties?: INetworkPeerBinding): NetworkPeerBinding;
+
+    /**
+     * Encodes the specified NetworkPeerBinding message. Does not implicitly {@link NetworkPeerBinding.verify|verify} messages.
+     * @param message NetworkPeerBinding message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: INetworkPeerBinding, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified NetworkPeerBinding message, length delimited. Does not implicitly {@link NetworkPeerBinding.verify|verify} messages.
+     * @param message NetworkPeerBinding message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: INetworkPeerBinding, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a NetworkPeerBinding message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns NetworkPeerBinding
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkPeerBinding;
+
+    /**
+     * Decodes a NetworkPeerBinding message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns NetworkPeerBinding
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkPeerBinding;
+
+    /**
+     * Verifies a NetworkPeerBinding message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a NetworkPeerBinding message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns NetworkPeerBinding
+     */
+    public static fromObject(object: { [k: string]: any }): NetworkPeerBinding;
+
+    /**
+     * Creates a plain object from a NetworkPeerBinding message. Also converts values to other types if specified.
+     * @param message NetworkPeerBinding
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: NetworkPeerBinding, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this NetworkPeerBinding to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a NetworkPeerOpenRequest. */
+export interface INetworkPeerOpenRequest {
+
+    /** NetworkPeerOpenRequest bindings */
+    bindings?: (INetworkPeerBinding[]|null);
+}
+
+/** Represents a NetworkPeerOpenRequest. */
+export class NetworkPeerOpenRequest implements INetworkPeerOpenRequest {
+
+    /**
+     * Constructs a new NetworkPeerOpenRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: INetworkPeerOpenRequest);
+
+    /** NetworkPeerOpenRequest bindings. */
+    public bindings: INetworkPeerBinding[];
+
+    /**
+     * Creates a new NetworkPeerOpenRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns NetworkPeerOpenRequest instance
+     */
+    public static create(properties?: INetworkPeerOpenRequest): NetworkPeerOpenRequest;
+
+    /**
+     * Encodes the specified NetworkPeerOpenRequest message. Does not implicitly {@link NetworkPeerOpenRequest.verify|verify} messages.
+     * @param message NetworkPeerOpenRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: INetworkPeerOpenRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified NetworkPeerOpenRequest message, length delimited. Does not implicitly {@link NetworkPeerOpenRequest.verify|verify} messages.
+     * @param message NetworkPeerOpenRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: INetworkPeerOpenRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a NetworkPeerOpenRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns NetworkPeerOpenRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkPeerOpenRequest;
+
+    /**
+     * Decodes a NetworkPeerOpenRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns NetworkPeerOpenRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkPeerOpenRequest;
+
+    /**
+     * Verifies a NetworkPeerOpenRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a NetworkPeerOpenRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns NetworkPeerOpenRequest
+     */
+    public static fromObject(object: { [k: string]: any }): NetworkPeerOpenRequest;
+
+    /**
+     * Creates a plain object from a NetworkPeerOpenRequest message. Also converts values to other types if specified.
+     * @param message NetworkPeerOpenRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: NetworkPeerOpenRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this NetworkPeerOpenRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a NetworkPeerOpenResponse. */
+export interface INetworkPeerOpenResponse {
+
+    /** NetworkPeerOpenResponse bindings */
+    bindings?: (INetworkPeerBinding[]|null);
+}
+
+/** Represents a NetworkPeerOpenResponse. */
+export class NetworkPeerOpenResponse implements INetworkPeerOpenResponse {
+
+    /**
+     * Constructs a new NetworkPeerOpenResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: INetworkPeerOpenResponse);
+
+    /** NetworkPeerOpenResponse bindings. */
+    public bindings: INetworkPeerBinding[];
+
+    /**
+     * Creates a new NetworkPeerOpenResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns NetworkPeerOpenResponse instance
+     */
+    public static create(properties?: INetworkPeerOpenResponse): NetworkPeerOpenResponse;
+
+    /**
+     * Encodes the specified NetworkPeerOpenResponse message. Does not implicitly {@link NetworkPeerOpenResponse.verify|verify} messages.
+     * @param message NetworkPeerOpenResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: INetworkPeerOpenResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified NetworkPeerOpenResponse message, length delimited. Does not implicitly {@link NetworkPeerOpenResponse.verify|verify} messages.
+     * @param message NetworkPeerOpenResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: INetworkPeerOpenResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a NetworkPeerOpenResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns NetworkPeerOpenResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkPeerOpenResponse;
+
+    /**
+     * Decodes a NetworkPeerOpenResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns NetworkPeerOpenResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkPeerOpenResponse;
+
+    /**
+     * Verifies a NetworkPeerOpenResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a NetworkPeerOpenResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns NetworkPeerOpenResponse
+     */
+    public static fromObject(object: { [k: string]: any }): NetworkPeerOpenResponse;
+
+    /**
+     * Creates a plain object from a NetworkPeerOpenResponse message. Also converts values to other types if specified.
+     * @param message NetworkPeerOpenResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: NetworkPeerOpenResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this NetworkPeerOpenResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a NetworkPeerCloseRequest. */
+export interface INetworkPeerCloseRequest {
+
+    /** NetworkPeerCloseRequest key */
+    key?: (Uint8Array|null);
+}
+
+/** Represents a NetworkPeerCloseRequest. */
+export class NetworkPeerCloseRequest implements INetworkPeerCloseRequest {
+
+    /**
+     * Constructs a new NetworkPeerCloseRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: INetworkPeerCloseRequest);
+
+    /** NetworkPeerCloseRequest key. */
+    public key: Uint8Array;
+
+    /**
+     * Creates a new NetworkPeerCloseRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns NetworkPeerCloseRequest instance
+     */
+    public static create(properties?: INetworkPeerCloseRequest): NetworkPeerCloseRequest;
+
+    /**
+     * Encodes the specified NetworkPeerCloseRequest message. Does not implicitly {@link NetworkPeerCloseRequest.verify|verify} messages.
+     * @param message NetworkPeerCloseRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: INetworkPeerCloseRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified NetworkPeerCloseRequest message, length delimited. Does not implicitly {@link NetworkPeerCloseRequest.verify|verify} messages.
+     * @param message NetworkPeerCloseRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: INetworkPeerCloseRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a NetworkPeerCloseRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns NetworkPeerCloseRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkPeerCloseRequest;
+
+    /**
+     * Decodes a NetworkPeerCloseRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns NetworkPeerCloseRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkPeerCloseRequest;
+
+    /**
+     * Verifies a NetworkPeerCloseRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a NetworkPeerCloseRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns NetworkPeerCloseRequest
+     */
+    public static fromObject(object: { [k: string]: any }): NetworkPeerCloseRequest;
+
+    /**
+     * Creates a plain object from a NetworkPeerCloseRequest message. Also converts values to other types if specified.
+     * @param message NetworkPeerCloseRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: NetworkPeerCloseRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this NetworkPeerCloseRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a NetworkPeerCloseResponse. */
+export interface INetworkPeerCloseResponse {
+}
+
+/** Represents a NetworkPeerCloseResponse. */
+export class NetworkPeerCloseResponse implements INetworkPeerCloseResponse {
+
+    /**
+     * Constructs a new NetworkPeerCloseResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: INetworkPeerCloseResponse);
+
+    /**
+     * Creates a new NetworkPeerCloseResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns NetworkPeerCloseResponse instance
+     */
+    public static create(properties?: INetworkPeerCloseResponse): NetworkPeerCloseResponse;
+
+    /**
+     * Encodes the specified NetworkPeerCloseResponse message. Does not implicitly {@link NetworkPeerCloseResponse.verify|verify} messages.
+     * @param message NetworkPeerCloseResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: INetworkPeerCloseResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified NetworkPeerCloseResponse message, length delimited. Does not implicitly {@link NetworkPeerCloseResponse.verify|verify} messages.
+     * @param message NetworkPeerCloseResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: INetworkPeerCloseResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a NetworkPeerCloseResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns NetworkPeerCloseResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkPeerCloseResponse;
+
+    /**
+     * Decodes a NetworkPeerCloseResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns NetworkPeerCloseResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkPeerCloseResponse;
+
+    /**
+     * Verifies a NetworkPeerCloseResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a NetworkPeerCloseResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns NetworkPeerCloseResponse
+     */
+    public static fromObject(object: { [k: string]: any }): NetworkPeerCloseResponse;
+
+    /**
+     * Creates a plain object from a NetworkPeerCloseResponse message. Also converts values to other types if specified.
+     * @param message NetworkPeerCloseResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: NetworkPeerCloseResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this NetworkPeerCloseResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BootstrapPeerGetPublishEnabledRequest. */
+export interface IBootstrapPeerGetPublishEnabledRequest {
+}
+
+/** Represents a BootstrapPeerGetPublishEnabledRequest. */
+export class BootstrapPeerGetPublishEnabledRequest implements IBootstrapPeerGetPublishEnabledRequest {
+
+    /**
+     * Constructs a new BootstrapPeerGetPublishEnabledRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBootstrapPeerGetPublishEnabledRequest);
+
+    /**
+     * Creates a new BootstrapPeerGetPublishEnabledRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BootstrapPeerGetPublishEnabledRequest instance
+     */
+    public static create(properties?: IBootstrapPeerGetPublishEnabledRequest): BootstrapPeerGetPublishEnabledRequest;
+
+    /**
+     * Encodes the specified BootstrapPeerGetPublishEnabledRequest message. Does not implicitly {@link BootstrapPeerGetPublishEnabledRequest.verify|verify} messages.
+     * @param message BootstrapPeerGetPublishEnabledRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBootstrapPeerGetPublishEnabledRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BootstrapPeerGetPublishEnabledRequest message, length delimited. Does not implicitly {@link BootstrapPeerGetPublishEnabledRequest.verify|verify} messages.
+     * @param message BootstrapPeerGetPublishEnabledRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBootstrapPeerGetPublishEnabledRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BootstrapPeerGetPublishEnabledRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BootstrapPeerGetPublishEnabledRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BootstrapPeerGetPublishEnabledRequest;
+
+    /**
+     * Decodes a BootstrapPeerGetPublishEnabledRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BootstrapPeerGetPublishEnabledRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BootstrapPeerGetPublishEnabledRequest;
+
+    /**
+     * Verifies a BootstrapPeerGetPublishEnabledRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BootstrapPeerGetPublishEnabledRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BootstrapPeerGetPublishEnabledRequest
+     */
+    public static fromObject(object: { [k: string]: any }): BootstrapPeerGetPublishEnabledRequest;
+
+    /**
+     * Creates a plain object from a BootstrapPeerGetPublishEnabledRequest message. Also converts values to other types if specified.
+     * @param message BootstrapPeerGetPublishEnabledRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BootstrapPeerGetPublishEnabledRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BootstrapPeerGetPublishEnabledRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BootstrapPeerGetPublishEnabledResponse. */
+export interface IBootstrapPeerGetPublishEnabledResponse {
+
+    /** BootstrapPeerGetPublishEnabledResponse enabled */
+    enabled?: (boolean|null);
+}
+
+/** Represents a BootstrapPeerGetPublishEnabledResponse. */
+export class BootstrapPeerGetPublishEnabledResponse implements IBootstrapPeerGetPublishEnabledResponse {
+
+    /**
+     * Constructs a new BootstrapPeerGetPublishEnabledResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBootstrapPeerGetPublishEnabledResponse);
+
+    /** BootstrapPeerGetPublishEnabledResponse enabled. */
+    public enabled: boolean;
+
+    /**
+     * Creates a new BootstrapPeerGetPublishEnabledResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BootstrapPeerGetPublishEnabledResponse instance
+     */
+    public static create(properties?: IBootstrapPeerGetPublishEnabledResponse): BootstrapPeerGetPublishEnabledResponse;
+
+    /**
+     * Encodes the specified BootstrapPeerGetPublishEnabledResponse message. Does not implicitly {@link BootstrapPeerGetPublishEnabledResponse.verify|verify} messages.
+     * @param message BootstrapPeerGetPublishEnabledResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBootstrapPeerGetPublishEnabledResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BootstrapPeerGetPublishEnabledResponse message, length delimited. Does not implicitly {@link BootstrapPeerGetPublishEnabledResponse.verify|verify} messages.
+     * @param message BootstrapPeerGetPublishEnabledResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBootstrapPeerGetPublishEnabledResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BootstrapPeerGetPublishEnabledResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BootstrapPeerGetPublishEnabledResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BootstrapPeerGetPublishEnabledResponse;
+
+    /**
+     * Decodes a BootstrapPeerGetPublishEnabledResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BootstrapPeerGetPublishEnabledResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BootstrapPeerGetPublishEnabledResponse;
+
+    /**
+     * Verifies a BootstrapPeerGetPublishEnabledResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BootstrapPeerGetPublishEnabledResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BootstrapPeerGetPublishEnabledResponse
+     */
+    public static fromObject(object: { [k: string]: any }): BootstrapPeerGetPublishEnabledResponse;
+
+    /**
+     * Creates a plain object from a BootstrapPeerGetPublishEnabledResponse message. Also converts values to other types if specified.
+     * @param message BootstrapPeerGetPublishEnabledResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BootstrapPeerGetPublishEnabledResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BootstrapPeerGetPublishEnabledResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BootstrapPeerListNetworksRequest. */
+export interface IBootstrapPeerListNetworksRequest {
+}
+
+/** Represents a BootstrapPeerListNetworksRequest. */
+export class BootstrapPeerListNetworksRequest implements IBootstrapPeerListNetworksRequest {
+
+    /**
+     * Constructs a new BootstrapPeerListNetworksRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBootstrapPeerListNetworksRequest);
+
+    /**
+     * Creates a new BootstrapPeerListNetworksRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BootstrapPeerListNetworksRequest instance
+     */
+    public static create(properties?: IBootstrapPeerListNetworksRequest): BootstrapPeerListNetworksRequest;
+
+    /**
+     * Encodes the specified BootstrapPeerListNetworksRequest message. Does not implicitly {@link BootstrapPeerListNetworksRequest.verify|verify} messages.
+     * @param message BootstrapPeerListNetworksRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBootstrapPeerListNetworksRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BootstrapPeerListNetworksRequest message, length delimited. Does not implicitly {@link BootstrapPeerListNetworksRequest.verify|verify} messages.
+     * @param message BootstrapPeerListNetworksRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBootstrapPeerListNetworksRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BootstrapPeerListNetworksRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BootstrapPeerListNetworksRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BootstrapPeerListNetworksRequest;
+
+    /**
+     * Decodes a BootstrapPeerListNetworksRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BootstrapPeerListNetworksRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BootstrapPeerListNetworksRequest;
+
+    /**
+     * Verifies a BootstrapPeerListNetworksRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BootstrapPeerListNetworksRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BootstrapPeerListNetworksRequest
+     */
+    public static fromObject(object: { [k: string]: any }): BootstrapPeerListNetworksRequest;
+
+    /**
+     * Creates a plain object from a BootstrapPeerListNetworksRequest message. Also converts values to other types if specified.
+     * @param message BootstrapPeerListNetworksRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BootstrapPeerListNetworksRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BootstrapPeerListNetworksRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BootstrapPeerListNetworksResponse. */
+export interface IBootstrapPeerListNetworksResponse {
+}
+
+/** Represents a BootstrapPeerListNetworksResponse. */
+export class BootstrapPeerListNetworksResponse implements IBootstrapPeerListNetworksResponse {
+
+    /**
+     * Constructs a new BootstrapPeerListNetworksResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBootstrapPeerListNetworksResponse);
+
+    /**
+     * Creates a new BootstrapPeerListNetworksResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BootstrapPeerListNetworksResponse instance
+     */
+    public static create(properties?: IBootstrapPeerListNetworksResponse): BootstrapPeerListNetworksResponse;
+
+    /**
+     * Encodes the specified BootstrapPeerListNetworksResponse message. Does not implicitly {@link BootstrapPeerListNetworksResponse.verify|verify} messages.
+     * @param message BootstrapPeerListNetworksResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBootstrapPeerListNetworksResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BootstrapPeerListNetworksResponse message, length delimited. Does not implicitly {@link BootstrapPeerListNetworksResponse.verify|verify} messages.
+     * @param message BootstrapPeerListNetworksResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBootstrapPeerListNetworksResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BootstrapPeerListNetworksResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BootstrapPeerListNetworksResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BootstrapPeerListNetworksResponse;
+
+    /**
+     * Decodes a BootstrapPeerListNetworksResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BootstrapPeerListNetworksResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BootstrapPeerListNetworksResponse;
+
+    /**
+     * Verifies a BootstrapPeerListNetworksResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BootstrapPeerListNetworksResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BootstrapPeerListNetworksResponse
+     */
+    public static fromObject(object: { [k: string]: any }): BootstrapPeerListNetworksResponse;
+
+    /**
+     * Creates a plain object from a BootstrapPeerListNetworksResponse message. Also converts values to other types if specified.
+     * @param message BootstrapPeerListNetworksResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BootstrapPeerListNetworksResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BootstrapPeerListNetworksResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BootstrapPeerPublishRequest. */
+export interface IBootstrapPeerPublishRequest {
+
+    /** BootstrapPeerPublishRequest certificate */
+    certificate?: (ICertificate|null);
+}
+
+/** Represents a BootstrapPeerPublishRequest. */
+export class BootstrapPeerPublishRequest implements IBootstrapPeerPublishRequest {
+
+    /**
+     * Constructs a new BootstrapPeerPublishRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBootstrapPeerPublishRequest);
+
+    /** BootstrapPeerPublishRequest certificate. */
+    public certificate?: (ICertificate|null);
+
+    /**
+     * Creates a new BootstrapPeerPublishRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BootstrapPeerPublishRequest instance
+     */
+    public static create(properties?: IBootstrapPeerPublishRequest): BootstrapPeerPublishRequest;
+
+    /**
+     * Encodes the specified BootstrapPeerPublishRequest message. Does not implicitly {@link BootstrapPeerPublishRequest.verify|verify} messages.
+     * @param message BootstrapPeerPublishRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBootstrapPeerPublishRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BootstrapPeerPublishRequest message, length delimited. Does not implicitly {@link BootstrapPeerPublishRequest.verify|verify} messages.
+     * @param message BootstrapPeerPublishRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBootstrapPeerPublishRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BootstrapPeerPublishRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BootstrapPeerPublishRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BootstrapPeerPublishRequest;
+
+    /**
+     * Decodes a BootstrapPeerPublishRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BootstrapPeerPublishRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BootstrapPeerPublishRequest;
+
+    /**
+     * Verifies a BootstrapPeerPublishRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BootstrapPeerPublishRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BootstrapPeerPublishRequest
+     */
+    public static fromObject(object: { [k: string]: any }): BootstrapPeerPublishRequest;
+
+    /**
+     * Creates a plain object from a BootstrapPeerPublishRequest message. Also converts values to other types if specified.
+     * @param message BootstrapPeerPublishRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BootstrapPeerPublishRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BootstrapPeerPublishRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a BootstrapPeerPublishResponse. */
+export interface IBootstrapPeerPublishResponse {
+}
+
+/** Represents a BootstrapPeerPublishResponse. */
+export class BootstrapPeerPublishResponse implements IBootstrapPeerPublishResponse {
+
+    /**
+     * Constructs a new BootstrapPeerPublishResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IBootstrapPeerPublishResponse);
+
+    /**
+     * Creates a new BootstrapPeerPublishResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns BootstrapPeerPublishResponse instance
+     */
+    public static create(properties?: IBootstrapPeerPublishResponse): BootstrapPeerPublishResponse;
+
+    /**
+     * Encodes the specified BootstrapPeerPublishResponse message. Does not implicitly {@link BootstrapPeerPublishResponse.verify|verify} messages.
+     * @param message BootstrapPeerPublishResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IBootstrapPeerPublishResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified BootstrapPeerPublishResponse message, length delimited. Does not implicitly {@link BootstrapPeerPublishResponse.verify|verify} messages.
+     * @param message BootstrapPeerPublishResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IBootstrapPeerPublishResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a BootstrapPeerPublishResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns BootstrapPeerPublishResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): BootstrapPeerPublishResponse;
+
+    /**
+     * Decodes a BootstrapPeerPublishResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns BootstrapPeerPublishResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): BootstrapPeerPublishResponse;
+
+    /**
+     * Verifies a BootstrapPeerPublishResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a BootstrapPeerPublishResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns BootstrapPeerPublishResponse
+     */
+    public static fromObject(object: { [k: string]: any }): BootstrapPeerPublishResponse;
+
+    /**
+     * Creates a plain object from a BootstrapPeerPublishResponse message. Also converts values to other types if specified.
+     * @param message BootstrapPeerPublishResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: BootstrapPeerPublishResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this BootstrapPeerPublishResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
 /** Properties of a CreateProfileRequest. */
 export interface ICreateProfileRequest {
 
@@ -11668,6 +13189,12 @@ export interface INetwork {
 
     /** Network icon */
     icon?: (INetworkIcon|null);
+
+    /** Network altProfileName */
+    altProfileName?: (string|null);
+
+    /** Network certificateRenewalRequired */
+    certificateRenewalRequired?: (boolean|null);
 }
 
 /** Represents a Network. */
@@ -11693,6 +13220,12 @@ export class Network implements INetwork {
 
     /** Network icon. */
     public icon?: (INetworkIcon|null);
+
+    /** Network altProfileName. */
+    public altProfileName: string;
+
+    /** Network certificateRenewalRequired. */
+    public certificateRenewalRequired: boolean;
 
     /**
      * Creates a new Network instance using the specified properties.
@@ -11760,126 +13293,6 @@ export class Network implements INetwork {
 
     /**
      * Converts this Network to JSON.
-     * @returns JSON object
-     */
-    public toJSON(): { [k: string]: any };
-}
-
-/** Properties of a NetworkMembership. */
-export interface INetworkMembership {
-
-    /** NetworkMembership id */
-    id?: (number|null);
-
-    /** NetworkMembership createdAt */
-    createdAt?: (number|null);
-
-    /** NetworkMembership name */
-    name?: (string|null);
-
-    /** NetworkMembership caCertificate */
-    caCertificate?: (ICertificate|null);
-
-    /** NetworkMembership certificate */
-    certificate?: (ICertificate|null);
-
-    /** NetworkMembership lastSeenAt */
-    lastSeenAt?: (number|null);
-}
-
-/** Represents a NetworkMembership. */
-export class NetworkMembership implements INetworkMembership {
-
-    /**
-     * Constructs a new NetworkMembership.
-     * @param [properties] Properties to set
-     */
-    constructor(properties?: INetworkMembership);
-
-    /** NetworkMembership id. */
-    public id: number;
-
-    /** NetworkMembership createdAt. */
-    public createdAt: number;
-
-    /** NetworkMembership name. */
-    public name: string;
-
-    /** NetworkMembership caCertificate. */
-    public caCertificate?: (ICertificate|null);
-
-    /** NetworkMembership certificate. */
-    public certificate?: (ICertificate|null);
-
-    /** NetworkMembership lastSeenAt. */
-    public lastSeenAt: number;
-
-    /**
-     * Creates a new NetworkMembership instance using the specified properties.
-     * @param [properties] Properties to set
-     * @returns NetworkMembership instance
-     */
-    public static create(properties?: INetworkMembership): NetworkMembership;
-
-    /**
-     * Encodes the specified NetworkMembership message. Does not implicitly {@link NetworkMembership.verify|verify} messages.
-     * @param message NetworkMembership message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encode(message: INetworkMembership, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Encodes the specified NetworkMembership message, length delimited. Does not implicitly {@link NetworkMembership.verify|verify} messages.
-     * @param message NetworkMembership message or plain object to encode
-     * @param [writer] Writer to encode to
-     * @returns Writer
-     */
-    public static encodeDelimited(message: INetworkMembership, writer?: $protobuf.Writer): $protobuf.Writer;
-
-    /**
-     * Decodes a NetworkMembership message from the specified reader or buffer.
-     * @param reader Reader or buffer to decode from
-     * @param [length] Message length if known beforehand
-     * @returns NetworkMembership
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkMembership;
-
-    /**
-     * Decodes a NetworkMembership message from the specified reader or buffer, length delimited.
-     * @param reader Reader or buffer to decode from
-     * @returns NetworkMembership
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkMembership;
-
-    /**
-     * Verifies a NetworkMembership message.
-     * @param message Plain object to verify
-     * @returns `null` if valid, otherwise the reason why it is not
-     */
-    public static verify(message: { [k: string]: any }): (string|null);
-
-    /**
-     * Creates a NetworkMembership message from a plain object. Also converts values to their respective internal types.
-     * @param object Plain object
-     * @returns NetworkMembership
-     */
-    public static fromObject(object: { [k: string]: any }): NetworkMembership;
-
-    /**
-     * Creates a plain object from a NetworkMembership message. Also converts values to other types if specified.
-     * @param message NetworkMembership
-     * @param [options] Conversion options
-     * @returns Plain object
-     */
-    public static toObject(message: NetworkMembership, options?: $protobuf.IConversionOptions): { [k: string]: any };
-
-    /**
-     * Converts this NetworkMembership to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -21107,8 +22520,8 @@ export class ListBootstrapPeersResponse implements IListBootstrapPeersResponse {
 /** Properties of a BootstrapPeer. */
 export interface IBootstrapPeer {
 
-    /** BootstrapPeer hostId */
-    hostId?: (Uint8Array|null);
+    /** BootstrapPeer peerId */
+    peerId?: (number|null);
 
     /** BootstrapPeer label */
     label?: (string|null);
@@ -21123,8 +22536,8 @@ export class BootstrapPeer implements IBootstrapPeer {
      */
     constructor(properties?: IBootstrapPeer);
 
-    /** BootstrapPeer hostId. */
-    public hostId: Uint8Array;
+    /** BootstrapPeer peerId. */
+    public peerId: number;
 
     /** BootstrapPeer label. */
     public label: string;
@@ -21584,8 +22997,8 @@ export namespace BootstrapServiceMessage {
 /** Properties of a PublishNetworkToBootstrapPeerRequest. */
 export interface IPublishNetworkToBootstrapPeerRequest {
 
-    /** PublishNetworkToBootstrapPeerRequest hostId */
-    hostId?: (Uint8Array|null);
+    /** PublishNetworkToBootstrapPeerRequest peerId */
+    peerId?: (number|null);
 
     /** PublishNetworkToBootstrapPeerRequest network */
     network?: (INetwork|null);
@@ -21600,8 +23013,8 @@ export class PublishNetworkToBootstrapPeerRequest implements IPublishNetworkToBo
      */
     constructor(properties?: IPublishNetworkToBootstrapPeerRequest);
 
-    /** PublishNetworkToBootstrapPeerRequest hostId. */
-    public hostId: Uint8Array;
+    /** PublishNetworkToBootstrapPeerRequest peerId. */
+    public peerId: number;
 
     /** PublishNetworkToBootstrapPeerRequest network. */
     public network?: (INetwork|null);

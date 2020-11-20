@@ -631,6 +631,7 @@ export class WorkerBridge {
       const mode = readOnly ? "readonly" : "readwrite";
       openReq.onsuccess = () => resolve(openReq.result.transaction(["data"], mode));
       openReq.onerror = reject;
+      openReq.onblocked = reject;
     });
 
     const transact = <T>(
@@ -674,6 +675,7 @@ export class WorkerBridge {
           .then((tx: IDBTransaction) => {
             tx.oncomplete = () => done(null);
             tx.onerror = (e) => done(String(e));
+            tx.commit?.();
           })
           .catch((e) => done(String(e)));
       },

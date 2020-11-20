@@ -1,6 +1,7 @@
 package vnic
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math"
@@ -19,19 +20,19 @@ import (
 
 var (
 	frameReadCount = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "strims_vpn_frame_read_count",
+		Name: "strims_vnic_frame_read_count",
 		Help: "The total number of frames read",
 	})
 	frameReadBytes = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "strims_vpn_frame_read_bytes",
+		Name: "strims_vnic_frame_read_bytes",
 		Help: "The total number of frame bytes read",
 	})
 	frameHandlerNotFoundCount = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "strims_vpn_frame_hander_not_found_count",
+		Name: "strims_vnic_frame_hander_not_found_count",
 		Help: "The total number of unhandled frames",
 	})
 	frameHandlerErrorCount = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "strims_vpn_frame_handler_error_count",
+		Name: "strims_vnic_frame_handler_error_count",
 		Help: "The total number of frame handler errors",
 	})
 )
@@ -64,6 +65,8 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key, hostCert *pb.Certif
 		return nil, fmt.Errorf("peer host id malformed: %w", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	p := &Peer{
 		logger:       logger,
 		Link:         link,
@@ -72,7 +75,8 @@ func newPeer(logger *zap.Logger, link Link, hostKey *pb.Key, hostCert *pb.Certif
 		handlers:     map[uint16]FrameHandler{},
 		reservations: map[uint16]struct{}{},
 		channels:     map[uint16]*FrameReadWriter{},
-		done:         make(chan struct{}),
+		ctx:          ctx,
+		close:        cancel,
 	}
 	return p, nil
 }
@@ -89,7 +93,8 @@ type Peer struct {
 	reservations     map[uint16]struct{}
 	channelsLock     sync.Mutex
 	channels         map[uint16]*FrameReadWriter
-	done             chan struct{}
+	ctx              context.Context
+	close            context.CancelFunc
 	closeOnce        sync.Once
 }
 
@@ -123,7 +128,7 @@ func (p *Peer) run() {
 // Close ...
 func (p *Peer) Close() {
 	p.closeOnce.Do(func() {
-		close(p.done)
+		p.close()
 		p.Link.Close()
 
 		p.channelsLock.Lock()
@@ -135,9 +140,14 @@ func (p *Peer) Close() {
 	})
 }
 
+// Context ...
+func (p *Peer) Context() context.Context {
+	return p.ctx
+}
+
 // Done ...
 func (p *Peer) Done() <-chan struct{} {
-	return p.done
+	return p.ctx.Done()
 }
 
 // HostID ...
@@ -211,6 +221,21 @@ func (p *Peer) Channel(port uint16) *FrameReadWriter {
 	p.channels[port] = f
 
 	return f
+}
+
+// ChannelPair creates a symmetric channel pair.
+func (p *Peer) ChannelPair(port0, port1 uint16) (rw0, rw1 *FrameReadWriter) {
+	rw0 = NewFrameReadWriter(p.Link, port0)
+	rw1 = NewFrameReadWriter(p.Link, port1)
+	p.SetHandler(port1, rw0.HandleFrame)
+	p.SetHandler(port0, rw1.HandleFrame)
+
+	p.channelsLock.Lock()
+	defer p.channelsLock.Unlock()
+	p.channels[port0] = rw0
+	p.channels[port1] = rw1
+
+	return
 }
 
 // CloseChannel ...

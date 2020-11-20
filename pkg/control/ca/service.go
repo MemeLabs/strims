@@ -1,7 +1,8 @@
-package network
+package ca
 
 import (
 	"context"
+	"sync"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
@@ -16,11 +17,14 @@ var caSalt = []byte("ca")
 
 const clientTimeout = time.Second * 5
 
-// NewCA ...
-func NewCA(ctx context.Context, logger *zap.Logger, client *vpn.Client, network *pb.Network) (*CA, error) {
-	ca := &CA{
+// NewServer ...
+func NewServer(ctx context.Context, logger *zap.Logger, client *vpn.Client, network *pb.Network) (*Server, error) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	ca := &Server{
 		logger:  logger,
 		network: network,
+		cancel:  cancel,
 	}
 
 	server := rpc.NewServer(logger)
@@ -36,18 +40,35 @@ func NewCA(ctx context.Context, logger *zap.Logger, client *vpn.Client, network 
 	return ca, nil
 }
 
-// CA ...
-type CA struct {
+// Server ...
+type Server struct {
 	logger  *zap.Logger
+	lock    sync.Mutex
 	network *pb.Network
+	cancel  context.CancelFunc
 
 	// invite policy
 	// certificate revocation stream
 	// certificate transparency list?
 }
 
+// Close ...
+func (s *Server) Close() {
+	s.cancel()
+}
+
+// UpdateNetwork ...
+func (s *Server) UpdateNetwork(network *pb.Network) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	s.network = network
+}
+
 // Renew ...
-func (s *CA) Renew(ctxt context.Context, req *pb.CARenewRequest) (*pb.CARenewResponse, error) {
+func (s *Server) Renew(ctxt context.Context, req *pb.CARenewRequest) (*pb.CARenewResponse, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	err := dao.VerifyCertificateRequest(req.CertificateRequest, pb.KeyUsage_KEY_USAGE_PEER|pb.KeyUsage_KEY_USAGE_SIGN)
 	if err != nil {
 		return nil, err
@@ -55,7 +76,6 @@ func (s *CA) Renew(ctxt context.Context, req *pb.CARenewRequest) (*pb.CARenewRes
 
 	// TODO: check subject (nick) availability
 	// TODO: verify invitation policy
-
 	networkCert, err := dao.NewSelfSignedCertificate(s.network.Key, pb.KeyUsage_KEY_USAGE_SIGN, time.Hour*24, dao.WithSubject(s.network.Name))
 	if err != nil {
 		return nil, err
@@ -70,18 +90,28 @@ func (s *CA) Renew(ctxt context.Context, req *pb.CARenewRequest) (*pb.CARenewRes
 	return &pb.CARenewResponse{Certificate: cert}, nil
 }
 
-// NewCAClient ...
-func NewCAClient(logger *zap.Logger, client *vpn.Client) (*api.CAClient, error) {
-	key := dao.GetRootCert(client.Network.Certificate()).Key
+// NewClient ...
+func NewClient(logger *zap.Logger, client *vpn.Client) (*Client, error) {
 	rpcClient, err := rpc.NewClient(logger, &rpc.VPNDialer{
 		Logger: logger,
 		Client: client,
-		Key:    key,
+		Key:    client.Network.Key(),
 		Salt:   caSalt,
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	return api.NewCAClient(rpcClient), nil
+	return &Client{rpcClient, api.NewCAClient(rpcClient)}, nil
+}
+
+// Client ...
+type Client struct {
+	rpc *rpc.Client
+	*api.CAClient
+}
+
+// Close ...
+func (c *Client) Close() {
+	c.rpc.Close()
 }

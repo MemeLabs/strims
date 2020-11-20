@@ -2,37 +2,27 @@ package frontend
 
 import (
 	"context"
-	"encoding/hex"
+	"fmt"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/control/app"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/services/bootstrap"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
 
-func newBootstrapService(ctx context.Context, logger *zap.Logger, store *dao.ProfileStore, vpn *vpn.Host) (api.BootstrapService, error) {
-	service := bootstrap.NewService(logger, vpn, store, bootstrap.ServiceOptions{EnablePublishing: true})
-
-	clients, err := dao.GetBootstrapClients(store)
-	if err != nil {
-		return nil, err
-	}
-	for _, client := range clients {
-		service.Dial(client)
-	}
-
-	return &bootstrapService{logger, store, vpn, service}, nil
+func newBootstrapService(ctx context.Context, logger *zap.Logger, store *dao.ProfileStore, vpn *vpn.Host, app *app.Control) api.BootstrapService {
+	return &bootstrapService{logger, store, vpn, app}
 }
 
 // bootstrapService ...
 type bootstrapService struct {
-	logger  *zap.Logger
-	store   *dao.ProfileStore
-	vpn     *vpn.Host
-	service *bootstrap.Service
+	logger *zap.Logger
+	store  *dao.ProfileStore
+	vpn    *vpn.Host
+	app    *app.Control
 }
 
 // CreateClient ...
@@ -87,10 +77,11 @@ func (s *bootstrapService) ListClients(ctx context.Context, r *pb.ListBootstrapC
 // ListPeers ...
 func (s *bootstrapService) ListPeers(ctx context.Context, r *pb.ListBootstrapPeersRequest) (*pb.ListBootstrapPeersResponse, error) {
 	peers := []*pb.BootstrapPeer{}
-	for _, id := range s.service.GetPeerHostIDs() {
+	for _, p := range s.app.Peer().List() {
+		cert := p.VNIC().Certificate
 		peers = append(peers, &pb.BootstrapPeer{
-			HostId: id.Bytes(nil),
-			Label:  hex.EncodeToString(id.Bytes(nil)),
+			PeerId: p.ID(),
+			Label:  fmt.Sprintf("%s (%x)", cert.Subject, cert.Key),
 		})
 	}
 
@@ -99,12 +90,7 @@ func (s *bootstrapService) ListPeers(ctx context.Context, r *pb.ListBootstrapPee
 
 // PublishNetworkToPeer ...
 func (s *bootstrapService) PublishNetworkToPeer(ctx context.Context, r *pb.PublishNetworkToBootstrapPeerRequest) (*pb.PublishNetworkToBootstrapPeerResponse, error) {
-	id, err := kademlia.UnmarshalID(r.HostId)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := s.service.PublishNetwork(id, r.Network); err != nil {
+	if err := s.app.Bootstrap().Publish(ctx, r.PeerId, r.Network, time.Hour*24*365*2); err != nil {
 		return nil, err
 	}
 

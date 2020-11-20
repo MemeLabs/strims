@@ -1,4 +1,4 @@
-package network
+package ca
 
 import (
 	"context"
@@ -21,7 +21,7 @@ func TestCA(t *testing.T) {
 
 	ctx := context.Background()
 
-	_, err = NewCA(ctx, logger, cluster.Nodes[0].Client, cluster.Network)
+	_, err = NewServer(ctx, logger, cluster.Nodes[0].Client, cluster.Network)
 	assert.Nil(t, err)
 
 	time.Sleep(time.Second)
@@ -38,7 +38,7 @@ func TestCA(t *testing.T) {
 		dao.WithSubject(cluster.Nodes[1].Profile.Name),
 	)
 
-	caClient, err := NewCAClient(logger, cluster.Nodes[1].Client)
+	caClient, err := NewClient(logger, cluster.Nodes[1].Client)
 	assert.Nil(t, err)
 
 	req := &pb.CARenewRequest{

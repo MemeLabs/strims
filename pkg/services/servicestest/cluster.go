@@ -8,6 +8,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/memkv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
@@ -15,9 +16,23 @@ import (
 	"go.uber.org/zap"
 )
 
+// NewNode ...
 func NewNode(logger *zap.Logger, i int) (*Node, error) {
 	profile, err := dao.NewProfile(fmt.Sprintf("user %d", i))
 	if err != nil {
+		return nil, err
+	}
+
+	blobStore, err := memkv.NewStore("test")
+	if err != nil {
+		return nil, err
+	}
+	storageKey, err := dao.NewStorageKey("test")
+	if err != nil {
+		return nil, err
+	}
+	profileStore := dao.NewProfileStore(profile.Id, blobStore, storageKey)
+	if err := profileStore.Init(profile); err != nil {
 		return nil, err
 	}
 
@@ -38,6 +53,7 @@ func NewNode(logger *zap.Logger, i int) (*Node, error) {
 
 	return &Node{
 		ID:      id,
+		Store:   profileStore,
 		Profile: profile,
 		VNIC:    vnicHost,
 		VPN:     vpnHost,
@@ -47,6 +63,7 @@ func NewNode(logger *zap.Logger, i int) (*Node, error) {
 
 // Node ...
 type Node struct {
+	Store   *dao.ProfileStore
 	Profile *pb.Profile
 	ID      kademlia.ID
 	VNIC    *vnic.Host

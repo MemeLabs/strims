@@ -172,11 +172,6 @@ func (n *Network) Key() []byte {
 	return dao.GetRootCert(n.certificate).Key
 }
 
-// Certificate ...
-func (n *Network) Certificate() *pb.Certificate {
-	return n.certificate
-}
-
 // AddPeer ...
 func (n *Network) AddPeer(peer *vnic.Peer, srcPort, dstPort uint16) {
 	n.linksLock.Lock()

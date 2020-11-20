@@ -20267,6 +20267,3222 @@ export const PeerIndexMessage = $root.PeerIndexMessage = (() => {
     return PeerIndexMessage;
 })();
 
+export const SwarmPeerAnnounceSwarmRequest = $root.SwarmPeerAnnounceSwarmRequest = (() => {
+
+    /**
+     * Properties of a SwarmPeerAnnounceSwarmRequest.
+     * @exports ISwarmPeerAnnounceSwarmRequest
+     * @interface ISwarmPeerAnnounceSwarmRequest
+     * @property {Uint8Array|null} [id] SwarmPeerAnnounceSwarmRequest id
+     * @property {number|null} [port] SwarmPeerAnnounceSwarmRequest port
+     */
+
+    /**
+     * Constructs a new SwarmPeerAnnounceSwarmRequest.
+     * @exports SwarmPeerAnnounceSwarmRequest
+     * @classdesc Represents a SwarmPeerAnnounceSwarmRequest.
+     * @implements ISwarmPeerAnnounceSwarmRequest
+     * @constructor
+     * @param {ISwarmPeerAnnounceSwarmRequest=} [properties] Properties to set
+     */
+    function SwarmPeerAnnounceSwarmRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * SwarmPeerAnnounceSwarmRequest id.
+     * @member {Uint8Array} id
+     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @instance
+     */
+    SwarmPeerAnnounceSwarmRequest.prototype.id = $util.newBuffer([]);
+
+    /**
+     * SwarmPeerAnnounceSwarmRequest port.
+     * @member {number} port
+     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @instance
+     */
+    SwarmPeerAnnounceSwarmRequest.prototype.port = 0;
+
+    /**
+     * Creates a new SwarmPeerAnnounceSwarmRequest instance using the specified properties.
+     * @function create
+     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @static
+     * @param {ISwarmPeerAnnounceSwarmRequest=} [properties] Properties to set
+     * @returns {SwarmPeerAnnounceSwarmRequest} SwarmPeerAnnounceSwarmRequest instance
+     */
+    SwarmPeerAnnounceSwarmRequest.create = function create(properties) {
+        return new SwarmPeerAnnounceSwarmRequest(properties);
+    };
+
+    /**
+     * Encodes the specified SwarmPeerAnnounceSwarmRequest message. Does not implicitly {@link SwarmPeerAnnounceSwarmRequest.verify|verify} messages.
+     * @function encode
+     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @static
+     * @param {ISwarmPeerAnnounceSwarmRequest} message SwarmPeerAnnounceSwarmRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    SwarmPeerAnnounceSwarmRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.id);
+        if (message.port != null && Object.hasOwnProperty.call(message, "port"))
+            writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.port);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified SwarmPeerAnnounceSwarmRequest message, length delimited. Does not implicitly {@link SwarmPeerAnnounceSwarmRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @static
+     * @param {ISwarmPeerAnnounceSwarmRequest} message SwarmPeerAnnounceSwarmRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    SwarmPeerAnnounceSwarmRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a SwarmPeerAnnounceSwarmRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {SwarmPeerAnnounceSwarmRequest} SwarmPeerAnnounceSwarmRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    SwarmPeerAnnounceSwarmRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.SwarmPeerAnnounceSwarmRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.bytes();
+                break;
+            case 2:
+                message.port = reader.uint32();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a SwarmPeerAnnounceSwarmRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {SwarmPeerAnnounceSwarmRequest} SwarmPeerAnnounceSwarmRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    SwarmPeerAnnounceSwarmRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a SwarmPeerAnnounceSwarmRequest message.
+     * @function verify
+     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    SwarmPeerAnnounceSwarmRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!(message.id && typeof message.id.length === "number" || $util.isString(message.id)))
+                return "id: buffer expected";
+        if (message.port != null && message.hasOwnProperty("port"))
+            if (!$util.isInteger(message.port))
+                return "port: integer expected";
+        return null;
+    };
+
+    /**
+     * Creates a SwarmPeerAnnounceSwarmRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {SwarmPeerAnnounceSwarmRequest} SwarmPeerAnnounceSwarmRequest
+     */
+    SwarmPeerAnnounceSwarmRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.SwarmPeerAnnounceSwarmRequest)
+            return object;
+        let message = new $root.SwarmPeerAnnounceSwarmRequest();
+        if (object.id != null)
+            if (typeof object.id === "string")
+                $util.base64.decode(object.id, message.id = $util.newBuffer($util.base64.length(object.id)), 0);
+            else if (object.id.length)
+                message.id = object.id;
+        if (object.port != null)
+            message.port = object.port >>> 0;
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a SwarmPeerAnnounceSwarmRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @static
+     * @param {SwarmPeerAnnounceSwarmRequest} message SwarmPeerAnnounceSwarmRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    SwarmPeerAnnounceSwarmRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if (options.bytes === String)
+                object.id = "";
+            else {
+                object.id = [];
+                if (options.bytes !== Array)
+                    object.id = $util.newBuffer(object.id);
+            }
+            object.port = 0;
+        }
+        if (message.id != null && message.hasOwnProperty("id"))
+            object.id = options.bytes === String ? $util.base64.encode(message.id, 0, message.id.length) : options.bytes === Array ? Array.prototype.slice.call(message.id) : message.id;
+        if (message.port != null && message.hasOwnProperty("port"))
+            object.port = message.port;
+        return object;
+    };
+
+    /**
+     * Converts this SwarmPeerAnnounceSwarmRequest to JSON.
+     * @function toJSON
+     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    SwarmPeerAnnounceSwarmRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return SwarmPeerAnnounceSwarmRequest;
+})();
+
+export const SwarmPeerAnnounceSwarmResponse = $root.SwarmPeerAnnounceSwarmResponse = (() => {
+
+    /**
+     * Properties of a SwarmPeerAnnounceSwarmResponse.
+     * @exports ISwarmPeerAnnounceSwarmResponse
+     * @interface ISwarmPeerAnnounceSwarmResponse
+     * @property {number|null} [port] SwarmPeerAnnounceSwarmResponse port
+     */
+
+    /**
+     * Constructs a new SwarmPeerAnnounceSwarmResponse.
+     * @exports SwarmPeerAnnounceSwarmResponse
+     * @classdesc Represents a SwarmPeerAnnounceSwarmResponse.
+     * @implements ISwarmPeerAnnounceSwarmResponse
+     * @constructor
+     * @param {ISwarmPeerAnnounceSwarmResponse=} [properties] Properties to set
+     */
+    function SwarmPeerAnnounceSwarmResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * SwarmPeerAnnounceSwarmResponse port.
+     * @member {number} port
+     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @instance
+     */
+    SwarmPeerAnnounceSwarmResponse.prototype.port = 0;
+
+    // OneOf field names bound to virtual getters and setters
+    let $oneOfFields;
+
+    /**
+     * SwarmPeerAnnounceSwarmResponse body.
+     * @member {"port"|undefined} body
+     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @instance
+     */
+    Object.defineProperty(SwarmPeerAnnounceSwarmResponse.prototype, "body", {
+        get: $util.oneOfGetter($oneOfFields = ["port"]),
+        set: $util.oneOfSetter($oneOfFields)
+    });
+
+    /**
+     * Creates a new SwarmPeerAnnounceSwarmResponse instance using the specified properties.
+     * @function create
+     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @static
+     * @param {ISwarmPeerAnnounceSwarmResponse=} [properties] Properties to set
+     * @returns {SwarmPeerAnnounceSwarmResponse} SwarmPeerAnnounceSwarmResponse instance
+     */
+    SwarmPeerAnnounceSwarmResponse.create = function create(properties) {
+        return new SwarmPeerAnnounceSwarmResponse(properties);
+    };
+
+    /**
+     * Encodes the specified SwarmPeerAnnounceSwarmResponse message. Does not implicitly {@link SwarmPeerAnnounceSwarmResponse.verify|verify} messages.
+     * @function encode
+     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @static
+     * @param {ISwarmPeerAnnounceSwarmResponse} message SwarmPeerAnnounceSwarmResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    SwarmPeerAnnounceSwarmResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.port != null && Object.hasOwnProperty.call(message, "port"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.port);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified SwarmPeerAnnounceSwarmResponse message, length delimited. Does not implicitly {@link SwarmPeerAnnounceSwarmResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @static
+     * @param {ISwarmPeerAnnounceSwarmResponse} message SwarmPeerAnnounceSwarmResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    SwarmPeerAnnounceSwarmResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a SwarmPeerAnnounceSwarmResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {SwarmPeerAnnounceSwarmResponse} SwarmPeerAnnounceSwarmResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    SwarmPeerAnnounceSwarmResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.SwarmPeerAnnounceSwarmResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.port = reader.uint32();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a SwarmPeerAnnounceSwarmResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {SwarmPeerAnnounceSwarmResponse} SwarmPeerAnnounceSwarmResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    SwarmPeerAnnounceSwarmResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a SwarmPeerAnnounceSwarmResponse message.
+     * @function verify
+     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    SwarmPeerAnnounceSwarmResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        let properties = {};
+        if (message.port != null && message.hasOwnProperty("port")) {
+            properties.body = 1;
+            if (!$util.isInteger(message.port))
+                return "port: integer expected";
+        }
+        return null;
+    };
+
+    /**
+     * Creates a SwarmPeerAnnounceSwarmResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {SwarmPeerAnnounceSwarmResponse} SwarmPeerAnnounceSwarmResponse
+     */
+    SwarmPeerAnnounceSwarmResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.SwarmPeerAnnounceSwarmResponse)
+            return object;
+        let message = new $root.SwarmPeerAnnounceSwarmResponse();
+        if (object.port != null)
+            message.port = object.port >>> 0;
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a SwarmPeerAnnounceSwarmResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @static
+     * @param {SwarmPeerAnnounceSwarmResponse} message SwarmPeerAnnounceSwarmResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    SwarmPeerAnnounceSwarmResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (message.port != null && message.hasOwnProperty("port")) {
+            object.port = message.port;
+            if (options.oneofs)
+                object.body = "port";
+        }
+        return object;
+    };
+
+    /**
+     * Converts this SwarmPeerAnnounceSwarmResponse to JSON.
+     * @function toJSON
+     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    SwarmPeerAnnounceSwarmResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return SwarmPeerAnnounceSwarmResponse;
+})();
+
+export const CAPeerRenewRequest = $root.CAPeerRenewRequest = (() => {
+
+    /**
+     * Properties of a CAPeerRenewRequest.
+     * @exports ICAPeerRenewRequest
+     * @interface ICAPeerRenewRequest
+     * @property {ICertificate|null} [certificate] CAPeerRenewRequest certificate
+     * @property {ICertificateRequest|null} [certificateRequest] CAPeerRenewRequest certificateRequest
+     */
+
+    /**
+     * Constructs a new CAPeerRenewRequest.
+     * @exports CAPeerRenewRequest
+     * @classdesc Represents a CAPeerRenewRequest.
+     * @implements ICAPeerRenewRequest
+     * @constructor
+     * @param {ICAPeerRenewRequest=} [properties] Properties to set
+     */
+    function CAPeerRenewRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * CAPeerRenewRequest certificate.
+     * @member {ICertificate|null|undefined} certificate
+     * @memberof CAPeerRenewRequest
+     * @instance
+     */
+    CAPeerRenewRequest.prototype.certificate = null;
+
+    /**
+     * CAPeerRenewRequest certificateRequest.
+     * @member {ICertificateRequest|null|undefined} certificateRequest
+     * @memberof CAPeerRenewRequest
+     * @instance
+     */
+    CAPeerRenewRequest.prototype.certificateRequest = null;
+
+    /**
+     * Creates a new CAPeerRenewRequest instance using the specified properties.
+     * @function create
+     * @memberof CAPeerRenewRequest
+     * @static
+     * @param {ICAPeerRenewRequest=} [properties] Properties to set
+     * @returns {CAPeerRenewRequest} CAPeerRenewRequest instance
+     */
+    CAPeerRenewRequest.create = function create(properties) {
+        return new CAPeerRenewRequest(properties);
+    };
+
+    /**
+     * Encodes the specified CAPeerRenewRequest message. Does not implicitly {@link CAPeerRenewRequest.verify|verify} messages.
+     * @function encode
+     * @memberof CAPeerRenewRequest
+     * @static
+     * @param {ICAPeerRenewRequest} message CAPeerRenewRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    CAPeerRenewRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
+            $root.Certificate.encode(message.certificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.certificateRequest != null && Object.hasOwnProperty.call(message, "certificateRequest"))
+            $root.CertificateRequest.encode(message.certificateRequest, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified CAPeerRenewRequest message, length delimited. Does not implicitly {@link CAPeerRenewRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof CAPeerRenewRequest
+     * @static
+     * @param {ICAPeerRenewRequest} message CAPeerRenewRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    CAPeerRenewRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a CAPeerRenewRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof CAPeerRenewRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {CAPeerRenewRequest} CAPeerRenewRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    CAPeerRenewRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.CAPeerRenewRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.certificate = $root.Certificate.decode(reader, reader.uint32());
+                break;
+            case 2:
+                message.certificateRequest = $root.CertificateRequest.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a CAPeerRenewRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof CAPeerRenewRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {CAPeerRenewRequest} CAPeerRenewRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    CAPeerRenewRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a CAPeerRenewRequest message.
+     * @function verify
+     * @memberof CAPeerRenewRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    CAPeerRenewRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.certificate != null && message.hasOwnProperty("certificate")) {
+            let error = $root.Certificate.verify(message.certificate);
+            if (error)
+                return "certificate." + error;
+        }
+        if (message.certificateRequest != null && message.hasOwnProperty("certificateRequest")) {
+            let error = $root.CertificateRequest.verify(message.certificateRequest);
+            if (error)
+                return "certificateRequest." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a CAPeerRenewRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof CAPeerRenewRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {CAPeerRenewRequest} CAPeerRenewRequest
+     */
+    CAPeerRenewRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.CAPeerRenewRequest)
+            return object;
+        let message = new $root.CAPeerRenewRequest();
+        if (object.certificate != null) {
+            if (typeof object.certificate !== "object")
+                throw TypeError(".CAPeerRenewRequest.certificate: object expected");
+            message.certificate = $root.Certificate.fromObject(object.certificate);
+        }
+        if (object.certificateRequest != null) {
+            if (typeof object.certificateRequest !== "object")
+                throw TypeError(".CAPeerRenewRequest.certificateRequest: object expected");
+            message.certificateRequest = $root.CertificateRequest.fromObject(object.certificateRequest);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a CAPeerRenewRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof CAPeerRenewRequest
+     * @static
+     * @param {CAPeerRenewRequest} message CAPeerRenewRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    CAPeerRenewRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            object.certificate = null;
+            object.certificateRequest = null;
+        }
+        if (message.certificate != null && message.hasOwnProperty("certificate"))
+            object.certificate = $root.Certificate.toObject(message.certificate, options);
+        if (message.certificateRequest != null && message.hasOwnProperty("certificateRequest"))
+            object.certificateRequest = $root.CertificateRequest.toObject(message.certificateRequest, options);
+        return object;
+    };
+
+    /**
+     * Converts this CAPeerRenewRequest to JSON.
+     * @function toJSON
+     * @memberof CAPeerRenewRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    CAPeerRenewRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return CAPeerRenewRequest;
+})();
+
+export const CAPeerRenewResponse = $root.CAPeerRenewResponse = (() => {
+
+    /**
+     * Properties of a CAPeerRenewResponse.
+     * @exports ICAPeerRenewResponse
+     * @interface ICAPeerRenewResponse
+     * @property {ICertificate|null} [certificate] CAPeerRenewResponse certificate
+     */
+
+    /**
+     * Constructs a new CAPeerRenewResponse.
+     * @exports CAPeerRenewResponse
+     * @classdesc Represents a CAPeerRenewResponse.
+     * @implements ICAPeerRenewResponse
+     * @constructor
+     * @param {ICAPeerRenewResponse=} [properties] Properties to set
+     */
+    function CAPeerRenewResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * CAPeerRenewResponse certificate.
+     * @member {ICertificate|null|undefined} certificate
+     * @memberof CAPeerRenewResponse
+     * @instance
+     */
+    CAPeerRenewResponse.prototype.certificate = null;
+
+    /**
+     * Creates a new CAPeerRenewResponse instance using the specified properties.
+     * @function create
+     * @memberof CAPeerRenewResponse
+     * @static
+     * @param {ICAPeerRenewResponse=} [properties] Properties to set
+     * @returns {CAPeerRenewResponse} CAPeerRenewResponse instance
+     */
+    CAPeerRenewResponse.create = function create(properties) {
+        return new CAPeerRenewResponse(properties);
+    };
+
+    /**
+     * Encodes the specified CAPeerRenewResponse message. Does not implicitly {@link CAPeerRenewResponse.verify|verify} messages.
+     * @function encode
+     * @memberof CAPeerRenewResponse
+     * @static
+     * @param {ICAPeerRenewResponse} message CAPeerRenewResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    CAPeerRenewResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
+            $root.Certificate.encode(message.certificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified CAPeerRenewResponse message, length delimited. Does not implicitly {@link CAPeerRenewResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof CAPeerRenewResponse
+     * @static
+     * @param {ICAPeerRenewResponse} message CAPeerRenewResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    CAPeerRenewResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a CAPeerRenewResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof CAPeerRenewResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {CAPeerRenewResponse} CAPeerRenewResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    CAPeerRenewResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.CAPeerRenewResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.certificate = $root.Certificate.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a CAPeerRenewResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof CAPeerRenewResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {CAPeerRenewResponse} CAPeerRenewResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    CAPeerRenewResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a CAPeerRenewResponse message.
+     * @function verify
+     * @memberof CAPeerRenewResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    CAPeerRenewResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.certificate != null && message.hasOwnProperty("certificate")) {
+            let error = $root.Certificate.verify(message.certificate);
+            if (error)
+                return "certificate." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a CAPeerRenewResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof CAPeerRenewResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {CAPeerRenewResponse} CAPeerRenewResponse
+     */
+    CAPeerRenewResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.CAPeerRenewResponse)
+            return object;
+        let message = new $root.CAPeerRenewResponse();
+        if (object.certificate != null) {
+            if (typeof object.certificate !== "object")
+                throw TypeError(".CAPeerRenewResponse.certificate: object expected");
+            message.certificate = $root.Certificate.fromObject(object.certificate);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a CAPeerRenewResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof CAPeerRenewResponse
+     * @static
+     * @param {CAPeerRenewResponse} message CAPeerRenewResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    CAPeerRenewResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.certificate = null;
+        if (message.certificate != null && message.hasOwnProperty("certificate"))
+            object.certificate = $root.Certificate.toObject(message.certificate, options);
+        return object;
+    };
+
+    /**
+     * Converts this CAPeerRenewResponse to JSON.
+     * @function toJSON
+     * @memberof CAPeerRenewResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    CAPeerRenewResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return CAPeerRenewResponse;
+})();
+
+export const NetworkPeerNegotiateRequest = $root.NetworkPeerNegotiateRequest = (() => {
+
+    /**
+     * Properties of a NetworkPeerNegotiateRequest.
+     * @exports INetworkPeerNegotiateRequest
+     * @interface INetworkPeerNegotiateRequest
+     * @property {number|null} [keyCount] NetworkPeerNegotiateRequest keyCount
+     */
+
+    /**
+     * Constructs a new NetworkPeerNegotiateRequest.
+     * @exports NetworkPeerNegotiateRequest
+     * @classdesc Represents a NetworkPeerNegotiateRequest.
+     * @implements INetworkPeerNegotiateRequest
+     * @constructor
+     * @param {INetworkPeerNegotiateRequest=} [properties] Properties to set
+     */
+    function NetworkPeerNegotiateRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * NetworkPeerNegotiateRequest keyCount.
+     * @member {number} keyCount
+     * @memberof NetworkPeerNegotiateRequest
+     * @instance
+     */
+    NetworkPeerNegotiateRequest.prototype.keyCount = 0;
+
+    /**
+     * Creates a new NetworkPeerNegotiateRequest instance using the specified properties.
+     * @function create
+     * @memberof NetworkPeerNegotiateRequest
+     * @static
+     * @param {INetworkPeerNegotiateRequest=} [properties] Properties to set
+     * @returns {NetworkPeerNegotiateRequest} NetworkPeerNegotiateRequest instance
+     */
+    NetworkPeerNegotiateRequest.create = function create(properties) {
+        return new NetworkPeerNegotiateRequest(properties);
+    };
+
+    /**
+     * Encodes the specified NetworkPeerNegotiateRequest message. Does not implicitly {@link NetworkPeerNegotiateRequest.verify|verify} messages.
+     * @function encode
+     * @memberof NetworkPeerNegotiateRequest
+     * @static
+     * @param {INetworkPeerNegotiateRequest} message NetworkPeerNegotiateRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerNegotiateRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.keyCount != null && Object.hasOwnProperty.call(message, "keyCount"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.keyCount);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified NetworkPeerNegotiateRequest message, length delimited. Does not implicitly {@link NetworkPeerNegotiateRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof NetworkPeerNegotiateRequest
+     * @static
+     * @param {INetworkPeerNegotiateRequest} message NetworkPeerNegotiateRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerNegotiateRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a NetworkPeerNegotiateRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof NetworkPeerNegotiateRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {NetworkPeerNegotiateRequest} NetworkPeerNegotiateRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerNegotiateRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkPeerNegotiateRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.keyCount = reader.uint32();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a NetworkPeerNegotiateRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof NetworkPeerNegotiateRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {NetworkPeerNegotiateRequest} NetworkPeerNegotiateRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerNegotiateRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a NetworkPeerNegotiateRequest message.
+     * @function verify
+     * @memberof NetworkPeerNegotiateRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    NetworkPeerNegotiateRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.keyCount != null && message.hasOwnProperty("keyCount"))
+            if (!$util.isInteger(message.keyCount))
+                return "keyCount: integer expected";
+        return null;
+    };
+
+    /**
+     * Creates a NetworkPeerNegotiateRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof NetworkPeerNegotiateRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {NetworkPeerNegotiateRequest} NetworkPeerNegotiateRequest
+     */
+    NetworkPeerNegotiateRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.NetworkPeerNegotiateRequest)
+            return object;
+        let message = new $root.NetworkPeerNegotiateRequest();
+        if (object.keyCount != null)
+            message.keyCount = object.keyCount >>> 0;
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a NetworkPeerNegotiateRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof NetworkPeerNegotiateRequest
+     * @static
+     * @param {NetworkPeerNegotiateRequest} message NetworkPeerNegotiateRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    NetworkPeerNegotiateRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.keyCount = 0;
+        if (message.keyCount != null && message.hasOwnProperty("keyCount"))
+            object.keyCount = message.keyCount;
+        return object;
+    };
+
+    /**
+     * Converts this NetworkPeerNegotiateRequest to JSON.
+     * @function toJSON
+     * @memberof NetworkPeerNegotiateRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    NetworkPeerNegotiateRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return NetworkPeerNegotiateRequest;
+})();
+
+export const NetworkPeerNegotiateResponse = $root.NetworkPeerNegotiateResponse = (() => {
+
+    /**
+     * Properties of a NetworkPeerNegotiateResponse.
+     * @exports INetworkPeerNegotiateResponse
+     * @interface INetworkPeerNegotiateResponse
+     * @property {number|null} [keyCount] NetworkPeerNegotiateResponse keyCount
+     */
+
+    /**
+     * Constructs a new NetworkPeerNegotiateResponse.
+     * @exports NetworkPeerNegotiateResponse
+     * @classdesc Represents a NetworkPeerNegotiateResponse.
+     * @implements INetworkPeerNegotiateResponse
+     * @constructor
+     * @param {INetworkPeerNegotiateResponse=} [properties] Properties to set
+     */
+    function NetworkPeerNegotiateResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * NetworkPeerNegotiateResponse keyCount.
+     * @member {number} keyCount
+     * @memberof NetworkPeerNegotiateResponse
+     * @instance
+     */
+    NetworkPeerNegotiateResponse.prototype.keyCount = 0;
+
+    /**
+     * Creates a new NetworkPeerNegotiateResponse instance using the specified properties.
+     * @function create
+     * @memberof NetworkPeerNegotiateResponse
+     * @static
+     * @param {INetworkPeerNegotiateResponse=} [properties] Properties to set
+     * @returns {NetworkPeerNegotiateResponse} NetworkPeerNegotiateResponse instance
+     */
+    NetworkPeerNegotiateResponse.create = function create(properties) {
+        return new NetworkPeerNegotiateResponse(properties);
+    };
+
+    /**
+     * Encodes the specified NetworkPeerNegotiateResponse message. Does not implicitly {@link NetworkPeerNegotiateResponse.verify|verify} messages.
+     * @function encode
+     * @memberof NetworkPeerNegotiateResponse
+     * @static
+     * @param {INetworkPeerNegotiateResponse} message NetworkPeerNegotiateResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerNegotiateResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.keyCount != null && Object.hasOwnProperty.call(message, "keyCount"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.keyCount);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified NetworkPeerNegotiateResponse message, length delimited. Does not implicitly {@link NetworkPeerNegotiateResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof NetworkPeerNegotiateResponse
+     * @static
+     * @param {INetworkPeerNegotiateResponse} message NetworkPeerNegotiateResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerNegotiateResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a NetworkPeerNegotiateResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof NetworkPeerNegotiateResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {NetworkPeerNegotiateResponse} NetworkPeerNegotiateResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerNegotiateResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkPeerNegotiateResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.keyCount = reader.uint32();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a NetworkPeerNegotiateResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof NetworkPeerNegotiateResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {NetworkPeerNegotiateResponse} NetworkPeerNegotiateResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerNegotiateResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a NetworkPeerNegotiateResponse message.
+     * @function verify
+     * @memberof NetworkPeerNegotiateResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    NetworkPeerNegotiateResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.keyCount != null && message.hasOwnProperty("keyCount"))
+            if (!$util.isInteger(message.keyCount))
+                return "keyCount: integer expected";
+        return null;
+    };
+
+    /**
+     * Creates a NetworkPeerNegotiateResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof NetworkPeerNegotiateResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {NetworkPeerNegotiateResponse} NetworkPeerNegotiateResponse
+     */
+    NetworkPeerNegotiateResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.NetworkPeerNegotiateResponse)
+            return object;
+        let message = new $root.NetworkPeerNegotiateResponse();
+        if (object.keyCount != null)
+            message.keyCount = object.keyCount >>> 0;
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a NetworkPeerNegotiateResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof NetworkPeerNegotiateResponse
+     * @static
+     * @param {NetworkPeerNegotiateResponse} message NetworkPeerNegotiateResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    NetworkPeerNegotiateResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.keyCount = 0;
+        if (message.keyCount != null && message.hasOwnProperty("keyCount"))
+            object.keyCount = message.keyCount;
+        return object;
+    };
+
+    /**
+     * Converts this NetworkPeerNegotiateResponse to JSON.
+     * @function toJSON
+     * @memberof NetworkPeerNegotiateResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    NetworkPeerNegotiateResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return NetworkPeerNegotiateResponse;
+})();
+
+export const NetworkPeerBinding = $root.NetworkPeerBinding = (() => {
+
+    /**
+     * Properties of a NetworkPeerBinding.
+     * @exports INetworkPeerBinding
+     * @interface INetworkPeerBinding
+     * @property {number|null} [port] NetworkPeerBinding port
+     * @property {ICertificate|null} [certificate] NetworkPeerBinding certificate
+     */
+
+    /**
+     * Constructs a new NetworkPeerBinding.
+     * @exports NetworkPeerBinding
+     * @classdesc Represents a NetworkPeerBinding.
+     * @implements INetworkPeerBinding
+     * @constructor
+     * @param {INetworkPeerBinding=} [properties] Properties to set
+     */
+    function NetworkPeerBinding(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * NetworkPeerBinding port.
+     * @member {number} port
+     * @memberof NetworkPeerBinding
+     * @instance
+     */
+    NetworkPeerBinding.prototype.port = 0;
+
+    /**
+     * NetworkPeerBinding certificate.
+     * @member {ICertificate|null|undefined} certificate
+     * @memberof NetworkPeerBinding
+     * @instance
+     */
+    NetworkPeerBinding.prototype.certificate = null;
+
+    /**
+     * Creates a new NetworkPeerBinding instance using the specified properties.
+     * @function create
+     * @memberof NetworkPeerBinding
+     * @static
+     * @param {INetworkPeerBinding=} [properties] Properties to set
+     * @returns {NetworkPeerBinding} NetworkPeerBinding instance
+     */
+    NetworkPeerBinding.create = function create(properties) {
+        return new NetworkPeerBinding(properties);
+    };
+
+    /**
+     * Encodes the specified NetworkPeerBinding message. Does not implicitly {@link NetworkPeerBinding.verify|verify} messages.
+     * @function encode
+     * @memberof NetworkPeerBinding
+     * @static
+     * @param {INetworkPeerBinding} message NetworkPeerBinding message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerBinding.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.port != null && Object.hasOwnProperty.call(message, "port"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint32(message.port);
+        if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
+            $root.Certificate.encode(message.certificate, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified NetworkPeerBinding message, length delimited. Does not implicitly {@link NetworkPeerBinding.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof NetworkPeerBinding
+     * @static
+     * @param {INetworkPeerBinding} message NetworkPeerBinding message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerBinding.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a NetworkPeerBinding message from the specified reader or buffer.
+     * @function decode
+     * @memberof NetworkPeerBinding
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {NetworkPeerBinding} NetworkPeerBinding
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerBinding.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkPeerBinding();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.port = reader.uint32();
+                break;
+            case 2:
+                message.certificate = $root.Certificate.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a NetworkPeerBinding message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof NetworkPeerBinding
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {NetworkPeerBinding} NetworkPeerBinding
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerBinding.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a NetworkPeerBinding message.
+     * @function verify
+     * @memberof NetworkPeerBinding
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    NetworkPeerBinding.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.port != null && message.hasOwnProperty("port"))
+            if (!$util.isInteger(message.port))
+                return "port: integer expected";
+        if (message.certificate != null && message.hasOwnProperty("certificate")) {
+            let error = $root.Certificate.verify(message.certificate);
+            if (error)
+                return "certificate." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a NetworkPeerBinding message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof NetworkPeerBinding
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {NetworkPeerBinding} NetworkPeerBinding
+     */
+    NetworkPeerBinding.fromObject = function fromObject(object) {
+        if (object instanceof $root.NetworkPeerBinding)
+            return object;
+        let message = new $root.NetworkPeerBinding();
+        if (object.port != null)
+            message.port = object.port >>> 0;
+        if (object.certificate != null) {
+            if (typeof object.certificate !== "object")
+                throw TypeError(".NetworkPeerBinding.certificate: object expected");
+            message.certificate = $root.Certificate.fromObject(object.certificate);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a NetworkPeerBinding message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof NetworkPeerBinding
+     * @static
+     * @param {NetworkPeerBinding} message NetworkPeerBinding
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    NetworkPeerBinding.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            object.port = 0;
+            object.certificate = null;
+        }
+        if (message.port != null && message.hasOwnProperty("port"))
+            object.port = message.port;
+        if (message.certificate != null && message.hasOwnProperty("certificate"))
+            object.certificate = $root.Certificate.toObject(message.certificate, options);
+        return object;
+    };
+
+    /**
+     * Converts this NetworkPeerBinding to JSON.
+     * @function toJSON
+     * @memberof NetworkPeerBinding
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    NetworkPeerBinding.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return NetworkPeerBinding;
+})();
+
+export const NetworkPeerOpenRequest = $root.NetworkPeerOpenRequest = (() => {
+
+    /**
+     * Properties of a NetworkPeerOpenRequest.
+     * @exports INetworkPeerOpenRequest
+     * @interface INetworkPeerOpenRequest
+     * @property {Array.<INetworkPeerBinding>|null} [bindings] NetworkPeerOpenRequest bindings
+     */
+
+    /**
+     * Constructs a new NetworkPeerOpenRequest.
+     * @exports NetworkPeerOpenRequest
+     * @classdesc Represents a NetworkPeerOpenRequest.
+     * @implements INetworkPeerOpenRequest
+     * @constructor
+     * @param {INetworkPeerOpenRequest=} [properties] Properties to set
+     */
+    function NetworkPeerOpenRequest(properties) {
+        this.bindings = [];
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * NetworkPeerOpenRequest bindings.
+     * @member {Array.<INetworkPeerBinding>} bindings
+     * @memberof NetworkPeerOpenRequest
+     * @instance
+     */
+    NetworkPeerOpenRequest.prototype.bindings = $util.emptyArray;
+
+    /**
+     * Creates a new NetworkPeerOpenRequest instance using the specified properties.
+     * @function create
+     * @memberof NetworkPeerOpenRequest
+     * @static
+     * @param {INetworkPeerOpenRequest=} [properties] Properties to set
+     * @returns {NetworkPeerOpenRequest} NetworkPeerOpenRequest instance
+     */
+    NetworkPeerOpenRequest.create = function create(properties) {
+        return new NetworkPeerOpenRequest(properties);
+    };
+
+    /**
+     * Encodes the specified NetworkPeerOpenRequest message. Does not implicitly {@link NetworkPeerOpenRequest.verify|verify} messages.
+     * @function encode
+     * @memberof NetworkPeerOpenRequest
+     * @static
+     * @param {INetworkPeerOpenRequest} message NetworkPeerOpenRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerOpenRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.bindings != null && message.bindings.length)
+            for (let i = 0; i < message.bindings.length; ++i)
+                $root.NetworkPeerBinding.encode(message.bindings[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified NetworkPeerOpenRequest message, length delimited. Does not implicitly {@link NetworkPeerOpenRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof NetworkPeerOpenRequest
+     * @static
+     * @param {INetworkPeerOpenRequest} message NetworkPeerOpenRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerOpenRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a NetworkPeerOpenRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof NetworkPeerOpenRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {NetworkPeerOpenRequest} NetworkPeerOpenRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerOpenRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkPeerOpenRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                if (!(message.bindings && message.bindings.length))
+                    message.bindings = [];
+                message.bindings.push($root.NetworkPeerBinding.decode(reader, reader.uint32()));
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a NetworkPeerOpenRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof NetworkPeerOpenRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {NetworkPeerOpenRequest} NetworkPeerOpenRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerOpenRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a NetworkPeerOpenRequest message.
+     * @function verify
+     * @memberof NetworkPeerOpenRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    NetworkPeerOpenRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.bindings != null && message.hasOwnProperty("bindings")) {
+            if (!Array.isArray(message.bindings))
+                return "bindings: array expected";
+            for (let i = 0; i < message.bindings.length; ++i) {
+                let error = $root.NetworkPeerBinding.verify(message.bindings[i]);
+                if (error)
+                    return "bindings." + error;
+            }
+        }
+        return null;
+    };
+
+    /**
+     * Creates a NetworkPeerOpenRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof NetworkPeerOpenRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {NetworkPeerOpenRequest} NetworkPeerOpenRequest
+     */
+    NetworkPeerOpenRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.NetworkPeerOpenRequest)
+            return object;
+        let message = new $root.NetworkPeerOpenRequest();
+        if (object.bindings) {
+            if (!Array.isArray(object.bindings))
+                throw TypeError(".NetworkPeerOpenRequest.bindings: array expected");
+            message.bindings = [];
+            for (let i = 0; i < object.bindings.length; ++i) {
+                if (typeof object.bindings[i] !== "object")
+                    throw TypeError(".NetworkPeerOpenRequest.bindings: object expected");
+                message.bindings[i] = $root.NetworkPeerBinding.fromObject(object.bindings[i]);
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a NetworkPeerOpenRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof NetworkPeerOpenRequest
+     * @static
+     * @param {NetworkPeerOpenRequest} message NetworkPeerOpenRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    NetworkPeerOpenRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.arrays || options.defaults)
+            object.bindings = [];
+        if (message.bindings && message.bindings.length) {
+            object.bindings = [];
+            for (let j = 0; j < message.bindings.length; ++j)
+                object.bindings[j] = $root.NetworkPeerBinding.toObject(message.bindings[j], options);
+        }
+        return object;
+    };
+
+    /**
+     * Converts this NetworkPeerOpenRequest to JSON.
+     * @function toJSON
+     * @memberof NetworkPeerOpenRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    NetworkPeerOpenRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return NetworkPeerOpenRequest;
+})();
+
+export const NetworkPeerOpenResponse = $root.NetworkPeerOpenResponse = (() => {
+
+    /**
+     * Properties of a NetworkPeerOpenResponse.
+     * @exports INetworkPeerOpenResponse
+     * @interface INetworkPeerOpenResponse
+     * @property {Array.<INetworkPeerBinding>|null} [bindings] NetworkPeerOpenResponse bindings
+     */
+
+    /**
+     * Constructs a new NetworkPeerOpenResponse.
+     * @exports NetworkPeerOpenResponse
+     * @classdesc Represents a NetworkPeerOpenResponse.
+     * @implements INetworkPeerOpenResponse
+     * @constructor
+     * @param {INetworkPeerOpenResponse=} [properties] Properties to set
+     */
+    function NetworkPeerOpenResponse(properties) {
+        this.bindings = [];
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * NetworkPeerOpenResponse bindings.
+     * @member {Array.<INetworkPeerBinding>} bindings
+     * @memberof NetworkPeerOpenResponse
+     * @instance
+     */
+    NetworkPeerOpenResponse.prototype.bindings = $util.emptyArray;
+
+    /**
+     * Creates a new NetworkPeerOpenResponse instance using the specified properties.
+     * @function create
+     * @memberof NetworkPeerOpenResponse
+     * @static
+     * @param {INetworkPeerOpenResponse=} [properties] Properties to set
+     * @returns {NetworkPeerOpenResponse} NetworkPeerOpenResponse instance
+     */
+    NetworkPeerOpenResponse.create = function create(properties) {
+        return new NetworkPeerOpenResponse(properties);
+    };
+
+    /**
+     * Encodes the specified NetworkPeerOpenResponse message. Does not implicitly {@link NetworkPeerOpenResponse.verify|verify} messages.
+     * @function encode
+     * @memberof NetworkPeerOpenResponse
+     * @static
+     * @param {INetworkPeerOpenResponse} message NetworkPeerOpenResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerOpenResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.bindings != null && message.bindings.length)
+            for (let i = 0; i < message.bindings.length; ++i)
+                $root.NetworkPeerBinding.encode(message.bindings[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified NetworkPeerOpenResponse message, length delimited. Does not implicitly {@link NetworkPeerOpenResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof NetworkPeerOpenResponse
+     * @static
+     * @param {INetworkPeerOpenResponse} message NetworkPeerOpenResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerOpenResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a NetworkPeerOpenResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof NetworkPeerOpenResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {NetworkPeerOpenResponse} NetworkPeerOpenResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerOpenResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkPeerOpenResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                if (!(message.bindings && message.bindings.length))
+                    message.bindings = [];
+                message.bindings.push($root.NetworkPeerBinding.decode(reader, reader.uint32()));
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a NetworkPeerOpenResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof NetworkPeerOpenResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {NetworkPeerOpenResponse} NetworkPeerOpenResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerOpenResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a NetworkPeerOpenResponse message.
+     * @function verify
+     * @memberof NetworkPeerOpenResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    NetworkPeerOpenResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.bindings != null && message.hasOwnProperty("bindings")) {
+            if (!Array.isArray(message.bindings))
+                return "bindings: array expected";
+            for (let i = 0; i < message.bindings.length; ++i) {
+                let error = $root.NetworkPeerBinding.verify(message.bindings[i]);
+                if (error)
+                    return "bindings." + error;
+            }
+        }
+        return null;
+    };
+
+    /**
+     * Creates a NetworkPeerOpenResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof NetworkPeerOpenResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {NetworkPeerOpenResponse} NetworkPeerOpenResponse
+     */
+    NetworkPeerOpenResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.NetworkPeerOpenResponse)
+            return object;
+        let message = new $root.NetworkPeerOpenResponse();
+        if (object.bindings) {
+            if (!Array.isArray(object.bindings))
+                throw TypeError(".NetworkPeerOpenResponse.bindings: array expected");
+            message.bindings = [];
+            for (let i = 0; i < object.bindings.length; ++i) {
+                if (typeof object.bindings[i] !== "object")
+                    throw TypeError(".NetworkPeerOpenResponse.bindings: object expected");
+                message.bindings[i] = $root.NetworkPeerBinding.fromObject(object.bindings[i]);
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a NetworkPeerOpenResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof NetworkPeerOpenResponse
+     * @static
+     * @param {NetworkPeerOpenResponse} message NetworkPeerOpenResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    NetworkPeerOpenResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.arrays || options.defaults)
+            object.bindings = [];
+        if (message.bindings && message.bindings.length) {
+            object.bindings = [];
+            for (let j = 0; j < message.bindings.length; ++j)
+                object.bindings[j] = $root.NetworkPeerBinding.toObject(message.bindings[j], options);
+        }
+        return object;
+    };
+
+    /**
+     * Converts this NetworkPeerOpenResponse to JSON.
+     * @function toJSON
+     * @memberof NetworkPeerOpenResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    NetworkPeerOpenResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return NetworkPeerOpenResponse;
+})();
+
+export const NetworkPeerCloseRequest = $root.NetworkPeerCloseRequest = (() => {
+
+    /**
+     * Properties of a NetworkPeerCloseRequest.
+     * @exports INetworkPeerCloseRequest
+     * @interface INetworkPeerCloseRequest
+     * @property {Uint8Array|null} [key] NetworkPeerCloseRequest key
+     */
+
+    /**
+     * Constructs a new NetworkPeerCloseRequest.
+     * @exports NetworkPeerCloseRequest
+     * @classdesc Represents a NetworkPeerCloseRequest.
+     * @implements INetworkPeerCloseRequest
+     * @constructor
+     * @param {INetworkPeerCloseRequest=} [properties] Properties to set
+     */
+    function NetworkPeerCloseRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * NetworkPeerCloseRequest key.
+     * @member {Uint8Array} key
+     * @memberof NetworkPeerCloseRequest
+     * @instance
+     */
+    NetworkPeerCloseRequest.prototype.key = $util.newBuffer([]);
+
+    /**
+     * Creates a new NetworkPeerCloseRequest instance using the specified properties.
+     * @function create
+     * @memberof NetworkPeerCloseRequest
+     * @static
+     * @param {INetworkPeerCloseRequest=} [properties] Properties to set
+     * @returns {NetworkPeerCloseRequest} NetworkPeerCloseRequest instance
+     */
+    NetworkPeerCloseRequest.create = function create(properties) {
+        return new NetworkPeerCloseRequest(properties);
+    };
+
+    /**
+     * Encodes the specified NetworkPeerCloseRequest message. Does not implicitly {@link NetworkPeerCloseRequest.verify|verify} messages.
+     * @function encode
+     * @memberof NetworkPeerCloseRequest
+     * @static
+     * @param {INetworkPeerCloseRequest} message NetworkPeerCloseRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerCloseRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified NetworkPeerCloseRequest message, length delimited. Does not implicitly {@link NetworkPeerCloseRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof NetworkPeerCloseRequest
+     * @static
+     * @param {INetworkPeerCloseRequest} message NetworkPeerCloseRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerCloseRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a NetworkPeerCloseRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof NetworkPeerCloseRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {NetworkPeerCloseRequest} NetworkPeerCloseRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerCloseRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkPeerCloseRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.key = reader.bytes();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a NetworkPeerCloseRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof NetworkPeerCloseRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {NetworkPeerCloseRequest} NetworkPeerCloseRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerCloseRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a NetworkPeerCloseRequest message.
+     * @function verify
+     * @memberof NetworkPeerCloseRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    NetworkPeerCloseRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.key != null && message.hasOwnProperty("key"))
+            if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
+                return "key: buffer expected";
+        return null;
+    };
+
+    /**
+     * Creates a NetworkPeerCloseRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof NetworkPeerCloseRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {NetworkPeerCloseRequest} NetworkPeerCloseRequest
+     */
+    NetworkPeerCloseRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.NetworkPeerCloseRequest)
+            return object;
+        let message = new $root.NetworkPeerCloseRequest();
+        if (object.key != null)
+            if (typeof object.key === "string")
+                $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
+            else if (object.key.length)
+                message.key = object.key;
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a NetworkPeerCloseRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof NetworkPeerCloseRequest
+     * @static
+     * @param {NetworkPeerCloseRequest} message NetworkPeerCloseRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    NetworkPeerCloseRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if (options.bytes === String)
+                object.key = "";
+            else {
+                object.key = [];
+                if (options.bytes !== Array)
+                    object.key = $util.newBuffer(object.key);
+            }
+        if (message.key != null && message.hasOwnProperty("key"))
+            object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
+        return object;
+    };
+
+    /**
+     * Converts this NetworkPeerCloseRequest to JSON.
+     * @function toJSON
+     * @memberof NetworkPeerCloseRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    NetworkPeerCloseRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return NetworkPeerCloseRequest;
+})();
+
+export const NetworkPeerCloseResponse = $root.NetworkPeerCloseResponse = (() => {
+
+    /**
+     * Properties of a NetworkPeerCloseResponse.
+     * @exports INetworkPeerCloseResponse
+     * @interface INetworkPeerCloseResponse
+     */
+
+    /**
+     * Constructs a new NetworkPeerCloseResponse.
+     * @exports NetworkPeerCloseResponse
+     * @classdesc Represents a NetworkPeerCloseResponse.
+     * @implements INetworkPeerCloseResponse
+     * @constructor
+     * @param {INetworkPeerCloseResponse=} [properties] Properties to set
+     */
+    function NetworkPeerCloseResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new NetworkPeerCloseResponse instance using the specified properties.
+     * @function create
+     * @memberof NetworkPeerCloseResponse
+     * @static
+     * @param {INetworkPeerCloseResponse=} [properties] Properties to set
+     * @returns {NetworkPeerCloseResponse} NetworkPeerCloseResponse instance
+     */
+    NetworkPeerCloseResponse.create = function create(properties) {
+        return new NetworkPeerCloseResponse(properties);
+    };
+
+    /**
+     * Encodes the specified NetworkPeerCloseResponse message. Does not implicitly {@link NetworkPeerCloseResponse.verify|verify} messages.
+     * @function encode
+     * @memberof NetworkPeerCloseResponse
+     * @static
+     * @param {INetworkPeerCloseResponse} message NetworkPeerCloseResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerCloseResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified NetworkPeerCloseResponse message, length delimited. Does not implicitly {@link NetworkPeerCloseResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof NetworkPeerCloseResponse
+     * @static
+     * @param {INetworkPeerCloseResponse} message NetworkPeerCloseResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerCloseResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a NetworkPeerCloseResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof NetworkPeerCloseResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {NetworkPeerCloseResponse} NetworkPeerCloseResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerCloseResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkPeerCloseResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a NetworkPeerCloseResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof NetworkPeerCloseResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {NetworkPeerCloseResponse} NetworkPeerCloseResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerCloseResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a NetworkPeerCloseResponse message.
+     * @function verify
+     * @memberof NetworkPeerCloseResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    NetworkPeerCloseResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a NetworkPeerCloseResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof NetworkPeerCloseResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {NetworkPeerCloseResponse} NetworkPeerCloseResponse
+     */
+    NetworkPeerCloseResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.NetworkPeerCloseResponse)
+            return object;
+        return new $root.NetworkPeerCloseResponse();
+    };
+
+    /**
+     * Creates a plain object from a NetworkPeerCloseResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof NetworkPeerCloseResponse
+     * @static
+     * @param {NetworkPeerCloseResponse} message NetworkPeerCloseResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    NetworkPeerCloseResponse.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this NetworkPeerCloseResponse to JSON.
+     * @function toJSON
+     * @memberof NetworkPeerCloseResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    NetworkPeerCloseResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return NetworkPeerCloseResponse;
+})();
+
+export const BootstrapPeerGetPublishEnabledRequest = $root.BootstrapPeerGetPublishEnabledRequest = (() => {
+
+    /**
+     * Properties of a BootstrapPeerGetPublishEnabledRequest.
+     * @exports IBootstrapPeerGetPublishEnabledRequest
+     * @interface IBootstrapPeerGetPublishEnabledRequest
+     */
+
+    /**
+     * Constructs a new BootstrapPeerGetPublishEnabledRequest.
+     * @exports BootstrapPeerGetPublishEnabledRequest
+     * @classdesc Represents a BootstrapPeerGetPublishEnabledRequest.
+     * @implements IBootstrapPeerGetPublishEnabledRequest
+     * @constructor
+     * @param {IBootstrapPeerGetPublishEnabledRequest=} [properties] Properties to set
+     */
+    function BootstrapPeerGetPublishEnabledRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new BootstrapPeerGetPublishEnabledRequest instance using the specified properties.
+     * @function create
+     * @memberof BootstrapPeerGetPublishEnabledRequest
+     * @static
+     * @param {IBootstrapPeerGetPublishEnabledRequest=} [properties] Properties to set
+     * @returns {BootstrapPeerGetPublishEnabledRequest} BootstrapPeerGetPublishEnabledRequest instance
+     */
+    BootstrapPeerGetPublishEnabledRequest.create = function create(properties) {
+        return new BootstrapPeerGetPublishEnabledRequest(properties);
+    };
+
+    /**
+     * Encodes the specified BootstrapPeerGetPublishEnabledRequest message. Does not implicitly {@link BootstrapPeerGetPublishEnabledRequest.verify|verify} messages.
+     * @function encode
+     * @memberof BootstrapPeerGetPublishEnabledRequest
+     * @static
+     * @param {IBootstrapPeerGetPublishEnabledRequest} message BootstrapPeerGetPublishEnabledRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BootstrapPeerGetPublishEnabledRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified BootstrapPeerGetPublishEnabledRequest message, length delimited. Does not implicitly {@link BootstrapPeerGetPublishEnabledRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof BootstrapPeerGetPublishEnabledRequest
+     * @static
+     * @param {IBootstrapPeerGetPublishEnabledRequest} message BootstrapPeerGetPublishEnabledRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BootstrapPeerGetPublishEnabledRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a BootstrapPeerGetPublishEnabledRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof BootstrapPeerGetPublishEnabledRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {BootstrapPeerGetPublishEnabledRequest} BootstrapPeerGetPublishEnabledRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BootstrapPeerGetPublishEnabledRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BootstrapPeerGetPublishEnabledRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a BootstrapPeerGetPublishEnabledRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof BootstrapPeerGetPublishEnabledRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {BootstrapPeerGetPublishEnabledRequest} BootstrapPeerGetPublishEnabledRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BootstrapPeerGetPublishEnabledRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a BootstrapPeerGetPublishEnabledRequest message.
+     * @function verify
+     * @memberof BootstrapPeerGetPublishEnabledRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    BootstrapPeerGetPublishEnabledRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a BootstrapPeerGetPublishEnabledRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof BootstrapPeerGetPublishEnabledRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {BootstrapPeerGetPublishEnabledRequest} BootstrapPeerGetPublishEnabledRequest
+     */
+    BootstrapPeerGetPublishEnabledRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.BootstrapPeerGetPublishEnabledRequest)
+            return object;
+        return new $root.BootstrapPeerGetPublishEnabledRequest();
+    };
+
+    /**
+     * Creates a plain object from a BootstrapPeerGetPublishEnabledRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof BootstrapPeerGetPublishEnabledRequest
+     * @static
+     * @param {BootstrapPeerGetPublishEnabledRequest} message BootstrapPeerGetPublishEnabledRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    BootstrapPeerGetPublishEnabledRequest.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this BootstrapPeerGetPublishEnabledRequest to JSON.
+     * @function toJSON
+     * @memberof BootstrapPeerGetPublishEnabledRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    BootstrapPeerGetPublishEnabledRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return BootstrapPeerGetPublishEnabledRequest;
+})();
+
+export const BootstrapPeerGetPublishEnabledResponse = $root.BootstrapPeerGetPublishEnabledResponse = (() => {
+
+    /**
+     * Properties of a BootstrapPeerGetPublishEnabledResponse.
+     * @exports IBootstrapPeerGetPublishEnabledResponse
+     * @interface IBootstrapPeerGetPublishEnabledResponse
+     * @property {boolean|null} [enabled] BootstrapPeerGetPublishEnabledResponse enabled
+     */
+
+    /**
+     * Constructs a new BootstrapPeerGetPublishEnabledResponse.
+     * @exports BootstrapPeerGetPublishEnabledResponse
+     * @classdesc Represents a BootstrapPeerGetPublishEnabledResponse.
+     * @implements IBootstrapPeerGetPublishEnabledResponse
+     * @constructor
+     * @param {IBootstrapPeerGetPublishEnabledResponse=} [properties] Properties to set
+     */
+    function BootstrapPeerGetPublishEnabledResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * BootstrapPeerGetPublishEnabledResponse enabled.
+     * @member {boolean} enabled
+     * @memberof BootstrapPeerGetPublishEnabledResponse
+     * @instance
+     */
+    BootstrapPeerGetPublishEnabledResponse.prototype.enabled = false;
+
+    /**
+     * Creates a new BootstrapPeerGetPublishEnabledResponse instance using the specified properties.
+     * @function create
+     * @memberof BootstrapPeerGetPublishEnabledResponse
+     * @static
+     * @param {IBootstrapPeerGetPublishEnabledResponse=} [properties] Properties to set
+     * @returns {BootstrapPeerGetPublishEnabledResponse} BootstrapPeerGetPublishEnabledResponse instance
+     */
+    BootstrapPeerGetPublishEnabledResponse.create = function create(properties) {
+        return new BootstrapPeerGetPublishEnabledResponse(properties);
+    };
+
+    /**
+     * Encodes the specified BootstrapPeerGetPublishEnabledResponse message. Does not implicitly {@link BootstrapPeerGetPublishEnabledResponse.verify|verify} messages.
+     * @function encode
+     * @memberof BootstrapPeerGetPublishEnabledResponse
+     * @static
+     * @param {IBootstrapPeerGetPublishEnabledResponse} message BootstrapPeerGetPublishEnabledResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BootstrapPeerGetPublishEnabledResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.enabled != null && Object.hasOwnProperty.call(message, "enabled"))
+            writer.uint32(/* id 1, wireType 0 =*/8).bool(message.enabled);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified BootstrapPeerGetPublishEnabledResponse message, length delimited. Does not implicitly {@link BootstrapPeerGetPublishEnabledResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof BootstrapPeerGetPublishEnabledResponse
+     * @static
+     * @param {IBootstrapPeerGetPublishEnabledResponse} message BootstrapPeerGetPublishEnabledResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BootstrapPeerGetPublishEnabledResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a BootstrapPeerGetPublishEnabledResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof BootstrapPeerGetPublishEnabledResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {BootstrapPeerGetPublishEnabledResponse} BootstrapPeerGetPublishEnabledResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BootstrapPeerGetPublishEnabledResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BootstrapPeerGetPublishEnabledResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.enabled = reader.bool();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a BootstrapPeerGetPublishEnabledResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof BootstrapPeerGetPublishEnabledResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {BootstrapPeerGetPublishEnabledResponse} BootstrapPeerGetPublishEnabledResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BootstrapPeerGetPublishEnabledResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a BootstrapPeerGetPublishEnabledResponse message.
+     * @function verify
+     * @memberof BootstrapPeerGetPublishEnabledResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    BootstrapPeerGetPublishEnabledResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.enabled != null && message.hasOwnProperty("enabled"))
+            if (typeof message.enabled !== "boolean")
+                return "enabled: boolean expected";
+        return null;
+    };
+
+    /**
+     * Creates a BootstrapPeerGetPublishEnabledResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof BootstrapPeerGetPublishEnabledResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {BootstrapPeerGetPublishEnabledResponse} BootstrapPeerGetPublishEnabledResponse
+     */
+    BootstrapPeerGetPublishEnabledResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.BootstrapPeerGetPublishEnabledResponse)
+            return object;
+        let message = new $root.BootstrapPeerGetPublishEnabledResponse();
+        if (object.enabled != null)
+            message.enabled = Boolean(object.enabled);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a BootstrapPeerGetPublishEnabledResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof BootstrapPeerGetPublishEnabledResponse
+     * @static
+     * @param {BootstrapPeerGetPublishEnabledResponse} message BootstrapPeerGetPublishEnabledResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    BootstrapPeerGetPublishEnabledResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.enabled = false;
+        if (message.enabled != null && message.hasOwnProperty("enabled"))
+            object.enabled = message.enabled;
+        return object;
+    };
+
+    /**
+     * Converts this BootstrapPeerGetPublishEnabledResponse to JSON.
+     * @function toJSON
+     * @memberof BootstrapPeerGetPublishEnabledResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    BootstrapPeerGetPublishEnabledResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return BootstrapPeerGetPublishEnabledResponse;
+})();
+
+export const BootstrapPeerListNetworksRequest = $root.BootstrapPeerListNetworksRequest = (() => {
+
+    /**
+     * Properties of a BootstrapPeerListNetworksRequest.
+     * @exports IBootstrapPeerListNetworksRequest
+     * @interface IBootstrapPeerListNetworksRequest
+     */
+
+    /**
+     * Constructs a new BootstrapPeerListNetworksRequest.
+     * @exports BootstrapPeerListNetworksRequest
+     * @classdesc Represents a BootstrapPeerListNetworksRequest.
+     * @implements IBootstrapPeerListNetworksRequest
+     * @constructor
+     * @param {IBootstrapPeerListNetworksRequest=} [properties] Properties to set
+     */
+    function BootstrapPeerListNetworksRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new BootstrapPeerListNetworksRequest instance using the specified properties.
+     * @function create
+     * @memberof BootstrapPeerListNetworksRequest
+     * @static
+     * @param {IBootstrapPeerListNetworksRequest=} [properties] Properties to set
+     * @returns {BootstrapPeerListNetworksRequest} BootstrapPeerListNetworksRequest instance
+     */
+    BootstrapPeerListNetworksRequest.create = function create(properties) {
+        return new BootstrapPeerListNetworksRequest(properties);
+    };
+
+    /**
+     * Encodes the specified BootstrapPeerListNetworksRequest message. Does not implicitly {@link BootstrapPeerListNetworksRequest.verify|verify} messages.
+     * @function encode
+     * @memberof BootstrapPeerListNetworksRequest
+     * @static
+     * @param {IBootstrapPeerListNetworksRequest} message BootstrapPeerListNetworksRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BootstrapPeerListNetworksRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified BootstrapPeerListNetworksRequest message, length delimited. Does not implicitly {@link BootstrapPeerListNetworksRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof BootstrapPeerListNetworksRequest
+     * @static
+     * @param {IBootstrapPeerListNetworksRequest} message BootstrapPeerListNetworksRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BootstrapPeerListNetworksRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a BootstrapPeerListNetworksRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof BootstrapPeerListNetworksRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {BootstrapPeerListNetworksRequest} BootstrapPeerListNetworksRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BootstrapPeerListNetworksRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BootstrapPeerListNetworksRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a BootstrapPeerListNetworksRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof BootstrapPeerListNetworksRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {BootstrapPeerListNetworksRequest} BootstrapPeerListNetworksRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BootstrapPeerListNetworksRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a BootstrapPeerListNetworksRequest message.
+     * @function verify
+     * @memberof BootstrapPeerListNetworksRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    BootstrapPeerListNetworksRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a BootstrapPeerListNetworksRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof BootstrapPeerListNetworksRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {BootstrapPeerListNetworksRequest} BootstrapPeerListNetworksRequest
+     */
+    BootstrapPeerListNetworksRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.BootstrapPeerListNetworksRequest)
+            return object;
+        return new $root.BootstrapPeerListNetworksRequest();
+    };
+
+    /**
+     * Creates a plain object from a BootstrapPeerListNetworksRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof BootstrapPeerListNetworksRequest
+     * @static
+     * @param {BootstrapPeerListNetworksRequest} message BootstrapPeerListNetworksRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    BootstrapPeerListNetworksRequest.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this BootstrapPeerListNetworksRequest to JSON.
+     * @function toJSON
+     * @memberof BootstrapPeerListNetworksRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    BootstrapPeerListNetworksRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return BootstrapPeerListNetworksRequest;
+})();
+
+export const BootstrapPeerListNetworksResponse = $root.BootstrapPeerListNetworksResponse = (() => {
+
+    /**
+     * Properties of a BootstrapPeerListNetworksResponse.
+     * @exports IBootstrapPeerListNetworksResponse
+     * @interface IBootstrapPeerListNetworksResponse
+     */
+
+    /**
+     * Constructs a new BootstrapPeerListNetworksResponse.
+     * @exports BootstrapPeerListNetworksResponse
+     * @classdesc Represents a BootstrapPeerListNetworksResponse.
+     * @implements IBootstrapPeerListNetworksResponse
+     * @constructor
+     * @param {IBootstrapPeerListNetworksResponse=} [properties] Properties to set
+     */
+    function BootstrapPeerListNetworksResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new BootstrapPeerListNetworksResponse instance using the specified properties.
+     * @function create
+     * @memberof BootstrapPeerListNetworksResponse
+     * @static
+     * @param {IBootstrapPeerListNetworksResponse=} [properties] Properties to set
+     * @returns {BootstrapPeerListNetworksResponse} BootstrapPeerListNetworksResponse instance
+     */
+    BootstrapPeerListNetworksResponse.create = function create(properties) {
+        return new BootstrapPeerListNetworksResponse(properties);
+    };
+
+    /**
+     * Encodes the specified BootstrapPeerListNetworksResponse message. Does not implicitly {@link BootstrapPeerListNetworksResponse.verify|verify} messages.
+     * @function encode
+     * @memberof BootstrapPeerListNetworksResponse
+     * @static
+     * @param {IBootstrapPeerListNetworksResponse} message BootstrapPeerListNetworksResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BootstrapPeerListNetworksResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified BootstrapPeerListNetworksResponse message, length delimited. Does not implicitly {@link BootstrapPeerListNetworksResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof BootstrapPeerListNetworksResponse
+     * @static
+     * @param {IBootstrapPeerListNetworksResponse} message BootstrapPeerListNetworksResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BootstrapPeerListNetworksResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a BootstrapPeerListNetworksResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof BootstrapPeerListNetworksResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {BootstrapPeerListNetworksResponse} BootstrapPeerListNetworksResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BootstrapPeerListNetworksResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BootstrapPeerListNetworksResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a BootstrapPeerListNetworksResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof BootstrapPeerListNetworksResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {BootstrapPeerListNetworksResponse} BootstrapPeerListNetworksResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BootstrapPeerListNetworksResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a BootstrapPeerListNetworksResponse message.
+     * @function verify
+     * @memberof BootstrapPeerListNetworksResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    BootstrapPeerListNetworksResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a BootstrapPeerListNetworksResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof BootstrapPeerListNetworksResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {BootstrapPeerListNetworksResponse} BootstrapPeerListNetworksResponse
+     */
+    BootstrapPeerListNetworksResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.BootstrapPeerListNetworksResponse)
+            return object;
+        return new $root.BootstrapPeerListNetworksResponse();
+    };
+
+    /**
+     * Creates a plain object from a BootstrapPeerListNetworksResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof BootstrapPeerListNetworksResponse
+     * @static
+     * @param {BootstrapPeerListNetworksResponse} message BootstrapPeerListNetworksResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    BootstrapPeerListNetworksResponse.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this BootstrapPeerListNetworksResponse to JSON.
+     * @function toJSON
+     * @memberof BootstrapPeerListNetworksResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    BootstrapPeerListNetworksResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return BootstrapPeerListNetworksResponse;
+})();
+
+export const BootstrapPeerPublishRequest = $root.BootstrapPeerPublishRequest = (() => {
+
+    /**
+     * Properties of a BootstrapPeerPublishRequest.
+     * @exports IBootstrapPeerPublishRequest
+     * @interface IBootstrapPeerPublishRequest
+     * @property {ICertificate|null} [certificate] BootstrapPeerPublishRequest certificate
+     */
+
+    /**
+     * Constructs a new BootstrapPeerPublishRequest.
+     * @exports BootstrapPeerPublishRequest
+     * @classdesc Represents a BootstrapPeerPublishRequest.
+     * @implements IBootstrapPeerPublishRequest
+     * @constructor
+     * @param {IBootstrapPeerPublishRequest=} [properties] Properties to set
+     */
+    function BootstrapPeerPublishRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * BootstrapPeerPublishRequest certificate.
+     * @member {ICertificate|null|undefined} certificate
+     * @memberof BootstrapPeerPublishRequest
+     * @instance
+     */
+    BootstrapPeerPublishRequest.prototype.certificate = null;
+
+    /**
+     * Creates a new BootstrapPeerPublishRequest instance using the specified properties.
+     * @function create
+     * @memberof BootstrapPeerPublishRequest
+     * @static
+     * @param {IBootstrapPeerPublishRequest=} [properties] Properties to set
+     * @returns {BootstrapPeerPublishRequest} BootstrapPeerPublishRequest instance
+     */
+    BootstrapPeerPublishRequest.create = function create(properties) {
+        return new BootstrapPeerPublishRequest(properties);
+    };
+
+    /**
+     * Encodes the specified BootstrapPeerPublishRequest message. Does not implicitly {@link BootstrapPeerPublishRequest.verify|verify} messages.
+     * @function encode
+     * @memberof BootstrapPeerPublishRequest
+     * @static
+     * @param {IBootstrapPeerPublishRequest} message BootstrapPeerPublishRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BootstrapPeerPublishRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
+            $root.Certificate.encode(message.certificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified BootstrapPeerPublishRequest message, length delimited. Does not implicitly {@link BootstrapPeerPublishRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof BootstrapPeerPublishRequest
+     * @static
+     * @param {IBootstrapPeerPublishRequest} message BootstrapPeerPublishRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BootstrapPeerPublishRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a BootstrapPeerPublishRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof BootstrapPeerPublishRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {BootstrapPeerPublishRequest} BootstrapPeerPublishRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BootstrapPeerPublishRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BootstrapPeerPublishRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.certificate = $root.Certificate.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a BootstrapPeerPublishRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof BootstrapPeerPublishRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {BootstrapPeerPublishRequest} BootstrapPeerPublishRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BootstrapPeerPublishRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a BootstrapPeerPublishRequest message.
+     * @function verify
+     * @memberof BootstrapPeerPublishRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    BootstrapPeerPublishRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.certificate != null && message.hasOwnProperty("certificate")) {
+            let error = $root.Certificate.verify(message.certificate);
+            if (error)
+                return "certificate." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a BootstrapPeerPublishRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof BootstrapPeerPublishRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {BootstrapPeerPublishRequest} BootstrapPeerPublishRequest
+     */
+    BootstrapPeerPublishRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.BootstrapPeerPublishRequest)
+            return object;
+        let message = new $root.BootstrapPeerPublishRequest();
+        if (object.certificate != null) {
+            if (typeof object.certificate !== "object")
+                throw TypeError(".BootstrapPeerPublishRequest.certificate: object expected");
+            message.certificate = $root.Certificate.fromObject(object.certificate);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a BootstrapPeerPublishRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof BootstrapPeerPublishRequest
+     * @static
+     * @param {BootstrapPeerPublishRequest} message BootstrapPeerPublishRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    BootstrapPeerPublishRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.certificate = null;
+        if (message.certificate != null && message.hasOwnProperty("certificate"))
+            object.certificate = $root.Certificate.toObject(message.certificate, options);
+        return object;
+    };
+
+    /**
+     * Converts this BootstrapPeerPublishRequest to JSON.
+     * @function toJSON
+     * @memberof BootstrapPeerPublishRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    BootstrapPeerPublishRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return BootstrapPeerPublishRequest;
+})();
+
+export const BootstrapPeerPublishResponse = $root.BootstrapPeerPublishResponse = (() => {
+
+    /**
+     * Properties of a BootstrapPeerPublishResponse.
+     * @exports IBootstrapPeerPublishResponse
+     * @interface IBootstrapPeerPublishResponse
+     */
+
+    /**
+     * Constructs a new BootstrapPeerPublishResponse.
+     * @exports BootstrapPeerPublishResponse
+     * @classdesc Represents a BootstrapPeerPublishResponse.
+     * @implements IBootstrapPeerPublishResponse
+     * @constructor
+     * @param {IBootstrapPeerPublishResponse=} [properties] Properties to set
+     */
+    function BootstrapPeerPublishResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new BootstrapPeerPublishResponse instance using the specified properties.
+     * @function create
+     * @memberof BootstrapPeerPublishResponse
+     * @static
+     * @param {IBootstrapPeerPublishResponse=} [properties] Properties to set
+     * @returns {BootstrapPeerPublishResponse} BootstrapPeerPublishResponse instance
+     */
+    BootstrapPeerPublishResponse.create = function create(properties) {
+        return new BootstrapPeerPublishResponse(properties);
+    };
+
+    /**
+     * Encodes the specified BootstrapPeerPublishResponse message. Does not implicitly {@link BootstrapPeerPublishResponse.verify|verify} messages.
+     * @function encode
+     * @memberof BootstrapPeerPublishResponse
+     * @static
+     * @param {IBootstrapPeerPublishResponse} message BootstrapPeerPublishResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BootstrapPeerPublishResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified BootstrapPeerPublishResponse message, length delimited. Does not implicitly {@link BootstrapPeerPublishResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof BootstrapPeerPublishResponse
+     * @static
+     * @param {IBootstrapPeerPublishResponse} message BootstrapPeerPublishResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    BootstrapPeerPublishResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a BootstrapPeerPublishResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof BootstrapPeerPublishResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {BootstrapPeerPublishResponse} BootstrapPeerPublishResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BootstrapPeerPublishResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.BootstrapPeerPublishResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a BootstrapPeerPublishResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof BootstrapPeerPublishResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {BootstrapPeerPublishResponse} BootstrapPeerPublishResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    BootstrapPeerPublishResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a BootstrapPeerPublishResponse message.
+     * @function verify
+     * @memberof BootstrapPeerPublishResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    BootstrapPeerPublishResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a BootstrapPeerPublishResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof BootstrapPeerPublishResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {BootstrapPeerPublishResponse} BootstrapPeerPublishResponse
+     */
+    BootstrapPeerPublishResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.BootstrapPeerPublishResponse)
+            return object;
+        return new $root.BootstrapPeerPublishResponse();
+    };
+
+    /**
+     * Creates a plain object from a BootstrapPeerPublishResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof BootstrapPeerPublishResponse
+     * @static
+     * @param {BootstrapPeerPublishResponse} message BootstrapPeerPublishResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    BootstrapPeerPublishResponse.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this BootstrapPeerPublishResponse to JSON.
+     * @function toJSON
+     * @memberof BootstrapPeerPublishResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    BootstrapPeerPublishResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return BootstrapPeerPublishResponse;
+})();
+
 export const CreateProfileRequest = $root.CreateProfileRequest = (() => {
 
     /**
@@ -27320,6 +30536,8 @@ export const Network = $root.Network = (() => {
      * @property {IKey|null} [key] Network key
      * @property {ICertificate|null} [certificate] Network certificate
      * @property {INetworkIcon|null} [icon] Network icon
+     * @property {string|null} [altProfileName] Network altProfileName
+     * @property {boolean|null} [certificateRenewalRequired] Network certificateRenewalRequired
      */
 
     /**
@@ -27378,6 +30596,22 @@ export const Network = $root.Network = (() => {
     Network.prototype.icon = null;
 
     /**
+     * Network altProfileName.
+     * @member {string} altProfileName
+     * @memberof Network
+     * @instance
+     */
+    Network.prototype.altProfileName = "";
+
+    /**
+     * Network certificateRenewalRequired.
+     * @member {boolean} certificateRenewalRequired
+     * @memberof Network
+     * @instance
+     */
+    Network.prototype.certificateRenewalRequired = false;
+
+    /**
      * Creates a new Network instance using the specified properties.
      * @function create
      * @memberof Network
@@ -27411,6 +30645,10 @@ export const Network = $root.Network = (() => {
             $root.Certificate.encode(message.certificate, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
         if (message.icon != null && Object.hasOwnProperty.call(message, "icon"))
             $root.NetworkIcon.encode(message.icon, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
+        if (message.altProfileName != null && Object.hasOwnProperty.call(message, "altProfileName"))
+            writer.uint32(/* id 6, wireType 2 =*/50).string(message.altProfileName);
+        if (message.certificateRenewalRequired != null && Object.hasOwnProperty.call(message, "certificateRenewalRequired"))
+            writer.uint32(/* id 7, wireType 0 =*/56).bool(message.certificateRenewalRequired);
         return writer;
     };
 
@@ -27459,6 +30697,12 @@ export const Network = $root.Network = (() => {
                 break;
             case 5:
                 message.icon = $root.NetworkIcon.decode(reader, reader.uint32());
+                break;
+            case 6:
+                message.altProfileName = reader.string();
+                break;
+            case 7:
+                message.certificateRenewalRequired = reader.bool();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -27516,6 +30760,12 @@ export const Network = $root.Network = (() => {
             if (error)
                 return "icon." + error;
         }
+        if (message.altProfileName != null && message.hasOwnProperty("altProfileName"))
+            if (!$util.isString(message.altProfileName))
+                return "altProfileName: string expected";
+        if (message.certificateRenewalRequired != null && message.hasOwnProperty("certificateRenewalRequired"))
+            if (typeof message.certificateRenewalRequired !== "boolean")
+                return "certificateRenewalRequired: boolean expected";
         return null;
     };
 
@@ -27557,6 +30807,10 @@ export const Network = $root.Network = (() => {
                 throw TypeError(".Network.icon: object expected");
             message.icon = $root.NetworkIcon.fromObject(object.icon);
         }
+        if (object.altProfileName != null)
+            message.altProfileName = String(object.altProfileName);
+        if (object.certificateRenewalRequired != null)
+            message.certificateRenewalRequired = Boolean(object.certificateRenewalRequired);
         return message;
     };
 
@@ -27583,6 +30837,8 @@ export const Network = $root.Network = (() => {
             object.key = null;
             object.certificate = null;
             object.icon = null;
+            object.altProfileName = "";
+            object.certificateRenewalRequired = false;
         }
         if (message.id != null && message.hasOwnProperty("id"))
             if (typeof message.id === "number")
@@ -27597,6 +30853,10 @@ export const Network = $root.Network = (() => {
             object.certificate = $root.Certificate.toObject(message.certificate, options);
         if (message.icon != null && message.hasOwnProperty("icon"))
             object.icon = $root.NetworkIcon.toObject(message.icon, options);
+        if (message.altProfileName != null && message.hasOwnProperty("altProfileName"))
+            object.altProfileName = message.altProfileName;
+        if (message.certificateRenewalRequired != null && message.hasOwnProperty("certificateRenewalRequired"))
+            object.certificateRenewalRequired = message.certificateRenewalRequired;
         return object;
     };
 
@@ -27612,356 +30872,6 @@ export const Network = $root.Network = (() => {
     };
 
     return Network;
-})();
-
-export const NetworkMembership = $root.NetworkMembership = (() => {
-
-    /**
-     * Properties of a NetworkMembership.
-     * @exports INetworkMembership
-     * @interface INetworkMembership
-     * @property {number|null} [id] NetworkMembership id
-     * @property {number|null} [createdAt] NetworkMembership createdAt
-     * @property {string|null} [name] NetworkMembership name
-     * @property {ICertificate|null} [caCertificate] NetworkMembership caCertificate
-     * @property {ICertificate|null} [certificate] NetworkMembership certificate
-     * @property {number|null} [lastSeenAt] NetworkMembership lastSeenAt
-     */
-
-    /**
-     * Constructs a new NetworkMembership.
-     * @exports NetworkMembership
-     * @classdesc Represents a NetworkMembership.
-     * @implements INetworkMembership
-     * @constructor
-     * @param {INetworkMembership=} [properties] Properties to set
-     */
-    function NetworkMembership(properties) {
-        if (properties)
-            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
-                if (properties[keys[i]] != null)
-                    this[keys[i]] = properties[keys[i]];
-    }
-
-    /**
-     * NetworkMembership id.
-     * @member {number} id
-     * @memberof NetworkMembership
-     * @instance
-     */
-    NetworkMembership.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
-
-    /**
-     * NetworkMembership createdAt.
-     * @member {number} createdAt
-     * @memberof NetworkMembership
-     * @instance
-     */
-    NetworkMembership.prototype.createdAt = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
-
-    /**
-     * NetworkMembership name.
-     * @member {string} name
-     * @memberof NetworkMembership
-     * @instance
-     */
-    NetworkMembership.prototype.name = "";
-
-    /**
-     * NetworkMembership caCertificate.
-     * @member {ICertificate|null|undefined} caCertificate
-     * @memberof NetworkMembership
-     * @instance
-     */
-    NetworkMembership.prototype.caCertificate = null;
-
-    /**
-     * NetworkMembership certificate.
-     * @member {ICertificate|null|undefined} certificate
-     * @memberof NetworkMembership
-     * @instance
-     */
-    NetworkMembership.prototype.certificate = null;
-
-    /**
-     * NetworkMembership lastSeenAt.
-     * @member {number} lastSeenAt
-     * @memberof NetworkMembership
-     * @instance
-     */
-    NetworkMembership.prototype.lastSeenAt = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
-
-    /**
-     * Creates a new NetworkMembership instance using the specified properties.
-     * @function create
-     * @memberof NetworkMembership
-     * @static
-     * @param {INetworkMembership=} [properties] Properties to set
-     * @returns {NetworkMembership} NetworkMembership instance
-     */
-    NetworkMembership.create = function create(properties) {
-        return new NetworkMembership(properties);
-    };
-
-    /**
-     * Encodes the specified NetworkMembership message. Does not implicitly {@link NetworkMembership.verify|verify} messages.
-     * @function encode
-     * @memberof NetworkMembership
-     * @static
-     * @param {INetworkMembership} message NetworkMembership message or plain object to encode
-     * @param {$protobuf.Writer} [writer] Writer to encode to
-     * @returns {$protobuf.Writer} Writer
-     */
-    NetworkMembership.encode = function encode(message, writer) {
-        if (!writer)
-            writer = $Writer.create();
-        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
-            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
-        if (message.createdAt != null && Object.hasOwnProperty.call(message, "createdAt"))
-            writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.createdAt);
-        if (message.name != null && Object.hasOwnProperty.call(message, "name"))
-            writer.uint32(/* id 3, wireType 2 =*/26).string(message.name);
-        if (message.caCertificate != null && Object.hasOwnProperty.call(message, "caCertificate"))
-            $root.Certificate.encode(message.caCertificate, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
-        if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
-            $root.Certificate.encode(message.certificate, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
-        if (message.lastSeenAt != null && Object.hasOwnProperty.call(message, "lastSeenAt"))
-            writer.uint32(/* id 6, wireType 0 =*/48).uint64(message.lastSeenAt);
-        return writer;
-    };
-
-    /**
-     * Encodes the specified NetworkMembership message, length delimited. Does not implicitly {@link NetworkMembership.verify|verify} messages.
-     * @function encodeDelimited
-     * @memberof NetworkMembership
-     * @static
-     * @param {INetworkMembership} message NetworkMembership message or plain object to encode
-     * @param {$protobuf.Writer} [writer] Writer to encode to
-     * @returns {$protobuf.Writer} Writer
-     */
-    NetworkMembership.encodeDelimited = function encodeDelimited(message, writer) {
-        return this.encode(message, writer).ldelim();
-    };
-
-    /**
-     * Decodes a NetworkMembership message from the specified reader or buffer.
-     * @function decode
-     * @memberof NetworkMembership
-     * @static
-     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @param {number} [length] Message length if known beforehand
-     * @returns {NetworkMembership} NetworkMembership
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    NetworkMembership.decode = function decode(reader, length) {
-        if (!(reader instanceof $Reader))
-            reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkMembership();
-        while (reader.pos < end) {
-            let tag = reader.uint32();
-            switch (tag >>> 3) {
-            case 1:
-                message.id = reader.uint64();
-                break;
-            case 2:
-                message.createdAt = reader.uint64();
-                break;
-            case 3:
-                message.name = reader.string();
-                break;
-            case 4:
-                message.caCertificate = $root.Certificate.decode(reader, reader.uint32());
-                break;
-            case 5:
-                message.certificate = $root.Certificate.decode(reader, reader.uint32());
-                break;
-            case 6:
-                message.lastSeenAt = reader.uint64();
-                break;
-            default:
-                reader.skipType(tag & 7);
-                break;
-            }
-        }
-        return message;
-    };
-
-    /**
-     * Decodes a NetworkMembership message from the specified reader or buffer, length delimited.
-     * @function decodeDelimited
-     * @memberof NetworkMembership
-     * @static
-     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {NetworkMembership} NetworkMembership
-     * @throws {Error} If the payload is not a reader or valid buffer
-     * @throws {$protobuf.util.ProtocolError} If required fields are missing
-     */
-    NetworkMembership.decodeDelimited = function decodeDelimited(reader) {
-        if (!(reader instanceof $Reader))
-            reader = new $Reader(reader);
-        return this.decode(reader, reader.uint32());
-    };
-
-    /**
-     * Verifies a NetworkMembership message.
-     * @function verify
-     * @memberof NetworkMembership
-     * @static
-     * @param {Object.<string,*>} message Plain object to verify
-     * @returns {string|null} `null` if valid, otherwise the reason why it is not
-     */
-    NetworkMembership.verify = function verify(message) {
-        if (typeof message !== "object" || message === null)
-            return "object expected";
-        if (message.id != null && message.hasOwnProperty("id"))
-            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
-                return "id: integer|Long expected";
-        if (message.createdAt != null && message.hasOwnProperty("createdAt"))
-            if (!$util.isInteger(message.createdAt) && !(message.createdAt && $util.isInteger(message.createdAt.low) && $util.isInteger(message.createdAt.high)))
-                return "createdAt: integer|Long expected";
-        if (message.name != null && message.hasOwnProperty("name"))
-            if (!$util.isString(message.name))
-                return "name: string expected";
-        if (message.caCertificate != null && message.hasOwnProperty("caCertificate")) {
-            let error = $root.Certificate.verify(message.caCertificate);
-            if (error)
-                return "caCertificate." + error;
-        }
-        if (message.certificate != null && message.hasOwnProperty("certificate")) {
-            let error = $root.Certificate.verify(message.certificate);
-            if (error)
-                return "certificate." + error;
-        }
-        if (message.lastSeenAt != null && message.hasOwnProperty("lastSeenAt"))
-            if (!$util.isInteger(message.lastSeenAt) && !(message.lastSeenAt && $util.isInteger(message.lastSeenAt.low) && $util.isInteger(message.lastSeenAt.high)))
-                return "lastSeenAt: integer|Long expected";
-        return null;
-    };
-
-    /**
-     * Creates a NetworkMembership message from a plain object. Also converts values to their respective internal types.
-     * @function fromObject
-     * @memberof NetworkMembership
-     * @static
-     * @param {Object.<string,*>} object Plain object
-     * @returns {NetworkMembership} NetworkMembership
-     */
-    NetworkMembership.fromObject = function fromObject(object) {
-        if (object instanceof $root.NetworkMembership)
-            return object;
-        let message = new $root.NetworkMembership();
-        if (object.id != null)
-            if ($util.Long)
-                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
-            else if (typeof object.id === "string")
-                message.id = parseInt(object.id, 10);
-            else if (typeof object.id === "number")
-                message.id = object.id;
-            else if (typeof object.id === "object")
-                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
-        if (object.createdAt != null)
-            if ($util.Long)
-                (message.createdAt = $util.Long.fromValue(object.createdAt)).unsigned = true;
-            else if (typeof object.createdAt === "string")
-                message.createdAt = parseInt(object.createdAt, 10);
-            else if (typeof object.createdAt === "number")
-                message.createdAt = object.createdAt;
-            else if (typeof object.createdAt === "object")
-                message.createdAt = new $util.LongBits(object.createdAt.low >>> 0, object.createdAt.high >>> 0).toNumber(true);
-        if (object.name != null)
-            message.name = String(object.name);
-        if (object.caCertificate != null) {
-            if (typeof object.caCertificate !== "object")
-                throw TypeError(".NetworkMembership.caCertificate: object expected");
-            message.caCertificate = $root.Certificate.fromObject(object.caCertificate);
-        }
-        if (object.certificate != null) {
-            if (typeof object.certificate !== "object")
-                throw TypeError(".NetworkMembership.certificate: object expected");
-            message.certificate = $root.Certificate.fromObject(object.certificate);
-        }
-        if (object.lastSeenAt != null)
-            if ($util.Long)
-                (message.lastSeenAt = $util.Long.fromValue(object.lastSeenAt)).unsigned = true;
-            else if (typeof object.lastSeenAt === "string")
-                message.lastSeenAt = parseInt(object.lastSeenAt, 10);
-            else if (typeof object.lastSeenAt === "number")
-                message.lastSeenAt = object.lastSeenAt;
-            else if (typeof object.lastSeenAt === "object")
-                message.lastSeenAt = new $util.LongBits(object.lastSeenAt.low >>> 0, object.lastSeenAt.high >>> 0).toNumber(true);
-        return message;
-    };
-
-    /**
-     * Creates a plain object from a NetworkMembership message. Also converts values to other types if specified.
-     * @function toObject
-     * @memberof NetworkMembership
-     * @static
-     * @param {NetworkMembership} message NetworkMembership
-     * @param {$protobuf.IConversionOptions} [options] Conversion options
-     * @returns {Object.<string,*>} Plain object
-     */
-    NetworkMembership.toObject = function toObject(message, options) {
-        if (!options)
-            options = {};
-        let object = {};
-        if (options.defaults) {
-            if ($util.Long) {
-                let long = new $util.Long(0, 0, true);
-                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-            } else
-                object.id = options.longs === String ? "0" : 0;
-            if ($util.Long) {
-                let long = new $util.Long(0, 0, true);
-                object.createdAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-            } else
-                object.createdAt = options.longs === String ? "0" : 0;
-            object.name = "";
-            object.caCertificate = null;
-            object.certificate = null;
-            if ($util.Long) {
-                let long = new $util.Long(0, 0, true);
-                object.lastSeenAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-            } else
-                object.lastSeenAt = options.longs === String ? "0" : 0;
-        }
-        if (message.id != null && message.hasOwnProperty("id"))
-            if (typeof message.id === "number")
-                object.id = options.longs === String ? String(message.id) : message.id;
-            else
-                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
-        if (message.createdAt != null && message.hasOwnProperty("createdAt"))
-            if (typeof message.createdAt === "number")
-                object.createdAt = options.longs === String ? String(message.createdAt) : message.createdAt;
-            else
-                object.createdAt = options.longs === String ? $util.Long.prototype.toString.call(message.createdAt) : options.longs === Number ? new $util.LongBits(message.createdAt.low >>> 0, message.createdAt.high >>> 0).toNumber(true) : message.createdAt;
-        if (message.name != null && message.hasOwnProperty("name"))
-            object.name = message.name;
-        if (message.caCertificate != null && message.hasOwnProperty("caCertificate"))
-            object.caCertificate = $root.Certificate.toObject(message.caCertificate, options);
-        if (message.certificate != null && message.hasOwnProperty("certificate"))
-            object.certificate = $root.Certificate.toObject(message.certificate, options);
-        if (message.lastSeenAt != null && message.hasOwnProperty("lastSeenAt"))
-            if (typeof message.lastSeenAt === "number")
-                object.lastSeenAt = options.longs === String ? String(message.lastSeenAt) : message.lastSeenAt;
-            else
-                object.lastSeenAt = options.longs === String ? $util.Long.prototype.toString.call(message.lastSeenAt) : options.longs === Number ? new $util.LongBits(message.lastSeenAt.low >>> 0, message.lastSeenAt.high >>> 0).toNumber(true) : message.lastSeenAt;
-        return object;
-    };
-
-    /**
-     * Converts this NetworkMembership to JSON.
-     * @function toJSON
-     * @memberof NetworkMembership
-     * @instance
-     * @returns {Object.<string,*>} JSON object
-     */
-    NetworkMembership.prototype.toJSON = function toJSON() {
-        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
-    };
-
-    return NetworkMembership;
 })();
 
 export const CreateNetworkInvitationRequest = $root.CreateNetworkInvitationRequest = (() => {
@@ -48416,7 +51326,7 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
      * Properties of a BootstrapPeer.
      * @exports IBootstrapPeer
      * @interface IBootstrapPeer
-     * @property {Uint8Array|null} [hostId] BootstrapPeer hostId
+     * @property {number|null} [peerId] BootstrapPeer peerId
      * @property {string|null} [label] BootstrapPeer label
      */
 
@@ -48436,12 +51346,12 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
     }
 
     /**
-     * BootstrapPeer hostId.
-     * @member {Uint8Array} hostId
+     * BootstrapPeer peerId.
+     * @member {number} peerId
      * @memberof BootstrapPeer
      * @instance
      */
-    BootstrapPeer.prototype.hostId = $util.newBuffer([]);
+    BootstrapPeer.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
      * BootstrapPeer label.
@@ -48475,8 +51385,8 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
     BootstrapPeer.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.hostId != null && Object.hasOwnProperty.call(message, "hostId"))
-            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.hostId);
+        if (message.peerId != null && Object.hasOwnProperty.call(message, "peerId"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.peerId);
         if (message.label != null && Object.hasOwnProperty.call(message, "label"))
             writer.uint32(/* id 2, wireType 2 =*/18).string(message.label);
         return writer;
@@ -48514,7 +51424,7 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.hostId = reader.bytes();
+                message.peerId = reader.uint64();
                 break;
             case 2:
                 message.label = reader.string();
@@ -48554,9 +51464,9 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
     BootstrapPeer.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.hostId != null && message.hasOwnProperty("hostId"))
-            if (!(message.hostId && typeof message.hostId.length === "number" || $util.isString(message.hostId)))
-                return "hostId: buffer expected";
+        if (message.peerId != null && message.hasOwnProperty("peerId"))
+            if (!$util.isInteger(message.peerId) && !(message.peerId && $util.isInteger(message.peerId.low) && $util.isInteger(message.peerId.high)))
+                return "peerId: integer|Long expected";
         if (message.label != null && message.hasOwnProperty("label"))
             if (!$util.isString(message.label))
                 return "label: string expected";
@@ -48575,11 +51485,15 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
         if (object instanceof $root.BootstrapPeer)
             return object;
         let message = new $root.BootstrapPeer();
-        if (object.hostId != null)
-            if (typeof object.hostId === "string")
-                $util.base64.decode(object.hostId, message.hostId = $util.newBuffer($util.base64.length(object.hostId)), 0);
-            else if (object.hostId.length)
-                message.hostId = object.hostId;
+        if (object.peerId != null)
+            if ($util.Long)
+                (message.peerId = $util.Long.fromValue(object.peerId)).unsigned = true;
+            else if (typeof object.peerId === "string")
+                message.peerId = parseInt(object.peerId, 10);
+            else if (typeof object.peerId === "number")
+                message.peerId = object.peerId;
+            else if (typeof object.peerId === "object")
+                message.peerId = new $util.LongBits(object.peerId.low >>> 0, object.peerId.high >>> 0).toNumber(true);
         if (object.label != null)
             message.label = String(object.label);
         return message;
@@ -48599,17 +51513,18 @@ export const BootstrapPeer = $root.BootstrapPeer = (() => {
             options = {};
         let object = {};
         if (options.defaults) {
-            if (options.bytes === String)
-                object.hostId = "";
-            else {
-                object.hostId = [];
-                if (options.bytes !== Array)
-                    object.hostId = $util.newBuffer(object.hostId);
-            }
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.peerId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.peerId = options.longs === String ? "0" : 0;
             object.label = "";
         }
-        if (message.hostId != null && message.hasOwnProperty("hostId"))
-            object.hostId = options.bytes === String ? $util.base64.encode(message.hostId, 0, message.hostId.length) : options.bytes === Array ? Array.prototype.slice.call(message.hostId) : message.hostId;
+        if (message.peerId != null && message.hasOwnProperty("peerId"))
+            if (typeof message.peerId === "number")
+                object.peerId = options.longs === String ? String(message.peerId) : message.peerId;
+            else
+                object.peerId = options.longs === String ? $util.Long.prototype.toString.call(message.peerId) : options.longs === Number ? new $util.LongBits(message.peerId.low >>> 0, message.peerId.high >>> 0).toNumber(true) : message.peerId;
         if (message.label != null && message.hasOwnProperty("label"))
             object.label = message.label;
         return object;
@@ -49494,7 +52409,7 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
      * Properties of a PublishNetworkToBootstrapPeerRequest.
      * @exports IPublishNetworkToBootstrapPeerRequest
      * @interface IPublishNetworkToBootstrapPeerRequest
-     * @property {Uint8Array|null} [hostId] PublishNetworkToBootstrapPeerRequest hostId
+     * @property {number|null} [peerId] PublishNetworkToBootstrapPeerRequest peerId
      * @property {INetwork|null} [network] PublishNetworkToBootstrapPeerRequest network
      */
 
@@ -49514,12 +52429,12 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
     }
 
     /**
-     * PublishNetworkToBootstrapPeerRequest hostId.
-     * @member {Uint8Array} hostId
+     * PublishNetworkToBootstrapPeerRequest peerId.
+     * @member {number} peerId
      * @memberof PublishNetworkToBootstrapPeerRequest
      * @instance
      */
-    PublishNetworkToBootstrapPeerRequest.prototype.hostId = $util.newBuffer([]);
+    PublishNetworkToBootstrapPeerRequest.prototype.peerId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
 
     /**
      * PublishNetworkToBootstrapPeerRequest network.
@@ -49553,8 +52468,8 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
     PublishNetworkToBootstrapPeerRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.hostId != null && Object.hasOwnProperty.call(message, "hostId"))
-            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.hostId);
+        if (message.peerId != null && Object.hasOwnProperty.call(message, "peerId"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.peerId);
         if (message.network != null && Object.hasOwnProperty.call(message, "network"))
             $root.Network.encode(message.network, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
         return writer;
@@ -49592,7 +52507,7 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.hostId = reader.bytes();
+                message.peerId = reader.uint64();
                 break;
             case 2:
                 message.network = $root.Network.decode(reader, reader.uint32());
@@ -49632,9 +52547,9 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
     PublishNetworkToBootstrapPeerRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.hostId != null && message.hasOwnProperty("hostId"))
-            if (!(message.hostId && typeof message.hostId.length === "number" || $util.isString(message.hostId)))
-                return "hostId: buffer expected";
+        if (message.peerId != null && message.hasOwnProperty("peerId"))
+            if (!$util.isInteger(message.peerId) && !(message.peerId && $util.isInteger(message.peerId.low) && $util.isInteger(message.peerId.high)))
+                return "peerId: integer|Long expected";
         if (message.network != null && message.hasOwnProperty("network")) {
             let error = $root.Network.verify(message.network);
             if (error)
@@ -49655,11 +52570,15 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
         if (object instanceof $root.PublishNetworkToBootstrapPeerRequest)
             return object;
         let message = new $root.PublishNetworkToBootstrapPeerRequest();
-        if (object.hostId != null)
-            if (typeof object.hostId === "string")
-                $util.base64.decode(object.hostId, message.hostId = $util.newBuffer($util.base64.length(object.hostId)), 0);
-            else if (object.hostId.length)
-                message.hostId = object.hostId;
+        if (object.peerId != null)
+            if ($util.Long)
+                (message.peerId = $util.Long.fromValue(object.peerId)).unsigned = true;
+            else if (typeof object.peerId === "string")
+                message.peerId = parseInt(object.peerId, 10);
+            else if (typeof object.peerId === "number")
+                message.peerId = object.peerId;
+            else if (typeof object.peerId === "object")
+                message.peerId = new $util.LongBits(object.peerId.low >>> 0, object.peerId.high >>> 0).toNumber(true);
         if (object.network != null) {
             if (typeof object.network !== "object")
                 throw TypeError(".PublishNetworkToBootstrapPeerRequest.network: object expected");
@@ -49682,17 +52601,18 @@ export const PublishNetworkToBootstrapPeerRequest = $root.PublishNetworkToBootst
             options = {};
         let object = {};
         if (options.defaults) {
-            if (options.bytes === String)
-                object.hostId = "";
-            else {
-                object.hostId = [];
-                if (options.bytes !== Array)
-                    object.hostId = $util.newBuffer(object.hostId);
-            }
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.peerId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.peerId = options.longs === String ? "0" : 0;
             object.network = null;
         }
-        if (message.hostId != null && message.hasOwnProperty("hostId"))
-            object.hostId = options.bytes === String ? $util.base64.encode(message.hostId, 0, message.hostId.length) : options.bytes === Array ? Array.prototype.slice.call(message.hostId) : message.hostId;
+        if (message.peerId != null && message.hasOwnProperty("peerId"))
+            if (typeof message.peerId === "number")
+                object.peerId = options.longs === String ? String(message.peerId) : message.peerId;
+            else
+                object.peerId = options.longs === String ? $util.Long.prototype.toString.call(message.peerId) : options.longs === Number ? new $util.LongBits(message.peerId.low >>> 0, message.peerId.high >>> 0).toNumber(true) : message.peerId;
         if (message.network != null && message.hasOwnProperty("network"))
             object.network = $root.Network.toObject(message.network, options);
         return object;

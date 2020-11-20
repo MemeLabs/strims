@@ -7,11 +7,9 @@ import (
 	"fmt"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/control/app"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/services/network"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -22,32 +20,15 @@ var (
 	ErrAlreadyJoinedNetwork = errors.New("user already has a membership for that network")
 )
 
-func newNetworkService(ctx context.Context, logger *zap.Logger, profile *pb.Profile, store *dao.ProfileStore, vpnHost *vpn.Host) (api.NetworkService, error) {
-	svc := &networkService{
+func newNetworkService(ctx context.Context, logger *zap.Logger, profile *pb.Profile, store *dao.ProfileStore, vpnHost *vpn.Host, app *app.Control) api.NetworkService {
+	return &networkService{
 		ctx:     ctx,
 		logger:  logger,
 		profile: profile,
 		store:   store,
 		vpnHost: vpnHost,
+		app:     app,
 	}
-
-	networks, err := dao.GetNetworks(store)
-	if err != nil {
-		return nil, err
-	}
-	for _, n := range networks {
-		if err := svc.startNetwork(ctx, n); err != nil {
-			cert := dao.GetRootCert(n.Certificate)
-			logger.Debug(
-				"starting network failed",
-				zap.String("networkName", cert.Subject),
-				logutil.ByteHex("networkKey", cert.Key),
-				zap.Error(err),
-			)
-		}
-	}
-
-	return svc, nil
 }
 
 // networkService ...
@@ -57,6 +38,7 @@ type networkService struct {
 	profile *pb.Profile
 	store   *dao.ProfileStore
 	vpnHost *vpn.Host
+	app     *app.Control
 }
 
 // Create ...
@@ -66,11 +48,7 @@ func (s *networkService) Create(ctx context.Context, r *pb.CreateNetworkRequest)
 		return nil, err
 	}
 
-	if err := dao.UpsertNetwork(s.store, network); err != nil {
-		return nil, err
-	}
-
-	if err := s.startNetwork(s.ctx, network); err != nil {
+	if err := s.app.Network().Add(network); err != nil {
 		return nil, err
 	}
 
@@ -84,19 +62,10 @@ func (s *networkService) Update(ctx context.Context, r *pb.UpdateNetworkRequest)
 
 // Delete ...
 func (s *networkService) Delete(ctx context.Context, r *pb.DeleteNetworkRequest) (*pb.DeleteNetworkResponse, error) {
-	err := s.store.Update(func(tx kv.RWTx) error {
-		network, err := dao.GetNetwork(tx, r.Id)
-		if err != nil {
-			return err
-		}
-		s.vpnHost.RemoveNetwork(network.Key.Public)
-
-		if err := dao.DeleteNetwork(tx, r.Id); err != nil {
-			return err
-		}
-		return nil
-	})
-	return &pb.DeleteNetworkResponse{}, err
+	if err := s.app.Network().Remove(r.Id); err != nil {
+		return nil, err
+	}
+	return &pb.DeleteNetworkResponse{}, nil
 }
 
 // Get ...
@@ -181,11 +150,7 @@ func (s *networkService) CreateFromInvitation(ctx context.Context, r *pb.CreateN
 		return nil, err
 	}
 
-	if err := s.startNetwork(s.ctx, network); err != nil {
-		return nil, err
-	}
-
-	if err := dao.UpsertNetwork(s.store, network); err != nil {
+	if err := s.app.Network().Add(network); err != nil {
 		return nil, err
 	}
 
@@ -202,21 +167,6 @@ func (s *networkService) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (<
 // StopVPN ...
 func (s *networkService) StopVPN(ctx context.Context, r *pb.StopVPNRequest) (*pb.StopVPNResponse, error) {
 	return nil, errors.New("not implemented")
-}
-
-func (s *networkService) startNetwork(ctx context.Context, n *pb.Network) error {
-	client, err := s.vpnHost.AddNetwork(n.Certificate)
-	if err != nil {
-		return err
-	}
-
-	if n.Key != nil {
-		_, err := network.NewCA(ctx, s.logger, client, n)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
 }
 
 // // loads the NetworkController fron the session store

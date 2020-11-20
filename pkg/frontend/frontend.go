@@ -6,11 +6,13 @@ import (
 	"io"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/control/app"
+	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
-	"github.com/MemeLabs/go-ppspp/pkg/services/network"
+	"github.com/MemeLabs/go-ppspp/pkg/services/peer"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
@@ -62,6 +64,7 @@ type Instance struct {
 
 	profile *pb.Profile
 	store   *dao.ProfileStore
+	app     *app.Control
 
 	Profile   api.ProfileService
 	Network   api.NetworkService
@@ -92,25 +95,20 @@ func (c *Instance) initProfileService(ctx context.Context, store kv.BlobStore, n
 
 // Init ...
 func (c *Instance) Init(ctx context.Context, profile *pb.Profile, store *dao.ProfileStore) error {
-	vpnHost, err := c.newVPN(profile.Key)
+	vpn, err := c.newVPN(profile.Key)
 	if err != nil {
 		return err
 	}
 
 	// TODO: put this somewhere
-	network.NewPeerHandler(c.logger, c.broker, vpnHost, store, profile)
+	// network.NewPeerHandler(c.logger, c.broker, vpn, store, profile)
+	c.app = app.NewControl(c.logger, c.broker, vpn, store, profile)
+	vpn.VNIC().AddPeerHandler(peer.NewPeerHandler(c.logger, c.app))
 
-	c.Network, err = newNetworkService(ctx, c.logger, profile, store, vpnHost)
-	if err != nil {
-		return err
-	}
-
+	c.Network = newNetworkService(ctx, c.logger, profile, store, vpn, c.app)
 	c.Debug = newDebugService(c.logger)
 
-	c.Bootstrap, err = newBootstrapService(ctx, c.logger, store, vpnHost)
-	if err != nil {
-		return err
-	}
+	c.Bootstrap = newBootstrapService(ctx, c.logger, store, vpn, c.app)
 
 	// c.Chat = newChatService(c.logger, store)
 	// c.Video = newVideoService(c.logger, store)
