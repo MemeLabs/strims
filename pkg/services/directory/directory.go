@@ -283,7 +283,7 @@ func (s *directoryServer) Ping(ctx context.Context) error {
 type directoryListingMap struct {
 	lock   sync.Mutex
 	m      llrb.LLRB
-	events event.Observable
+	events event.Observer
 }
 
 func (m *directoryListingMap) Insert(k []byte, v *pb.DirectoryListing) {

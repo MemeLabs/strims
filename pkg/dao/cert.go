@@ -10,6 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
+const certPredateDuration = time.Minute
 const defaultCertTTL = time.Hour * 24 * 365 * 2 // ~two years
 
 // validation errors
@@ -19,6 +20,8 @@ var (
 	ErrUnsupportedKeyUsage                = errors.New("unsupported key usage")
 	ErrInvalidCertificateRequestSignature = errors.New("invalid certificate request signature")
 	ErrInvalidSignature                   = errors.New("invalid certificate signature")
+	ErrNotBeforeRange                     = errors.New("not before limit exceeded")
+	ErrNotAfterRange                      = errors.New("not after limit exceeded")
 )
 
 // CertificateRequestOption ...
@@ -94,7 +97,7 @@ func SignCertificateRequest(
 		KeyType:      csr.KeyType,
 		KeyUsage:     csr.KeyUsage,
 		Subject:      csr.Subject,
-		NotBefore:    uint64(now.Unix()),
+		NotBefore:    uint64(now.Add(-certPredateDuration).Unix()),
 		NotAfter:     uint64(now.Add(validDuration).Unix()),
 		SerialNumber: make([]byte, 16),
 	}
@@ -118,7 +121,10 @@ func SignCertificateRequest(
 }
 
 // VerifyCertificate ...
-func VerifyCertificate(cert *pb.Certificate) error {
+func VerifyCertificate(cert *pb.Certificate) Errors {
+	var errs Errors
+	now := time.Now()
+
 	for parent := cert.GetParent(); cert != nil; cert, parent = parent, parent.GetParent() {
 		// check that either the certificare is a self-signed root or has a valid
 		// signing certificate as its parent.
@@ -127,7 +133,7 @@ func VerifyCertificate(cert *pb.Certificate) error {
 			signingCert = parent
 		}
 		if signingCert.KeyUsage&uint32(pb.KeyUsage_KEY_USAGE_SIGN) == 0 {
-			return ErrUnsupportedKeyUsage
+			errs = append(errs, ErrUnsupportedKeyUsage)
 		}
 
 		certBytes, _ := serializeCertificate(cert)
@@ -136,17 +142,25 @@ func VerifyCertificate(cert *pb.Certificate) error {
 		switch signingCert.KeyType {
 		case pb.KeyType_KEY_TYPE_ED25519:
 			if len(signingCert.Key) != ed25519.PublicKeySize {
-				return ErrInvalidKeyLength
+				errs = append(errs, ErrInvalidKeyLength)
+				break
 			}
 			validSig = ed25519.Verify(signingCert.Key, certBytes, cert.Signature)
 		default:
-			return ErrUnsupportedKeyType
+			errs = append(errs, ErrUnsupportedKeyType)
 		}
 		if !validSig {
-			return ErrInvalidSignature
+			errs = append(errs, ErrInvalidSignature)
+		}
+
+		if now.Before(time.Unix(int64(cert.NotBefore), 0)) {
+			errs = append(errs, ErrNotBeforeRange)
+		}
+		if now.After(time.Unix(int64(cert.NotAfter), 0)) {
+			errs = append(errs, ErrNotAfterRange)
 		}
 	}
-	return nil
+	return errs
 }
 
 // NewSelfSignedCertificate ...

@@ -144,15 +144,8 @@ message Network {
   Key key = 3;
   Certificate certificate = 4;
   NetworkIcon icon = 5;
-}
-
-message NetworkMembership {
-  uint64 id = 1;
-  uint64 created_at = 2;
-  string name = 3;
-  Certificate ca_certificate = 4;
-  Certificate certificate = 5;
-  uint64 last_seen_at = 6;
+  string alt_profile_name = 6;
+  bool certificate_renewal_required = 7;
 }
 
 enum KDFType {

@@ -54,8 +54,8 @@ type Host struct {
 	vnic                 *vnic.Host
 	clientsLock          sync.Mutex
 	clients              clientMap
-	networkObservers     event.Observable
-	peerNetworkObservers event.Observable
+	networkObservers     event.Observer
+	peerNetworkObservers event.Observer
 	recentMessageIDs     *lru.Cache
 	hashTableStore       *HashTableStore
 	peerIndexStore       *PeerIndexStore
@@ -136,32 +136,6 @@ func (h *Host) RemoveNetwork(key []byte) error {
 
 	client.Network.Close()
 	return nil
-}
-
-// Networks ...
-// func (h *Host) Networks() []*Network {
-// 	h.clientsLock.Lock()
-// 	defer h.clientsLock.Unlock()
-
-// 	networks := make([]*Network, h.clients.Len(), 0)
-// 	h.clients.Each(func(c *Client) bool {
-// 		networks = append(networks, c.Network)
-// 		return true
-// 	})
-// 	return networks
-// }
-
-// NetworkKeys ...
-func (h *Host) NetworkKeys() [][]byte {
-	h.clientsLock.Lock()
-	defer h.clientsLock.Unlock()
-
-	keys := make([][]byte, 0, h.clients.Len())
-	h.clients.Each(func(c *Client) bool {
-		keys = append(keys, c.Network.Key())
-		return true
-	})
-	return keys
 }
 
 // Client ...

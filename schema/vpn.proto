@@ -196,7 +196,7 @@ message ListBootstrapPeersResponse {
 }
 
 message BootstrapPeer {
-  bytes host_id = 1;
+  uint64 peer_id = 1;
   string label = 2;
 }
 
@@ -222,7 +222,7 @@ message BootstrapServiceMessage {
 }
 
 message PublishNetworkToBootstrapPeerRequest {
-  bytes host_id = 1;
+  uint64 peer_id = 1;
   Network network = 2;
 }
 message PublishNetworkToBootstrapPeerResponse {}

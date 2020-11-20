@@ -20,14 +20,12 @@ type RWDialer struct {
 
 // Dial ...
 func (d *RWDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Transport, error) {
-	t := &RWTransport{
+	return &RWTransport{
 		ctx:        ctx,
 		logger:     d.Logger,
 		rw:         d.ReadWriter,
 		dispatcher: dispatcher,
-	}
-
-	return t, nil
+	}, nil
 }
 
 // RWTransport ...

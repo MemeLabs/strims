@@ -1,0 +1,93 @@
+syntax = "proto3";
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+option java_package = "gg.strims.ppspp.proto";
+option swift_prefix = "PB";
+
+import "profile.proto";
+
+message SwarmPeerAnnounceSwarmRequest {
+  bytes id = 1;
+  uint32 port = 2;
+}
+
+message SwarmPeerAnnounceSwarmResponse {
+  oneof body {
+    uint32 port = 1;
+  }
+}
+
+service SwarmPeer {
+  rpc AnnounceSwarm(SwarmPeerAnnounceSwarmRequest) returns (SwarmPeerAnnounceSwarmResponse);
+}
+
+message CAPeerRenewRequest {
+  Certificate certificate = 1;
+  CertificateRequest certificate_request = 2;
+}
+
+message CAPeerRenewResponse {
+  Certificate certificate = 1;
+}
+
+service CAPeer {
+  rpc Renew(CAPeerRenewRequest) returns (CAPeerRenewResponse);
+}
+
+message NetworkPeerNegotiateRequest {
+  uint32 key_count = 1;
+}
+
+message NetworkPeerNegotiateResponse {
+  uint32 key_count = 1;
+}
+
+message NetworkPeerBinding {
+  uint32 port = 1;
+  Certificate certificate = 2;
+}
+
+message NetworkPeerOpenRequest {
+  repeated NetworkPeerBinding bindings = 1;
+}
+
+message NetworkPeerOpenResponse {
+  repeated NetworkPeerBinding bindings = 1;
+}
+
+message NetworkPeerCloseRequest {
+  bytes key = 1;
+}
+
+message NetworkPeerCloseResponse {}
+
+service NetworkPeer {
+  rpc Negotiate(NetworkPeerNegotiateRequest) returns (NetworkPeerNegotiateResponse);
+  rpc Open(NetworkPeerOpenRequest) returns (NetworkPeerOpenResponse);
+  rpc Close(NetworkPeerCloseRequest) returns (NetworkPeerCloseResponse);
+}
+
+
+message BootstrapPeerGetPublishEnabledRequest {}
+
+message BootstrapPeerGetPublishEnabledResponse {
+  bool enabled = 1;
+}
+
+message BootstrapPeerListNetworksRequest {}
+
+message BootstrapPeerListNetworksResponse {
+
+}
+
+message BootstrapPeerPublishRequest {
+  Certificate certificate = 1;
+}
+
+message BootstrapPeerPublishResponse {}
+
+service BootstrapPeer {
+  rpc GetPublishEnabled(BootstrapPeerGetPublishEnabledRequest) returns (BootstrapPeerGetPublishEnabledResponse);
+  rpc ListNetworks(BootstrapPeerListNetworksRequest) returns (BootstrapPeerListNetworksResponse);
+  rpc Publish(BootstrapPeerPublishRequest) returns (BootstrapPeerPublishResponse);
+}

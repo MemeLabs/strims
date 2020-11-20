@@ -252,9 +252,9 @@ const HomePage = () => {
     console.log(new TextDecoder().decode(data));
   };
 
-  React.useEffect(() => {
-    handleTestClick();
-  }, []);
+  // React.useEffect(() => {
+  //   handleTestClick();
+  // }, []);
 
   return (
     <MainLayout>
@@ -289,9 +289,9 @@ const HomePage = () => {
             <button className="input input_button" onClick={() => pprof({ name: "heap" })}>
               heap profile
             </button>
-            <button className="input input_button" onClick={handleTestClick}>
+            {/* <button className="input input_button" onClick={handleTestClick}>
               test
-            </button>
+            </button> */}
             <button className="input input_button" onClick={handleChatClientClick}>
               chat client
             </button>

@@ -35,27 +35,29 @@ const (
 	NetworkBrokerPort
 	BootstrapPort
 	SwarmPort
+	PeerRPCClientPort
+	PeerRPCServerPort
 )
 
 var (
 	linksActive = promauto.NewGauge(prometheus.GaugeOpts{
-		Name: "strims_vpn_links_active",
+		Name: "strims_vnic_links_active",
 		Help: "The number of active network links",
 	})
 	linkReadBytes = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "strims_vpn_link_read_bytes",
+		Name: "strims_vnic_link_read_bytes",
 		Help: "The total number of bytes read from network links",
 	})
 	linkWriteBytes = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "strims_vpn_link_write_bytes",
+		Name: "strims_vnic_link_write_bytes",
 		Help: "The total number of bytes written to network links",
 	})
 	dialCount = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "strims_vpn_dial_count",
+		Name: "strims_vnic_dial_count",
 		Help: "The total number of dialed network connections",
 	}, []string{"scheme"})
 	dialErrorCount = promauto.NewCounterVec(prometheus.CounterOpts{
-		Name: "strims_vpn_dial_error_count",
+		Name: "strims_vnic_dial_error_count",
 		Help: "The total number of network connection dial errors",
 	}, []string{"scheme"})
 )
