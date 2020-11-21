@@ -26,4 +26,14 @@ export default class NetworkPeer {
       this.host.call("NetworkPeer/Close", new pb.NetworkPeerCloseRequest(arg))
     );
   }
+  public updateCertificate(
+    arg: pb.INetworkPeerUpdateCertificateRequest = new pb.NetworkPeerUpdateCertificateRequest()
+  ): Promise<pb.NetworkPeerUpdateCertificateResponse> {
+    return this.host.expectOne(
+      this.host.call(
+        "NetworkPeer/UpdateCertificate",
+        new pb.NetworkPeerUpdateCertificateRequest(arg)
+      )
+    );
+  }
 }

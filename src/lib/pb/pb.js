@@ -22464,6 +22464,358 @@ export const NetworkPeerCloseResponse = $root.NetworkPeerCloseResponse = (() => 
     return NetworkPeerCloseResponse;
 })();
 
+export const NetworkPeerUpdateCertificateRequest = $root.NetworkPeerUpdateCertificateRequest = (() => {
+
+    /**
+     * Properties of a NetworkPeerUpdateCertificateRequest.
+     * @exports INetworkPeerUpdateCertificateRequest
+     * @interface INetworkPeerUpdateCertificateRequest
+     * @property {ICertificate|null} [certificate] NetworkPeerUpdateCertificateRequest certificate
+     */
+
+    /**
+     * Constructs a new NetworkPeerUpdateCertificateRequest.
+     * @exports NetworkPeerUpdateCertificateRequest
+     * @classdesc Represents a NetworkPeerUpdateCertificateRequest.
+     * @implements INetworkPeerUpdateCertificateRequest
+     * @constructor
+     * @param {INetworkPeerUpdateCertificateRequest=} [properties] Properties to set
+     */
+    function NetworkPeerUpdateCertificateRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * NetworkPeerUpdateCertificateRequest certificate.
+     * @member {ICertificate|null|undefined} certificate
+     * @memberof NetworkPeerUpdateCertificateRequest
+     * @instance
+     */
+    NetworkPeerUpdateCertificateRequest.prototype.certificate = null;
+
+    /**
+     * Creates a new NetworkPeerUpdateCertificateRequest instance using the specified properties.
+     * @function create
+     * @memberof NetworkPeerUpdateCertificateRequest
+     * @static
+     * @param {INetworkPeerUpdateCertificateRequest=} [properties] Properties to set
+     * @returns {NetworkPeerUpdateCertificateRequest} NetworkPeerUpdateCertificateRequest instance
+     */
+    NetworkPeerUpdateCertificateRequest.create = function create(properties) {
+        return new NetworkPeerUpdateCertificateRequest(properties);
+    };
+
+    /**
+     * Encodes the specified NetworkPeerUpdateCertificateRequest message. Does not implicitly {@link NetworkPeerUpdateCertificateRequest.verify|verify} messages.
+     * @function encode
+     * @memberof NetworkPeerUpdateCertificateRequest
+     * @static
+     * @param {INetworkPeerUpdateCertificateRequest} message NetworkPeerUpdateCertificateRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerUpdateCertificateRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
+            $root.Certificate.encode(message.certificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified NetworkPeerUpdateCertificateRequest message, length delimited. Does not implicitly {@link NetworkPeerUpdateCertificateRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof NetworkPeerUpdateCertificateRequest
+     * @static
+     * @param {INetworkPeerUpdateCertificateRequest} message NetworkPeerUpdateCertificateRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerUpdateCertificateRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a NetworkPeerUpdateCertificateRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof NetworkPeerUpdateCertificateRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {NetworkPeerUpdateCertificateRequest} NetworkPeerUpdateCertificateRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerUpdateCertificateRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkPeerUpdateCertificateRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.certificate = $root.Certificate.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a NetworkPeerUpdateCertificateRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof NetworkPeerUpdateCertificateRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {NetworkPeerUpdateCertificateRequest} NetworkPeerUpdateCertificateRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerUpdateCertificateRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a NetworkPeerUpdateCertificateRequest message.
+     * @function verify
+     * @memberof NetworkPeerUpdateCertificateRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    NetworkPeerUpdateCertificateRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.certificate != null && message.hasOwnProperty("certificate")) {
+            let error = $root.Certificate.verify(message.certificate);
+            if (error)
+                return "certificate." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a NetworkPeerUpdateCertificateRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof NetworkPeerUpdateCertificateRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {NetworkPeerUpdateCertificateRequest} NetworkPeerUpdateCertificateRequest
+     */
+    NetworkPeerUpdateCertificateRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.NetworkPeerUpdateCertificateRequest)
+            return object;
+        let message = new $root.NetworkPeerUpdateCertificateRequest();
+        if (object.certificate != null) {
+            if (typeof object.certificate !== "object")
+                throw TypeError(".NetworkPeerUpdateCertificateRequest.certificate: object expected");
+            message.certificate = $root.Certificate.fromObject(object.certificate);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a NetworkPeerUpdateCertificateRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof NetworkPeerUpdateCertificateRequest
+     * @static
+     * @param {NetworkPeerUpdateCertificateRequest} message NetworkPeerUpdateCertificateRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    NetworkPeerUpdateCertificateRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.certificate = null;
+        if (message.certificate != null && message.hasOwnProperty("certificate"))
+            object.certificate = $root.Certificate.toObject(message.certificate, options);
+        return object;
+    };
+
+    /**
+     * Converts this NetworkPeerUpdateCertificateRequest to JSON.
+     * @function toJSON
+     * @memberof NetworkPeerUpdateCertificateRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    NetworkPeerUpdateCertificateRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return NetworkPeerUpdateCertificateRequest;
+})();
+
+export const NetworkPeerUpdateCertificateResponse = $root.NetworkPeerUpdateCertificateResponse = (() => {
+
+    /**
+     * Properties of a NetworkPeerUpdateCertificateResponse.
+     * @exports INetworkPeerUpdateCertificateResponse
+     * @interface INetworkPeerUpdateCertificateResponse
+     */
+
+    /**
+     * Constructs a new NetworkPeerUpdateCertificateResponse.
+     * @exports NetworkPeerUpdateCertificateResponse
+     * @classdesc Represents a NetworkPeerUpdateCertificateResponse.
+     * @implements INetworkPeerUpdateCertificateResponse
+     * @constructor
+     * @param {INetworkPeerUpdateCertificateResponse=} [properties] Properties to set
+     */
+    function NetworkPeerUpdateCertificateResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new NetworkPeerUpdateCertificateResponse instance using the specified properties.
+     * @function create
+     * @memberof NetworkPeerUpdateCertificateResponse
+     * @static
+     * @param {INetworkPeerUpdateCertificateResponse=} [properties] Properties to set
+     * @returns {NetworkPeerUpdateCertificateResponse} NetworkPeerUpdateCertificateResponse instance
+     */
+    NetworkPeerUpdateCertificateResponse.create = function create(properties) {
+        return new NetworkPeerUpdateCertificateResponse(properties);
+    };
+
+    /**
+     * Encodes the specified NetworkPeerUpdateCertificateResponse message. Does not implicitly {@link NetworkPeerUpdateCertificateResponse.verify|verify} messages.
+     * @function encode
+     * @memberof NetworkPeerUpdateCertificateResponse
+     * @static
+     * @param {INetworkPeerUpdateCertificateResponse} message NetworkPeerUpdateCertificateResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerUpdateCertificateResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified NetworkPeerUpdateCertificateResponse message, length delimited. Does not implicitly {@link NetworkPeerUpdateCertificateResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof NetworkPeerUpdateCertificateResponse
+     * @static
+     * @param {INetworkPeerUpdateCertificateResponse} message NetworkPeerUpdateCertificateResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    NetworkPeerUpdateCertificateResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a NetworkPeerUpdateCertificateResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof NetworkPeerUpdateCertificateResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {NetworkPeerUpdateCertificateResponse} NetworkPeerUpdateCertificateResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerUpdateCertificateResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.NetworkPeerUpdateCertificateResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a NetworkPeerUpdateCertificateResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof NetworkPeerUpdateCertificateResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {NetworkPeerUpdateCertificateResponse} NetworkPeerUpdateCertificateResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    NetworkPeerUpdateCertificateResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a NetworkPeerUpdateCertificateResponse message.
+     * @function verify
+     * @memberof NetworkPeerUpdateCertificateResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    NetworkPeerUpdateCertificateResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a NetworkPeerUpdateCertificateResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof NetworkPeerUpdateCertificateResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {NetworkPeerUpdateCertificateResponse} NetworkPeerUpdateCertificateResponse
+     */
+    NetworkPeerUpdateCertificateResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.NetworkPeerUpdateCertificateResponse)
+            return object;
+        return new $root.NetworkPeerUpdateCertificateResponse();
+    };
+
+    /**
+     * Creates a plain object from a NetworkPeerUpdateCertificateResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof NetworkPeerUpdateCertificateResponse
+     * @static
+     * @param {NetworkPeerUpdateCertificateResponse} message NetworkPeerUpdateCertificateResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    NetworkPeerUpdateCertificateResponse.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this NetworkPeerUpdateCertificateResponse to JSON.
+     * @function toJSON
+     * @memberof NetworkPeerUpdateCertificateResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    NetworkPeerUpdateCertificateResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return NetworkPeerUpdateCertificateResponse;
+})();
+
 export const BootstrapPeerGetPublishEnabledRequest = $root.BootstrapPeerGetPublishEnabledRequest = (() => {
 
     /**

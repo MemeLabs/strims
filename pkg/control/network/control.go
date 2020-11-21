@@ -23,8 +23,10 @@ import (
 var (
 	ErrNetworkNotFound          = errors.New("network not found")
 	ErrNetworkBindingsEmpty     = errors.New("network bindings empty")
-	ErrNetworkOwnerMismatch     = errors.New("init and network certificate key mismatch")
+	ErrNetworkBindingNotFound   = errors.New("network binding not found")
 	ErrNetworkAuthorityMismatch = errors.New("network ca mismatch")
+	ErrCertificateOwnerMismatch = errors.New("init and network certificate key mismatch")
+	ErrProvisionalCertificate   = errors.New("provisional certificate is not supported")
 	ErrNetworkIDBounds          = errors.New("network id out of range")
 )
 
@@ -98,6 +100,10 @@ func (t *Control) Run(ctx context.Context) {
 				t.handlePeerAdd(ctx, e.ID)
 			case event.NetworkPeerBindings:
 				t.handlePeerBinding(ctx, e.PeerID, e.NetworkKeys)
+			case event.NetworkCertUpdate:
+				t.handleNetworkCertUpdate(e.Network)
+			case event.NetworkAdd:
+				t.handleNetworkAdd(ctx)
 			}
 		case <-ctx.Done():
 			return
@@ -117,7 +123,7 @@ func (t *Control) handlePeerAdd(ctx context.Context, peerID uint64) {
 	}
 
 	go func() {
-		if err := peer.sync(ctx); err != nil {
+		if err := peer.negotiateNetworks(ctx); err != nil {
 			t.logger.Debug("network negotiation failed", zap.Error(err))
 		}
 		t.observers.Network.Emit(event.NetworkNegotiationComplete{})
@@ -152,6 +158,32 @@ func (t *Control) handlePeerBinding(ctx context.Context, peerID uint64, networkK
 					logutil.ByteHex("network", networkKeyForCertificate(network.Certificate)),
 					zap.Error(err),
 				)
+			}
+		}()
+	}
+}
+
+func (t *Control) handleNetworkCertUpdate(network *pb.Network) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	for _, peer := range t.peers {
+		if peer.hasNetworkBinding(network.Id) {
+			go peer.sendCertificateUpdate(network)
+		}
+	}
+}
+
+func (t *Control) handleNetworkAdd(ctx context.Context) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	// TODO: throttle
+	for _, peer := range t.peers {
+		peer := peer
+		go func() {
+			if err := peer.negotiateNetworks(ctx); err != nil {
+				t.logger.Debug("network negotiation failed", zap.Error(err))
 			}
 		}()
 	}
@@ -265,13 +297,13 @@ func (t *Control) startNetworks() {
 		t.logger.Fatal("loading networks failed", zap.Error(err))
 	}
 
-	for _, n := range networks {
-		t.certificates.Insert(n.Certificate, n.Id)
-		t.networks[n.Id] = n
+	for _, network := range networks {
+		t.certificates.Insert(network)
+		t.networks[network.Id] = network
 
-		cert := dao.GetRootCert(n.Certificate)
+		cert := dao.GetRootCert(network.Certificate)
 
-		if _, err := t.vpn.AddNetwork(n.Certificate); err != nil {
+		if _, err := t.vpn.AddNetwork(network.Certificate); err != nil {
 			t.logger.Error(
 				"starting network failed",
 				zap.String("name", cert.Subject),
@@ -285,7 +317,7 @@ func (t *Control) startNetworks() {
 				logutil.ByteHex("key", cert.Key),
 			)
 
-			t.observers.Network.Emit(event.NetworkStart{Network: n})
+			t.observers.Network.Emit(event.NetworkStart{Network: network})
 		}
 	}
 }
@@ -377,7 +409,7 @@ func (t *Control) setCertificate(id uint64, cert *pb.Certificate) error {
 			return nil
 		},
 		func(network *pb.Network) {
-			t.certificates.Insert(network.Certificate, network.Id)
+			t.certificates.Insert(network)
 			t.observers.Network.Emit(event.NetworkCertUpdate{Network: proto.Clone(network).(*pb.Network)})
 		},
 	)
@@ -408,6 +440,8 @@ func (t *Control) Add(network *pb.Network) error {
 	}
 
 	t.networks[network.Id] = network
+	t.certificates.Insert(network)
+
 	t.observers.Network.Emit(event.NetworkAdd{Network: network})
 	t.observers.Network.Emit(event.NetworkStart{Network: network})
 
@@ -439,6 +473,7 @@ func (t *Control) Remove(id uint64) error {
 
 	t.certificates.Delete(networkKey)
 	delete(t.networks, id)
+
 	t.observers.Network.Emit(event.NetworkRemove{Network: network})
 	t.observers.Network.Emit(event.NetworkStop{Network: network})
 

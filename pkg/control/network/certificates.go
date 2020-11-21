@@ -13,15 +13,15 @@ type certificateMap struct {
 	m  llrb.LLRB
 }
 
-func (c *certificateMap) Insert(certificate *pb.Certificate, networkID uint64) {
+func (c *certificateMap) Insert(network *pb.Network) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
 	c.m.ReplaceOrInsert(&certificateMapItem{
-		networkKey:  networkKeyForCertificate(certificate),
-		networkID:   networkID,
-		certificate: certificate,
-		trusted:     isCertificateTrusted(certificate),
+		networkKey:  networkKeyForCertificate(network.Certificate),
+		networkID:   network.Id,
+		certificate: network.Certificate,
+		trusted:     isCertificateTrusted(network.Certificate),
 	})
 }
 

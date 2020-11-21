@@ -2,11 +2,8 @@ package rpc
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
-	"path"
 	"reflect"
-	"runtime"
 	"time"
 
 	"github.com/golang/protobuf/proto"
@@ -137,20 +134,6 @@ func (h *ServiceDispatcher) call(call *CallIn) {
 	} else {
 		call.returnError(fmt.Errorf("unexpected response type %T", rs[0].Interface()))
 	}
-}
-
-func jsonDump(i interface{}) {
-	_, file, line, _ := runtime.Caller(1)
-	b, err := json.MarshalIndent(i, "", "  ")
-	if err != nil {
-		panic(err)
-	}
-	fmt.Printf(
-		"%s %s:%d: %s\n",
-		time.Now().Format("2006/01/02 15:04:05.000000"),
-		path.Base(file),
-		line, string(b),
-	)
 }
 
 type serviceMethod struct {

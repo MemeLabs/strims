@@ -25,5 +25,8 @@ class NetworkPeerClient {
   public func close(_ arg: PBNetworkPeerCloseRequest = PBNetworkPeerCloseRequest()) -> Promise<PBNetworkPeerCloseResponse> {
     return self.client.callUnary("NetworkPeer/Close", arg)
   }
+  public func updateCertificate(_ arg: PBNetworkPeerUpdateCertificateRequest = PBNetworkPeerUpdateCertificateRequest()) -> Promise<PBNetworkPeerUpdateCertificateResponse> {
+    return self.client.callUnary("NetworkPeer/UpdateCertificate", arg)
+  }
   
 }

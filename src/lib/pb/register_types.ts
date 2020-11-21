@@ -58,6 +58,8 @@ registerType("NetworkPeerOpenRequest", pb.NetworkPeerOpenRequest);
 registerType("NetworkPeerOpenResponse", pb.NetworkPeerOpenResponse);
 registerType("NetworkPeerCloseRequest", pb.NetworkPeerCloseRequest);
 registerType("NetworkPeerCloseResponse", pb.NetworkPeerCloseResponse);
+registerType("NetworkPeerUpdateCertificateRequest", pb.NetworkPeerUpdateCertificateRequest);
+registerType("NetworkPeerUpdateCertificateResponse", pb.NetworkPeerUpdateCertificateResponse);
 registerType("BootstrapPeerGetPublishEnabledRequest", pb.BootstrapPeerGetPublishEnabledRequest);
 registerType("BootstrapPeerGetPublishEnabledResponse", pb.BootstrapPeerGetPublishEnabledResponse);
 registerType("BootstrapPeerListNetworksRequest", pb.BootstrapPeerListNetworksRequest);

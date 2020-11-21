@@ -18,4 +18,9 @@ class NetworkPeerClient(filepath: String) : RPCClient(filepath) {
     ): NetworkPeerCloseResponse =
         this.callUnary("NetworkPeer/Close", arg)
 
+    suspend fun updateCertificate(
+        arg: NetworkPeerUpdateCertificateRequest = NetworkPeerUpdateCertificateRequest()
+    ): NetworkPeerUpdateCertificateResponse =
+        this.callUnary("NetworkPeer/UpdateCertificate", arg)
+
 }
