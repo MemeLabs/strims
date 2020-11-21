@@ -145,7 +145,6 @@ message Network {
   Certificate certificate = 4;
   NetworkIcon icon = 5;
   string alt_profile_name = 6;
-  bool certificate_renewal_required = 7;
 }
 
 enum KDFType {

@@ -17,6 +17,9 @@ import (
 	"go.uber.org/zap"
 )
 
+// use a higher limit here to prevent errors while streaming video from the ui.
+const serverMaxMessageBytes = 10 * 1024 * 1024
+
 // ErrMethodNotImplemented ...
 var ErrMethodNotImplemented = errors.New("method not implemented")
 
@@ -40,8 +43,9 @@ func (s *Server) Listen(ctx context.Context, rw io.ReadWriter) error {
 	}
 
 	return server.Listen(ctx, &rpc.RWDialer{
-		Logger:     s.Logger,
-		ReadWriter: rw,
+		Logger:          s.Logger,
+		ReadWriter:      rw,
+		MaxMessageBytes: serverMaxMessageBytes,
 	})
 }
 

@@ -38,7 +38,9 @@ func NewClient(logger *zap.Logger, dialer Dialer) (*Client, error) {
 	}
 
 	go func() {
-		transport.Listen()
+		if err := transport.Listen(); err != nil && !errors.Is(err, context.Canceled) {
+			logger.Debug("client closed with error", zap.Error(err))
+		}
 		cancel()
 	}()
 

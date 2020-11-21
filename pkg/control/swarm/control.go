@@ -17,7 +17,7 @@ import (
 func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers) *Control {
 	events := make(chan interface{}, 128)
 	observers.Peer.Notify(events)
-	observers.VPN.Notify(events)
+	observers.Network.Notify(events)
 
 	return &Control{
 		logger:    logger,

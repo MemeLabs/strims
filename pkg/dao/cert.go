@@ -10,7 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
-const certPredateDuration = time.Minute
+const certPredateDuration = time.Hour
 const defaultCertTTL = time.Hour * 24 * 365 * 2 // ~two years
 
 // validation errors
@@ -121,7 +121,7 @@ func SignCertificateRequest(
 }
 
 // VerifyCertificate ...
-func VerifyCertificate(cert *pb.Certificate) Errors {
+func VerifyCertificate(cert *pb.Certificate) error {
 	var errs Errors
 	now := time.Now()
 
@@ -160,7 +160,11 @@ func VerifyCertificate(cert *pb.Certificate) Errors {
 			errs = append(errs, ErrNotAfterRange)
 		}
 	}
-	return errs
+
+	if len(errs) != 0 {
+		return errs
+	}
+	return nil
 }
 
 // NewSelfSignedCertificate ...

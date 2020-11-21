@@ -36,7 +36,7 @@ func NewControl(logger *zap.Logger, broker network.Broker, vpn *vpn.Host, store 
 	}
 
 	ctx := context.Background()
-	// go c.peer.Run(ctx)
+	go c.ca.Run(ctx)
 	go c.network.Run(ctx)
 	go c.swarm.Run(ctx)
 	go c.bootstrap.Run(ctx)

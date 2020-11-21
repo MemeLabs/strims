@@ -171,7 +171,7 @@ func (p *Peer) exchangeBindingsAsReceiver(ctx context.Context, keys [][]byte) er
 			return err
 		}
 
-		p.observers.VPN.Emit(event.NetworkPeerBindings{PeerID: p.id, NetworkKeys: keys})
+		p.observers.Network.Emit(event.NetworkPeerBindings{PeerID: p.id, NetworkKeys: keys})
 
 		return p.handleNetworkBindings(networkBindings, peerNetworkBindings)
 	}
@@ -191,7 +191,7 @@ func (p *Peer) exchangeBindingsAsSender(ctx context.Context, keys [][]byte) erro
 			return err
 		}
 
-		p.observers.VPN.Emit(event.NetworkPeerBindings{PeerID: p.id, NetworkKeys: keys})
+		p.observers.Network.Emit(event.NetworkPeerBindings{PeerID: p.id, NetworkKeys: keys})
 
 		networkBindings, err := p.sendNetworkBindings(ctx, keys)
 		if err != nil {
@@ -243,7 +243,7 @@ func (p *Peer) verifyNetworkBindings(bindings []*pb.NetworkPeerBinding) ([][]byt
 
 	keys := make([][]byte, len(bindings))
 	for i, b := range bindings {
-		if err := dao.VerifyCertificate(b.Certificate); !err.IncludesOnly(dao.ErrNotAfterRange) {
+		if err, ok := dao.VerifyCertificate(b.Certificate).(dao.Errors); ok && !err.IncludesOnly(dao.ErrNotAfterRange) {
 			return nil, err
 		}
 		keys[i] = networkKeyForCertificate(b.Certificate)
@@ -277,11 +277,11 @@ func (p *Peer) handleNetworkBindings(networkBindings, peerNetworkBindings []*pb.
 		}
 		p.links[c.networkID] = link
 
-		if !isNetworkCertificateTrusted(binding.Certificate) || !isNetworkCertificateTrusted(peerBinding.Certificate) {
+		if !isCertificateTrusted(binding.Certificate) || !isCertificateTrusted(peerBinding.Certificate) {
 			continue
 		}
 
-		p.logger.Debug(
+		p.logger.Info(
 			"adding peer to network",
 			zap.Stringer("peer", p.peer.HostID()),
 			logutil.ByteHex("network", networkKey),
@@ -296,7 +296,7 @@ func (p *Peer) handleNetworkBindings(networkBindings, peerNetworkBindings []*pb.
 		client.Network.AddPeer(p.peer, link.localPort, link.peerPort)
 		link.open = true
 
-		p.observers.VPN.Emit(event.NetworkPeerOpen{PeerID: p.id, NetworkKey: networkKey})
+		p.observers.Network.Emit(event.NetworkPeerOpen{PeerID: p.id, NetworkKey: networkKey})
 	}
 	return nil
 }
@@ -307,7 +307,7 @@ type networkBinding struct {
 	open      bool
 }
 
-func isNetworkCertificateTrusted(cert *pb.Certificate) bool {
+func isCertificateTrusted(cert *pb.Certificate) bool {
 	return bytes.Equal(networkKeyForCertificate(cert), cert.GetParent().Key)
 }
 
@@ -315,9 +315,13 @@ func networkKeyForCertificate(cert *pb.Certificate) []byte {
 	return dao.GetRootCert(cert).Key
 }
 
-func nextNetworkCertificateRenewTime(network *pb.Network) time.Time {
-	if network.CertificateRenewalRequired {
+func nextCertificateRenewTime(network *pb.Network) time.Time {
+	if isCertificateSubjectMismatched(network) {
 		return time.Now()
 	}
 	return time.Unix(int64(network.Certificate.NotAfter), 0).Add(-certRenewScheduleAheadDuration)
+}
+
+func isCertificateSubjectMismatched(network *pb.Network) bool {
+	return network.AltProfileName != "" && network.AltProfileName != network.Certificate.Subject
 }

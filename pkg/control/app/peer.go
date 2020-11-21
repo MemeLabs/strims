@@ -18,7 +18,7 @@ import (
 // NewPeerControl ...
 func NewPeerControl(logger *zap.Logger, observers *event.Observers, ca *ca.Control, network *network.Control, swarm *swarm.Control, bootstrap *bootstrap.Control) *PeerControl {
 	events := make(chan interface{}, 128)
-	observers.VPN.Notify(events)
+	observers.Network.Notify(events)
 
 	return &PeerControl{
 		logger:    logger,

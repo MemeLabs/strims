@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"io"
 	"sync"
 
@@ -12,30 +13,43 @@ import (
 	"go.uber.org/zap"
 )
 
+const defaultMaxMessageBytes = 512 * 1024
+
+// ErrMessageToolarge emitted when received message exceeds configured limit
+var ErrMessageToolarge = errors.New("received message too large")
+
 // RWDialer ...
 type RWDialer struct {
-	Logger     *zap.Logger
-	ReadWriter io.ReadWriter
+	Logger          *zap.Logger
+	ReadWriter      io.ReadWriter
+	MaxMessageBytes int
 }
 
 // Dial ...
 func (d *RWDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Transport, error) {
+	maxMessageBytes := d.MaxMessageBytes
+	if maxMessageBytes == 0 {
+		maxMessageBytes = defaultMaxMessageBytes
+	}
+
 	return &RWTransport{
-		ctx:        ctx,
-		logger:     d.Logger,
-		rw:         d.ReadWriter,
-		dispatcher: dispatcher,
+		ctx:             ctx,
+		logger:          d.Logger,
+		rw:              d.ReadWriter,
+		maxMessageBytes: maxMessageBytes,
+		dispatcher:      dispatcher,
 	}, nil
 }
 
 // RWTransport ...
 type RWTransport struct {
-	ctx        context.Context
-	logger     *zap.Logger
-	rw         io.ReadWriter
-	callsIn    sync.Map
-	callsOut   sync.Map
-	dispatcher Dispatcher
+	ctx             context.Context
+	logger          *zap.Logger
+	rw              io.ReadWriter
+	maxMessageBytes int
+	callsIn         sync.Map
+	callsOut        sync.Map
+	dispatcher      Dispatcher
 }
 
 // Listen reads incoming calls
@@ -46,6 +60,9 @@ func (t *RWTransport) Listen() error {
 		l, err := binary.ReadUvarint(bytereader.New(t.rw))
 		if err != nil {
 			return err
+		}
+		if int(l) > t.maxMessageBytes {
+			return ErrMessageToolarge
 		}
 		if int(l) > cap(b) {
 			b = make([]byte, l)

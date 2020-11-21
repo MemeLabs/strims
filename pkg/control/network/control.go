@@ -46,7 +46,7 @@ type ReadWriteFlusher interface {
 // NewControl ...
 func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile, observers *event.Observers, ca *ca.Control) *Control {
 	events := make(chan interface{}, 128)
-	observers.VPN.Notify(events)
+	observers.Network.Notify(events)
 	observers.Peer.Notify(events)
 
 	return &Control{
@@ -76,7 +76,7 @@ type Control struct {
 	observers         *event.Observers
 	ca                *ca.Control
 	certRenewTimeout  <-chan time.Time
-	lastCertRenewTime time.Time
+	nextCertRenewTime time.Time
 	events            chan interface{}
 	networks          map[uint64]*pb.Network
 	peers             map[uint64]*Peer
@@ -98,10 +98,6 @@ func (t *Control) Run(ctx context.Context) {
 				t.handlePeerAdd(ctx, e.ID)
 			case event.NetworkPeerBindings:
 				t.handlePeerBinding(ctx, e.PeerID, e.NetworkKeys)
-			case event.CARenewNetworkCert:
-				// TODO: propagate updated certificate to peers
-			case event.CARenewNetworkCertError:
-				// TODO: propagate error message to ui
 			}
 		case <-ctx.Done():
 			return
@@ -112,6 +108,9 @@ func (t *Control) Run(ctx context.Context) {
 }
 
 func (t *Control) handlePeerAdd(ctx context.Context, peerID uint64) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
 	peer, ok := t.peers[peerID]
 	if !ok {
 		return
@@ -121,7 +120,7 @@ func (t *Control) handlePeerAdd(ctx context.Context, peerID uint64) {
 		if err := peer.sync(ctx); err != nil {
 			t.logger.Debug("network negotiation failed", zap.Error(err))
 		}
-		t.observers.VPN.Emit(event.NetworkNegotiationComplete{})
+		t.observers.Network.Emit(event.NetworkNegotiationComplete{})
 	}()
 }
 
@@ -145,14 +144,23 @@ func (t *Control) handlePeerBinding(ctx context.Context, peerID uint64, networkK
 			continue
 		}
 
-		go t.renewNetworkCertificateWithPeer(ctx, network, peer)
+		go func() {
+			if err := t.renewCertificateWithPeer(ctx, network, peer); err != nil {
+				t.logger.Debug(
+					"certificate renew via peer failed",
+					zap.Stringer("peer", peer.peer.HostID()),
+					logutil.ByteHex("network", networkKeyForCertificate(network.Certificate)),
+					zap.Error(err),
+				)
+			}
+		}()
 	}
 }
 
 type certificateRenewFunc func(ctx context.Context, cert *pb.Certificate, csr *pb.CertificateRequest) (*pb.Certificate, error)
 
-// renewNetworkCertificateWithRenewFunc ...
-func (t *Control) renewNetworkCertificateWithRenewFunc(network *pb.Network, fn certificateRenewFunc) (*pb.Certificate, error) {
+// renewCertificateWithRenewFunc ...
+func (t *Control) renewCertificateWithRenewFunc(network *pb.Network, fn certificateRenewFunc) error {
 	subject := t.profile.Name
 	if network.AltProfileName != "" {
 		subject = network.AltProfileName
@@ -164,46 +172,45 @@ func (t *Control) renewNetworkCertificateWithRenewFunc(network *pb.Network, fn c
 		dao.WithSubject(subject),
 	)
 	if err != nil {
-		t.logger.Debug("csr generation failed", zap.Error(err))
-		return nil, err
+		return err
 	}
 
-	cert, err := fn(context.TODO(), network.Certificate, csr)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	cert, err := fn(ctx, network.Certificate, csr)
 	if err != nil {
-		t.observers.CA.Emit(event.CARenewNetworkCertError{Network: network, Error: err})
-		return nil, err
+		return err
 	}
 	if err := dao.VerifyCertificate(cert); err != nil {
-		t.observers.CA.Emit(event.CARenewNetworkCertError{Network: network, Error: err})
-		return nil, err
+		return err
 	}
 
-	t.observers.CA.Emit(event.CARenewNetworkCert{Network: network, Certificate: cert})
-	return cert, nil
+	return t.setCertificate(network.Id, cert)
 }
 
-// renewNetworkCertificate ...
-func (t *Control) renewNetworkCertificate(network *pb.Network) (*pb.Certificate, error) {
+// renewCertificate ...
+func (t *Control) renewCertificate(network *pb.Network) error {
 	client, ok := t.vpn.Client(networkKeyForCertificate(network.Certificate))
 	if !ok {
-		return nil, ErrNetworkNotFound
+		return ErrNetworkNotFound
 	}
 
-	return t.renewNetworkCertificateWithRenewFunc(
+	return t.renewCertificateWithRenewFunc(
 		network,
 		func(ctx context.Context, cert *pb.Certificate, csr *pb.CertificateRequest) (*pb.Certificate, error) {
-			client, err := ca.NewClient(t.logger, client)
+			caClient, err := ca.NewClient(t.logger, client)
 			if err != nil {
 				return nil, err
 			}
-			defer client.Close()
+			defer caClient.Close()
 
 			renewReq := &pb.CARenewRequest{
 				Certificate:        cert,
 				CertificateRequest: csr,
 			}
 			renewRes := &pb.CARenewResponse{}
-			if err := client.Renew(ctx, renewReq, renewRes); err != nil {
+			if err := caClient.Renew(ctx, renewReq, renewRes); err != nil {
 				return nil, err
 			}
 
@@ -212,8 +219,8 @@ func (t *Control) renewNetworkCertificate(network *pb.Network) (*pb.Certificate,
 	)
 }
 
-func (t *Control) renewNetworkCertificateWithPeer(ctx context.Context, network *pb.Network, peer *Peer) (*pb.Certificate, error) {
-	return t.renewNetworkCertificateWithRenewFunc(
+func (t *Control) renewCertificateWithPeer(ctx context.Context, network *pb.Network, peer *Peer) error {
+	return t.renewCertificateWithRenewFunc(
 		network,
 		func(ctx context.Context, cert *pb.Certificate, csr *pb.CertificateRequest) (*pb.Certificate, error) {
 			req := &pb.CAPeerRenewRequest{
@@ -255,36 +262,42 @@ func (t *Control) startNetworks() {
 
 	networks, err := dao.GetNetworks(t.store)
 	if err != nil {
-		t.logger.Debug(
-			"loading networks failed",
-			zap.Error(err),
-		)
-		return
+		t.logger.Fatal("loading networks failed", zap.Error(err))
 	}
 
 	for _, n := range networks {
 		t.certificates.Insert(n.Certificate, n.Id)
 		t.networks[n.Id] = n
 
+		cert := dao.GetRootCert(n.Certificate)
+
 		if _, err := t.vpn.AddNetwork(n.Certificate); err != nil {
-			cert := dao.GetRootCert(n.Certificate)
-			t.logger.Debug(
+			t.logger.Error(
 				"starting network failed",
-				zap.String("networkName", cert.Subject),
-				logutil.ByteHex("networkKey", cert.Key),
+				zap.String("name", cert.Subject),
+				logutil.ByteHex("key", cert.Key),
 				zap.Error(err),
 			)
 		} else {
-			t.observers.VPN.Emit(event.NetworkStart{Network: n})
+			t.logger.Info(
+				"network started",
+				zap.String("name", cert.Subject),
+				logutil.ByteHex("key", cert.Key),
+			)
+
+			t.observers.Network.Emit(event.NetworkStart{Network: n})
 		}
 	}
 }
 
 func (t *Control) scheduleCertRenewal() {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
 	minNextTime := time.Unix(math.MaxInt64, 0)
 
 	for _, n := range t.networks {
-		nextTime := nextNetworkCertificateRenewTime(n)
+		nextTime := nextCertificateRenewTime(n)
 		if nextTime.Before(minNextTime) {
 			minNextTime = nextTime
 		}
@@ -295,24 +308,33 @@ func (t *Control) scheduleCertRenewal() {
 	if minNextTime.Before(now) {
 		minNextTime = now
 	}
-	if minNextTime.Before(t.lastCertRenewTime.Add(certRecheckInterval)) {
-		minNextTime = t.lastCertRenewTime.Add(certRecheckInterval)
+	if minNextTime.Before(t.nextCertRenewTime) {
+		minNextTime = t.nextCertRenewTime
 	}
 
 	t.certRenewTimeout = time.After(minNextTime.Sub(now))
 }
 
 func (t *Control) renewExpiredCerts() {
-	now := time.Now()
-	t.lastCertRenewTime = now
-
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
+	now := time.Now()
+	t.nextCertRenewTime = now.Add(certRecheckInterval)
+
 	for _, network := range t.networks {
-		ttl := time.Unix(0, int64(network.Certificate.NotAfter)).Sub(now)
-		if ttl < certRenewScheduleAheadDuration {
-			go t.renewNetworkCertificate(network)
+		network := network
+
+		if now.After(nextCertificateRenewTime(network)) || isCertificateSubjectMismatched(network) {
+			go func() {
+				if err := t.renewCertificate(network); err != nil {
+					t.logger.Debug(
+						"network certificate renewal failed",
+						logutil.ByteHex("network", networkKeyForCertificate(network.Certificate)),
+						zap.Error(err),
+					)
+				}
+			}()
 		}
 	}
 }
@@ -347,7 +369,7 @@ func (t *Control) mutateNetwork(id uint64, mutate func(*pb.Network) error) error
 	return t.mutateNetworkWithFinalizer(id, mutate, noopMutateNetworkFinalizer)
 }
 
-func (t *Control) setNetworkCertificate(id uint64, cert *pb.Certificate) error {
+func (t *Control) setCertificate(id uint64, cert *pb.Certificate) error {
 	return t.mutateNetworkWithFinalizer(
 		id,
 		func(network *pb.Network) error {
@@ -355,7 +377,8 @@ func (t *Control) setNetworkCertificate(id uint64, cert *pb.Certificate) error {
 			return nil
 		},
 		func(network *pb.Network) {
-			t.observers.VPN.Emit(event.NetworkCertUpdate{Network: proto.Clone(network).(*pb.Network)})
+			t.certificates.Insert(network.Certificate, network.Id)
+			t.observers.Network.Emit(event.NetworkCertUpdate{Network: proto.Clone(network).(*pb.Network)})
 		},
 	)
 }
@@ -363,7 +386,6 @@ func (t *Control) setNetworkCertificate(id uint64, cert *pb.Certificate) error {
 func (t *Control) setNetworkAltProfileName(id uint64, name string) error {
 	return t.mutateNetwork(id, func(network *pb.Network) error {
 		network.AltProfileName = name
-		network.CertificateRenewalRequired = true
 		return nil
 	})
 }
@@ -377,8 +399,6 @@ func (t *Control) Add(network *pb.Network) error {
 		return errors.New("duplicate network id")
 	}
 
-	network.CertificateRenewalRequired = isNetworkCertificateTrusted(network.Certificate)
-
 	if err := dao.UpsertNetwork(t.store, network); err != nil {
 		return err
 	}
@@ -388,8 +408,8 @@ func (t *Control) Add(network *pb.Network) error {
 	}
 
 	t.networks[network.Id] = network
-	t.observers.VPN.Emit(event.NetworkAdd{Network: network})
-	t.observers.VPN.Emit(event.NetworkStart{Network: network})
+	t.observers.Network.Emit(event.NetworkAdd{Network: network})
+	t.observers.Network.Emit(event.NetworkStart{Network: network})
 
 	return nil
 }
@@ -419,8 +439,8 @@ func (t *Control) Remove(id uint64) error {
 
 	t.certificates.Delete(networkKey)
 	delete(t.networks, id)
-	t.observers.VPN.Emit(event.NetworkRemove{Network: network})
-	t.observers.VPN.Emit(event.NetworkStop{Network: network})
+	t.observers.Network.Emit(event.NetworkRemove{Network: network})
+	t.observers.Network.Emit(event.NetworkStop{Network: network})
 
 	return nil
 }
