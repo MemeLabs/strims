@@ -61,10 +61,17 @@ message NetworkPeerCloseRequest {
 
 message NetworkPeerCloseResponse {}
 
+message NetworkPeerUpdateCertificateRequest {
+  Certificate certificate = 1;
+}
+
+message NetworkPeerUpdateCertificateResponse {}
+
 service NetworkPeer {
   rpc Negotiate(NetworkPeerNegotiateRequest) returns (NetworkPeerNegotiateResponse);
   rpc Open(NetworkPeerOpenRequest) returns (NetworkPeerOpenResponse);
   rpc Close(NetworkPeerCloseRequest) returns (NetworkPeerCloseResponse);
+  rpc UpdateCertificate(NetworkPeerUpdateCertificateRequest) returns (NetworkPeerUpdateCertificateResponse);
 }
 
 

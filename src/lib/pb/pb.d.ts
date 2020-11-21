@@ -9599,6 +9599,180 @@ export class NetworkPeerCloseResponse implements INetworkPeerCloseResponse {
     public toJSON(): { [k: string]: any };
 }
 
+/** Properties of a NetworkPeerUpdateCertificateRequest. */
+export interface INetworkPeerUpdateCertificateRequest {
+
+    /** NetworkPeerUpdateCertificateRequest certificate */
+    certificate?: (ICertificate|null);
+}
+
+/** Represents a NetworkPeerUpdateCertificateRequest. */
+export class NetworkPeerUpdateCertificateRequest implements INetworkPeerUpdateCertificateRequest {
+
+    /**
+     * Constructs a new NetworkPeerUpdateCertificateRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: INetworkPeerUpdateCertificateRequest);
+
+    /** NetworkPeerUpdateCertificateRequest certificate. */
+    public certificate?: (ICertificate|null);
+
+    /**
+     * Creates a new NetworkPeerUpdateCertificateRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns NetworkPeerUpdateCertificateRequest instance
+     */
+    public static create(properties?: INetworkPeerUpdateCertificateRequest): NetworkPeerUpdateCertificateRequest;
+
+    /**
+     * Encodes the specified NetworkPeerUpdateCertificateRequest message. Does not implicitly {@link NetworkPeerUpdateCertificateRequest.verify|verify} messages.
+     * @param message NetworkPeerUpdateCertificateRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: INetworkPeerUpdateCertificateRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified NetworkPeerUpdateCertificateRequest message, length delimited. Does not implicitly {@link NetworkPeerUpdateCertificateRequest.verify|verify} messages.
+     * @param message NetworkPeerUpdateCertificateRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: INetworkPeerUpdateCertificateRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a NetworkPeerUpdateCertificateRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns NetworkPeerUpdateCertificateRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkPeerUpdateCertificateRequest;
+
+    /**
+     * Decodes a NetworkPeerUpdateCertificateRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns NetworkPeerUpdateCertificateRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkPeerUpdateCertificateRequest;
+
+    /**
+     * Verifies a NetworkPeerUpdateCertificateRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a NetworkPeerUpdateCertificateRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns NetworkPeerUpdateCertificateRequest
+     */
+    public static fromObject(object: { [k: string]: any }): NetworkPeerUpdateCertificateRequest;
+
+    /**
+     * Creates a plain object from a NetworkPeerUpdateCertificateRequest message. Also converts values to other types if specified.
+     * @param message NetworkPeerUpdateCertificateRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: NetworkPeerUpdateCertificateRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this NetworkPeerUpdateCertificateRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a NetworkPeerUpdateCertificateResponse. */
+export interface INetworkPeerUpdateCertificateResponse {
+}
+
+/** Represents a NetworkPeerUpdateCertificateResponse. */
+export class NetworkPeerUpdateCertificateResponse implements INetworkPeerUpdateCertificateResponse {
+
+    /**
+     * Constructs a new NetworkPeerUpdateCertificateResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: INetworkPeerUpdateCertificateResponse);
+
+    /**
+     * Creates a new NetworkPeerUpdateCertificateResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns NetworkPeerUpdateCertificateResponse instance
+     */
+    public static create(properties?: INetworkPeerUpdateCertificateResponse): NetworkPeerUpdateCertificateResponse;
+
+    /**
+     * Encodes the specified NetworkPeerUpdateCertificateResponse message. Does not implicitly {@link NetworkPeerUpdateCertificateResponse.verify|verify} messages.
+     * @param message NetworkPeerUpdateCertificateResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: INetworkPeerUpdateCertificateResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified NetworkPeerUpdateCertificateResponse message, length delimited. Does not implicitly {@link NetworkPeerUpdateCertificateResponse.verify|verify} messages.
+     * @param message NetworkPeerUpdateCertificateResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: INetworkPeerUpdateCertificateResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a NetworkPeerUpdateCertificateResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns NetworkPeerUpdateCertificateResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): NetworkPeerUpdateCertificateResponse;
+
+    /**
+     * Decodes a NetworkPeerUpdateCertificateResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns NetworkPeerUpdateCertificateResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): NetworkPeerUpdateCertificateResponse;
+
+    /**
+     * Verifies a NetworkPeerUpdateCertificateResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a NetworkPeerUpdateCertificateResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns NetworkPeerUpdateCertificateResponse
+     */
+    public static fromObject(object: { [k: string]: any }): NetworkPeerUpdateCertificateResponse;
+
+    /**
+     * Creates a plain object from a NetworkPeerUpdateCertificateResponse message. Also converts values to other types if specified.
+     * @param message NetworkPeerUpdateCertificateResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: NetworkPeerUpdateCertificateResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this NetworkPeerUpdateCertificateResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
 /** Properties of a BootstrapPeerGetPublishEnabledRequest. */
 export interface IBootstrapPeerGetPublishEnabledRequest {
 }
