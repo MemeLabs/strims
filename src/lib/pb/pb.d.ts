@@ -13192,9 +13192,6 @@ export interface INetwork {
 
     /** Network altProfileName */
     altProfileName?: (string|null);
-
-    /** Network certificateRenewalRequired */
-    certificateRenewalRequired?: (boolean|null);
 }
 
 /** Represents a Network. */
@@ -13223,9 +13220,6 @@ export class Network implements INetwork {
 
     /** Network altProfileName. */
     public altProfileName: string;
-
-    /** Network certificateRenewalRequired. */
-    public certificateRenewalRequired: boolean;
 
     /**
      * Creates a new Network instance using the specified properties.

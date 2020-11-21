@@ -30537,7 +30537,6 @@ export const Network = $root.Network = (() => {
      * @property {ICertificate|null} [certificate] Network certificate
      * @property {INetworkIcon|null} [icon] Network icon
      * @property {string|null} [altProfileName] Network altProfileName
-     * @property {boolean|null} [certificateRenewalRequired] Network certificateRenewalRequired
      */
 
     /**
@@ -30604,14 +30603,6 @@ export const Network = $root.Network = (() => {
     Network.prototype.altProfileName = "";
 
     /**
-     * Network certificateRenewalRequired.
-     * @member {boolean} certificateRenewalRequired
-     * @memberof Network
-     * @instance
-     */
-    Network.prototype.certificateRenewalRequired = false;
-
-    /**
      * Creates a new Network instance using the specified properties.
      * @function create
      * @memberof Network
@@ -30647,8 +30638,6 @@ export const Network = $root.Network = (() => {
             $root.NetworkIcon.encode(message.icon, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
         if (message.altProfileName != null && Object.hasOwnProperty.call(message, "altProfileName"))
             writer.uint32(/* id 6, wireType 2 =*/50).string(message.altProfileName);
-        if (message.certificateRenewalRequired != null && Object.hasOwnProperty.call(message, "certificateRenewalRequired"))
-            writer.uint32(/* id 7, wireType 0 =*/56).bool(message.certificateRenewalRequired);
         return writer;
     };
 
@@ -30700,9 +30689,6 @@ export const Network = $root.Network = (() => {
                 break;
             case 6:
                 message.altProfileName = reader.string();
-                break;
-            case 7:
-                message.certificateRenewalRequired = reader.bool();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -30763,9 +30749,6 @@ export const Network = $root.Network = (() => {
         if (message.altProfileName != null && message.hasOwnProperty("altProfileName"))
             if (!$util.isString(message.altProfileName))
                 return "altProfileName: string expected";
-        if (message.certificateRenewalRequired != null && message.hasOwnProperty("certificateRenewalRequired"))
-            if (typeof message.certificateRenewalRequired !== "boolean")
-                return "certificateRenewalRequired: boolean expected";
         return null;
     };
 
@@ -30809,8 +30792,6 @@ export const Network = $root.Network = (() => {
         }
         if (object.altProfileName != null)
             message.altProfileName = String(object.altProfileName);
-        if (object.certificateRenewalRequired != null)
-            message.certificateRenewalRequired = Boolean(object.certificateRenewalRequired);
         return message;
     };
 
@@ -30838,7 +30819,6 @@ export const Network = $root.Network = (() => {
             object.certificate = null;
             object.icon = null;
             object.altProfileName = "";
-            object.certificateRenewalRequired = false;
         }
         if (message.id != null && message.hasOwnProperty("id"))
             if (typeof message.id === "number")
@@ -30855,8 +30835,6 @@ export const Network = $root.Network = (() => {
             object.icon = $root.NetworkIcon.toObject(message.icon, options);
         if (message.altProfileName != null && message.hasOwnProperty("altProfileName"))
             object.altProfileName = message.altProfileName;
-        if (message.certificateRenewalRequired != null && message.hasOwnProperty("certificateRenewalRequired"))
-            object.certificateRenewalRequired = message.certificateRenewalRequired;
         return object;
     };
 

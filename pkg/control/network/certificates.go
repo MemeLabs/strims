@@ -21,7 +21,7 @@ func (c *certificateMap) Insert(certificate *pb.Certificate, networkID uint64) {
 		networkKey:  networkKeyForCertificate(certificate),
 		networkID:   networkID,
 		certificate: certificate,
-		trusted:     isNetworkCertificateTrusted(certificate),
+		trusted:     isCertificateTrusted(certificate),
 	})
 }
 

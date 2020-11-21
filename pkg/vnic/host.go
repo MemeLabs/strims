@@ -18,7 +18,7 @@ import (
 )
 
 const reservedPortCount uint16 = 1000
-const hostCertValidDuration = time.Minute
+const hostCertValidDuration = time.Hour
 
 // default network service ports
 const (
