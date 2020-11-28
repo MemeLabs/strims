@@ -62,26 +62,24 @@ type peerIndex struct {
 }
 
 // HandleMessage ...
-func (s *peerIndex) HandleMessage(msg *Message) (forward bool, err error) {
+func (s *peerIndex) HandleMessage(msg *Message) error {
 	var m pb.PeerIndexMessage
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
-		return true, err
+		return err
 	}
 
 	switch b := m.Body.(type) {
 	case *pb.PeerIndexMessage_Publish_:
-		err = s.handlePublish(b.Publish.Record)
+		return s.handlePublish(b.Publish.Record)
 	case *pb.PeerIndexMessage_Unpublish_:
-		err = s.handleUnpublish(b.Unpublish.Record)
+		return s.handleUnpublish(b.Unpublish.Record)
 	case *pb.PeerIndexMessage_SearchRequest_:
-		err = s.handleSearchRequest(b.SearchRequest, msg.SrcHostID())
+		return s.handleSearchRequest(b.SearchRequest, msg.SrcHostID())
 	case *pb.PeerIndexMessage_SearchResponse_:
-		err = s.handleSearchResponse(b.SearchResponse)
+		return s.handleSearchResponse(b.SearchResponse)
 	default:
-		err = errors.New("unexpected message type")
+		return errors.New("unexpected message type")
 	}
-
-	return true, err
 }
 
 func (s *peerIndex) handlePublish(r *pb.PeerIndexMessage_Record) error {

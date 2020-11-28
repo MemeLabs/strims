@@ -3,6 +3,7 @@ package rpc
 import (
 	"context"
 	"errors"
+	"runtime"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
@@ -44,11 +45,19 @@ func NewClient(logger *zap.Logger, dialer Dialer) (*Client, error) {
 		cancel()
 	}()
 
-	return &Client{
+	c := &Client{
 		logger:    logger,
 		transport: transport,
 		cancel:    cancel,
-	}, nil
+	}
+
+	runtime.SetFinalizer(c, clientFinalizer)
+
+	return c, nil
+}
+
+func clientFinalizer(c *Client) {
+	c.Close()
 }
 
 // Client ...

@@ -1,22 +1,27 @@
 package rpc
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"sync"
 
+	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/golang/protobuf/proto"
+	"github.com/golang/protobuf/ptypes/any"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
 
 // VPNDialer ...
 type VPNDialer struct {
-	Logger *zap.Logger
-	Client *vpn.Client
-	Key    []byte
-	Salt   []byte
+	Logger   *zap.Logger
+	Client   *vpn.Client
+	Key      []byte
+	Salt     []byte
+	CertFunc VPNCertFunc
 }
 
 // Dial ...
@@ -27,22 +32,24 @@ func (d *VPNDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Transport,
 	}
 
 	return &VPNTransport{
-		ctx:        ctx,
-		logger:     d.Logger,
-		client:     d.Client,
-		key:        d.Key,
-		salt:       d.Salt,
-		port:       port,
-		dispatcher: dispatcher,
+		ctx:         ctx,
+		logger:      d.Logger,
+		client:      d.Client,
+		key:         d.Key,
+		salt:        d.Salt,
+		port:        port,
+		dispatcher:  dispatcher,
+		certificate: d.CertFunc,
 	}, nil
 }
 
 // VPNServerDialer ...
 type VPNServerDialer struct {
-	Logger *zap.Logger
-	Client *vpn.Client
-	Key    *pb.Key
-	Salt   []byte
+	Logger   *zap.Logger
+	Client   *vpn.Client
+	Key      *pb.Key
+	Salt     []byte
+	CertFunc VPNCertFunc
 }
 
 // Dial ...
@@ -53,13 +60,14 @@ func (d *VPNServerDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Tran
 	}
 
 	c := &VPNTransport{
-		ctx:        ctx,
-		logger:     d.Logger,
-		client:     d.Client,
-		key:        d.Key.Public,
-		salt:       d.Salt,
-		port:       port,
-		dispatcher: dispatcher,
+		ctx:         ctx,
+		logger:      d.Logger,
+		client:      d.Client,
+		key:         d.Key.Public,
+		salt:        d.Salt,
+		port:        port,
+		dispatcher:  dispatcher,
+		certificate: d.CertFunc,
 	}
 
 	addr := &HostAddr{
@@ -75,15 +83,16 @@ func (d *VPNServerDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Tran
 
 // VPNTransport ...
 type VPNTransport struct {
-	ctx        context.Context
-	logger     *zap.Logger
-	client     *vpn.Client
-	key        []byte
-	salt       []byte
-	port       uint16
-	callsIn    vpnCallMap
-	callsOut   vpnCallMap
-	dispatcher Dispatcher
+	ctx         context.Context
+	logger      *zap.Logger
+	client      *vpn.Client
+	key         []byte
+	salt        []byte
+	certificate VPNCertFunc
+	port        uint16
+	callsIn     vpnCallMap
+	callsOut    vpnCallMap
+	dispatcher  Dispatcher
 }
 
 // Listen ...
@@ -101,10 +110,21 @@ func (t *VPNTransport) Listen() error {
 }
 
 // HandleMessage ...
-func (t *VPNTransport) HandleMessage(msg *vpn.Message) (bool, error) {
+func (t *VPNTransport) HandleMessage(msg *vpn.Message) error {
 	req := &pb.Call{}
 	if err := proto.Unmarshal(msg.Body, req); err != nil {
-		return false, nil
+		return err
+	}
+
+	t.logger.Debug("we got here...?")
+	cert := &pb.Certificate{}
+	if err := proto.Unmarshal(req.Headers[vpnCertificateHeader].GetValue(), cert); err != nil {
+		t.logger.Debug("we got here...?", zap.Error(err))
+		return err
+	}
+	if err := t.verifyMessage(msg, req, cert); err != nil {
+		t.logger.Debug("we got here...?", zap.Error(err))
+		return err
 	}
 
 	addr := &HostAddr{
@@ -112,13 +132,14 @@ func (t *VPNTransport) HandleMessage(msg *vpn.Message) (bool, error) {
 		Port:   msg.Header.SrcPort,
 	}
 
+	ctx := &VPNContext{t.ctx, msg, cert}
 	parentCallAccessor := &vpnParentCallAccessor{
 		addr:     addr,
 		id:       req.ParentId,
 		callsIn:  &t.callsIn,
 		callsOut: &t.callsOut,
 	}
-	call := NewCallIn(t.ctx, req, parentCallAccessor)
+	call := NewCallIn(ctx, req, parentCallAccessor)
 	t.callsIn.Insert(addr, call)
 
 	go t.dispatcher.Dispatch(call)
@@ -129,10 +150,29 @@ func (t *VPNTransport) HandleMessage(msg *vpn.Message) (bool, error) {
 		t.callsIn.Delete(addr, req.Id)
 	}()
 
-	return false, nil
+	return nil
 }
 
 func (t *VPNTransport) call(ctx context.Context, call *pb.Call, addr *HostAddr) error {
+	t.logger.Debug("started call")
+	cert, err := t.certificate()
+	if err != nil {
+		return err
+	}
+
+	b := callBuffers.Get().(*proto.Buffer)
+	defer callBuffers.Put(b)
+
+	b.Reset()
+	if err := b.Marshal(cert); err != nil {
+		return err
+	}
+	call.Headers[vpnCertificateHeader] = &any.Any{
+		TypeUrl: anyURLPrefix + proto.MessageName(cert),
+		Value:   b.Bytes(),
+	}
+	t.logger.Debug("sending...")
+
 	return t.client.Network.SendProto(addr.HostID, addr.Port, t.port, call)
 }
 
@@ -154,6 +194,50 @@ func (t *VPNTransport) Call(call *CallOut, fn ResponseFunc) error {
 	}
 
 	return fn()
+}
+
+const vpnCertificateHeader = "vpnCertificate"
+
+func (t *VPNTransport) verifyMessage(msg *vpn.Message, req *pb.Call, cert *pb.Certificate) error {
+	if !bytes.Equal(cert.GetKey(), msg.Trailer.Entries[0].HostID.Bytes(nil)) {
+		return errors.New("certificate host id mismatch")
+	}
+
+	asdf, err := t.certificate()
+	if err != nil {
+		return err
+	}
+
+	if !bytes.Equal(dao.GetRootCert(asdf).Key, cert.GetParent().GetParent().GetKey()) {
+		return errors.New("network key mismatch")
+	}
+	if err := dao.VerifyCertificate(cert); err != nil {
+		return err
+	}
+	if !msg.Verify(0) {
+		return errors.New("invalid message signature")
+	}
+	return nil
+}
+
+// VPNCertFunc ...
+type VPNCertFunc func() (*pb.Certificate, error)
+
+// VPNContext smuggles the vpn message into rpc calls
+type VPNContext struct {
+	context.Context
+	message     *vpn.Message
+	certificate *pb.Certificate
+}
+
+// Message returns the vpn message the call arrived in
+func (c *VPNContext) Message() *vpn.Message {
+	return c.message
+}
+
+// Certificate ...
+func (c *VPNContext) Certificate() *pb.Certificate {
+	return c.certificate
 }
 
 type vpnCallMap struct {

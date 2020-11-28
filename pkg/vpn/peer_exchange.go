@@ -236,14 +236,14 @@ type peerExchange struct {
 }
 
 // HandleMessage ...
-func (s *peerExchange) HandleMessage(msg *Message) (bool, error) {
+func (s *peerExchange) HandleMessage(msg *Message) error {
 	if !msg.Header.DstID.Equals(s.network.host.ID()) || msg.Trailer.Hops == 0 {
-		return true, nil
+		return nil
 	}
 
 	var m pb.PeerExchangeMessage
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
-		return false, err
+		return err
 	}
 
 	s.mediatorsLock.Lock()
@@ -251,17 +251,16 @@ func (s *peerExchange) HandleMessage(msg *Message) (bool, error) {
 
 	switch b := m.Body.(type) {
 	case *pb.PeerExchangeMessage_Offer_:
-		return false, s.handleOffer(b.Offer, msg)
+		return s.handleOffer(b.Offer, msg)
 	case *pb.PeerExchangeMessage_Answer_:
-		return false, s.handleAnswer(b.Answer, msg)
+		return s.handleAnswer(b.Answer, msg)
 	case *pb.PeerExchangeMessage_IceCandidate_:
-		return false, s.handleICECandidate(b.IceCandidate, msg)
+		return s.handleICECandidate(b.IceCandidate, msg)
 	case *pb.PeerExchangeMessage_CallbackRequest_:
-		return false, s.handleCallbackRequest(b.CallbackRequest, msg)
+		return s.handleCallbackRequest(b.CallbackRequest, msg)
+	default:
+		return errors.New("unexpected message type")
 	}
-
-	// return false, errors.New("unexpected message type")
-	return false, nil
 }
 
 // Connect create mediator to negotiate connection with peer

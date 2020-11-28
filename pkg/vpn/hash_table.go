@@ -53,30 +53,28 @@ type hashTable struct {
 }
 
 // HandleMessage ...
-func (s *hashTable) HandleMessage(msg *Message) (forward bool, err error) {
+func (s *hashTable) HandleMessage(msg *Message) error {
 	if msg.Trailer.Hops == 0 {
-		return true, nil
+		return nil
 	}
 
 	var m pb.HashTableMessage
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
-		return true, err
+		return err
 	}
 
 	switch b := m.Body.(type) {
 	case *pb.HashTableMessage_Publish_:
-		err = s.handlePublish(b.Publish.Record)
+		return s.handlePublish(b.Publish.Record)
 	case *pb.HashTableMessage_Unpublish_:
-		err = s.handleUnpublish(b.Unpublish.Record)
+		return s.handleUnpublish(b.Unpublish.Record)
 	case *pb.HashTableMessage_GetRequest_:
-		err = s.handleGetRequest(b.GetRequest, msg.SrcHostID())
+		return s.handleGetRequest(b.GetRequest, msg.SrcHostID())
 	case *pb.HashTableMessage_GetResponse_:
-		err = s.handleGetResponse(b.GetResponse, msg.Header.DstID)
+		return s.handleGetResponse(b.GetResponse, msg.Header.DstID)
 	default:
-		err = errors.New("unexpected message type")
+		return errors.New("unexpected message type")
 	}
-
-	return true, err
 }
 
 func (s *hashTable) handlePublish(r *pb.HashTableMessage_Record) error {

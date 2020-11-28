@@ -6062,6 +6062,876 @@ export namespace DirectoryClientEvent {
     }
 }
 
+/** Properties of a DirectoryPublishRequest. */
+export interface IDirectoryPublishRequest {
+
+    /** DirectoryPublishRequest certificate */
+    certificate?: (ICertificate|null);
+
+    /** DirectoryPublishRequest listing */
+    listing?: (IDirectoryListing|null);
+}
+
+/** Represents a DirectoryPublishRequest. */
+export class DirectoryPublishRequest implements IDirectoryPublishRequest {
+
+    /**
+     * Constructs a new DirectoryPublishRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryPublishRequest);
+
+    /** DirectoryPublishRequest certificate. */
+    public certificate?: (ICertificate|null);
+
+    /** DirectoryPublishRequest listing. */
+    public listing?: (IDirectoryListing|null);
+
+    /**
+     * Creates a new DirectoryPublishRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryPublishRequest instance
+     */
+    public static create(properties?: IDirectoryPublishRequest): DirectoryPublishRequest;
+
+    /**
+     * Encodes the specified DirectoryPublishRequest message. Does not implicitly {@link DirectoryPublishRequest.verify|verify} messages.
+     * @param message DirectoryPublishRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryPublishRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryPublishRequest message, length delimited. Does not implicitly {@link DirectoryPublishRequest.verify|verify} messages.
+     * @param message DirectoryPublishRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryPublishRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryPublishRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryPublishRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryPublishRequest;
+
+    /**
+     * Decodes a DirectoryPublishRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryPublishRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryPublishRequest;
+
+    /**
+     * Verifies a DirectoryPublishRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryPublishRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryPublishRequest
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryPublishRequest;
+
+    /**
+     * Creates a plain object from a DirectoryPublishRequest message. Also converts values to other types if specified.
+     * @param message DirectoryPublishRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryPublishRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryPublishRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryPublishResponse. */
+export interface IDirectoryPublishResponse {
+}
+
+/** Represents a DirectoryPublishResponse. */
+export class DirectoryPublishResponse implements IDirectoryPublishResponse {
+
+    /**
+     * Constructs a new DirectoryPublishResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryPublishResponse);
+
+    /**
+     * Creates a new DirectoryPublishResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryPublishResponse instance
+     */
+    public static create(properties?: IDirectoryPublishResponse): DirectoryPublishResponse;
+
+    /**
+     * Encodes the specified DirectoryPublishResponse message. Does not implicitly {@link DirectoryPublishResponse.verify|verify} messages.
+     * @param message DirectoryPublishResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryPublishResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryPublishResponse message, length delimited. Does not implicitly {@link DirectoryPublishResponse.verify|verify} messages.
+     * @param message DirectoryPublishResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryPublishResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryPublishResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryPublishResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryPublishResponse;
+
+    /**
+     * Decodes a DirectoryPublishResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryPublishResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryPublishResponse;
+
+    /**
+     * Verifies a DirectoryPublishResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryPublishResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryPublishResponse
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryPublishResponse;
+
+    /**
+     * Creates a plain object from a DirectoryPublishResponse message. Also converts values to other types if specified.
+     * @param message DirectoryPublishResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryPublishResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryPublishResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryUnpublishRequest. */
+export interface IDirectoryUnpublishRequest {
+
+    /** DirectoryUnpublishRequest key */
+    key?: (Uint8Array|null);
+}
+
+/** Represents a DirectoryUnpublishRequest. */
+export class DirectoryUnpublishRequest implements IDirectoryUnpublishRequest {
+
+    /**
+     * Constructs a new DirectoryUnpublishRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryUnpublishRequest);
+
+    /** DirectoryUnpublishRequest key. */
+    public key: Uint8Array;
+
+    /**
+     * Creates a new DirectoryUnpublishRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryUnpublishRequest instance
+     */
+    public static create(properties?: IDirectoryUnpublishRequest): DirectoryUnpublishRequest;
+
+    /**
+     * Encodes the specified DirectoryUnpublishRequest message. Does not implicitly {@link DirectoryUnpublishRequest.verify|verify} messages.
+     * @param message DirectoryUnpublishRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryUnpublishRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryUnpublishRequest message, length delimited. Does not implicitly {@link DirectoryUnpublishRequest.verify|verify} messages.
+     * @param message DirectoryUnpublishRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryUnpublishRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryUnpublishRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryUnpublishRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryUnpublishRequest;
+
+    /**
+     * Decodes a DirectoryUnpublishRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryUnpublishRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryUnpublishRequest;
+
+    /**
+     * Verifies a DirectoryUnpublishRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryUnpublishRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryUnpublishRequest
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryUnpublishRequest;
+
+    /**
+     * Creates a plain object from a DirectoryUnpublishRequest message. Also converts values to other types if specified.
+     * @param message DirectoryUnpublishRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryUnpublishRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryUnpublishRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryUnpublishResponse. */
+export interface IDirectoryUnpublishResponse {
+}
+
+/** Represents a DirectoryUnpublishResponse. */
+export class DirectoryUnpublishResponse implements IDirectoryUnpublishResponse {
+
+    /**
+     * Constructs a new DirectoryUnpublishResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryUnpublishResponse);
+
+    /**
+     * Creates a new DirectoryUnpublishResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryUnpublishResponse instance
+     */
+    public static create(properties?: IDirectoryUnpublishResponse): DirectoryUnpublishResponse;
+
+    /**
+     * Encodes the specified DirectoryUnpublishResponse message. Does not implicitly {@link DirectoryUnpublishResponse.verify|verify} messages.
+     * @param message DirectoryUnpublishResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryUnpublishResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryUnpublishResponse message, length delimited. Does not implicitly {@link DirectoryUnpublishResponse.verify|verify} messages.
+     * @param message DirectoryUnpublishResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryUnpublishResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryUnpublishResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryUnpublishResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryUnpublishResponse;
+
+    /**
+     * Decodes a DirectoryUnpublishResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryUnpublishResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryUnpublishResponse;
+
+    /**
+     * Verifies a DirectoryUnpublishResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryUnpublishResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryUnpublishResponse
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryUnpublishResponse;
+
+    /**
+     * Creates a plain object from a DirectoryUnpublishResponse message. Also converts values to other types if specified.
+     * @param message DirectoryUnpublishResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryUnpublishResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryUnpublishResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryJoinRequest. */
+export interface IDirectoryJoinRequest {
+
+    /** DirectoryJoinRequest certificate */
+    certificate?: (ICertificate|null);
+
+    /** DirectoryJoinRequest key */
+    key?: (Uint8Array|null);
+}
+
+/** Represents a DirectoryJoinRequest. */
+export class DirectoryJoinRequest implements IDirectoryJoinRequest {
+
+    /**
+     * Constructs a new DirectoryJoinRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryJoinRequest);
+
+    /** DirectoryJoinRequest certificate. */
+    public certificate?: (ICertificate|null);
+
+    /** DirectoryJoinRequest key. */
+    public key: Uint8Array;
+
+    /**
+     * Creates a new DirectoryJoinRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryJoinRequest instance
+     */
+    public static create(properties?: IDirectoryJoinRequest): DirectoryJoinRequest;
+
+    /**
+     * Encodes the specified DirectoryJoinRequest message. Does not implicitly {@link DirectoryJoinRequest.verify|verify} messages.
+     * @param message DirectoryJoinRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryJoinRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryJoinRequest message, length delimited. Does not implicitly {@link DirectoryJoinRequest.verify|verify} messages.
+     * @param message DirectoryJoinRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryJoinRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryJoinRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryJoinRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryJoinRequest;
+
+    /**
+     * Decodes a DirectoryJoinRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryJoinRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryJoinRequest;
+
+    /**
+     * Verifies a DirectoryJoinRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryJoinRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryJoinRequest
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryJoinRequest;
+
+    /**
+     * Creates a plain object from a DirectoryJoinRequest message. Also converts values to other types if specified.
+     * @param message DirectoryJoinRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryJoinRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryJoinRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryJoinResponse. */
+export interface IDirectoryJoinResponse {
+}
+
+/** Represents a DirectoryJoinResponse. */
+export class DirectoryJoinResponse implements IDirectoryJoinResponse {
+
+    /**
+     * Constructs a new DirectoryJoinResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryJoinResponse);
+
+    /**
+     * Creates a new DirectoryJoinResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryJoinResponse instance
+     */
+    public static create(properties?: IDirectoryJoinResponse): DirectoryJoinResponse;
+
+    /**
+     * Encodes the specified DirectoryJoinResponse message. Does not implicitly {@link DirectoryJoinResponse.verify|verify} messages.
+     * @param message DirectoryJoinResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryJoinResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryJoinResponse message, length delimited. Does not implicitly {@link DirectoryJoinResponse.verify|verify} messages.
+     * @param message DirectoryJoinResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryJoinResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryJoinResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryJoinResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryJoinResponse;
+
+    /**
+     * Decodes a DirectoryJoinResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryJoinResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryJoinResponse;
+
+    /**
+     * Verifies a DirectoryJoinResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryJoinResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryJoinResponse
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryJoinResponse;
+
+    /**
+     * Creates a plain object from a DirectoryJoinResponse message. Also converts values to other types if specified.
+     * @param message DirectoryJoinResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryJoinResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryJoinResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryPartRequest. */
+export interface IDirectoryPartRequest {
+}
+
+/** Represents a DirectoryPartRequest. */
+export class DirectoryPartRequest implements IDirectoryPartRequest {
+
+    /**
+     * Constructs a new DirectoryPartRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryPartRequest);
+
+    /**
+     * Creates a new DirectoryPartRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryPartRequest instance
+     */
+    public static create(properties?: IDirectoryPartRequest): DirectoryPartRequest;
+
+    /**
+     * Encodes the specified DirectoryPartRequest message. Does not implicitly {@link DirectoryPartRequest.verify|verify} messages.
+     * @param message DirectoryPartRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryPartRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryPartRequest message, length delimited. Does not implicitly {@link DirectoryPartRequest.verify|verify} messages.
+     * @param message DirectoryPartRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryPartRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryPartRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryPartRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryPartRequest;
+
+    /**
+     * Decodes a DirectoryPartRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryPartRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryPartRequest;
+
+    /**
+     * Verifies a DirectoryPartRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryPartRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryPartRequest
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryPartRequest;
+
+    /**
+     * Creates a plain object from a DirectoryPartRequest message. Also converts values to other types if specified.
+     * @param message DirectoryPartRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryPartRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryPartRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryPartResponse. */
+export interface IDirectoryPartResponse {
+}
+
+/** Represents a DirectoryPartResponse. */
+export class DirectoryPartResponse implements IDirectoryPartResponse {
+
+    /**
+     * Constructs a new DirectoryPartResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryPartResponse);
+
+    /**
+     * Creates a new DirectoryPartResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryPartResponse instance
+     */
+    public static create(properties?: IDirectoryPartResponse): DirectoryPartResponse;
+
+    /**
+     * Encodes the specified DirectoryPartResponse message. Does not implicitly {@link DirectoryPartResponse.verify|verify} messages.
+     * @param message DirectoryPartResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryPartResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryPartResponse message, length delimited. Does not implicitly {@link DirectoryPartResponse.verify|verify} messages.
+     * @param message DirectoryPartResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryPartResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryPartResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryPartResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryPartResponse;
+
+    /**
+     * Decodes a DirectoryPartResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryPartResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryPartResponse;
+
+    /**
+     * Verifies a DirectoryPartResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryPartResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryPartResponse
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryPartResponse;
+
+    /**
+     * Creates a plain object from a DirectoryPartResponse message. Also converts values to other types if specified.
+     * @param message DirectoryPartResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryPartResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryPartResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryPingRequest. */
+export interface IDirectoryPingRequest {
+}
+
+/** Represents a DirectoryPingRequest. */
+export class DirectoryPingRequest implements IDirectoryPingRequest {
+
+    /**
+     * Constructs a new DirectoryPingRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryPingRequest);
+
+    /**
+     * Creates a new DirectoryPingRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryPingRequest instance
+     */
+    public static create(properties?: IDirectoryPingRequest): DirectoryPingRequest;
+
+    /**
+     * Encodes the specified DirectoryPingRequest message. Does not implicitly {@link DirectoryPingRequest.verify|verify} messages.
+     * @param message DirectoryPingRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryPingRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryPingRequest message, length delimited. Does not implicitly {@link DirectoryPingRequest.verify|verify} messages.
+     * @param message DirectoryPingRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryPingRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryPingRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryPingRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryPingRequest;
+
+    /**
+     * Decodes a DirectoryPingRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryPingRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryPingRequest;
+
+    /**
+     * Verifies a DirectoryPingRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryPingRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryPingRequest
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryPingRequest;
+
+    /**
+     * Creates a plain object from a DirectoryPingRequest message. Also converts values to other types if specified.
+     * @param message DirectoryPingRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryPingRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryPingRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryPingResponse. */
+export interface IDirectoryPingResponse {
+}
+
+/** Represents a DirectoryPingResponse. */
+export class DirectoryPingResponse implements IDirectoryPingResponse {
+
+    /**
+     * Constructs a new DirectoryPingResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryPingResponse);
+
+    /**
+     * Creates a new DirectoryPingResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryPingResponse instance
+     */
+    public static create(properties?: IDirectoryPingResponse): DirectoryPingResponse;
+
+    /**
+     * Encodes the specified DirectoryPingResponse message. Does not implicitly {@link DirectoryPingResponse.verify|verify} messages.
+     * @param message DirectoryPingResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryPingResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryPingResponse message, length delimited. Does not implicitly {@link DirectoryPingResponse.verify|verify} messages.
+     * @param message DirectoryPingResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryPingResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryPingResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryPingResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryPingResponse;
+
+    /**
+     * Decodes a DirectoryPingResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryPingResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryPingResponse;
+
+    /**
+     * Verifies a DirectoryPingResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryPingResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryPingResponse
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryPingResponse;
+
+    /**
+     * Creates a plain object from a DirectoryPingResponse message. Also converts values to other types if specified.
+     * @param message DirectoryPingResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryPingResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryPingResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
 /** Properties of a HashTableMessage. */
 export interface IHashTableMessage {
 
@@ -14551,6 +15421,9 @@ export interface ICall {
 
     /** Call argument */
     argument?: (google.protobuf.IAny|null);
+
+    /** Call headers */
+    headers?: ({ [k: string]: google.protobuf.IAny }|null);
 }
 
 /** Represents a Call. */
@@ -14573,6 +15446,9 @@ export class Call implements ICall {
 
     /** Call argument. */
     public argument?: (google.protobuf.IAny|null);
+
+    /** Call headers. */
+    public headers: { [k: string]: google.protobuf.IAny };
 
     /**
      * Creates a new Call instance using the specified properties.

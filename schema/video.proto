@@ -132,3 +132,111 @@ service Video {
   rpc StartHLSEgress(StartHLSEgressRequest) returns (StartHLSEgressResponse);
   rpc StopHLSEgress(StopHLSEgressRequest) returns (StopHLSEgressResponse);
 }
+
+// message RTMPConfig {
+//   string address = 1;
+//   uint32 port = 2;
+//   repeated uint64 networks = 3;
+// }
+
+// message RTMPHostStream {
+//   uint64 id = 1;
+//   Key stream_key = 2;
+//   Certificate owner_certificate = 3;
+//   string title = 4;
+//   string description = 5;
+//   repeated string tags = 6;
+// }
+
+// message RTMPUpsertStreamRequest {
+//   RTMPConfig config = 1;
+// }
+
+// message RTMPUpsertStreamResponse {
+//   RTMPConfig config = 1;
+// }
+
+// message RTMPDeleteStreamRequest {
+//   uint64 id = 1;
+// }
+
+// message RTMPDeleteStreamResponse {}
+
+// message RTMPDeleteStreamRequest {
+//   uint64 id = 1;
+// }
+
+// message RTMPDeleteStreamResponse {}
+
+// service RTMPHostConfig {
+//   rpc UpsertStream(RTMPUpsertStreamRequest) returns (RTMPUpsertStreamResponse);
+//   rpc DeleteStream(RTMPDeleteStreamRequest) returns (RTMPDeleteStreamResponse);
+// }
+
+// message RTMPHostUpsertStreamRequest {
+//   uint64 id = 1;
+//   Certificate certificate = 2;
+//   string title = 3;
+//   string description = 4;
+//   repeated string tags = 5;
+// }
+
+// message RTMPHostUpsertStreamRequest {
+//   bytes id = 1;
+//   bytes stream_key = 1;
+// }
+
+// message RTMPHostDeleteStreamRequest {
+
+// }
+
+// message RTMPHostDeleteStreamRequest {
+
+// }
+
+// service RTMPHost {
+//   rpc UpsertStream(RTMPHostUpsertStreamRequest) returns (RTMPHostUpsertStreamRequest);
+//   rpc DeleteStream(RTMPHostDeleteStreamRequest) returns (RTMPHostDeleteStreamRequest);
+// }
+
+// message RTMPStream {
+//   uint64 id = 1;
+//   bytes server_key = 2;
+//   uint64 server_id = 3;
+//   bytes stream_key = 4;
+//   string uri = 4;
+//   string title = 5;
+//   string description = 6;
+//   repeated string tags = 7;
+// }
+
+// message RTMPConfigCreateStreamRequest {
+//   string title = 5;
+//   string description = 6;
+//   repeated string tags = 7;
+// }
+
+// message RTMPConfigCreateStreamResponse {
+
+// }
+
+// message RTMPConfigUpdateStreamRequest {
+//   string title = 5;
+//   string description = 6;
+//   repeated string tags = 7;
+// }
+
+// message RTMPConfigUpdateStreamResponse {
+
+// }
+
+// message RTMPConfigDeleteStreamRequest {
+//   uint64 id = 1;
+// }
+
+// message RTMPConfigDeleteStreamResponse {}
+
+// service RTMPConfig {
+//   rpc UpsertStream(RTMPConfigUpsertStreamRequest) returns (RTMPConfigUpsertStreamResponse);
+//   rpc DeleteStream(RTMPConfigDeleteStreamRequest) returns (RTMPConfigDeleteStreamResponse);
+// }

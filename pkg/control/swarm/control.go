@@ -2,6 +2,7 @@ package swarm
 
 import (
 	"context"
+	"log"
 	"sync"
 	"sync/atomic"
 
@@ -26,6 +27,7 @@ func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers) *
 		events:    events,
 		swarms:    map[uint64]*Swarm{},
 		peers:     map[uint64]*Peer{},
+		scheduler: ppspp.NewScheduler(context.Background(), logger),
 	}
 }
 
@@ -39,6 +41,7 @@ type Control struct {
 	swarms    map[uint64]*Swarm
 	nextID    uint64
 	peers     map[uint64]*Peer
+	scheduler *ppspp.Scheduler
 }
 
 // Run ...
@@ -51,13 +54,39 @@ func (t *Control) Run(ctx context.Context) {
 			// 	t.handlePeerAdd(event.Peer, event.Client)
 			// case PeerRemoveEvent:
 			// 	t.handlePeerRemove(event.Peer)
+			case event.NetworkStart:
+				t.handleNetworkStart(e.Network)
 			case event.NetworkStop:
-				t.handleVPNStop(e.Network)
+				t.handleNetworkStop(e.Network)
+			case event.NetworkPeerOpen:
+				t.handleNetworkPeerOpen()
+			case event.NetworkPeerClose:
+				t.handleNetworkPeerClose()
 			}
 		case <-ctx.Done():
 			return
 		}
 	}
+}
+
+func (t *Control) handleNetworkStart(network *pb.Network) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+}
+
+func (t *Control) handleNetworkStop(network *pb.Network) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+}
+
+func (t *Control) handleNetworkPeerOpen() {
+	log.Println("do something with peer network...")
+}
+
+func (t *Control) handleNetworkPeerClose() {
+	log.Println("do something with peer network...")
 }
 
 // AddPeer ...
@@ -90,12 +119,6 @@ func (t *Control) RemovePeer(id uint64) {
 	delete(t.peers, id)
 }
 
-func (t *Control) handleVPNStop(network *pb.Network) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-}
-
 // Add ...
 func (t *Control) Add(swarm *ppspp.Swarm) *Swarm {
 	s := &Swarm{
@@ -107,22 +130,47 @@ func (t *Control) Add(swarm *ppspp.Swarm) *Swarm {
 	defer t.lock.Unlock()
 
 	t.swarms[s.ID] = s
-	t.observers.Swarm.Emit(event.SwarmAdd{swarm})
+	t.observers.Swarm.Emit(event.SwarmAdd{Swarm: swarm})
 
 	return s
 }
 
 // Remove ...
-func (t *Control) Remove(p *Swarm) {
+func (t *Control) Remove(swarm *Swarm) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	delete(t.swarms, p.ID)
-	t.observers.Swarm.Emit(event.SwarmRemove{p.Swarm})
+	delete(t.swarms, swarm.ID)
+	t.observers.Swarm.Emit(event.SwarmRemove{Swarm: swarm.Swarm})
+}
+
+// List ...
+func (t *Control) List(swarm *Swarm) []*Swarm {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	return nil
+}
+
+// Publish ...
+func (t *Control) Publish(swarmID, networkID uint64) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
 }
 
 // Swarm ...
 type Swarm struct {
-	ID    uint64
-	Swarm *ppspp.Swarm
+	ID       uint64
+	Swarm    *ppspp.Swarm
+	Networks []*Network
+}
+
+// Publish ...
+func (s *Swarm) Publish(networkID uint64) {
+	// s.Networks = append(s.Networks)
+}
+
+// Network ...
+type Network struct {
 }

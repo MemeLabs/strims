@@ -79,8 +79,7 @@ type channelMessageHandler struct {
 	*Channel
 }
 
-func (c channelMessageHandler) HandleMessage(m *Message) (bool, error) {
+func (c channelMessageHandler) HandleMessage(m *Message) error {
 	c.messages <- m
-
-	return false, nil
+	return nil
 }

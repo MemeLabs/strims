@@ -15,7 +15,7 @@ import (
 )
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile, observers *event.Observers) *Control {
+func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) *Control {
 	events := make(chan interface{}, 128)
 	observers.Peer.Notify(events)
 	observers.Network.Notify(events)
@@ -24,7 +24,6 @@ func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, prof
 		logger:    logger,
 		vpn:       vpn,
 		store:     store,
-		profile:   profile,
 		observers: observers,
 		events:    events,
 		peers:     map[uint64]*Peer{},
@@ -33,10 +32,9 @@ func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, prof
 
 // Control ...
 type Control struct {
-	logger  *zap.Logger
-	vpn     *vpn.Host
-	store   *dao.ProfileStore
-	profile *pb.Profile
+	logger *zap.Logger
+	vpn    *vpn.Host
+	store  *dao.ProfileStore
 
 	lock              sync.Mutex
 	observers         *event.Observers
@@ -98,13 +96,6 @@ func (t *Control) AddPeer(id uint64, peer *vnic.Peer, client PeerClient) *Peer {
 func (t *Control) RemovePeer(id uint64) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-
-	p, ok := t.peers[id]
-	if !ok {
-		return
-	}
-
-	_ = p
 
 	delete(t.peers, id)
 }

@@ -4,7 +4,7 @@ import (
 	"crypto/sha256"
 	"testing"
 
-	"github.com/docker/docker/pkg/testutil/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestXOR(t *testing.T) {
@@ -22,11 +22,12 @@ func TestMarshalUnmarshal(t *testing.T) {
 	b0 := hash.Sum(nil)
 
 	id0, err := UnmarshalID(b0)
-	assert.NilError(t, err)
+	assert.Nil(t, err)
 
 	b1 := id0.Bytes(nil)
 	id1, err := UnmarshalID(b1)
-	assert.NilError(t, err)
+	assert.Nil(t, err)
 
 	assert.Equal(t, id0, id1)
+	assert.Equal(t, b0, b1)
 }

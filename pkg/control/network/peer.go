@@ -17,6 +17,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
 
@@ -48,7 +49,6 @@ func NewPeer(
 		vpn:          vpn,
 		certificates: certificates,
 
-		links:      make(map[uint64]*networkBinding),
 		keyCount:   make(chan uint32, 1),
 		bindings:   make(chan []*pb.NetworkPeerBinding, 1),
 		brokerConn: peer.Channel(vnic.NetworkBrokerPort),
@@ -67,7 +67,7 @@ type Peer struct {
 	certificates *certificateMap
 
 	lock        sync.Mutex
-	links       map[uint64]*networkBinding
+	links       llrb.LLRB
 	negotiating uint32
 	keyCount    chan uint32
 	bindings    chan []*pb.NetworkPeerBinding
@@ -109,42 +109,36 @@ func (p *Peer) HandlePeerUpdateCertificate(cert *pb.Certificate) error {
 	defer p.lock.Unlock()
 
 	if err := dao.VerifyCertificate(cert); err != nil {
-		p.logger.Debug("update certificate failed", zap.Error(err))
 		return err
 	}
-	if !bytes.Equal(p.peer.Certificate.Key, cert.Key) {
-		p.logger.Debug("update certificate failed", zap.Error(ErrCertificateOwnerMismatch))
+	if !isPeerCertificateOwner(p.peer, cert) {
 		return ErrCertificateOwnerMismatch
 	}
 	if !isCertificateTrusted(cert) {
-		p.logger.Debug("update certificate failed", zap.Error(ErrProvisionalCertificate))
 		return ErrProvisionalCertificate
 	}
 
-	networkKey := networkKeyForCertificate(cert)
-	c, ok := p.certificates.Get(networkKey)
-	if !ok {
-		p.logger.Debug("update certificate failed", zap.Error(ErrNetworkNotFound))
-		return ErrNetworkNotFound
-	}
-	link, ok := p.links[c.networkID]
-	if !ok {
-		p.logger.Debug("update certificate failed", zap.Error(ErrNetworkBindingNotFound))
+	li := p.links.Get(&networkBinding{networkKey: networkKeyForCertificate(cert)})
+	if li == nil {
 		return ErrNetworkBindingNotFound
 	}
 
+	link := li.(*networkBinding)
 	link.peerCertTrusted = true
-	return p.addNetwork(networkKey, link)
+
+	return p.openNetwork(link)
 }
 
 func (p *Peer) sendCertificateUpdate(network *pb.Network) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	link, ok := p.links[network.Id]
-	if !ok {
+	li := p.links.Get(&networkBinding{networkKey: networkKeyForCertificate(network.Certificate)})
+	if li == nil {
 		return ErrNetworkBindingNotFound
 	}
+
+	link := li.(*networkBinding)
 	link.localCertTrusted = true
 
 	err := p.client.Network().UpdateCertificate(
@@ -156,32 +150,42 @@ func (p *Peer) sendCertificateUpdate(network *pb.Network) error {
 		return err
 	}
 
-	return p.addNetwork(networkKeyForCertificate(network.Certificate), link)
+	return p.openNetwork(link)
 }
 
-func (p *Peer) closeNetworkWithoutNotifyingPeer(networkKey []byte) {
+func (p *Peer) closeNetworkWithoutNotifyingPeer(networkKey []byte) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	c, ok := p.certificates.Get(networkKey)
-	if !ok {
-		return
+	li := p.links.Get(&networkBinding{networkKey: networkKey})
+	if li == nil {
+		return ErrNetworkBindingNotFound
 	}
-	if _, ok := p.links[c.networkID]; !ok {
-		return
-	}
-	delete(p.links, c.networkID)
-
-	if len(p.links) == 0 {
-		p.peer.Close()
-		return
-	}
+	p.links.Delete(li)
 
 	client, ok := p.vpn.Client(networkKey)
 	if !ok {
-		return
+		return ErrNetworkNotFound
 	}
 	client.Network.RemovePeer(p.peer.HostID())
+
+	p.observers.Network.Emit(event.NetworkPeerClose{
+		PeerID:     p.id,
+		NetworkID:  li.(*networkBinding).networkID,
+		NetworkKey: networkKey,
+	})
+
+	p.logger.Info(
+		"removed peer from network",
+		zap.Stringer("peer", p.peer.HostID()),
+		logutil.ByteHex("network", networkKey),
+	)
+
+	if p.links.Len() == 0 {
+		p.peer.Close()
+	}
+
+	return nil
 }
 
 func (p *Peer) closeNetwork(networkKey []byte) {
@@ -189,15 +193,33 @@ func (p *Peer) closeNetwork(networkKey []byte) {
 	p.client.Network().Close(context.Background(), &pb.NetworkPeerCloseRequest{Key: networkKey}, &pb.NetworkPeerCloseResponse{})
 }
 
-func (p *Peer) hasNetworkBinding(networkID uint64) bool {
+func (p *Peer) networkKeysForLinks() [][]byte {
 	p.lock.Lock()
 	defer p.lock.Unlock()
-	return p.links[networkID] != nil
+
+	keys := make([][]byte, p.links.Len())
+	p.links.AscendLessThan(llrb.Inf(1), func(li llrb.Item) bool {
+		keys = append(keys, li.(*networkBinding).networkKey)
+		return true
+	})
+	return keys
+}
+
+func (p *Peer) close() {
+	for _, key := range p.networkKeysForLinks() {
+		p.closeNetworkWithoutNotifyingPeer(key)
+	}
+}
+
+func (p *Peer) hasNetworkBinding(networkKey []byte) bool {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	return p.links.Has(&networkBinding{networkKey: networkKey})
 }
 
 func (p *Peer) negotiateNetworks(ctx context.Context) error {
 	if !atomic.CompareAndSwapUint32(&p.negotiating, 0, 1) {
-		return errors.New("already syncing")
+		return errors.New("cannot begin new negotiation until previous negotiation finishes")
 	}
 	defer atomic.StoreUint32(&p.negotiating, 0)
 
@@ -222,12 +244,14 @@ func (p *Peer) exchangeBindings(ctx context.Context, keys [][]byte) error {
 			return errors.New("one or both peers have zero keys")
 		}
 
+		// the psz sender role scales better than the receiver so by default we
+		// pick role by comparing key counts. the role choice has to be symmetric
+		// so host ids break ties.
 		preferSend := p.peer.HostID().Less(p.vpn.VNIC().ID())
 		if len(keys) > int(keyCount) || (len(keys) == int(keyCount) && preferSend) {
 			return p.exchangeBindingsAsSender(ctx, keys)
-		} else {
-			return p.exchangeBindingsAsReceiver(ctx, keys)
 		}
+		return p.exchangeBindingsAsReceiver(ctx, keys)
 	}
 }
 
@@ -289,7 +313,7 @@ func (p *Peer) sendNetworkBindings(ctx context.Context, keys [][]byte) ([]*pb.Ne
 			return nil, fmt.Errorf("certificate not found: %w", ErrNetworkNotFound)
 		}
 
-		if _, ok := p.links[c.networkID]; ok {
+		if p.links.Has(&networkBinding{networkKey: key}) {
 			continue
 		}
 
@@ -330,69 +354,81 @@ func (p *Peer) verifyNetworkBindings(bindings []*pb.NetworkPeerBinding) ([][]byt
 }
 
 func (p *Peer) handleNetworkBindings(networkBindings, peerNetworkBindings []*pb.NetworkPeerBinding) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
 	for i, peerBinding := range peerNetworkBindings {
 		binding := networkBindings[i]
 		networkKey := networkKeyForCertificate(peerBinding.Certificate)
 
-		if !bytes.Equal(p.peer.Certificate.Key, peerBinding.Certificate.Key) {
+		if !isPeerCertificateOwner(p.peer, peerBinding.Certificate) {
 			return ErrCertificateOwnerMismatch
 		}
 		if !bytes.Equal(networkKeyForCertificate(binding.Certificate), networkKey) {
 			return ErrNetworkAuthorityMismatch
 		}
 		if peerBinding.Port > uint32(math.MaxUint16) {
-			return ErrNetworkIDBounds
-		}
-
-		link := &networkBinding{
-			localPort:        uint16(binding.Port),
-			peerPort:         uint16(peerBinding.Port),
-			localCertTrusted: isCertificateTrusted(binding.Certificate),
-			peerCertTrusted:  isCertificateTrusted(peerBinding.Certificate),
+			return ErrNetworkPortBounds
 		}
 
 		c, ok := p.certificates.Get(networkKey)
 		if !ok {
 			continue
 		}
-		p.links[c.networkID] = link
+
+		link := &networkBinding{
+			networkKey:       networkKey,
+			networkID:        c.networkID,
+			localPort:        uint16(binding.Port),
+			peerPort:         uint16(peerBinding.Port),
+			localCertTrusted: isCertificateTrusted(binding.Certificate),
+			peerCertTrusted:  isCertificateTrusted(peerBinding.Certificate),
+		}
+		p.links.ReplaceOrInsert(link)
 
 		if !isCertificateTrusted(binding.Certificate) || !isCertificateTrusted(peerBinding.Certificate) {
 			continue
 		}
 
-		if err := p.addNetwork(networkKey, link); err != nil {
+		if err := p.openNetwork(link); err != nil {
 			return err
 		}
 	}
 	return nil
 }
 
-func (p *Peer) addNetwork(networkKey []byte, link *networkBinding) error {
+func (p *Peer) openNetwork(link *networkBinding) error {
 	if link.open || !link.localCertTrusted || !link.peerCertTrusted {
 		return nil
 	}
 	link.open = true
 
-	p.logger.Info(
-		"adding peer to network",
-		zap.Stringer("peer", p.peer.HostID()),
-		logutil.ByteHex("network", networkKey),
-		zap.Uint16("localPort", link.localPort),
-		zap.Uint16("peerPort", link.peerPort),
-	)
-
-	client, ok := p.vpn.Client(networkKey)
+	client, ok := p.vpn.Client(link.networkKey)
 	if !ok {
 		return ErrNetworkNotFound
 	}
 	client.Network.AddPeer(p.peer, link.localPort, link.peerPort)
 
-	p.observers.Network.Emit(event.NetworkPeerOpen{PeerID: p.id, NetworkKey: networkKey})
+	p.observers.Network.Emit(event.NetworkPeerOpen{
+		PeerID:     p.id,
+		NetworkID:  link.networkID,
+		NetworkKey: link.networkKey,
+	})
+
+	p.logger.Info(
+		"added peer to network",
+		zap.Stringer("peer", p.peer.HostID()),
+		logutil.ByteHex("network", link.networkKey),
+		zap.Uint16("localPort", link.localPort),
+		zap.Uint16("peerPort", link.peerPort),
+	)
+
 	return nil
 }
 
 type networkBinding struct {
+	networkKey       []byte
+	networkID        uint64
 	localPort        uint16
 	peerPort         uint16
 	localCertTrusted bool
@@ -400,21 +436,9 @@ type networkBinding struct {
 	open             bool
 }
 
-func isCertificateTrusted(cert *pb.Certificate) bool {
-	return bytes.Equal(networkKeyForCertificate(cert), cert.GetParent().Key)
-}
-
-func networkKeyForCertificate(cert *pb.Certificate) []byte {
-	return dao.GetRootCert(cert).Key
-}
-
-func nextCertificateRenewTime(network *pb.Network) time.Time {
-	if isCertificateSubjectMismatched(network) {
-		return time.Now()
+func (b *networkBinding) Less(o llrb.Item) bool {
+	if o, ok := o.(*networkBinding); ok {
+		return bytes.Compare(b.networkKey, o.networkKey) == -1
 	}
-	return time.Unix(int64(network.Certificate.NotAfter), 0).Add(-certRenewScheduleAheadDuration)
-}
-
-func isCertificateSubjectMismatched(network *pb.Network) bool {
-	return network.AltProfileName != "" && network.AltProfileName != network.Certificate.Subject
+	return !o.Less(b)
 }

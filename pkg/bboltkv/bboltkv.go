@@ -91,7 +91,7 @@ func (t Tx) ScanPrefix(prefix string) (values [][]byte, err error) {
 
 	p := []byte(prefix)
 	for k, v := c.Seek(p); k != nil && bytes.HasPrefix(k, p); k, v = c.Next() {
-		values = append(values, append([]byte{}, v...))
+		values = append(values, append(make([]byte, 0, len(v)), v...))
 	}
 
 	return values, nil

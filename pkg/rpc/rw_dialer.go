@@ -15,8 +15,8 @@ import (
 
 const defaultMaxMessageBytes = 512 * 1024
 
-// ErrMessageToolarge emitted when received message exceeds configured limit
-var ErrMessageToolarge = errors.New("received message too large")
+// ErrMessageTooLarge emitted when received message exceeds configured limit
+var ErrMessageTooLarge = errors.New("received message too large")
 
 // RWDialer ...
 type RWDialer struct {
@@ -62,7 +62,7 @@ func (t *RWTransport) Listen() error {
 			return err
 		}
 		if int(l) > t.maxMessageBytes {
-			return ErrMessageToolarge
+			return ErrMessageTooLarge
 		}
 		if int(l) > cap(b) {
 			b = make([]byte, l)

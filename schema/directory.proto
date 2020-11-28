@@ -4,6 +4,8 @@ option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
 option java_package = "gg.strims.ppspp.proto";
 option swift_prefix = "PB";
 
+import "profile.proto";
+
 message GetDirectoryEventsRequest {
   bytes network_key = 1;
 }
@@ -93,4 +95,41 @@ message DirectoryClientEvent {
     Part part = 4;
     Ping ping = 5;
   }
+}
+
+message DirectoryPublishRequest {
+  Certificate certificate = 1;
+  DirectoryListing listing = 2;
+}
+
+message DirectoryPublishResponse {}
+
+message DirectoryUnpublishRequest {
+  bytes key = 1;
+}
+
+message DirectoryUnpublishResponse {}
+
+message DirectoryJoinRequest {
+  Certificate certificate = 1;
+  bytes key = 2;
+}
+
+message DirectoryJoinResponse {}
+
+message DirectoryPartRequest {}
+
+message DirectoryPartResponse {}
+
+message DirectoryPingRequest {}
+
+message DirectoryPingResponse {}
+
+
+service Directory {
+  rpc Publish(DirectoryPublishRequest) returns (DirectoryPublishResponse);
+  rpc Unpublish(DirectoryUnpublishRequest) returns (DirectoryUnpublishResponse);
+  rpc Join(DirectoryJoinRequest) returns (DirectoryJoinResponse);
+  rpc Part(DirectoryPartRequest) returns (DirectoryPartResponse);
+  rpc Ping(DirectoryPingRequest) returns (DirectoryPingResponse);
 }

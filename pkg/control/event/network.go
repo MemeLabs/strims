@@ -2,6 +2,11 @@ package event
 
 import "github.com/MemeLabs/go-ppspp/pkg/pb"
 
+// NetworkLoad ...
+type NetworkLoad struct {
+	Network *pb.Network
+}
+
 // NetworkAdd ...
 type NetworkAdd struct {
 	Network *pb.Network
@@ -42,12 +47,14 @@ type NetworkPeerBindings struct {
 // NetworkPeerOpen ...
 type NetworkPeerOpen struct {
 	PeerID     uint64
+	NetworkID  uint64
 	NetworkKey []byte
 }
 
 // NetworkPeerClose ...
 type NetworkPeerClose struct {
 	PeerID     uint64
+	NetworkID  uint64
 	NetworkKey []byte
 }
 

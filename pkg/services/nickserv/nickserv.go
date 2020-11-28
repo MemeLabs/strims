@@ -121,10 +121,10 @@ func (s *NickServ) Close() {
 	})
 }
 
-func (s *NickServ) HandleMessage(msg *vpn.Message) (forward bool, err error) {
+func (s *NickServ) HandleMessage(msg *vpn.Message) error {
 	var m pb.NickServRPCCommand
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
-		return true, err
+		return err
 	}
 
 	valid := ed25519.Verify(m.SourcePublicKey, msg.Body, msg.Trailer.Entries[0].Signature)
@@ -133,7 +133,7 @@ func (s *NickServ) HandleMessage(msg *vpn.Message) (forward bool, err error) {
 			zap.Uint64("requestID", m.RequestId),
 			zap.Binary("publicKey", m.SourcePublicKey),
 		)
-		return false, dao.ErrInvalidSignature
+		return dao.ErrInvalidSignature
 	}
 
 	var resp proto.Message
@@ -167,7 +167,7 @@ func (s *NickServ) HandleMessage(msg *vpn.Message) (forward bool, err error) {
 
 	// TODO: return some errors that can occur during handling
 
-	return false, s.Send(resp, msg.Trailer.Entries[0].HostID, msg.Header.SrcPort, msg.Header.DstPort)
+	return s.Send(resp, msg.Trailer.Entries[0].HostID, msg.Header.SrcPort, msg.Header.DstPort)
 }
 
 func (s *NickServ) Send(msg proto.Message, dstID kademlia.ID, dstPort, srcPort uint16) error {

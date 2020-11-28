@@ -6,10 +6,14 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
+	"github.com/MemeLabs/go-ppspp/pkg/services/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
@@ -17,17 +21,17 @@ import (
 var ErrNetworkNotFound = errors.New("network not found")
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile, observers *event.Observers) *Control {
+func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers, dialer *dialer.Control) *Control {
 	events := make(chan interface{}, 128)
 	observers.Network.Notify(events)
 
 	return &Control{
 		logger:    logger,
 		vpn:       vpn,
-		profile:   profile,
 		observers: observers,
 		events:    events,
-		servers:   map[uint64]*Server{},
+		dialer:    dialer,
+		servers:   map[uint64]context.CancelFunc{},
 	}
 }
 
@@ -35,11 +39,11 @@ func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, prof
 type Control struct {
 	logger            *zap.Logger
 	vpn               *vpn.Host
-	profile           *pb.Profile
 	observers         *event.Observers
 	lock              sync.Mutex
-	servers           map[uint64]*Server
+	servers           map[uint64]context.CancelFunc
 	events            chan interface{}
+	dialer            *dialer.Control
 	certRenewTimeout  <-chan time.Time
 	lastCertRenewTime time.Time
 }
@@ -66,45 +70,48 @@ func (t *Control) handleNetworkStart(ctx context.Context, network *pb.Network) {
 		return
 	}
 
-	client, ok := t.vpn.Client(network.Key.Public)
-	if !ok {
-		return
-	}
-
 	t.logger.Info(
 		"starting certificate authority",
 		logutil.ByteHex("network", network.Key.Public),
 	)
-	ca, err := NewServer(ctx, t.logger, client, network)
+
+	server := rpc.NewServer(t.logger)
+	api.RegisterCAService(server, ca.NewService(t.logger, network))
+
+	dialer, err := t.dialer.ServerDialer(network.Key.Public, network.Key, ca.AddressSalt)
 	if err != nil {
 		t.logger.Error(
 			"starting certificate authority failed",
 			logutil.ByteHex("network", network.Key.Public),
 			zap.Error(err),
 		)
+		return
 	}
 
-	t.servers[network.Id] = ca
+	ctx, cancel := context.WithCancel(ctx)
+	go server.Listen(ctx, dialer)
+
+	t.servers[network.Id] = cancel
 }
 
 func (t *Control) handleNetworkStop(network *pb.Network) {
 	if server, ok := t.servers[network.Id]; ok {
-		server.Close()
+		server()
 	}
 }
 
 // ForwardRenewRequest ...
 func (t *Control) ForwardRenewRequest(ctx context.Context, cert *pb.Certificate, csr *pb.CertificateRequest) (*pb.Certificate, error) {
-	client, ok := t.vpn.Client(networkKeyForCertificate(cert))
-	if !ok {
-		return nil, ErrNetworkNotFound
-	}
-
-	caClient, err := NewClient(t.logger, client)
+	networkKey := networkKeyForCertificate(cert)
+	dialer, err := t.dialer.ClientDialer(networkKey, networkKey, ca.AddressSalt)
 	if err != nil {
 		return nil, err
 	}
-	defer caClient.Close()
+	client, err := rpc.NewClient(t.logger, dialer)
+	if err != nil {
+		return nil, err
+	}
+	caClient := api.NewCAClient(client)
 
 	renewReq := &pb.CARenewRequest{
 		Certificate:        cert,

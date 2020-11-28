@@ -105,6 +105,7 @@ func send(ctx context.Context, id, parentID uint64, method string, arg proto.Mes
 			TypeUrl: anyURLPrefix + proto.MessageName(arg),
 			Value:   b.Bytes(),
 		},
+		Headers: map[string]*any.Any{},
 	}
 	return fn(ctx, rc)
 }

@@ -241,12 +241,12 @@ func (n *Network) handleFrame(p *vnic.Peer, f vnic.Frame) error {
 
 // Send ...
 func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
-	n.logger.Debug(
-		"sending message",
-		zap.Stringer("dst", id),
-		zap.Uint16("srcPort", srcPort),
-		zap.Uint16("dstPort", port),
-	)
+	// n.logger.Debug(
+	// 	"sending message",
+	// 	zap.Stringer("dst", id),
+	// 	zap.Uint16("srcPort", srcPort),
+	// 	zap.Uint16("dstPort", port),
+	// )
 	return n.handleMessage(&Message{
 		Header: MessageHeader{
 			DstID:   id,
@@ -280,21 +280,19 @@ func (n *Network) SendProto(id kademlia.ID, port, srcPort uint16, msg proto.Mess
 }
 
 func (n *Network) handleMessage(m *Message) error {
-	n.logger.Debug(
-		"received message",
-		zap.Stringer("src", m.SrcHostID()),
-		zap.Uint16("srcPort", m.Header.SrcPort),
-		zap.Uint16("dstPort", m.Header.DstPort),
-	)
+	// n.logger.Debug(
+	// 	"received message",
+	// 	zap.Stringer("src", m.SrcHostID()),
+	// 	zap.Uint16("srcPort", m.Header.SrcPort),
+	// 	zap.Uint16("dstPort", m.Header.DstPort),
+	// )
 
 	if m.Header.DstPort < reservedPortCount {
-		forward, err := n.callHandler(m)
-		if !forward || err != nil {
+		if err := n.callHandler(m); err != nil {
 			return err
 		}
 	} else if m.Header.DstID.Equals(n.host.ID()) {
-		_, err := n.callHandler(m)
-		return err
+		return n.callHandler(m)
 	}
 
 	if m.Trailer.Contains(n.host.ID()) {
@@ -310,11 +308,11 @@ func (n *Network) handleMessage(m *Message) error {
 	return n.sendMessage(m)
 }
 
-func (n *Network) callHandler(m *Message) (bool, error) {
+func (n *Network) callHandler(m *Message) error {
 	if h, ok := n.handlers[m.Header.DstPort]; ok {
 		return h.HandleMessage(m)
 	}
-	return true, nil
+	return nil
 }
 
 // sendMessage ...
@@ -380,7 +378,7 @@ func (n *Network) sendMessage(m *Message) error {
 
 // MessageHandler ...
 type MessageHandler interface {
-	HandleMessage(m *Message) (bool, error)
+	HandleMessage(m *Message) error
 }
 
 // TODO: handle eviction

@@ -8,11 +8,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/control/ca"
+	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
+	"github.com/MemeLabs/go-ppspp/pkg/services/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -27,11 +30,11 @@ var (
 	ErrNetworkAuthorityMismatch = errors.New("network ca mismatch")
 	ErrCertificateOwnerMismatch = errors.New("init and network certificate key mismatch")
 	ErrProvisionalCertificate   = errors.New("provisional certificate is not supported")
-	ErrNetworkIDBounds          = errors.New("network id out of range")
+	ErrNetworkPortBounds        = errors.New("network port out of range")
 )
 
 const certRecheckInterval = time.Minute * 5
-const certRenewScheduleAheadDuration = time.Hour * 24 & 7
+const certRenewScheduleAheadDuration = time.Hour * 24 * 7
 
 // Broker negotiates common networks with peers.
 type Broker interface {
@@ -46,23 +49,24 @@ type ReadWriteFlusher interface {
 }
 
 // NewControl ...
-func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile, observers *event.Observers, ca *ca.Control) *Control {
+func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile, observers *event.Observers, dialer *dialer.Control) *Control {
 	events := make(chan interface{}, 128)
 	observers.Network.Notify(events)
 	observers.Peer.Notify(events)
 
 	return &Control{
-		logger:       logger,
-		broker:       broker,
-		vpn:          vpn,
-		store:        store,
-		profile:      profile,
-		observers:    observers,
-		ca:           ca,
-		events:       events,
-		networks:     map[uint64]*pb.Network{},
-		peers:        map[uint64]*Peer{},
-		certificates: &certificateMap{},
+		logger:           logger,
+		broker:           broker,
+		vpn:              vpn,
+		store:            store,
+		profile:          profile,
+		observers:        observers,
+		events:           events,
+		dialer:           dialer,
+		certRenewTimeout: time.NewTimer(0),
+		networks:         map[uint64]*pb.Network{},
+		peers:            map[uint64]*Peer{},
+		certificates:     &certificateMap{},
 	}
 }
 
@@ -76,10 +80,10 @@ type Control struct {
 
 	lock              sync.Mutex
 	observers         *event.Observers
-	ca                *ca.Control
-	certRenewTimeout  <-chan time.Time
-	nextCertRenewTime time.Time
 	events            chan interface{}
+	dialer            *dialer.Control
+	certRenewTimeout  *time.Timer
+	nextCertRenewTime time.Time
 	networks          map[uint64]*pb.Network
 	peers             map[uint64]*Peer
 	certificates      *certificateMap
@@ -92,7 +96,7 @@ func (t *Control) Run(ctx context.Context) {
 
 	for {
 		select {
-		case <-t.certRenewTimeout:
+		case <-t.certRenewTimeout.C:
 			t.renewExpiredCerts()
 		case e := <-t.events:
 			switch e := e.(type) {
@@ -167,8 +171,9 @@ func (t *Control) handleNetworkCertUpdate(network *pb.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
+	networkKey := networkKeyForCertificate(network.Certificate)
 	for _, peer := range t.peers {
-		if peer.hasNetworkBinding(network.Id) {
+		if peer.hasNetworkBinding(networkKey) {
 			go peer.sendCertificateUpdate(network)
 		}
 	}
@@ -223,19 +228,19 @@ func (t *Control) renewCertificateWithRenewFunc(network *pb.Network, fn certific
 
 // renewCertificate ...
 func (t *Control) renewCertificate(network *pb.Network) error {
-	client, ok := t.vpn.Client(networkKeyForCertificate(network.Certificate))
-	if !ok {
-		return ErrNetworkNotFound
-	}
-
 	return t.renewCertificateWithRenewFunc(
 		network,
 		func(ctx context.Context, cert *pb.Certificate, csr *pb.CertificateRequest) (*pb.Certificate, error) {
-			caClient, err := ca.NewClient(t.logger, client)
+			networkKey := networkKeyForCertificate(network.Certificate)
+			dialer, err := t.dialer.ClientDialer(networkKey, networkKey, ca.AddressSalt)
 			if err != nil {
 				return nil, err
 			}
-			defer caClient.Close()
+			client, err := rpc.NewClient(t.logger, dialer)
+			if err != nil {
+				return nil, err
+			}
+			caClient := api.NewCAClient(client)
 
 			renewReq := &pb.CARenewRequest{
 				Certificate:        cert,
@@ -285,6 +290,7 @@ func (t *Control) RemovePeer(id uint64) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
+	t.peers[id].close()
 	delete(t.peers, id)
 }
 
@@ -298,8 +304,9 @@ func (t *Control) startNetworks() {
 	}
 
 	for _, network := range networks {
-		t.certificates.Insert(network)
 		t.networks[network.Id] = network
+		t.certificates.Insert(network)
+		t.dialer.ReplaceOrInsertNetwork(network)
 
 		cert := dao.GetRootCert(network.Certificate)
 
@@ -344,7 +351,7 @@ func (t *Control) scheduleCertRenewal() {
 		minNextTime = t.nextCertRenewTime
 	}
 
-	t.certRenewTimeout = time.After(minNextTime.Sub(now))
+	t.certRenewTimeout.Reset(minNextTime.Sub(now))
 }
 
 func (t *Control) renewExpiredCerts() {
@@ -410,6 +417,7 @@ func (t *Control) setCertificate(id uint64, cert *pb.Certificate) error {
 		},
 		func(network *pb.Network) {
 			t.certificates.Insert(network)
+			t.dialer.ReplaceOrInsertNetwork(network)
 			t.observers.Network.Emit(event.NetworkCertUpdate{Network: proto.Clone(network).(*pb.Network)})
 		},
 	)
@@ -441,6 +449,7 @@ func (t *Control) Add(network *pb.Network) error {
 
 	t.networks[network.Id] = network
 	t.certificates.Insert(network)
+	t.dialer.ReplaceOrInsertNetwork(network)
 
 	t.observers.Network.Emit(event.NetworkAdd{Network: network})
 	t.observers.Network.Emit(event.NetworkStart{Network: network})
@@ -471,11 +480,12 @@ func (t *Control) Remove(id uint64) error {
 		return err
 	}
 
+	t.dialer.RemoveNetwork(network)
 	t.certificates.Delete(networkKey)
 	delete(t.networks, id)
 
-	t.observers.Network.Emit(event.NetworkRemove{Network: network})
 	t.observers.Network.Emit(event.NetworkStop{Network: network})
+	t.observers.Network.Emit(event.NetworkRemove{Network: network})
 
 	return nil
 }

@@ -28,7 +28,7 @@ func NewWriter(o WriterOptions) (*Writer, error) {
 		Verifier:               s.verifier,
 		Writer:                 store.NewWriter(s.pubSub, s.chunkSize()),
 		WriterOptions: integrity.WriterOptions{
-			ChunksPerSignature: 32,
+			ChunksPerSignature: s.chunksPerSignature(),
 		},
 	})
 	if err != nil {

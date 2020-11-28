@@ -85,7 +85,7 @@ func (m *MessageTrailer) Unmarshal(b []byte) (n int, err error) {
 }
 
 // Marshal ...
-func (m *MessageTrailer) Marshal(b []byte, msg []byte, host *vnic.Host) (n int, err error) {
+func (m *MessageTrailer) Marshal(b []byte) (n int, err error) {
 	for i := 0; i < m.Hops; i++ {
 		d, err := m.Entries[i].Marshal(b[n:])
 		if err != nil {
@@ -93,14 +93,6 @@ func (m *MessageTrailer) Marshal(b []byte, msg []byte, host *vnic.Host) (n int, 
 		}
 		n += d
 	}
-
-	d, err := host.ID().Marshal(b[n:])
-	if err != nil {
-		return 0, err
-	}
-	n += d
-	n += copy(b[n:], ed25519.Sign(host.Key().Private, msg))
-
 	return n, nil
 }
 
@@ -147,6 +139,8 @@ func (m *MessageTrailerEntry) Unmarshal(b []byte) (n int, err error) {
 
 // Message ...
 type Message struct {
+	rawBytes []byte
+
 	Header  MessageHeader
 	Body    []byte
 	Trailer MessageTrailer
@@ -177,6 +171,21 @@ func (m *Message) SrcHostID() (id kademlia.ID) {
 	return m.Trailer.Entries[0].HostID
 }
 
+// Verify checks the integrity of a message with the signature at the given hop.
+func (m *Message) Verify(hop int) bool {
+	// short circuit for loopback messages
+	if m.Trailer.Hops == 0 {
+		return true
+	}
+
+	if m.Trailer.Hops <= hop {
+		return false
+	}
+	trailer := m.Trailer.Entries[hop]
+	msgLen := messageHeaderLen + len(m.Body) + hop*messageTrailerLen + kademlia.IDLength
+	return ed25519.Verify(trailer.HostID.Bytes(nil), m.rawBytes[:msgLen], trailer.Signature)
+}
+
 // Marshal ...
 func (m *Message) Marshal(b []byte, host *vnic.Host) (n int, err error) {
 	if len(b) < m.Size() {
@@ -191,11 +200,18 @@ func (m *Message) Marshal(b []byte, host *vnic.Host) (n int, err error) {
 
 	n += copy(b[n:], m.Body)
 
-	d, err = m.Trailer.Marshal(b[n:], b[:n], host)
+	d, err = m.Trailer.Marshal(b[n:])
 	if err != nil {
 		return 0, err
 	}
 	n += d
+
+	d, err = host.ID().Marshal(b[n:])
+	if err != nil {
+		return 0, err
+	}
+	n += d
+	n += copy(b[n:], ed25519.Sign(host.Key().Private, b[:n]))
 
 	return n, nil
 }
@@ -221,6 +237,7 @@ func (m *Message) Unmarshal(b []byte) (n int, err error) {
 	}
 	n += d
 
+	m.rawBytes = b[:n]
 	return n, nil
 }
 

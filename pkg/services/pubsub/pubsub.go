@@ -170,10 +170,10 @@ func (s *Server) send(e *pb.PubSubEvent) (int, error) {
 }
 
 // HandleMessage ...
-func (s *Server) HandleMessage(msg *vpn.Message) (forward bool, err error) {
+func (s *Server) HandleMessage(msg *vpn.Message) error {
 	var req pb.PubSubEvent
 	if err := proto.Unmarshal(msg.Body, &req); err != nil {
-		return false, err
+		return err
 	}
 
 	switch b := req.Body.(type) {
@@ -183,7 +183,7 @@ func (s *Server) HandleMessage(msg *vpn.Message) (forward bool, err error) {
 		log.Printf("some other message type? %T", req.Body)
 	}
 
-	return true, nil
+	return nil
 }
 
 // NewClient ...

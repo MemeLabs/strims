@@ -63,12 +63,13 @@ func NewNode(logger *zap.Logger, i int) (*Node, error) {
 
 // Node ...
 type Node struct {
-	Store   *dao.ProfileStore
-	Profile *pb.Profile
-	ID      kademlia.ID
-	VNIC    *vnic.Host
-	VPN     *vpn.Host
-	Client  *vpn.Client
+	Store    *dao.ProfileStore
+	Profile  *pb.Profile
+	ID       kademlia.ID
+	VNIC     *vnic.Host
+	VPN      *vpn.Host
+	Client   *vpn.Client
+	HostCert *pb.Certificate
 
 	peers map[string]struct{}
 	conns []*ppspptest.MeterConn
@@ -115,22 +116,17 @@ func (c *Cluster) Run() error {
 	}
 
 	for _, node := range c.Nodes[1:] {
-		csr, err := dao.NewCertificateRequest(
-			node.Profile.Key,
-			pb.KeyUsage_KEY_USAGE_PEER|pb.KeyUsage_KEY_USAGE_SIGN,
-			dao.WithSubject(c.Nodes[0].Profile.Name),
-		)
+		peerCert, err := createCert(node.Profile.Key, node.Profile.Name, c.Network.Key, c.Network.Certificate)
 		if err != nil {
 			return err
 		}
-
-		cert, err := dao.SignCertificateRequest(csr, time.Hour*24, c.Network.Key)
+		hostCert, err := createCert(node.Profile.Key, node.Profile.Name, c.Network.Key, c.Network.Certificate)
 		if err != nil {
 			return err
 		}
-		cert.ParentOneof = &pb.Certificate_Parent{Parent: c.Network.Certificate}
+		node.HostCert = hostCert
 
-		node.Client, err = node.VPN.AddNetwork(cert)
+		node.Client, err = node.VPN.AddNetwork(peerCert)
 		if err != nil {
 			return err
 		}
@@ -193,16 +189,35 @@ func (c *Cluster) Run() error {
 	return nil
 }
 
+func createCert(key *pb.Key, subject string, signingKey *pb.Key, signingCert *pb.Certificate) (*pb.Certificate, error) {
+	csr, err := dao.NewCertificateRequest(
+		key,
+		pb.KeyUsage_KEY_USAGE_PEER|pb.KeyUsage_KEY_USAGE_SIGN,
+		dao.WithSubject(subject),
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	cert, err := dao.SignCertificateRequest(csr, time.Hour*24, signingKey)
+	if err != nil {
+		return nil, err
+	}
+	cert.ParentOneof = &pb.Certificate_Parent{Parent: signingCert}
+
+	return cert, nil
+}
+
 // MessageHandlerFunc ...
-func MessageHandlerFunc(fn func(*vpn.Message) (bool, error)) vpn.MessageHandler {
+func MessageHandlerFunc(fn func(*vpn.Message) error) vpn.MessageHandler {
 	return &messageHandler{fn}
 }
 
 type messageHandler struct {
-	handleMessage func(*vpn.Message) (bool, error)
+	handleMessage func(*vpn.Message) error
 }
 
-func (h *messageHandler) HandleMessage(msg *vpn.Message) (bool, error) {
+func (h *messageHandler) HandleMessage(msg *vpn.Message) error {
 	return h.handleMessage(msg)
 }
 

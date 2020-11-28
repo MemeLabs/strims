@@ -169,27 +169,6 @@ func (s *networkService) StopVPN(ctx context.Context, r *pb.StopVPNRequest) (*pb
 	return nil, errors.New("not implemented")
 }
 
-// // loads the NetworkController fron the session store
-// // TODO: move to (s *Session) getNetworkController ?
-// func (s *Network) getNetworkController(ctx context.Context) (*NetworkController, error) {
-// 	session, err := contextSession(ctx)
-// 	if err != nil {
-// 		return nil, err
-// 	}
-
-// 	d, ok := session.Values.Load(vpnKey)
-// 	if !ok {
-// 		return nil, errors.New("could not get vpn data")
-// 	}
-
-// 	data, ok := d.(vpnData)
-// 	if !ok {
-// 		return nil, errors.New("vpn data has unexpected type")
-// 	}
-
-// 	return data.controller, nil
-// }
-
 // GetDirectoryEvents ...
 func (s *networkService) GetDirectoryEvents(ctx context.Context, r *pb.GetDirectoryEventsRequest) (<-chan *pb.DirectoryServerEvent, error) {
 	// ctl, err := s.getNetworkController(ctx)
