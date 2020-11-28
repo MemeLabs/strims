@@ -7,11 +7,11 @@ import (
 	"github.com/golang/geo/s2"
 )
 
-type billingType string
+type BillingType string
 
 const (
-	Monthly billingType = "monthly"
-	Hourly  billingType = "hourly"
+	Monthly BillingType = "monthly"
+	Hourly  BillingType = "hourly"
 )
 
 // A Driver is defines the implementation of a third party driver such as
@@ -49,7 +49,7 @@ type CreateRequest struct {
 	SKU    string
 	SSHKey string
 	// hourly(0) | monthly(1)
-	BillingType billingType
+	BillingType BillingType
 }
 
 // ListRequest ...
@@ -92,15 +92,17 @@ type Price struct {
 
 // Node represents a host
 type Node struct {
-	ProviderID string    `json:"provider_id,omitempty"`
-	Name       string    `json:"name,omitempty"`
-	Memory     int       `json:"memory,omitempty"`
-	CPUs       int       `json:"vcpus,omitempty"`
-	Disk       int       `json:"disk,omitempty"`
-	Networks   *Networks `json:"networks,omitempty"`
-	Status     string    `json:"status,omitempty"`
-	Region     *Region   `json:"region,omitempty"`
-	SKU        *SKU      `json:"sku,omitempty"`
+	ProviderID       string    `json:"provider_id,omitempty"`
+	Name             string    `json:"name,omitempty"`
+	Memory           int       `json:"memory,omitempty"`
+	CPUs             int       `json:"vcpus,omitempty"`
+	Disk             int       `json:"disk,omitempty"`
+	Networks         *Networks `json:"networks,omitempty"`
+	Status           string    `json:"status,omitempty"`
+	Region           *Region   `json:"region,omitempty"`
+	SKU              *SKU      `json:"sku,omitempty"`
+	WireguardPrivKey string
+	WireguardIPv4    string
 }
 
 // Networks represents the Node's networks.

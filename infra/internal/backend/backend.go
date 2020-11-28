@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -18,8 +19,10 @@ import (
 	"github.com/MemeLabs/go-ppspp/infra/internal/models"
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/MemeLabs/go-ppspp/infra/pkg/wgutil"
+	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/mitchellh/mapstructure"
 	"github.com/volatiletech/sqlboiler/v4/boil"
+	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"golang.org/x/crypto/ssh"
 
 	// db driver
@@ -159,6 +162,8 @@ func New(cfg Config) (*Backend, error) {
 		return nil, err
 	}
 
+	boil.SetDB(db)
+
 	flake := sonyflake.NewSonyflake(sonyflake.Settings{
 		StartTime: cfg.FlakeStartTime,
 	})
@@ -236,7 +241,8 @@ func (b *Backend) SSHPublicKey() string {
 	return string(bytes.Trim(d, "\r\n\t "))
 }
 
-func (b *Backend) NextWGIPv4(ctx context.Context, activeNodes models.NodeSlice) (string, error) {
+func (b *Backend) nextWGIPv4(ctx context.Context, activeNodes models.NodeSlice) (string, error) {
+	runtime.Breakpoint()
 OUTER:
 	for i := 1; i < 255; i++ {
 		for _, node := range activeNodes {
@@ -259,10 +265,78 @@ OUTER:
 	return "", fmt.Errorf("failed to find next wg ipv4")
 }
 
-func (b *Backend) InsertNode(ctx context.Context, node *node.Node, wgIP, wgKey string) error {
+func (b *Backend) CreateNode(
+	ctx context.Context,
+	driver node.Driver,
+	hostname, region, sku string,
+	billingType node.BillingType,
+) (*node.Node, error) {
+
+	req := &node.CreateRequest{
+		Name:        hostname,
+		Region:      region,
+		SKU:         sku,
+		SSHKey:      b.SSHPublicKey(),
+		BillingType: billingType,
+	}
+	n, err := driver.Create(ctx, req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create node(%v): %w", req, err)
+	}
+
+	slice, err := models.Nodes(qm.Where("active=?", 1)).All(ctx, b.DB)
+	if err != nil {
+		return nil, err
+	}
+
+	for i := 0; i < len(slice); i++ {
+		for _, peer := range b.Conf.Peers {
+			if peer.Endpoint == slice[i].IPV4 {
+				continue
+			}
+		}
+
+		b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
+			PublicKey:           slice[i].WireguardKey,
+			AllowedIPs:          slice[i].WireguardIP,
+			Endpoint:            slice[i].IPV4,
+			PersistentKeepalive: 25,
+		})
+	}
+
+	wgIPv4, err := b.nextWGIPv4(ctx, slice)
+	if wgIPv4 == "" || err != nil {
+		return nil, fmt.Errorf("failed to get next wg ipv4: %w", err)
+	}
+
+	wgPriv, wgPub, err := wgutil.GenerateKey()
+	if wgPriv == "" || err != nil {
+		return nil, fmt.Errorf("failed to create wg keys: %w", err)
+	}
+
+	b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
+		PublicKey:           wgPub,
+		AllowedIPs:          wgIPv4,
+		Endpoint:            n.Networks.V4[0],
+		PersistentKeepalive: 25,
+	})
+
+	n.WireguardIPv4 = wgIPv4
+	n.WireguardPrivKey = wgPriv
+
+	return n, nil
+}
+
+func (b *Backend) InsertNode(ctx context.Context, node *node.Node) error {
+
+	id, err := dao.GenerateSnowflake()
+	if err != nil {
+		return err
+	}
 
 	// TODO: node pricing
 	nodeEntry := &models.Node{
+		ID:         int64(id),
 		Active:     1,
 		StartedAt:  time.Now().UnixNano(),
 		ProviderID: node.ProviderID,
@@ -275,12 +349,12 @@ func (b *Backend) InsertNode(ctx context.Context, node *node.Node, wgIP, wgKey s
 		RegionName:   node.Region.Name,
 		RegionLat:    float64(node.Region.LatLng.Lat),
 		RegionLng:    float64(node.Region.LatLng.Lng),
-		WireguardIP:  wgIP,
-		WireguardKey: wgKey,
+		WireguardIP:  node.WireguardIPv4,
+		WireguardKey: node.WireguardPrivKey,
 	}
 
 	if err := nodeEntry.Insert(ctx, b.DB, boil.Infer()); err != nil {
-		return err
+		return fmt.Errorf("failed to insert node: %w", err)
 	}
 	return nil
 }
@@ -336,9 +410,8 @@ func (b *Backend) UpdateController() error {
 		return fmt.Errorf("failed to push file to container: %w", err)
 	}
 
-	// TODO: remove `lxc exec`
 	if err := run(
-		"lxc", "exec", "-T", containerName, "--",
+		"lxc", "exec", "-T", containerName, "--", // TODO: remove `lxc exec`
 		"python3", "/mnt/controller-sync-wg.py", location,
 	); err != nil {
 		return fmt.Errorf("failed to update controller: %w", err)
@@ -346,12 +419,7 @@ func (b *Backend) UpdateController() error {
 	return nil
 }
 
-func (b *Backend) controllerSync(newConfLocation string) error {
-
-	return nil
-}
-
-func (b *Backend) InitNode(ctx context.Context, node *node.Node, user, wgIP string) error {
+func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) error {
 
 	// Continuously retry ssh'ing into the new node. We only do this to ensure
 	// that it is connectable by the time the master node begins initilization.
@@ -369,12 +437,21 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user, wgIP stri
 		return fmt.Errorf("failed to connect to node: %w", err)
 	}
 
+	/*
+	   node_user=$1
+	   node_addr=$2
+	   node_key_path=$3
+	   wg_ip=$4
+	   wg_config=$5
+	   node_name=$6
+	*/
+
 	if err := run(
 		"scripts/node-start.sh",
 		user,
 		node.Networks.V4[0],
 		b.SSHIdentityFile(),
-		wgIP,
+		node.WireguardIPv4,
 		b.Conf.String(),
 		node.Name,
 	); err != nil {
