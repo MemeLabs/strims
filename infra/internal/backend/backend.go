@@ -11,7 +11,6 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +31,9 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+// TODO(jbpratt): delete this for a flag
+const containerName = "strims-k8s"
 
 // DriverConfig ...
 type DriverConfig interface {
@@ -242,11 +244,10 @@ func (b *Backend) SSHPublicKey() string {
 }
 
 func (b *Backend) nextWGIPv4(ctx context.Context, activeNodes models.NodeSlice) (string, error) {
-	runtime.Breakpoint()
 OUTER:
 	for i := 1; i < 255; i++ {
 		for _, node := range activeNodes {
-			addr := strings.Split(node.IPV4, ".")
+			addr := strings.Split(node.WireguardIP, ".")
 			if len(addr) == 4 {
 				host, err := strconv.Atoi(addr[3])
 				if err != nil {
@@ -299,7 +300,7 @@ func (b *Backend) CreateNode(
 		b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
 			PublicKey:           slice[i].WireguardKey,
 			AllowedIPs:          slice[i].WireguardIP,
-			Endpoint:            slice[i].IPV4,
+			Endpoint:            fmt.Sprintf("%s:%d", slice[i].IPV4, 51820),
 			PersistentKeepalive: 25,
 		})
 	}
@@ -317,7 +318,7 @@ func (b *Backend) CreateNode(
 	b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
 		PublicKey:           wgPub,
 		AllowedIPs:          wgIPv4,
-		Endpoint:            n.Networks.V4[0],
+		Endpoint:            fmt.Sprintf("%s:%d", n.Networks.V4[0], 51820),
 		PersistentKeepalive: 25,
 	})
 
@@ -334,7 +335,6 @@ func (b *Backend) InsertNode(ctx context.Context, node *node.Node) error {
 		return err
 	}
 
-	// TODO: node pricing
 	nodeEntry := &models.Node{
 		ID:         int64(id),
 		Active:     1,
@@ -346,11 +346,13 @@ func (b *Backend) InsertNode(ctx context.Context, node *node.Node) error {
 		Disk:       int64(node.Disk),
 		IPV4:       node.Networks.V4[0],
 		// IPV6:       node.Networks.V6[0],
-		RegionName:   node.Region.Name,
-		RegionLat:    float64(node.Region.LatLng.Lat),
-		RegionLng:    float64(node.Region.LatLng.Lng),
-		WireguardIP:  node.WireguardIPv4,
-		WireguardKey: node.WireguardPrivKey,
+		RegionName:      node.Region.Name,
+		RegionLat:       float64(node.Region.LatLng.Lat),
+		RegionLng:       float64(node.Region.LatLng.Lng),
+		WireguardIP:     node.WireguardIPv4,
+		WireguardKey:    node.WireguardPrivKey,
+		SKUPriceHourly:  node.SKU.PriceHourly.Value,
+		SKUPriceMonthly: node.SKU.PriceMonthly.Value,
 	}
 
 	if err := nodeEntry.Insert(ctx, b.DB, boil.Infer()); err != nil {
@@ -360,8 +362,6 @@ func (b *Backend) InsertNode(ctx context.Context, node *node.Node) error {
 }
 
 func (b *Backend) UpdateController() error {
-	const containerName = "strims-k8s"
-	const location = "/mnt/wg0.conf"
 
 	// write the wg cfg to a temp file
 	tmp, err := ioutil.TempFile("", "goppspp")
@@ -402,19 +402,28 @@ func (b *Backend) UpdateController() error {
 		}
 	*/
 	// TODO: this assumes running from lxc host which is not accurate long term.
+	const location = "/mnt/wg0.conf"
+
+	if err := lxcpush(tmp.Name(), location); err != nil {
+		return err
+	}
 	// This can be removed as the temp file will be written directly on the
 	// container.
-	if err := run(
-		"lxc", "file", "push", tmp.Name(), fmt.Sprintf("%s%s", containerName, location),
-	); err != nil {
-		return fmt.Errorf("failed to push file to container: %w", err)
-	}
-
 	if err := run(
 		"lxc", "exec", "-T", containerName, "--", // TODO: remove `lxc exec`
 		"python3", "/mnt/controller-sync-wg.py", location,
 	); err != nil {
 		return fmt.Errorf("failed to update controller: %w", err)
+	}
+	return nil
+}
+
+// TODO(jbpratt): delete
+func lxcpush(from, to string) error {
+	if err := run(
+		"lxc", "file", "push", from, fmt.Sprintf("%s%s", containerName, to),
+	); err != nil {
+		return fmt.Errorf("failed to push file to container: %w", err)
 	}
 	return nil
 }
@@ -431,7 +440,7 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) er
 		if err == nil {
 			break
 		}
-		time.Sleep(500 * time.Millisecond)
+		time.Sleep(time.Second)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to connect to node: %w", err)
@@ -447,7 +456,8 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) er
 	*/
 
 	if err := run(
-		"scripts/node-start.sh",
+		"lxc", "exec", "-T", containerName, "--", // TODO: remove `lxc exec`
+		"/mnt/node-start.sh",
 		user,
 		node.Networks.V4[0],
 		b.SSHIdentityFile(),
@@ -464,7 +474,8 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) er
 func (b *Backend) SyncNodes(ctx context.Context, nodes []*node.Node) error {
 	for _, node := range nodes {
 		if err := run(
-			"scripts/node-sync-wg.sh",
+			"lxc", "exec", "-T", containerName, "--", // TODO: remove `lxc exec`
+			"/mnt/node-sync-wg.sh",
 			// TODO: can we just have a map of default user keyed on provider?
 			"",
 			node.Networks.V4[0],
@@ -506,8 +517,28 @@ func sshToNode(user, addr, privKeyPath string) (*ssh.Client, error) {
 // executes a script locally. Expects a shebang and the script to be executable
 func run(args ...string) error {
 	fmt.Printf("+ %q\n", strings.Join(args, " "))
-	if output, err := exec.Command(args[0], args[1:]...).Output(); err != nil {
-		return fmt.Errorf("failed to exec cmd: %w with %q", err, output)
+	cmd := exec.Command(args[0], args[1:]...)
+
+	stderr, err := cmd.StderrPipe()
+	if err != nil {
+		return err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return err
+	}
+
+	copy := func(w io.Writer, r io.Reader) {
+		if _, err := io.Copy(w, r); err != nil {
+			panic(err)
+		}
+	}
+
+	go copy(os.Stderr, stderr)
+	go copy(os.Stdout, stdout)
+
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("failed to exec cmd: %w", err)
 	}
 	return nil
 }

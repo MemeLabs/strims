@@ -4,9 +4,6 @@ import (
 	"crypto/rand"
 	"encoding/json"
 	"fmt"
-	"io"
-	"os"
-	"os/exec"
 	"path"
 	"runtime"
 	"time"
@@ -68,19 +65,19 @@ var createCmd = &cobra.Command{
 		}
 
 		jsonDump(n)
+		if err := backend.InsertNode(cmd.Context(), n); err != nil {
+			return fmt.Errorf("failed to insert node(%v): %w", n, err)
+		}
+
+		if err := backend.UpdateController(); err != nil {
+			return fmt.Errorf("failed to update controller config(%v): %w", backend.Conf, err)
+		}
+
+		if err := backend.InitNode(cmd.Context(), n, d.DefaultUser()); err != nil {
+			return fmt.Errorf("failed to init node(%v): %w", nil, err)
+		}
+
 		/*
-			if err := backend.InsertNode(cmd.Context(), n); err != nil {
-				return fmt.Errorf("failed to insert node(%v): %w", n, err)
-			}
-
-			if err := backend.UpdateController(); err != nil {
-				return fmt.Errorf("failed to update controller config(%v): %w", backend.Conf, err)
-			}
-
-			if err := backend.InitNode(cmd.Context(), n, d.DefaultUser()); err != nil {
-				return fmt.Errorf("failed to init node(%v): %w", nil, err)
-			}
-
 			// TODO: controller should only have peers updated, not entire conf..
 			if err := backend.SyncNodes(cmd.Context(), nil); err != nil {
 				return fmt.Errorf("failed to sync nodes: %w", err)
@@ -102,27 +99,6 @@ func jsonDump(i interface{}) {
 		path.Base(file),
 		line, string(b),
 	)
-}
-
-func relayStdio(cmd *exec.Cmd) error {
-	stderr, err := cmd.StderrPipe()
-	if err != nil {
-		return err
-	}
-	stdout, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-
-	copy := func(w io.Writer, r io.Reader) {
-		if _, err := io.Copy(w, r); err != nil {
-			panic(err)
-		}
-	}
-
-	go copy(os.Stderr, stderr)
-	go copy(os.Stdout, stdout)
-	return nil
 }
 
 func generateHostname(provider, region string) string {

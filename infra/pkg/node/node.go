@@ -101,8 +101,8 @@ type Node struct {
 	Status           string    `json:"status,omitempty"`
 	Region           *Region   `json:"region,omitempty"`
 	SKU              *SKU      `json:"sku,omitempty"`
-	WireguardPrivKey string
-	WireguardIPv4    string
+	WireguardPrivKey string    `json:"wireguard_priv_key,omitempty"`
+	WireguardIPv4    string    `json:"wireguard_ipv4,omitempty"`
 }
 
 // Networks represents the Node's networks.
