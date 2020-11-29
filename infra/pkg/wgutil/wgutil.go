@@ -25,6 +25,16 @@ func GenerateKey() (private, public string, err error) {
 	return
 }
 
+func PublicFromPrivate(private string) (string, error) {
+	key, err := base64.StdEncoding.DecodeString(private)
+	if err != nil {
+		return "", err
+	}
+
+	pub := ecdh.X25519().PublicKey(key).([32]byte)
+	return base64.StdEncoding.EncodeToString(pub[:]), nil
+}
+
 // InterfaceConfig ...
 type InterfaceConfig struct {
 	PrivateKey string

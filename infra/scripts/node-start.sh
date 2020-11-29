@@ -8,7 +8,7 @@ wg_ip=$4
 wg_config=$5
 node_name=$6
 
-read -ra join_cmd <<< "$(kubeadm token create --print-join-command | tr -d '\n')"
+read -ra join_cmd <<< "$(sudo kubeadm token create --print-join-command | tr -d '\n')"
 k8s_api_server_endpoint=${join_cmd[2]}
 k8s_token=${join_cmd[4]}
 k8s_ca_cert_hash=${join_cmd[6]}
@@ -81,5 +81,5 @@ nodeRegistration:
     node-ip: $wg_ip
 EOF
 
-kubeadm join --config=/tmp/kubeadm.yml
+kubeadm join --v=5 --config=/tmp/kubeadm.yml
 CMD

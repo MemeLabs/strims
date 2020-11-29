@@ -18,7 +18,9 @@ def main() -> int:
     wg_conf_file = "/etc/wireguard/wg0.conf"
     shutil.copy2(wg_conf_file, "/tmp/wg0.conf")
     shutil.copy2(args.conf, wg_conf_file)
-    subprocess.run(["bash", "-c", "wg", "setconf", "wg0", "<(wg-quick strip wg0)"])
+    # subprocess.run(["bash", "-c", "wg", "setconf", "wg0", "<(wg-quick strip wg0)"])
+    subprocess.run(["bash", "-c", "wg-quick down wg0"])
+    subprocess.run(["bash", "-c", "wg-quick up wg0"])
 
     return 0
 

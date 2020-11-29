@@ -10,8 +10,8 @@ import (
 	"io/ioutil"
 	"os"
 	"os/exec"
+	"path"
 	"reflect"
-	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -32,6 +32,21 @@ import (
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
+
+var (
+	controllerSyncScript string
+	nodeStartScript      string
+)
+
+func init() {
+	h, err := os.UserHomeDir()
+	if err != nil {
+		panic(err)
+	}
+
+	controllerSyncScript = path.Join(h, "controller-sync-wg.py")
+	nodeStartScript = path.Join(h, "node-start.sh")
+}
 
 // TODO(jbpratt): delete this for a flag
 const containerName = "strims-k8s"
@@ -105,8 +120,8 @@ type Config struct {
 	SSH            struct {
 		IdentityFile string
 	}
-	InterfaceConfig    wgutil.InterfaceConfig
-	ControllerPublicIP string
+	InterfaceConfig         wgutil.InterfaceConfig
+	PublicControllerAddress string
 }
 
 var driverConfigType = reflect.TypeOf((*DriverConfig)(nil)).Elem()
@@ -212,7 +227,7 @@ func New(cfg Config) (*Backend, error) {
 		flake:             flake,
 		sshIdentityFile:   cfg.SSH.IdentityFile,
 		Conf:              cfg.InterfaceConfig,
-		ControllerAddress: cfg.ControllerPublicIP,
+		ControllerAddress: cfg.PublicControllerAddress,
 	}, nil
 }
 
@@ -333,6 +348,7 @@ func (b *Backend) CreateNode(
 
 	n.WireguardIPv4 = wgIPv4
 	n.WireguardPrivKey = wgPriv
+	n.WireguardPubKey = wgPub
 
 	return n, nil
 }
@@ -387,62 +403,37 @@ func (b *Backend) UpdateController() error {
 		return fmt.Errorf("failed to close temp file: %w", err)
 	}
 
-	// TODO: with the understanding that the final binary will be executed on
-	// the lxc master we can just do the work from the python script in Go all
-	// of this can be replaced with:
 	/*
 		const wgConf = "/etc/wireguard/wg0.conf"
-		tmp, err := ioutil.TempFile("", "goppspp")
-		if err != nil {
-			return fmt.Errorf("failed to create tmp file: %w", err)
-		}
-		defer os.Remove(tmp.Name())
 
 		// back up wireguard conf
+		if err := copyFile(wgConf, "/tmp/wg0.conf"); err != nil {
+			return fmt.Errorf("failed to copy file: (%s to %s) %v", "/tmp/wg0.conf", wgConf, err)
+		}
+
+		// replace wg conf with new conf
 		if err := copyFile(tmp.Name(), wgConf); err != nil {
 			return fmt.Errorf("failed to copy file: (%s to %s) %v", tmp.Name(), wgConf, err)
 		}
 
-		// replace wg conf with new conf
-		if err := copyFile(wgConf, newConfLocation); err != nil {
-			return fmt.Errorf("failed to copy file: (%s to %s) %v", wgConf, newConfLocation, err)
-		}
-
-		if err := run("wg", "setconf", "wg0", "<(", "wg-quick", "strip", "wg0", ")"); err != nil {
+		if err := run("sudo", "wg", "setconf", "wg0", "<(", "wg-quick", "strip", "wg0", ")"); err != nil {
 			return fmt.Errorf("failed to run 'wg setconf': %v", err)
 		}
 	*/
-	// TODO: this assumes running from lxc host which is not accurate long term.
-	const location = "/mnt/wg0.conf"
 
-	if err := lxcpush(tmp.Name(), location); err != nil {
-		return err
-	}
-	// This can be removed as the temp file will be written directly on the
-	// container.
 	if err := run(
-		"lxc", "exec", "-T", containerName, "--", // TODO: remove `lxc exec`
-		"python3", "/mnt/controller-sync-wg.py", location,
+		"sudo", "-S", "python3", controllerSyncScript, tmp.Name(),
 	); err != nil {
 		return fmt.Errorf("failed to update controller: %w", err)
 	}
-	return nil
-}
 
-// TODO(jbpratt): delete
-func lxcpush(from, to string) error {
-	if err := run(
-		"lxc", "file", "push", from, fmt.Sprintf("%s%s", containerName, to),
-	); err != nil {
-		return fmt.Errorf("failed to push file to container: %w", err)
-	}
 	return nil
 }
 
 func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) error {
 
-	// Continuously retry ssh'ing into the new node. We only do this to ensure
-	// that it is connectable by the time the master node begins initilization.
+	// Continuously retry ssh'ing into the new node. This is to ensure that it is
+	// connectable by the time the master node begins initilization.
 	// TODO(jbpratt): maybe move this as a step in node creation..
 	var err error
 	for i := 0; i < nodeSSHRetries; i++ {
@@ -468,7 +459,18 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) er
 		peers = append(peers, p)
 	}
 
+	wgPub, err := wgutil.PublicFromPrivate(b.Conf.PrivateKey)
+	if err != nil {
+		return fmt.Errorf("failed to determine public key from private: %w", err)
+	}
+
 	// add controller as peer
+	peers = append(peers, wgutil.InterfacePeerConfig{
+		AllowedIPs:          "10.0.0.1/32",
+		PublicKey:           wgPub,
+		Endpoint:            fmt.Sprintf("%s:%d", b.ControllerAddress, 51820),
+		PersistentKeepalive: 25,
+	})
 
 	// set main interface
 	conf := &wgutil.InterfaceConfig{
@@ -478,11 +480,8 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) er
 		Peers:      peers,
 	}
 
-	runtime.Breakpoint()
-
 	if err := run(
-		"lxc", "exec", "-T", containerName, "--", // TODO: remove `lxc exec`
-		"/mnt/node-start.sh",
+		nodeStartScript,
 		user,
 		node.Networks.V4[0],
 		b.SSHIdentityFile(),
@@ -499,8 +498,8 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) er
 func (b *Backend) SyncNodes(ctx context.Context, nodes []*node.Node) error {
 	for _, node := range nodes {
 		if err := run(
-			"lxc", "exec", "-T", containerName, "--", // TODO: remove `lxc exec`
-			"/mnt/node-sync-wg.sh",
+			//"lxc", "exec", "-T", containerName, "--", // TODO: remove `lxc exec`
+			"~/node-sync-wg.sh",
 			// TODO: can we just have a map of default user keyed on provider?
 			"",
 			node.Networks.V4[0],
