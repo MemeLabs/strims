@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -205,23 +206,25 @@ func New(cfg Config) (*Backend, error) {
 	}
 
 	return &Backend{
-		Log:             log,
-		DB:              db,
-		NodeDrivers:     drivers,
-		flake:           flake,
-		sshIdentityFile: cfg.SSH.IdentityFile,
-		Conf:            cfg.InterfaceConfig,
+		Log:               log,
+		DB:                db,
+		NodeDrivers:       drivers,
+		flake:             flake,
+		sshIdentityFile:   cfg.SSH.IdentityFile,
+		Conf:              cfg.InterfaceConfig,
+		ControllerAddress: cfg.ControllerPublicIP,
 	}, nil
 }
 
 // Backend ...
 type Backend struct {
-	DB              *sql.DB
-	Log             *zap.Logger
-	NodeDrivers     map[string]node.Driver
-	Conf            wgutil.InterfaceConfig
-	flake           *sonyflake.Sonyflake
-	sshIdentityFile string
+	DB                *sql.DB
+	Log               *zap.Logger
+	NodeDrivers       map[string]node.Driver
+	Conf              wgutil.InterfaceConfig
+	flake             *sonyflake.Sonyflake
+	sshIdentityFile   string
+	ControllerAddress string
 }
 
 // NextID ...
@@ -245,7 +248,7 @@ func (b *Backend) SSHPublicKey() string {
 
 func (b *Backend) nextWGIPv4(ctx context.Context, activeNodes models.NodeSlice) (string, error) {
 OUTER:
-	for i := 1; i < 255; i++ {
+	for i := 2; i < 255; i++ {
 		for _, node := range activeNodes {
 			addr := strings.Split(node.WireguardIP, ".")
 			if len(addr) == 4 {
@@ -285,11 +288,14 @@ func (b *Backend) CreateNode(
 		return nil, fmt.Errorf("failed to create node(%v): %w", req, err)
 	}
 
+	b.Log.Info("node has been created")
+
 	slice, err := models.Nodes(qm.Where("active=?", 1)).All(ctx, b.DB)
 	if err != nil {
 		return nil, err
 	}
 
+	// append all peers from the database to static peers
 	for i := 0; i < len(slice); i++ {
 		for _, peer := range b.Conf.Peers {
 			if peer.Endpoint == slice[i].IPV4 {
@@ -310,14 +316,17 @@ func (b *Backend) CreateNode(
 		return nil, fmt.Errorf("failed to get next wg ipv4: %w", err)
 	}
 
+	b.Log.Info("nextWGIPv4", zap.String("ipv4", wgIPv4))
+
 	wgPriv, wgPub, err := wgutil.GenerateKey()
 	if wgPriv == "" || err != nil {
 		return nil, fmt.Errorf("failed to create wg keys: %w", err)
 	}
 
+	// append new peer
 	b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
 		PublicKey:           wgPub,
-		AllowedIPs:          wgIPv4,
+		AllowedIPs:          fmt.Sprintf("%s/%d", wgIPv4, 32),
 		Endpoint:            fmt.Sprintf("%s:%d", n.Networks.V4[0], 51820),
 		PersistentKeepalive: 25,
 	})
@@ -358,6 +367,8 @@ func (b *Backend) InsertNode(ctx context.Context, node *node.Node) error {
 	if err := nodeEntry.Insert(ctx, b.DB, boil.Infer()); err != nil {
 		return fmt.Errorf("failed to insert node: %w", err)
 	}
+
+	b.Log.Info("node inserted into database")
 	return nil
 }
 
@@ -446,14 +457,28 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) er
 		return fmt.Errorf("failed to connect to node: %w", err)
 	}
 
-	/*
-	   node_user=$1
-	   node_addr=$2
-	   node_key_path=$3
-	   wg_ip=$4
-	   wg_config=$5
-	   node_name=$6
-	*/
+	b.Log.Info("node ssh available")
+
+	// construct new node's WG config
+	var peers []wgutil.InterfacePeerConfig
+	for _, p := range b.Conf.Peers {
+		if p.Endpoint == fmt.Sprintf("%s:%d", node.Networks.V4[0], 51820) {
+			continue
+		}
+		peers = append(peers, p)
+	}
+
+	// add controller as peer
+
+	// set main interface
+	conf := &wgutil.InterfaceConfig{
+		PrivateKey: node.WireguardPrivKey,
+		Address:    fmt.Sprintf("%s/%d", node.WireguardIPv4, 24),
+		ListenPort: 51820,
+		Peers:      peers,
+	}
+
+	runtime.Breakpoint()
 
 	if err := run(
 		"lxc", "exec", "-T", containerName, "--", // TODO: remove `lxc exec`
@@ -462,7 +487,7 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) er
 		node.Networks.V4[0],
 		b.SSHIdentityFile(),
 		node.WireguardIPv4,
-		b.Conf.String(),
+		conf.String(),
 		node.Name,
 	); err != nil {
 		return fmt.Errorf("failed to exec 'node-start.sh': %w", err)

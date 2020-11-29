@@ -101,6 +101,7 @@ type Node struct {
 	Status           string    `json:"status,omitempty"`
 	Region           *Region   `json:"region,omitempty"`
 	SKU              *SKU      `json:"sku,omitempty"`
+	WireguardPubKey  string    // TODO(jbpratt): do we really need this?
 	WireguardPrivKey string    `json:"wireguard_priv_key,omitempty"`
 	WireguardIPv4    string    `json:"wireguard_ipv4,omitempty"`
 }
