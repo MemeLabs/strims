@@ -95,6 +95,7 @@ type Price struct {
 // Node represents a host
 type Node struct {
 	Driver           string    `json:"driver,omitempty"`
+	ProviderName     string    `json:"provider_name,omitempty"`
 	ProviderID       string    `json:"provider_id,omitempty"`
 	Name             string    `json:"name,omitempty"`
 	Memory           int       `json:"memory,omitempty"`

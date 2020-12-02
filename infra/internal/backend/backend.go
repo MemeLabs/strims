@@ -22,6 +22,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/golang/geo/s2"
 	"github.com/mitchellh/mapstructure"
+	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"golang.org/x/crypto/ssh"
@@ -107,7 +108,7 @@ type Config struct {
 	PublicControllerAddress string
 }
 
-// TODO(jbpratt): delete this for a flag
+// TODO(jbpratt): delete this for a flag or config
 const containerName = "strims-k8s"
 
 var (
@@ -293,7 +294,7 @@ func (b *Backend) CreateNode(
 	driver node.Driver,
 	hostname, region, sku string,
 	billingType node.BillingType,
-) (*node.Node, error) {
+) error {
 
 	req := &node.CreateRequest{
 		Name:        hostname,
@@ -302,16 +303,17 @@ func (b *Backend) CreateNode(
 		SSHKey:      b.SSHPublicKey(),
 		BillingType: billingType,
 	}
+
 	n, err := driver.Create(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create node(%v): %w", req, err)
+		return fmt.Errorf("failed to create node(%v): %w", req, err)
 	}
 
 	b.Log.Info("node has been created")
 
 	nodes, err := b.ActiveNodes(ctx)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// append all peers from the database to static peers
@@ -330,31 +332,43 @@ func (b *Backend) CreateNode(
 		})
 	}
 
-	wgIPv4, err := b.nextWGIPv4(ctx, nodes)
-	if wgIPv4 == "" || err != nil {
-		return nil, fmt.Errorf("failed to get next wg ipv4: %w", err)
+	n.WireguardIPv4, err = b.nextWGIPv4(ctx, nodes)
+	if n.WireguardIPv4 == "" || err != nil {
+		return fmt.Errorf("failed to get next wg ipv4: %w", err)
 	}
 
-	b.Log.Info("nextWGIPv4", zap.String("ipv4", wgIPv4))
+	b.Log.Info("nextWGIPv4", zap.String("ipv4", n.WireguardIPv4))
 
-	wgPriv, wgPub, err := wgutil.GenerateKey()
-	if wgPriv == "" || err != nil {
-		return nil, fmt.Errorf("failed to create wg keys: %w", err)
+	n.WireguardPrivKey, n.WireguardPubKey, err = wgutil.GenerateKey()
+	if n.WireguardPrivKey == "" || err != nil {
+		return fmt.Errorf("failed to create wg keys: %w", err)
 	}
 
 	// append new peer
 	b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
-		PublicKey:           wgPub,
-		AllowedIPs:          fmt.Sprintf("%s/%d", wgIPv4, 32),
+		PublicKey:           n.WireguardPrivKey,
+		AllowedIPs:          fmt.Sprintf("%s/%d", n.WireguardIPv4, 32),
 		Endpoint:            fmt.Sprintf("%s:%d", n.Networks.V4[0], 51820),
 		PersistentKeepalive: 25,
 	})
 
-	n.WireguardIPv4 = wgIPv4
-	n.WireguardPrivKey = wgPriv
-	n.WireguardPubKey = wgPub
+	if err := b.insertNode(ctx, n); err != nil {
+		return fmt.Errorf("failed to insert node(%v): %w", n, err)
+	}
 
-	return n, nil
+	if err := b.updateController(); err != nil {
+		return fmt.Errorf("failed to update controller config(%v): %w", b.Conf, err)
+	}
+
+	if err := b.initNode(ctx, n, driver.DefaultUser()); err != nil {
+		return fmt.Errorf("failed to init node(%v): %w", nil, err)
+	}
+
+	if err := b.syncNodes(ctx, nil); err != nil {
+		return fmt.Errorf("failed to sync nodes: %w", err)
+	}
+
+	return nil
 }
 
 func (b *Backend) ActiveNodes(ctx context.Context) ([]*node.Node, error) {
@@ -371,7 +385,7 @@ func (b *Backend) ActiveNodes(ctx context.Context) ([]*node.Node, error) {
 	return nodes, nil
 }
 
-func (b *Backend) InsertNode(ctx context.Context, node *node.Node) error {
+func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 
 	id, err := dao.GenerateSnowflake()
 	if err != nil {
@@ -406,7 +420,7 @@ func (b *Backend) InsertNode(ctx context.Context, node *node.Node) error {
 	return nil
 }
 
-func (b *Backend) UpdateController() error {
+func (b *Backend) updateController() error {
 
 	// write the wg cfg to a temp file
 	tmp, err := ioutil.TempFile("", "goppspp")
@@ -430,7 +444,7 @@ func (b *Backend) UpdateController() error {
 	return nil
 }
 
-func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) error {
+func (b *Backend) initNode(ctx context.Context, node *node.Node, user string) error {
 
 	// Continuously retry ssh'ing into the new node. This is to ensure that it is
 	// connectable by the time the master node begins initilization.
@@ -438,10 +452,11 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) er
 	var err error
 	for i := 0; i < nodeSSHRetries; i++ {
 		fmt.Printf("trying %d\n", i)
-		_, err = sshToNode(user, node.Networks.V4[0], b.SSHIdentityFile())
+		c, err := sshToNode(user, node.Networks.V4[0], b.SSHIdentityFile())
 		if err == nil {
 			break
 		}
+		c.Close()
 		time.Sleep(time.Second)
 	}
 	if err != nil {
@@ -495,7 +510,7 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) er
 	return nil
 }
 
-func (b *Backend) SyncNodes(ctx context.Context, nodes []*node.Node) error {
+func (b *Backend) syncNodes(ctx context.Context, nodes []*node.Node) error {
 	for _, n := range nodes {
 		if err := run(
 			nodeSyncScript,
@@ -510,6 +525,63 @@ func (b *Backend) SyncNodes(ctx context.Context, nodes []*node.Node) error {
 	return nil
 }
 
+func (b *Backend) DestroyNode(ctx context.Context, name string) error {
+
+	n, err := models.Nodes(qm.Where("name=?", name)).One(ctx, b.DB)
+	if err != nil {
+		return fmt.Errorf("failed to find node in database: %w", err)
+	}
+
+	if err := run("kubectl delete node", n.Name); err != nil {
+		return fmt.Errorf("failed to delete node: %w", err)
+	}
+
+	// set 'stopped_at' time and 'active'
+	n.Active = 0
+	n.StoppedAt = null.Int64From(time.Now().Unix())
+
+	_, err = n.Update(ctx, b.DB, boil.Infer())
+	if err != nil {
+		return fmt.Errorf("failed to update node: %w", err)
+	}
+
+	for i, p := range b.Conf.Peers {
+		if p.PublicKey == n.IPV4 {
+			b.Conf.Peers = append(b.Conf.Peers[:i], b.Conf.Peers[i+1:]...)
+		}
+	}
+
+	if err := b.updateController(); err != nil {
+		return fmt.Errorf("failed to update controller(%v): %w", b.Conf, err)
+	}
+
+	nodes, err := b.ActiveNodes(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get active nodes: %w", err)
+	}
+
+	// maybe we should be syncing by peers, what about static peers
+	if err := b.syncNodes(ctx, nodes); err != nil {
+		return fmt.Errorf("failed to sync nodes: %w", err)
+	}
+
+	d, ok := b.NodeDrivers[n.ProviderName]
+	if !ok {
+		return fmt.Errorf("unknown provider %s", n.ProviderName)
+	}
+
+	req := &node.DeleteRequest{
+		Region:     n.RegionName,
+		ProviderID: n.ProviderID,
+	}
+
+	if err := d.Delete(ctx, req); err != nil {
+		return fmt.Errorf("failed to delete node(%v): %w", req, err)
+	}
+
+	return fmt.Errorf("unimplemented")
+}
+
 func modelToNode(n *models.Node) *node.Node {
 	var status string
 	if n.Active == 1 {
@@ -519,11 +591,12 @@ func modelToNode(n *models.Node) *node.Node {
 	}
 
 	return &node.Node{
-		ProviderID: n.ProviderID,
-		Name:       n.Name,
-		Memory:     int(n.Memory),
-		CPUs:       int(n.CPUs),
-		Disk:       int(n.Disk),
+		ProviderName: n.ProviderName,
+		ProviderID:   n.ProviderID,
+		Name:         n.Name,
+		Memory:       int(n.Memory),
+		CPUs:         int(n.CPUs),
+		Disk:         int(n.Disk),
 		Networks: &node.Networks{
 			V4: []string{n.IPV4},
 			V6: []string{n.IPV6},

@@ -50,39 +50,27 @@ var createCmd = &cobra.Command{
 	},
 	ValidArgsFunction: providerValidArgsFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
+
 		provider := args[0]
 		sku := args[1]
 		region := args[2]
+
 		d, ok := backend.NodeDrivers[provider]
 		if !ok {
 			return fmt.Errorf("invalid node provider for %q", provider)
 		}
 
-		hostname := generateHostname(provider, region)
-		n, err := backend.CreateNode(cmd.Context(), d, hostname, region, sku, node.Hourly)
-		if err != nil {
+		if err := backend.CreateNode(
+			cmd.Context(),
+			d,
+			generateHostname(provider, region),
+			region,
+			sku,
+			node.Hourly,
+		); err != nil {
 			return fmt.Errorf("failed to create node: %w", err)
 		}
 
-		jsonDump(n)
-		if err := backend.InsertNode(cmd.Context(), n); err != nil {
-			return fmt.Errorf("failed to insert node(%v): %w", n, err)
-		}
-
-		if err := backend.UpdateController(); err != nil {
-			return fmt.Errorf("failed to update controller config(%v): %w", backend.Conf, err)
-		}
-
-		if err := backend.InitNode(cmd.Context(), n, d.DefaultUser()); err != nil {
-			return fmt.Errorf("failed to init node(%v): %w", nil, err)
-		}
-
-		/*
-			// TODO: controller should only have peers updated, not entire conf..
-			if err := backend.SyncNodes(cmd.Context(), nil); err != nil {
-				return fmt.Errorf("failed to sync nodes: %w", err)
-			}
-		*/
 		return nil
 	},
 }
