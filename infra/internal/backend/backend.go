@@ -265,11 +265,11 @@ func (b *Backend) SSHPublicKey() string {
 	return string(bytes.Trim(d, "\r\n\t "))
 }
 
-func (b *Backend) nextWGIPv4(ctx context.Context, activeNodes models.NodeSlice) (string, error) {
+func (b *Backend) nextWGIPv4(ctx context.Context, activeNodes []*node.Node) (string, error) {
 OUTER:
 	for i := 2; i < 255; i++ {
 		for _, node := range activeNodes {
-			addr := strings.Split(node.WireguardIP, ".")
+			addr := strings.Split(node.WireguardIPv4, ".")
 			if len(addr) == 4 {
 				host, err := strconv.Atoi(addr[3])
 				if err != nil {
@@ -309,28 +309,28 @@ func (b *Backend) CreateNode(
 
 	b.Log.Info("node has been created")
 
-	slice, err := models.Nodes(qm.Where("active=?", 1)).All(ctx, b.DB)
+	nodes, err := b.ActiveNodes(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	// append all peers from the database to static peers
-	for i := 0; i < len(slice); i++ {
+	for _, n := range nodes {
 		for _, peer := range b.Conf.Peers {
-			if peer.Endpoint == slice[i].IPV4 {
+			if peer.Endpoint == n.Networks.V4[0] {
 				continue
 			}
 		}
 
 		b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
-			PublicKey:           slice[i].WireguardKey,
-			AllowedIPs:          slice[i].WireguardIP,
-			Endpoint:            fmt.Sprintf("%s:%d", slice[i].IPV4, 51820),
+			PublicKey:           n.WireguardPubKey,
+			AllowedIPs:          fmt.Sprintf("%s/%d", n.WireguardIPv4, 32),
+			Endpoint:            fmt.Sprintf("%s:%d", n.Networks.V4[0], 51820),
 			PersistentKeepalive: 25,
 		})
 	}
 
-	wgIPv4, err := b.nextWGIPv4(ctx, slice)
+	wgIPv4, err := b.nextWGIPv4(ctx, nodes)
 	if wgIPv4 == "" || err != nil {
 		return nil, fmt.Errorf("failed to get next wg ipv4: %w", err)
 	}
@@ -355,6 +355,20 @@ func (b *Backend) CreateNode(
 	n.WireguardPubKey = wgPub
 
 	return n, nil
+}
+
+func (b *Backend) ActiveNodes(ctx context.Context) ([]*node.Node, error) {
+	var nodes []*node.Node
+	slice, err := models.Nodes(qm.Where("active=?", 1)).All(ctx, b.DB)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, n := range slice {
+		nodes = append(nodes, modelToNode(n))
+	}
+
+	return nodes, nil
 }
 
 func (b *Backend) InsertNode(ctx context.Context, node *node.Node) error {
@@ -488,7 +502,7 @@ func (b *Backend) SyncNodes(ctx context.Context, nodes []*node.Node) error {
 			node.DefaultUser[n.Driver],
 			n.Networks.V4[0],
 			b.SSHIdentityFile(),
-			b.Conf.String(),
+			b.Conf.String(), // TODO(jbpratt): need a different conf here
 		); err != nil {
 			return fmt.Errorf("failed to exec 'node-sync-wg.sh': %w", err)
 		}
@@ -496,7 +510,7 @@ func (b *Backend) SyncNodes(ctx context.Context, nodes []*node.Node) error {
 	return nil
 }
 
-func (b *Backend) ModelToNode(n *models.Node) *node.Node {
+func modelToNode(n *models.Node) *node.Node {
 	var status string
 	if n.Active == 1 {
 		status = "active"
@@ -561,7 +575,7 @@ func sshToNode(user, addr, privKeyPath string) (*ssh.Client, error) {
 	return conn, nil
 }
 
-// executes a script locally. Expects a shebang and the script to be executable
+// executes a shell command
 func run(args ...string) error {
 	fmt.Printf("+ %q\n", strings.Join(args, " "))
 	cmd := exec.Command(args[0], args[1:]...)
