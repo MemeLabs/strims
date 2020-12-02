@@ -33,24 +33,6 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-var (
-	controllerSyncScript string
-	nodeStartScript      string
-)
-
-func init() {
-	h, err := os.UserHomeDir()
-	if err != nil {
-		panic(err)
-	}
-
-	controllerSyncScript = path.Join(h, "controller-sync-wg.py")
-	nodeStartScript = path.Join(h, "node-start.sh")
-}
-
-// TODO(jbpratt): delete this for a flag
-const containerName = "strims-k8s"
-
 // DriverConfig ...
 type DriverConfig interface {
 	isDriverConfig()
@@ -124,9 +106,30 @@ type Config struct {
 	PublicControllerAddress string
 }
 
-var driverConfigType = reflect.TypeOf((*DriverConfig)(nil)).Elem()
-var timeType = reflect.TypeOf(time.Time{})
-var nodeSSHRetries = 100
+// TODO(jbpratt): delete this for a flag
+const containerName = "strims-k8s"
+
+var (
+	driverConfigType = reflect.TypeOf((*DriverConfig)(nil)).Elem()
+	timeType         = reflect.TypeOf(time.Time{})
+
+	nodeSSHRetries = 100
+
+	controllerSyncScript string
+	nodeStartScript      string
+	nodeSyncScript       string
+)
+
+func init() {
+	h, err := os.UserHomeDir()
+	if err != nil {
+		panic(err)
+	}
+
+	controllerSyncScript = path.Join(h, "controller-sync-wg.py")
+	nodeStartScript = path.Join(h, "node-start.sh")
+	nodeStartScript = path.Join(h, "node-sync.sh")
+}
 
 // DecoderConfigOptions ...
 func (c *Config) DecoderConfigOptions(config *mapstructure.DecoderConfig) {
@@ -403,24 +406,6 @@ func (b *Backend) UpdateController() error {
 		return fmt.Errorf("failed to close temp file: %w", err)
 	}
 
-	/*
-		const wgConf = "/etc/wireguard/wg0.conf"
-
-		// back up wireguard conf
-		if err := copyFile(wgConf, "/tmp/wg0.conf"); err != nil {
-			return fmt.Errorf("failed to copy file: (%s to %s) %v", "/tmp/wg0.conf", wgConf, err)
-		}
-
-		// replace wg conf with new conf
-		if err := copyFile(tmp.Name(), wgConf); err != nil {
-			return fmt.Errorf("failed to copy file: (%s to %s) %v", tmp.Name(), wgConf, err)
-		}
-
-		if err := run("sudo", "wg", "setconf", "wg0", "<(", "wg-quick", "strip", "wg0", ")"); err != nil {
-			return fmt.Errorf("failed to run 'wg setconf': %v", err)
-		}
-	*/
-
 	if err := run(
 		"sudo", "-S", "python3", controllerSyncScript, tmp.Name(),
 	); err != nil {
@@ -496,13 +481,11 @@ func (b *Backend) InitNode(ctx context.Context, node *node.Node, user string) er
 }
 
 func (b *Backend) SyncNodes(ctx context.Context, nodes []*node.Node) error {
-	for _, node := range nodes {
+	for _, n := range nodes {
 		if err := run(
-			//"lxc", "exec", "-T", containerName, "--", // TODO: remove `lxc exec`
-			"~/node-sync-wg.sh",
-			// TODO: can we just have a map of default user keyed on provider?
-			"",
-			node.Networks.V4[0],
+			nodeSyncScript,
+			node.DefaultUser[n.Driver],
+			n.Networks.V4[0],
 			b.SSHIdentityFile(),
 			b.Conf.String(),
 		); err != nil {

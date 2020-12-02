@@ -14,6 +14,8 @@ const (
 	Hourly  BillingType = "hourly"
 )
 
+var DefaultUser = map[string]string{"ovh": "ubuntu"}
+
 // A Driver is defines the implementation of a third party driver such as
 // DigitalOcean. The driver is used to facilitate provisioning and tearing
 // down resources.
@@ -92,6 +94,7 @@ type Price struct {
 
 // Node represents a host
 type Node struct {
+	Driver           string    `json:"driver,omitempty"`
 	ProviderID       string    `json:"provider_id,omitempty"`
 	Name             string    `json:"name,omitempty"`
 	Memory           int       `json:"memory,omitempty"`
