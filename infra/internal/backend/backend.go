@@ -20,6 +20,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/MemeLabs/go-ppspp/infra/pkg/wgutil"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/golang/geo/s2"
 	"github.com/mitchellh/mapstructure"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
@@ -493,6 +494,45 @@ func (b *Backend) SyncNodes(ctx context.Context, nodes []*node.Node) error {
 		}
 	}
 	return nil
+}
+
+func (b *Backend) ModelToNode(n *models.Node) *node.Node {
+	var status string
+	if n.Active == 1 {
+		status = "active"
+	} else {
+		status = "inactive"
+	}
+
+	return &node.Node{
+		ProviderID: n.ProviderID,
+		Name:       n.Name,
+		Memory:     int(n.Memory),
+		CPUs:       int(n.CPUs),
+		Disk:       int(n.Disk),
+		Networks: &node.Networks{
+			V4: []string{n.IPV4},
+			V6: []string{n.IPV6},
+		},
+		Status: status,
+		Region: &node.Region{
+			Name:   n.RegionName,
+			LatLng: s2.LatLngFromDegrees(n.RegionLat, n.RegionLng),
+		},
+		SKU: &node.SKU{
+			Name:         n.SKUName,
+			NetworkCap:   int(n.SKUNetworkCap),
+			NetworkSpeed: int(n.SKUNetworkSpeed),
+			PriceMonthly: &node.Price{
+				Value: n.SKUPriceMonthly,
+			},
+			PriceHourly: &node.Price{
+				Value: n.SKUPriceHourly,
+			},
+		},
+		WireguardPrivKey: n.WireguardKey,
+		WireguardIPv4:    n.WireguardIP,
+	}
 }
 
 // sshToNode allows connection to an instance via SSH. A user, address and
