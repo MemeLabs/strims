@@ -51,6 +51,8 @@ EOF
 apt-get update
 apt-get install -y wireguard
 
+wait
+
 cat > /etc/wireguard/wg0.conf <<EOF
 $wg_config
 EOF

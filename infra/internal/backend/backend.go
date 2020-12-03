@@ -130,7 +130,7 @@ func init() {
 
 	controllerSyncScript = path.Join(h, "controller-sync-wg.py")
 	nodeStartScript = path.Join(h, "node-start.sh")
-	nodeStartScript = path.Join(h, "node-sync.sh")
+	nodeSyncScript = path.Join(h, "node-sync-wg.sh")
 }
 
 // DecoderConfigOptions ...
@@ -309,8 +309,6 @@ func (b *Backend) CreateNode(
 		return fmt.Errorf("failed to create node(%v): %w", req, err)
 	}
 
-	b.Log.Info("node has been created")
-
 	nodes, err := b.ActiveNodes(ctx)
 	if err != nil {
 		return err
@@ -337,22 +335,20 @@ func (b *Backend) CreateNode(
 		return fmt.Errorf("failed to get next wg ipv4: %w", err)
 	}
 
-	b.Log.Info("nextWGIPv4", zap.String("ipv4", n.WireguardIPv4))
-
 	n.WireguardPrivKey, n.WireguardPubKey, err = wgutil.GenerateKey()
-	if n.WireguardPrivKey == "" || err != nil {
+	if n.WireguardPrivKey == "" || n.WireguardPubKey == "" || err != nil {
 		return fmt.Errorf("failed to create wg keys: %w", err)
 	}
 
 	// append new peer
 	b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
-		PublicKey:           n.WireguardPrivKey,
+		PublicKey:           n.WireguardPubKey,
 		AllowedIPs:          fmt.Sprintf("%s/%d", n.WireguardIPv4, 32),
 		Endpoint:            fmt.Sprintf("%s:%d", n.Networks.V4[0], 51820),
 		PersistentKeepalive: 25,
 	})
 
-	if err := b.insertNode(ctx, n); err != nil {
+	if err := b.insertNode(ctx, n, driver.Provider()); err != nil {
 		return fmt.Errorf("failed to insert node(%v): %w", n, err)
 	}
 
@@ -364,9 +360,11 @@ func (b *Backend) CreateNode(
 		return fmt.Errorf("failed to init node(%v): %w", nil, err)
 	}
 
-	if err := b.syncNodes(ctx, nil); err != nil {
-		return fmt.Errorf("failed to sync nodes: %w", err)
-	}
+	/*
+		if err := b.syncNodes(ctx, nil); err != nil {
+			return fmt.Errorf("failed to sync nodes: %w", err)
+		}
+	*/
 
 	return nil
 }
@@ -385,7 +383,7 @@ func (b *Backend) ActiveNodes(ctx context.Context) ([]*node.Node, error) {
 	return nodes, nil
 }
 
-func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
+func (b *Backend) insertNode(ctx context.Context, node *node.Node, providerName string) error {
 
 	id, err := dao.GenerateSnowflake()
 	if err != nil {
@@ -393,15 +391,16 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 	}
 
 	nodeEntry := &models.Node{
-		ID:         int64(id),
-		Active:     1,
-		StartedAt:  time.Now().UnixNano(),
-		ProviderID: node.ProviderID,
-		Name:       node.Name,
-		Memory:     int64(node.Memory),
-		CPUs:       int64(node.CPUs),
-		Disk:       int64(node.Disk),
-		IPV4:       node.Networks.V4[0],
+		ID:           int64(id),
+		Active:       1,
+		StartedAt:    time.Now().UnixNano(),
+		ProviderID:   node.ProviderID,
+		ProviderName: providerName,
+		Name:         node.Name,
+		Memory:       int64(node.Memory),
+		CPUs:         int64(node.CPUs),
+		Disk:         int64(node.Disk),
+		IPV4:         node.Networks.V4[0],
 		// IPV6:       node.Networks.V6[0],
 		RegionName:      node.Region.Name,
 		RegionLat:       float64(node.Region.LatLng.Lat),
@@ -416,7 +415,6 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 		return fmt.Errorf("failed to insert node: %w", err)
 	}
 
-	b.Log.Info("node inserted into database")
 	return nil
 }
 
@@ -450,20 +448,19 @@ func (b *Backend) initNode(ctx context.Context, node *node.Node, user string) er
 	// connectable by the time the master node begins initilization.
 	// TODO(jbpratt): maybe move this as a step in node creation..
 	var err error
+	fmt.Print("attempting to ssh to the new node")
 	for i := 0; i < nodeSSHRetries; i++ {
-		fmt.Printf("trying %d\n", i)
-		c, err := sshToNode(user, node.Networks.V4[0], b.SSHIdentityFile())
+		fmt.Print(".")
+		_, err := sshToNode(user, node.Networks.V4[0], b.SSHIdentityFile())
 		if err == nil {
 			break
 		}
-		c.Close()
 		time.Sleep(time.Second)
 	}
 	if err != nil {
 		return fmt.Errorf("failed to connect to node: %w", err)
 	}
-
-	b.Log.Info("node ssh available")
+	fmt.Print("\n")
 
 	// construct new node's WG config
 	var peers []wgutil.InterfacePeerConfig
@@ -475,7 +472,7 @@ func (b *Backend) initNode(ctx context.Context, node *node.Node, user string) er
 	}
 
 	wgPub, err := wgutil.PublicFromPrivate(b.Conf.PrivateKey)
-	if err != nil {
+	if wgPub == "" || err != nil {
 		return fmt.Errorf("failed to determine public key from private: %w", err)
 	}
 
@@ -526,14 +523,22 @@ func (b *Backend) syncNodes(ctx context.Context, nodes []*node.Node) error {
 }
 
 func (b *Backend) DestroyNode(ctx context.Context, name string) error {
-
-	n, err := models.Nodes(qm.Where("name=?", name)).One(ctx, b.DB)
-	if err != nil {
-		return fmt.Errorf("failed to find node in database: %w", err)
+	if err := run("sudo", "kubectl", "delete", "node", name); err != nil {
+		return fmt.Errorf("failed to delete node: %w", err)
 	}
 
-	if err := run("kubectl delete node", n.Name); err != nil {
-		return fmt.Errorf("failed to delete node: %w", err)
+	// https://stackoverflow.com/a/51724905/11751968
+	// k8s storing node names in lowercase causes a mix up with the node naming
+	// scheme so we mangle a bit here.
+	parts := strings.Split(name, "-")
+	if len(parts) != 3 {
+		return fmt.Errorf("invalid name: does not match pattern 'provider-region-random'")
+	}
+
+	name = fmt.Sprintf("%s-%s-%s", parts[0], strings.ToUpper(parts[1]), parts[2])
+	n, err := models.Nodes(qm.Where("name=?", name)).One(ctx, b.DB)
+	if err != nil {
+		return fmt.Errorf("failed to find node(%s) in database: %w", name, err)
 	}
 
 	// set 'stopped_at' time and 'active'
@@ -579,7 +584,7 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to delete node(%v): %w", req, err)
 	}
 
-	return fmt.Errorf("unimplemented")
+	return nil
 }
 
 func modelToNode(n *models.Node) *node.Node {

@@ -19,8 +19,8 @@ def main() -> int:
     shutil.copy2(wg_conf_file, "/tmp/wg0.conf")
     shutil.copy2(args.conf, wg_conf_file)
     # subprocess.run(["bash", "-c", "wg", "setconf", "wg0", "<(wg-quick strip wg0)"])
-    subprocess.run(["bash", "-c", "wg-quick down wg0"])
-    subprocess.run(["bash", "-c", "wg-quick up wg0"])
+    subprocess.run(["bash", "-xc", "wg-quick down wg0"])
+    subprocess.run(["bash", "-xc", "wg-quick up wg0"])
 
     return 0
 
