@@ -14,7 +14,7 @@ const (
 	Hourly  BillingType = "hourly"
 )
 
-var DefaultUser = map[string]string{"ovh": "ubuntu"}
+var DefaultUser = map[string]string{"ovh": "ubuntu", "scaleway": "root"}
 
 // A Driver is defines the implementation of a third party driver such as
 // DigitalOcean. The driver is used to facilitate provisioning and tearing

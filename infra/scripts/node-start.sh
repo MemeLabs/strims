@@ -17,6 +17,7 @@ k8s_ca_cert_hash=${join_cmd[6]}
 ssh -T "$node_user"@"$node_addr" -i "$node_key_path" -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no <<CMD
 #!/bin/bash
 set -ex
+
 sudo -s
 
 ufw default allow outgoing

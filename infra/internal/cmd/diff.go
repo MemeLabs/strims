@@ -3,12 +3,11 @@ package cmd
 import (
 	"fmt"
 
-	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/spf13/cobra"
 )
 
 func init() {
-
+	rootCmd.AddCommand(diffCmd)
 }
 
 var diffCmd = &cobra.Command{
@@ -16,22 +15,12 @@ var diffCmd = &cobra.Command{
 	Short: "Find differences between active instances and the database",
 	RunE: func(cmd *cobra.Command, args []string) error {
 
-		var liveNodes []*node.Node
-		for _, driver := range backend.NodeDrivers {
-			res, err := driver.List(cmd.Context(), nil)
-			if err != nil {
-				return fmt.Errorf("failed to list nodes for %q: %w", driver.Provider(), err)
-			}
-
-			liveNodes = append(liveNodes, res...)
-		}
-
-		dbNodes, err := backend.ActiveNodes(cmd.Context())
+		diff, err := backend.DiffNodes(cmd.Context())
 		if err != nil {
-			return fmt.Errorf("failed to get active nodes: %w", err)
+			return fmt.Errorf("failed to diff nodes: %w", err)
 		}
 
-		_ = dbNodes
+		fmt.Println(diff)
 
 		return nil
 	},

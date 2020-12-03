@@ -21,6 +21,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/infra/pkg/wgutil"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/golang/geo/s2"
+	"github.com/google/go-cmp/cmp"
 	"github.com/mitchellh/mapstructure"
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
@@ -396,7 +397,7 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node, providerName 
 		StartedAt:    time.Now().UnixNano(),
 		ProviderID:   node.ProviderID,
 		ProviderName: providerName,
-		Name:         node.Name,
+		Name:         strings.ToLower(node.Name), // lowering here to match k8s node naming
 		Memory:       int64(node.Memory),
 		CPUs:         int64(node.CPUs),
 		Disk:         int64(node.Disk),
@@ -527,15 +528,6 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to delete node: %w", err)
 	}
 
-	// https://stackoverflow.com/a/51724905/11751968
-	// k8s storing node names in lowercase causes a mix up with the node naming
-	// scheme so we mangle a bit here.
-	parts := strings.Split(name, "-")
-	if len(parts) != 3 {
-		return fmt.Errorf("invalid name: does not match pattern 'provider-region-random'")
-	}
-
-	name = fmt.Sprintf("%s-%s-%s", parts[0], strings.ToUpper(parts[1]), parts[2])
 	n, err := models.Nodes(qm.Where("name=?", name)).One(ctx, b.DB)
 	if err != nil {
 		return fmt.Errorf("failed to find node(%s) in database: %w", name, err)
@@ -585,6 +577,30 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 	}
 
 	return nil
+}
+
+func (b *Backend) DiffNodes(ctx context.Context) (string, error) {
+
+	var liveNodes []*node.Node
+	for _, driver := range b.NodeDrivers {
+		res, err := driver.List(ctx, nil)
+		if err != nil {
+			return "", fmt.Errorf("failed to list nodes for %q: %w", driver.Provider(), err)
+		}
+
+		liveNodes = append(liveNodes, res...)
+	}
+
+	dbNodes, err := b.ActiveNodes(ctx)
+	if err != nil {
+		return "", fmt.Errorf("failed to get active nodes: %w", err)
+	}
+
+	if diff := cmp.Diff(liveNodes, dbNodes); diff != "" {
+		return diff, nil
+	}
+
+	return "", errors.New("failed to compare")
 }
 
 func modelToNode(n *models.Node) *node.Node {
