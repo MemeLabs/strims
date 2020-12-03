@@ -6,17 +6,24 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
-var ErrNetworkNotFound = errors.New("network not found")
+// errors ...
+var (
+	ErrNetworkNotFound = errors.New("network not found")
+)
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) *Control {
+func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers, dialer *dialer.Control) *Control {
 	events := make(chan interface{}, 128)
 	observers.Network.Notify(events)
 
@@ -25,18 +32,18 @@ func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, obse
 		vpn:       vpn,
 		observers: observers,
 		events:    events,
-		// servers:   map[uint64]*Server{},
+		dialer:    dialer,
 	}
 }
 
 // Control ...
 type Control struct {
-	logger    *zap.Logger
-	vpn       *vpn.Host
-	observers *event.Observers
-	lock      sync.Mutex
-	// servers           map[uint64]*Server
+	logger            *zap.Logger
+	vpn               *vpn.Host
+	observers         *event.Observers
 	events            chan interface{}
+	dialer            *dialer.Control
+	servers           sync.Map
 	certRenewTimeout  <-chan time.Time
 	lastCertRenewTime time.Time
 }
@@ -59,35 +66,62 @@ func (t *Control) Run(ctx context.Context) {
 }
 
 func (t *Control) handleNetworkStart(ctx context.Context, network *pb.Network) {
-	// if network.Key == nil {
-	// 	return
-	// }
+	if network.Key == nil {
+		return
+	}
 
-	// client, ok := t.vpn.Client(network.Key.Public)
-	// if !ok {
-	// 	return
-	// }
+	// TODO: locking
 
-	// t.logger.Info(
-	// 	"starting certificate authority",
-	// 	logutil.ByteHex("network", network.Key.Public),
-	// )
-	// ca, err := NewServer(ctx, t.logger, client, network)
-	// if err != nil {
-	// 	t.logger.Error(
-	// 		"starting certificate authority failed",
-	// 		logutil.ByteHex("network", network.Key.Public),
-	// 		zap.Error(err),
-	// 	)
-	// }
+	go func() {
+		t.logger.Info(
+			"starting directory service",
+			logutil.ByteHex("network", network.Key.Public),
+		)
 
-	// t.servers[network.Id] = ca
+		if err := t.startServer(ctx, network); err != nil {
+			t.logger.Error(
+				"starting directory service failed",
+				logutil.ByteHex("network", network.Key.Public),
+				zap.Error(err),
+			)
+		}
+	}()
+
+}
+
+func (t *Control) startServer(ctx context.Context, network *pb.Network) error {
+	server, err := t.dialer.Server(network.Key.Public, network.Key, AddressSalt)
+	if err != nil {
+		return err
+	}
+
+	client, ok := t.vpn.Client(network.Key.Public)
+	if !ok {
+		return ErrNetworkNotFound
+	}
+
+	service, err := newDirectoryService(t.logger, client, network.Key)
+	if err != nil {
+		return err
+	}
+
+	api.RegisterDirectoryService(server, service)
+
+	eg, ctx := errgroup.WithContext(ctx)
+	ctx, cancel := context.WithCancel(ctx)
+
+	t.servers.Store(network.Id, cancel)
+	defer t.servers.Delete(network.Id)
+
+	eg.Go(func() error { return service.Run(ctx) })
+	eg.Go(func() error { return server.Listen(ctx) })
+	return eg.Wait()
 }
 
 func (t *Control) handleNetworkStop(network *pb.Network) {
-	// if server, ok := t.servers[network.Id]; ok {
-	// 	server.Close()
-	// }
+	if server, ok := t.servers.Load(network.Id); ok {
+		server.(context.CancelFunc)()
+	}
 }
 
 func networkKeyForCertificate(cert *pb.Certificate) []byte {

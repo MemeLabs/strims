@@ -10,7 +10,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/golang/protobuf/proto"
-	"github.com/golang/protobuf/ptypes/any"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
@@ -116,14 +115,11 @@ func (t *VPNTransport) HandleMessage(msg *vpn.Message) error {
 		return err
 	}
 
-	t.logger.Debug("we got here...?")
 	cert := &pb.Certificate{}
-	if err := proto.Unmarshal(req.Headers[vpnCertificateHeader].GetValue(), cert); err != nil {
-		t.logger.Debug("we got here...?", zap.Error(err))
+	if err := proto.Unmarshal(req.Headers[vpnCertificateHeader], cert); err != nil {
 		return err
 	}
 	if err := t.verifyMessage(msg, req, cert); err != nil {
-		t.logger.Debug("we got here...?", zap.Error(err))
 		return err
 	}
 
@@ -139,39 +135,29 @@ func (t *VPNTransport) HandleMessage(msg *vpn.Message) error {
 		callsIn:  &t.callsIn,
 		callsOut: &t.callsOut,
 	}
-	call := NewCallIn(ctx, req, parentCallAccessor)
-	t.callsIn.Insert(addr, call)
+	send := func(ctx context.Context, res *pb.Call) error {
+		return t.send(ctx, res, addr)
+	}
+	call := NewCallIn(ctx, req, parentCallAccessor, send)
 
-	go t.dispatcher.Dispatch(call)
+	t.callsIn.Insert(addr, call)
 	go func() {
-		call.SendResponse(func(ctx context.Context, res *pb.Call) error {
-			return t.call(ctx, res, addr)
-		})
+		t.dispatcher.Dispatch(call)
 		t.callsIn.Delete(addr, req.Id)
 	}()
 
 	return nil
 }
 
-func (t *VPNTransport) call(ctx context.Context, call *pb.Call, addr *HostAddr) error {
-	t.logger.Debug("started call")
-	cert, err := t.certificate()
-	if err != nil {
-		return err
-	}
-
+func (t *VPNTransport) send(ctx context.Context, call *pb.Call, addr *HostAddr) error {
 	b := callBuffers.Get().(*proto.Buffer)
 	defer callBuffers.Put(b)
 
 	b.Reset()
-	if err := b.Marshal(cert); err != nil {
+	if err := b.Marshal(t.certificate()); err != nil {
 		return err
 	}
-	call.Headers[vpnCertificateHeader] = &any.Any{
-		TypeUrl: anyURLPrefix + proto.MessageName(cert),
-		Value:   b.Bytes(),
-	}
-	t.logger.Debug("sending...")
+	call.Headers[vpnCertificateHeader] = b.Bytes()
 
 	return t.client.Network.SendProto(addr.HostID, addr.Port, t.port, call)
 }
@@ -187,7 +173,7 @@ func (t *VPNTransport) Call(call *CallOut, fn ResponseFunc) error {
 	defer t.callsOut.Delete(addr, call.ID())
 
 	err = call.SendRequest(func(ctx context.Context, res *pb.Call) error {
-		return t.call(ctx, res, addr)
+		return t.send(ctx, res, addr)
 	})
 	if err != nil {
 		return err
@@ -196,19 +182,14 @@ func (t *VPNTransport) Call(call *CallOut, fn ResponseFunc) error {
 	return fn()
 }
 
-const vpnCertificateHeader = "vpnCertificate"
+const vpnCertificateHeader = "certificate"
 
 func (t *VPNTransport) verifyMessage(msg *vpn.Message, req *pb.Call, cert *pb.Certificate) error {
 	if !bytes.Equal(cert.GetKey(), msg.Trailer.Entries[0].HostID.Bytes(nil)) {
 		return errors.New("certificate host id mismatch")
 	}
 
-	asdf, err := t.certificate()
-	if err != nil {
-		return err
-	}
-
-	if !bytes.Equal(dao.GetRootCert(asdf).Key, cert.GetParent().GetParent().GetKey()) {
+	if !bytes.Equal(dao.GetRootCert(t.certificate()).Key, cert.GetParent().GetParent().GetKey()) {
 		return errors.New("network key mismatch")
 	}
 	if err := dao.VerifyCertificate(cert); err != nil {
@@ -221,7 +202,7 @@ func (t *VPNTransport) verifyMessage(msg *vpn.Message, req *pb.Call, cert *pb.Ce
 }
 
 // VPNCertFunc ...
-type VPNCertFunc func() (*pb.Certificate, error)
+type VPNCertFunc func() *pb.Certificate
 
 // VPNContext smuggles the vpn message into rpc calls
 type VPNContext struct {

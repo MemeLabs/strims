@@ -12,7 +12,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/services/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -75,10 +74,7 @@ func (t *Control) handleNetworkStart(ctx context.Context, network *pb.Network) {
 		logutil.ByteHex("network", network.Key.Public),
 	)
 
-	server := rpc.NewServer(t.logger)
-	api.RegisterCAService(server, ca.NewService(t.logger, network))
-
-	dialer, err := t.dialer.ServerDialer(network.Key.Public, network.Key, ca.AddressSalt)
+	server, err := t.dialer.Server(network.Key.Public, network.Key, ca.AddressSalt)
 	if err != nil {
 		t.logger.Error(
 			"starting certificate authority failed",
@@ -88,8 +84,9 @@ func (t *Control) handleNetworkStart(ctx context.Context, network *pb.Network) {
 		return
 	}
 
+	api.RegisterCAService(server, ca.NewService(t.logger, network))
 	ctx, cancel := context.WithCancel(ctx)
-	go server.Listen(ctx, dialer)
+	go server.Listen(ctx)
 
 	t.servers[network.Id] = cancel
 }
@@ -103,11 +100,7 @@ func (t *Control) handleNetworkStop(network *pb.Network) {
 // ForwardRenewRequest ...
 func (t *Control) ForwardRenewRequest(ctx context.Context, cert *pb.Certificate, csr *pb.CertificateRequest) (*pb.Certificate, error) {
 	networkKey := networkKeyForCertificate(cert)
-	dialer, err := t.dialer.ClientDialer(networkKey, networkKey, ca.AddressSalt)
-	if err != nil {
-		return nil, err
-	}
-	client, err := rpc.NewClient(t.logger, dialer)
+	client, err := t.dialer.Client(networkKey, networkKey, ca.AddressSalt)
 	if err != nil {
 		return nil, err
 	}

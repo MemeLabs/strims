@@ -50,7 +50,6 @@ func NewCallBase(ctx context.Context) CallBase {
 	return CallBase{
 		ctx:    ctx,
 		cancel: cancel,
-		res:    make(chan proto.Message),
 	}
 }
 
@@ -58,7 +57,6 @@ func NewCallBase(ctx context.Context) CallBase {
 type CallBase struct {
 	ctx    context.Context
 	cancel context.CancelFunc
-	res    chan proto.Message
 }
 
 // Context ...
@@ -72,11 +70,12 @@ func (c *CallBase) Cancel() {
 }
 
 // NewCallIn ...
-func NewCallIn(ctx context.Context, req *pb.Call, parentCallAcessor ParentCallAccessor) *CallIn {
+func NewCallIn(ctx context.Context, req *pb.Call, parentCallAcessor ParentCallAccessor, send SendFunc) *CallIn {
 	return &CallIn{
 		CallBase:           NewCallBase(ctx),
 		req:                req,
 		ParentCallAccessor: parentCallAcessor,
+		send:               send,
 	}
 }
 
@@ -86,6 +85,7 @@ type CallIn struct {
 	ParentCallAccessor
 	req          *pb.Call
 	responseType ResponseType
+	send         SendFunc
 }
 
 // ID ...
@@ -115,48 +115,35 @@ func (c *CallIn) Argument() (interface{}, error) {
 	return arg, nil
 }
 
-// SendResponse ...
-func (c *CallIn) SendResponse(fn SendFunc) error {
-	defer c.cancel()
+func (c *CallIn) sendResponse(res proto.Message) error {
+	id, err := dao.GenerateSnowflake()
+	if err != nil {
+		return err
+	}
 
-	for res := range c.res {
-		id, err := dao.GenerateSnowflake()
-		if err != nil {
-			return err
-		}
-
-		if err := send(c.ctx, id, c.req.Id, callbackMethod, res, fn); err != nil {
-			return err
-		}
+	if err := send(c.ctx, id, c.req.Id, callbackMethod, res, c.send); err != nil {
+		return err
 	}
 	return nil
 }
 
-func (c *CallIn) returnNone() {
-	close(c.res)
-}
-
 func (c *CallIn) returnUndefined() {
 	c.responseType = ResponseTypeUndefined
-	c.res <- &pb.Undefined{}
-	close(c.res)
+	c.sendResponse(&pb.Undefined{})
 }
 
 func (c *CallIn) returnError(err error) {
 	c.responseType = ResponseTypeError
-	c.res <- &pb.Error{Message: err.Error()}
-	close(c.res)
+	c.sendResponse(&pb.Error{Message: err.Error()})
 }
 
 func (c *CallIn) returnValue(v proto.Message) {
 	c.responseType = ResponseTypeValue
-	c.res <- v
-	close(c.res)
+	c.sendResponse(v)
 }
 
 func (c *CallIn) returnStream(v interface{}) {
 	c.responseType = ResponseTypeStream
-	defer close(c.res)
 
 	cases := []reflect.SelectCase{
 		{
@@ -177,10 +164,14 @@ func (c *CallIn) returnStream(v interface{}) {
 		}
 
 		if !ok {
-			c.res <- &pb.Close{}
+			c.sendResponse(&pb.Close{})
 			return
 		}
-		c.res <- v.Interface().(proto.Message)
+
+		if err := c.sendResponse(v.Interface().(proto.Message)); err != nil {
+			c.cancel()
+			return
+		}
 	}
 }
 
@@ -204,6 +195,7 @@ func NewCallOutWithParent(ctx context.Context, method string, arg proto.Message,
 		parentID: parent.ID(),
 		method:   method,
 		arg:      arg,
+		res:      make(chan proto.Message),
 		errs:     make(chan error),
 	}, nil
 }
@@ -215,6 +207,7 @@ type CallOut struct {
 	parentID uint64
 	method   string
 	arg      proto.Message
+	res      chan proto.Message
 	errs     chan error
 }
 

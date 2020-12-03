@@ -87,7 +87,7 @@ func main() {
 		panic(err)
 	}
 
-	server := rpc.NewServer(logger)
+	server := rpc.NewServer(logger, &noopDialer{})
 
 	newVPN := func(key *pb.Key) (*vpn.Host, error) {
 		vnicHost, err := vnic.New(
@@ -142,4 +142,20 @@ func initProfileStore() (*dao.ProfileStore, error) {
 
 	_, profileStore, err := dao.LoadProfile(ds, profiles[0].Id, pw)
 	return profileStore, err
+}
+
+type noopDialer struct{}
+
+func (d *noopDialer) Dial(context.Context, rpc.Dispatcher) (rpc.Transport, error) {
+	return &noopTransport{}, nil
+}
+
+type noopTransport struct{}
+
+func (t *noopTransport) Call(*rpc.CallOut, rpc.ResponseFunc) error {
+	return nil
+}
+
+func (t *noopTransport) Listen() error {
+	return nil
 }

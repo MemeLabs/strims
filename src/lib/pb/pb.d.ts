@@ -4618,6 +4618,12 @@ export interface IDirectoryListing {
 
     /** DirectoryListing extra */
     extra?: (Uint8Array|null);
+
+    /** DirectoryListing timestamp */
+    timestamp?: (number|null);
+
+    /** DirectoryListing signature */
+    signature?: (Uint8Array|null);
 }
 
 /** Represents a DirectoryListing. */
@@ -4646,6 +4652,12 @@ export class DirectoryListing implements IDirectoryListing {
 
     /** DirectoryListing extra. */
     public extra: Uint8Array;
+
+    /** DirectoryListing timestamp. */
+    public timestamp: number;
+
+    /** DirectoryListing signature. */
+    public signature: Uint8Array;
 
     /**
      * Creates a new DirectoryListing instance using the specified properties.
@@ -4727,11 +4739,11 @@ export interface IDirectoryServerEvent {
     /** DirectoryServerEvent unpublish */
     unpublish?: (DirectoryServerEvent.IUnpublish|null);
 
-    /** DirectoryServerEvent open */
-    open?: (DirectoryServerEvent.IViewerChange|null);
+    /** DirectoryServerEvent viewerCountChange */
+    viewerCountChange?: (DirectoryServerEvent.IViewerCountChange|null);
 
-    /** DirectoryServerEvent ping */
-    ping?: (DirectoryServerEvent.IPing|null);
+    /** DirectoryServerEvent viewerStateChange */
+    viewerStateChange?: (DirectoryServerEvent.IViewerStateChange|null);
 }
 
 /** Represents a DirectoryServerEvent. */
@@ -4749,14 +4761,14 @@ export class DirectoryServerEvent implements IDirectoryServerEvent {
     /** DirectoryServerEvent unpublish. */
     public unpublish?: (DirectoryServerEvent.IUnpublish|null);
 
-    /** DirectoryServerEvent open. */
-    public open?: (DirectoryServerEvent.IViewerChange|null);
+    /** DirectoryServerEvent viewerCountChange. */
+    public viewerCountChange?: (DirectoryServerEvent.IViewerCountChange|null);
 
-    /** DirectoryServerEvent ping. */
-    public ping?: (DirectoryServerEvent.IPing|null);
+    /** DirectoryServerEvent viewerStateChange. */
+    public viewerStateChange?: (DirectoryServerEvent.IViewerStateChange|null);
 
     /** DirectoryServerEvent body. */
-    public body?: ("publish"|"unpublish"|"open"|"ping");
+    public body?: ("publish"|"unpublish"|"viewerCountChange"|"viewerStateChange");
 
     /**
      * Creates a new DirectoryServerEvent instance using the specified properties.
@@ -5011,187 +5023,199 @@ export namespace DirectoryServerEvent {
         public toJSON(): { [k: string]: any };
     }
 
-    /** Properties of a ViewerChange. */
-    interface IViewerChange {
+    /** Properties of a ViewerCountChange. */
+    interface IViewerCountChange {
 
-        /** ViewerChange key */
+        /** ViewerCountChange key */
         key?: (Uint8Array|null);
 
-        /** ViewerChange count */
+        /** ViewerCountChange count */
         count?: (number|null);
     }
 
-    /** Represents a ViewerChange. */
-    class ViewerChange implements IViewerChange {
+    /** Represents a ViewerCountChange. */
+    class ViewerCountChange implements IViewerCountChange {
 
         /**
-         * Constructs a new ViewerChange.
+         * Constructs a new ViewerCountChange.
          * @param [properties] Properties to set
          */
-        constructor(properties?: DirectoryServerEvent.IViewerChange);
+        constructor(properties?: DirectoryServerEvent.IViewerCountChange);
 
-        /** ViewerChange key. */
+        /** ViewerCountChange key. */
         public key: Uint8Array;
 
-        /** ViewerChange count. */
+        /** ViewerCountChange count. */
         public count: number;
 
         /**
-         * Creates a new ViewerChange instance using the specified properties.
+         * Creates a new ViewerCountChange instance using the specified properties.
          * @param [properties] Properties to set
-         * @returns ViewerChange instance
+         * @returns ViewerCountChange instance
          */
-        public static create(properties?: DirectoryServerEvent.IViewerChange): DirectoryServerEvent.ViewerChange;
+        public static create(properties?: DirectoryServerEvent.IViewerCountChange): DirectoryServerEvent.ViewerCountChange;
 
         /**
-         * Encodes the specified ViewerChange message. Does not implicitly {@link DirectoryServerEvent.ViewerChange.verify|verify} messages.
-         * @param message ViewerChange message or plain object to encode
+         * Encodes the specified ViewerCountChange message. Does not implicitly {@link DirectoryServerEvent.ViewerCountChange.verify|verify} messages.
+         * @param message ViewerCountChange message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encode(message: DirectoryServerEvent.IViewerChange, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encode(message: DirectoryServerEvent.IViewerCountChange, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Encodes the specified ViewerChange message, length delimited. Does not implicitly {@link DirectoryServerEvent.ViewerChange.verify|verify} messages.
-         * @param message ViewerChange message or plain object to encode
+         * Encodes the specified ViewerCountChange message, length delimited. Does not implicitly {@link DirectoryServerEvent.ViewerCountChange.verify|verify} messages.
+         * @param message ViewerCountChange message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encodeDelimited(message: DirectoryServerEvent.IViewerChange, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encodeDelimited(message: DirectoryServerEvent.IViewerCountChange, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Decodes a ViewerChange message from the specified reader or buffer.
+         * Decodes a ViewerCountChange message from the specified reader or buffer.
          * @param reader Reader or buffer to decode from
          * @param [length] Message length if known beforehand
-         * @returns ViewerChange
+         * @returns ViewerCountChange
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryServerEvent.ViewerChange;
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryServerEvent.ViewerCountChange;
 
         /**
-         * Decodes a ViewerChange message from the specified reader or buffer, length delimited.
+         * Decodes a ViewerCountChange message from the specified reader or buffer, length delimited.
          * @param reader Reader or buffer to decode from
-         * @returns ViewerChange
+         * @returns ViewerCountChange
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryServerEvent.ViewerChange;
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryServerEvent.ViewerCountChange;
 
         /**
-         * Verifies a ViewerChange message.
+         * Verifies a ViewerCountChange message.
          * @param message Plain object to verify
          * @returns `null` if valid, otherwise the reason why it is not
          */
         public static verify(message: { [k: string]: any }): (string|null);
 
         /**
-         * Creates a ViewerChange message from a plain object. Also converts values to their respective internal types.
+         * Creates a ViewerCountChange message from a plain object. Also converts values to their respective internal types.
          * @param object Plain object
-         * @returns ViewerChange
+         * @returns ViewerCountChange
          */
-        public static fromObject(object: { [k: string]: any }): DirectoryServerEvent.ViewerChange;
+        public static fromObject(object: { [k: string]: any }): DirectoryServerEvent.ViewerCountChange;
 
         /**
-         * Creates a plain object from a ViewerChange message. Also converts values to other types if specified.
-         * @param message ViewerChange
+         * Creates a plain object from a ViewerCountChange message. Also converts values to other types if specified.
+         * @param message ViewerCountChange
          * @param [options] Conversion options
          * @returns Plain object
          */
-        public static toObject(message: DirectoryServerEvent.ViewerChange, options?: $protobuf.IConversionOptions): { [k: string]: any };
+        public static toObject(message: DirectoryServerEvent.ViewerCountChange, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
         /**
-         * Converts this ViewerChange to JSON.
+         * Converts this ViewerCountChange to JSON.
          * @returns JSON object
          */
         public toJSON(): { [k: string]: any };
     }
 
-    /** Properties of a Ping. */
-    interface IPing {
+    /** Properties of a ViewerStateChange. */
+    interface IViewerStateChange {
 
-        /** Ping time */
-        time?: (number|null);
+        /** ViewerStateChange subject */
+        subject?: (string|null);
+
+        /** ViewerStateChange online */
+        online?: (boolean|null);
+
+        /** ViewerStateChange viewingKeys */
+        viewingKeys?: (Uint8Array[]|null);
     }
 
-    /** Represents a Ping. */
-    class Ping implements IPing {
+    /** Represents a ViewerStateChange. */
+    class ViewerStateChange implements IViewerStateChange {
 
         /**
-         * Constructs a new Ping.
+         * Constructs a new ViewerStateChange.
          * @param [properties] Properties to set
          */
-        constructor(properties?: DirectoryServerEvent.IPing);
+        constructor(properties?: DirectoryServerEvent.IViewerStateChange);
 
-        /** Ping time. */
-        public time: number;
+        /** ViewerStateChange subject. */
+        public subject: string;
+
+        /** ViewerStateChange online. */
+        public online: boolean;
+
+        /** ViewerStateChange viewingKeys. */
+        public viewingKeys: Uint8Array[];
 
         /**
-         * Creates a new Ping instance using the specified properties.
+         * Creates a new ViewerStateChange instance using the specified properties.
          * @param [properties] Properties to set
-         * @returns Ping instance
+         * @returns ViewerStateChange instance
          */
-        public static create(properties?: DirectoryServerEvent.IPing): DirectoryServerEvent.Ping;
+        public static create(properties?: DirectoryServerEvent.IViewerStateChange): DirectoryServerEvent.ViewerStateChange;
 
         /**
-         * Encodes the specified Ping message. Does not implicitly {@link DirectoryServerEvent.Ping.verify|verify} messages.
-         * @param message Ping message or plain object to encode
+         * Encodes the specified ViewerStateChange message. Does not implicitly {@link DirectoryServerEvent.ViewerStateChange.verify|verify} messages.
+         * @param message ViewerStateChange message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encode(message: DirectoryServerEvent.IPing, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encode(message: DirectoryServerEvent.IViewerStateChange, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Encodes the specified Ping message, length delimited. Does not implicitly {@link DirectoryServerEvent.Ping.verify|verify} messages.
-         * @param message Ping message or plain object to encode
+         * Encodes the specified ViewerStateChange message, length delimited. Does not implicitly {@link DirectoryServerEvent.ViewerStateChange.verify|verify} messages.
+         * @param message ViewerStateChange message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encodeDelimited(message: DirectoryServerEvent.IPing, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encodeDelimited(message: DirectoryServerEvent.IViewerStateChange, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Decodes a Ping message from the specified reader or buffer.
+         * Decodes a ViewerStateChange message from the specified reader or buffer.
          * @param reader Reader or buffer to decode from
          * @param [length] Message length if known beforehand
-         * @returns Ping
+         * @returns ViewerStateChange
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryServerEvent.Ping;
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryServerEvent.ViewerStateChange;
 
         /**
-         * Decodes a Ping message from the specified reader or buffer, length delimited.
+         * Decodes a ViewerStateChange message from the specified reader or buffer, length delimited.
          * @param reader Reader or buffer to decode from
-         * @returns Ping
+         * @returns ViewerStateChange
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryServerEvent.Ping;
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryServerEvent.ViewerStateChange;
 
         /**
-         * Verifies a Ping message.
+         * Verifies a ViewerStateChange message.
          * @param message Plain object to verify
          * @returns `null` if valid, otherwise the reason why it is not
          */
         public static verify(message: { [k: string]: any }): (string|null);
 
         /**
-         * Creates a Ping message from a plain object. Also converts values to their respective internal types.
+         * Creates a ViewerStateChange message from a plain object. Also converts values to their respective internal types.
          * @param object Plain object
-         * @returns Ping
+         * @returns ViewerStateChange
          */
-        public static fromObject(object: { [k: string]: any }): DirectoryServerEvent.Ping;
+        public static fromObject(object: { [k: string]: any }): DirectoryServerEvent.ViewerStateChange;
 
         /**
-         * Creates a plain object from a Ping message. Also converts values to other types if specified.
-         * @param message Ping
+         * Creates a plain object from a ViewerStateChange message. Also converts values to other types if specified.
+         * @param message ViewerStateChange
          * @param [options] Conversion options
          * @returns Plain object
          */
-        public static toObject(message: DirectoryServerEvent.Ping, options?: $protobuf.IConversionOptions): { [k: string]: any };
+        public static toObject(message: DirectoryServerEvent.ViewerStateChange, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
         /**
-         * Converts this Ping to JSON.
+         * Converts this ViewerStateChange to JSON.
          * @returns JSON object
          */
         public toJSON(): { [k: string]: any };
@@ -6065,9 +6089,6 @@ export namespace DirectoryClientEvent {
 /** Properties of a DirectoryPublishRequest. */
 export interface IDirectoryPublishRequest {
 
-    /** DirectoryPublishRequest certificate */
-    certificate?: (ICertificate|null);
-
     /** DirectoryPublishRequest listing */
     listing?: (IDirectoryListing|null);
 }
@@ -6080,9 +6101,6 @@ export class DirectoryPublishRequest implements IDirectoryPublishRequest {
      * @param [properties] Properties to set
      */
     constructor(properties?: IDirectoryPublishRequest);
-
-    /** DirectoryPublishRequest certificate. */
-    public certificate?: (ICertificate|null);
 
     /** DirectoryPublishRequest listing. */
     public listing?: (IDirectoryListing|null);
@@ -6419,9 +6437,6 @@ export class DirectoryUnpublishResponse implements IDirectoryUnpublishResponse {
 /** Properties of a DirectoryJoinRequest. */
 export interface IDirectoryJoinRequest {
 
-    /** DirectoryJoinRequest certificate */
-    certificate?: (ICertificate|null);
-
     /** DirectoryJoinRequest key */
     key?: (Uint8Array|null);
 }
@@ -6434,9 +6449,6 @@ export class DirectoryJoinRequest implements IDirectoryJoinRequest {
      * @param [properties] Properties to set
      */
     constructor(properties?: IDirectoryJoinRequest);
-
-    /** DirectoryJoinRequest certificate. */
-    public certificate?: (ICertificate|null);
 
     /** DirectoryJoinRequest key. */
     public key: Uint8Array;
@@ -6598,6 +6610,9 @@ export class DirectoryJoinResponse implements IDirectoryJoinResponse {
 
 /** Properties of a DirectoryPartRequest. */
 export interface IDirectoryPartRequest {
+
+    /** DirectoryPartRequest key */
+    key?: (Uint8Array|null);
 }
 
 /** Represents a DirectoryPartRequest. */
@@ -6608,6 +6623,9 @@ export class DirectoryPartRequest implements IDirectoryPartRequest {
      * @param [properties] Properties to set
      */
     constructor(properties?: IDirectoryPartRequest);
+
+    /** DirectoryPartRequest key. */
+    public key: Uint8Array;
 
     /**
      * Creates a new DirectoryPartRequest instance using the specified properties.
@@ -15423,7 +15441,7 @@ export interface ICall {
     argument?: (google.protobuf.IAny|null);
 
     /** Call headers */
-    headers?: ({ [k: string]: google.protobuf.IAny }|null);
+    headers?: ({ [k: string]: Uint8Array }|null);
 }
 
 /** Represents a Call. */
@@ -15448,7 +15466,7 @@ export class Call implements ICall {
     public argument?: (google.protobuf.IAny|null);
 
     /** Call headers. */
-    public headers: { [k: string]: google.protobuf.IAny };
+    public headers: { [k: string]: Uint8Array };
 
     /**
      * Creates a new Call instance using the specified properties.

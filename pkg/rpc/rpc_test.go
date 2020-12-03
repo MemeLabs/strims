@@ -24,6 +24,7 @@ func (t *testServer) CallStream(ctx context.Context, req *pb.RPCCallStreamReques
 	go func() {
 		for i := 0; i < int(req.Count); i++ {
 			ch <- &pb.RPCCallStreamResponse{Id: req.Id}
+			time.Sleep(time.Millisecond)
 		}
 		close(ch)
 	}()
@@ -34,12 +35,12 @@ func (t *testServer) CallStream(ctx context.Context, req *pb.RPCCallStreamReques
 func newTestClientServerPair(logger *zap.Logger) (*api.RPCTestClient, *Server, error) {
 	a, b := ppspptest.NewUnbufferedConnPair()
 
-	server := NewServer(logger)
-	api.RegisterRPCTestService(server, &testServer{})
-	go server.Listen(context.Background(), &RWDialer{
+	server := NewServer(logger, &RWDialer{
 		Logger:     logger,
 		ReadWriter: a,
 	})
+	api.RegisterRPCTestService(server, &testServer{})
+	go server.Listen(context.Background())
 
 	client, err := NewClient(logger, &RWDialer{
 		Logger:     logger,
@@ -90,7 +91,7 @@ func TestStreamingE2E(t *testing.T) {
 		n++
 		assert.Equal(t, req.Id, res.Id, "expected response to contain req id")
 	}
-	assert.Equal(t, n, req.Count, "expected response message count mismatch")
+	assert.Equal(t, req.Count, n, "expected response message count mismatch")
 
 	<-done
 }

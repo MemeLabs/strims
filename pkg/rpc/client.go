@@ -128,8 +128,6 @@ func (c *Client) CallStreaming(ctx context.Context, method string, req proto.Mes
 type clientDispatcher struct{}
 
 func (c *clientDispatcher) Dispatch(call *CallIn) {
-	defer call.returnNone()
-
 	if call.Method() != callbackMethod {
 		return
 	}

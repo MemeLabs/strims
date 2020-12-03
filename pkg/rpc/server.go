@@ -28,20 +28,22 @@ var (
 )
 
 // NewServer ...
-func NewServer(logger *zap.Logger) *Server {
+func NewServer(logger *zap.Logger, dialer Dialer) *Server {
 	return &Server{
 		ServiceDispatcher: NewServiceDispatcher(logger),
+		dialer:            dialer,
 	}
 }
 
 // Server ...
 type Server struct {
 	*ServiceDispatcher
+	dialer Dialer
 }
 
 // Listen ...
-func (s *Server) Listen(ctx context.Context, dialer Dialer) error {
-	transport, err := dialer.Dial(ctx, s.ServiceDispatcher)
+func (s *Server) Listen(ctx context.Context) error {
+	transport, err := s.dialer.Dial(ctx, s.ServiceDispatcher)
 	if err != nil {
 		return err
 	}

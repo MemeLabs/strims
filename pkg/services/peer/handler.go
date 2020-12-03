@@ -31,17 +31,17 @@ func NewPeerHandler(logger *zap.Logger, app *app.Control) vnic.PeerHandler {
 			network:   api.NewNetworkPeerClient(c),
 		})
 
-		s := rpc.NewServer(logger)
+		s := rpc.NewServer(logger, &rpc.RWFDialer{
+			Logger:           logger,
+			ReadWriteFlusher: rw1,
+		})
 		api.RegisterBootstrapPeerService(s, &bootstrapService{p, app})
 		api.RegisterCAPeerService(s, &caService{p, app})
 		api.RegisterSwarmPeerService(s, &swarmService{p, app})
 		api.RegisterNetworkPeerService(s, &networkService{p, app})
 
 		go func() {
-			err := s.Listen(context.Background(), &rpc.RWFDialer{
-				Logger:           logger,
-				ReadWriteFlusher: rw1,
-			})
+			err := s.Listen(context.Background())
 			if err != nil {
 				logger.Debug("peer rpc server closed with error", zap.Error(err))
 			}

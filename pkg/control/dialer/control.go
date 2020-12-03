@@ -101,6 +101,15 @@ func (t *Control) ServerDialer(networkKey []byte, key *pb.Key, salt []byte) (rpc
 	}, nil
 }
 
+// Server ...
+func (t *Control) Server(networkKey []byte, key *pb.Key, salt []byte) (*rpc.Server, error) {
+	dialer, err := t.ServerDialer(networkKey, key, salt)
+	if err != nil {
+		return nil, err
+	}
+	return rpc.NewServer(t.logger, dialer), nil
+}
+
 // ClientDialer ...
 func (t *Control) ClientDialer(networkKey, key, salt []byte) (rpc.Dialer, error) {
 	cert, client, err := t.hostCertAndVPNClient(networkKey)
@@ -115,6 +124,15 @@ func (t *Control) ClientDialer(networkKey, key, salt []byte) (rpc.Dialer, error)
 		Salt:     salt,
 		CertFunc: cert.Load,
 	}, nil
+}
+
+// Client ...
+func (t *Control) Client(networkKey, key, salt []byte) (*rpc.Client, error) {
+	dialer, err := t.ClientDialer(networkKey, key, salt)
+	if err != nil {
+		return nil, err
+	}
+	return rpc.NewClient(t.logger, dialer)
 }
 
 type hostCertKey struct {
@@ -140,10 +158,10 @@ func (h *hostCert) Store(cert *pb.Certificate) {
 	h.cert = cert
 }
 
-func (h *hostCert) Load() (*pb.Certificate, error) {
+func (h *hostCert) Load() *pb.Certificate {
 	h.lock.Lock()
 	defer h.lock.Unlock()
-	return h.cert, nil
+	return h.cert
 }
 
 func (h *hostCert) Key() []byte {

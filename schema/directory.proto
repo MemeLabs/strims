@@ -22,6 +22,8 @@ message DirectoryListing {
   string description = 4;
   repeated string tags = 5;
   bytes extra = 6;
+  int64 timestamp = 7;
+  bytes signature = 8;
 }
 
 message DirectoryServerEvent {
@@ -33,20 +35,22 @@ message DirectoryServerEvent {
     bytes key = 1;
   }
 
-  message ViewerChange {
+  message ViewerCountChange {
     bytes key = 1;
     uint32 count = 2;
   }
 
-  message Ping {
-    int64 time = 1;
+  message ViewerStateChange {
+    string subject = 1;
+    bool online = 2;
+    repeated bytes viewing_keys = 3;
   }
 
   oneof body {
     Publish publish = 1;
     Unpublish unpublish = 2;
-    ViewerChange open = 3;
-    Ping ping = 4;
+    ViewerCountChange viewer_count_change = 3;
+    ViewerStateChange viewer_state_change = 4;
   }
 }
 
@@ -98,8 +102,7 @@ message DirectoryClientEvent {
 }
 
 message DirectoryPublishRequest {
-  Certificate certificate = 1;
-  DirectoryListing listing = 2;
+  DirectoryListing listing = 1;
 }
 
 message DirectoryPublishResponse {}
@@ -111,13 +114,14 @@ message DirectoryUnpublishRequest {
 message DirectoryUnpublishResponse {}
 
 message DirectoryJoinRequest {
-  Certificate certificate = 1;
-  bytes key = 2;
+  bytes key = 1;
 }
 
 message DirectoryJoinResponse {}
 
-message DirectoryPartRequest {}
+message DirectoryPartRequest {
+  bytes key = 1;
+}
 
 message DirectoryPartResponse {}
 

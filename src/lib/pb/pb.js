@@ -10496,6 +10496,8 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
      * @property {string|null} [description] DirectoryListing description
      * @property {Array.<string>|null} [tags] DirectoryListing tags
      * @property {Uint8Array|null} [extra] DirectoryListing extra
+     * @property {number|null} [timestamp] DirectoryListing timestamp
+     * @property {Uint8Array|null} [signature] DirectoryListing signature
      */
 
     /**
@@ -10563,6 +10565,22 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
     DirectoryListing.prototype.extra = $util.newBuffer([]);
 
     /**
+     * DirectoryListing timestamp.
+     * @member {number} timestamp
+     * @memberof DirectoryListing
+     * @instance
+     */
+    DirectoryListing.prototype.timestamp = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+    /**
+     * DirectoryListing signature.
+     * @member {Uint8Array} signature
+     * @memberof DirectoryListing
+     * @instance
+     */
+    DirectoryListing.prototype.signature = $util.newBuffer([]);
+
+    /**
      * Creates a new DirectoryListing instance using the specified properties.
      * @function create
      * @memberof DirectoryListing
@@ -10599,6 +10617,10 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
                 writer.uint32(/* id 5, wireType 2 =*/42).string(message.tags[i]);
         if (message.extra != null && Object.hasOwnProperty.call(message, "extra"))
             writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.extra);
+        if (message.timestamp != null && Object.hasOwnProperty.call(message, "timestamp"))
+            writer.uint32(/* id 7, wireType 0 =*/56).int64(message.timestamp);
+        if (message.signature != null && Object.hasOwnProperty.call(message, "signature"))
+            writer.uint32(/* id 8, wireType 2 =*/66).bytes(message.signature);
         return writer;
     };
 
@@ -10652,6 +10674,12 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
                 break;
             case 6:
                 message.extra = reader.bytes();
+                break;
+            case 7:
+                message.timestamp = reader.int64();
+                break;
+            case 8:
+                message.signature = reader.bytes();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -10710,6 +10738,12 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
         if (message.extra != null && message.hasOwnProperty("extra"))
             if (!(message.extra && typeof message.extra.length === "number" || $util.isString(message.extra)))
                 return "extra: buffer expected";
+        if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+            if (!$util.isInteger(message.timestamp) && !(message.timestamp && $util.isInteger(message.timestamp.low) && $util.isInteger(message.timestamp.high)))
+                return "timestamp: integer|Long expected";
+        if (message.signature != null && message.hasOwnProperty("signature"))
+            if (!(message.signature && typeof message.signature.length === "number" || $util.isString(message.signature)))
+                return "signature: buffer expected";
         return null;
     };
 
@@ -10748,6 +10782,20 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
                 $util.base64.decode(object.extra, message.extra = $util.newBuffer($util.base64.length(object.extra)), 0);
             else if (object.extra.length)
                 message.extra = object.extra;
+        if (object.timestamp != null)
+            if ($util.Long)
+                (message.timestamp = $util.Long.fromValue(object.timestamp)).unsigned = false;
+            else if (typeof object.timestamp === "string")
+                message.timestamp = parseInt(object.timestamp, 10);
+            else if (typeof object.timestamp === "number")
+                message.timestamp = object.timestamp;
+            else if (typeof object.timestamp === "object")
+                message.timestamp = new $util.LongBits(object.timestamp.low >>> 0, object.timestamp.high >>> 0).toNumber();
+        if (object.signature != null)
+            if (typeof object.signature === "string")
+                $util.base64.decode(object.signature, message.signature = $util.newBuffer($util.base64.length(object.signature)), 0);
+            else if (object.signature.length)
+                message.signature = object.signature;
         return message;
     };
 
@@ -10784,6 +10832,18 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
                 if (options.bytes !== Array)
                     object.extra = $util.newBuffer(object.extra);
             }
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, false);
+                object.timestamp = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.timestamp = options.longs === String ? "0" : 0;
+            if (options.bytes === String)
+                object.signature = "";
+            else {
+                object.signature = [];
+                if (options.bytes !== Array)
+                    object.signature = $util.newBuffer(object.signature);
+            }
         }
         if (message.key != null && message.hasOwnProperty("key"))
             object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
@@ -10800,6 +10860,13 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
         }
         if (message.extra != null && message.hasOwnProperty("extra"))
             object.extra = options.bytes === String ? $util.base64.encode(message.extra, 0, message.extra.length) : options.bytes === Array ? Array.prototype.slice.call(message.extra) : message.extra;
+        if (message.timestamp != null && message.hasOwnProperty("timestamp"))
+            if (typeof message.timestamp === "number")
+                object.timestamp = options.longs === String ? String(message.timestamp) : message.timestamp;
+            else
+                object.timestamp = options.longs === String ? $util.Long.prototype.toString.call(message.timestamp) : options.longs === Number ? new $util.LongBits(message.timestamp.low >>> 0, message.timestamp.high >>> 0).toNumber() : message.timestamp;
+        if (message.signature != null && message.hasOwnProperty("signature"))
+            object.signature = options.bytes === String ? $util.base64.encode(message.signature, 0, message.signature.length) : options.bytes === Array ? Array.prototype.slice.call(message.signature) : message.signature;
         return object;
     };
 
@@ -10825,8 +10892,8 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
      * @interface IDirectoryServerEvent
      * @property {DirectoryServerEvent.IPublish|null} [publish] DirectoryServerEvent publish
      * @property {DirectoryServerEvent.IUnpublish|null} [unpublish] DirectoryServerEvent unpublish
-     * @property {DirectoryServerEvent.IViewerChange|null} [open] DirectoryServerEvent open
-     * @property {DirectoryServerEvent.IPing|null} [ping] DirectoryServerEvent ping
+     * @property {DirectoryServerEvent.IViewerCountChange|null} [viewerCountChange] DirectoryServerEvent viewerCountChange
+     * @property {DirectoryServerEvent.IViewerStateChange|null} [viewerStateChange] DirectoryServerEvent viewerStateChange
      */
 
     /**
@@ -10861,32 +10928,32 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
     DirectoryServerEvent.prototype.unpublish = null;
 
     /**
-     * DirectoryServerEvent open.
-     * @member {DirectoryServerEvent.IViewerChange|null|undefined} open
+     * DirectoryServerEvent viewerCountChange.
+     * @member {DirectoryServerEvent.IViewerCountChange|null|undefined} viewerCountChange
      * @memberof DirectoryServerEvent
      * @instance
      */
-    DirectoryServerEvent.prototype.open = null;
+    DirectoryServerEvent.prototype.viewerCountChange = null;
 
     /**
-     * DirectoryServerEvent ping.
-     * @member {DirectoryServerEvent.IPing|null|undefined} ping
+     * DirectoryServerEvent viewerStateChange.
+     * @member {DirectoryServerEvent.IViewerStateChange|null|undefined} viewerStateChange
      * @memberof DirectoryServerEvent
      * @instance
      */
-    DirectoryServerEvent.prototype.ping = null;
+    DirectoryServerEvent.prototype.viewerStateChange = null;
 
     // OneOf field names bound to virtual getters and setters
     let $oneOfFields;
 
     /**
      * DirectoryServerEvent body.
-     * @member {"publish"|"unpublish"|"open"|"ping"|undefined} body
+     * @member {"publish"|"unpublish"|"viewerCountChange"|"viewerStateChange"|undefined} body
      * @memberof DirectoryServerEvent
      * @instance
      */
     Object.defineProperty(DirectoryServerEvent.prototype, "body", {
-        get: $util.oneOfGetter($oneOfFields = ["publish", "unpublish", "open", "ping"]),
+        get: $util.oneOfGetter($oneOfFields = ["publish", "unpublish", "viewerCountChange", "viewerStateChange"]),
         set: $util.oneOfSetter($oneOfFields)
     });
 
@@ -10918,10 +10985,10 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
             $root.DirectoryServerEvent.Publish.encode(message.publish, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         if (message.unpublish != null && Object.hasOwnProperty.call(message, "unpublish"))
             $root.DirectoryServerEvent.Unpublish.encode(message.unpublish, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
-        if (message.open != null && Object.hasOwnProperty.call(message, "open"))
-            $root.DirectoryServerEvent.ViewerChange.encode(message.open, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
-        if (message.ping != null && Object.hasOwnProperty.call(message, "ping"))
-            $root.DirectoryServerEvent.Ping.encode(message.ping, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+        if (message.viewerCountChange != null && Object.hasOwnProperty.call(message, "viewerCountChange"))
+            $root.DirectoryServerEvent.ViewerCountChange.encode(message.viewerCountChange, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+        if (message.viewerStateChange != null && Object.hasOwnProperty.call(message, "viewerStateChange"))
+            $root.DirectoryServerEvent.ViewerStateChange.encode(message.viewerStateChange, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
         return writer;
     };
 
@@ -10963,10 +11030,10 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
                 message.unpublish = $root.DirectoryServerEvent.Unpublish.decode(reader, reader.uint32());
                 break;
             case 3:
-                message.open = $root.DirectoryServerEvent.ViewerChange.decode(reader, reader.uint32());
+                message.viewerCountChange = $root.DirectoryServerEvent.ViewerCountChange.decode(reader, reader.uint32());
                 break;
             case 4:
-                message.ping = $root.DirectoryServerEvent.Ping.decode(reader, reader.uint32());
+                message.viewerStateChange = $root.DirectoryServerEvent.ViewerStateChange.decode(reader, reader.uint32());
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -11022,24 +11089,24 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
                     return "unpublish." + error;
             }
         }
-        if (message.open != null && message.hasOwnProperty("open")) {
+        if (message.viewerCountChange != null && message.hasOwnProperty("viewerCountChange")) {
             if (properties.body === 1)
                 return "body: multiple values";
             properties.body = 1;
             {
-                let error = $root.DirectoryServerEvent.ViewerChange.verify(message.open);
+                let error = $root.DirectoryServerEvent.ViewerCountChange.verify(message.viewerCountChange);
                 if (error)
-                    return "open." + error;
+                    return "viewerCountChange." + error;
             }
         }
-        if (message.ping != null && message.hasOwnProperty("ping")) {
+        if (message.viewerStateChange != null && message.hasOwnProperty("viewerStateChange")) {
             if (properties.body === 1)
                 return "body: multiple values";
             properties.body = 1;
             {
-                let error = $root.DirectoryServerEvent.Ping.verify(message.ping);
+                let error = $root.DirectoryServerEvent.ViewerStateChange.verify(message.viewerStateChange);
                 if (error)
-                    return "ping." + error;
+                    return "viewerStateChange." + error;
             }
         }
         return null;
@@ -11067,15 +11134,15 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
                 throw TypeError(".DirectoryServerEvent.unpublish: object expected");
             message.unpublish = $root.DirectoryServerEvent.Unpublish.fromObject(object.unpublish);
         }
-        if (object.open != null) {
-            if (typeof object.open !== "object")
-                throw TypeError(".DirectoryServerEvent.open: object expected");
-            message.open = $root.DirectoryServerEvent.ViewerChange.fromObject(object.open);
+        if (object.viewerCountChange != null) {
+            if (typeof object.viewerCountChange !== "object")
+                throw TypeError(".DirectoryServerEvent.viewerCountChange: object expected");
+            message.viewerCountChange = $root.DirectoryServerEvent.ViewerCountChange.fromObject(object.viewerCountChange);
         }
-        if (object.ping != null) {
-            if (typeof object.ping !== "object")
-                throw TypeError(".DirectoryServerEvent.ping: object expected");
-            message.ping = $root.DirectoryServerEvent.Ping.fromObject(object.ping);
+        if (object.viewerStateChange != null) {
+            if (typeof object.viewerStateChange !== "object")
+                throw TypeError(".DirectoryServerEvent.viewerStateChange: object expected");
+            message.viewerStateChange = $root.DirectoryServerEvent.ViewerStateChange.fromObject(object.viewerStateChange);
         }
         return message;
     };
@@ -11103,15 +11170,15 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
             if (options.oneofs)
                 object.body = "unpublish";
         }
-        if (message.open != null && message.hasOwnProperty("open")) {
-            object.open = $root.DirectoryServerEvent.ViewerChange.toObject(message.open, options);
+        if (message.viewerCountChange != null && message.hasOwnProperty("viewerCountChange")) {
+            object.viewerCountChange = $root.DirectoryServerEvent.ViewerCountChange.toObject(message.viewerCountChange, options);
             if (options.oneofs)
-                object.body = "open";
+                object.body = "viewerCountChange";
         }
-        if (message.ping != null && message.hasOwnProperty("ping")) {
-            object.ping = $root.DirectoryServerEvent.Ping.toObject(message.ping, options);
+        if (message.viewerStateChange != null && message.hasOwnProperty("viewerStateChange")) {
+            object.viewerStateChange = $root.DirectoryServerEvent.ViewerStateChange.toObject(message.viewerStateChange, options);
             if (options.oneofs)
-                object.body = "ping";
+                object.body = "viewerStateChange";
         }
         return object;
     };
@@ -11515,25 +11582,25 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         return Unpublish;
     })();
 
-    DirectoryServerEvent.ViewerChange = (function() {
+    DirectoryServerEvent.ViewerCountChange = (function() {
 
         /**
-         * Properties of a ViewerChange.
+         * Properties of a ViewerCountChange.
          * @memberof DirectoryServerEvent
-         * @interface IViewerChange
-         * @property {Uint8Array|null} [key] ViewerChange key
-         * @property {number|null} [count] ViewerChange count
+         * @interface IViewerCountChange
+         * @property {Uint8Array|null} [key] ViewerCountChange key
+         * @property {number|null} [count] ViewerCountChange count
          */
 
         /**
-         * Constructs a new ViewerChange.
+         * Constructs a new ViewerCountChange.
          * @memberof DirectoryServerEvent
-         * @classdesc Represents a ViewerChange.
-         * @implements IViewerChange
+         * @classdesc Represents a ViewerCountChange.
+         * @implements IViewerCountChange
          * @constructor
-         * @param {DirectoryServerEvent.IViewerChange=} [properties] Properties to set
+         * @param {DirectoryServerEvent.IViewerCountChange=} [properties] Properties to set
          */
-        function ViewerChange(properties) {
+        function ViewerCountChange(properties) {
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -11541,43 +11608,43 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         }
 
         /**
-         * ViewerChange key.
+         * ViewerCountChange key.
          * @member {Uint8Array} key
-         * @memberof DirectoryServerEvent.ViewerChange
+         * @memberof DirectoryServerEvent.ViewerCountChange
          * @instance
          */
-        ViewerChange.prototype.key = $util.newBuffer([]);
+        ViewerCountChange.prototype.key = $util.newBuffer([]);
 
         /**
-         * ViewerChange count.
+         * ViewerCountChange count.
          * @member {number} count
-         * @memberof DirectoryServerEvent.ViewerChange
+         * @memberof DirectoryServerEvent.ViewerCountChange
          * @instance
          */
-        ViewerChange.prototype.count = 0;
+        ViewerCountChange.prototype.count = 0;
 
         /**
-         * Creates a new ViewerChange instance using the specified properties.
+         * Creates a new ViewerCountChange instance using the specified properties.
          * @function create
-         * @memberof DirectoryServerEvent.ViewerChange
+         * @memberof DirectoryServerEvent.ViewerCountChange
          * @static
-         * @param {DirectoryServerEvent.IViewerChange=} [properties] Properties to set
-         * @returns {DirectoryServerEvent.ViewerChange} ViewerChange instance
+         * @param {DirectoryServerEvent.IViewerCountChange=} [properties] Properties to set
+         * @returns {DirectoryServerEvent.ViewerCountChange} ViewerCountChange instance
          */
-        ViewerChange.create = function create(properties) {
-            return new ViewerChange(properties);
+        ViewerCountChange.create = function create(properties) {
+            return new ViewerCountChange(properties);
         };
 
         /**
-         * Encodes the specified ViewerChange message. Does not implicitly {@link DirectoryServerEvent.ViewerChange.verify|verify} messages.
+         * Encodes the specified ViewerCountChange message. Does not implicitly {@link DirectoryServerEvent.ViewerCountChange.verify|verify} messages.
          * @function encode
-         * @memberof DirectoryServerEvent.ViewerChange
+         * @memberof DirectoryServerEvent.ViewerCountChange
          * @static
-         * @param {DirectoryServerEvent.IViewerChange} message ViewerChange message or plain object to encode
+         * @param {DirectoryServerEvent.IViewerCountChange} message ViewerCountChange message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        ViewerChange.encode = function encode(message, writer) {
+        ViewerCountChange.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
             if (message.key != null && Object.hasOwnProperty.call(message, "key"))
@@ -11588,33 +11655,33 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         };
 
         /**
-         * Encodes the specified ViewerChange message, length delimited. Does not implicitly {@link DirectoryServerEvent.ViewerChange.verify|verify} messages.
+         * Encodes the specified ViewerCountChange message, length delimited. Does not implicitly {@link DirectoryServerEvent.ViewerCountChange.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof DirectoryServerEvent.ViewerChange
+         * @memberof DirectoryServerEvent.ViewerCountChange
          * @static
-         * @param {DirectoryServerEvent.IViewerChange} message ViewerChange message or plain object to encode
+         * @param {DirectoryServerEvent.IViewerCountChange} message ViewerCountChange message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        ViewerChange.encodeDelimited = function encodeDelimited(message, writer) {
+        ViewerCountChange.encodeDelimited = function encodeDelimited(message, writer) {
             return this.encode(message, writer).ldelim();
         };
 
         /**
-         * Decodes a ViewerChange message from the specified reader or buffer.
+         * Decodes a ViewerCountChange message from the specified reader or buffer.
          * @function decode
-         * @memberof DirectoryServerEvent.ViewerChange
+         * @memberof DirectoryServerEvent.ViewerCountChange
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {DirectoryServerEvent.ViewerChange} ViewerChange
+         * @returns {DirectoryServerEvent.ViewerCountChange} ViewerCountChange
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        ViewerChange.decode = function decode(reader, length) {
+        ViewerCountChange.decode = function decode(reader, length) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryServerEvent.ViewerChange();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryServerEvent.ViewerCountChange();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
@@ -11633,30 +11700,30 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         };
 
         /**
-         * Decodes a ViewerChange message from the specified reader or buffer, length delimited.
+         * Decodes a ViewerCountChange message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof DirectoryServerEvent.ViewerChange
+         * @memberof DirectoryServerEvent.ViewerCountChange
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {DirectoryServerEvent.ViewerChange} ViewerChange
+         * @returns {DirectoryServerEvent.ViewerCountChange} ViewerCountChange
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        ViewerChange.decodeDelimited = function decodeDelimited(reader) {
+        ViewerCountChange.decodeDelimited = function decodeDelimited(reader) {
             if (!(reader instanceof $Reader))
                 reader = new $Reader(reader);
             return this.decode(reader, reader.uint32());
         };
 
         /**
-         * Verifies a ViewerChange message.
+         * Verifies a ViewerCountChange message.
          * @function verify
-         * @memberof DirectoryServerEvent.ViewerChange
+         * @memberof DirectoryServerEvent.ViewerCountChange
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
          */
-        ViewerChange.verify = function verify(message) {
+        ViewerCountChange.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
             if (message.key != null && message.hasOwnProperty("key"))
@@ -11669,17 +11736,17 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         };
 
         /**
-         * Creates a ViewerChange message from a plain object. Also converts values to their respective internal types.
+         * Creates a ViewerCountChange message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof DirectoryServerEvent.ViewerChange
+         * @memberof DirectoryServerEvent.ViewerCountChange
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {DirectoryServerEvent.ViewerChange} ViewerChange
+         * @returns {DirectoryServerEvent.ViewerCountChange} ViewerCountChange
          */
-        ViewerChange.fromObject = function fromObject(object) {
-            if (object instanceof $root.DirectoryServerEvent.ViewerChange)
+        ViewerCountChange.fromObject = function fromObject(object) {
+            if (object instanceof $root.DirectoryServerEvent.ViewerCountChange)
                 return object;
-            let message = new $root.DirectoryServerEvent.ViewerChange();
+            let message = new $root.DirectoryServerEvent.ViewerCountChange();
             if (object.key != null)
                 if (typeof object.key === "string")
                     $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
@@ -11691,15 +11758,15 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         };
 
         /**
-         * Creates a plain object from a ViewerChange message. Also converts values to other types if specified.
+         * Creates a plain object from a ViewerCountChange message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof DirectoryServerEvent.ViewerChange
+         * @memberof DirectoryServerEvent.ViewerCountChange
          * @static
-         * @param {DirectoryServerEvent.ViewerChange} message ViewerChange
+         * @param {DirectoryServerEvent.ViewerCountChange} message ViewerCountChange
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
-        ViewerChange.toObject = function toObject(message, options) {
+        ViewerCountChange.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
             let object = {};
@@ -11721,37 +11788,40 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         };
 
         /**
-         * Converts this ViewerChange to JSON.
+         * Converts this ViewerCountChange to JSON.
          * @function toJSON
-         * @memberof DirectoryServerEvent.ViewerChange
+         * @memberof DirectoryServerEvent.ViewerCountChange
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
-        ViewerChange.prototype.toJSON = function toJSON() {
+        ViewerCountChange.prototype.toJSON = function toJSON() {
             return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
         };
 
-        return ViewerChange;
+        return ViewerCountChange;
     })();
 
-    DirectoryServerEvent.Ping = (function() {
+    DirectoryServerEvent.ViewerStateChange = (function() {
 
         /**
-         * Properties of a Ping.
+         * Properties of a ViewerStateChange.
          * @memberof DirectoryServerEvent
-         * @interface IPing
-         * @property {number|null} [time] Ping time
+         * @interface IViewerStateChange
+         * @property {string|null} [subject] ViewerStateChange subject
+         * @property {boolean|null} [online] ViewerStateChange online
+         * @property {Array.<Uint8Array>|null} [viewingKeys] ViewerStateChange viewingKeys
          */
 
         /**
-         * Constructs a new Ping.
+         * Constructs a new ViewerStateChange.
          * @memberof DirectoryServerEvent
-         * @classdesc Represents a Ping.
-         * @implements IPing
+         * @classdesc Represents a ViewerStateChange.
+         * @implements IViewerStateChange
          * @constructor
-         * @param {DirectoryServerEvent.IPing=} [properties] Properties to set
+         * @param {DirectoryServerEvent.IViewerStateChange=} [properties] Properties to set
          */
-        function Ping(properties) {
+        function ViewerStateChange(properties) {
+            this.viewingKeys = [];
             if (properties)
                 for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                     if (properties[keys[i]] != null)
@@ -11759,75 +11829,104 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         }
 
         /**
-         * Ping time.
-         * @member {number} time
-         * @memberof DirectoryServerEvent.Ping
+         * ViewerStateChange subject.
+         * @member {string} subject
+         * @memberof DirectoryServerEvent.ViewerStateChange
          * @instance
          */
-        Ping.prototype.time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+        ViewerStateChange.prototype.subject = "";
 
         /**
-         * Creates a new Ping instance using the specified properties.
-         * @function create
-         * @memberof DirectoryServerEvent.Ping
-         * @static
-         * @param {DirectoryServerEvent.IPing=} [properties] Properties to set
-         * @returns {DirectoryServerEvent.Ping} Ping instance
+         * ViewerStateChange online.
+         * @member {boolean} online
+         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @instance
          */
-        Ping.create = function create(properties) {
-            return new Ping(properties);
+        ViewerStateChange.prototype.online = false;
+
+        /**
+         * ViewerStateChange viewingKeys.
+         * @member {Array.<Uint8Array>} viewingKeys
+         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @instance
+         */
+        ViewerStateChange.prototype.viewingKeys = $util.emptyArray;
+
+        /**
+         * Creates a new ViewerStateChange instance using the specified properties.
+         * @function create
+         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @static
+         * @param {DirectoryServerEvent.IViewerStateChange=} [properties] Properties to set
+         * @returns {DirectoryServerEvent.ViewerStateChange} ViewerStateChange instance
+         */
+        ViewerStateChange.create = function create(properties) {
+            return new ViewerStateChange(properties);
         };
 
         /**
-         * Encodes the specified Ping message. Does not implicitly {@link DirectoryServerEvent.Ping.verify|verify} messages.
+         * Encodes the specified ViewerStateChange message. Does not implicitly {@link DirectoryServerEvent.ViewerStateChange.verify|verify} messages.
          * @function encode
-         * @memberof DirectoryServerEvent.Ping
+         * @memberof DirectoryServerEvent.ViewerStateChange
          * @static
-         * @param {DirectoryServerEvent.IPing} message Ping message or plain object to encode
+         * @param {DirectoryServerEvent.IViewerStateChange} message ViewerStateChange message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        Ping.encode = function encode(message, writer) {
+        ViewerStateChange.encode = function encode(message, writer) {
             if (!writer)
                 writer = $Writer.create();
-            if (message.time != null && Object.hasOwnProperty.call(message, "time"))
-                writer.uint32(/* id 1, wireType 0 =*/8).int64(message.time);
+            if (message.subject != null && Object.hasOwnProperty.call(message, "subject"))
+                writer.uint32(/* id 1, wireType 2 =*/10).string(message.subject);
+            if (message.online != null && Object.hasOwnProperty.call(message, "online"))
+                writer.uint32(/* id 2, wireType 0 =*/16).bool(message.online);
+            if (message.viewingKeys != null && message.viewingKeys.length)
+                for (let i = 0; i < message.viewingKeys.length; ++i)
+                    writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.viewingKeys[i]);
             return writer;
         };
 
         /**
-         * Encodes the specified Ping message, length delimited. Does not implicitly {@link DirectoryServerEvent.Ping.verify|verify} messages.
+         * Encodes the specified ViewerStateChange message, length delimited. Does not implicitly {@link DirectoryServerEvent.ViewerStateChange.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof DirectoryServerEvent.Ping
+         * @memberof DirectoryServerEvent.ViewerStateChange
          * @static
-         * @param {DirectoryServerEvent.IPing} message Ping message or plain object to encode
+         * @param {DirectoryServerEvent.IViewerStateChange} message ViewerStateChange message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
-        Ping.encodeDelimited = function encodeDelimited(message, writer) {
+        ViewerStateChange.encodeDelimited = function encodeDelimited(message, writer) {
             return this.encode(message, writer).ldelim();
         };
 
         /**
-         * Decodes a Ping message from the specified reader or buffer.
+         * Decodes a ViewerStateChange message from the specified reader or buffer.
          * @function decode
-         * @memberof DirectoryServerEvent.Ping
+         * @memberof DirectoryServerEvent.ViewerStateChange
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {DirectoryServerEvent.Ping} Ping
+         * @returns {DirectoryServerEvent.ViewerStateChange} ViewerStateChange
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        Ping.decode = function decode(reader, length) {
+        ViewerStateChange.decode = function decode(reader, length) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryServerEvent.Ping();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryServerEvent.ViewerStateChange();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
                 case 1:
-                    message.time = reader.int64();
+                    message.subject = reader.string();
+                    break;
+                case 2:
+                    message.online = reader.bool();
+                    break;
+                case 3:
+                    if (!(message.viewingKeys && message.viewingKeys.length))
+                        message.viewingKeys = [];
+                    message.viewingKeys.push(reader.bytes());
                     break;
                 default:
                     reader.skipType(tag & 7);
@@ -11838,101 +11937,120 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         };
 
         /**
-         * Decodes a Ping message from the specified reader or buffer, length delimited.
+         * Decodes a ViewerStateChange message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof DirectoryServerEvent.Ping
+         * @memberof DirectoryServerEvent.ViewerStateChange
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {DirectoryServerEvent.Ping} Ping
+         * @returns {DirectoryServerEvent.ViewerStateChange} ViewerStateChange
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        Ping.decodeDelimited = function decodeDelimited(reader) {
+        ViewerStateChange.decodeDelimited = function decodeDelimited(reader) {
             if (!(reader instanceof $Reader))
                 reader = new $Reader(reader);
             return this.decode(reader, reader.uint32());
         };
 
         /**
-         * Verifies a Ping message.
+         * Verifies a ViewerStateChange message.
          * @function verify
-         * @memberof DirectoryServerEvent.Ping
+         * @memberof DirectoryServerEvent.ViewerStateChange
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
          */
-        Ping.verify = function verify(message) {
+        ViewerStateChange.verify = function verify(message) {
             if (typeof message !== "object" || message === null)
                 return "object expected";
-            if (message.time != null && message.hasOwnProperty("time"))
-                if (!$util.isInteger(message.time) && !(message.time && $util.isInteger(message.time.low) && $util.isInteger(message.time.high)))
-                    return "time: integer|Long expected";
+            if (message.subject != null && message.hasOwnProperty("subject"))
+                if (!$util.isString(message.subject))
+                    return "subject: string expected";
+            if (message.online != null && message.hasOwnProperty("online"))
+                if (typeof message.online !== "boolean")
+                    return "online: boolean expected";
+            if (message.viewingKeys != null && message.hasOwnProperty("viewingKeys")) {
+                if (!Array.isArray(message.viewingKeys))
+                    return "viewingKeys: array expected";
+                for (let i = 0; i < message.viewingKeys.length; ++i)
+                    if (!(message.viewingKeys[i] && typeof message.viewingKeys[i].length === "number" || $util.isString(message.viewingKeys[i])))
+                        return "viewingKeys: buffer[] expected";
+            }
             return null;
         };
 
         /**
-         * Creates a Ping message from a plain object. Also converts values to their respective internal types.
+         * Creates a ViewerStateChange message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof DirectoryServerEvent.Ping
+         * @memberof DirectoryServerEvent.ViewerStateChange
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {DirectoryServerEvent.Ping} Ping
+         * @returns {DirectoryServerEvent.ViewerStateChange} ViewerStateChange
          */
-        Ping.fromObject = function fromObject(object) {
-            if (object instanceof $root.DirectoryServerEvent.Ping)
+        ViewerStateChange.fromObject = function fromObject(object) {
+            if (object instanceof $root.DirectoryServerEvent.ViewerStateChange)
                 return object;
-            let message = new $root.DirectoryServerEvent.Ping();
-            if (object.time != null)
-                if ($util.Long)
-                    (message.time = $util.Long.fromValue(object.time)).unsigned = false;
-                else if (typeof object.time === "string")
-                    message.time = parseInt(object.time, 10);
-                else if (typeof object.time === "number")
-                    message.time = object.time;
-                else if (typeof object.time === "object")
-                    message.time = new $util.LongBits(object.time.low >>> 0, object.time.high >>> 0).toNumber();
+            let message = new $root.DirectoryServerEvent.ViewerStateChange();
+            if (object.subject != null)
+                message.subject = String(object.subject);
+            if (object.online != null)
+                message.online = Boolean(object.online);
+            if (object.viewingKeys) {
+                if (!Array.isArray(object.viewingKeys))
+                    throw TypeError(".DirectoryServerEvent.ViewerStateChange.viewingKeys: array expected");
+                message.viewingKeys = [];
+                for (let i = 0; i < object.viewingKeys.length; ++i)
+                    if (typeof object.viewingKeys[i] === "string")
+                        $util.base64.decode(object.viewingKeys[i], message.viewingKeys[i] = $util.newBuffer($util.base64.length(object.viewingKeys[i])), 0);
+                    else if (object.viewingKeys[i].length)
+                        message.viewingKeys[i] = object.viewingKeys[i];
+            }
             return message;
         };
 
         /**
-         * Creates a plain object from a Ping message. Also converts values to other types if specified.
+         * Creates a plain object from a ViewerStateChange message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof DirectoryServerEvent.Ping
+         * @memberof DirectoryServerEvent.ViewerStateChange
          * @static
-         * @param {DirectoryServerEvent.Ping} message Ping
+         * @param {DirectoryServerEvent.ViewerStateChange} message ViewerStateChange
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
-        Ping.toObject = function toObject(message, options) {
+        ViewerStateChange.toObject = function toObject(message, options) {
             if (!options)
                 options = {};
             let object = {};
-            if (options.defaults)
-                if ($util.Long) {
-                    let long = new $util.Long(0, 0, false);
-                    object.time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-                } else
-                    object.time = options.longs === String ? "0" : 0;
-            if (message.time != null && message.hasOwnProperty("time"))
-                if (typeof message.time === "number")
-                    object.time = options.longs === String ? String(message.time) : message.time;
-                else
-                    object.time = options.longs === String ? $util.Long.prototype.toString.call(message.time) : options.longs === Number ? new $util.LongBits(message.time.low >>> 0, message.time.high >>> 0).toNumber() : message.time;
+            if (options.arrays || options.defaults)
+                object.viewingKeys = [];
+            if (options.defaults) {
+                object.subject = "";
+                object.online = false;
+            }
+            if (message.subject != null && message.hasOwnProperty("subject"))
+                object.subject = message.subject;
+            if (message.online != null && message.hasOwnProperty("online"))
+                object.online = message.online;
+            if (message.viewingKeys && message.viewingKeys.length) {
+                object.viewingKeys = [];
+                for (let j = 0; j < message.viewingKeys.length; ++j)
+                    object.viewingKeys[j] = options.bytes === String ? $util.base64.encode(message.viewingKeys[j], 0, message.viewingKeys[j].length) : options.bytes === Array ? Array.prototype.slice.call(message.viewingKeys[j]) : message.viewingKeys[j];
+            }
             return object;
         };
 
         /**
-         * Converts this Ping to JSON.
+         * Converts this ViewerStateChange to JSON.
          * @function toJSON
-         * @memberof DirectoryServerEvent.Ping
+         * @memberof DirectoryServerEvent.ViewerStateChange
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
-        Ping.prototype.toJSON = function toJSON() {
+        ViewerStateChange.prototype.toJSON = function toJSON() {
             return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
         };
 
-        return Ping;
+        return ViewerStateChange;
     })();
 
     return DirectoryServerEvent;
@@ -13971,7 +14089,6 @@ export const DirectoryPublishRequest = $root.DirectoryPublishRequest = (() => {
      * Properties of a DirectoryPublishRequest.
      * @exports IDirectoryPublishRequest
      * @interface IDirectoryPublishRequest
-     * @property {ICertificate|null} [certificate] DirectoryPublishRequest certificate
      * @property {IDirectoryListing|null} [listing] DirectoryPublishRequest listing
      */
 
@@ -13989,14 +14106,6 @@ export const DirectoryPublishRequest = $root.DirectoryPublishRequest = (() => {
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
-
-    /**
-     * DirectoryPublishRequest certificate.
-     * @member {ICertificate|null|undefined} certificate
-     * @memberof DirectoryPublishRequest
-     * @instance
-     */
-    DirectoryPublishRequest.prototype.certificate = null;
 
     /**
      * DirectoryPublishRequest listing.
@@ -14030,10 +14139,8 @@ export const DirectoryPublishRequest = $root.DirectoryPublishRequest = (() => {
     DirectoryPublishRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
-            $root.Certificate.encode(message.certificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         if (message.listing != null && Object.hasOwnProperty.call(message, "listing"))
-            $root.DirectoryListing.encode(message.listing, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            $root.DirectoryListing.encode(message.listing, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         return writer;
     };
 
@@ -14069,9 +14176,6 @@ export const DirectoryPublishRequest = $root.DirectoryPublishRequest = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.certificate = $root.Certificate.decode(reader, reader.uint32());
-                break;
-            case 2:
                 message.listing = $root.DirectoryListing.decode(reader, reader.uint32());
                 break;
             default:
@@ -14109,11 +14213,6 @@ export const DirectoryPublishRequest = $root.DirectoryPublishRequest = (() => {
     DirectoryPublishRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.certificate != null && message.hasOwnProperty("certificate")) {
-            let error = $root.Certificate.verify(message.certificate);
-            if (error)
-                return "certificate." + error;
-        }
         if (message.listing != null && message.hasOwnProperty("listing")) {
             let error = $root.DirectoryListing.verify(message.listing);
             if (error)
@@ -14134,11 +14233,6 @@ export const DirectoryPublishRequest = $root.DirectoryPublishRequest = (() => {
         if (object instanceof $root.DirectoryPublishRequest)
             return object;
         let message = new $root.DirectoryPublishRequest();
-        if (object.certificate != null) {
-            if (typeof object.certificate !== "object")
-                throw TypeError(".DirectoryPublishRequest.certificate: object expected");
-            message.certificate = $root.Certificate.fromObject(object.certificate);
-        }
         if (object.listing != null) {
             if (typeof object.listing !== "object")
                 throw TypeError(".DirectoryPublishRequest.listing: object expected");
@@ -14160,12 +14254,8 @@ export const DirectoryPublishRequest = $root.DirectoryPublishRequest = (() => {
         if (!options)
             options = {};
         let object = {};
-        if (options.defaults) {
-            object.certificate = null;
+        if (options.defaults)
             object.listing = null;
-        }
-        if (message.certificate != null && message.hasOwnProperty("certificate"))
-            object.certificate = $root.Certificate.toObject(message.certificate, options);
         if (message.listing != null && message.hasOwnProperty("listing"))
             object.listing = $root.DirectoryListing.toObject(message.listing, options);
         return object;
@@ -14707,7 +14797,6 @@ export const DirectoryJoinRequest = $root.DirectoryJoinRequest = (() => {
      * Properties of a DirectoryJoinRequest.
      * @exports IDirectoryJoinRequest
      * @interface IDirectoryJoinRequest
-     * @property {ICertificate|null} [certificate] DirectoryJoinRequest certificate
      * @property {Uint8Array|null} [key] DirectoryJoinRequest key
      */
 
@@ -14725,14 +14814,6 @@ export const DirectoryJoinRequest = $root.DirectoryJoinRequest = (() => {
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
-
-    /**
-     * DirectoryJoinRequest certificate.
-     * @member {ICertificate|null|undefined} certificate
-     * @memberof DirectoryJoinRequest
-     * @instance
-     */
-    DirectoryJoinRequest.prototype.certificate = null;
 
     /**
      * DirectoryJoinRequest key.
@@ -14766,10 +14847,8 @@ export const DirectoryJoinRequest = $root.DirectoryJoinRequest = (() => {
     DirectoryJoinRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
-            $root.Certificate.encode(message.certificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         if (message.key != null && Object.hasOwnProperty.call(message, "key"))
-            writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.key);
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
         return writer;
     };
 
@@ -14805,9 +14884,6 @@ export const DirectoryJoinRequest = $root.DirectoryJoinRequest = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.certificate = $root.Certificate.decode(reader, reader.uint32());
-                break;
-            case 2:
                 message.key = reader.bytes();
                 break;
             default:
@@ -14845,11 +14921,6 @@ export const DirectoryJoinRequest = $root.DirectoryJoinRequest = (() => {
     DirectoryJoinRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.certificate != null && message.hasOwnProperty("certificate")) {
-            let error = $root.Certificate.verify(message.certificate);
-            if (error)
-                return "certificate." + error;
-        }
         if (message.key != null && message.hasOwnProperty("key"))
             if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
                 return "key: buffer expected";
@@ -14868,11 +14939,6 @@ export const DirectoryJoinRequest = $root.DirectoryJoinRequest = (() => {
         if (object instanceof $root.DirectoryJoinRequest)
             return object;
         let message = new $root.DirectoryJoinRequest();
-        if (object.certificate != null) {
-            if (typeof object.certificate !== "object")
-                throw TypeError(".DirectoryJoinRequest.certificate: object expected");
-            message.certificate = $root.Certificate.fromObject(object.certificate);
-        }
         if (object.key != null)
             if (typeof object.key === "string")
                 $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
@@ -14894,8 +14960,7 @@ export const DirectoryJoinRequest = $root.DirectoryJoinRequest = (() => {
         if (!options)
             options = {};
         let object = {};
-        if (options.defaults) {
-            object.certificate = null;
+        if (options.defaults)
             if (options.bytes === String)
                 object.key = "";
             else {
@@ -14903,9 +14968,6 @@ export const DirectoryJoinRequest = $root.DirectoryJoinRequest = (() => {
                 if (options.bytes !== Array)
                     object.key = $util.newBuffer(object.key);
             }
-        }
-        if (message.certificate != null && message.hasOwnProperty("certificate"))
-            object.certificate = $root.Certificate.toObject(message.certificate, options);
         if (message.key != null && message.hasOwnProperty("key"))
             object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
         return object;
@@ -15091,6 +15153,7 @@ export const DirectoryPartRequest = $root.DirectoryPartRequest = (() => {
      * Properties of a DirectoryPartRequest.
      * @exports IDirectoryPartRequest
      * @interface IDirectoryPartRequest
+     * @property {Uint8Array|null} [key] DirectoryPartRequest key
      */
 
     /**
@@ -15107,6 +15170,14 @@ export const DirectoryPartRequest = $root.DirectoryPartRequest = (() => {
                 if (properties[keys[i]] != null)
                     this[keys[i]] = properties[keys[i]];
     }
+
+    /**
+     * DirectoryPartRequest key.
+     * @member {Uint8Array} key
+     * @memberof DirectoryPartRequest
+     * @instance
+     */
+    DirectoryPartRequest.prototype.key = $util.newBuffer([]);
 
     /**
      * Creates a new DirectoryPartRequest instance using the specified properties.
@@ -15132,6 +15203,8 @@ export const DirectoryPartRequest = $root.DirectoryPartRequest = (() => {
     DirectoryPartRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
+        if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
         return writer;
     };
 
@@ -15166,6 +15239,9 @@ export const DirectoryPartRequest = $root.DirectoryPartRequest = (() => {
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
+            case 1:
+                message.key = reader.bytes();
+                break;
             default:
                 reader.skipType(tag & 7);
                 break;
@@ -15201,6 +15277,9 @@ export const DirectoryPartRequest = $root.DirectoryPartRequest = (() => {
     DirectoryPartRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
+        if (message.key != null && message.hasOwnProperty("key"))
+            if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
+                return "key: buffer expected";
         return null;
     };
 
@@ -15215,7 +15294,13 @@ export const DirectoryPartRequest = $root.DirectoryPartRequest = (() => {
     DirectoryPartRequest.fromObject = function fromObject(object) {
         if (object instanceof $root.DirectoryPartRequest)
             return object;
-        return new $root.DirectoryPartRequest();
+        let message = new $root.DirectoryPartRequest();
+        if (object.key != null)
+            if (typeof object.key === "string")
+                $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
+            else if (object.key.length)
+                message.key = object.key;
+        return message;
     };
 
     /**
@@ -15227,8 +15312,21 @@ export const DirectoryPartRequest = $root.DirectoryPartRequest = (() => {
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    DirectoryPartRequest.toObject = function toObject() {
-        return {};
+    DirectoryPartRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if (options.bytes === String)
+                object.key = "";
+            else {
+                object.key = [];
+                if (options.bytes !== Array)
+                    object.key = $util.newBuffer(object.key);
+            }
+        if (message.key != null && message.hasOwnProperty("key"))
+            object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
+        return object;
     };
 
     /**
@@ -35474,7 +35572,7 @@ export const Call = $root.Call = (() => {
      * @property {number|null} [parentId] Call parentId
      * @property {string|null} [method] Call method
      * @property {google.protobuf.IAny|null} [argument] Call argument
-     * @property {Object.<string,google.protobuf.IAny>|null} [headers] Call headers
+     * @property {Object.<string,Uint8Array>|null} [headers] Call headers
      */
 
     /**
@@ -35527,7 +35625,7 @@ export const Call = $root.Call = (() => {
 
     /**
      * Call headers.
-     * @member {Object.<string,google.protobuf.IAny>} headers
+     * @member {Object.<string,Uint8Array>} headers
      * @memberof Call
      * @instance
      */
@@ -35566,10 +35664,8 @@ export const Call = $root.Call = (() => {
         if (message.argument != null && Object.hasOwnProperty.call(message, "argument"))
             $root.google.protobuf.Any.encode(message.argument, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
         if (message.headers != null && Object.hasOwnProperty.call(message, "headers"))
-            for (let keys = Object.keys(message.headers), i = 0; i < keys.length; ++i) {
-                writer.uint32(/* id 5, wireType 2 =*/42).fork().uint32(/* id 1, wireType 2 =*/10).string(keys[i]);
-                $root.google.protobuf.Any.encode(message.headers[keys[i]], writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim().ldelim();
-            }
+            for (let keys = Object.keys(message.headers), i = 0; i < keys.length; ++i)
+                writer.uint32(/* id 5, wireType 2 =*/42).fork().uint32(/* id 1, wireType 2 =*/10).string(keys[i]).uint32(/* id 2, wireType 2 =*/18).bytes(message.headers[keys[i]]).ldelim();
         return writer;
     };
 
@@ -35621,7 +35717,7 @@ export const Call = $root.Call = (() => {
                     message.headers = {};
                 let end2 = reader.uint32() + reader.pos;
                 key = "";
-                value = null;
+                value = [];
                 while (reader.pos < end2) {
                     let tag2 = reader.uint32();
                     switch (tag2 >>> 3) {
@@ -35629,7 +35725,7 @@ export const Call = $root.Call = (() => {
                         key = reader.string();
                         break;
                     case 2:
-                        value = $root.google.protobuf.Any.decode(reader, reader.uint32());
+                        value = reader.bytes();
                         break;
                     default:
                         reader.skipType(tag2 & 7);
@@ -35691,11 +35787,9 @@ export const Call = $root.Call = (() => {
             if (!$util.isObject(message.headers))
                 return "headers: object expected";
             let key = Object.keys(message.headers);
-            for (let i = 0; i < key.length; ++i) {
-                let error = $root.google.protobuf.Any.verify(message.headers[key[i]]);
-                if (error)
-                    return "headers." + error;
-            }
+            for (let i = 0; i < key.length; ++i)
+                if (!(message.headers[key[i]] && typeof message.headers[key[i]].length === "number" || $util.isString(message.headers[key[i]])))
+                    return "headers: buffer{k:string} expected";
         }
         return null;
     };
@@ -35741,11 +35835,11 @@ export const Call = $root.Call = (() => {
             if (typeof object.headers !== "object")
                 throw TypeError(".Call.headers: object expected");
             message.headers = {};
-            for (let keys = Object.keys(object.headers), i = 0; i < keys.length; ++i) {
-                if (typeof object.headers[keys[i]] !== "object")
-                    throw TypeError(".Call.headers: object expected");
-                message.headers[keys[i]] = $root.google.protobuf.Any.fromObject(object.headers[keys[i]]);
-            }
+            for (let keys = Object.keys(object.headers), i = 0; i < keys.length; ++i)
+                if (typeof object.headers[keys[i]] === "string")
+                    $util.base64.decode(object.headers[keys[i]], message.headers[keys[i]] = $util.newBuffer($util.base64.length(object.headers[keys[i]])), 0);
+                else if (object.headers[keys[i]].length)
+                    message.headers[keys[i]] = object.headers[keys[i]];
         }
         return message;
     };
@@ -35797,7 +35891,7 @@ export const Call = $root.Call = (() => {
         if (message.headers && (keys2 = Object.keys(message.headers)).length) {
             object.headers = {};
             for (let j = 0; j < keys2.length; ++j)
-                object.headers[keys2[j]] = $root.google.protobuf.Any.toObject(message.headers[keys2[j]], options);
+                object.headers[keys2[j]] = options.bytes === String ? $util.base64.encode(message.headers[keys2[j]], 0, message.headers[keys2[j]].length) : options.bytes === Array ? Array.prototype.slice.call(message.headers[keys2[j]]) : message.headers[keys2[j]];
         }
         return object;
     };

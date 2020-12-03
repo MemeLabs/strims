@@ -118,13 +118,14 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 func initBroker(bridge js.Value, bus *wasmio.Bus) {
 	logger := newLogger(bridge)
 
-	server := rpc.NewServer(logger)
-	api.RegisterBrokerProxyService(server, network.NewBrokerProxyService(logger))
-	err := server.Listen(context.Background(), &rpc.RWDialer{
+	server := rpc.NewServer(logger, &rpc.RWDialer{
 		Logger:     logger,
 		ReadWriter: bus,
 	})
-	if err != nil {
+
+	api.RegisterBrokerProxyService(server, network.NewBrokerProxyService(logger))
+
+	if err := server.Listen(context.Background()); err != nil {
 		logger.Fatal("network broker proxy server closed with error", zap.Error(err))
 	}
 }

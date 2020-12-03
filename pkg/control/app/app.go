@@ -23,7 +23,7 @@ func NewControl(logger *zap.Logger, broker network.Broker, vpn *vpn.Host, store 
 	var (
 		dialerControl    = dialer.NewControl(logger, vpn, profile)
 		caControl        = ca.NewControl(logger, vpn, store, observers, dialerControl)
-		directoryControl = directory.NewControl(logger, vpn, store, observers)
+		directoryControl = directory.NewControl(logger, vpn, store, observers, dialerControl)
 		networkControl   = network.NewControl(logger, broker, vpn, store, profile, observers, dialerControl)
 		swarmControl     = swarm.NewControl(logger, vpn, observers)
 		bootstrapControl = bootstrap.NewControl(logger, vpn, store, observers)
@@ -43,6 +43,7 @@ func NewControl(logger *zap.Logger, broker network.Broker, vpn *vpn.Host, store 
 
 	ctx := context.Background()
 	go c.ca.Run(ctx)
+	go c.directory.Run(ctx)
 	go c.network.Run(ctx)
 	go c.swarm.Run(ctx)
 	go c.bootstrap.Run(ctx)

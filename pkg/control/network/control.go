@@ -14,7 +14,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/services/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -232,11 +231,7 @@ func (t *Control) renewCertificate(network *pb.Network) error {
 		network,
 		func(ctx context.Context, cert *pb.Certificate, csr *pb.CertificateRequest) (*pb.Certificate, error) {
 			networkKey := networkKeyForCertificate(network.Certificate)
-			dialer, err := t.dialer.ClientDialer(networkKey, networkKey, ca.AddressSalt)
-			if err != nil {
-				return nil, err
-			}
-			client, err := rpc.NewClient(t.logger, dialer)
+			client, err := t.dialer.Client(networkKey, networkKey, ca.AddressSalt)
 			if err != nil {
 				return nil, err
 			}

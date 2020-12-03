@@ -1,12 +1,13 @@
 package directory
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
@@ -18,6 +19,19 @@ import (
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
+)
+
+const broadcastInterval = time.Second
+const sessionTimeout = time.Minute * 15
+
+// AddressSalt ...
+var AddressSalt = []byte("directory")
+
+// errors
+var (
+	ErrListingNotFound = errors.New("listing not found")
+	ErrSessionNotFound = errors.New("session not found")
+	ErrUserNotFound    = errors.New("user not found")
 )
 
 func newDirectoryService(logger *zap.Logger, client *vpn.Client, key *pb.Key) (*directoryService, error) {
@@ -36,23 +50,161 @@ func newDirectoryService(logger *zap.Logger, client *vpn.Client, key *pb.Key) (*
 	}
 
 	return &directoryService{
-		logger: logger,
-		w:      prefixstream.NewWriter(w),
-		swarm:  w.Swarm(),
+		logger:          logger,
+		done:            make(chan struct{}),
+		broadcastTicker: time.NewTicker(broadcastInterval),
+		w:               prefixstream.NewWriter(w),
+		swarm:           w.Swarm(),
 	}, nil
 }
 
 type directoryService struct {
-	logger      *zap.Logger
-	w           *prefixstream.Writer
-	swarm       *ppspp.Swarm
-	lock        sync.Mutex
-	listings    llrb.LLRB
-	users       llrb.LLRB
-	certificate *pb.Certificate
+	logger            *zap.Logger
+	closeOnce         sync.Once
+	done              chan struct{}
+	broadcastTicker   *time.Ticker
+	lastBroadcastTime time.Time
+	w                 *prefixstream.Writer
+	swarm             *ppspp.Swarm
+	lock              sync.Mutex
+	listings          lru
+	sessions          lru
+	users             lru
+	certificate       *pb.Certificate
 }
 
-func (s *directoryService) writeToStream(msg protoreflect.ProtoMessage) error {
+func (d *directoryService) Run(ctx context.Context) error {
+	for {
+		select {
+		case <-d.broadcastTicker.C:
+			if err := d.broadcast(); err != nil {
+				return err
+			}
+		case <-d.done:
+			return errors.New("closed")
+		case <-ctx.Done():
+			d.Close()
+			return ctx.Err()
+		}
+	}
+}
+
+func (d *directoryService) Close() {
+	d.closeOnce.Do(func() {
+		// TODO: shut down swarm...
+		d.broadcastTicker.Stop()
+		close(d.done)
+	})
+}
+
+func (d *directoryService) broadcast() error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	now := iotime.Load()
+
+	listings := d.listings.PeekRecentlyTouched(d.lastBroadcastTime)
+	for l, ok := listings.Next().(*listing); ok; l, ok = listings.Next().(*listing) {
+		var event *pb.DirectoryServerEvent
+		if l.publishers.Len() == 0 && l.viewers.Len() == 0 {
+			d.listings.Delete(l)
+			event = &pb.DirectoryServerEvent{
+				Body: &pb.DirectoryServerEvent_Unpublish_{
+					Unpublish: &pb.DirectoryServerEvent_Unpublish{
+						Key: l.listing.Key,
+					},
+				},
+			}
+		} else if l.modifiedTime.After(d.lastBroadcastTime) {
+			event = &pb.DirectoryServerEvent{
+				Body: &pb.DirectoryServerEvent_Publish_{
+					Publish: &pb.DirectoryServerEvent_Publish{
+						Listing: l.listing,
+					},
+				},
+			}
+		} else {
+			event = &pb.DirectoryServerEvent{
+				Body: &pb.DirectoryServerEvent_ViewerCountChange_{
+					ViewerCountChange: &pb.DirectoryServerEvent_ViewerCountChange{
+						Key:   l.listing.Key,
+						Count: uint32(l.viewers.Len()),
+					},
+				},
+			}
+		}
+		if err := d.writeToStream(event); err != nil {
+			return err
+		}
+	}
+
+	users := d.users.PeekRecentlyTouched(d.lastBroadcastTime)
+	for u, ok := users.Next().(*user); ok; u, ok = users.Next().(*user) {
+		var keys [][]byte
+		u.sessions.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
+			it.(*session).viewedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
+				keys = append(keys, it.(*listing).listing.Key)
+				return true
+			})
+			return true
+		})
+
+		event := &pb.DirectoryServerEvent{
+			Body: &pb.DirectoryServerEvent_ViewerStateChange_{
+				ViewerStateChange: &pb.DirectoryServerEvent_ViewerStateChange{
+					Subject:     u.certificate.Subject,
+					Online:      true,
+					ViewingKeys: keys,
+				},
+			},
+		}
+		if err := d.writeToStream(event); err != nil {
+			return err
+		}
+	}
+
+	eol := now.Add(-sessionTimeout)
+
+	for s, ok := d.sessions.Pop(eol).(*session); ok; s, ok = d.sessions.Pop(eol).(*session) {
+		u := d.users.GetOrInsert(&session{certificate: s.certificate.GetParent()}).(*user)
+		u.sessions.Delete(s)
+		if u.sessions.Len() != 0 {
+			continue
+		}
+
+		d.users.Delete(u)
+
+		event := &pb.DirectoryServerEvent{
+			Body: &pb.DirectoryServerEvent_ViewerStateChange_{
+				ViewerStateChange: &pb.DirectoryServerEvent_ViewerStateChange{
+					Subject: u.certificate.Subject,
+					Online:  false,
+				},
+			},
+		}
+		if err := d.writeToStream(event); err != nil {
+			return err
+		}
+	}
+
+	for l, ok := d.listings.Pop(eol).(*listing); ok; l, ok = d.listings.Pop(eol).(*listing) {
+		event := &pb.DirectoryServerEvent{
+			Body: &pb.DirectoryServerEvent_Unpublish_{
+				Unpublish: &pb.DirectoryServerEvent_Unpublish{
+					Key: l.listing.Key,
+				},
+			},
+		}
+		if err := d.writeToStream(event); err != nil {
+			return err
+		}
+	}
+
+	d.lastBroadcastTime = now
+	return nil
+}
+
+func (d *directoryService) writeToStream(msg protoreflect.ProtoMessage) error {
 	b := pool.Get(uint16(proto.Size(msg)))
 	defer pool.Put(b)
 
@@ -62,97 +214,157 @@ func (s *directoryService) writeToStream(msg protoreflect.ProtoMessage) error {
 		return err
 	}
 
-	_, err = s.w.Write(*b)
+	_, err = d.w.Write(*b)
 	return err
 }
 
-func (s *directoryService) verifyMessage(msg *vpn.Message, hostCert *pb.Certificate) error {
-	identCert := hostCert.GetParent()
-	networkCert := identCert.GetParent()
-
-	if !bytes.Equal(hostCert.GetKey(), msg.Trailer.Entries[0].HostID.Bytes(nil)) {
-		return errors.New("certificate host id mismatch")
-	}
-	if !bytes.Equal(dao.GetRootCert(s.certificate).Key, networkCert.GetKey()) {
-		return errors.New("network key mismatch")
-	}
-	if err := dao.VerifyCertificate(hostCert); err != nil {
-		return err
-	}
-	if !msg.Verify(0) {
-		return errors.New("invalid message signature")
-	}
-	return nil
-}
-
-func (s *directoryService) Publish(ctx context.Context, req *pb.DirectoryPublishRequest) (*pb.DirectoryPublishResponse, error) {
-	if err := s.verifyMessage(ctx.(*rpc.VPNContext).Message(), req.Certificate); err != nil {
+func (d *directoryService) Publish(ctx context.Context, req *pb.DirectoryPublishRequest) (*pb.DirectoryPublishResponse, error) {
+	if err := dao.VerifyDirectoryListing(req.Listing); err != nil {
 		return nil, err
 	}
 
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	d.lock.Lock()
+	defer d.lock.Unlock()
 
-	s.listings.Get(&listing{listing: req.Listing})
-	s.users.Get(&user{})
+	l := d.listings.GetOrInsert(&listing{
+		listing:      req.Listing,
+		modifiedTime: iotime.Load(),
+	}).(*listing)
+	s := d.sessions.GetOrInsert(&session{certificate: ctx.(*rpc.VPNContext).Certificate()}).(*session)
+	u := d.users.GetOrInsert(&session{certificate: ctx.(*rpc.VPNContext).Certificate().GetParent()}).(*user)
 
-	// is this new? is it a duplicate?
-
-	if err := s.writeToStream(req.Listing); err != nil {
-		return nil, err
+	if req.Listing.Timestamp > l.listing.Timestamp {
+		l.listing = req.Listing
+		l.modifiedTime = iotime.Load()
 	}
 
-	return nil, errors.New("not implemented")
+	l.publishers.InsertNoReplace(s)
+	s.publishedListings.InsertNoReplace(l)
+	u.sessions.InsertNoReplace(s)
+
+	return &pb.DirectoryPublishResponse{}, nil
 }
 
-func (s *directoryService) Unpublish(ctx context.Context, req *pb.DirectoryUnpublishRequest) (*pb.DirectoryUnpublishResponse, error) {
-	return nil, errors.New("not implemented")
+func (d *directoryService) Unpublish(ctx context.Context, req *pb.DirectoryUnpublishRequest) (*pb.DirectoryUnpublishResponse, error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	l, ok := d.listings.Get(&lruKey{key: req.Key}).(*listing)
+	if !ok {
+		return nil, ErrListingNotFound
+	}
+	s, ok := d.sessions.Get(&session{certificate: ctx.(*rpc.VPNContext).Certificate()}).(*session)
+	if !ok {
+		return nil, ErrSessionNotFound
+	}
+
+	if l.publishers.Delete(s) == nil {
+		return nil, errors.New("not publishing this listing")
+	}
+	s.publishedListings.Delete(l)
+
+	return &pb.DirectoryUnpublishResponse{}, nil
 }
 
-func (s *directoryService) Join(ctx context.Context, req *pb.DirectoryJoinRequest) (*pb.DirectoryJoinResponse, error) {
-	// hostCert := req.GetCertificate()
-	// identCert := hostCert.GetParent()
-	// networkCert := identCert.GetParent()
+func (d *directoryService) Join(ctx context.Context, req *pb.DirectoryJoinRequest) (*pb.DirectoryJoinResponse, error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
 
-	// if !bytes.Equal(dao.GetRootCert(s.certificate).Key, req.Certificate.GetParent().GetKey()) {
-	// 	return nil, errors.New("network key mismatch")
-	// }
+	l, ok := d.listings.Get(&lruKey{key: req.Key}).(*listing)
+	if !ok {
+		return nil, ErrListingNotFound
+	}
+	s := d.sessions.GetOrInsert(&session{certificate: ctx.(*rpc.VPNContext).Certificate()}).(*session)
+	u := d.users.GetOrInsert(&session{certificate: ctx.(*rpc.VPNContext).Certificate().GetParent()}).(*user)
 
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	l.viewers.InsertNoReplace(s)
+	s.viewedListings.InsertNoReplace(l)
+	u.sessions.InsertNoReplace(s)
 
-	return nil, errors.New("not implemented")
+	return &pb.DirectoryJoinResponse{}, nil
 }
 
-func (s *directoryService) Part(ctx context.Context, req *pb.DirectoryPartRequest) (*pb.DirectoryPartResponse, error) {
-	return nil, errors.New("not implemented")
+func (d *directoryService) Part(ctx context.Context, req *pb.DirectoryPartRequest) (*pb.DirectoryPartResponse, error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	l, ok := d.listings.Get(&lruKey{key: req.Key}).(*listing)
+	if !ok {
+		return nil, ErrListingNotFound
+	}
+	s, ok := d.sessions.Get(&session{certificate: ctx.(*rpc.VPNContext).Certificate()}).(*session)
+	if !ok {
+		return nil, ErrSessionNotFound
+	}
+	d.users.Touch(&session{certificate: ctx.(*rpc.VPNContext).Certificate().GetParent()})
+
+	if l.viewers.Delete(s) == nil {
+		return nil, errors.New("not viewing this listing")
+	}
+	s.viewedListings.Delete(l)
+
+	return &pb.DirectoryPartResponse{}, nil
 }
 
-func (s *directoryService) Ping(ctx context.Context, req *pb.DirectoryPingRequest) (*pb.DirectoryPingResponse, error) {
-	return nil, errors.New("not implemented")
+func (d *directoryService) Ping(ctx context.Context, req *pb.DirectoryPingRequest) (*pb.DirectoryPingResponse, error) {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	s, ok := d.sessions.Get(&session{certificate: ctx.(*rpc.VPNContext).Certificate()}).(*session)
+	if ok {
+		return nil, ErrSessionNotFound
+	}
+
+	s.publishedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
+		d.listings.Touch(it.(*listing))
+		return true
+	})
+	s.viewedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
+		d.listings.Touch(it.(*listing))
+		return true
+	})
+
+	return &pb.DirectoryPingResponse{}, nil
 }
 
 type listing struct {
-	listing    *pb.DirectoryListing
-	users      llrb.LLRB
-	publishers llrb.LLRB
+	listing      *pb.DirectoryListing
+	modifiedTime time.Time
+	publishers   llrb.LLRB
+	viewers      llrb.LLRB
 }
 
-func (i *listing) Less(o llrb.Item) bool {
-	if o, ok := o.(*listing); ok {
-		return bytes.Compare(i.listing.Key, o.listing.Key) == -1
-	}
-	return !o.Less(i)
+func (l *listing) Key() []byte {
+	return l.listing.Key
+}
+
+func (l *listing) Less(o llrb.Item) bool {
+	return keyerLess(l, o)
+}
+
+type session struct {
+	certificate       *pb.Certificate
+	publishedListings llrb.LLRB
+	viewedListings    llrb.LLRB
+}
+
+func (u *session) Key() []byte {
+	return u.certificate.Key
+}
+
+func (u *session) Less(o llrb.Item) bool {
+	return keyerLess(u, o)
 }
 
 type user struct {
 	certificate *pb.Certificate
-	listings    llrb.LLRB
+	sessions    llrb.LLRB
 }
 
-func (i *user) Less(o llrb.Item) bool {
-	if o, ok := o.(*user); ok {
-		return bytes.Compare(i.certificate.Key, o.certificate.Key) == -1
-	}
-	return !o.Less(i)
+func (u *user) Key() []byte {
+	return u.certificate.Key
+}
+
+func (u *user) Less(o llrb.Item) bool {
+	return keyerLess(u, o)
 }

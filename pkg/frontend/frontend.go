@@ -36,17 +36,17 @@ type Server struct {
 
 // Listen ...
 func (s *Server) Listen(ctx context.Context, rw io.ReadWriter) error {
-	server := rpc.NewServer(s.Logger)
+	server := rpc.NewServer(s.Logger, &rpc.RWDialer{
+		Logger:          s.Logger,
+		ReadWriter:      rw,
+		MaxMessageBytes: serverMaxMessageBytes,
+	})
 	c := New(s.Logger, server, s.NewVPNHost, s.Broker)
 	if err := c.initProfileService(ctx, s.Store, s.NewVPNHost); err != nil {
 		return err
 	}
 
-	return server.Listen(ctx, &rpc.RWDialer{
-		Logger:          s.Logger,
-		ReadWriter:      rw,
-		MaxMessageBytes: serverMaxMessageBytes,
-	})
+	return server.Listen(ctx)
 }
 
 // New ...

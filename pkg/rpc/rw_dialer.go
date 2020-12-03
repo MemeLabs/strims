@@ -83,12 +83,11 @@ func (t *RWTransport) Listen() error {
 			callsIn:  &t.callsIn,
 			callsOut: &t.callsOut,
 		}
-		call := NewCallIn(t.ctx, req, parentCallAccessor)
-		t.callsIn.Store(req.Id, call)
+		call := NewCallIn(t.ctx, req, parentCallAccessor, t.send)
 
-		go t.dispatcher.Dispatch(call)
+		t.callsIn.Store(req.Id, call)
 		go func() {
-			call.SendResponse(t.call)
+			t.dispatcher.Dispatch(call)
 			t.callsIn.Delete(req.Id)
 		}()
 
@@ -98,7 +97,7 @@ func (t *RWTransport) Listen() error {
 	}
 }
 
-func (t *RWTransport) call(ctx context.Context, call *pb.Call) error {
+func (t *RWTransport) send(ctx context.Context, call *pb.Call) error {
 	b := callBuffers.Get().(*proto.Buffer)
 	defer callBuffers.Put(b)
 	b.Reset()
@@ -122,7 +121,7 @@ func (t *RWTransport) Call(call *CallOut, fn ResponseFunc) error {
 	t.callsOut.Store(call.ID(), call)
 	defer t.callsOut.Delete(call.ID())
 
-	if err := call.SendRequest(t.call); err != nil {
+	if err := call.SendRequest(t.send); err != nil {
 		return err
 	}
 
