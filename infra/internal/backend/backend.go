@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"io/ioutil"
+	"net"
 	"os"
 	"os/exec"
 	"path"
@@ -316,17 +317,23 @@ func (b *Backend) CreateNode(
 	}
 
 	// append all peers from the database to static peers
-	for _, n := range nodes {
+	for _, node := range nodes {
 		for _, peer := range b.Conf.Peers {
-			if peer.Endpoint == n.Networks.V4[0] {
+			if peer.Endpoint == node.Networks.V4[0] {
 				continue
 			}
 		}
 
+		pub, err := wgutil.PublicFromPrivate(node.WireguardPrivKey)
+		if err != nil {
+			// TODO: let's handle this
+			continue
+		}
+
 		b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
-			PublicKey:           n.WireguardPubKey,
-			AllowedIPs:          fmt.Sprintf("%s/%d", n.WireguardIPv4, 32),
-			Endpoint:            fmt.Sprintf("%s:%d", n.Networks.V4[0], 51820),
+			PublicKey:           pub,
+			AllowedIPs:          fmt.Sprintf("%s/%d", node.WireguardIPv4, 32),
+			Endpoint:            fmt.Sprintf("%s:%d", node.Networks.V4[0], 51820),
 			PersistentKeepalive: 25,
 		})
 	}
@@ -444,7 +451,6 @@ func (b *Backend) updateController() error {
 }
 
 func (b *Backend) initNode(ctx context.Context, node *node.Node, user string) error {
-
 	// Continuously retry ssh'ing into the new node. This is to ensure that it is
 	// connectable by the time the master node begins initilization.
 	// TODO(jbpratt): maybe move this as a step in node creation..
@@ -552,15 +558,17 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to update controller(%v): %w", b.Conf, err)
 	}
 
-	nodes, err := b.ActiveNodes(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to get active nodes: %w", err)
-	}
+	/*
+		nodes, err := b.ActiveNodes(ctx)
+		if err != nil {
+			return fmt.Errorf("failed to get active nodes: %w", err)
+		}
 
-	// maybe we should be syncing by peers, what about static peers
-	if err := b.syncNodes(ctx, nodes); err != nil {
-		return fmt.Errorf("failed to sync nodes: %w", err)
-	}
+		// maybe we should be syncing by peers, what about static peers
+		if err := b.syncNodes(ctx, nodes); err != nil {
+			return fmt.Errorf("failed to sync nodes: %w", err)
+		}
+	*/
 
 	d, ok := b.NodeDrivers[n.ProviderName]
 	if !ok {
@@ -718,4 +726,23 @@ func copyFile(src, dst string) error {
 		return err
 	}
 	return out.Close()
+}
+
+func isPublicIP(IP net.IP) bool {
+	if IP.IsLoopback() || IP.IsLinkLocalMulticast() || IP.IsLinkLocalUnicast() {
+		return false
+	}
+	if ip4 := IP.To4(); ip4 != nil {
+		switch {
+		case ip4[0] == 10:
+			return false
+		case ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31:
+			return false
+		case ip4[0] == 192 && ip4[1] == 168:
+			return false
+		default:
+			return true
+		}
+	}
+	return false
 }

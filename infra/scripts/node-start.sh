@@ -49,6 +49,7 @@ cat > /etc/docker/daemon.json <<EOF
 }
 EOF
 
+apt-get clean
 apt-get update
 apt-get install -y wireguard
 

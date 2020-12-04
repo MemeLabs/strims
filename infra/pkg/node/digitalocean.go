@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"net"
 	"sort"
 	"strconv"
 	"time"
@@ -272,11 +273,15 @@ func digitalOceanNode(droplet *godo.Droplet) *Node {
 		SKU:        digitalOceanSKU(droplet.Size),
 	}
 
-	for _, net := range droplet.Networks.V4 {
-		node.Networks.V4 = append(node.Networks.V4, net.IPAddress)
+	for _, ipv4 := range droplet.Networks.V4 {
+		if isPublicIP(net.ParseIP(ipv4.IPAddress)) {
+			node.Networks.V4 = append(node.Networks.V4, ipv4.IPAddress)
+		}
 	}
-	for _, net := range droplet.Networks.V6 {
-		node.Networks.V6 = append(node.Networks.V6, net.IPAddress)
+	for _, ipv6 := range droplet.Networks.V6 {
+		if isPublicIP(net.ParseIP(ipv6.IPAddress)) {
+			node.Networks.V6 = append(node.Networks.V6, ipv6.IPAddress)
+		}
 	}
 
 	for _, region := range digitalOceanRegions {
@@ -286,4 +291,23 @@ func digitalOceanNode(droplet *godo.Droplet) *Node {
 	}
 
 	return node
+}
+
+func isPublicIP(IP net.IP) bool {
+	if IP.IsLoopback() || IP.IsLinkLocalMulticast() || IP.IsLinkLocalUnicast() {
+		return false
+	}
+	if ip4 := IP.To4(); ip4 != nil {
+		switch {
+		case ip4[0] == 10:
+			return false
+		case ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31:
+			return false
+		case ip4[0] == 192 && ip4[1] == 168:
+			return false
+		default:
+			return true
+		}
+	}
+	return false
 }
