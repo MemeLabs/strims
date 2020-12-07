@@ -109,7 +109,6 @@ type Config struct {
 	}
 	InterfaceConfig         wgutil.InterfaceConfig
 	PublicControllerAddress string
-	ContainerName           string // lxc (maybe can be deleted)
 }
 
 var (
@@ -267,29 +266,6 @@ func (b *Backend) SSHPublicKey() string {
 	return string(bytes.Trim(d, "\r\n\t "))
 }
 
-func (b *Backend) nextWGIPv4(ctx context.Context, activeNodes []*node.Node) (string, error) {
-OUTER:
-	for i := 2; i < 255; i++ {
-		for _, node := range activeNodes {
-			addr := strings.Split(node.WireguardIPv4, ".")
-			if len(addr) == 4 {
-				host, err := strconv.Atoi(addr[3])
-				if err != nil {
-					return "", fmt.Errorf("failed to parse ipv4 addr(%q): %w", addr[3], err)
-				}
-
-				// addr already taken
-				if host == i {
-					continue OUTER
-				}
-			}
-		}
-		// no node has this addr
-		return fmt.Sprintf("10.0.0.%d", i), nil
-	}
-	return "", fmt.Errorf("failed to find next wg ipv4")
-}
-
 func (b *Backend) CreateNode(
 	ctx context.Context,
 	driver node.Driver,
@@ -321,33 +297,18 @@ func (b *Backend) CreateNode(
 		zap.String("ipv4", n.Networks.V4[0]),
 		zap.String("name", n.Name))
 
+	if err := b.insertNode(ctx, n, driver.Provider()); err != nil {
+		return fmt.Errorf("failed to insert node(%v): %w", n, err)
+	}
+
+	b.Log.Info("node has been inserted into the database")
+
 	nodes, err := b.ActiveNodes(ctx)
 	if err != nil {
 		return err
 	}
 
-	// append all peers from the database to static peers
-	for _, node := range nodes {
-		for _, peer := range b.Conf.Peers {
-			if peer.Endpoint == node.Networks.V4[0] {
-				continue
-			}
-		}
-
-		pub, err := wgutil.PublicFromPrivate(node.WireguardPrivKey)
-		if err != nil {
-			b.Log.Error("failed to get public key from node's private key",
-				zap.String("node_name", node.Name))
-			continue
-		}
-
-		b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
-			PublicKey:           pub,
-			AllowedIPs:          fmt.Sprintf("%s/%d", node.WireguardIPv4, 32),
-			Endpoint:            fmt.Sprintf("%s:%d", node.Networks.V4[0], 51820),
-			PersistentKeepalive: 25,
-		})
-	}
+	b.buildControllerConf(nodes)
 
 	n.WireguardIPv4, err = b.nextWGIPv4(ctx, nodes)
 	if n.WireguardIPv4 == "" || err != nil {
@@ -370,12 +331,6 @@ func (b *Backend) CreateNode(
 		Endpoint:            fmt.Sprintf("%s:%d", n.Networks.V4[0], 51820),
 		PersistentKeepalive: 25,
 	})
-
-	if err := b.insertNode(ctx, n, driver.Provider()); err != nil {
-		return fmt.Errorf("failed to insert node(%v): %w", n, err)
-	}
-
-	b.Log.Info("node has been inserted into the database")
 
 	if err := b.updateController(); err != nil {
 		return fmt.Errorf("failed to update controller config(%v): %w", b.Conf, err)
@@ -531,9 +486,15 @@ func (b *Backend) syncNodes(ctx context.Context, nodes []*node.Node) {
 }
 
 func (b *Backend) DestroyNode(ctx context.Context, name string) error {
+	if err := run("sudo", "kubectl", "drain", name); err != nil {
+		return fmt.Errorf("failed to delete node: %w", err)
+	}
+
 	if err := run("sudo", "kubectl", "delete", "node", name); err != nil {
 		return fmt.Errorf("failed to delete node: %w", err)
 	}
+
+	b.Log.Info("node has been deleted from kube")
 
 	n, err := models.Nodes(qm.Where("name=?", name)).One(ctx, b.DB)
 	if err != nil {
@@ -548,9 +509,13 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to update node: %w", err)
 	}
 
+	b.Log.Info("node has been updated in db to inactive")
+
 	for i, p := range b.Conf.Peers {
-		if p.PublicKey == n.IPV4 {
+		if p.Endpoint == fmt.Sprintf("%s:%d", n.IPV4, 51820) {
 			b.Conf.Peers = append(b.Conf.Peers[:i], b.Conf.Peers[i+1:]...)
+			b.Log.Info("node has been removed from wg peers", zap.String("node_name", n.Name))
+			break
 		}
 	}
 
@@ -558,13 +523,19 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to update controller(%v): %w", b.Conf, err)
 	}
 
+	b.Log.Info("controller has been updated")
+
 	nodes, err := b.ActiveNodes(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get active nodes: %w", err)
 	}
 
+	b.buildControllerConf(nodes)
+
 	// maybe we should be syncing by peers, what about static peers
 	b.syncNodes(ctx, nodes)
+
+	b.Log.Info("nodes have been synced")
 
 	d, ok := b.NodeDrivers[n.ProviderName]
 	if !ok {
@@ -579,6 +550,8 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 	if err := d.Delete(ctx, req); err != nil {
 		return fmt.Errorf("failed to delete node(%v): %w", req, err)
 	}
+
+	b.Log.Info("node has been deleted at the provider", zap.String("provider", n.ProviderName))
 
 	return nil
 }
@@ -605,6 +578,55 @@ func (b *Backend) DiffNodes(ctx context.Context) (string, error) {
 	}
 
 	return "", errors.New("failed to compare")
+}
+
+func (b *Backend) nextWGIPv4(ctx context.Context, activeNodes []*node.Node) (string, error) {
+OUTER:
+	for i := 2; i < 255; i++ {
+		for _, node := range activeNodes {
+			addr := strings.Split(node.WireguardIPv4, ".")
+			if len(addr) == 4 {
+				host, err := strconv.Atoi(addr[3])
+				if err != nil {
+					return "", fmt.Errorf("failed to parse ipv4 addr(%q): %w", addr[3], err)
+				}
+
+				// addr already taken
+				if host == i {
+					continue OUTER
+				}
+			}
+		}
+		// no node has this addr
+		return fmt.Sprintf("10.0.0.%d", i), nil
+	}
+	return "", fmt.Errorf("failed to find next wg ipv4")
+}
+
+func (b *Backend) buildControllerConf(nodes []*node.Node) {
+	b.Conf.Peers = nil
+	// append all peers from the database to static peers
+	for _, node := range nodes {
+		for _, peer := range b.Conf.Peers {
+			if peer.Endpoint == node.Networks.V4[0] {
+				continue
+			}
+		}
+
+		pub, err := wgutil.PublicFromPrivate(node.WireguardPrivKey)
+		if err != nil {
+			b.Log.Error("failed to get public key from node's private key",
+				zap.String("node_name", node.Name))
+			continue
+		}
+
+		b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
+			PublicKey:           pub,
+			AllowedIPs:          fmt.Sprintf("%s/%d", node.WireguardIPv4, 32),
+			Endpoint:            fmt.Sprintf("%s:%d", node.Networks.V4[0], 51820),
+			PersistentKeepalive: 25,
+		})
+	}
 }
 
 func (b *Backend) configForNode(n *node.Node) (*wgutil.InterfaceConfig, error) {
