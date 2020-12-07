@@ -14,7 +14,7 @@ const (
 	Hourly  BillingType = "hourly"
 )
 
-var DefaultUser = map[string]string{"ovh": "ubuntu", "scaleway": "root"}
+var DefaultUser = map[string]string{"ovh": "ubuntu", "scaleway": "root", "digitalocean": "root"}
 
 // A Driver is defines the implementation of a third party driver such as
 // DigitalOcean. The driver is used to facilitate provisioning and tearing
@@ -105,7 +105,6 @@ type Node struct {
 	Status           string    `json:"status,omitempty"`
 	Region           *Region   `json:"region,omitempty"`
 	SKU              *SKU      `json:"sku,omitempty"`
-	WireguardPubKey  string    `json:"wireguard_pub_key,omitempty"` // TODO(jbpratt): do we really need this?
 	WireguardPrivKey string    `json:"wireguard_priv_key,omitempty"`
 	WireguardIPv4    string    `json:"wireguard_ipv4,omitempty"`
 }
