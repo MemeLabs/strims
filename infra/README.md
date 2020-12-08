@@ -35,6 +35,14 @@ Providers:
     TenantID: xxxxxx-xxxx-xxxx-xxxx-xxxxxxxxx
 SSH:
   IdentityFile: /root/.ssh/id_ecdsa_example
+ScriptDirectory: /mnt/
+ControllerUser: "root"
+PublicControllerAddress: "51.51.51.2"
+InterfaceConfig:
+  PrivateKey: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX="
+  Address: "10.0.0.1/24"
+  ListenPort: 51820
+ScriptDirectory: /
 ```
 
 ```

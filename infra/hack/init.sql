@@ -21,6 +21,7 @@ CREATE TABLE IF NOT EXISTS "nodes" (
   "sku_price_hourly" REAL NOT NULL,
   "wireguard_key" TEXT NOT NULL,
   "wireguard_ip" TEXT NOT NULL,
+  "user" TEXT NOT NULL,
   UNIQUE ("provider_name", "provider_id"),
   UNIQUE ("name")
 );

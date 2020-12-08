@@ -12,9 +12,8 @@ type BillingType string
 const (
 	Monthly BillingType = "monthly"
 	Hourly  BillingType = "hourly"
+	Custom  BillingType = "custom"
 )
-
-var DefaultUser = map[string]string{"ovh": "ubuntu", "scaleway": "root", "digitalocean": "root"}
 
 // A Driver is defines the implementation of a third party driver such as
 // DigitalOcean. The driver is used to facilitate provisioning and tearing
@@ -94,6 +93,7 @@ type Price struct {
 
 // Node represents a host
 type Node struct {
+	User             string    `json:"user,omitempty"`
 	Driver           string    `json:"driver,omitempty"`
 	ProviderName     string    `json:"provider_name,omitempty"`
 	ProviderID       string    `json:"provider_id,omitempty"`

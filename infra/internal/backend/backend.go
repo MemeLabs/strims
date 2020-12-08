@@ -109,6 +109,7 @@ type Config struct {
 	}
 	InterfaceConfig         wgutil.InterfaceConfig
 	PublicControllerAddress string
+	ScriptDirectory         string
 }
 
 var (
@@ -121,17 +122,6 @@ var (
 	nodeStartScript      string
 	nodeSyncScript       string
 )
-
-func init() {
-	h, err := os.UserHomeDir()
-	if err != nil {
-		panic(err)
-	}
-
-	controllerSyncScript = path.Join(h, "controller-sync-wg.py")
-	nodeStartScript = path.Join(h, "node-start.sh")
-	nodeSyncScript = path.Join(h, "node-sync-wg.sh")
-}
 
 // DecoderConfigOptions ...
 func (c *Config) DecoderConfigOptions(config *mapstructure.DecoderConfig) {
@@ -172,7 +162,7 @@ func (c *Config) DecoderConfigOptions(config *mapstructure.DecoderConfig) {
 	})
 }
 
-// New creates a Backend taking in the Config
+// New ...
 func New(cfg Config) (*Backend, error) {
 	log := zap.New(zapcore.NewCore(
 		zapcore.NewConsoleEncoder(zap.NewDevelopmentEncoderConfig()),
@@ -225,6 +215,14 @@ func New(cfg Config) (*Backend, error) {
 		}
 	}
 
+	if cfg.ScriptDirectory == "" {
+		return nil, errors.New("config must contain script directory location")
+	}
+
+	controllerSyncScript = path.Join(cfg.ScriptDirectory, "controller-sync-wg.py")
+	nodeStartScript = path.Join(cfg.ScriptDirectory, "node-start.sh")
+	nodeSyncScript = path.Join(cfg.ScriptDirectory, "node-sync-wg.sh")
+
 	return &Backend{
 		Log:               log,
 		DB:                db,
@@ -269,39 +267,78 @@ func (b *Backend) SSHPublicKey() string {
 func (b *Backend) CreateNode(
 	ctx context.Context,
 	driver node.Driver,
-	hostname, region, sku string,
+	hostname, region, sku, user, ipv4 string,
 	billingType node.BillingType,
 ) error {
 
-	b.Log.Info("creating node",
-		zap.String("provider", driver.Provider()),
-		zap.String("hostname", hostname),
-		zap.String("region", region))
+	var n *node.Node
+	var err error
 
-	req := &node.CreateRequest{
-		Name:        hostname,
-		Region:      region,
-		SKU:         sku,
-		SSHKey:      b.SSHPublicKey(),
-		BillingType: billingType,
+	if billingType == node.Custom {
+		n = &node.Node{
+			User:         user,
+			Driver:       "custom",
+			ProviderName: "custom",
+			ProviderID:   "1337",
+			Name:         hostname,
+			Memory:       0,
+			CPUs:         0,
+			Disk:         0,
+			Networks: &node.Networks{
+				V4: []string{ipv4},
+			},
+			Status: "active",
+			Region: &node.Region{
+				Name: hostname,
+				City: "",
+				LatLng: s2.LatLng{
+					Lat: 0,
+					Lng: 0,
+				},
+			},
+			SKU: &node.SKU{
+				Name:         hostname,
+				CPUs:         0,
+				Memory:       0,
+				Disk:         0,
+				NetworkCap:   0,
+				NetworkSpeed: 0,
+				PriceMonthly: &node.Price{
+					Value:    0,
+					Currency: "",
+				},
+				PriceHourly: &node.Price{
+					Value:    0,
+					Currency: "",
+				},
+			},
+		}
+	} else {
+		b.Log.Info("creating node",
+			zap.String("provider", driver.Provider()),
+			zap.String("hostname", hostname),
+			zap.String("region", region))
+
+		req := &node.CreateRequest{
+			Name:        hostname,
+			Region:      region,
+			SKU:         sku,
+			SSHKey:      b.SSHPublicKey(),
+			BillingType: billingType,
+		}
+
+		n, err = driver.Create(ctx, req)
+		if err != nil {
+			return fmt.Errorf("failed to create node(%v): %w", req, err)
+		}
+
+		n.ProviderName = driver.Provider()
+		n.User = user
+
+		b.Log.Info("node has been created",
+			zap.String("ipv4", n.Networks.V4[0]),
+			zap.String("name", n.Name))
 	}
-
-	n, err := driver.Create(ctx, req)
-	if err != nil {
-		return fmt.Errorf("failed to create node(%v): %w", req, err)
-	}
-
-	n.ProviderName = driver.Provider()
-
-	b.Log.Info("node has been created",
-		zap.String("ipv4", n.Networks.V4[0]),
-		zap.String("name", n.Name))
-
-	if err := b.insertNode(ctx, n, driver.Provider()); err != nil {
-		return fmt.Errorf("failed to insert node(%v): %w", n, err)
-	}
-
-	b.Log.Info("node has been inserted into the database")
 
 	nodes, err := b.ActiveNodes(ctx)
 	if err != nil {
@@ -332,13 +369,19 @@ func (b *Backend) CreateNode(
 		PersistentKeepalive: 25,
 	})
 
+	if err := b.insertNode(ctx, n); err != nil {
+		return fmt.Errorf("failed to insert node(%v): %w", n, err)
+	}
+
+	b.Log.Info("node has been inserted into the database")
+
 	if err := b.updateController(); err != nil {
 		return fmt.Errorf("failed to update controller config(%v): %w", b.Conf, err)
 	}
 
 	b.Log.Info("controller has been updated")
 
-	if err := b.initNode(ctx, n, driver.DefaultUser()); err != nil {
+	if err := b.initNode(ctx, n); err != nil {
 		return fmt.Errorf("failed to init node(%v): %w", nil, err)
 	}
 
@@ -365,7 +408,7 @@ func (b *Backend) ActiveNodes(ctx context.Context) ([]*node.Node, error) {
 	return nodes, nil
 }
 
-func (b *Backend) insertNode(ctx context.Context, node *node.Node, providerName string) error {
+func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 
 	id, err := dao.GenerateSnowflake()
 	if err != nil {
@@ -373,11 +416,12 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node, providerName 
 	}
 
 	nodeEntry := &models.Node{
+		User:         node.User,
 		ID:           int64(id),
 		Active:       1,
 		StartedAt:    time.Now().UnixNano(),
 		ProviderID:   node.ProviderID,
-		ProviderName: providerName,
+		ProviderName: node.ProviderName,
 		Name:         strings.ToLower(node.Name), // lowering here to match k8s node naming
 		Memory:       int64(node.Memory),
 		CPUs:         int64(node.CPUs),
@@ -401,7 +445,6 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node, providerName 
 }
 
 func (b *Backend) updateController() error {
-
 	// write the wg cfg to a temp file
 	tmp, err := ioutil.TempFile("", "goppspp")
 	if err != nil {
@@ -418,13 +461,13 @@ func (b *Backend) updateController() error {
 	if err := run(
 		"sudo", "-S", "python3", controllerSyncScript, tmp.Name(),
 	); err != nil {
-		return fmt.Errorf("failed to update controller: %w", err)
+		return fmt.Errorf("failed to execute sync script: %w", err)
 	}
 
 	return nil
 }
 
-func (b *Backend) initNode(ctx context.Context, node *node.Node, user string) error {
+func (b *Backend) initNode(ctx context.Context, node *node.Node) error {
 	// Continuously retry ssh'ing into the new node. This is to ensure that it is
 	// connectable by the time the master node begins initilization.
 	// TODO(jbpratt): maybe move this as a step in node creation..
@@ -432,7 +475,7 @@ func (b *Backend) initNode(ctx context.Context, node *node.Node, user string) er
 	fmt.Print("attempting to ssh to the new node")
 	for i := 0; i < nodeSSHRetries; i++ {
 		fmt.Print(".")
-		_, err := sshToNode(user, node.Networks.V4[0], b.SSHIdentityFile())
+		_, err := sshToNode(node.User, node.Networks.V4[0], b.SSHIdentityFile())
 		if err == nil {
 			break
 		}
@@ -451,7 +494,7 @@ func (b *Backend) initNode(ctx context.Context, node *node.Node, user string) er
 
 	if err := run(
 		nodeStartScript,
-		user,
+		node.User,
 		node.Networks.V4[0],
 		b.SSHIdentityFile(),
 		node.WireguardIPv4,
@@ -474,7 +517,7 @@ func (b *Backend) syncNodes(ctx context.Context, nodes []*node.Node) {
 
 		if err := run(
 			nodeSyncScript,
-			node.DefaultUser[n.ProviderName],
+			n.User,
 			n.Networks.V4[0],
 			b.SSHIdentityFile(),
 			conf.String(),
@@ -486,12 +529,18 @@ func (b *Backend) syncNodes(ctx context.Context, nodes []*node.Node) {
 }
 
 func (b *Backend) DestroyNode(ctx context.Context, name string) error {
-	if err := run("sudo", "kubectl", "drain", name); err != nil {
-		return fmt.Errorf("failed to delete node: %w", err)
-	}
+
+	/*
+	  if err := run(
+	    "sudo", "kubectl", "drain", name, "--ignore-daemonsets", "--delete-local-data", "--force",
+	  ); err != nil {
+	    b.Log.Error("failed to drain node: %w", zap.Error(err))
+	  }
+	*/
 
 	if err := run("sudo", "kubectl", "delete", "node", name); err != nil {
-		return fmt.Errorf("failed to delete node: %w", err)
+		b.Log.Error("failed to delete node: %w", zap.Error(err))
+		return err
 	}
 
 	b.Log.Info("node has been deleted from kube")
@@ -531,27 +580,9 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 	}
 
 	b.buildControllerConf(nodes)
-
-	// maybe we should be syncing by peers, what about static peers
 	b.syncNodes(ctx, nodes)
 
 	b.Log.Info("nodes have been synced")
-
-	d, ok := b.NodeDrivers[n.ProviderName]
-	if !ok {
-		return fmt.Errorf("unknown provider %s", n.ProviderName)
-	}
-
-	req := &node.DeleteRequest{
-		Region:     n.RegionName,
-		ProviderID: n.ProviderID,
-	}
-
-	if err := d.Delete(ctx, req); err != nil {
-		return fmt.Errorf("failed to delete node(%v): %w", req, err)
-	}
-
-	b.Log.Info("node has been deleted at the provider", zap.String("provider", n.ProviderName))
 
 	return nil
 }
@@ -605,7 +636,6 @@ OUTER:
 
 func (b *Backend) buildControllerConf(nodes []*node.Node) {
 	b.Conf.Peers = nil
-	// append all peers from the database to static peers
 	for _, node := range nodes {
 		for _, peer := range b.Conf.Peers {
 			if peer.Endpoint == node.Networks.V4[0] {
@@ -673,6 +703,7 @@ func modelToNode(n *models.Node) *node.Node {
 	}
 
 	return &node.Node{
+		User:         n.User,
 		ProviderName: n.ProviderName,
 		ProviderID:   n.ProviderID,
 		Name:         n.Name,
@@ -782,7 +813,8 @@ func copyFile(src, dst string) error {
 	return out.Close()
 }
 
-func isPublicIP(IP net.IP) bool {
+func IsPublicIP(addr string) bool {
+	IP := net.ParseIP(addr)
 	if IP.IsLoopback() || IP.IsLinkLocalMulticast() || IP.IsLinkLocalUnicast() {
 		return false
 	}
