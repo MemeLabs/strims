@@ -270,75 +270,32 @@ func (b *Backend) CreateNode(
 	hostname, region, sku, user, ipv4 string,
 	billingType node.BillingType,
 ) error {
+	b.Log.Info("creating node",
+		zap.String("provider", driver.Provider()),
+		zap.String("hostname", hostname),
+		zap.String("region", region))
 
-	var n *node.Node
-	var err error
-
-	if billingType == node.Custom {
-		n = &node.Node{
-			User:         user,
-			Driver:       "custom",
-			ProviderName: "custom",
-			ProviderID:   "1337",
-			Name:         hostname,
-			Memory:       0,
-			CPUs:         0,
-			Disk:         0,
-			Networks: &node.Networks{
-				V4: []string{ipv4},
-			},
-			Status: "active",
-			Region: &node.Region{
-				Name: hostname,
-				City: "",
-				LatLng: s2.LatLng{
-					Lat: 0,
-					Lng: 0,
-				},
-			},
-			SKU: &node.SKU{
-				Name:         hostname,
-				CPUs:         0,
-				Memory:       0,
-				Disk:         0,
-				NetworkCap:   0,
-				NetworkSpeed: 0,
-				PriceMonthly: &node.Price{
-					Value:    0,
-					Currency: "",
-				},
-				PriceHourly: &node.Price{
-					Value:    0,
-					Currency: "",
-				},
-			},
-		}
-	} else {
-		b.Log.Info("creating node",
-			zap.String("provider", driver.Provider()),
-			zap.String("hostname", hostname),
-			zap.String("region", region))
-
-		req := &node.CreateRequest{
-			Name:        hostname,
-			Region:      region,
-			SKU:         sku,
-			SSHKey:      b.SSHPublicKey(),
-			BillingType: billingType,
-		}
-
-		n, err = driver.Create(ctx, req)
-		if err != nil {
-			return fmt.Errorf("failed to create node(%v): %w", req, err)
-		}
-
-		n.ProviderName = driver.Provider()
-		n.User = user
-
-		b.Log.Info("node has been created",
-			zap.String("ipv4", n.Networks.V4[0]),
-			zap.String("name", n.Name))
+	req := &node.CreateRequest{
+		User:        user,
+		IPV4:        ipv4,
+		Name:        hostname,
+		Region:      region,
+		SKU:         sku,
+		SSHKey:      b.SSHPublicKey(),
+		BillingType: billingType,
 	}
+
+	n, err := driver.Create(ctx, req)
+	if err != nil {
+		return fmt.Errorf("failed to create node(%v): %w", req, err)
+	}
+
+	n.ProviderName = driver.Provider()
+	n.User = user
+
+	b.Log.Info("node has been created",
+		zap.String("ipv4", n.Networks.V4[0]),
+		zap.String("name", n.Name))
 
 	nodes, err := b.ActiveNodes(ctx)
 	if err != nil {
@@ -409,7 +366,6 @@ func (b *Backend) ActiveNodes(ctx context.Context) ([]*node.Node, error) {
 }
 
 func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
-
 	id, err := dao.GenerateSnowflake()
 	if err != nil {
 		return err
@@ -458,10 +414,8 @@ func (b *Backend) updateController() error {
 		return fmt.Errorf("failed to close temp file: %w", err)
 	}
 
-	if err := run(
-		"sudo", "-S", "python3", controllerSyncScript, tmp.Name(),
-	); err != nil {
-		return fmt.Errorf("failed to execute sync script: %w", err)
+	if err := run("wg", "syncconf", "wg0", tmp.Name()); err != nil {
+		return fmt.Errorf("failed to 'wg-quick down wg0': %w", err)
 	}
 
 	return nil
@@ -529,16 +483,15 @@ func (b *Backend) syncNodes(ctx context.Context, nodes []*node.Node) {
 }
 
 func (b *Backend) DestroyNode(ctx context.Context, name string) error {
-
 	/*
 	  if err := run(
-	    "sudo", "kubectl", "drain", name, "--ignore-daemonsets", "--delete-local-data", "--force",
+	    "kubectl", "drain", name, "--ignore-daemonsets", "--delete-local-data", "--force",
 	  ); err != nil {
 	    b.Log.Error("failed to drain node: %w", zap.Error(err))
 	  }
 	*/
 
-	if err := run("sudo", "kubectl", "delete", "node", name); err != nil {
+	if err := run("kubectl", "delete", "node", name); err != nil {
 		b.Log.Error("failed to delete node: %w", zap.Error(err))
 		return err
 	}
@@ -588,7 +541,6 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 }
 
 func (b *Backend) DiffNodes(ctx context.Context) (string, error) {
-
 	var liveNodes []*node.Node
 	for _, driver := range b.NodeDrivers {
 		res, err := driver.List(ctx, nil)

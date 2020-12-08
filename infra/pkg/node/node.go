@@ -45,6 +45,8 @@ type SKUsRequest struct {
 
 // CreateRequest ...
 type CreateRequest struct {
+	User   string
+	IPV4   string
 	Name   string
 	Region string
 	SKU    string
