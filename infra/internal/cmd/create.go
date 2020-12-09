@@ -62,6 +62,11 @@ var createCmd = &cobra.Command{
 	ValidArgsFunction: providerValidArgsFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
+		d, ok := backend.NodeDrivers[provider]
+		if !ok {
+			return fmt.Errorf("invalid node provider for %q", provider)
+		}
+
 		if provider == "custom" {
 			user := args[1]
 			hostname := args[2]
@@ -69,7 +74,7 @@ var createCmd = &cobra.Command{
 
 			if err := backend.CreateNode(
 				cmd.Context(),
-				nil, // no driver
+				d, // no driver
 				hostname,
 				"", // no region
 				"", // no sku
@@ -82,11 +87,6 @@ var createCmd = &cobra.Command{
 		} else {
 			sku := args[1]
 			region := args[2]
-
-			d, ok := backend.NodeDrivers[provider]
-			if !ok {
-				return fmt.Errorf("invalid node provider for %q", provider)
-			}
 
 			if err := backend.CreateNode(
 				cmd.Context(),

@@ -2,12 +2,15 @@ package node
 
 import (
 	"context"
-	"errors"
 
 	"github.com/golang/geo/s2"
 )
 
 type CustomDriver struct{}
+
+func NewCustomDriver() *CustomDriver {
+	return &CustomDriver{}
+}
 
 // Provider ...
 func (d *CustomDriver) Provider() string {
@@ -23,6 +26,10 @@ func (d *CustomDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Reg
 }
 
 func (d *CustomDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error) {
+	return nil, nil
+}
+
+func (d *CustomDriver) List(ctx context.Context, req *ListRequest) ([]*Node, error) {
 	return nil, nil
 }
 
@@ -68,5 +75,5 @@ func (d *CustomDriver) Create(ctx context.Context, req *CreateRequest) (*Node, e
 }
 
 func (d *CustomDriver) Delete(ctx context.Context, req *DeleteRequest) error {
-	return errors.New("unimplemented")
+	return nil
 }

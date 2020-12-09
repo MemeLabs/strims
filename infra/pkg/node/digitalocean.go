@@ -293,6 +293,7 @@ func digitalOceanNode(droplet *godo.Droplet) *Node {
 	return node
 }
 
+// delete this or promote it
 func isPublicIP(IP net.IP) bool {
 	if IP.IsLoopback() || IP.IsLinkLocalMulticast() || IP.IsLinkLocalUnicast() {
 		return false

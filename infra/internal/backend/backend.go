@@ -180,7 +180,7 @@ func New(cfg Config) (*Backend, error) {
 		StartTime: cfg.FlakeStartTime,
 	})
 
-	drivers := map[string]node.Driver{}
+	drivers := map[string]node.Driver{"custom": node.NewCustomDriver()}
 	for name, dci := range cfg.Providers {
 		switch dc := dci.(type) {
 		case *DigitalOceanConfig:
@@ -428,7 +428,7 @@ func (b *Backend) initNode(ctx context.Context, node *node.Node) error {
 	// connectable by the time the master node begins initilization.
 	// TODO(jbpratt): maybe move this as a step in node creation..
 	var err error
-	fmt.Print("attempting to ssh to the new node")
+	fmt.Printf("attempting to ssh to the new node(%s@%s)", node.User, node.Networks.V4[0])
 	for i := 0; i < nodeSSHRetries; i++ {
 		fmt.Print(".")
 		_, err := sshToNode(node.User, node.Networks.V4[0], b.SSHIdentityFile())
