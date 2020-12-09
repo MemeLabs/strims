@@ -16,5 +16,5 @@ cat > /etc/wireguard/wg0.conf <<EOF
 $wg_config
 EOF
 
-wg addconf wg0 <(wg-quick strip wg0)
+wg syncconf wg0 <(wg-quick strip wg0)
 CMD

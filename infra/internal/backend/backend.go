@@ -118,9 +118,8 @@ var (
 
 	nodeSSHRetries = 100
 
-	controllerSyncScript string
-	nodeStartScript      string
-	nodeSyncScript       string
+	nodeStartScript string
+	nodeSyncScript  string
 )
 
 // DecoderConfigOptions ...
@@ -219,7 +218,6 @@ func New(cfg Config) (*Backend, error) {
 		return nil, errors.New("config must contain script directory location")
 	}
 
-	controllerSyncScript = path.Join(cfg.ScriptDirectory, "controller-sync-wg.py")
 	nodeStartScript = path.Join(cfg.ScriptDirectory, "node-start.sh")
 	nodeSyncScript = path.Join(cfg.ScriptDirectory, "node-sync-wg.sh")
 
@@ -309,7 +307,7 @@ func (b *Backend) CreateNode(
 		return fmt.Errorf("failed to get next wg ipv4: %w", err)
 	}
 
-	b.Log.Info("next wireguard address", zap.String("ipv4", n.WireguardIPv4))
+	b.Log.Info("next wireguard address", zap.String("wg_ipv4", n.WireguardIPv4))
 
 	wgpriv, wgpub, err := wgutil.GenerateKey()
 	if wgpriv == "" || wgpub == "" || err != nil {
@@ -401,13 +399,13 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 }
 
 func (b *Backend) updateController() error {
-	// write the wg cfg to a temp file
+	// write the wg stripped cfg to a temp file
 	tmp, err := ioutil.TempFile("", "goppspp")
 	if err != nil {
 		return fmt.Errorf("failed to create tmp file: %w", err)
 	}
 	defer os.Remove(tmp.Name())
-	if _, err := tmp.Write([]byte(b.Conf.String())); err != nil {
+	if _, err := tmp.Write([]byte(b.Conf.Strip())); err != nil {
 		return fmt.Errorf("failed to write wg conf(%s): %w", b.Conf.String(), err)
 	}
 	if err := tmp.Close(); err != nil {
@@ -415,6 +413,10 @@ func (b *Backend) updateController() error {
 	}
 
 	if err := run("wg", "syncconf", "wg0", tmp.Name()); err != nil {
+		return fmt.Errorf("failed to 'wg-quick down wg0': %w", err)
+	}
+
+	if err := run("wg-quick", "save", "wg0"); err != nil {
 		return fmt.Errorf("failed to 'wg-quick down wg0': %w", err)
 	}
 
@@ -483,13 +485,11 @@ func (b *Backend) syncNodes(ctx context.Context, nodes []*node.Node) {
 }
 
 func (b *Backend) DestroyNode(ctx context.Context, name string) error {
-	/*
-	  if err := run(
-	    "kubectl", "drain", name, "--ignore-daemonsets", "--delete-local-data", "--force",
-	  ); err != nil {
-	    b.Log.Error("failed to drain node: %w", zap.Error(err))
-	  }
-	*/
+	if err := run(
+		"kubectl", "drain", name, "--ignore-daemonsets", "--delete-local-data", "--force", "--timeout=30s",
+	); err != nil {
+		b.Log.Error("failed to drain node: %w", zap.Error(err))
+	}
 
 	if err := run("kubectl", "delete", "node", name); err != nil {
 		b.Log.Error("failed to delete node: %w", zap.Error(err))
@@ -521,21 +521,38 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 		}
 	}
 
-	if err := b.updateController(); err != nil {
-		return fmt.Errorf("failed to update controller(%v): %w", b.Conf, err)
-	}
-
-	b.Log.Info("controller has been updated")
-
 	nodes, err := b.ActiveNodes(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to get active nodes: %w", err)
 	}
 
 	b.buildControllerConf(nodes)
+
+	if err := b.updateController(); err != nil {
+		return fmt.Errorf("failed to update controller(%v): %w", b.Conf, err)
+	}
+
+	b.Log.Info("controller has been updated")
+
 	b.syncNodes(ctx, nodes)
 
 	b.Log.Info("nodes have been synced")
+
+	d, ok := b.NodeDrivers[n.ProviderName]
+	if !ok {
+		return fmt.Errorf("unknown provider %s", n.ProviderName)
+	}
+
+	req := &node.DeleteRequest{
+		Region:     n.RegionName,
+		ProviderID: n.ProviderID,
+	}
+
+	if err := d.Delete(ctx, req); err != nil {
+		return fmt.Errorf("failed to delete node(%v): %w", req, err)
+	}
+
+	b.Log.Info("node has been deleted at the provider", zap.String("provider", n.ProviderName))
 
 	return nil
 }

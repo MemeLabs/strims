@@ -49,7 +49,7 @@ cat > /etc/docker/daemon.json <<EOF
 }
 EOF
 
-rm /var/lib/apt/lists/*
+rm -rf /var/lib/apt/lists/*
 
 apt-get clean
 apt-get update

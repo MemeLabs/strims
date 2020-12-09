@@ -40,6 +40,7 @@ type InterfaceConfig struct {
 	PrivateKey string
 	Address    string
 	ListenPort uint64
+	SaveConfig bool
 	Peers      []InterfacePeerConfig
 }
 
@@ -49,8 +50,26 @@ func (c *InterfaceConfig) String() string {
 	t := `[Interface]
 PrivateKey = %s
 Address = %s
+ListenPort = %d
+SaveConfig = %t`
+	b.WriteString(fmt.Sprintf(t, c.PrivateKey, c.Address, c.ListenPort, c.SaveConfig))
+
+	for _, p := range c.Peers {
+		b.WriteRune('\n')
+		b.WriteString(p.String())
+	}
+
+	b.WriteRune('\n')
+	return b.String()
+}
+
+func (c *InterfaceConfig) Strip() string {
+	var b strings.Builder
+
+	t := `[Interface]
+PrivateKey = %s
 ListenPort = %d`
-	b.WriteString(fmt.Sprintf(t, c.PrivateKey, c.Address, c.ListenPort))
+	b.WriteString(fmt.Sprintf(t, c.PrivateKey, c.ListenPort))
 
 	for _, p := range c.Peers {
 		b.WriteRune('\n')
