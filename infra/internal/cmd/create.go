@@ -23,7 +23,7 @@ var createCmd = &cobra.Command{
 			hostname := args[2]
 			ipv4 := args[3]
 			if user == "" || hostname == "" || ipv4 == "" {
-				return errors.New("user and ipv4 are required for custom provisioning")
+				return errors.New("user, ipv4, and hostname are required for custom provisioning")
 			}
 
 			if !node.IsPublicIP(ipv4) {
@@ -61,7 +61,7 @@ var createCmd = &cobra.Command{
 	ValidArgsFunction: providerValidArgsFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		provider := args[0]
-		d, ok := backend.NodeDrivers[provider]
+		driver, ok := backend.NodeDrivers[provider]
 		if !ok {
 			return fmt.Errorf("invalid node provider for %q", provider)
 		}
@@ -73,7 +73,7 @@ var createCmd = &cobra.Command{
 
 			if err := backend.CreateNode(
 				cmd.Context(),
-				d, // no driver
+				driver,
 				hostname,
 				"", // no region
 				"", // no sku
@@ -89,11 +89,11 @@ var createCmd = &cobra.Command{
 
 			if err := backend.CreateNode(
 				cmd.Context(),
-				d,
+				driver,
 				generateHostname(provider, region),
 				region,
 				sku,
-				d.DefaultUser(),
+				driver.DefaultUser(),
 				"", // no ipv4
 				node.Hourly,
 			); err != nil {

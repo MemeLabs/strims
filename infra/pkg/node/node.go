@@ -2,7 +2,6 @@ package node
 
 import (
 	"context"
-	"strings"
 
 	"github.com/golang/geo/s2"
 )
@@ -142,8 +141,4 @@ func ValidSKU(skuName string, skus []*SKU) bool {
 		}
 	}
 	return false
-}
-
-func IsPriviledged(user string) bool {
-	return strings.ToLower(user) == "root"
 }

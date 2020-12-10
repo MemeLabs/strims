@@ -433,7 +433,6 @@ func (b *Backend) updateController() error {
 func (b *Backend) initNode(ctx context.Context, node *node.Node) error {
 	// Continuously retry ssh'ing into the new node. This is to ensure that it is
 	// connectable by the time the master node begins initilization.
-	// TODO(jbpratt): maybe move this as a step in node creation..
 	var err error
 	fmt.Printf("attempting to ssh to the new node(%s@%s)", node.User, node.Networks.V4[0])
 	for i := 0; i < nodeSSHRetries; i++ {
@@ -492,6 +491,8 @@ func (b *Backend) syncNodes(ctx context.Context, nodes []*node.Node) {
 }
 
 func (b *Backend) DestroyNode(ctx context.Context, name string) error {
+	// TODO: validate node exists, don't depend on kubectl to fail
+
 	if err := run(
 		"kubectl", "drain", name, "--ignore-daemonsets", "--delete-local-data", "--force", "--timeout=30s",
 	); err != nil {

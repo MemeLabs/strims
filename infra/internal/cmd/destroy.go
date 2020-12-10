@@ -17,7 +17,6 @@ var destroyCmd = &cobra.Command{
 	ValidArgsFunction: providerValidArgsFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		name := args[0]
-		// TODO: validate it is an active node
 
 		if err := backend.DestroyNode(cmd.Context(), name); err != nil {
 			return fmt.Errorf("failed to destroy node: %w", err)
