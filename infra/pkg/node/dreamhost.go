@@ -129,6 +129,10 @@ func (d *DreamHostDriver) findOrAddKey(ctx context.Context, region, public strin
 	}
 
 	keypairsList, err := keypairs.ExtractKeyPairs(keypairsPager)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, keypair := range keypairsList {
 		if keypair.PublicKey == public {
 			return &keypair, nil

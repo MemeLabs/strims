@@ -16,8 +16,10 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
-const heficedOS = "Ubuntu LTS 20.04"
-const heficedAPIEndpoint string = "https://api.heficed.com/"
+const (
+	heficedOS                 = "Ubuntu LTS 20.04"
+	heficedAPIEndpoint string = "https://api.heficed.com/"
+)
 
 var heficedRegions = []*Region{
 	{
@@ -452,12 +454,6 @@ type heficedSSHKeys struct {
 		Label       string `json:"label"`
 		FingerPrint string `json:"fingerPrint"`
 		Created     int    `json:"created"`
-	} `json:"data"`
-}
-
-type heficedTenants struct {
-	Data [][]struct {
-		ID string `json:"id"`
 	} `json:"data"`
 }
 

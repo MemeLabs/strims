@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -36,11 +35,6 @@ func init() {
 	rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file")
 	rootCmd.PersistentFlags().Int8P("logLevel", "v", int8(zap.ErrorLevel), "log level")
 	viper.BindPFlag("logLevel", rootCmd.PersistentFlags().Lookup("logLevel"))
-}
-
-func er(msg interface{}) {
-	fmt.Println("Error:", msg)
-	os.Exit(1)
 }
 
 func initConfig() {
