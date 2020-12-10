@@ -274,12 +274,12 @@ func digitalOceanNode(droplet *godo.Droplet) *Node {
 	}
 
 	for _, ipv4 := range droplet.Networks.V4 {
-		if isPublicIP(net.ParseIP(ipv4.IPAddress)) {
+		if IsPublicIP(ipv4.IPAddress) {
 			node.Networks.V4 = append(node.Networks.V4, ipv4.IPAddress)
 		}
 	}
 	for _, ipv6 := range droplet.Networks.V6 {
-		if isPublicIP(net.ParseIP(ipv6.IPAddress)) {
+		if IsPublicIP(ipv6.IPAddress) {
 			node.Networks.V6 = append(node.Networks.V6, ipv6.IPAddress)
 		}
 	}
@@ -293,8 +293,8 @@ func digitalOceanNode(droplet *godo.Droplet) *Node {
 	return node
 }
 
-// delete this or promote it
-func isPublicIP(IP net.IP) bool {
+func IsPublicIP(addr string) bool {
+	IP := net.ParseIP(addr)
 	if IP.IsLoopback() || IP.IsLinkLocalMulticast() || IP.IsLinkLocalUnicast() {
 		return false
 	}

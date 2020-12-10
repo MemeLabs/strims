@@ -9,7 +9,6 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
-	"net"
 	"os"
 	"os/exec"
 	"path"
@@ -220,6 +219,14 @@ func New(cfg Config) (*Backend, error) {
 
 	nodeStartScript = path.Join(cfg.ScriptDirectory, "node-start.sh")
 	nodeSyncScript = path.Join(cfg.ScriptDirectory, "node-sync-wg.sh")
+
+	if _, err := os.Stat(nodeStartScript); os.IsNotExist(err) {
+		return nil, fmt.Errorf("could not locate script: %s %w", nodeStartScript, err)
+	}
+
+	if _, err := os.Stat(nodeSyncScript); os.IsNotExist(err) {
+		return nil, fmt.Errorf("could not locate script: %s %w", nodeSyncScript, err)
+	}
 
 	return &Backend{
 		Log:               log,
@@ -488,11 +495,11 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 	if err := run(
 		"kubectl", "drain", name, "--ignore-daemonsets", "--delete-local-data", "--force", "--timeout=30s",
 	); err != nil {
-		b.Log.Error("failed to drain node: %w", zap.Error(err))
+		b.Log.Error("failed to drain node", zap.Error(err))
 	}
 
 	if err := run("kubectl", "delete", "node", name); err != nil {
-		b.Log.Error("failed to delete node: %w", zap.Error(err))
+		b.Log.Error("failed to delete node", zap.Error(err))
 		return err
 	}
 
@@ -653,14 +660,12 @@ func (b *Backend) configForNode(n *node.Node) (*wgutil.InterfaceConfig, error) {
 	})
 
 	// set main interface
-	conf := &wgutil.InterfaceConfig{
+	return &wgutil.InterfaceConfig{
 		PrivateKey: n.WireguardPrivKey,
 		Address:    fmt.Sprintf("%s/%d", n.WireguardIPv4, 24),
 		ListenPort: wgport,
 		Peers:      peers,
-	}
-
-	return conf, nil
+	}, nil
 }
 
 func modelToNode(n *models.Node) *node.Node {
@@ -773,31 +778,10 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer out.Close()
 
 	_, err = io.Copy(out, in)
 	if err != nil {
 		return err
 	}
 	return out.Close()
-}
-
-func IsPublicIP(addr string) bool {
-	IP := net.ParseIP(addr)
-	if IP.IsLoopback() || IP.IsLinkLocalMulticast() || IP.IsLinkLocalUnicast() {
-		return false
-	}
-	if ip4 := IP.To4(); ip4 != nil {
-		switch {
-		case ip4[0] == 10:
-			return false
-		case ip4[0] == 172 && ip4[1] >= 16 && ip4[1] <= 31:
-			return false
-		case ip4[0] == 192 && ip4[1] == 168:
-			return false
-		default:
-			return true
-		}
-	}
-	return false
 }

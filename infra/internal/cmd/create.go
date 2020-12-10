@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	be "github.com/MemeLabs/go-ppspp/infra/internal/backend"
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/spf13/cobra"
 )
@@ -27,7 +26,7 @@ var createCmd = &cobra.Command{
 				return errors.New("user and ipv4 are required for custom provisioning")
 			}
 
-			if !be.IsPublicIP(ipv4) {
+			if !node.IsPublicIP(ipv4) {
 				return fmt.Errorf("ipv4(%s) provided is not a public ip", ipv4)
 			}
 		} else {
