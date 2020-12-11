@@ -56,6 +56,10 @@ func (d *DreamHostDriver) Provider() string {
 	return "dreamHost"
 }
 
+func (d *DreamHostDriver) DefaultUser() string {
+	return "ubuntu"
+}
+
 // Regions ...
 func (d *DreamHostDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region, error) {
 	return []*Region{&dreamHostRegion}, nil
@@ -125,6 +129,10 @@ func (d *DreamHostDriver) findOrAddKey(ctx context.Context, region, public strin
 	}
 
 	keypairsList, err := keypairs.ExtractKeyPairs(keypairsPager)
+	if err != nil {
+		return nil, err
+	}
+
 	for _, keypair := range keypairsList {
 		if keypair.PublicKey == public {
 			return &keypair, nil

@@ -2,6 +2,8 @@
 set -ex
 pushd $(/bin/pwd) > /dev/null
 
+KUB_VERSION=1.19.3-00
+
 mkdir -p /etc/systemd/system/docker.service.d
 mkdir -p /etc/docker
 sudo cat > /etc/docker/daemon.json <<EOF
@@ -38,7 +40,7 @@ curl -s https://packages.cloud.google.com/apt/doc/apt-key.gpg | apt-key add -
 echo 'deb https://apt.kubernetes.io/ kubernetes-xenial main' | tee /etc/apt/sources.list.d/kubernetes.list
 add-apt-repository  'deb [arch=amd64] https://download.docker.com/linux/ubuntu focal stable'
 apt-get update
-apt-get install -y pwgen docker-ce=5:19.03.12~3-0~ubuntu-focal kubelet=1.18.6-00 kubeadm=1.18.6-00
+apt-get install -y pwgen docker-ce=5:19.03.12~3-0~ubuntu-focal kubelet=$KUB_VERSION kubeadm=$KUB_VERSION
 sudo apt-mark hold docker-ce kubelet kubeadm
 
 sudo cat > /tmp/kubeadm.yaml <<EOF

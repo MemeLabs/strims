@@ -26,7 +26,7 @@ require (
 	github.com/gofrs/uuid v3.3.0+incompatible // indirect
 	github.com/golang/geo v0.0.0-20200730024412-e86565bf3f35
 	github.com/golang/protobuf v1.4.2
-	github.com/google/go-cmp v0.5.2 // indirect
+	github.com/google/go-cmp v0.5.2
 	github.com/google/uuid v1.1.2 // indirect
 	github.com/gophercloud/gophercloud v0.12.0
 	github.com/gorilla/mux v1.8.0
@@ -56,20 +56,23 @@ require (
 	github.com/scaleway/scaleway-sdk-go v1.0.0-beta.6
 	github.com/sony/sonyflake v1.0.0
 	github.com/spf13/afero v1.4.0 // indirect
-	github.com/spf13/cast v1.3.1 // indirect
 	github.com/spf13/cobra v1.0.0
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.5 // indirect
 	github.com/spf13/viper v1.7.1
 	github.com/stretchr/testify v1.6.1
 	github.com/tj/assert v0.0.3
-	github.com/volatiletech/null v8.0.0+incompatible // indirect
 	github.com/volatiletech/null/v8 v8.1.0
+	github.com/volatiletech/randomize v0.0.1
 	github.com/volatiletech/sqlboiler v3.7.1+incompatible
+	github.com/volatiletech/sqlboiler-sqlite3 v0.0.0-20200618013359-a93887c09a14 // indirect
+	github.com/volatiletech/sqlboiler/v4 v4.3.1
+	github.com/volatiletech/strmangle v0.0.1
 	go.etcd.io/bbolt v1.3.5
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.16.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
+	golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6
 	golang.org/x/net v0.0.0-20200923182212-328152dc79b1 // indirect
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208

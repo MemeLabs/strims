@@ -18,9 +18,9 @@ func init() {
 }
 
 var skusCmd = &cobra.Command{
-	Use:               "skus [provider]",
+	Use:               "skus [provider] [region]",
 	Short:             "List provider SKUs",
-	Args:              cobra.MaximumNArgs(1),
+	Args:              cobra.MaximumNArgs(2),
 	ValidArgsFunction: providerValidArgsFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		header := []string{

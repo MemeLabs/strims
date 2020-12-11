@@ -24,11 +24,22 @@ func GenerateKey() (private, public string, err error) {
 	return
 }
 
+func PublicFromPrivate(private string) (string, error) {
+	key, err := base64.StdEncoding.DecodeString(private)
+	if err != nil {
+		return "", err
+	}
+
+	pub := ecdh.X25519().PublicKey(key).([32]byte)
+	return base64.StdEncoding.EncodeToString(pub[:]), nil
+}
+
 // InterfaceConfig ...
 type InterfaceConfig struct {
 	PrivateKey string
 	Address    string
 	ListenPort uint64
+	SaveConfig bool
 	Peers      []InterfacePeerConfig
 }
 
@@ -38,8 +49,26 @@ func (c *InterfaceConfig) String() string {
 	t := `[Interface]
 PrivateKey = %s
 Address = %s
+ListenPort = %d
+SaveConfig = %t`
+	b.WriteString(fmt.Sprintf(t, c.PrivateKey, c.Address, c.ListenPort, c.SaveConfig))
+
+	for _, p := range c.Peers {
+		b.WriteRune('\n')
+		b.WriteString(p.String())
+	}
+
+	b.WriteRune('\n')
+	return b.String()
+}
+
+func (c *InterfaceConfig) Strip() string {
+	var b strings.Builder
+
+	t := `[Interface]
+PrivateKey = %s
 ListenPort = %d`
-	b.WriteString(fmt.Sprintf(t, c.PrivateKey, c.Address, c.ListenPort))
+	b.WriteString(fmt.Sprintf(t, c.PrivateKey, c.ListenPort))
 
 	for _, p := range c.Peers {
 		b.WriteRune('\n')

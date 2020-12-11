@@ -1,10 +1,8 @@
 package cmd
 
 import (
-	"context"
 	"fmt"
 
-	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/spf13/cobra"
 )
 
@@ -13,23 +11,15 @@ func init() {
 }
 
 var destroyCmd = &cobra.Command{
-	Use:               "destroy",
+	Use:               "destroy [name]",
 	Short:             "Destroy node",
 	Args:              cobra.ExactArgs(1),
 	ValidArgsFunction: providerValidArgsFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		provider := args[0]
-		d, ok := backend.NodeDrivers[provider]
-		if !ok {
-			return fmt.Errorf("Unsupported provider: %s", provider)
-		}
+		name := args[0]
 
-		err := d.Delete(context.Background(), &node.DeleteRequest{
-			ProviderID: "263083",
-			Region:     "uk-lon1",
-		})
-		if err != nil {
-			return err
+		if err := backend.DestroyNode(cmd.Context(), name); err != nil {
+			return fmt.Errorf("failed to destroy node: %w", err)
 		}
 
 		return nil

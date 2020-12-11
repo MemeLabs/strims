@@ -1,21 +1,23 @@
-#!/bin/bash
+#!/usr/bin/env bash
 set -xe
 
 node_user=$1
 node_addr=$2
 node_key_path=$3
-wg_ip = $4
+wg_ip=$4
 wg_config=$5
 node_name=$6
 
-read -a join_cmd <<< `kubeadm token create --print-join-command | tr -d '\n'`
+read -ra join_cmd <<<"$(sudo kubeadm token create --print-join-command | tr -d '\n')"
 k8s_api_server_endpoint=${join_cmd[2]}
 k8s_token=${join_cmd[4]}
 k8s_ca_cert_hash=${join_cmd[6]}
 
-ssh -T $node_user@$node_addr -i $node_key_path -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no <<CMD
+# shellcheck disable=SC2087
+ssh -T "$node_user"@"$node_addr" -i "$node_key_path" -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no <<CMD
 #!/bin/bash
 set -ex
+
 sudo -s
 
 ufw default allow outgoing
@@ -47,8 +49,13 @@ cat > /etc/docker/daemon.json <<EOF
 }
 EOF
 
+rm -rf /var/lib/apt/lists/*
+
+apt-get clean
 apt-get update
 apt-get install -y wireguard
+
+wait
 
 cat > /etc/wireguard/wg0.conf <<EOF
 $wg_config
@@ -80,5 +87,5 @@ nodeRegistration:
     node-ip: $wg_ip
 EOF
 
-kubeadm join --config=/tmp/kubeadm.yml
+kubeadm join --v=5 --config=/tmp/kubeadm.yml
 CMD

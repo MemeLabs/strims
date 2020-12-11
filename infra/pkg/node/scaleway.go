@@ -49,6 +49,10 @@ func (d *ScalewayDriver) Provider() string {
 	return "scaleway"
 }
 
+func (d *ScalewayDriver) DefaultUser() string {
+	return "root"
+}
+
 // Regions ...
 func (d *ScalewayDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region, error) {
 	return append(make([]*Region, 0, len(scalewayRegions)), scalewayRegions...), nil

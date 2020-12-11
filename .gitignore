@@ -6,3 +6,5 @@ schema/sanitized/*.proto
 *.g_*
 *.t_*
 *.wasm
+**/infra.yaml
+**/*.sqlite

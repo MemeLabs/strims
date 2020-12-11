@@ -130,6 +130,10 @@ func (d *OVHDriver) Provider() string {
 	return "ovh"
 }
 
+func (d *OVHDriver) DefaultUser() string {
+	return "ubuntu"
+}
+
 // Regions ...
 func (d *OVHDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region, error) {
 	regions := make([]*Region, 0, len(ovhRegions))
@@ -163,27 +167,30 @@ func (d *OVHDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error) 
 		return nil, err
 	}
 
+	if !ValidRegion(req.Region, regions) {
+		return nil, fmt.Errorf("invalid region(%q)", req.Region)
+	}
+
 	names := map[string]bool{}
 	path := fmt.Sprintf("/cloud/project/%s/flavor", url.QueryEscape(d.projectID))
-	for _, region := range regions {
-		if req.Region != "" && req.Region != region.Name {
-			continue
-		}
-		resp := []*ovhSKU{}
-		if err := d.client.GetWithContext(
-			ctx,
-			fmt.Sprintf("%s?region=%s", path, url.QueryEscape(region.Name)),
-			&resp,
-		); err != nil {
-			return nil, err
-		}
+	resp := []*ovhSKU{}
+	if err := d.client.GetWithContext(
+		ctx,
+		fmt.Sprintf("%s?region=%s", path, url.QueryEscape(req.Region)),
+		&resp,
+	); err != nil {
+		return nil, err
+	}
 
-		for _, s := range resp {
-			if _, ok := names[s.Name]; !ok {
-				names[s.Name] = true
-				skus = append(skus, d.ovhSKU(s, priceMap))
-			}
+	for _, s := range resp {
+		if _, ok := names[s.Name]; !ok {
+			names[s.Name] = true
+			skus = append(skus, d.ovhSKU(s, priceMap))
 		}
+	}
+
+	if len(skus) == 0 {
+		return nil, fmt.Errorf("failed to find any skus")
 	}
 
 	return skus, nil

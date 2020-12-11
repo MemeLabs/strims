@@ -16,8 +16,10 @@ import (
 	"golang.org/x/oauth2/clientcredentials"
 )
 
-const heficedOS = "Ubuntu LTS 20.04"
-const heficedAPIEndpoint string = "https://api.heficed.com/"
+const (
+	heficedOS                 = "Ubuntu LTS 20.04"
+	heficedAPIEndpoint string = "https://api.heficed.com/"
+)
 
 var heficedRegions = []*Region{
 	{
@@ -109,6 +111,11 @@ func NewHeficedDriver(clientID, clientSecret, tenantID string) (*HeficedDriver, 
 // Provider returns the driver's provider name
 func (d *HeficedDriver) Provider() string {
 	return "heficed"
+}
+
+// DefaultUser used to log into the instances
+func (d *HeficedDriver) DefaultUser() string {
+	return "root"
 }
 
 // Regions returns a list of available regions for the current credentials
@@ -240,6 +247,10 @@ func (d *HeficedDriver) Create(ctx context.Context, req *CreateRequest) (*Node, 
 			}
 			order = toHeficedOrder(spec, templateID, req.Region)
 		}
+	}
+
+	if req.BillingType == Hourly {
+		order.BillingTypeId = -1 // hourly
 	}
 
 	if order == nil {
@@ -443,12 +454,6 @@ type heficedSSHKeys struct {
 		Label       string `json:"label"`
 		FingerPrint string `json:"fingerPrint"`
 		Created     int    `json:"created"`
-	} `json:"data"`
-}
-
-type heficedTenants struct {
-	Data [][]struct {
-		ID string `json:"id"`
 	} `json:"data"`
 }
 
