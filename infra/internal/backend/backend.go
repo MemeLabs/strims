@@ -420,11 +420,11 @@ func (b *Backend) updateController() error {
 	}
 
 	if err := run("wg", "syncconf", "wg0", tmp.Name()); err != nil {
-		return fmt.Errorf("failed to 'wg-quick down wg0': %w", err)
+		return fmt.Errorf("failed to run 'wg syncconf wg0': %w", err)
 	}
 
 	if err := run("wg-quick", "save", "wg0"); err != nil {
-		return fmt.Errorf("failed to 'wg-quick down wg0': %w", err)
+		return fmt.Errorf("failed to run 'wg-quick save wg0': %w", err)
 	}
 
 	return nil
