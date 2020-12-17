@@ -1,6 +1,7 @@
 package ppspp
 
 import (
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
@@ -10,7 +11,6 @@ import (
 type WriterOptions struct {
 	SwarmOptions SwarmOptions
 	Key          *pb.Key
-	Integrity    integrity.WriterOptions
 }
 
 // NewWriter ...
@@ -43,7 +43,7 @@ func NewWriter(o WriterOptions) (*Writer, error) {
 
 // Writer ...
 type Writer struct {
-	w integrity.WriteFlusher
+	w ioutil.WriteFlusher
 	s *Swarm
 }
 

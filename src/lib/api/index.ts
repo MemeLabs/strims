@@ -7,6 +7,7 @@ import Debug from "./debugClient";
 import Network from "./networkClient";
 import Profile from "./profileClient";
 import Video from "./videoClient";
+import VideoIngress from "./videoIngressClient";
 
 export default class Client {
   public bootstrap: Bootstrap;
@@ -15,6 +16,7 @@ export default class Client {
   public profile: Profile;
   public chat: Chat;
   public video: Video;
+  public videoIngress: VideoIngress;
 
   constructor(w: Writable, r: Readable) {
     const host = new RPCHost(w, r);
@@ -24,5 +26,6 @@ export default class Client {
     this.profile = new Profile(host);
     this.chat = new Chat(host);
     this.video = new Video(host);
+    this.videoIngress = new VideoIngress(host);
   }
 }

@@ -138,6 +138,10 @@ message ProfileSummary {
   string name = 2;
 }
 
+message ProfileID {
+  uint64 next_id = 1;
+}
+
 message Network {
   uint64 id = 1;
   string name = 2;

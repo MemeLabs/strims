@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/merkle"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 )
@@ -316,7 +317,7 @@ func (v *MerkleChunkVerifier) Verify(b binmap.Bin, d []byte) (bool, error) {
 // MerkleWriterOptions ...
 type MerkleWriterOptions struct {
 	Verifier           *MerkleSwarmVerifier
-	Writer             WriteFlusher
+	Writer             ioutil.WriteFlusher
 	ChunksPerSignature int
 	ChunkSize          int
 	Signer             SignatureSigner

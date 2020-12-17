@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 )
 
@@ -179,7 +180,7 @@ func (v *SignAllChunkVerifier) Verify(b binmap.Bin, d []byte) (bool, error) {
 // SignAllWriterOptions ...
 type SignAllWriterOptions struct {
 	Verifier  *SignAllSwarmVerifier
-	Writer    WriteFlusher
+	Writer    ioutil.WriteFlusher
 	ChunkSize int
 	Signer    SignatureSigner
 }

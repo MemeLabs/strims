@@ -54,6 +54,10 @@ func (w *WSReadWriter) Read(b []byte) (n int, err error) {
 	if err == io.EOF {
 		w.r = nil
 		err = nil
+
+		if n == 0 {
+			return w.Read(b)
+		}
 	}
 
 	return

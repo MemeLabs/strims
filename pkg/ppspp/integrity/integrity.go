@@ -12,6 +12,7 @@ import (
 	"golang.org/x/crypto/blake2b"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 )
 
@@ -179,7 +180,7 @@ type SwarmWriterOptions struct {
 	ProtectionMethod       ProtectionMethod
 	ChunkSize              int
 	Verifier               SwarmVerifier
-	Writer                 WriteFlusher
+	Writer                 ioutil.WriteFlusher
 	WriterOptions
 }
 
@@ -189,7 +190,7 @@ type WriterOptions struct {
 }
 
 // NewWriter ...
-func NewWriter(key []byte, opt SwarmWriterOptions) (WriteFlusher, error) {
+func NewWriter(key []byte, opt SwarmWriterOptions) (ioutil.WriteFlusher, error) {
 	var signatureSigner SignatureSigner
 	switch opt.LiveSignatureAlgorithm {
 	case LiveSignatureAlgorithmED25519:
@@ -247,10 +248,4 @@ type SignatureSigner interface {
 type SignatureVerifier interface {
 	Verify(timestamp time.Time, hash, sig []byte) bool
 	Size() int
-}
-
-// WriteFlusher ...
-type WriteFlusher interface {
-	Write(p []byte) (int, error)
-	Flush() error
 }

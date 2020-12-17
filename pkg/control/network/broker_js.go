@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/wasmio"
@@ -215,7 +216,7 @@ type BrokerProxyClient struct {
 }
 
 // SendKeys ...
-func (h *BrokerProxyClient) SendKeys(c ReadWriteFlusher, keys [][]byte) error {
+func (h *BrokerProxyClient) SendKeys(c ioutil.ReadWriteFlusher, keys [][]byte) error {
 	proxy, err := h.proxy(c)
 	if err != nil {
 		return err
@@ -225,7 +226,7 @@ func (h *BrokerProxyClient) SendKeys(c ReadWriteFlusher, keys [][]byte) error {
 }
 
 // ReceiveKeys ...
-func (h *BrokerProxyClient) ReceiveKeys(c ReadWriteFlusher, keys [][]byte) ([][]byte, error) {
+func (h *BrokerProxyClient) ReceiveKeys(c ioutil.ReadWriteFlusher, keys [][]byte) ([][]byte, error) {
 	proxy, err := h.proxy(c)
 	if err != nil {
 		return nil, err
@@ -234,7 +235,7 @@ func (h *BrokerProxyClient) ReceiveKeys(c ReadWriteFlusher, keys [][]byte) ([][]
 	return proxy.ReceiveKeys(keys)
 }
 
-func (h *BrokerProxyClient) proxy(conn ReadWriteFlusher) (*brokerProxyClientHelper, error) {
+func (h *BrokerProxyClient) proxy(conn ioutil.ReadWriteFlusher) (*brokerProxyClientHelper, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	req := &pb.BrokerProxyRequest{ConnMtu: int32(connMTU(conn))}
@@ -278,7 +279,7 @@ type brokerProxyClientHelper struct {
 	cancel context.CancelFunc
 	id     uint64
 	client *api.BrokerProxyClient
-	conn   ReadWriteFlusher
+	conn   ioutil.ReadWriteFlusher
 	read   chan struct{}
 }
 

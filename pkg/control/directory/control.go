@@ -79,14 +79,13 @@ func (t *Control) handleNetworkStart(ctx context.Context, network *pb.Network) {
 		)
 
 		if err := t.startServer(ctx, network); err != nil {
-			t.logger.Error(
-				"starting directory service failed",
+			t.logger.Info(
+				"directory service closed",
 				logutil.ByteHex("network", network.Key.Public),
 				zap.Error(err),
 			)
 		}
 	}()
-
 }
 
 func (t *Control) startServer(ctx context.Context, network *pb.Network) error {
@@ -119,7 +118,7 @@ func (t *Control) startServer(ctx context.Context, network *pb.Network) error {
 }
 
 func (t *Control) handleNetworkStop(network *pb.Network) {
-	if server, ok := t.servers.Load(network.Id); ok {
+	if server, ok := t.servers.LoadAndDelete(network.Id); ok {
 		server.(context.CancelFunc)()
 	}
 }

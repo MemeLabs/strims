@@ -69,7 +69,7 @@ require (
 	github.com/volatiletech/sqlboiler/v4 v4.3.1
 	github.com/volatiletech/strmangle v0.0.1
 	go.etcd.io/bbolt v1.3.5
-	go.uber.org/multierr v1.6.0 // indirect
+	go.uber.org/multierr v1.6.0
 	go.uber.org/zap v1.16.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
 	golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6

@@ -17,6 +17,10 @@ import (
 
 const transcoderAddr = "127.0.0.1:0"
 
+// TranscoderMimeType output mime type
+const TranscoderMimeType = "video/mp4;codecs=mp4a.40.5,avc1.64001F"
+
+// NewTranscoder ...
 func NewTranscoder(logger *zap.Logger) *Transcoder {
 	return &Transcoder{
 		logger: logger,

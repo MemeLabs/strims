@@ -70,12 +70,13 @@ type Instance struct {
 	store   *dao.ProfileStore
 	app     *app.Control
 
-	Profile   api.ProfileService
-	Network   api.NetworkService
-	Debug     api.DebugService
-	Bootstrap api.BootstrapService
-	Chat      api.ChatService
-	Video     api.VideoService
+	Profile      api.ProfileService
+	Network      api.NetworkService
+	Debug        api.DebugService
+	Bootstrap    api.BootstrapService
+	Chat         api.ChatService
+	Video        api.VideoService
+	VideoIngress api.VideoIngressService
 }
 
 func (c *Instance) initProfileService(ctx context.Context, store kv.BlobStore, newVPN VPNFunc) error {
@@ -107,7 +108,9 @@ func (c *Instance) Init(ctx context.Context, profile *pb.Profile, store *dao.Pro
 	// TODO: put this somewhere
 	// network.NewPeerHandler(c.logger, c.broker, vpn, store, profile)
 	c.app = app.NewControl(c.logger, c.broker, vpn, store, profile)
-	vpn.VNIC().AddPeerHandler(peer.NewPeerHandler(c.logger, c.app))
+	go c.app.Run(ctx)
+
+	vpn.VNIC().AddPeerHandler(peer.NewPeerHandler(c.logger, c.app, store))
 
 	c.Network = newNetworkService(ctx, c.logger, profile, store, vpn, c.app)
 	c.Debug = newDebugService(c.logger)
@@ -116,6 +119,9 @@ func (c *Instance) Init(ctx context.Context, profile *pb.Profile, store *dao.Pro
 
 	// c.Chat = newChatService(c.logger, store)
 	// c.Video = newVideoService(c.logger, store)
+
+	c.VideoIngress = newVideoIngressService(ctx, c.logger, profile, store, vpn, c.app)
+
 	return nil
 }
 
@@ -125,4 +131,5 @@ func (c *Instance) registerServices() {
 	api.RegisterBootstrapService(c.server, c.Bootstrap)
 	// api.RegisterChatService(c.server, c.Chat)
 	// api.RegisterVideoService(c.server, c.Video)
+	api.RegisterVideoIngressService(c.server, c.VideoIngress)
 }

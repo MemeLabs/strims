@@ -4,6 +4,7 @@ const { CleanWebpackPlugin } = require("clean-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
 const webpack = require("webpack");
+const bundleAnalyzer = require("webpack-bundle-analyzer");
 
 module.exports = (env, argv) => {
   const scriptModuleRule = {
@@ -63,6 +64,8 @@ module.exports = (env, argv) => {
     new webpack.HotModuleReplacementPlugin(),
   ];
 
+  let devtool;
+
   if (argv.mode === "production") {
     scriptModuleRule.use = ["ts-loader"];
 
@@ -74,8 +77,12 @@ module.exports = (env, argv) => {
         chunkFilename: "[id].[contenthash].css",
       })
     );
+
+    devtool = "source-map";
   } else {
     styleModuleRule.use.unshift("style-loader");
+
+    devtool = "eval-source-map";
   }
 
   const createElectronBuild = (target, fileName) => ({
@@ -83,7 +90,7 @@ module.exports = (env, argv) => {
     entry: {
       [target]: path.join(__dirname, "src", "desktop", fileName || `${target}.ts`),
     },
-    devtool: "inline-source-map",
+    devtool,
     output: {
       filename: "[name].js",
       chunkFilename: "[id].js",
@@ -114,7 +121,7 @@ module.exports = (env, argv) => {
         index: path.join(__dirname, "src", "web", "index.tsx"),
         test: path.join(__dirname, "src", "web", "test.ts"),
       },
-      devtool: "inline-source-map",
+      devtool,
       output: {
         filename: "[name].[hash].js",
         chunkFilename: "[id].[chunkhash].js",

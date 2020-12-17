@@ -44,3 +44,25 @@ html, body {
   flex: 1 1;
   padding: 1em;
 }
+
+.app--dark {
+  --card-bg: #{$slate-300};
+  --card-border: #{$slate-400};
+
+  --input-bg: #{$slate-400};
+  --input-color: #{$gray-400};
+  --input-disabled-bg: #{$slate-300};
+  --input-disabled-color: #{$gray-100};
+  --input-placeholder-color: #{$gray-100};
+}
+
+.app--light {
+  --card-bg: #{$gray-300};
+  --card-border: #{$gray-500};
+
+  --input-bg: #{$gray-400};
+  --input-color: #{$slate-200};
+  --input-disabled-bg: #{$gray-500};
+  --input-disabled-color: #{$slate-500};
+  --input-placeholder-color: #{$slate-400};
+}

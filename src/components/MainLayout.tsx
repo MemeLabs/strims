@@ -210,7 +210,7 @@ export const MainLayout = ({ children }: { children: any }) => {
           <button onClick={toggleTheme} className="main_layout__primary_nav__logo">
             <FiHome />
           </button>
-          <Link to="/networks" className="main_layout__primary_nav__link">
+          <Link to="/settings" className="main_layout__primary_nav__link">
             Categories
           </Link>
           <Link to="/" className="main_layout__primary_nav__link">

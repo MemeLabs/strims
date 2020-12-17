@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/nareix/joy5/format/rtmp"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 )
 
@@ -28,6 +29,7 @@ type Server struct {
 
 	streams  streams
 	listener net.Listener
+	conns    sync.Map
 }
 
 func (s *Server) logEvent(c *rtmp.Conn, nc net.Conn, e int) {
@@ -73,16 +75,32 @@ func (s *Server) handleConn(c *rtmp.Conn, nc net.Conn) {
 
 // Close ...
 func (s *Server) Close() error {
-	return s.listener.Close()
+	var errs []error
+
+	if err := s.listener.Close(); err != nil {
+		errs = append(errs, err)
+	}
+
+	s.conns.Range(func(key, _ interface{}) bool {
+		if err := key.(net.Conn).Close(); err != nil {
+			errs = append(errs, err)
+		}
+		return true
+	})
+
+	if len(errs) != 0 {
+		return multierr.Combine(errs...)
+	}
+	return nil
 }
 
 // Listen ...
-func (s *Server) Listen() error {
-	l, err := net.Listen("tcp", s.Addr)
+func (s *Server) Listen() (err error) {
+	s.listener, err = net.Listen("tcp", s.Addr)
 	if err != nil {
 		return err
 	}
-	s.listener = l
+	defer func() { s.listener = nil }()
 
 	srv := &rtmp.Server{
 		LogEvent:         s.logEvent,
@@ -91,12 +109,16 @@ func (s *Server) Listen() error {
 	}
 
 	for {
-		nc, err := l.Accept()
+		nc, err := s.listener.Accept()
 		if err != nil {
-			time.Sleep(time.Second)
-			continue
+			return err
 		}
-		go srv.HandleNetConn(nc)
+
+		s.conns.Store(nc, struct{}{})
+		go func() {
+			srv.HandleNetConn(nc)
+			s.conns.Delete(nc)
+		}()
 	}
 }
 

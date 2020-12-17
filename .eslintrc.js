@@ -41,5 +41,7 @@ module.exports = {
     "no-console": "warn",
     "valid-typeof": "off",
     "quote-props": ["error", "consistent"],
+    // TODO: remove after this is fixed https://github.com/react-hook-form/react-hook-form/issues/2887
+    "@typescript-eslint/unbound-method": "off",
   },
 };

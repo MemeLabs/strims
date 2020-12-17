@@ -15,15 +15,34 @@ message TestDirectoryPublishRequest {
 }
 message TestDirectoryPublishResponse {}
 
-message DirectoryListing {
-  bytes key = 1;
+message DirectoryListingSnippet {
+  string title = 1;
+  string description = 2;
+  repeated string tags = 3;
+}
+
+message DirectoryListingMedia {
+  int64 started_at = 1;
   string mime_type = 2;
-  string title = 3;
-  string description = 4;
-  repeated string tags = 5;
-  bytes extra = 6;
-  int64 timestamp = 7;
-  bytes signature = 8;
+  uint32 bitrate = 3;
+}
+
+message DirectoryListingService {
+  string type = 1;
+}
+
+message DirectoryListing {
+  Certificate creator = 1;
+  int64 timestamp = 2;
+  DirectoryListingSnippet snippet = 3;
+
+  oneof content {
+    DirectoryListingMedia media = 1001;
+    DirectoryListingService service = 1002;
+  }
+
+  bytes key = 10001;
+  bytes signature = 10002;
 }
 
 message DirectoryServerEvent {

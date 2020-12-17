@@ -9,12 +9,29 @@ import (
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
+	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/hls"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
+
+type SwarmWriter struct {
+	Key *pb.Key
+}
+
+// move to control
+func (s *SwarmWriter) DirectoryListing() (*pb.DirectoryListing, error) {
+	listing := &pb.DirectoryListing{
+		MimeType: "video/webm",
+		Title:    "test",
+	}
+	if err := dao.SignMessage(listing, s.Key); err != nil {
+		return nil, err
+	}
+	return listing, nil
+}
 
 func testKey() *pb.Key {
 	key := &pb.Key{}
@@ -37,7 +54,6 @@ func NewVideoServer(logger *zap.Logger) (*VideoServer, error) {
 	key := testKey()
 
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
-		// SwarmOptions: ppspp.NewDefaultSwarmOptions(),
 		SwarmOptions: ppspp.SwarmOptions{
 			LiveWindow: 1 << 15, // 32mb
 			// LiveWindow: 1 << 16, // 64mb

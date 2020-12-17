@@ -3,7 +3,6 @@ package network
 import (
 	"context"
 	"errors"
-	"io"
 	"math"
 	"sync"
 	"time"
@@ -12,6 +11,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/services/ca"
@@ -37,14 +37,8 @@ const certRenewScheduleAheadDuration = time.Hour * 24 * 7
 
 // Broker negotiates common networks with peers.
 type Broker interface {
-	SendKeys(c ReadWriteFlusher, keys [][]byte) error
-	ReceiveKeys(c ReadWriteFlusher, keys [][]byte) ([][]byte, error)
-}
-
-// ReadWriteFlusher ...
-type ReadWriteFlusher interface {
-	io.ReadWriter
-	Flush() error
+	SendKeys(c ioutil.ReadWriteFlusher, keys [][]byte) error
+	ReceiveKeys(c ioutil.ReadWriteFlusher, keys [][]byte) ([][]byte, error)
 }
 
 // NewControl ...
@@ -423,6 +417,14 @@ func (t *Control) setNetworkAltProfileName(id uint64, name string) error {
 		network.AltProfileName = name
 		return nil
 	})
+}
+
+// Certificate ...
+func (t *Control) Certificate(networkKey []byte) (*pb.Certificate, bool) {
+	if ci, ok := t.certificates.Get(networkKey); ok {
+		return ci.certificate, true
+	}
+	return nil, false
 }
 
 // Add ...

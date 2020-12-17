@@ -67,8 +67,8 @@ func NewNetworkCertificate(network *pb.Network) (*pb.Certificate, error) {
 }
 
 // NewNetwork ...
-func NewNetwork(name string, icon *pb.NetworkIcon, profile *pb.Profile) (*pb.Network, error) {
-	id, err := GenerateSnowflake()
+func NewNetwork(g IDGenerator, name string, icon *pb.NetworkIcon, profile *pb.Profile) (*pb.Network, error) {
+	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
 	}
@@ -107,8 +107,8 @@ func NewNetwork(name string, icon *pb.NetworkIcon, profile *pb.Profile) (*pb.Net
 }
 
 // NewNetworkFromInvitationV0 generates a network from a network invitation
-func NewNetworkFromInvitationV0(invitation *pb.InvitationV0, profile *pb.Profile) (*pb.Network, error) {
-	id, err := GenerateSnowflake()
+func NewNetworkFromInvitationV0(g IDGenerator, invitation *pb.InvitationV0, profile *pb.Profile) (*pb.Network, error) {
+	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
 	}
@@ -134,8 +134,8 @@ func NewNetworkFromInvitationV0(invitation *pb.InvitationV0, profile *pb.Profile
 }
 
 // NewNetworkFromCertificate generates a network from a network invitation
-func NewNetworkFromCertificate(cert *pb.Certificate) (*pb.Network, error) {
-	id, err := GenerateSnowflake()
+func NewNetworkFromCertificate(g IDGenerator, cert *pb.Certificate) (*pb.Network, error) {
+	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
 	}

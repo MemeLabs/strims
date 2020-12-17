@@ -9070,6 +9070,239 @@ export const CallChatClientResponse = $root.CallChatClientResponse = (() => {
     return CallChatClientResponse;
 })();
 
+export const SecondaryIndexKey = $root.SecondaryIndexKey = (() => {
+
+    /**
+     * Properties of a SecondaryIndexKey.
+     * @exports ISecondaryIndexKey
+     * @interface ISecondaryIndexKey
+     * @property {Uint8Array|null} [key] SecondaryIndexKey key
+     * @property {number|null} [id] SecondaryIndexKey id
+     */
+
+    /**
+     * Constructs a new SecondaryIndexKey.
+     * @exports SecondaryIndexKey
+     * @classdesc Represents a SecondaryIndexKey.
+     * @implements ISecondaryIndexKey
+     * @constructor
+     * @param {ISecondaryIndexKey=} [properties] Properties to set
+     */
+    function SecondaryIndexKey(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * SecondaryIndexKey key.
+     * @member {Uint8Array} key
+     * @memberof SecondaryIndexKey
+     * @instance
+     */
+    SecondaryIndexKey.prototype.key = $util.newBuffer([]);
+
+    /**
+     * SecondaryIndexKey id.
+     * @member {number} id
+     * @memberof SecondaryIndexKey
+     * @instance
+     */
+    SecondaryIndexKey.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * Creates a new SecondaryIndexKey instance using the specified properties.
+     * @function create
+     * @memberof SecondaryIndexKey
+     * @static
+     * @param {ISecondaryIndexKey=} [properties] Properties to set
+     * @returns {SecondaryIndexKey} SecondaryIndexKey instance
+     */
+    SecondaryIndexKey.create = function create(properties) {
+        return new SecondaryIndexKey(properties);
+    };
+
+    /**
+     * Encodes the specified SecondaryIndexKey message. Does not implicitly {@link SecondaryIndexKey.verify|verify} messages.
+     * @function encode
+     * @memberof SecondaryIndexKey
+     * @static
+     * @param {ISecondaryIndexKey} message SecondaryIndexKey message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    SecondaryIndexKey.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.id);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified SecondaryIndexKey message, length delimited. Does not implicitly {@link SecondaryIndexKey.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof SecondaryIndexKey
+     * @static
+     * @param {ISecondaryIndexKey} message SecondaryIndexKey message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    SecondaryIndexKey.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a SecondaryIndexKey message from the specified reader or buffer.
+     * @function decode
+     * @memberof SecondaryIndexKey
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {SecondaryIndexKey} SecondaryIndexKey
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    SecondaryIndexKey.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.SecondaryIndexKey();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.key = reader.bytes();
+                break;
+            case 2:
+                message.id = reader.uint64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a SecondaryIndexKey message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof SecondaryIndexKey
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {SecondaryIndexKey} SecondaryIndexKey
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    SecondaryIndexKey.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a SecondaryIndexKey message.
+     * @function verify
+     * @memberof SecondaryIndexKey
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    SecondaryIndexKey.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.key != null && message.hasOwnProperty("key"))
+            if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
+                return "key: buffer expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates a SecondaryIndexKey message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof SecondaryIndexKey
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {SecondaryIndexKey} SecondaryIndexKey
+     */
+    SecondaryIndexKey.fromObject = function fromObject(object) {
+        if (object instanceof $root.SecondaryIndexKey)
+            return object;
+        let message = new $root.SecondaryIndexKey();
+        if (object.key != null)
+            if (typeof object.key === "string")
+                $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
+            else if (object.key.length)
+                message.key = object.key;
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a SecondaryIndexKey message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof SecondaryIndexKey
+     * @static
+     * @param {SecondaryIndexKey} message SecondaryIndexKey
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    SecondaryIndexKey.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if (options.bytes === String)
+                object.key = "";
+            else {
+                object.key = [];
+                if (options.bytes !== Array)
+                    object.key = $util.newBuffer(object.key);
+            }
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+        }
+        if (message.key != null && message.hasOwnProperty("key"))
+            object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        return object;
+    };
+
+    /**
+     * Converts this SecondaryIndexKey to JSON.
+     * @function toJSON
+     * @memberof SecondaryIndexKey
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    SecondaryIndexKey.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return SecondaryIndexKey;
+})();
+
 export const PProfRequest = $root.PProfRequest = (() => {
 
     /**
@@ -10484,19 +10717,700 @@ export const TestDirectoryPublishResponse = $root.TestDirectoryPublishResponse =
     return TestDirectoryPublishResponse;
 })();
 
+export const DirectoryListingSnippet = $root.DirectoryListingSnippet = (() => {
+
+    /**
+     * Properties of a DirectoryListingSnippet.
+     * @exports IDirectoryListingSnippet
+     * @interface IDirectoryListingSnippet
+     * @property {string|null} [title] DirectoryListingSnippet title
+     * @property {string|null} [description] DirectoryListingSnippet description
+     * @property {Array.<string>|null} [tags] DirectoryListingSnippet tags
+     */
+
+    /**
+     * Constructs a new DirectoryListingSnippet.
+     * @exports DirectoryListingSnippet
+     * @classdesc Represents a DirectoryListingSnippet.
+     * @implements IDirectoryListingSnippet
+     * @constructor
+     * @param {IDirectoryListingSnippet=} [properties] Properties to set
+     */
+    function DirectoryListingSnippet(properties) {
+        this.tags = [];
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * DirectoryListingSnippet title.
+     * @member {string} title
+     * @memberof DirectoryListingSnippet
+     * @instance
+     */
+    DirectoryListingSnippet.prototype.title = "";
+
+    /**
+     * DirectoryListingSnippet description.
+     * @member {string} description
+     * @memberof DirectoryListingSnippet
+     * @instance
+     */
+    DirectoryListingSnippet.prototype.description = "";
+
+    /**
+     * DirectoryListingSnippet tags.
+     * @member {Array.<string>} tags
+     * @memberof DirectoryListingSnippet
+     * @instance
+     */
+    DirectoryListingSnippet.prototype.tags = $util.emptyArray;
+
+    /**
+     * Creates a new DirectoryListingSnippet instance using the specified properties.
+     * @function create
+     * @memberof DirectoryListingSnippet
+     * @static
+     * @param {IDirectoryListingSnippet=} [properties] Properties to set
+     * @returns {DirectoryListingSnippet} DirectoryListingSnippet instance
+     */
+    DirectoryListingSnippet.create = function create(properties) {
+        return new DirectoryListingSnippet(properties);
+    };
+
+    /**
+     * Encodes the specified DirectoryListingSnippet message. Does not implicitly {@link DirectoryListingSnippet.verify|verify} messages.
+     * @function encode
+     * @memberof DirectoryListingSnippet
+     * @static
+     * @param {IDirectoryListingSnippet} message DirectoryListingSnippet message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryListingSnippet.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.title != null && Object.hasOwnProperty.call(message, "title"))
+            writer.uint32(/* id 1, wireType 2 =*/10).string(message.title);
+        if (message.description != null && Object.hasOwnProperty.call(message, "description"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.description);
+        if (message.tags != null && message.tags.length)
+            for (let i = 0; i < message.tags.length; ++i)
+                writer.uint32(/* id 3, wireType 2 =*/26).string(message.tags[i]);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified DirectoryListingSnippet message, length delimited. Does not implicitly {@link DirectoryListingSnippet.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof DirectoryListingSnippet
+     * @static
+     * @param {IDirectoryListingSnippet} message DirectoryListingSnippet message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryListingSnippet.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a DirectoryListingSnippet message from the specified reader or buffer.
+     * @function decode
+     * @memberof DirectoryListingSnippet
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {DirectoryListingSnippet} DirectoryListingSnippet
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryListingSnippet.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryListingSnippet();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.title = reader.string();
+                break;
+            case 2:
+                message.description = reader.string();
+                break;
+            case 3:
+                if (!(message.tags && message.tags.length))
+                    message.tags = [];
+                message.tags.push(reader.string());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a DirectoryListingSnippet message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof DirectoryListingSnippet
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {DirectoryListingSnippet} DirectoryListingSnippet
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryListingSnippet.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a DirectoryListingSnippet message.
+     * @function verify
+     * @memberof DirectoryListingSnippet
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    DirectoryListingSnippet.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.title != null && message.hasOwnProperty("title"))
+            if (!$util.isString(message.title))
+                return "title: string expected";
+        if (message.description != null && message.hasOwnProperty("description"))
+            if (!$util.isString(message.description))
+                return "description: string expected";
+        if (message.tags != null && message.hasOwnProperty("tags")) {
+            if (!Array.isArray(message.tags))
+                return "tags: array expected";
+            for (let i = 0; i < message.tags.length; ++i)
+                if (!$util.isString(message.tags[i]))
+                    return "tags: string[] expected";
+        }
+        return null;
+    };
+
+    /**
+     * Creates a DirectoryListingSnippet message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof DirectoryListingSnippet
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {DirectoryListingSnippet} DirectoryListingSnippet
+     */
+    DirectoryListingSnippet.fromObject = function fromObject(object) {
+        if (object instanceof $root.DirectoryListingSnippet)
+            return object;
+        let message = new $root.DirectoryListingSnippet();
+        if (object.title != null)
+            message.title = String(object.title);
+        if (object.description != null)
+            message.description = String(object.description);
+        if (object.tags) {
+            if (!Array.isArray(object.tags))
+                throw TypeError(".DirectoryListingSnippet.tags: array expected");
+            message.tags = [];
+            for (let i = 0; i < object.tags.length; ++i)
+                message.tags[i] = String(object.tags[i]);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a DirectoryListingSnippet message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof DirectoryListingSnippet
+     * @static
+     * @param {DirectoryListingSnippet} message DirectoryListingSnippet
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    DirectoryListingSnippet.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.arrays || options.defaults)
+            object.tags = [];
+        if (options.defaults) {
+            object.title = "";
+            object.description = "";
+        }
+        if (message.title != null && message.hasOwnProperty("title"))
+            object.title = message.title;
+        if (message.description != null && message.hasOwnProperty("description"))
+            object.description = message.description;
+        if (message.tags && message.tags.length) {
+            object.tags = [];
+            for (let j = 0; j < message.tags.length; ++j)
+                object.tags[j] = message.tags[j];
+        }
+        return object;
+    };
+
+    /**
+     * Converts this DirectoryListingSnippet to JSON.
+     * @function toJSON
+     * @memberof DirectoryListingSnippet
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    DirectoryListingSnippet.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return DirectoryListingSnippet;
+})();
+
+export const DirectoryListingMedia = $root.DirectoryListingMedia = (() => {
+
+    /**
+     * Properties of a DirectoryListingMedia.
+     * @exports IDirectoryListingMedia
+     * @interface IDirectoryListingMedia
+     * @property {number|null} [startedAt] DirectoryListingMedia startedAt
+     * @property {string|null} [mimeType] DirectoryListingMedia mimeType
+     * @property {number|null} [bitrate] DirectoryListingMedia bitrate
+     */
+
+    /**
+     * Constructs a new DirectoryListingMedia.
+     * @exports DirectoryListingMedia
+     * @classdesc Represents a DirectoryListingMedia.
+     * @implements IDirectoryListingMedia
+     * @constructor
+     * @param {IDirectoryListingMedia=} [properties] Properties to set
+     */
+    function DirectoryListingMedia(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * DirectoryListingMedia startedAt.
+     * @member {number} startedAt
+     * @memberof DirectoryListingMedia
+     * @instance
+     */
+    DirectoryListingMedia.prototype.startedAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+    /**
+     * DirectoryListingMedia mimeType.
+     * @member {string} mimeType
+     * @memberof DirectoryListingMedia
+     * @instance
+     */
+    DirectoryListingMedia.prototype.mimeType = "";
+
+    /**
+     * DirectoryListingMedia bitrate.
+     * @member {number} bitrate
+     * @memberof DirectoryListingMedia
+     * @instance
+     */
+    DirectoryListingMedia.prototype.bitrate = 0;
+
+    /**
+     * Creates a new DirectoryListingMedia instance using the specified properties.
+     * @function create
+     * @memberof DirectoryListingMedia
+     * @static
+     * @param {IDirectoryListingMedia=} [properties] Properties to set
+     * @returns {DirectoryListingMedia} DirectoryListingMedia instance
+     */
+    DirectoryListingMedia.create = function create(properties) {
+        return new DirectoryListingMedia(properties);
+    };
+
+    /**
+     * Encodes the specified DirectoryListingMedia message. Does not implicitly {@link DirectoryListingMedia.verify|verify} messages.
+     * @function encode
+     * @memberof DirectoryListingMedia
+     * @static
+     * @param {IDirectoryListingMedia} message DirectoryListingMedia message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryListingMedia.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.startedAt != null && Object.hasOwnProperty.call(message, "startedAt"))
+            writer.uint32(/* id 1, wireType 0 =*/8).int64(message.startedAt);
+        if (message.mimeType != null && Object.hasOwnProperty.call(message, "mimeType"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.mimeType);
+        if (message.bitrate != null && Object.hasOwnProperty.call(message, "bitrate"))
+            writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.bitrate);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified DirectoryListingMedia message, length delimited. Does not implicitly {@link DirectoryListingMedia.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof DirectoryListingMedia
+     * @static
+     * @param {IDirectoryListingMedia} message DirectoryListingMedia message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryListingMedia.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a DirectoryListingMedia message from the specified reader or buffer.
+     * @function decode
+     * @memberof DirectoryListingMedia
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {DirectoryListingMedia} DirectoryListingMedia
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryListingMedia.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryListingMedia();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.startedAt = reader.int64();
+                break;
+            case 2:
+                message.mimeType = reader.string();
+                break;
+            case 3:
+                message.bitrate = reader.uint32();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a DirectoryListingMedia message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof DirectoryListingMedia
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {DirectoryListingMedia} DirectoryListingMedia
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryListingMedia.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a DirectoryListingMedia message.
+     * @function verify
+     * @memberof DirectoryListingMedia
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    DirectoryListingMedia.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.startedAt != null && message.hasOwnProperty("startedAt"))
+            if (!$util.isInteger(message.startedAt) && !(message.startedAt && $util.isInteger(message.startedAt.low) && $util.isInteger(message.startedAt.high)))
+                return "startedAt: integer|Long expected";
+        if (message.mimeType != null && message.hasOwnProperty("mimeType"))
+            if (!$util.isString(message.mimeType))
+                return "mimeType: string expected";
+        if (message.bitrate != null && message.hasOwnProperty("bitrate"))
+            if (!$util.isInteger(message.bitrate))
+                return "bitrate: integer expected";
+        return null;
+    };
+
+    /**
+     * Creates a DirectoryListingMedia message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof DirectoryListingMedia
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {DirectoryListingMedia} DirectoryListingMedia
+     */
+    DirectoryListingMedia.fromObject = function fromObject(object) {
+        if (object instanceof $root.DirectoryListingMedia)
+            return object;
+        let message = new $root.DirectoryListingMedia();
+        if (object.startedAt != null)
+            if ($util.Long)
+                (message.startedAt = $util.Long.fromValue(object.startedAt)).unsigned = false;
+            else if (typeof object.startedAt === "string")
+                message.startedAt = parseInt(object.startedAt, 10);
+            else if (typeof object.startedAt === "number")
+                message.startedAt = object.startedAt;
+            else if (typeof object.startedAt === "object")
+                message.startedAt = new $util.LongBits(object.startedAt.low >>> 0, object.startedAt.high >>> 0).toNumber();
+        if (object.mimeType != null)
+            message.mimeType = String(object.mimeType);
+        if (object.bitrate != null)
+            message.bitrate = object.bitrate >>> 0;
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a DirectoryListingMedia message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof DirectoryListingMedia
+     * @static
+     * @param {DirectoryListingMedia} message DirectoryListingMedia
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    DirectoryListingMedia.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, false);
+                object.startedAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.startedAt = options.longs === String ? "0" : 0;
+            object.mimeType = "";
+            object.bitrate = 0;
+        }
+        if (message.startedAt != null && message.hasOwnProperty("startedAt"))
+            if (typeof message.startedAt === "number")
+                object.startedAt = options.longs === String ? String(message.startedAt) : message.startedAt;
+            else
+                object.startedAt = options.longs === String ? $util.Long.prototype.toString.call(message.startedAt) : options.longs === Number ? new $util.LongBits(message.startedAt.low >>> 0, message.startedAt.high >>> 0).toNumber() : message.startedAt;
+        if (message.mimeType != null && message.hasOwnProperty("mimeType"))
+            object.mimeType = message.mimeType;
+        if (message.bitrate != null && message.hasOwnProperty("bitrate"))
+            object.bitrate = message.bitrate;
+        return object;
+    };
+
+    /**
+     * Converts this DirectoryListingMedia to JSON.
+     * @function toJSON
+     * @memberof DirectoryListingMedia
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    DirectoryListingMedia.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return DirectoryListingMedia;
+})();
+
+export const DirectoryListingService = $root.DirectoryListingService = (() => {
+
+    /**
+     * Properties of a DirectoryListingService.
+     * @exports IDirectoryListingService
+     * @interface IDirectoryListingService
+     * @property {string|null} [type] DirectoryListingService type
+     */
+
+    /**
+     * Constructs a new DirectoryListingService.
+     * @exports DirectoryListingService
+     * @classdesc Represents a DirectoryListingService.
+     * @implements IDirectoryListingService
+     * @constructor
+     * @param {IDirectoryListingService=} [properties] Properties to set
+     */
+    function DirectoryListingService(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * DirectoryListingService type.
+     * @member {string} type
+     * @memberof DirectoryListingService
+     * @instance
+     */
+    DirectoryListingService.prototype.type = "";
+
+    /**
+     * Creates a new DirectoryListingService instance using the specified properties.
+     * @function create
+     * @memberof DirectoryListingService
+     * @static
+     * @param {IDirectoryListingService=} [properties] Properties to set
+     * @returns {DirectoryListingService} DirectoryListingService instance
+     */
+    DirectoryListingService.create = function create(properties) {
+        return new DirectoryListingService(properties);
+    };
+
+    /**
+     * Encodes the specified DirectoryListingService message. Does not implicitly {@link DirectoryListingService.verify|verify} messages.
+     * @function encode
+     * @memberof DirectoryListingService
+     * @static
+     * @param {IDirectoryListingService} message DirectoryListingService message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryListingService.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.type != null && Object.hasOwnProperty.call(message, "type"))
+            writer.uint32(/* id 1, wireType 2 =*/10).string(message.type);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified DirectoryListingService message, length delimited. Does not implicitly {@link DirectoryListingService.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof DirectoryListingService
+     * @static
+     * @param {IDirectoryListingService} message DirectoryListingService message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryListingService.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a DirectoryListingService message from the specified reader or buffer.
+     * @function decode
+     * @memberof DirectoryListingService
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {DirectoryListingService} DirectoryListingService
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryListingService.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryListingService();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.type = reader.string();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a DirectoryListingService message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof DirectoryListingService
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {DirectoryListingService} DirectoryListingService
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryListingService.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a DirectoryListingService message.
+     * @function verify
+     * @memberof DirectoryListingService
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    DirectoryListingService.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.type != null && message.hasOwnProperty("type"))
+            if (!$util.isString(message.type))
+                return "type: string expected";
+        return null;
+    };
+
+    /**
+     * Creates a DirectoryListingService message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof DirectoryListingService
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {DirectoryListingService} DirectoryListingService
+     */
+    DirectoryListingService.fromObject = function fromObject(object) {
+        if (object instanceof $root.DirectoryListingService)
+            return object;
+        let message = new $root.DirectoryListingService();
+        if (object.type != null)
+            message.type = String(object.type);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a DirectoryListingService message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof DirectoryListingService
+     * @static
+     * @param {DirectoryListingService} message DirectoryListingService
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    DirectoryListingService.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.type = "";
+        if (message.type != null && message.hasOwnProperty("type"))
+            object.type = message.type;
+        return object;
+    };
+
+    /**
+     * Converts this DirectoryListingService to JSON.
+     * @function toJSON
+     * @memberof DirectoryListingService
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    DirectoryListingService.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return DirectoryListingService;
+})();
+
 export const DirectoryListing = $root.DirectoryListing = (() => {
 
     /**
      * Properties of a DirectoryListing.
      * @exports IDirectoryListing
      * @interface IDirectoryListing
-     * @property {Uint8Array|null} [key] DirectoryListing key
-     * @property {string|null} [mimeType] DirectoryListing mimeType
-     * @property {string|null} [title] DirectoryListing title
-     * @property {string|null} [description] DirectoryListing description
-     * @property {Array.<string>|null} [tags] DirectoryListing tags
-     * @property {Uint8Array|null} [extra] DirectoryListing extra
+     * @property {ICertificate|null} [creator] DirectoryListing creator
      * @property {number|null} [timestamp] DirectoryListing timestamp
+     * @property {IDirectoryListingSnippet|null} [snippet] DirectoryListing snippet
+     * @property {IDirectoryListingMedia|null} [media] DirectoryListing media
+     * @property {IDirectoryListingService|null} [service] DirectoryListing service
+     * @property {Uint8Array|null} [key] DirectoryListing key
      * @property {Uint8Array|null} [signature] DirectoryListing signature
      */
 
@@ -10509,7 +11423,6 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
      * @param {IDirectoryListing=} [properties] Properties to set
      */
     function DirectoryListing(properties) {
-        this.tags = [];
         if (properties)
             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
@@ -10517,52 +11430,12 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
     }
 
     /**
-     * DirectoryListing key.
-     * @member {Uint8Array} key
+     * DirectoryListing creator.
+     * @member {ICertificate|null|undefined} creator
      * @memberof DirectoryListing
      * @instance
      */
-    DirectoryListing.prototype.key = $util.newBuffer([]);
-
-    /**
-     * DirectoryListing mimeType.
-     * @member {string} mimeType
-     * @memberof DirectoryListing
-     * @instance
-     */
-    DirectoryListing.prototype.mimeType = "";
-
-    /**
-     * DirectoryListing title.
-     * @member {string} title
-     * @memberof DirectoryListing
-     * @instance
-     */
-    DirectoryListing.prototype.title = "";
-
-    /**
-     * DirectoryListing description.
-     * @member {string} description
-     * @memberof DirectoryListing
-     * @instance
-     */
-    DirectoryListing.prototype.description = "";
-
-    /**
-     * DirectoryListing tags.
-     * @member {Array.<string>} tags
-     * @memberof DirectoryListing
-     * @instance
-     */
-    DirectoryListing.prototype.tags = $util.emptyArray;
-
-    /**
-     * DirectoryListing extra.
-     * @member {Uint8Array} extra
-     * @memberof DirectoryListing
-     * @instance
-     */
-    DirectoryListing.prototype.extra = $util.newBuffer([]);
+    DirectoryListing.prototype.creator = null;
 
     /**
      * DirectoryListing timestamp.
@@ -10573,12 +11446,58 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
     DirectoryListing.prototype.timestamp = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
 
     /**
+     * DirectoryListing snippet.
+     * @member {IDirectoryListingSnippet|null|undefined} snippet
+     * @memberof DirectoryListing
+     * @instance
+     */
+    DirectoryListing.prototype.snippet = null;
+
+    /**
+     * DirectoryListing media.
+     * @member {IDirectoryListingMedia|null|undefined} media
+     * @memberof DirectoryListing
+     * @instance
+     */
+    DirectoryListing.prototype.media = null;
+
+    /**
+     * DirectoryListing service.
+     * @member {IDirectoryListingService|null|undefined} service
+     * @memberof DirectoryListing
+     * @instance
+     */
+    DirectoryListing.prototype.service = null;
+
+    /**
+     * DirectoryListing key.
+     * @member {Uint8Array} key
+     * @memberof DirectoryListing
+     * @instance
+     */
+    DirectoryListing.prototype.key = $util.newBuffer([]);
+
+    /**
      * DirectoryListing signature.
      * @member {Uint8Array} signature
      * @memberof DirectoryListing
      * @instance
      */
     DirectoryListing.prototype.signature = $util.newBuffer([]);
+
+    // OneOf field names bound to virtual getters and setters
+    let $oneOfFields;
+
+    /**
+     * DirectoryListing content.
+     * @member {"media"|"service"|undefined} content
+     * @memberof DirectoryListing
+     * @instance
+     */
+    Object.defineProperty(DirectoryListing.prototype, "content", {
+        get: $util.oneOfGetter($oneOfFields = ["media", "service"]),
+        set: $util.oneOfSetter($oneOfFields)
+    });
 
     /**
      * Creates a new DirectoryListing instance using the specified properties.
@@ -10604,23 +11523,20 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
     DirectoryListing.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.key != null && Object.hasOwnProperty.call(message, "key"))
-            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.key);
-        if (message.mimeType != null && Object.hasOwnProperty.call(message, "mimeType"))
-            writer.uint32(/* id 2, wireType 2 =*/18).string(message.mimeType);
-        if (message.title != null && Object.hasOwnProperty.call(message, "title"))
-            writer.uint32(/* id 3, wireType 2 =*/26).string(message.title);
-        if (message.description != null && Object.hasOwnProperty.call(message, "description"))
-            writer.uint32(/* id 4, wireType 2 =*/34).string(message.description);
-        if (message.tags != null && message.tags.length)
-            for (let i = 0; i < message.tags.length; ++i)
-                writer.uint32(/* id 5, wireType 2 =*/42).string(message.tags[i]);
-        if (message.extra != null && Object.hasOwnProperty.call(message, "extra"))
-            writer.uint32(/* id 6, wireType 2 =*/50).bytes(message.extra);
+        if (message.creator != null && Object.hasOwnProperty.call(message, "creator"))
+            $root.Certificate.encode(message.creator, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         if (message.timestamp != null && Object.hasOwnProperty.call(message, "timestamp"))
-            writer.uint32(/* id 7, wireType 0 =*/56).int64(message.timestamp);
+            writer.uint32(/* id 2, wireType 0 =*/16).int64(message.timestamp);
+        if (message.snippet != null && Object.hasOwnProperty.call(message, "snippet"))
+            $root.DirectoryListingSnippet.encode(message.snippet, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+        if (message.media != null && Object.hasOwnProperty.call(message, "media"))
+            $root.DirectoryListingMedia.encode(message.media, writer.uint32(/* id 1001, wireType 2 =*/8010).fork()).ldelim();
+        if (message.service != null && Object.hasOwnProperty.call(message, "service"))
+            $root.DirectoryListingService.encode(message.service, writer.uint32(/* id 1002, wireType 2 =*/8018).fork()).ldelim();
+        if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+            writer.uint32(/* id 10001, wireType 2 =*/80010).bytes(message.key);
         if (message.signature != null && Object.hasOwnProperty.call(message, "signature"))
-            writer.uint32(/* id 8, wireType 2 =*/66).bytes(message.signature);
+            writer.uint32(/* id 10002, wireType 2 =*/80018).bytes(message.signature);
         return writer;
     };
 
@@ -10656,29 +11572,24 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.key = reader.bytes();
+                message.creator = $root.Certificate.decode(reader, reader.uint32());
                 break;
             case 2:
-                message.mimeType = reader.string();
-                break;
-            case 3:
-                message.title = reader.string();
-                break;
-            case 4:
-                message.description = reader.string();
-                break;
-            case 5:
-                if (!(message.tags && message.tags.length))
-                    message.tags = [];
-                message.tags.push(reader.string());
-                break;
-            case 6:
-                message.extra = reader.bytes();
-                break;
-            case 7:
                 message.timestamp = reader.int64();
                 break;
-            case 8:
+            case 3:
+                message.snippet = $root.DirectoryListingSnippet.decode(reader, reader.uint32());
+                break;
+            case 1001:
+                message.media = $root.DirectoryListingMedia.decode(reader, reader.uint32());
+                break;
+            case 1002:
+                message.service = $root.DirectoryListingService.decode(reader, reader.uint32());
+                break;
+            case 10001:
+                message.key = reader.bytes();
+                break;
+            case 10002:
                 message.signature = reader.bytes();
                 break;
             default:
@@ -10716,31 +11627,41 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
     DirectoryListing.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.key != null && message.hasOwnProperty("key"))
-            if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
-                return "key: buffer expected";
-        if (message.mimeType != null && message.hasOwnProperty("mimeType"))
-            if (!$util.isString(message.mimeType))
-                return "mimeType: string expected";
-        if (message.title != null && message.hasOwnProperty("title"))
-            if (!$util.isString(message.title))
-                return "title: string expected";
-        if (message.description != null && message.hasOwnProperty("description"))
-            if (!$util.isString(message.description))
-                return "description: string expected";
-        if (message.tags != null && message.hasOwnProperty("tags")) {
-            if (!Array.isArray(message.tags))
-                return "tags: array expected";
-            for (let i = 0; i < message.tags.length; ++i)
-                if (!$util.isString(message.tags[i]))
-                    return "tags: string[] expected";
+        let properties = {};
+        if (message.creator != null && message.hasOwnProperty("creator")) {
+            let error = $root.Certificate.verify(message.creator);
+            if (error)
+                return "creator." + error;
         }
-        if (message.extra != null && message.hasOwnProperty("extra"))
-            if (!(message.extra && typeof message.extra.length === "number" || $util.isString(message.extra)))
-                return "extra: buffer expected";
         if (message.timestamp != null && message.hasOwnProperty("timestamp"))
             if (!$util.isInteger(message.timestamp) && !(message.timestamp && $util.isInteger(message.timestamp.low) && $util.isInteger(message.timestamp.high)))
                 return "timestamp: integer|Long expected";
+        if (message.snippet != null && message.hasOwnProperty("snippet")) {
+            let error = $root.DirectoryListingSnippet.verify(message.snippet);
+            if (error)
+                return "snippet." + error;
+        }
+        if (message.media != null && message.hasOwnProperty("media")) {
+            properties.content = 1;
+            {
+                let error = $root.DirectoryListingMedia.verify(message.media);
+                if (error)
+                    return "media." + error;
+            }
+        }
+        if (message.service != null && message.hasOwnProperty("service")) {
+            if (properties.content === 1)
+                return "content: multiple values";
+            properties.content = 1;
+            {
+                let error = $root.DirectoryListingService.verify(message.service);
+                if (error)
+                    return "service." + error;
+            }
+        }
+        if (message.key != null && message.hasOwnProperty("key"))
+            if (!(message.key && typeof message.key.length === "number" || $util.isString(message.key)))
+                return "key: buffer expected";
         if (message.signature != null && message.hasOwnProperty("signature"))
             if (!(message.signature && typeof message.signature.length === "number" || $util.isString(message.signature)))
                 return "signature: buffer expected";
@@ -10759,29 +11680,11 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
         if (object instanceof $root.DirectoryListing)
             return object;
         let message = new $root.DirectoryListing();
-        if (object.key != null)
-            if (typeof object.key === "string")
-                $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
-            else if (object.key.length)
-                message.key = object.key;
-        if (object.mimeType != null)
-            message.mimeType = String(object.mimeType);
-        if (object.title != null)
-            message.title = String(object.title);
-        if (object.description != null)
-            message.description = String(object.description);
-        if (object.tags) {
-            if (!Array.isArray(object.tags))
-                throw TypeError(".DirectoryListing.tags: array expected");
-            message.tags = [];
-            for (let i = 0; i < object.tags.length; ++i)
-                message.tags[i] = String(object.tags[i]);
+        if (object.creator != null) {
+            if (typeof object.creator !== "object")
+                throw TypeError(".DirectoryListing.creator: object expected");
+            message.creator = $root.Certificate.fromObject(object.creator);
         }
-        if (object.extra != null)
-            if (typeof object.extra === "string")
-                $util.base64.decode(object.extra, message.extra = $util.newBuffer($util.base64.length(object.extra)), 0);
-            else if (object.extra.length)
-                message.extra = object.extra;
         if (object.timestamp != null)
             if ($util.Long)
                 (message.timestamp = $util.Long.fromValue(object.timestamp)).unsigned = false;
@@ -10791,6 +11694,26 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
                 message.timestamp = object.timestamp;
             else if (typeof object.timestamp === "object")
                 message.timestamp = new $util.LongBits(object.timestamp.low >>> 0, object.timestamp.high >>> 0).toNumber();
+        if (object.snippet != null) {
+            if (typeof object.snippet !== "object")
+                throw TypeError(".DirectoryListing.snippet: object expected");
+            message.snippet = $root.DirectoryListingSnippet.fromObject(object.snippet);
+        }
+        if (object.media != null) {
+            if (typeof object.media !== "object")
+                throw TypeError(".DirectoryListing.media: object expected");
+            message.media = $root.DirectoryListingMedia.fromObject(object.media);
+        }
+        if (object.service != null) {
+            if (typeof object.service !== "object")
+                throw TypeError(".DirectoryListing.service: object expected");
+            message.service = $root.DirectoryListingService.fromObject(object.service);
+        }
+        if (object.key != null)
+            if (typeof object.key === "string")
+                $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
+            else if (object.key.length)
+                message.key = object.key;
         if (object.signature != null)
             if (typeof object.signature === "string")
                 $util.base64.decode(object.signature, message.signature = $util.newBuffer($util.base64.length(object.signature)), 0);
@@ -10812,9 +11735,14 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
         if (!options)
             options = {};
         let object = {};
-        if (options.arrays || options.defaults)
-            object.tags = [];
         if (options.defaults) {
+            object.creator = null;
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, false);
+                object.timestamp = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.timestamp = options.longs === String ? "0" : 0;
+            object.snippet = null;
             if (options.bytes === String)
                 object.key = "";
             else {
@@ -10822,21 +11750,6 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
                 if (options.bytes !== Array)
                     object.key = $util.newBuffer(object.key);
             }
-            object.mimeType = "";
-            object.title = "";
-            object.description = "";
-            if (options.bytes === String)
-                object.extra = "";
-            else {
-                object.extra = [];
-                if (options.bytes !== Array)
-                    object.extra = $util.newBuffer(object.extra);
-            }
-            if ($util.Long) {
-                let long = new $util.Long(0, 0, false);
-                object.timestamp = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
-            } else
-                object.timestamp = options.longs === String ? "0" : 0;
             if (options.bytes === String)
                 object.signature = "";
             else {
@@ -10845,26 +11758,27 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
                     object.signature = $util.newBuffer(object.signature);
             }
         }
-        if (message.key != null && message.hasOwnProperty("key"))
-            object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
-        if (message.mimeType != null && message.hasOwnProperty("mimeType"))
-            object.mimeType = message.mimeType;
-        if (message.title != null && message.hasOwnProperty("title"))
-            object.title = message.title;
-        if (message.description != null && message.hasOwnProperty("description"))
-            object.description = message.description;
-        if (message.tags && message.tags.length) {
-            object.tags = [];
-            for (let j = 0; j < message.tags.length; ++j)
-                object.tags[j] = message.tags[j];
-        }
-        if (message.extra != null && message.hasOwnProperty("extra"))
-            object.extra = options.bytes === String ? $util.base64.encode(message.extra, 0, message.extra.length) : options.bytes === Array ? Array.prototype.slice.call(message.extra) : message.extra;
+        if (message.creator != null && message.hasOwnProperty("creator"))
+            object.creator = $root.Certificate.toObject(message.creator, options);
         if (message.timestamp != null && message.hasOwnProperty("timestamp"))
             if (typeof message.timestamp === "number")
                 object.timestamp = options.longs === String ? String(message.timestamp) : message.timestamp;
             else
                 object.timestamp = options.longs === String ? $util.Long.prototype.toString.call(message.timestamp) : options.longs === Number ? new $util.LongBits(message.timestamp.low >>> 0, message.timestamp.high >>> 0).toNumber() : message.timestamp;
+        if (message.snippet != null && message.hasOwnProperty("snippet"))
+            object.snippet = $root.DirectoryListingSnippet.toObject(message.snippet, options);
+        if (message.media != null && message.hasOwnProperty("media")) {
+            object.media = $root.DirectoryListingMedia.toObject(message.media, options);
+            if (options.oneofs)
+                object.content = "media";
+        }
+        if (message.service != null && message.hasOwnProperty("service")) {
+            object.service = $root.DirectoryListingService.toObject(message.service, options);
+            if (options.oneofs)
+                object.content = "service";
+        }
+        if (message.key != null && message.hasOwnProperty("key"))
+            object.key = options.bytes === String ? $util.base64.encode(message.key, 0, message.key.length) : options.bytes === Array ? Array.prototype.slice.call(message.key) : message.key;
         if (message.signature != null && message.hasOwnProperty("signature"))
             object.signature = options.bytes === String ? $util.base64.encode(message.signature, 0, message.signature.length) : options.bytes === Array ? Array.prototype.slice.call(message.signature) : message.signature;
         return object;
@@ -32735,6 +33649,207 @@ export const ProfileSummary = $root.ProfileSummary = (() => {
     return ProfileSummary;
 })();
 
+export const ProfileID = $root.ProfileID = (() => {
+
+    /**
+     * Properties of a ProfileID.
+     * @exports IProfileID
+     * @interface IProfileID
+     * @property {number|null} [nextId] ProfileID nextId
+     */
+
+    /**
+     * Constructs a new ProfileID.
+     * @exports ProfileID
+     * @classdesc Represents a ProfileID.
+     * @implements IProfileID
+     * @constructor
+     * @param {IProfileID=} [properties] Properties to set
+     */
+    function ProfileID(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * ProfileID nextId.
+     * @member {number} nextId
+     * @memberof ProfileID
+     * @instance
+     */
+    ProfileID.prototype.nextId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * Creates a new ProfileID instance using the specified properties.
+     * @function create
+     * @memberof ProfileID
+     * @static
+     * @param {IProfileID=} [properties] Properties to set
+     * @returns {ProfileID} ProfileID instance
+     */
+    ProfileID.create = function create(properties) {
+        return new ProfileID(properties);
+    };
+
+    /**
+     * Encodes the specified ProfileID message. Does not implicitly {@link ProfileID.verify|verify} messages.
+     * @function encode
+     * @memberof ProfileID
+     * @static
+     * @param {IProfileID} message ProfileID message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    ProfileID.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.nextId != null && Object.hasOwnProperty.call(message, "nextId"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.nextId);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified ProfileID message, length delimited. Does not implicitly {@link ProfileID.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof ProfileID
+     * @static
+     * @param {IProfileID} message ProfileID message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    ProfileID.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a ProfileID message from the specified reader or buffer.
+     * @function decode
+     * @memberof ProfileID
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {ProfileID} ProfileID
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    ProfileID.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.ProfileID();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.nextId = reader.uint64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a ProfileID message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof ProfileID
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {ProfileID} ProfileID
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    ProfileID.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a ProfileID message.
+     * @function verify
+     * @memberof ProfileID
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    ProfileID.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.nextId != null && message.hasOwnProperty("nextId"))
+            if (!$util.isInteger(message.nextId) && !(message.nextId && $util.isInteger(message.nextId.low) && $util.isInteger(message.nextId.high)))
+                return "nextId: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates a ProfileID message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof ProfileID
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {ProfileID} ProfileID
+     */
+    ProfileID.fromObject = function fromObject(object) {
+        if (object instanceof $root.ProfileID)
+            return object;
+        let message = new $root.ProfileID();
+        if (object.nextId != null)
+            if ($util.Long)
+                (message.nextId = $util.Long.fromValue(object.nextId)).unsigned = true;
+            else if (typeof object.nextId === "string")
+                message.nextId = parseInt(object.nextId, 10);
+            else if (typeof object.nextId === "number")
+                message.nextId = object.nextId;
+            else if (typeof object.nextId === "object")
+                message.nextId = new $util.LongBits(object.nextId.low >>> 0, object.nextId.high >>> 0).toNumber(true);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a ProfileID message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof ProfileID
+     * @static
+     * @param {ProfileID} message ProfileID
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    ProfileID.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.nextId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.nextId = options.longs === String ? "0" : 0;
+        if (message.nextId != null && message.hasOwnProperty("nextId"))
+            if (typeof message.nextId === "number")
+                object.nextId = options.longs === String ? String(message.nextId) : message.nextId;
+            else
+                object.nextId = options.longs === String ? $util.Long.prototype.toString.call(message.nextId) : options.longs === Number ? new $util.LongBits(message.nextId.low >>> 0, message.nextId.high >>> 0).toNumber(true) : message.nextId;
+        return object;
+    };
+
+    /**
+     * Converts this ProfileID to JSON.
+     * @function toJSON
+     * @memberof ProfileID
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    ProfileID.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return ProfileID;
+})();
+
 export const Network = $root.Network = (() => {
 
     /**
@@ -37416,6 +38531,6376 @@ export const RPCCallStreamResponse = $root.RPCCallStreamResponse = (() => {
     };
 
     return RPCCallStreamResponse;
+})();
+
+export const VideoIngressConfig = $root.VideoIngressConfig = (() => {
+
+    /**
+     * Properties of a VideoIngressConfig.
+     * @exports IVideoIngressConfig
+     * @interface IVideoIngressConfig
+     * @property {boolean|null} [enabled] VideoIngressConfig enabled
+     * @property {string|null} [serverAddr] VideoIngressConfig serverAddr
+     * @property {string|null} [publicServerAddr] VideoIngressConfig publicServerAddr
+     * @property {Array.<Uint8Array>|null} [serviceNetworkKeys] VideoIngressConfig serviceNetworkKeys
+     */
+
+    /**
+     * Constructs a new VideoIngressConfig.
+     * @exports VideoIngressConfig
+     * @classdesc Represents a VideoIngressConfig.
+     * @implements IVideoIngressConfig
+     * @constructor
+     * @param {IVideoIngressConfig=} [properties] Properties to set
+     */
+    function VideoIngressConfig(properties) {
+        this.serviceNetworkKeys = [];
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressConfig enabled.
+     * @member {boolean} enabled
+     * @memberof VideoIngressConfig
+     * @instance
+     */
+    VideoIngressConfig.prototype.enabled = false;
+
+    /**
+     * VideoIngressConfig serverAddr.
+     * @member {string} serverAddr
+     * @memberof VideoIngressConfig
+     * @instance
+     */
+    VideoIngressConfig.prototype.serverAddr = "";
+
+    /**
+     * VideoIngressConfig publicServerAddr.
+     * @member {string} publicServerAddr
+     * @memberof VideoIngressConfig
+     * @instance
+     */
+    VideoIngressConfig.prototype.publicServerAddr = "";
+
+    /**
+     * VideoIngressConfig serviceNetworkKeys.
+     * @member {Array.<Uint8Array>} serviceNetworkKeys
+     * @memberof VideoIngressConfig
+     * @instance
+     */
+    VideoIngressConfig.prototype.serviceNetworkKeys = $util.emptyArray;
+
+    /**
+     * Creates a new VideoIngressConfig instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressConfig
+     * @static
+     * @param {IVideoIngressConfig=} [properties] Properties to set
+     * @returns {VideoIngressConfig} VideoIngressConfig instance
+     */
+    VideoIngressConfig.create = function create(properties) {
+        return new VideoIngressConfig(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressConfig message. Does not implicitly {@link VideoIngressConfig.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressConfig
+     * @static
+     * @param {IVideoIngressConfig} message VideoIngressConfig message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressConfig.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.enabled != null && Object.hasOwnProperty.call(message, "enabled"))
+            writer.uint32(/* id 1, wireType 0 =*/8).bool(message.enabled);
+        if (message.serverAddr != null && Object.hasOwnProperty.call(message, "serverAddr"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.serverAddr);
+        if (message.publicServerAddr != null && Object.hasOwnProperty.call(message, "publicServerAddr"))
+            writer.uint32(/* id 3, wireType 2 =*/26).string(message.publicServerAddr);
+        if (message.serviceNetworkKeys != null && message.serviceNetworkKeys.length)
+            for (let i = 0; i < message.serviceNetworkKeys.length; ++i)
+                writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.serviceNetworkKeys[i]);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressConfig message, length delimited. Does not implicitly {@link VideoIngressConfig.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressConfig
+     * @static
+     * @param {IVideoIngressConfig} message VideoIngressConfig message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressConfig.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressConfig message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressConfig
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressConfig} VideoIngressConfig
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressConfig.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressConfig();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.enabled = reader.bool();
+                break;
+            case 2:
+                message.serverAddr = reader.string();
+                break;
+            case 3:
+                message.publicServerAddr = reader.string();
+                break;
+            case 4:
+                if (!(message.serviceNetworkKeys && message.serviceNetworkKeys.length))
+                    message.serviceNetworkKeys = [];
+                message.serviceNetworkKeys.push(reader.bytes());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressConfig message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressConfig
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressConfig} VideoIngressConfig
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressConfig.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressConfig message.
+     * @function verify
+     * @memberof VideoIngressConfig
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressConfig.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.enabled != null && message.hasOwnProperty("enabled"))
+            if (typeof message.enabled !== "boolean")
+                return "enabled: boolean expected";
+        if (message.serverAddr != null && message.hasOwnProperty("serverAddr"))
+            if (!$util.isString(message.serverAddr))
+                return "serverAddr: string expected";
+        if (message.publicServerAddr != null && message.hasOwnProperty("publicServerAddr"))
+            if (!$util.isString(message.publicServerAddr))
+                return "publicServerAddr: string expected";
+        if (message.serviceNetworkKeys != null && message.hasOwnProperty("serviceNetworkKeys")) {
+            if (!Array.isArray(message.serviceNetworkKeys))
+                return "serviceNetworkKeys: array expected";
+            for (let i = 0; i < message.serviceNetworkKeys.length; ++i)
+                if (!(message.serviceNetworkKeys[i] && typeof message.serviceNetworkKeys[i].length === "number" || $util.isString(message.serviceNetworkKeys[i])))
+                    return "serviceNetworkKeys: buffer[] expected";
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressConfig message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressConfig
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressConfig} VideoIngressConfig
+     */
+    VideoIngressConfig.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressConfig)
+            return object;
+        let message = new $root.VideoIngressConfig();
+        if (object.enabled != null)
+            message.enabled = Boolean(object.enabled);
+        if (object.serverAddr != null)
+            message.serverAddr = String(object.serverAddr);
+        if (object.publicServerAddr != null)
+            message.publicServerAddr = String(object.publicServerAddr);
+        if (object.serviceNetworkKeys) {
+            if (!Array.isArray(object.serviceNetworkKeys))
+                throw TypeError(".VideoIngressConfig.serviceNetworkKeys: array expected");
+            message.serviceNetworkKeys = [];
+            for (let i = 0; i < object.serviceNetworkKeys.length; ++i)
+                if (typeof object.serviceNetworkKeys[i] === "string")
+                    $util.base64.decode(object.serviceNetworkKeys[i], message.serviceNetworkKeys[i] = $util.newBuffer($util.base64.length(object.serviceNetworkKeys[i])), 0);
+                else if (object.serviceNetworkKeys[i].length)
+                    message.serviceNetworkKeys[i] = object.serviceNetworkKeys[i];
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressConfig message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressConfig
+     * @static
+     * @param {VideoIngressConfig} message VideoIngressConfig
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressConfig.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.arrays || options.defaults)
+            object.serviceNetworkKeys = [];
+        if (options.defaults) {
+            object.enabled = false;
+            object.serverAddr = "";
+            object.publicServerAddr = "";
+        }
+        if (message.enabled != null && message.hasOwnProperty("enabled"))
+            object.enabled = message.enabled;
+        if (message.serverAddr != null && message.hasOwnProperty("serverAddr"))
+            object.serverAddr = message.serverAddr;
+        if (message.publicServerAddr != null && message.hasOwnProperty("publicServerAddr"))
+            object.publicServerAddr = message.publicServerAddr;
+        if (message.serviceNetworkKeys && message.serviceNetworkKeys.length) {
+            object.serviceNetworkKeys = [];
+            for (let j = 0; j < message.serviceNetworkKeys.length; ++j)
+                object.serviceNetworkKeys[j] = options.bytes === String ? $util.base64.encode(message.serviceNetworkKeys[j], 0, message.serviceNetworkKeys[j].length) : options.bytes === Array ? Array.prototype.slice.call(message.serviceNetworkKeys[j]) : message.serviceNetworkKeys[j];
+        }
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressConfig to JSON.
+     * @function toJSON
+     * @memberof VideoIngressConfig
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressConfig.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressConfig;
+})();
+
+export const VideoIngressChannel = $root.VideoIngressChannel = (() => {
+
+    /**
+     * Properties of a VideoIngressChannel.
+     * @exports IVideoIngressChannel
+     * @interface IVideoIngressChannel
+     * @property {number|null} [id] VideoIngressChannel id
+     * @property {VideoIngressChannel.ILocal|null} [local] VideoIngressChannel local
+     * @property {VideoIngressChannel.ILocalShare|null} [localShare] VideoIngressChannel localShare
+     * @property {VideoIngressChannel.IRemoteShare|null} [remoteShare] VideoIngressChannel remoteShare
+     * @property {IKey|null} [key] VideoIngressChannel key
+     * @property {Uint8Array|null} [token] VideoIngressChannel token
+     * @property {IDirectoryListingSnippet|null} [directoryListingSnippet] VideoIngressChannel directoryListingSnippet
+     */
+
+    /**
+     * Constructs a new VideoIngressChannel.
+     * @exports VideoIngressChannel
+     * @classdesc Represents a VideoIngressChannel.
+     * @implements IVideoIngressChannel
+     * @constructor
+     * @param {IVideoIngressChannel=} [properties] Properties to set
+     */
+    function VideoIngressChannel(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressChannel id.
+     * @member {number} id
+     * @memberof VideoIngressChannel
+     * @instance
+     */
+    VideoIngressChannel.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * VideoIngressChannel local.
+     * @member {VideoIngressChannel.ILocal|null|undefined} local
+     * @memberof VideoIngressChannel
+     * @instance
+     */
+    VideoIngressChannel.prototype.local = null;
+
+    /**
+     * VideoIngressChannel localShare.
+     * @member {VideoIngressChannel.ILocalShare|null|undefined} localShare
+     * @memberof VideoIngressChannel
+     * @instance
+     */
+    VideoIngressChannel.prototype.localShare = null;
+
+    /**
+     * VideoIngressChannel remoteShare.
+     * @member {VideoIngressChannel.IRemoteShare|null|undefined} remoteShare
+     * @memberof VideoIngressChannel
+     * @instance
+     */
+    VideoIngressChannel.prototype.remoteShare = null;
+
+    /**
+     * VideoIngressChannel key.
+     * @member {IKey|null|undefined} key
+     * @memberof VideoIngressChannel
+     * @instance
+     */
+    VideoIngressChannel.prototype.key = null;
+
+    /**
+     * VideoIngressChannel token.
+     * @member {Uint8Array} token
+     * @memberof VideoIngressChannel
+     * @instance
+     */
+    VideoIngressChannel.prototype.token = $util.newBuffer([]);
+
+    /**
+     * VideoIngressChannel directoryListingSnippet.
+     * @member {IDirectoryListingSnippet|null|undefined} directoryListingSnippet
+     * @memberof VideoIngressChannel
+     * @instance
+     */
+    VideoIngressChannel.prototype.directoryListingSnippet = null;
+
+    // OneOf field names bound to virtual getters and setters
+    let $oneOfFields;
+
+    /**
+     * VideoIngressChannel owner.
+     * @member {"local"|"localShare"|"remoteShare"|undefined} owner
+     * @memberof VideoIngressChannel
+     * @instance
+     */
+    Object.defineProperty(VideoIngressChannel.prototype, "owner", {
+        get: $util.oneOfGetter($oneOfFields = ["local", "localShare", "remoteShare"]),
+        set: $util.oneOfSetter($oneOfFields)
+    });
+
+    /**
+     * Creates a new VideoIngressChannel instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressChannel
+     * @static
+     * @param {IVideoIngressChannel=} [properties] Properties to set
+     * @returns {VideoIngressChannel} VideoIngressChannel instance
+     */
+    VideoIngressChannel.create = function create(properties) {
+        return new VideoIngressChannel(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressChannel message. Does not implicitly {@link VideoIngressChannel.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressChannel
+     * @static
+     * @param {IVideoIngressChannel} message VideoIngressChannel message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressChannel.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        if (message.key != null && Object.hasOwnProperty.call(message, "key"))
+            $root.Key.encode(message.key, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        if (message.token != null && Object.hasOwnProperty.call(message, "token"))
+            writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.token);
+        if (message.directoryListingSnippet != null && Object.hasOwnProperty.call(message, "directoryListingSnippet"))
+            $root.DirectoryListingSnippet.encode(message.directoryListingSnippet, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+        if (message.local != null && Object.hasOwnProperty.call(message, "local"))
+            $root.VideoIngressChannel.Local.encode(message.local, writer.uint32(/* id 1001, wireType 2 =*/8010).fork()).ldelim();
+        if (message.localShare != null && Object.hasOwnProperty.call(message, "localShare"))
+            $root.VideoIngressChannel.LocalShare.encode(message.localShare, writer.uint32(/* id 1002, wireType 2 =*/8018).fork()).ldelim();
+        if (message.remoteShare != null && Object.hasOwnProperty.call(message, "remoteShare"))
+            $root.VideoIngressChannel.RemoteShare.encode(message.remoteShare, writer.uint32(/* id 1003, wireType 2 =*/8026).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressChannel message, length delimited. Does not implicitly {@link VideoIngressChannel.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressChannel
+     * @static
+     * @param {IVideoIngressChannel} message VideoIngressChannel message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressChannel.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressChannel message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressChannel
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressChannel} VideoIngressChannel
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressChannel.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressChannel();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
+            case 1001:
+                message.local = $root.VideoIngressChannel.Local.decode(reader, reader.uint32());
+                break;
+            case 1002:
+                message.localShare = $root.VideoIngressChannel.LocalShare.decode(reader, reader.uint32());
+                break;
+            case 1003:
+                message.remoteShare = $root.VideoIngressChannel.RemoteShare.decode(reader, reader.uint32());
+                break;
+            case 2:
+                message.key = $root.Key.decode(reader, reader.uint32());
+                break;
+            case 3:
+                message.token = reader.bytes();
+                break;
+            case 4:
+                message.directoryListingSnippet = $root.DirectoryListingSnippet.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressChannel message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressChannel
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressChannel} VideoIngressChannel
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressChannel.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressChannel message.
+     * @function verify
+     * @memberof VideoIngressChannel
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressChannel.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        let properties = {};
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        if (message.local != null && message.hasOwnProperty("local")) {
+            properties.owner = 1;
+            {
+                let error = $root.VideoIngressChannel.Local.verify(message.local);
+                if (error)
+                    return "local." + error;
+            }
+        }
+        if (message.localShare != null && message.hasOwnProperty("localShare")) {
+            if (properties.owner === 1)
+                return "owner: multiple values";
+            properties.owner = 1;
+            {
+                let error = $root.VideoIngressChannel.LocalShare.verify(message.localShare);
+                if (error)
+                    return "localShare." + error;
+            }
+        }
+        if (message.remoteShare != null && message.hasOwnProperty("remoteShare")) {
+            if (properties.owner === 1)
+                return "owner: multiple values";
+            properties.owner = 1;
+            {
+                let error = $root.VideoIngressChannel.RemoteShare.verify(message.remoteShare);
+                if (error)
+                    return "remoteShare." + error;
+            }
+        }
+        if (message.key != null && message.hasOwnProperty("key")) {
+            let error = $root.Key.verify(message.key);
+            if (error)
+                return "key." + error;
+        }
+        if (message.token != null && message.hasOwnProperty("token"))
+            if (!(message.token && typeof message.token.length === "number" || $util.isString(message.token)))
+                return "token: buffer expected";
+        if (message.directoryListingSnippet != null && message.hasOwnProperty("directoryListingSnippet")) {
+            let error = $root.DirectoryListingSnippet.verify(message.directoryListingSnippet);
+            if (error)
+                return "directoryListingSnippet." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressChannel message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressChannel
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressChannel} VideoIngressChannel
+     */
+    VideoIngressChannel.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressChannel)
+            return object;
+        let message = new $root.VideoIngressChannel();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        if (object.local != null) {
+            if (typeof object.local !== "object")
+                throw TypeError(".VideoIngressChannel.local: object expected");
+            message.local = $root.VideoIngressChannel.Local.fromObject(object.local);
+        }
+        if (object.localShare != null) {
+            if (typeof object.localShare !== "object")
+                throw TypeError(".VideoIngressChannel.localShare: object expected");
+            message.localShare = $root.VideoIngressChannel.LocalShare.fromObject(object.localShare);
+        }
+        if (object.remoteShare != null) {
+            if (typeof object.remoteShare !== "object")
+                throw TypeError(".VideoIngressChannel.remoteShare: object expected");
+            message.remoteShare = $root.VideoIngressChannel.RemoteShare.fromObject(object.remoteShare);
+        }
+        if (object.key != null) {
+            if (typeof object.key !== "object")
+                throw TypeError(".VideoIngressChannel.key: object expected");
+            message.key = $root.Key.fromObject(object.key);
+        }
+        if (object.token != null)
+            if (typeof object.token === "string")
+                $util.base64.decode(object.token, message.token = $util.newBuffer($util.base64.length(object.token)), 0);
+            else if (object.token.length)
+                message.token = object.token;
+        if (object.directoryListingSnippet != null) {
+            if (typeof object.directoryListingSnippet !== "object")
+                throw TypeError(".VideoIngressChannel.directoryListingSnippet: object expected");
+            message.directoryListingSnippet = $root.DirectoryListingSnippet.fromObject(object.directoryListingSnippet);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressChannel message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressChannel
+     * @static
+     * @param {VideoIngressChannel} message VideoIngressChannel
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressChannel.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+            object.key = null;
+            if (options.bytes === String)
+                object.token = "";
+            else {
+                object.token = [];
+                if (options.bytes !== Array)
+                    object.token = $util.newBuffer(object.token);
+            }
+            object.directoryListingSnippet = null;
+        }
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        if (message.key != null && message.hasOwnProperty("key"))
+            object.key = $root.Key.toObject(message.key, options);
+        if (message.token != null && message.hasOwnProperty("token"))
+            object.token = options.bytes === String ? $util.base64.encode(message.token, 0, message.token.length) : options.bytes === Array ? Array.prototype.slice.call(message.token) : message.token;
+        if (message.directoryListingSnippet != null && message.hasOwnProperty("directoryListingSnippet"))
+            object.directoryListingSnippet = $root.DirectoryListingSnippet.toObject(message.directoryListingSnippet, options);
+        if (message.local != null && message.hasOwnProperty("local")) {
+            object.local = $root.VideoIngressChannel.Local.toObject(message.local, options);
+            if (options.oneofs)
+                object.owner = "local";
+        }
+        if (message.localShare != null && message.hasOwnProperty("localShare")) {
+            object.localShare = $root.VideoIngressChannel.LocalShare.toObject(message.localShare, options);
+            if (options.oneofs)
+                object.owner = "localShare";
+        }
+        if (message.remoteShare != null && message.hasOwnProperty("remoteShare")) {
+            object.remoteShare = $root.VideoIngressChannel.RemoteShare.toObject(message.remoteShare, options);
+            if (options.oneofs)
+                object.owner = "remoteShare";
+        }
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressChannel to JSON.
+     * @function toJSON
+     * @memberof VideoIngressChannel
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressChannel.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    VideoIngressChannel.Local = (function() {
+
+        /**
+         * Properties of a Local.
+         * @memberof VideoIngressChannel
+         * @interface ILocal
+         * @property {Uint8Array|null} [authKey] Local authKey
+         * @property {Uint8Array|null} [networkKey] Local networkKey
+         */
+
+        /**
+         * Constructs a new Local.
+         * @memberof VideoIngressChannel
+         * @classdesc Represents a Local.
+         * @implements ILocal
+         * @constructor
+         * @param {VideoIngressChannel.ILocal=} [properties] Properties to set
+         */
+        function Local(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Local authKey.
+         * @member {Uint8Array} authKey
+         * @memberof VideoIngressChannel.Local
+         * @instance
+         */
+        Local.prototype.authKey = $util.newBuffer([]);
+
+        /**
+         * Local networkKey.
+         * @member {Uint8Array} networkKey
+         * @memberof VideoIngressChannel.Local
+         * @instance
+         */
+        Local.prototype.networkKey = $util.newBuffer([]);
+
+        /**
+         * Creates a new Local instance using the specified properties.
+         * @function create
+         * @memberof VideoIngressChannel.Local
+         * @static
+         * @param {VideoIngressChannel.ILocal=} [properties] Properties to set
+         * @returns {VideoIngressChannel.Local} Local instance
+         */
+        Local.create = function create(properties) {
+            return new Local(properties);
+        };
+
+        /**
+         * Encodes the specified Local message. Does not implicitly {@link VideoIngressChannel.Local.verify|verify} messages.
+         * @function encode
+         * @memberof VideoIngressChannel.Local
+         * @static
+         * @param {VideoIngressChannel.ILocal} message Local message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Local.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.authKey != null && Object.hasOwnProperty.call(message, "authKey"))
+                writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.authKey);
+            if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
+                writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.networkKey);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Local message, length delimited. Does not implicitly {@link VideoIngressChannel.Local.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof VideoIngressChannel.Local
+         * @static
+         * @param {VideoIngressChannel.ILocal} message Local message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Local.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Local message from the specified reader or buffer.
+         * @function decode
+         * @memberof VideoIngressChannel.Local
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {VideoIngressChannel.Local} Local
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Local.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressChannel.Local();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.authKey = reader.bytes();
+                    break;
+                case 2:
+                    message.networkKey = reader.bytes();
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Local message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof VideoIngressChannel.Local
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {VideoIngressChannel.Local} Local
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Local.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Local message.
+         * @function verify
+         * @memberof VideoIngressChannel.Local
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Local.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.authKey != null && message.hasOwnProperty("authKey"))
+                if (!(message.authKey && typeof message.authKey.length === "number" || $util.isString(message.authKey)))
+                    return "authKey: buffer expected";
+            if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+                if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
+                    return "networkKey: buffer expected";
+            return null;
+        };
+
+        /**
+         * Creates a Local message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof VideoIngressChannel.Local
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {VideoIngressChannel.Local} Local
+         */
+        Local.fromObject = function fromObject(object) {
+            if (object instanceof $root.VideoIngressChannel.Local)
+                return object;
+            let message = new $root.VideoIngressChannel.Local();
+            if (object.authKey != null)
+                if (typeof object.authKey === "string")
+                    $util.base64.decode(object.authKey, message.authKey = $util.newBuffer($util.base64.length(object.authKey)), 0);
+                else if (object.authKey.length)
+                    message.authKey = object.authKey;
+            if (object.networkKey != null)
+                if (typeof object.networkKey === "string")
+                    $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
+                else if (object.networkKey.length)
+                    message.networkKey = object.networkKey;
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a Local message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof VideoIngressChannel.Local
+         * @static
+         * @param {VideoIngressChannel.Local} message Local
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Local.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if (options.bytes === String)
+                    object.authKey = "";
+                else {
+                    object.authKey = [];
+                    if (options.bytes !== Array)
+                        object.authKey = $util.newBuffer(object.authKey);
+                }
+                if (options.bytes === String)
+                    object.networkKey = "";
+                else {
+                    object.networkKey = [];
+                    if (options.bytes !== Array)
+                        object.networkKey = $util.newBuffer(object.networkKey);
+                }
+            }
+            if (message.authKey != null && message.hasOwnProperty("authKey"))
+                object.authKey = options.bytes === String ? $util.base64.encode(message.authKey, 0, message.authKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.authKey) : message.authKey;
+            if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+                object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
+            return object;
+        };
+
+        /**
+         * Converts this Local to JSON.
+         * @function toJSON
+         * @memberof VideoIngressChannel.Local
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Local.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Local;
+    })();
+
+    VideoIngressChannel.LocalShare = (function() {
+
+        /**
+         * Properties of a LocalShare.
+         * @memberof VideoIngressChannel
+         * @interface ILocalShare
+         * @property {ICertificate|null} [certificate] LocalShare certificate
+         */
+
+        /**
+         * Constructs a new LocalShare.
+         * @memberof VideoIngressChannel
+         * @classdesc Represents a LocalShare.
+         * @implements ILocalShare
+         * @constructor
+         * @param {VideoIngressChannel.ILocalShare=} [properties] Properties to set
+         */
+        function LocalShare(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * LocalShare certificate.
+         * @member {ICertificate|null|undefined} certificate
+         * @memberof VideoIngressChannel.LocalShare
+         * @instance
+         */
+        LocalShare.prototype.certificate = null;
+
+        /**
+         * Creates a new LocalShare instance using the specified properties.
+         * @function create
+         * @memberof VideoIngressChannel.LocalShare
+         * @static
+         * @param {VideoIngressChannel.ILocalShare=} [properties] Properties to set
+         * @returns {VideoIngressChannel.LocalShare} LocalShare instance
+         */
+        LocalShare.create = function create(properties) {
+            return new LocalShare(properties);
+        };
+
+        /**
+         * Encodes the specified LocalShare message. Does not implicitly {@link VideoIngressChannel.LocalShare.verify|verify} messages.
+         * @function encode
+         * @memberof VideoIngressChannel.LocalShare
+         * @static
+         * @param {VideoIngressChannel.ILocalShare} message LocalShare message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        LocalShare.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.certificate != null && Object.hasOwnProperty.call(message, "certificate"))
+                $root.Certificate.encode(message.certificate, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            return writer;
+        };
+
+        /**
+         * Encodes the specified LocalShare message, length delimited. Does not implicitly {@link VideoIngressChannel.LocalShare.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof VideoIngressChannel.LocalShare
+         * @static
+         * @param {VideoIngressChannel.ILocalShare} message LocalShare message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        LocalShare.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a LocalShare message from the specified reader or buffer.
+         * @function decode
+         * @memberof VideoIngressChannel.LocalShare
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {VideoIngressChannel.LocalShare} LocalShare
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        LocalShare.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressChannel.LocalShare();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.certificate = $root.Certificate.decode(reader, reader.uint32());
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a LocalShare message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof VideoIngressChannel.LocalShare
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {VideoIngressChannel.LocalShare} LocalShare
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        LocalShare.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a LocalShare message.
+         * @function verify
+         * @memberof VideoIngressChannel.LocalShare
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        LocalShare.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.certificate != null && message.hasOwnProperty("certificate")) {
+                let error = $root.Certificate.verify(message.certificate);
+                if (error)
+                    return "certificate." + error;
+            }
+            return null;
+        };
+
+        /**
+         * Creates a LocalShare message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof VideoIngressChannel.LocalShare
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {VideoIngressChannel.LocalShare} LocalShare
+         */
+        LocalShare.fromObject = function fromObject(object) {
+            if (object instanceof $root.VideoIngressChannel.LocalShare)
+                return object;
+            let message = new $root.VideoIngressChannel.LocalShare();
+            if (object.certificate != null) {
+                if (typeof object.certificate !== "object")
+                    throw TypeError(".VideoIngressChannel.LocalShare.certificate: object expected");
+                message.certificate = $root.Certificate.fromObject(object.certificate);
+            }
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a LocalShare message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof VideoIngressChannel.LocalShare
+         * @static
+         * @param {VideoIngressChannel.LocalShare} message LocalShare
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        LocalShare.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                object.certificate = null;
+            if (message.certificate != null && message.hasOwnProperty("certificate"))
+                object.certificate = $root.Certificate.toObject(message.certificate, options);
+            return object;
+        };
+
+        /**
+         * Converts this LocalShare to JSON.
+         * @function toJSON
+         * @memberof VideoIngressChannel.LocalShare
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        LocalShare.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return LocalShare;
+    })();
+
+    VideoIngressChannel.RemoteShare = (function() {
+
+        /**
+         * Properties of a RemoteShare.
+         * @memberof VideoIngressChannel
+         * @interface IRemoteShare
+         * @property {number|null} [id] RemoteShare id
+         * @property {Uint8Array|null} [networkKey] RemoteShare networkKey
+         * @property {Uint8Array|null} [serviceKey] RemoteShare serviceKey
+         * @property {Uint8Array|null} [serviceSalt] RemoteShare serviceSalt
+         * @property {string|null} [serverAddr] RemoteShare serverAddr
+         */
+
+        /**
+         * Constructs a new RemoteShare.
+         * @memberof VideoIngressChannel
+         * @classdesc Represents a RemoteShare.
+         * @implements IRemoteShare
+         * @constructor
+         * @param {VideoIngressChannel.IRemoteShare=} [properties] Properties to set
+         */
+        function RemoteShare(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * RemoteShare id.
+         * @member {number} id
+         * @memberof VideoIngressChannel.RemoteShare
+         * @instance
+         */
+        RemoteShare.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+        /**
+         * RemoteShare networkKey.
+         * @member {Uint8Array} networkKey
+         * @memberof VideoIngressChannel.RemoteShare
+         * @instance
+         */
+        RemoteShare.prototype.networkKey = $util.newBuffer([]);
+
+        /**
+         * RemoteShare serviceKey.
+         * @member {Uint8Array} serviceKey
+         * @memberof VideoIngressChannel.RemoteShare
+         * @instance
+         */
+        RemoteShare.prototype.serviceKey = $util.newBuffer([]);
+
+        /**
+         * RemoteShare serviceSalt.
+         * @member {Uint8Array} serviceSalt
+         * @memberof VideoIngressChannel.RemoteShare
+         * @instance
+         */
+        RemoteShare.prototype.serviceSalt = $util.newBuffer([]);
+
+        /**
+         * RemoteShare serverAddr.
+         * @member {string} serverAddr
+         * @memberof VideoIngressChannel.RemoteShare
+         * @instance
+         */
+        RemoteShare.prototype.serverAddr = "";
+
+        /**
+         * Creates a new RemoteShare instance using the specified properties.
+         * @function create
+         * @memberof VideoIngressChannel.RemoteShare
+         * @static
+         * @param {VideoIngressChannel.IRemoteShare=} [properties] Properties to set
+         * @returns {VideoIngressChannel.RemoteShare} RemoteShare instance
+         */
+        RemoteShare.create = function create(properties) {
+            return new RemoteShare(properties);
+        };
+
+        /**
+         * Encodes the specified RemoteShare message. Does not implicitly {@link VideoIngressChannel.RemoteShare.verify|verify} messages.
+         * @function encode
+         * @memberof VideoIngressChannel.RemoteShare
+         * @static
+         * @param {VideoIngressChannel.IRemoteShare} message RemoteShare message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        RemoteShare.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+                writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+            if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
+                writer.uint32(/* id 2, wireType 2 =*/18).bytes(message.networkKey);
+            if (message.serviceKey != null && Object.hasOwnProperty.call(message, "serviceKey"))
+                writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.serviceKey);
+            if (message.serviceSalt != null && Object.hasOwnProperty.call(message, "serviceSalt"))
+                writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.serviceSalt);
+            if (message.serverAddr != null && Object.hasOwnProperty.call(message, "serverAddr"))
+                writer.uint32(/* id 5, wireType 2 =*/42).string(message.serverAddr);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified RemoteShare message, length delimited. Does not implicitly {@link VideoIngressChannel.RemoteShare.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof VideoIngressChannel.RemoteShare
+         * @static
+         * @param {VideoIngressChannel.IRemoteShare} message RemoteShare message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        RemoteShare.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a RemoteShare message from the specified reader or buffer.
+         * @function decode
+         * @memberof VideoIngressChannel.RemoteShare
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {VideoIngressChannel.RemoteShare} RemoteShare
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        RemoteShare.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressChannel.RemoteShare();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.id = reader.uint64();
+                    break;
+                case 2:
+                    message.networkKey = reader.bytes();
+                    break;
+                case 3:
+                    message.serviceKey = reader.bytes();
+                    break;
+                case 4:
+                    message.serviceSalt = reader.bytes();
+                    break;
+                case 5:
+                    message.serverAddr = reader.string();
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a RemoteShare message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof VideoIngressChannel.RemoteShare
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {VideoIngressChannel.RemoteShare} RemoteShare
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        RemoteShare.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a RemoteShare message.
+         * @function verify
+         * @memberof VideoIngressChannel.RemoteShare
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        RemoteShare.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.id != null && message.hasOwnProperty("id"))
+                if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                    return "id: integer|Long expected";
+            if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+                if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
+                    return "networkKey: buffer expected";
+            if (message.serviceKey != null && message.hasOwnProperty("serviceKey"))
+                if (!(message.serviceKey && typeof message.serviceKey.length === "number" || $util.isString(message.serviceKey)))
+                    return "serviceKey: buffer expected";
+            if (message.serviceSalt != null && message.hasOwnProperty("serviceSalt"))
+                if (!(message.serviceSalt && typeof message.serviceSalt.length === "number" || $util.isString(message.serviceSalt)))
+                    return "serviceSalt: buffer expected";
+            if (message.serverAddr != null && message.hasOwnProperty("serverAddr"))
+                if (!$util.isString(message.serverAddr))
+                    return "serverAddr: string expected";
+            return null;
+        };
+
+        /**
+         * Creates a RemoteShare message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof VideoIngressChannel.RemoteShare
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {VideoIngressChannel.RemoteShare} RemoteShare
+         */
+        RemoteShare.fromObject = function fromObject(object) {
+            if (object instanceof $root.VideoIngressChannel.RemoteShare)
+                return object;
+            let message = new $root.VideoIngressChannel.RemoteShare();
+            if (object.id != null)
+                if ($util.Long)
+                    (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+                else if (typeof object.id === "string")
+                    message.id = parseInt(object.id, 10);
+                else if (typeof object.id === "number")
+                    message.id = object.id;
+                else if (typeof object.id === "object")
+                    message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+            if (object.networkKey != null)
+                if (typeof object.networkKey === "string")
+                    $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
+                else if (object.networkKey.length)
+                    message.networkKey = object.networkKey;
+            if (object.serviceKey != null)
+                if (typeof object.serviceKey === "string")
+                    $util.base64.decode(object.serviceKey, message.serviceKey = $util.newBuffer($util.base64.length(object.serviceKey)), 0);
+                else if (object.serviceKey.length)
+                    message.serviceKey = object.serviceKey;
+            if (object.serviceSalt != null)
+                if (typeof object.serviceSalt === "string")
+                    $util.base64.decode(object.serviceSalt, message.serviceSalt = $util.newBuffer($util.base64.length(object.serviceSalt)), 0);
+                else if (object.serviceSalt.length)
+                    message.serviceSalt = object.serviceSalt;
+            if (object.serverAddr != null)
+                message.serverAddr = String(object.serverAddr);
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a RemoteShare message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof VideoIngressChannel.RemoteShare
+         * @static
+         * @param {VideoIngressChannel.RemoteShare} message RemoteShare
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        RemoteShare.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults) {
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, true);
+                    object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.id = options.longs === String ? "0" : 0;
+                if (options.bytes === String)
+                    object.networkKey = "";
+                else {
+                    object.networkKey = [];
+                    if (options.bytes !== Array)
+                        object.networkKey = $util.newBuffer(object.networkKey);
+                }
+                if (options.bytes === String)
+                    object.serviceKey = "";
+                else {
+                    object.serviceKey = [];
+                    if (options.bytes !== Array)
+                        object.serviceKey = $util.newBuffer(object.serviceKey);
+                }
+                if (options.bytes === String)
+                    object.serviceSalt = "";
+                else {
+                    object.serviceSalt = [];
+                    if (options.bytes !== Array)
+                        object.serviceSalt = $util.newBuffer(object.serviceSalt);
+                }
+                object.serverAddr = "";
+            }
+            if (message.id != null && message.hasOwnProperty("id"))
+                if (typeof message.id === "number")
+                    object.id = options.longs === String ? String(message.id) : message.id;
+                else
+                    object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+            if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+                object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
+            if (message.serviceKey != null && message.hasOwnProperty("serviceKey"))
+                object.serviceKey = options.bytes === String ? $util.base64.encode(message.serviceKey, 0, message.serviceKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.serviceKey) : message.serviceKey;
+            if (message.serviceSalt != null && message.hasOwnProperty("serviceSalt"))
+                object.serviceSalt = options.bytes === String ? $util.base64.encode(message.serviceSalt, 0, message.serviceSalt.length) : options.bytes === Array ? Array.prototype.slice.call(message.serviceSalt) : message.serviceSalt;
+            if (message.serverAddr != null && message.hasOwnProperty("serverAddr"))
+                object.serverAddr = message.serverAddr;
+            return object;
+        };
+
+        /**
+         * Converts this RemoteShare to JSON.
+         * @function toJSON
+         * @memberof VideoIngressChannel.RemoteShare
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        RemoteShare.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return RemoteShare;
+    })();
+
+    return VideoIngressChannel;
+})();
+
+export const VideoIngressStream = $root.VideoIngressStream = (() => {
+
+    /**
+     * Properties of a VideoIngressStream.
+     * @exports IVideoIngressStream
+     * @interface IVideoIngressStream
+     * @property {number|null} [id] VideoIngressStream id
+     * @property {number|null} [channelId] VideoIngressStream channelId
+     * @property {number|null} [createdAt] VideoIngressStream createdAt
+     * @property {number|null} [updatedAt] VideoIngressStream updatedAt
+     */
+
+    /**
+     * Constructs a new VideoIngressStream.
+     * @exports VideoIngressStream
+     * @classdesc Represents a VideoIngressStream.
+     * @implements IVideoIngressStream
+     * @constructor
+     * @param {IVideoIngressStream=} [properties] Properties to set
+     */
+    function VideoIngressStream(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressStream id.
+     * @member {number} id
+     * @memberof VideoIngressStream
+     * @instance
+     */
+    VideoIngressStream.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * VideoIngressStream channelId.
+     * @member {number} channelId
+     * @memberof VideoIngressStream
+     * @instance
+     */
+    VideoIngressStream.prototype.channelId = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * VideoIngressStream createdAt.
+     * @member {number} createdAt
+     * @memberof VideoIngressStream
+     * @instance
+     */
+    VideoIngressStream.prototype.createdAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+    /**
+     * VideoIngressStream updatedAt.
+     * @member {number} updatedAt
+     * @memberof VideoIngressStream
+     * @instance
+     */
+    VideoIngressStream.prototype.updatedAt = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+    /**
+     * Creates a new VideoIngressStream instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressStream
+     * @static
+     * @param {IVideoIngressStream=} [properties] Properties to set
+     * @returns {VideoIngressStream} VideoIngressStream instance
+     */
+    VideoIngressStream.create = function create(properties) {
+        return new VideoIngressStream(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressStream message. Does not implicitly {@link VideoIngressStream.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressStream
+     * @static
+     * @param {IVideoIngressStream} message VideoIngressStream message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressStream.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        if (message.channelId != null && Object.hasOwnProperty.call(message, "channelId"))
+            writer.uint32(/* id 2, wireType 0 =*/16).uint64(message.channelId);
+        if (message.createdAt != null && Object.hasOwnProperty.call(message, "createdAt"))
+            writer.uint32(/* id 3, wireType 0 =*/24).int64(message.createdAt);
+        if (message.updatedAt != null && Object.hasOwnProperty.call(message, "updatedAt"))
+            writer.uint32(/* id 4, wireType 0 =*/32).int64(message.updatedAt);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressStream message, length delimited. Does not implicitly {@link VideoIngressStream.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressStream
+     * @static
+     * @param {IVideoIngressStream} message VideoIngressStream message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressStream.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressStream message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressStream
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressStream} VideoIngressStream
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressStream.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressStream();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
+            case 2:
+                message.channelId = reader.uint64();
+                break;
+            case 3:
+                message.createdAt = reader.int64();
+                break;
+            case 4:
+                message.updatedAt = reader.int64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressStream message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressStream
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressStream} VideoIngressStream
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressStream.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressStream message.
+     * @function verify
+     * @memberof VideoIngressStream
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressStream.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        if (message.channelId != null && message.hasOwnProperty("channelId"))
+            if (!$util.isInteger(message.channelId) && !(message.channelId && $util.isInteger(message.channelId.low) && $util.isInteger(message.channelId.high)))
+                return "channelId: integer|Long expected";
+        if (message.createdAt != null && message.hasOwnProperty("createdAt"))
+            if (!$util.isInteger(message.createdAt) && !(message.createdAt && $util.isInteger(message.createdAt.low) && $util.isInteger(message.createdAt.high)))
+                return "createdAt: integer|Long expected";
+        if (message.updatedAt != null && message.hasOwnProperty("updatedAt"))
+            if (!$util.isInteger(message.updatedAt) && !(message.updatedAt && $util.isInteger(message.updatedAt.low) && $util.isInteger(message.updatedAt.high)))
+                return "updatedAt: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressStream message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressStream
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressStream} VideoIngressStream
+     */
+    VideoIngressStream.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressStream)
+            return object;
+        let message = new $root.VideoIngressStream();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        if (object.channelId != null)
+            if ($util.Long)
+                (message.channelId = $util.Long.fromValue(object.channelId)).unsigned = true;
+            else if (typeof object.channelId === "string")
+                message.channelId = parseInt(object.channelId, 10);
+            else if (typeof object.channelId === "number")
+                message.channelId = object.channelId;
+            else if (typeof object.channelId === "object")
+                message.channelId = new $util.LongBits(object.channelId.low >>> 0, object.channelId.high >>> 0).toNumber(true);
+        if (object.createdAt != null)
+            if ($util.Long)
+                (message.createdAt = $util.Long.fromValue(object.createdAt)).unsigned = false;
+            else if (typeof object.createdAt === "string")
+                message.createdAt = parseInt(object.createdAt, 10);
+            else if (typeof object.createdAt === "number")
+                message.createdAt = object.createdAt;
+            else if (typeof object.createdAt === "object")
+                message.createdAt = new $util.LongBits(object.createdAt.low >>> 0, object.createdAt.high >>> 0).toNumber();
+        if (object.updatedAt != null)
+            if ($util.Long)
+                (message.updatedAt = $util.Long.fromValue(object.updatedAt)).unsigned = false;
+            else if (typeof object.updatedAt === "string")
+                message.updatedAt = parseInt(object.updatedAt, 10);
+            else if (typeof object.updatedAt === "number")
+                message.updatedAt = object.updatedAt;
+            else if (typeof object.updatedAt === "object")
+                message.updatedAt = new $util.LongBits(object.updatedAt.low >>> 0, object.updatedAt.high >>> 0).toNumber();
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressStream message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressStream
+     * @static
+     * @param {VideoIngressStream} message VideoIngressStream
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressStream.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.channelId = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.channelId = options.longs === String ? "0" : 0;
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, false);
+                object.createdAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.createdAt = options.longs === String ? "0" : 0;
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, false);
+                object.updatedAt = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.updatedAt = options.longs === String ? "0" : 0;
+        }
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        if (message.channelId != null && message.hasOwnProperty("channelId"))
+            if (typeof message.channelId === "number")
+                object.channelId = options.longs === String ? String(message.channelId) : message.channelId;
+            else
+                object.channelId = options.longs === String ? $util.Long.prototype.toString.call(message.channelId) : options.longs === Number ? new $util.LongBits(message.channelId.low >>> 0, message.channelId.high >>> 0).toNumber(true) : message.channelId;
+        if (message.createdAt != null && message.hasOwnProperty("createdAt"))
+            if (typeof message.createdAt === "number")
+                object.createdAt = options.longs === String ? String(message.createdAt) : message.createdAt;
+            else
+                object.createdAt = options.longs === String ? $util.Long.prototype.toString.call(message.createdAt) : options.longs === Number ? new $util.LongBits(message.createdAt.low >>> 0, message.createdAt.high >>> 0).toNumber() : message.createdAt;
+        if (message.updatedAt != null && message.hasOwnProperty("updatedAt"))
+            if (typeof message.updatedAt === "number")
+                object.updatedAt = options.longs === String ? String(message.updatedAt) : message.updatedAt;
+            else
+                object.updatedAt = options.longs === String ? $util.Long.prototype.toString.call(message.updatedAt) : options.longs === Number ? new $util.LongBits(message.updatedAt.low >>> 0, message.updatedAt.high >>> 0).toNumber() : message.updatedAt;
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressStream to JSON.
+     * @function toJSON
+     * @memberof VideoIngressStream
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressStream.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressStream;
+})();
+
+export const VideoIngressIsSupportedRequest = $root.VideoIngressIsSupportedRequest = (() => {
+
+    /**
+     * Properties of a VideoIngressIsSupportedRequest.
+     * @exports IVideoIngressIsSupportedRequest
+     * @interface IVideoIngressIsSupportedRequest
+     */
+
+    /**
+     * Constructs a new VideoIngressIsSupportedRequest.
+     * @exports VideoIngressIsSupportedRequest
+     * @classdesc Represents a VideoIngressIsSupportedRequest.
+     * @implements IVideoIngressIsSupportedRequest
+     * @constructor
+     * @param {IVideoIngressIsSupportedRequest=} [properties] Properties to set
+     */
+    function VideoIngressIsSupportedRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new VideoIngressIsSupportedRequest instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressIsSupportedRequest
+     * @static
+     * @param {IVideoIngressIsSupportedRequest=} [properties] Properties to set
+     * @returns {VideoIngressIsSupportedRequest} VideoIngressIsSupportedRequest instance
+     */
+    VideoIngressIsSupportedRequest.create = function create(properties) {
+        return new VideoIngressIsSupportedRequest(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressIsSupportedRequest message. Does not implicitly {@link VideoIngressIsSupportedRequest.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressIsSupportedRequest
+     * @static
+     * @param {IVideoIngressIsSupportedRequest} message VideoIngressIsSupportedRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressIsSupportedRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressIsSupportedRequest message, length delimited. Does not implicitly {@link VideoIngressIsSupportedRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressIsSupportedRequest
+     * @static
+     * @param {IVideoIngressIsSupportedRequest} message VideoIngressIsSupportedRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressIsSupportedRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressIsSupportedRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressIsSupportedRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressIsSupportedRequest} VideoIngressIsSupportedRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressIsSupportedRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressIsSupportedRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressIsSupportedRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressIsSupportedRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressIsSupportedRequest} VideoIngressIsSupportedRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressIsSupportedRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressIsSupportedRequest message.
+     * @function verify
+     * @memberof VideoIngressIsSupportedRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressIsSupportedRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressIsSupportedRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressIsSupportedRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressIsSupportedRequest} VideoIngressIsSupportedRequest
+     */
+    VideoIngressIsSupportedRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressIsSupportedRequest)
+            return object;
+        return new $root.VideoIngressIsSupportedRequest();
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressIsSupportedRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressIsSupportedRequest
+     * @static
+     * @param {VideoIngressIsSupportedRequest} message VideoIngressIsSupportedRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressIsSupportedRequest.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this VideoIngressIsSupportedRequest to JSON.
+     * @function toJSON
+     * @memberof VideoIngressIsSupportedRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressIsSupportedRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressIsSupportedRequest;
+})();
+
+export const VideoIngressIsSupportedResponse = $root.VideoIngressIsSupportedResponse = (() => {
+
+    /**
+     * Properties of a VideoIngressIsSupportedResponse.
+     * @exports IVideoIngressIsSupportedResponse
+     * @interface IVideoIngressIsSupportedResponse
+     * @property {boolean|null} [supported] VideoIngressIsSupportedResponse supported
+     */
+
+    /**
+     * Constructs a new VideoIngressIsSupportedResponse.
+     * @exports VideoIngressIsSupportedResponse
+     * @classdesc Represents a VideoIngressIsSupportedResponse.
+     * @implements IVideoIngressIsSupportedResponse
+     * @constructor
+     * @param {IVideoIngressIsSupportedResponse=} [properties] Properties to set
+     */
+    function VideoIngressIsSupportedResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressIsSupportedResponse supported.
+     * @member {boolean} supported
+     * @memberof VideoIngressIsSupportedResponse
+     * @instance
+     */
+    VideoIngressIsSupportedResponse.prototype.supported = false;
+
+    /**
+     * Creates a new VideoIngressIsSupportedResponse instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressIsSupportedResponse
+     * @static
+     * @param {IVideoIngressIsSupportedResponse=} [properties] Properties to set
+     * @returns {VideoIngressIsSupportedResponse} VideoIngressIsSupportedResponse instance
+     */
+    VideoIngressIsSupportedResponse.create = function create(properties) {
+        return new VideoIngressIsSupportedResponse(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressIsSupportedResponse message. Does not implicitly {@link VideoIngressIsSupportedResponse.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressIsSupportedResponse
+     * @static
+     * @param {IVideoIngressIsSupportedResponse} message VideoIngressIsSupportedResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressIsSupportedResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.supported != null && Object.hasOwnProperty.call(message, "supported"))
+            writer.uint32(/* id 1, wireType 0 =*/8).bool(message.supported);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressIsSupportedResponse message, length delimited. Does not implicitly {@link VideoIngressIsSupportedResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressIsSupportedResponse
+     * @static
+     * @param {IVideoIngressIsSupportedResponse} message VideoIngressIsSupportedResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressIsSupportedResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressIsSupportedResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressIsSupportedResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressIsSupportedResponse} VideoIngressIsSupportedResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressIsSupportedResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressIsSupportedResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.supported = reader.bool();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressIsSupportedResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressIsSupportedResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressIsSupportedResponse} VideoIngressIsSupportedResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressIsSupportedResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressIsSupportedResponse message.
+     * @function verify
+     * @memberof VideoIngressIsSupportedResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressIsSupportedResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.supported != null && message.hasOwnProperty("supported"))
+            if (typeof message.supported !== "boolean")
+                return "supported: boolean expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressIsSupportedResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressIsSupportedResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressIsSupportedResponse} VideoIngressIsSupportedResponse
+     */
+    VideoIngressIsSupportedResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressIsSupportedResponse)
+            return object;
+        let message = new $root.VideoIngressIsSupportedResponse();
+        if (object.supported != null)
+            message.supported = Boolean(object.supported);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressIsSupportedResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressIsSupportedResponse
+     * @static
+     * @param {VideoIngressIsSupportedResponse} message VideoIngressIsSupportedResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressIsSupportedResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.supported = false;
+        if (message.supported != null && message.hasOwnProperty("supported"))
+            object.supported = message.supported;
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressIsSupportedResponse to JSON.
+     * @function toJSON
+     * @memberof VideoIngressIsSupportedResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressIsSupportedResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressIsSupportedResponse;
+})();
+
+export const VideoIngressGetConfigRequest = $root.VideoIngressGetConfigRequest = (() => {
+
+    /**
+     * Properties of a VideoIngressGetConfigRequest.
+     * @exports IVideoIngressGetConfigRequest
+     * @interface IVideoIngressGetConfigRequest
+     */
+
+    /**
+     * Constructs a new VideoIngressGetConfigRequest.
+     * @exports VideoIngressGetConfigRequest
+     * @classdesc Represents a VideoIngressGetConfigRequest.
+     * @implements IVideoIngressGetConfigRequest
+     * @constructor
+     * @param {IVideoIngressGetConfigRequest=} [properties] Properties to set
+     */
+    function VideoIngressGetConfigRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new VideoIngressGetConfigRequest instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressGetConfigRequest
+     * @static
+     * @param {IVideoIngressGetConfigRequest=} [properties] Properties to set
+     * @returns {VideoIngressGetConfigRequest} VideoIngressGetConfigRequest instance
+     */
+    VideoIngressGetConfigRequest.create = function create(properties) {
+        return new VideoIngressGetConfigRequest(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressGetConfigRequest message. Does not implicitly {@link VideoIngressGetConfigRequest.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressGetConfigRequest
+     * @static
+     * @param {IVideoIngressGetConfigRequest} message VideoIngressGetConfigRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressGetConfigRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressGetConfigRequest message, length delimited. Does not implicitly {@link VideoIngressGetConfigRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressGetConfigRequest
+     * @static
+     * @param {IVideoIngressGetConfigRequest} message VideoIngressGetConfigRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressGetConfigRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressGetConfigRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressGetConfigRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressGetConfigRequest} VideoIngressGetConfigRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressGetConfigRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressGetConfigRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressGetConfigRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressGetConfigRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressGetConfigRequest} VideoIngressGetConfigRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressGetConfigRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressGetConfigRequest message.
+     * @function verify
+     * @memberof VideoIngressGetConfigRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressGetConfigRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressGetConfigRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressGetConfigRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressGetConfigRequest} VideoIngressGetConfigRequest
+     */
+    VideoIngressGetConfigRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressGetConfigRequest)
+            return object;
+        return new $root.VideoIngressGetConfigRequest();
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressGetConfigRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressGetConfigRequest
+     * @static
+     * @param {VideoIngressGetConfigRequest} message VideoIngressGetConfigRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressGetConfigRequest.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this VideoIngressGetConfigRequest to JSON.
+     * @function toJSON
+     * @memberof VideoIngressGetConfigRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressGetConfigRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressGetConfigRequest;
+})();
+
+export const VideoIngressGetConfigResponse = $root.VideoIngressGetConfigResponse = (() => {
+
+    /**
+     * Properties of a VideoIngressGetConfigResponse.
+     * @exports IVideoIngressGetConfigResponse
+     * @interface IVideoIngressGetConfigResponse
+     * @property {IVideoIngressConfig|null} [config] VideoIngressGetConfigResponse config
+     */
+
+    /**
+     * Constructs a new VideoIngressGetConfigResponse.
+     * @exports VideoIngressGetConfigResponse
+     * @classdesc Represents a VideoIngressGetConfigResponse.
+     * @implements IVideoIngressGetConfigResponse
+     * @constructor
+     * @param {IVideoIngressGetConfigResponse=} [properties] Properties to set
+     */
+    function VideoIngressGetConfigResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressGetConfigResponse config.
+     * @member {IVideoIngressConfig|null|undefined} config
+     * @memberof VideoIngressGetConfigResponse
+     * @instance
+     */
+    VideoIngressGetConfigResponse.prototype.config = null;
+
+    /**
+     * Creates a new VideoIngressGetConfigResponse instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressGetConfigResponse
+     * @static
+     * @param {IVideoIngressGetConfigResponse=} [properties] Properties to set
+     * @returns {VideoIngressGetConfigResponse} VideoIngressGetConfigResponse instance
+     */
+    VideoIngressGetConfigResponse.create = function create(properties) {
+        return new VideoIngressGetConfigResponse(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressGetConfigResponse message. Does not implicitly {@link VideoIngressGetConfigResponse.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressGetConfigResponse
+     * @static
+     * @param {IVideoIngressGetConfigResponse} message VideoIngressGetConfigResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressGetConfigResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.config != null && Object.hasOwnProperty.call(message, "config"))
+            $root.VideoIngressConfig.encode(message.config, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressGetConfigResponse message, length delimited. Does not implicitly {@link VideoIngressGetConfigResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressGetConfigResponse
+     * @static
+     * @param {IVideoIngressGetConfigResponse} message VideoIngressGetConfigResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressGetConfigResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressGetConfigResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressGetConfigResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressGetConfigResponse} VideoIngressGetConfigResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressGetConfigResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressGetConfigResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.config = $root.VideoIngressConfig.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressGetConfigResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressGetConfigResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressGetConfigResponse} VideoIngressGetConfigResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressGetConfigResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressGetConfigResponse message.
+     * @function verify
+     * @memberof VideoIngressGetConfigResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressGetConfigResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.config != null && message.hasOwnProperty("config")) {
+            let error = $root.VideoIngressConfig.verify(message.config);
+            if (error)
+                return "config." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressGetConfigResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressGetConfigResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressGetConfigResponse} VideoIngressGetConfigResponse
+     */
+    VideoIngressGetConfigResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressGetConfigResponse)
+            return object;
+        let message = new $root.VideoIngressGetConfigResponse();
+        if (object.config != null) {
+            if (typeof object.config !== "object")
+                throw TypeError(".VideoIngressGetConfigResponse.config: object expected");
+            message.config = $root.VideoIngressConfig.fromObject(object.config);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressGetConfigResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressGetConfigResponse
+     * @static
+     * @param {VideoIngressGetConfigResponse} message VideoIngressGetConfigResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressGetConfigResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.config = null;
+        if (message.config != null && message.hasOwnProperty("config"))
+            object.config = $root.VideoIngressConfig.toObject(message.config, options);
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressGetConfigResponse to JSON.
+     * @function toJSON
+     * @memberof VideoIngressGetConfigResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressGetConfigResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressGetConfigResponse;
+})();
+
+export const VideoIngressSetConfigRequest = $root.VideoIngressSetConfigRequest = (() => {
+
+    /**
+     * Properties of a VideoIngressSetConfigRequest.
+     * @exports IVideoIngressSetConfigRequest
+     * @interface IVideoIngressSetConfigRequest
+     * @property {IVideoIngressConfig|null} [config] VideoIngressSetConfigRequest config
+     */
+
+    /**
+     * Constructs a new VideoIngressSetConfigRequest.
+     * @exports VideoIngressSetConfigRequest
+     * @classdesc Represents a VideoIngressSetConfigRequest.
+     * @implements IVideoIngressSetConfigRequest
+     * @constructor
+     * @param {IVideoIngressSetConfigRequest=} [properties] Properties to set
+     */
+    function VideoIngressSetConfigRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressSetConfigRequest config.
+     * @member {IVideoIngressConfig|null|undefined} config
+     * @memberof VideoIngressSetConfigRequest
+     * @instance
+     */
+    VideoIngressSetConfigRequest.prototype.config = null;
+
+    /**
+     * Creates a new VideoIngressSetConfigRequest instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressSetConfigRequest
+     * @static
+     * @param {IVideoIngressSetConfigRequest=} [properties] Properties to set
+     * @returns {VideoIngressSetConfigRequest} VideoIngressSetConfigRequest instance
+     */
+    VideoIngressSetConfigRequest.create = function create(properties) {
+        return new VideoIngressSetConfigRequest(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressSetConfigRequest message. Does not implicitly {@link VideoIngressSetConfigRequest.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressSetConfigRequest
+     * @static
+     * @param {IVideoIngressSetConfigRequest} message VideoIngressSetConfigRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressSetConfigRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.config != null && Object.hasOwnProperty.call(message, "config"))
+            $root.VideoIngressConfig.encode(message.config, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressSetConfigRequest message, length delimited. Does not implicitly {@link VideoIngressSetConfigRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressSetConfigRequest
+     * @static
+     * @param {IVideoIngressSetConfigRequest} message VideoIngressSetConfigRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressSetConfigRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressSetConfigRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressSetConfigRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressSetConfigRequest} VideoIngressSetConfigRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressSetConfigRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressSetConfigRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.config = $root.VideoIngressConfig.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressSetConfigRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressSetConfigRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressSetConfigRequest} VideoIngressSetConfigRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressSetConfigRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressSetConfigRequest message.
+     * @function verify
+     * @memberof VideoIngressSetConfigRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressSetConfigRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.config != null && message.hasOwnProperty("config")) {
+            let error = $root.VideoIngressConfig.verify(message.config);
+            if (error)
+                return "config." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressSetConfigRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressSetConfigRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressSetConfigRequest} VideoIngressSetConfigRequest
+     */
+    VideoIngressSetConfigRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressSetConfigRequest)
+            return object;
+        let message = new $root.VideoIngressSetConfigRequest();
+        if (object.config != null) {
+            if (typeof object.config !== "object")
+                throw TypeError(".VideoIngressSetConfigRequest.config: object expected");
+            message.config = $root.VideoIngressConfig.fromObject(object.config);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressSetConfigRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressSetConfigRequest
+     * @static
+     * @param {VideoIngressSetConfigRequest} message VideoIngressSetConfigRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressSetConfigRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.config = null;
+        if (message.config != null && message.hasOwnProperty("config"))
+            object.config = $root.VideoIngressConfig.toObject(message.config, options);
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressSetConfigRequest to JSON.
+     * @function toJSON
+     * @memberof VideoIngressSetConfigRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressSetConfigRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressSetConfigRequest;
+})();
+
+export const VideoIngressSetConfigResponse = $root.VideoIngressSetConfigResponse = (() => {
+
+    /**
+     * Properties of a VideoIngressSetConfigResponse.
+     * @exports IVideoIngressSetConfigResponse
+     * @interface IVideoIngressSetConfigResponse
+     * @property {IVideoIngressConfig|null} [config] VideoIngressSetConfigResponse config
+     */
+
+    /**
+     * Constructs a new VideoIngressSetConfigResponse.
+     * @exports VideoIngressSetConfigResponse
+     * @classdesc Represents a VideoIngressSetConfigResponse.
+     * @implements IVideoIngressSetConfigResponse
+     * @constructor
+     * @param {IVideoIngressSetConfigResponse=} [properties] Properties to set
+     */
+    function VideoIngressSetConfigResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressSetConfigResponse config.
+     * @member {IVideoIngressConfig|null|undefined} config
+     * @memberof VideoIngressSetConfigResponse
+     * @instance
+     */
+    VideoIngressSetConfigResponse.prototype.config = null;
+
+    /**
+     * Creates a new VideoIngressSetConfigResponse instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressSetConfigResponse
+     * @static
+     * @param {IVideoIngressSetConfigResponse=} [properties] Properties to set
+     * @returns {VideoIngressSetConfigResponse} VideoIngressSetConfigResponse instance
+     */
+    VideoIngressSetConfigResponse.create = function create(properties) {
+        return new VideoIngressSetConfigResponse(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressSetConfigResponse message. Does not implicitly {@link VideoIngressSetConfigResponse.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressSetConfigResponse
+     * @static
+     * @param {IVideoIngressSetConfigResponse} message VideoIngressSetConfigResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressSetConfigResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.config != null && Object.hasOwnProperty.call(message, "config"))
+            $root.VideoIngressConfig.encode(message.config, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressSetConfigResponse message, length delimited. Does not implicitly {@link VideoIngressSetConfigResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressSetConfigResponse
+     * @static
+     * @param {IVideoIngressSetConfigResponse} message VideoIngressSetConfigResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressSetConfigResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressSetConfigResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressSetConfigResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressSetConfigResponse} VideoIngressSetConfigResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressSetConfigResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressSetConfigResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.config = $root.VideoIngressConfig.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressSetConfigResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressSetConfigResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressSetConfigResponse} VideoIngressSetConfigResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressSetConfigResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressSetConfigResponse message.
+     * @function verify
+     * @memberof VideoIngressSetConfigResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressSetConfigResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.config != null && message.hasOwnProperty("config")) {
+            let error = $root.VideoIngressConfig.verify(message.config);
+            if (error)
+                return "config." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressSetConfigResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressSetConfigResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressSetConfigResponse} VideoIngressSetConfigResponse
+     */
+    VideoIngressSetConfigResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressSetConfigResponse)
+            return object;
+        let message = new $root.VideoIngressSetConfigResponse();
+        if (object.config != null) {
+            if (typeof object.config !== "object")
+                throw TypeError(".VideoIngressSetConfigResponse.config: object expected");
+            message.config = $root.VideoIngressConfig.fromObject(object.config);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressSetConfigResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressSetConfigResponse
+     * @static
+     * @param {VideoIngressSetConfigResponse} message VideoIngressSetConfigResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressSetConfigResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.config = null;
+        if (message.config != null && message.hasOwnProperty("config"))
+            object.config = $root.VideoIngressConfig.toObject(message.config, options);
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressSetConfigResponse to JSON.
+     * @function toJSON
+     * @memberof VideoIngressSetConfigResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressSetConfigResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressSetConfigResponse;
+})();
+
+export const VideoIngressListStreamsRequest = $root.VideoIngressListStreamsRequest = (() => {
+
+    /**
+     * Properties of a VideoIngressListStreamsRequest.
+     * @exports IVideoIngressListStreamsRequest
+     * @interface IVideoIngressListStreamsRequest
+     */
+
+    /**
+     * Constructs a new VideoIngressListStreamsRequest.
+     * @exports VideoIngressListStreamsRequest
+     * @classdesc Represents a VideoIngressListStreamsRequest.
+     * @implements IVideoIngressListStreamsRequest
+     * @constructor
+     * @param {IVideoIngressListStreamsRequest=} [properties] Properties to set
+     */
+    function VideoIngressListStreamsRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new VideoIngressListStreamsRequest instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressListStreamsRequest
+     * @static
+     * @param {IVideoIngressListStreamsRequest=} [properties] Properties to set
+     * @returns {VideoIngressListStreamsRequest} VideoIngressListStreamsRequest instance
+     */
+    VideoIngressListStreamsRequest.create = function create(properties) {
+        return new VideoIngressListStreamsRequest(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressListStreamsRequest message. Does not implicitly {@link VideoIngressListStreamsRequest.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressListStreamsRequest
+     * @static
+     * @param {IVideoIngressListStreamsRequest} message VideoIngressListStreamsRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressListStreamsRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressListStreamsRequest message, length delimited. Does not implicitly {@link VideoIngressListStreamsRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressListStreamsRequest
+     * @static
+     * @param {IVideoIngressListStreamsRequest} message VideoIngressListStreamsRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressListStreamsRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressListStreamsRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressListStreamsRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressListStreamsRequest} VideoIngressListStreamsRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressListStreamsRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressListStreamsRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressListStreamsRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressListStreamsRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressListStreamsRequest} VideoIngressListStreamsRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressListStreamsRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressListStreamsRequest message.
+     * @function verify
+     * @memberof VideoIngressListStreamsRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressListStreamsRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressListStreamsRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressListStreamsRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressListStreamsRequest} VideoIngressListStreamsRequest
+     */
+    VideoIngressListStreamsRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressListStreamsRequest)
+            return object;
+        return new $root.VideoIngressListStreamsRequest();
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressListStreamsRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressListStreamsRequest
+     * @static
+     * @param {VideoIngressListStreamsRequest} message VideoIngressListStreamsRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressListStreamsRequest.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this VideoIngressListStreamsRequest to JSON.
+     * @function toJSON
+     * @memberof VideoIngressListStreamsRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressListStreamsRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressListStreamsRequest;
+})();
+
+export const VideoIngressListStreamsResponse = $root.VideoIngressListStreamsResponse = (() => {
+
+    /**
+     * Properties of a VideoIngressListStreamsResponse.
+     * @exports IVideoIngressListStreamsResponse
+     * @interface IVideoIngressListStreamsResponse
+     * @property {Array.<IVideoIngressStream>|null} [streams] VideoIngressListStreamsResponse streams
+     */
+
+    /**
+     * Constructs a new VideoIngressListStreamsResponse.
+     * @exports VideoIngressListStreamsResponse
+     * @classdesc Represents a VideoIngressListStreamsResponse.
+     * @implements IVideoIngressListStreamsResponse
+     * @constructor
+     * @param {IVideoIngressListStreamsResponse=} [properties] Properties to set
+     */
+    function VideoIngressListStreamsResponse(properties) {
+        this.streams = [];
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressListStreamsResponse streams.
+     * @member {Array.<IVideoIngressStream>} streams
+     * @memberof VideoIngressListStreamsResponse
+     * @instance
+     */
+    VideoIngressListStreamsResponse.prototype.streams = $util.emptyArray;
+
+    /**
+     * Creates a new VideoIngressListStreamsResponse instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressListStreamsResponse
+     * @static
+     * @param {IVideoIngressListStreamsResponse=} [properties] Properties to set
+     * @returns {VideoIngressListStreamsResponse} VideoIngressListStreamsResponse instance
+     */
+    VideoIngressListStreamsResponse.create = function create(properties) {
+        return new VideoIngressListStreamsResponse(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressListStreamsResponse message. Does not implicitly {@link VideoIngressListStreamsResponse.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressListStreamsResponse
+     * @static
+     * @param {IVideoIngressListStreamsResponse} message VideoIngressListStreamsResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressListStreamsResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.streams != null && message.streams.length)
+            for (let i = 0; i < message.streams.length; ++i)
+                $root.VideoIngressStream.encode(message.streams[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressListStreamsResponse message, length delimited. Does not implicitly {@link VideoIngressListStreamsResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressListStreamsResponse
+     * @static
+     * @param {IVideoIngressListStreamsResponse} message VideoIngressListStreamsResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressListStreamsResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressListStreamsResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressListStreamsResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressListStreamsResponse} VideoIngressListStreamsResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressListStreamsResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressListStreamsResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                if (!(message.streams && message.streams.length))
+                    message.streams = [];
+                message.streams.push($root.VideoIngressStream.decode(reader, reader.uint32()));
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressListStreamsResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressListStreamsResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressListStreamsResponse} VideoIngressListStreamsResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressListStreamsResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressListStreamsResponse message.
+     * @function verify
+     * @memberof VideoIngressListStreamsResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressListStreamsResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.streams != null && message.hasOwnProperty("streams")) {
+            if (!Array.isArray(message.streams))
+                return "streams: array expected";
+            for (let i = 0; i < message.streams.length; ++i) {
+                let error = $root.VideoIngressStream.verify(message.streams[i]);
+                if (error)
+                    return "streams." + error;
+            }
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressListStreamsResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressListStreamsResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressListStreamsResponse} VideoIngressListStreamsResponse
+     */
+    VideoIngressListStreamsResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressListStreamsResponse)
+            return object;
+        let message = new $root.VideoIngressListStreamsResponse();
+        if (object.streams) {
+            if (!Array.isArray(object.streams))
+                throw TypeError(".VideoIngressListStreamsResponse.streams: array expected");
+            message.streams = [];
+            for (let i = 0; i < object.streams.length; ++i) {
+                if (typeof object.streams[i] !== "object")
+                    throw TypeError(".VideoIngressListStreamsResponse.streams: object expected");
+                message.streams[i] = $root.VideoIngressStream.fromObject(object.streams[i]);
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressListStreamsResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressListStreamsResponse
+     * @static
+     * @param {VideoIngressListStreamsResponse} message VideoIngressListStreamsResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressListStreamsResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.arrays || options.defaults)
+            object.streams = [];
+        if (message.streams && message.streams.length) {
+            object.streams = [];
+            for (let j = 0; j < message.streams.length; ++j)
+                object.streams[j] = $root.VideoIngressStream.toObject(message.streams[j], options);
+        }
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressListStreamsResponse to JSON.
+     * @function toJSON
+     * @memberof VideoIngressListStreamsResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressListStreamsResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressListStreamsResponse;
+})();
+
+export const VideoIngressListChannelsRequest = $root.VideoIngressListChannelsRequest = (() => {
+
+    /**
+     * Properties of a VideoIngressListChannelsRequest.
+     * @exports IVideoIngressListChannelsRequest
+     * @interface IVideoIngressListChannelsRequest
+     */
+
+    /**
+     * Constructs a new VideoIngressListChannelsRequest.
+     * @exports VideoIngressListChannelsRequest
+     * @classdesc Represents a VideoIngressListChannelsRequest.
+     * @implements IVideoIngressListChannelsRequest
+     * @constructor
+     * @param {IVideoIngressListChannelsRequest=} [properties] Properties to set
+     */
+    function VideoIngressListChannelsRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new VideoIngressListChannelsRequest instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressListChannelsRequest
+     * @static
+     * @param {IVideoIngressListChannelsRequest=} [properties] Properties to set
+     * @returns {VideoIngressListChannelsRequest} VideoIngressListChannelsRequest instance
+     */
+    VideoIngressListChannelsRequest.create = function create(properties) {
+        return new VideoIngressListChannelsRequest(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressListChannelsRequest message. Does not implicitly {@link VideoIngressListChannelsRequest.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressListChannelsRequest
+     * @static
+     * @param {IVideoIngressListChannelsRequest} message VideoIngressListChannelsRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressListChannelsRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressListChannelsRequest message, length delimited. Does not implicitly {@link VideoIngressListChannelsRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressListChannelsRequest
+     * @static
+     * @param {IVideoIngressListChannelsRequest} message VideoIngressListChannelsRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressListChannelsRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressListChannelsRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressListChannelsRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressListChannelsRequest} VideoIngressListChannelsRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressListChannelsRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressListChannelsRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressListChannelsRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressListChannelsRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressListChannelsRequest} VideoIngressListChannelsRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressListChannelsRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressListChannelsRequest message.
+     * @function verify
+     * @memberof VideoIngressListChannelsRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressListChannelsRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressListChannelsRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressListChannelsRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressListChannelsRequest} VideoIngressListChannelsRequest
+     */
+    VideoIngressListChannelsRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressListChannelsRequest)
+            return object;
+        return new $root.VideoIngressListChannelsRequest();
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressListChannelsRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressListChannelsRequest
+     * @static
+     * @param {VideoIngressListChannelsRequest} message VideoIngressListChannelsRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressListChannelsRequest.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this VideoIngressListChannelsRequest to JSON.
+     * @function toJSON
+     * @memberof VideoIngressListChannelsRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressListChannelsRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressListChannelsRequest;
+})();
+
+export const VideoIngressListChannelsResponse = $root.VideoIngressListChannelsResponse = (() => {
+
+    /**
+     * Properties of a VideoIngressListChannelsResponse.
+     * @exports IVideoIngressListChannelsResponse
+     * @interface IVideoIngressListChannelsResponse
+     * @property {Array.<IVideoIngressChannel>|null} [channels] VideoIngressListChannelsResponse channels
+     */
+
+    /**
+     * Constructs a new VideoIngressListChannelsResponse.
+     * @exports VideoIngressListChannelsResponse
+     * @classdesc Represents a VideoIngressListChannelsResponse.
+     * @implements IVideoIngressListChannelsResponse
+     * @constructor
+     * @param {IVideoIngressListChannelsResponse=} [properties] Properties to set
+     */
+    function VideoIngressListChannelsResponse(properties) {
+        this.channels = [];
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressListChannelsResponse channels.
+     * @member {Array.<IVideoIngressChannel>} channels
+     * @memberof VideoIngressListChannelsResponse
+     * @instance
+     */
+    VideoIngressListChannelsResponse.prototype.channels = $util.emptyArray;
+
+    /**
+     * Creates a new VideoIngressListChannelsResponse instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressListChannelsResponse
+     * @static
+     * @param {IVideoIngressListChannelsResponse=} [properties] Properties to set
+     * @returns {VideoIngressListChannelsResponse} VideoIngressListChannelsResponse instance
+     */
+    VideoIngressListChannelsResponse.create = function create(properties) {
+        return new VideoIngressListChannelsResponse(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressListChannelsResponse message. Does not implicitly {@link VideoIngressListChannelsResponse.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressListChannelsResponse
+     * @static
+     * @param {IVideoIngressListChannelsResponse} message VideoIngressListChannelsResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressListChannelsResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.channels != null && message.channels.length)
+            for (let i = 0; i < message.channels.length; ++i)
+                $root.VideoIngressChannel.encode(message.channels[i], writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressListChannelsResponse message, length delimited. Does not implicitly {@link VideoIngressListChannelsResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressListChannelsResponse
+     * @static
+     * @param {IVideoIngressListChannelsResponse} message VideoIngressListChannelsResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressListChannelsResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressListChannelsResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressListChannelsResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressListChannelsResponse} VideoIngressListChannelsResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressListChannelsResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressListChannelsResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                if (!(message.channels && message.channels.length))
+                    message.channels = [];
+                message.channels.push($root.VideoIngressChannel.decode(reader, reader.uint32()));
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressListChannelsResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressListChannelsResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressListChannelsResponse} VideoIngressListChannelsResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressListChannelsResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressListChannelsResponse message.
+     * @function verify
+     * @memberof VideoIngressListChannelsResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressListChannelsResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.channels != null && message.hasOwnProperty("channels")) {
+            if (!Array.isArray(message.channels))
+                return "channels: array expected";
+            for (let i = 0; i < message.channels.length; ++i) {
+                let error = $root.VideoIngressChannel.verify(message.channels[i]);
+                if (error)
+                    return "channels." + error;
+            }
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressListChannelsResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressListChannelsResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressListChannelsResponse} VideoIngressListChannelsResponse
+     */
+    VideoIngressListChannelsResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressListChannelsResponse)
+            return object;
+        let message = new $root.VideoIngressListChannelsResponse();
+        if (object.channels) {
+            if (!Array.isArray(object.channels))
+                throw TypeError(".VideoIngressListChannelsResponse.channels: array expected");
+            message.channels = [];
+            for (let i = 0; i < object.channels.length; ++i) {
+                if (typeof object.channels[i] !== "object")
+                    throw TypeError(".VideoIngressListChannelsResponse.channels: object expected");
+                message.channels[i] = $root.VideoIngressChannel.fromObject(object.channels[i]);
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressListChannelsResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressListChannelsResponse
+     * @static
+     * @param {VideoIngressListChannelsResponse} message VideoIngressListChannelsResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressListChannelsResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.arrays || options.defaults)
+            object.channels = [];
+        if (message.channels && message.channels.length) {
+            object.channels = [];
+            for (let j = 0; j < message.channels.length; ++j)
+                object.channels[j] = $root.VideoIngressChannel.toObject(message.channels[j], options);
+        }
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressListChannelsResponse to JSON.
+     * @function toJSON
+     * @memberof VideoIngressListChannelsResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressListChannelsResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressListChannelsResponse;
+})();
+
+export const VideoIngressCreateChannelRequest = $root.VideoIngressCreateChannelRequest = (() => {
+
+    /**
+     * Properties of a VideoIngressCreateChannelRequest.
+     * @exports IVideoIngressCreateChannelRequest
+     * @interface IVideoIngressCreateChannelRequest
+     * @property {IDirectoryListingSnippet|null} [directoryListingSnippet] VideoIngressCreateChannelRequest directoryListingSnippet
+     * @property {Uint8Array|null} [networkKey] VideoIngressCreateChannelRequest networkKey
+     */
+
+    /**
+     * Constructs a new VideoIngressCreateChannelRequest.
+     * @exports VideoIngressCreateChannelRequest
+     * @classdesc Represents a VideoIngressCreateChannelRequest.
+     * @implements IVideoIngressCreateChannelRequest
+     * @constructor
+     * @param {IVideoIngressCreateChannelRequest=} [properties] Properties to set
+     */
+    function VideoIngressCreateChannelRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressCreateChannelRequest directoryListingSnippet.
+     * @member {IDirectoryListingSnippet|null|undefined} directoryListingSnippet
+     * @memberof VideoIngressCreateChannelRequest
+     * @instance
+     */
+    VideoIngressCreateChannelRequest.prototype.directoryListingSnippet = null;
+
+    /**
+     * VideoIngressCreateChannelRequest networkKey.
+     * @member {Uint8Array} networkKey
+     * @memberof VideoIngressCreateChannelRequest
+     * @instance
+     */
+    VideoIngressCreateChannelRequest.prototype.networkKey = $util.newBuffer([]);
+
+    /**
+     * Creates a new VideoIngressCreateChannelRequest instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressCreateChannelRequest
+     * @static
+     * @param {IVideoIngressCreateChannelRequest=} [properties] Properties to set
+     * @returns {VideoIngressCreateChannelRequest} VideoIngressCreateChannelRequest instance
+     */
+    VideoIngressCreateChannelRequest.create = function create(properties) {
+        return new VideoIngressCreateChannelRequest(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressCreateChannelRequest message. Does not implicitly {@link VideoIngressCreateChannelRequest.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressCreateChannelRequest
+     * @static
+     * @param {IVideoIngressCreateChannelRequest} message VideoIngressCreateChannelRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressCreateChannelRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.directoryListingSnippet != null && Object.hasOwnProperty.call(message, "directoryListingSnippet"))
+            $root.DirectoryListingSnippet.encode(message.directoryListingSnippet, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
+            writer.uint32(/* id 4, wireType 2 =*/34).bytes(message.networkKey);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressCreateChannelRequest message, length delimited. Does not implicitly {@link VideoIngressCreateChannelRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressCreateChannelRequest
+     * @static
+     * @param {IVideoIngressCreateChannelRequest} message VideoIngressCreateChannelRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressCreateChannelRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressCreateChannelRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressCreateChannelRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressCreateChannelRequest} VideoIngressCreateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressCreateChannelRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressCreateChannelRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.directoryListingSnippet = $root.DirectoryListingSnippet.decode(reader, reader.uint32());
+                break;
+            case 4:
+                message.networkKey = reader.bytes();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressCreateChannelRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressCreateChannelRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressCreateChannelRequest} VideoIngressCreateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressCreateChannelRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressCreateChannelRequest message.
+     * @function verify
+     * @memberof VideoIngressCreateChannelRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressCreateChannelRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.directoryListingSnippet != null && message.hasOwnProperty("directoryListingSnippet")) {
+            let error = $root.DirectoryListingSnippet.verify(message.directoryListingSnippet);
+            if (error)
+                return "directoryListingSnippet." + error;
+        }
+        if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+            if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
+                return "networkKey: buffer expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressCreateChannelRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressCreateChannelRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressCreateChannelRequest} VideoIngressCreateChannelRequest
+     */
+    VideoIngressCreateChannelRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressCreateChannelRequest)
+            return object;
+        let message = new $root.VideoIngressCreateChannelRequest();
+        if (object.directoryListingSnippet != null) {
+            if (typeof object.directoryListingSnippet !== "object")
+                throw TypeError(".VideoIngressCreateChannelRequest.directoryListingSnippet: object expected");
+            message.directoryListingSnippet = $root.DirectoryListingSnippet.fromObject(object.directoryListingSnippet);
+        }
+        if (object.networkKey != null)
+            if (typeof object.networkKey === "string")
+                $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
+            else if (object.networkKey.length)
+                message.networkKey = object.networkKey;
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressCreateChannelRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressCreateChannelRequest
+     * @static
+     * @param {VideoIngressCreateChannelRequest} message VideoIngressCreateChannelRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressCreateChannelRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            object.directoryListingSnippet = null;
+            if (options.bytes === String)
+                object.networkKey = "";
+            else {
+                object.networkKey = [];
+                if (options.bytes !== Array)
+                    object.networkKey = $util.newBuffer(object.networkKey);
+            }
+        }
+        if (message.directoryListingSnippet != null && message.hasOwnProperty("directoryListingSnippet"))
+            object.directoryListingSnippet = $root.DirectoryListingSnippet.toObject(message.directoryListingSnippet, options);
+        if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+            object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressCreateChannelRequest to JSON.
+     * @function toJSON
+     * @memberof VideoIngressCreateChannelRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressCreateChannelRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressCreateChannelRequest;
+})();
+
+export const VideoIngressCreateChannelResponse = $root.VideoIngressCreateChannelResponse = (() => {
+
+    /**
+     * Properties of a VideoIngressCreateChannelResponse.
+     * @exports IVideoIngressCreateChannelResponse
+     * @interface IVideoIngressCreateChannelResponse
+     * @property {IVideoIngressChannel|null} [channel] VideoIngressCreateChannelResponse channel
+     */
+
+    /**
+     * Constructs a new VideoIngressCreateChannelResponse.
+     * @exports VideoIngressCreateChannelResponse
+     * @classdesc Represents a VideoIngressCreateChannelResponse.
+     * @implements IVideoIngressCreateChannelResponse
+     * @constructor
+     * @param {IVideoIngressCreateChannelResponse=} [properties] Properties to set
+     */
+    function VideoIngressCreateChannelResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressCreateChannelResponse channel.
+     * @member {IVideoIngressChannel|null|undefined} channel
+     * @memberof VideoIngressCreateChannelResponse
+     * @instance
+     */
+    VideoIngressCreateChannelResponse.prototype.channel = null;
+
+    /**
+     * Creates a new VideoIngressCreateChannelResponse instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressCreateChannelResponse
+     * @static
+     * @param {IVideoIngressCreateChannelResponse=} [properties] Properties to set
+     * @returns {VideoIngressCreateChannelResponse} VideoIngressCreateChannelResponse instance
+     */
+    VideoIngressCreateChannelResponse.create = function create(properties) {
+        return new VideoIngressCreateChannelResponse(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressCreateChannelResponse message. Does not implicitly {@link VideoIngressCreateChannelResponse.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressCreateChannelResponse
+     * @static
+     * @param {IVideoIngressCreateChannelResponse} message VideoIngressCreateChannelResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressCreateChannelResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.channel != null && Object.hasOwnProperty.call(message, "channel"))
+            $root.VideoIngressChannel.encode(message.channel, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressCreateChannelResponse message, length delimited. Does not implicitly {@link VideoIngressCreateChannelResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressCreateChannelResponse
+     * @static
+     * @param {IVideoIngressCreateChannelResponse} message VideoIngressCreateChannelResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressCreateChannelResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressCreateChannelResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressCreateChannelResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressCreateChannelResponse} VideoIngressCreateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressCreateChannelResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressCreateChannelResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.channel = $root.VideoIngressChannel.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressCreateChannelResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressCreateChannelResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressCreateChannelResponse} VideoIngressCreateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressCreateChannelResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressCreateChannelResponse message.
+     * @function verify
+     * @memberof VideoIngressCreateChannelResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressCreateChannelResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.channel != null && message.hasOwnProperty("channel")) {
+            let error = $root.VideoIngressChannel.verify(message.channel);
+            if (error)
+                return "channel." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressCreateChannelResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressCreateChannelResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressCreateChannelResponse} VideoIngressCreateChannelResponse
+     */
+    VideoIngressCreateChannelResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressCreateChannelResponse)
+            return object;
+        let message = new $root.VideoIngressCreateChannelResponse();
+        if (object.channel != null) {
+            if (typeof object.channel !== "object")
+                throw TypeError(".VideoIngressCreateChannelResponse.channel: object expected");
+            message.channel = $root.VideoIngressChannel.fromObject(object.channel);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressCreateChannelResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressCreateChannelResponse
+     * @static
+     * @param {VideoIngressCreateChannelResponse} message VideoIngressCreateChannelResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressCreateChannelResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.channel = null;
+        if (message.channel != null && message.hasOwnProperty("channel"))
+            object.channel = $root.VideoIngressChannel.toObject(message.channel, options);
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressCreateChannelResponse to JSON.
+     * @function toJSON
+     * @memberof VideoIngressCreateChannelResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressCreateChannelResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressCreateChannelResponse;
+})();
+
+export const VideoIngressUpdateChannelRequest = $root.VideoIngressUpdateChannelRequest = (() => {
+
+    /**
+     * Properties of a VideoIngressUpdateChannelRequest.
+     * @exports IVideoIngressUpdateChannelRequest
+     * @interface IVideoIngressUpdateChannelRequest
+     * @property {number|null} [id] VideoIngressUpdateChannelRequest id
+     * @property {IDirectoryListingSnippet|null} [directoryListingSnippet] VideoIngressUpdateChannelRequest directoryListingSnippet
+     * @property {Uint8Array|null} [networkKey] VideoIngressUpdateChannelRequest networkKey
+     */
+
+    /**
+     * Constructs a new VideoIngressUpdateChannelRequest.
+     * @exports VideoIngressUpdateChannelRequest
+     * @classdesc Represents a VideoIngressUpdateChannelRequest.
+     * @implements IVideoIngressUpdateChannelRequest
+     * @constructor
+     * @param {IVideoIngressUpdateChannelRequest=} [properties] Properties to set
+     */
+    function VideoIngressUpdateChannelRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressUpdateChannelRequest id.
+     * @member {number} id
+     * @memberof VideoIngressUpdateChannelRequest
+     * @instance
+     */
+    VideoIngressUpdateChannelRequest.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * VideoIngressUpdateChannelRequest directoryListingSnippet.
+     * @member {IDirectoryListingSnippet|null|undefined} directoryListingSnippet
+     * @memberof VideoIngressUpdateChannelRequest
+     * @instance
+     */
+    VideoIngressUpdateChannelRequest.prototype.directoryListingSnippet = null;
+
+    /**
+     * VideoIngressUpdateChannelRequest networkKey.
+     * @member {Uint8Array} networkKey
+     * @memberof VideoIngressUpdateChannelRequest
+     * @instance
+     */
+    VideoIngressUpdateChannelRequest.prototype.networkKey = $util.newBuffer([]);
+
+    /**
+     * Creates a new VideoIngressUpdateChannelRequest instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressUpdateChannelRequest
+     * @static
+     * @param {IVideoIngressUpdateChannelRequest=} [properties] Properties to set
+     * @returns {VideoIngressUpdateChannelRequest} VideoIngressUpdateChannelRequest instance
+     */
+    VideoIngressUpdateChannelRequest.create = function create(properties) {
+        return new VideoIngressUpdateChannelRequest(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressUpdateChannelRequest message. Does not implicitly {@link VideoIngressUpdateChannelRequest.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressUpdateChannelRequest
+     * @static
+     * @param {IVideoIngressUpdateChannelRequest} message VideoIngressUpdateChannelRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressUpdateChannelRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        if (message.directoryListingSnippet != null && Object.hasOwnProperty.call(message, "directoryListingSnippet"))
+            $root.DirectoryListingSnippet.encode(message.directoryListingSnippet, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
+            writer.uint32(/* id 3, wireType 2 =*/26).bytes(message.networkKey);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressUpdateChannelRequest message, length delimited. Does not implicitly {@link VideoIngressUpdateChannelRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressUpdateChannelRequest
+     * @static
+     * @param {IVideoIngressUpdateChannelRequest} message VideoIngressUpdateChannelRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressUpdateChannelRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressUpdateChannelRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressUpdateChannelRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressUpdateChannelRequest} VideoIngressUpdateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressUpdateChannelRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressUpdateChannelRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
+            case 2:
+                message.directoryListingSnippet = $root.DirectoryListingSnippet.decode(reader, reader.uint32());
+                break;
+            case 3:
+                message.networkKey = reader.bytes();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressUpdateChannelRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressUpdateChannelRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressUpdateChannelRequest} VideoIngressUpdateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressUpdateChannelRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressUpdateChannelRequest message.
+     * @function verify
+     * @memberof VideoIngressUpdateChannelRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressUpdateChannelRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        if (message.directoryListingSnippet != null && message.hasOwnProperty("directoryListingSnippet")) {
+            let error = $root.DirectoryListingSnippet.verify(message.directoryListingSnippet);
+            if (error)
+                return "directoryListingSnippet." + error;
+        }
+        if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+            if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
+                return "networkKey: buffer expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressUpdateChannelRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressUpdateChannelRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressUpdateChannelRequest} VideoIngressUpdateChannelRequest
+     */
+    VideoIngressUpdateChannelRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressUpdateChannelRequest)
+            return object;
+        let message = new $root.VideoIngressUpdateChannelRequest();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        if (object.directoryListingSnippet != null) {
+            if (typeof object.directoryListingSnippet !== "object")
+                throw TypeError(".VideoIngressUpdateChannelRequest.directoryListingSnippet: object expected");
+            message.directoryListingSnippet = $root.DirectoryListingSnippet.fromObject(object.directoryListingSnippet);
+        }
+        if (object.networkKey != null)
+            if (typeof object.networkKey === "string")
+                $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
+            else if (object.networkKey.length)
+                message.networkKey = object.networkKey;
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressUpdateChannelRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressUpdateChannelRequest
+     * @static
+     * @param {VideoIngressUpdateChannelRequest} message VideoIngressUpdateChannelRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressUpdateChannelRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+            object.directoryListingSnippet = null;
+            if (options.bytes === String)
+                object.networkKey = "";
+            else {
+                object.networkKey = [];
+                if (options.bytes !== Array)
+                    object.networkKey = $util.newBuffer(object.networkKey);
+            }
+        }
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        if (message.directoryListingSnippet != null && message.hasOwnProperty("directoryListingSnippet"))
+            object.directoryListingSnippet = $root.DirectoryListingSnippet.toObject(message.directoryListingSnippet, options);
+        if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+            object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressUpdateChannelRequest to JSON.
+     * @function toJSON
+     * @memberof VideoIngressUpdateChannelRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressUpdateChannelRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressUpdateChannelRequest;
+})();
+
+export const VideoIngressUpdateChannelResponse = $root.VideoIngressUpdateChannelResponse = (() => {
+
+    /**
+     * Properties of a VideoIngressUpdateChannelResponse.
+     * @exports IVideoIngressUpdateChannelResponse
+     * @interface IVideoIngressUpdateChannelResponse
+     * @property {IVideoIngressChannel|null} [channel] VideoIngressUpdateChannelResponse channel
+     */
+
+    /**
+     * Constructs a new VideoIngressUpdateChannelResponse.
+     * @exports VideoIngressUpdateChannelResponse
+     * @classdesc Represents a VideoIngressUpdateChannelResponse.
+     * @implements IVideoIngressUpdateChannelResponse
+     * @constructor
+     * @param {IVideoIngressUpdateChannelResponse=} [properties] Properties to set
+     */
+    function VideoIngressUpdateChannelResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressUpdateChannelResponse channel.
+     * @member {IVideoIngressChannel|null|undefined} channel
+     * @memberof VideoIngressUpdateChannelResponse
+     * @instance
+     */
+    VideoIngressUpdateChannelResponse.prototype.channel = null;
+
+    /**
+     * Creates a new VideoIngressUpdateChannelResponse instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressUpdateChannelResponse
+     * @static
+     * @param {IVideoIngressUpdateChannelResponse=} [properties] Properties to set
+     * @returns {VideoIngressUpdateChannelResponse} VideoIngressUpdateChannelResponse instance
+     */
+    VideoIngressUpdateChannelResponse.create = function create(properties) {
+        return new VideoIngressUpdateChannelResponse(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressUpdateChannelResponse message. Does not implicitly {@link VideoIngressUpdateChannelResponse.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressUpdateChannelResponse
+     * @static
+     * @param {IVideoIngressUpdateChannelResponse} message VideoIngressUpdateChannelResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressUpdateChannelResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.channel != null && Object.hasOwnProperty.call(message, "channel"))
+            $root.VideoIngressChannel.encode(message.channel, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressUpdateChannelResponse message, length delimited. Does not implicitly {@link VideoIngressUpdateChannelResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressUpdateChannelResponse
+     * @static
+     * @param {IVideoIngressUpdateChannelResponse} message VideoIngressUpdateChannelResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressUpdateChannelResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressUpdateChannelResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressUpdateChannelResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressUpdateChannelResponse} VideoIngressUpdateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressUpdateChannelResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressUpdateChannelResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.channel = $root.VideoIngressChannel.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressUpdateChannelResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressUpdateChannelResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressUpdateChannelResponse} VideoIngressUpdateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressUpdateChannelResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressUpdateChannelResponse message.
+     * @function verify
+     * @memberof VideoIngressUpdateChannelResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressUpdateChannelResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.channel != null && message.hasOwnProperty("channel")) {
+            let error = $root.VideoIngressChannel.verify(message.channel);
+            if (error)
+                return "channel." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressUpdateChannelResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressUpdateChannelResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressUpdateChannelResponse} VideoIngressUpdateChannelResponse
+     */
+    VideoIngressUpdateChannelResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressUpdateChannelResponse)
+            return object;
+        let message = new $root.VideoIngressUpdateChannelResponse();
+        if (object.channel != null) {
+            if (typeof object.channel !== "object")
+                throw TypeError(".VideoIngressUpdateChannelResponse.channel: object expected");
+            message.channel = $root.VideoIngressChannel.fromObject(object.channel);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressUpdateChannelResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressUpdateChannelResponse
+     * @static
+     * @param {VideoIngressUpdateChannelResponse} message VideoIngressUpdateChannelResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressUpdateChannelResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.channel = null;
+        if (message.channel != null && message.hasOwnProperty("channel"))
+            object.channel = $root.VideoIngressChannel.toObject(message.channel, options);
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressUpdateChannelResponse to JSON.
+     * @function toJSON
+     * @memberof VideoIngressUpdateChannelResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressUpdateChannelResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressUpdateChannelResponse;
+})();
+
+export const VideoIngressDeleteChannelRequest = $root.VideoIngressDeleteChannelRequest = (() => {
+
+    /**
+     * Properties of a VideoIngressDeleteChannelRequest.
+     * @exports IVideoIngressDeleteChannelRequest
+     * @interface IVideoIngressDeleteChannelRequest
+     * @property {number|null} [id] VideoIngressDeleteChannelRequest id
+     */
+
+    /**
+     * Constructs a new VideoIngressDeleteChannelRequest.
+     * @exports VideoIngressDeleteChannelRequest
+     * @classdesc Represents a VideoIngressDeleteChannelRequest.
+     * @implements IVideoIngressDeleteChannelRequest
+     * @constructor
+     * @param {IVideoIngressDeleteChannelRequest=} [properties] Properties to set
+     */
+    function VideoIngressDeleteChannelRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressDeleteChannelRequest id.
+     * @member {number} id
+     * @memberof VideoIngressDeleteChannelRequest
+     * @instance
+     */
+    VideoIngressDeleteChannelRequest.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * Creates a new VideoIngressDeleteChannelRequest instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressDeleteChannelRequest
+     * @static
+     * @param {IVideoIngressDeleteChannelRequest=} [properties] Properties to set
+     * @returns {VideoIngressDeleteChannelRequest} VideoIngressDeleteChannelRequest instance
+     */
+    VideoIngressDeleteChannelRequest.create = function create(properties) {
+        return new VideoIngressDeleteChannelRequest(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressDeleteChannelRequest message. Does not implicitly {@link VideoIngressDeleteChannelRequest.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressDeleteChannelRequest
+     * @static
+     * @param {IVideoIngressDeleteChannelRequest} message VideoIngressDeleteChannelRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressDeleteChannelRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressDeleteChannelRequest message, length delimited. Does not implicitly {@link VideoIngressDeleteChannelRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressDeleteChannelRequest
+     * @static
+     * @param {IVideoIngressDeleteChannelRequest} message VideoIngressDeleteChannelRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressDeleteChannelRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressDeleteChannelRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressDeleteChannelRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressDeleteChannelRequest} VideoIngressDeleteChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressDeleteChannelRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressDeleteChannelRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressDeleteChannelRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressDeleteChannelRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressDeleteChannelRequest} VideoIngressDeleteChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressDeleteChannelRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressDeleteChannelRequest message.
+     * @function verify
+     * @memberof VideoIngressDeleteChannelRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressDeleteChannelRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressDeleteChannelRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressDeleteChannelRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressDeleteChannelRequest} VideoIngressDeleteChannelRequest
+     */
+    VideoIngressDeleteChannelRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressDeleteChannelRequest)
+            return object;
+        let message = new $root.VideoIngressDeleteChannelRequest();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressDeleteChannelRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressDeleteChannelRequest
+     * @static
+     * @param {VideoIngressDeleteChannelRequest} message VideoIngressDeleteChannelRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressDeleteChannelRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressDeleteChannelRequest to JSON.
+     * @function toJSON
+     * @memberof VideoIngressDeleteChannelRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressDeleteChannelRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressDeleteChannelRequest;
+})();
+
+export const VideoIngressDeleteChannelResponse = $root.VideoIngressDeleteChannelResponse = (() => {
+
+    /**
+     * Properties of a VideoIngressDeleteChannelResponse.
+     * @exports IVideoIngressDeleteChannelResponse
+     * @interface IVideoIngressDeleteChannelResponse
+     */
+
+    /**
+     * Constructs a new VideoIngressDeleteChannelResponse.
+     * @exports VideoIngressDeleteChannelResponse
+     * @classdesc Represents a VideoIngressDeleteChannelResponse.
+     * @implements IVideoIngressDeleteChannelResponse
+     * @constructor
+     * @param {IVideoIngressDeleteChannelResponse=} [properties] Properties to set
+     */
+    function VideoIngressDeleteChannelResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new VideoIngressDeleteChannelResponse instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressDeleteChannelResponse
+     * @static
+     * @param {IVideoIngressDeleteChannelResponse=} [properties] Properties to set
+     * @returns {VideoIngressDeleteChannelResponse} VideoIngressDeleteChannelResponse instance
+     */
+    VideoIngressDeleteChannelResponse.create = function create(properties) {
+        return new VideoIngressDeleteChannelResponse(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressDeleteChannelResponse message. Does not implicitly {@link VideoIngressDeleteChannelResponse.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressDeleteChannelResponse
+     * @static
+     * @param {IVideoIngressDeleteChannelResponse} message VideoIngressDeleteChannelResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressDeleteChannelResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressDeleteChannelResponse message, length delimited. Does not implicitly {@link VideoIngressDeleteChannelResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressDeleteChannelResponse
+     * @static
+     * @param {IVideoIngressDeleteChannelResponse} message VideoIngressDeleteChannelResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressDeleteChannelResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressDeleteChannelResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressDeleteChannelResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressDeleteChannelResponse} VideoIngressDeleteChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressDeleteChannelResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressDeleteChannelResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressDeleteChannelResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressDeleteChannelResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressDeleteChannelResponse} VideoIngressDeleteChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressDeleteChannelResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressDeleteChannelResponse message.
+     * @function verify
+     * @memberof VideoIngressDeleteChannelResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressDeleteChannelResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressDeleteChannelResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressDeleteChannelResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressDeleteChannelResponse} VideoIngressDeleteChannelResponse
+     */
+    VideoIngressDeleteChannelResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressDeleteChannelResponse)
+            return object;
+        return new $root.VideoIngressDeleteChannelResponse();
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressDeleteChannelResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressDeleteChannelResponse
+     * @static
+     * @param {VideoIngressDeleteChannelResponse} message VideoIngressDeleteChannelResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressDeleteChannelResponse.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this VideoIngressDeleteChannelResponse to JSON.
+     * @function toJSON
+     * @memberof VideoIngressDeleteChannelResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressDeleteChannelResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressDeleteChannelResponse;
+})();
+
+export const VideoIngressGetChannelURLRequest = $root.VideoIngressGetChannelURLRequest = (() => {
+
+    /**
+     * Properties of a VideoIngressGetChannelURLRequest.
+     * @exports IVideoIngressGetChannelURLRequest
+     * @interface IVideoIngressGetChannelURLRequest
+     * @property {number|null} [id] VideoIngressGetChannelURLRequest id
+     */
+
+    /**
+     * Constructs a new VideoIngressGetChannelURLRequest.
+     * @exports VideoIngressGetChannelURLRequest
+     * @classdesc Represents a VideoIngressGetChannelURLRequest.
+     * @implements IVideoIngressGetChannelURLRequest
+     * @constructor
+     * @param {IVideoIngressGetChannelURLRequest=} [properties] Properties to set
+     */
+    function VideoIngressGetChannelURLRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressGetChannelURLRequest id.
+     * @member {number} id
+     * @memberof VideoIngressGetChannelURLRequest
+     * @instance
+     */
+    VideoIngressGetChannelURLRequest.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * Creates a new VideoIngressGetChannelURLRequest instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressGetChannelURLRequest
+     * @static
+     * @param {IVideoIngressGetChannelURLRequest=} [properties] Properties to set
+     * @returns {VideoIngressGetChannelURLRequest} VideoIngressGetChannelURLRequest instance
+     */
+    VideoIngressGetChannelURLRequest.create = function create(properties) {
+        return new VideoIngressGetChannelURLRequest(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressGetChannelURLRequest message. Does not implicitly {@link VideoIngressGetChannelURLRequest.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressGetChannelURLRequest
+     * @static
+     * @param {IVideoIngressGetChannelURLRequest} message VideoIngressGetChannelURLRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressGetChannelURLRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressGetChannelURLRequest message, length delimited. Does not implicitly {@link VideoIngressGetChannelURLRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressGetChannelURLRequest
+     * @static
+     * @param {IVideoIngressGetChannelURLRequest} message VideoIngressGetChannelURLRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressGetChannelURLRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressGetChannelURLRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressGetChannelURLRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressGetChannelURLRequest} VideoIngressGetChannelURLRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressGetChannelURLRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressGetChannelURLRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressGetChannelURLRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressGetChannelURLRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressGetChannelURLRequest} VideoIngressGetChannelURLRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressGetChannelURLRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressGetChannelURLRequest message.
+     * @function verify
+     * @memberof VideoIngressGetChannelURLRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressGetChannelURLRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressGetChannelURLRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressGetChannelURLRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressGetChannelURLRequest} VideoIngressGetChannelURLRequest
+     */
+    VideoIngressGetChannelURLRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressGetChannelURLRequest)
+            return object;
+        let message = new $root.VideoIngressGetChannelURLRequest();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressGetChannelURLRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressGetChannelURLRequest
+     * @static
+     * @param {VideoIngressGetChannelURLRequest} message VideoIngressGetChannelURLRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressGetChannelURLRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressGetChannelURLRequest to JSON.
+     * @function toJSON
+     * @memberof VideoIngressGetChannelURLRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressGetChannelURLRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressGetChannelURLRequest;
+})();
+
+export const VideoIngressGetChannelURLResponse = $root.VideoIngressGetChannelURLResponse = (() => {
+
+    /**
+     * Properties of a VideoIngressGetChannelURLResponse.
+     * @exports IVideoIngressGetChannelURLResponse
+     * @interface IVideoIngressGetChannelURLResponse
+     * @property {string|null} [url] VideoIngressGetChannelURLResponse url
+     * @property {string|null} [serverAddr] VideoIngressGetChannelURLResponse serverAddr
+     * @property {string|null} [streamKey] VideoIngressGetChannelURLResponse streamKey
+     */
+
+    /**
+     * Constructs a new VideoIngressGetChannelURLResponse.
+     * @exports VideoIngressGetChannelURLResponse
+     * @classdesc Represents a VideoIngressGetChannelURLResponse.
+     * @implements IVideoIngressGetChannelURLResponse
+     * @constructor
+     * @param {IVideoIngressGetChannelURLResponse=} [properties] Properties to set
+     */
+    function VideoIngressGetChannelURLResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressGetChannelURLResponse url.
+     * @member {string} url
+     * @memberof VideoIngressGetChannelURLResponse
+     * @instance
+     */
+    VideoIngressGetChannelURLResponse.prototype.url = "";
+
+    /**
+     * VideoIngressGetChannelURLResponse serverAddr.
+     * @member {string} serverAddr
+     * @memberof VideoIngressGetChannelURLResponse
+     * @instance
+     */
+    VideoIngressGetChannelURLResponse.prototype.serverAddr = "";
+
+    /**
+     * VideoIngressGetChannelURLResponse streamKey.
+     * @member {string} streamKey
+     * @memberof VideoIngressGetChannelURLResponse
+     * @instance
+     */
+    VideoIngressGetChannelURLResponse.prototype.streamKey = "";
+
+    /**
+     * Creates a new VideoIngressGetChannelURLResponse instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressGetChannelURLResponse
+     * @static
+     * @param {IVideoIngressGetChannelURLResponse=} [properties] Properties to set
+     * @returns {VideoIngressGetChannelURLResponse} VideoIngressGetChannelURLResponse instance
+     */
+    VideoIngressGetChannelURLResponse.create = function create(properties) {
+        return new VideoIngressGetChannelURLResponse(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressGetChannelURLResponse message. Does not implicitly {@link VideoIngressGetChannelURLResponse.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressGetChannelURLResponse
+     * @static
+     * @param {IVideoIngressGetChannelURLResponse} message VideoIngressGetChannelURLResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressGetChannelURLResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.url != null && Object.hasOwnProperty.call(message, "url"))
+            writer.uint32(/* id 1, wireType 2 =*/10).string(message.url);
+        if (message.serverAddr != null && Object.hasOwnProperty.call(message, "serverAddr"))
+            writer.uint32(/* id 2, wireType 2 =*/18).string(message.serverAddr);
+        if (message.streamKey != null && Object.hasOwnProperty.call(message, "streamKey"))
+            writer.uint32(/* id 3, wireType 2 =*/26).string(message.streamKey);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressGetChannelURLResponse message, length delimited. Does not implicitly {@link VideoIngressGetChannelURLResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressGetChannelURLResponse
+     * @static
+     * @param {IVideoIngressGetChannelURLResponse} message VideoIngressGetChannelURLResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressGetChannelURLResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressGetChannelURLResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressGetChannelURLResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressGetChannelURLResponse} VideoIngressGetChannelURLResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressGetChannelURLResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressGetChannelURLResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.url = reader.string();
+                break;
+            case 2:
+                message.serverAddr = reader.string();
+                break;
+            case 3:
+                message.streamKey = reader.string();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressGetChannelURLResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressGetChannelURLResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressGetChannelURLResponse} VideoIngressGetChannelURLResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressGetChannelURLResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressGetChannelURLResponse message.
+     * @function verify
+     * @memberof VideoIngressGetChannelURLResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressGetChannelURLResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.url != null && message.hasOwnProperty("url"))
+            if (!$util.isString(message.url))
+                return "url: string expected";
+        if (message.serverAddr != null && message.hasOwnProperty("serverAddr"))
+            if (!$util.isString(message.serverAddr))
+                return "serverAddr: string expected";
+        if (message.streamKey != null && message.hasOwnProperty("streamKey"))
+            if (!$util.isString(message.streamKey))
+                return "streamKey: string expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressGetChannelURLResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressGetChannelURLResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressGetChannelURLResponse} VideoIngressGetChannelURLResponse
+     */
+    VideoIngressGetChannelURLResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressGetChannelURLResponse)
+            return object;
+        let message = new $root.VideoIngressGetChannelURLResponse();
+        if (object.url != null)
+            message.url = String(object.url);
+        if (object.serverAddr != null)
+            message.serverAddr = String(object.serverAddr);
+        if (object.streamKey != null)
+            message.streamKey = String(object.streamKey);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressGetChannelURLResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressGetChannelURLResponse
+     * @static
+     * @param {VideoIngressGetChannelURLResponse} message VideoIngressGetChannelURLResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressGetChannelURLResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            object.url = "";
+            object.serverAddr = "";
+            object.streamKey = "";
+        }
+        if (message.url != null && message.hasOwnProperty("url"))
+            object.url = message.url;
+        if (message.serverAddr != null && message.hasOwnProperty("serverAddr"))
+            object.serverAddr = message.serverAddr;
+        if (message.streamKey != null && message.hasOwnProperty("streamKey"))
+            object.streamKey = message.streamKey;
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressGetChannelURLResponse to JSON.
+     * @function toJSON
+     * @memberof VideoIngressGetChannelURLResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressGetChannelURLResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressGetChannelURLResponse;
+})();
+
+export const VideoIngressShareCreateChannelRequest = $root.VideoIngressShareCreateChannelRequest = (() => {
+
+    /**
+     * Properties of a VideoIngressShareCreateChannelRequest.
+     * @exports IVideoIngressShareCreateChannelRequest
+     * @interface IVideoIngressShareCreateChannelRequest
+     * @property {IDirectoryListingSnippet|null} [directoryListingSnippet] VideoIngressShareCreateChannelRequest directoryListingSnippet
+     */
+
+    /**
+     * Constructs a new VideoIngressShareCreateChannelRequest.
+     * @exports VideoIngressShareCreateChannelRequest
+     * @classdesc Represents a VideoIngressShareCreateChannelRequest.
+     * @implements IVideoIngressShareCreateChannelRequest
+     * @constructor
+     * @param {IVideoIngressShareCreateChannelRequest=} [properties] Properties to set
+     */
+    function VideoIngressShareCreateChannelRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressShareCreateChannelRequest directoryListingSnippet.
+     * @member {IDirectoryListingSnippet|null|undefined} directoryListingSnippet
+     * @memberof VideoIngressShareCreateChannelRequest
+     * @instance
+     */
+    VideoIngressShareCreateChannelRequest.prototype.directoryListingSnippet = null;
+
+    /**
+     * Creates a new VideoIngressShareCreateChannelRequest instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressShareCreateChannelRequest
+     * @static
+     * @param {IVideoIngressShareCreateChannelRequest=} [properties] Properties to set
+     * @returns {VideoIngressShareCreateChannelRequest} VideoIngressShareCreateChannelRequest instance
+     */
+    VideoIngressShareCreateChannelRequest.create = function create(properties) {
+        return new VideoIngressShareCreateChannelRequest(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressShareCreateChannelRequest message. Does not implicitly {@link VideoIngressShareCreateChannelRequest.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressShareCreateChannelRequest
+     * @static
+     * @param {IVideoIngressShareCreateChannelRequest} message VideoIngressShareCreateChannelRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressShareCreateChannelRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.directoryListingSnippet != null && Object.hasOwnProperty.call(message, "directoryListingSnippet"))
+            $root.DirectoryListingSnippet.encode(message.directoryListingSnippet, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressShareCreateChannelRequest message, length delimited. Does not implicitly {@link VideoIngressShareCreateChannelRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressShareCreateChannelRequest
+     * @static
+     * @param {IVideoIngressShareCreateChannelRequest} message VideoIngressShareCreateChannelRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressShareCreateChannelRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressShareCreateChannelRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressShareCreateChannelRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressShareCreateChannelRequest} VideoIngressShareCreateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressShareCreateChannelRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressShareCreateChannelRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.directoryListingSnippet = $root.DirectoryListingSnippet.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressShareCreateChannelRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressShareCreateChannelRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressShareCreateChannelRequest} VideoIngressShareCreateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressShareCreateChannelRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressShareCreateChannelRequest message.
+     * @function verify
+     * @memberof VideoIngressShareCreateChannelRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressShareCreateChannelRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.directoryListingSnippet != null && message.hasOwnProperty("directoryListingSnippet")) {
+            let error = $root.DirectoryListingSnippet.verify(message.directoryListingSnippet);
+            if (error)
+                return "directoryListingSnippet." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressShareCreateChannelRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressShareCreateChannelRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressShareCreateChannelRequest} VideoIngressShareCreateChannelRequest
+     */
+    VideoIngressShareCreateChannelRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressShareCreateChannelRequest)
+            return object;
+        let message = new $root.VideoIngressShareCreateChannelRequest();
+        if (object.directoryListingSnippet != null) {
+            if (typeof object.directoryListingSnippet !== "object")
+                throw TypeError(".VideoIngressShareCreateChannelRequest.directoryListingSnippet: object expected");
+            message.directoryListingSnippet = $root.DirectoryListingSnippet.fromObject(object.directoryListingSnippet);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressShareCreateChannelRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressShareCreateChannelRequest
+     * @static
+     * @param {VideoIngressShareCreateChannelRequest} message VideoIngressShareCreateChannelRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressShareCreateChannelRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.directoryListingSnippet = null;
+        if (message.directoryListingSnippet != null && message.hasOwnProperty("directoryListingSnippet"))
+            object.directoryListingSnippet = $root.DirectoryListingSnippet.toObject(message.directoryListingSnippet, options);
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressShareCreateChannelRequest to JSON.
+     * @function toJSON
+     * @memberof VideoIngressShareCreateChannelRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressShareCreateChannelRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressShareCreateChannelRequest;
+})();
+
+export const VideoIngressShareCreateChannelResponse = $root.VideoIngressShareCreateChannelResponse = (() => {
+
+    /**
+     * Properties of a VideoIngressShareCreateChannelResponse.
+     * @exports IVideoIngressShareCreateChannelResponse
+     * @interface IVideoIngressShareCreateChannelResponse
+     * @property {IVideoIngressChannel|null} [channel] VideoIngressShareCreateChannelResponse channel
+     */
+
+    /**
+     * Constructs a new VideoIngressShareCreateChannelResponse.
+     * @exports VideoIngressShareCreateChannelResponse
+     * @classdesc Represents a VideoIngressShareCreateChannelResponse.
+     * @implements IVideoIngressShareCreateChannelResponse
+     * @constructor
+     * @param {IVideoIngressShareCreateChannelResponse=} [properties] Properties to set
+     */
+    function VideoIngressShareCreateChannelResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressShareCreateChannelResponse channel.
+     * @member {IVideoIngressChannel|null|undefined} channel
+     * @memberof VideoIngressShareCreateChannelResponse
+     * @instance
+     */
+    VideoIngressShareCreateChannelResponse.prototype.channel = null;
+
+    /**
+     * Creates a new VideoIngressShareCreateChannelResponse instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressShareCreateChannelResponse
+     * @static
+     * @param {IVideoIngressShareCreateChannelResponse=} [properties] Properties to set
+     * @returns {VideoIngressShareCreateChannelResponse} VideoIngressShareCreateChannelResponse instance
+     */
+    VideoIngressShareCreateChannelResponse.create = function create(properties) {
+        return new VideoIngressShareCreateChannelResponse(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressShareCreateChannelResponse message. Does not implicitly {@link VideoIngressShareCreateChannelResponse.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressShareCreateChannelResponse
+     * @static
+     * @param {IVideoIngressShareCreateChannelResponse} message VideoIngressShareCreateChannelResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressShareCreateChannelResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.channel != null && Object.hasOwnProperty.call(message, "channel"))
+            $root.VideoIngressChannel.encode(message.channel, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressShareCreateChannelResponse message, length delimited. Does not implicitly {@link VideoIngressShareCreateChannelResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressShareCreateChannelResponse
+     * @static
+     * @param {IVideoIngressShareCreateChannelResponse} message VideoIngressShareCreateChannelResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressShareCreateChannelResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressShareCreateChannelResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressShareCreateChannelResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressShareCreateChannelResponse} VideoIngressShareCreateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressShareCreateChannelResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressShareCreateChannelResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.channel = $root.VideoIngressChannel.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressShareCreateChannelResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressShareCreateChannelResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressShareCreateChannelResponse} VideoIngressShareCreateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressShareCreateChannelResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressShareCreateChannelResponse message.
+     * @function verify
+     * @memberof VideoIngressShareCreateChannelResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressShareCreateChannelResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.channel != null && message.hasOwnProperty("channel")) {
+            let error = $root.VideoIngressChannel.verify(message.channel);
+            if (error)
+                return "channel." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressShareCreateChannelResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressShareCreateChannelResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressShareCreateChannelResponse} VideoIngressShareCreateChannelResponse
+     */
+    VideoIngressShareCreateChannelResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressShareCreateChannelResponse)
+            return object;
+        let message = new $root.VideoIngressShareCreateChannelResponse();
+        if (object.channel != null) {
+            if (typeof object.channel !== "object")
+                throw TypeError(".VideoIngressShareCreateChannelResponse.channel: object expected");
+            message.channel = $root.VideoIngressChannel.fromObject(object.channel);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressShareCreateChannelResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressShareCreateChannelResponse
+     * @static
+     * @param {VideoIngressShareCreateChannelResponse} message VideoIngressShareCreateChannelResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressShareCreateChannelResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.channel = null;
+        if (message.channel != null && message.hasOwnProperty("channel"))
+            object.channel = $root.VideoIngressChannel.toObject(message.channel, options);
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressShareCreateChannelResponse to JSON.
+     * @function toJSON
+     * @memberof VideoIngressShareCreateChannelResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressShareCreateChannelResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressShareCreateChannelResponse;
+})();
+
+export const VideoIngressShareUpdateChannelRequest = $root.VideoIngressShareUpdateChannelRequest = (() => {
+
+    /**
+     * Properties of a VideoIngressShareUpdateChannelRequest.
+     * @exports IVideoIngressShareUpdateChannelRequest
+     * @interface IVideoIngressShareUpdateChannelRequest
+     * @property {number|null} [id] VideoIngressShareUpdateChannelRequest id
+     * @property {IDirectoryListingSnippet|null} [directoryListingSnippet] VideoIngressShareUpdateChannelRequest directoryListingSnippet
+     */
+
+    /**
+     * Constructs a new VideoIngressShareUpdateChannelRequest.
+     * @exports VideoIngressShareUpdateChannelRequest
+     * @classdesc Represents a VideoIngressShareUpdateChannelRequest.
+     * @implements IVideoIngressShareUpdateChannelRequest
+     * @constructor
+     * @param {IVideoIngressShareUpdateChannelRequest=} [properties] Properties to set
+     */
+    function VideoIngressShareUpdateChannelRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressShareUpdateChannelRequest id.
+     * @member {number} id
+     * @memberof VideoIngressShareUpdateChannelRequest
+     * @instance
+     */
+    VideoIngressShareUpdateChannelRequest.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * VideoIngressShareUpdateChannelRequest directoryListingSnippet.
+     * @member {IDirectoryListingSnippet|null|undefined} directoryListingSnippet
+     * @memberof VideoIngressShareUpdateChannelRequest
+     * @instance
+     */
+    VideoIngressShareUpdateChannelRequest.prototype.directoryListingSnippet = null;
+
+    /**
+     * Creates a new VideoIngressShareUpdateChannelRequest instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressShareUpdateChannelRequest
+     * @static
+     * @param {IVideoIngressShareUpdateChannelRequest=} [properties] Properties to set
+     * @returns {VideoIngressShareUpdateChannelRequest} VideoIngressShareUpdateChannelRequest instance
+     */
+    VideoIngressShareUpdateChannelRequest.create = function create(properties) {
+        return new VideoIngressShareUpdateChannelRequest(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressShareUpdateChannelRequest message. Does not implicitly {@link VideoIngressShareUpdateChannelRequest.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressShareUpdateChannelRequest
+     * @static
+     * @param {IVideoIngressShareUpdateChannelRequest} message VideoIngressShareUpdateChannelRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressShareUpdateChannelRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        if (message.directoryListingSnippet != null && Object.hasOwnProperty.call(message, "directoryListingSnippet"))
+            $root.DirectoryListingSnippet.encode(message.directoryListingSnippet, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressShareUpdateChannelRequest message, length delimited. Does not implicitly {@link VideoIngressShareUpdateChannelRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressShareUpdateChannelRequest
+     * @static
+     * @param {IVideoIngressShareUpdateChannelRequest} message VideoIngressShareUpdateChannelRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressShareUpdateChannelRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressShareUpdateChannelRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressShareUpdateChannelRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressShareUpdateChannelRequest} VideoIngressShareUpdateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressShareUpdateChannelRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressShareUpdateChannelRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
+            case 2:
+                message.directoryListingSnippet = $root.DirectoryListingSnippet.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressShareUpdateChannelRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressShareUpdateChannelRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressShareUpdateChannelRequest} VideoIngressShareUpdateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressShareUpdateChannelRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressShareUpdateChannelRequest message.
+     * @function verify
+     * @memberof VideoIngressShareUpdateChannelRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressShareUpdateChannelRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        if (message.directoryListingSnippet != null && message.hasOwnProperty("directoryListingSnippet")) {
+            let error = $root.DirectoryListingSnippet.verify(message.directoryListingSnippet);
+            if (error)
+                return "directoryListingSnippet." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressShareUpdateChannelRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressShareUpdateChannelRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressShareUpdateChannelRequest} VideoIngressShareUpdateChannelRequest
+     */
+    VideoIngressShareUpdateChannelRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressShareUpdateChannelRequest)
+            return object;
+        let message = new $root.VideoIngressShareUpdateChannelRequest();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        if (object.directoryListingSnippet != null) {
+            if (typeof object.directoryListingSnippet !== "object")
+                throw TypeError(".VideoIngressShareUpdateChannelRequest.directoryListingSnippet: object expected");
+            message.directoryListingSnippet = $root.DirectoryListingSnippet.fromObject(object.directoryListingSnippet);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressShareUpdateChannelRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressShareUpdateChannelRequest
+     * @static
+     * @param {VideoIngressShareUpdateChannelRequest} message VideoIngressShareUpdateChannelRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressShareUpdateChannelRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults) {
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+            object.directoryListingSnippet = null;
+        }
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        if (message.directoryListingSnippet != null && message.hasOwnProperty("directoryListingSnippet"))
+            object.directoryListingSnippet = $root.DirectoryListingSnippet.toObject(message.directoryListingSnippet, options);
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressShareUpdateChannelRequest to JSON.
+     * @function toJSON
+     * @memberof VideoIngressShareUpdateChannelRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressShareUpdateChannelRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressShareUpdateChannelRequest;
+})();
+
+export const VideoIngressShareUpdateChannelResponse = $root.VideoIngressShareUpdateChannelResponse = (() => {
+
+    /**
+     * Properties of a VideoIngressShareUpdateChannelResponse.
+     * @exports IVideoIngressShareUpdateChannelResponse
+     * @interface IVideoIngressShareUpdateChannelResponse
+     * @property {IVideoIngressChannel|null} [channel] VideoIngressShareUpdateChannelResponse channel
+     */
+
+    /**
+     * Constructs a new VideoIngressShareUpdateChannelResponse.
+     * @exports VideoIngressShareUpdateChannelResponse
+     * @classdesc Represents a VideoIngressShareUpdateChannelResponse.
+     * @implements IVideoIngressShareUpdateChannelResponse
+     * @constructor
+     * @param {IVideoIngressShareUpdateChannelResponse=} [properties] Properties to set
+     */
+    function VideoIngressShareUpdateChannelResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressShareUpdateChannelResponse channel.
+     * @member {IVideoIngressChannel|null|undefined} channel
+     * @memberof VideoIngressShareUpdateChannelResponse
+     * @instance
+     */
+    VideoIngressShareUpdateChannelResponse.prototype.channel = null;
+
+    /**
+     * Creates a new VideoIngressShareUpdateChannelResponse instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressShareUpdateChannelResponse
+     * @static
+     * @param {IVideoIngressShareUpdateChannelResponse=} [properties] Properties to set
+     * @returns {VideoIngressShareUpdateChannelResponse} VideoIngressShareUpdateChannelResponse instance
+     */
+    VideoIngressShareUpdateChannelResponse.create = function create(properties) {
+        return new VideoIngressShareUpdateChannelResponse(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressShareUpdateChannelResponse message. Does not implicitly {@link VideoIngressShareUpdateChannelResponse.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressShareUpdateChannelResponse
+     * @static
+     * @param {IVideoIngressShareUpdateChannelResponse} message VideoIngressShareUpdateChannelResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressShareUpdateChannelResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.channel != null && Object.hasOwnProperty.call(message, "channel"))
+            $root.VideoIngressChannel.encode(message.channel, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressShareUpdateChannelResponse message, length delimited. Does not implicitly {@link VideoIngressShareUpdateChannelResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressShareUpdateChannelResponse
+     * @static
+     * @param {IVideoIngressShareUpdateChannelResponse} message VideoIngressShareUpdateChannelResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressShareUpdateChannelResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressShareUpdateChannelResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressShareUpdateChannelResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressShareUpdateChannelResponse} VideoIngressShareUpdateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressShareUpdateChannelResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressShareUpdateChannelResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.channel = $root.VideoIngressChannel.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressShareUpdateChannelResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressShareUpdateChannelResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressShareUpdateChannelResponse} VideoIngressShareUpdateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressShareUpdateChannelResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressShareUpdateChannelResponse message.
+     * @function verify
+     * @memberof VideoIngressShareUpdateChannelResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressShareUpdateChannelResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.channel != null && message.hasOwnProperty("channel")) {
+            let error = $root.VideoIngressChannel.verify(message.channel);
+            if (error)
+                return "channel." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressShareUpdateChannelResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressShareUpdateChannelResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressShareUpdateChannelResponse} VideoIngressShareUpdateChannelResponse
+     */
+    VideoIngressShareUpdateChannelResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressShareUpdateChannelResponse)
+            return object;
+        let message = new $root.VideoIngressShareUpdateChannelResponse();
+        if (object.channel != null) {
+            if (typeof object.channel !== "object")
+                throw TypeError(".VideoIngressShareUpdateChannelResponse.channel: object expected");
+            message.channel = $root.VideoIngressChannel.fromObject(object.channel);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressShareUpdateChannelResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressShareUpdateChannelResponse
+     * @static
+     * @param {VideoIngressShareUpdateChannelResponse} message VideoIngressShareUpdateChannelResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressShareUpdateChannelResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.channel = null;
+        if (message.channel != null && message.hasOwnProperty("channel"))
+            object.channel = $root.VideoIngressChannel.toObject(message.channel, options);
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressShareUpdateChannelResponse to JSON.
+     * @function toJSON
+     * @memberof VideoIngressShareUpdateChannelResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressShareUpdateChannelResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressShareUpdateChannelResponse;
+})();
+
+export const VideoIngressShareDeleteChannelRequest = $root.VideoIngressShareDeleteChannelRequest = (() => {
+
+    /**
+     * Properties of a VideoIngressShareDeleteChannelRequest.
+     * @exports IVideoIngressShareDeleteChannelRequest
+     * @interface IVideoIngressShareDeleteChannelRequest
+     * @property {number|null} [id] VideoIngressShareDeleteChannelRequest id
+     */
+
+    /**
+     * Constructs a new VideoIngressShareDeleteChannelRequest.
+     * @exports VideoIngressShareDeleteChannelRequest
+     * @classdesc Represents a VideoIngressShareDeleteChannelRequest.
+     * @implements IVideoIngressShareDeleteChannelRequest
+     * @constructor
+     * @param {IVideoIngressShareDeleteChannelRequest=} [properties] Properties to set
+     */
+    function VideoIngressShareDeleteChannelRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * VideoIngressShareDeleteChannelRequest id.
+     * @member {number} id
+     * @memberof VideoIngressShareDeleteChannelRequest
+     * @instance
+     */
+    VideoIngressShareDeleteChannelRequest.prototype.id = $util.Long ? $util.Long.fromBits(0,0,true) : 0;
+
+    /**
+     * Creates a new VideoIngressShareDeleteChannelRequest instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressShareDeleteChannelRequest
+     * @static
+     * @param {IVideoIngressShareDeleteChannelRequest=} [properties] Properties to set
+     * @returns {VideoIngressShareDeleteChannelRequest} VideoIngressShareDeleteChannelRequest instance
+     */
+    VideoIngressShareDeleteChannelRequest.create = function create(properties) {
+        return new VideoIngressShareDeleteChannelRequest(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressShareDeleteChannelRequest message. Does not implicitly {@link VideoIngressShareDeleteChannelRequest.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressShareDeleteChannelRequest
+     * @static
+     * @param {IVideoIngressShareDeleteChannelRequest} message VideoIngressShareDeleteChannelRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressShareDeleteChannelRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 0 =*/8).uint64(message.id);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressShareDeleteChannelRequest message, length delimited. Does not implicitly {@link VideoIngressShareDeleteChannelRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressShareDeleteChannelRequest
+     * @static
+     * @param {IVideoIngressShareDeleteChannelRequest} message VideoIngressShareDeleteChannelRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressShareDeleteChannelRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressShareDeleteChannelRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressShareDeleteChannelRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressShareDeleteChannelRequest} VideoIngressShareDeleteChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressShareDeleteChannelRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressShareDeleteChannelRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.uint64();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressShareDeleteChannelRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressShareDeleteChannelRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressShareDeleteChannelRequest} VideoIngressShareDeleteChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressShareDeleteChannelRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressShareDeleteChannelRequest message.
+     * @function verify
+     * @memberof VideoIngressShareDeleteChannelRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressShareDeleteChannelRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!$util.isInteger(message.id) && !(message.id && $util.isInteger(message.id.low) && $util.isInteger(message.id.high)))
+                return "id: integer|Long expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressShareDeleteChannelRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressShareDeleteChannelRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressShareDeleteChannelRequest} VideoIngressShareDeleteChannelRequest
+     */
+    VideoIngressShareDeleteChannelRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressShareDeleteChannelRequest)
+            return object;
+        let message = new $root.VideoIngressShareDeleteChannelRequest();
+        if (object.id != null)
+            if ($util.Long)
+                (message.id = $util.Long.fromValue(object.id)).unsigned = true;
+            else if (typeof object.id === "string")
+                message.id = parseInt(object.id, 10);
+            else if (typeof object.id === "number")
+                message.id = object.id;
+            else if (typeof object.id === "object")
+                message.id = new $util.LongBits(object.id.low >>> 0, object.id.high >>> 0).toNumber(true);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressShareDeleteChannelRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressShareDeleteChannelRequest
+     * @static
+     * @param {VideoIngressShareDeleteChannelRequest} message VideoIngressShareDeleteChannelRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressShareDeleteChannelRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if ($util.Long) {
+                let long = new $util.Long(0, 0, true);
+                object.id = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+            } else
+                object.id = options.longs === String ? "0" : 0;
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (typeof message.id === "number")
+                object.id = options.longs === String ? String(message.id) : message.id;
+            else
+                object.id = options.longs === String ? $util.Long.prototype.toString.call(message.id) : options.longs === Number ? new $util.LongBits(message.id.low >>> 0, message.id.high >>> 0).toNumber(true) : message.id;
+        return object;
+    };
+
+    /**
+     * Converts this VideoIngressShareDeleteChannelRequest to JSON.
+     * @function toJSON
+     * @memberof VideoIngressShareDeleteChannelRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressShareDeleteChannelRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressShareDeleteChannelRequest;
+})();
+
+export const VideoIngressShareDeleteChannelResponse = $root.VideoIngressShareDeleteChannelResponse = (() => {
+
+    /**
+     * Properties of a VideoIngressShareDeleteChannelResponse.
+     * @exports IVideoIngressShareDeleteChannelResponse
+     * @interface IVideoIngressShareDeleteChannelResponse
+     */
+
+    /**
+     * Constructs a new VideoIngressShareDeleteChannelResponse.
+     * @exports VideoIngressShareDeleteChannelResponse
+     * @classdesc Represents a VideoIngressShareDeleteChannelResponse.
+     * @implements IVideoIngressShareDeleteChannelResponse
+     * @constructor
+     * @param {IVideoIngressShareDeleteChannelResponse=} [properties] Properties to set
+     */
+    function VideoIngressShareDeleteChannelResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new VideoIngressShareDeleteChannelResponse instance using the specified properties.
+     * @function create
+     * @memberof VideoIngressShareDeleteChannelResponse
+     * @static
+     * @param {IVideoIngressShareDeleteChannelResponse=} [properties] Properties to set
+     * @returns {VideoIngressShareDeleteChannelResponse} VideoIngressShareDeleteChannelResponse instance
+     */
+    VideoIngressShareDeleteChannelResponse.create = function create(properties) {
+        return new VideoIngressShareDeleteChannelResponse(properties);
+    };
+
+    /**
+     * Encodes the specified VideoIngressShareDeleteChannelResponse message. Does not implicitly {@link VideoIngressShareDeleteChannelResponse.verify|verify} messages.
+     * @function encode
+     * @memberof VideoIngressShareDeleteChannelResponse
+     * @static
+     * @param {IVideoIngressShareDeleteChannelResponse} message VideoIngressShareDeleteChannelResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressShareDeleteChannelResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified VideoIngressShareDeleteChannelResponse message, length delimited. Does not implicitly {@link VideoIngressShareDeleteChannelResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof VideoIngressShareDeleteChannelResponse
+     * @static
+     * @param {IVideoIngressShareDeleteChannelResponse} message VideoIngressShareDeleteChannelResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    VideoIngressShareDeleteChannelResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a VideoIngressShareDeleteChannelResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof VideoIngressShareDeleteChannelResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {VideoIngressShareDeleteChannelResponse} VideoIngressShareDeleteChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressShareDeleteChannelResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.VideoIngressShareDeleteChannelResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a VideoIngressShareDeleteChannelResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof VideoIngressShareDeleteChannelResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {VideoIngressShareDeleteChannelResponse} VideoIngressShareDeleteChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    VideoIngressShareDeleteChannelResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a VideoIngressShareDeleteChannelResponse message.
+     * @function verify
+     * @memberof VideoIngressShareDeleteChannelResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    VideoIngressShareDeleteChannelResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a VideoIngressShareDeleteChannelResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof VideoIngressShareDeleteChannelResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {VideoIngressShareDeleteChannelResponse} VideoIngressShareDeleteChannelResponse
+     */
+    VideoIngressShareDeleteChannelResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.VideoIngressShareDeleteChannelResponse)
+            return object;
+        return new $root.VideoIngressShareDeleteChannelResponse();
+    };
+
+    /**
+     * Creates a plain object from a VideoIngressShareDeleteChannelResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof VideoIngressShareDeleteChannelResponse
+     * @static
+     * @param {VideoIngressShareDeleteChannelResponse} message VideoIngressShareDeleteChannelResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    VideoIngressShareDeleteChannelResponse.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this VideoIngressShareDeleteChannelResponse to JSON.
+     * @function toJSON
+     * @memberof VideoIngressShareDeleteChannelResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    VideoIngressShareDeleteChannelResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return VideoIngressShareDeleteChannelResponse;
 })();
 
 export const JoinSwarmRequest = $root.JoinSwarmRequest = (() => {
@@ -57130,7 +64615,7 @@ export const CARenewResponse = $root.CARenewResponse = (() => {
  * @property {number} UPDATE_SWARM=1 UPDATE_SWARM value
  * @property {number} DELETE_SWARM=2 DELETE_SWARM value
  */
-$root.SwarmEventType = (function() {
+export const SwarmEventType = $root.SwarmEventType = (() => {
     const valuesById = {}, values = Object.create(valuesById);
     values[valuesById[0] = "CREATE_SWARM"] = 0;
     values[valuesById[1] = "UPDATE_SWARM"] = 1;
@@ -57145,7 +64630,7 @@ $root.SwarmEventType = (function() {
  * @property {number} OFFER=0 OFFER value
  * @property {number} ANSWER=1 ANSWER value
  */
-$root.WRTCSDPType = (function() {
+export const WRTCSDPType = $root.WRTCSDPType = (() => {
     const valuesById = {}, values = Object.create(valuesById);
     values[valuesById[0] = "OFFER"] = 0;
     values[valuesById[1] = "ANSWER"] = 1;
@@ -57162,7 +64647,7 @@ $root.WRTCSDPType = (function() {
  * @property {number} METRICS_FORMAT_PROTO_COMPACT=3 METRICS_FORMAT_PROTO_COMPACT value
  * @property {number} METRICS_FORMAT_OPEN_METRICS=4 METRICS_FORMAT_OPEN_METRICS value
  */
-$root.MetricsFormat = (function() {
+export const MetricsFormat = $root.MetricsFormat = (() => {
     const valuesById = {}, values = Object.create(valuesById);
     values[valuesById[0] = "METRICS_FORMAT_TEXT"] = 0;
     values[valuesById[1] = "METRICS_FORMAT_PROTO_DELIM"] = 1;
@@ -57179,7 +64664,7 @@ $root.MetricsFormat = (function() {
  * @property {number} KDF_TYPE_UNDEFINED=0 KDF_TYPE_UNDEFINED value
  * @property {number} KDF_TYPE_PBKDF2_SHA256=1 KDF_TYPE_PBKDF2_SHA256 value
  */
-$root.KDFType = (function() {
+export const KDFType = $root.KDFType = (() => {
     const valuesById = {}, values = Object.create(valuesById);
     values[valuesById[0] = "KDF_TYPE_UNDEFINED"] = 0;
     values[valuesById[1] = "KDF_TYPE_PBKDF2_SHA256"] = 1;
@@ -57194,7 +64679,7 @@ $root.KDFType = (function() {
  * @property {number} KEY_TYPE_ED25519=1 KEY_TYPE_ED25519 value
  * @property {number} KEY_TYPE_X25519=2 KEY_TYPE_X25519 value
  */
-$root.KeyType = (function() {
+export const KeyType = $root.KeyType = (() => {
     const valuesById = {}, values = Object.create(valuesById);
     values[valuesById[0] = "KEY_TYPE_UNDEFINED"] = 0;
     values[valuesById[1] = "KEY_TYPE_ED25519"] = 1;
@@ -57213,7 +64698,7 @@ $root.KeyType = (function() {
  * @property {number} KEY_USAGE_BROKER=8 KEY_USAGE_BROKER value
  * @property {number} KEY_USAGE_ENCIPHERMENT=16 KEY_USAGE_ENCIPHERMENT value
  */
-$root.KeyUsage = (function() {
+export const KeyUsage = $root.KeyUsage = (() => {
     const valuesById = {}, values = Object.create(valuesById);
     values[valuesById[0] = "KEY_USAGE_UNDEFINED"] = 0;
     values[valuesById[1] = "KEY_USAGE_PEER"] = 1;

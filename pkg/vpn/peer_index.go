@@ -3,7 +3,6 @@ package vpn
 import (
 	"bytes"
 	"context"
-	"crypto/ed25519"
 	"crypto/sha256"
 	"encoding/binary"
 	"errors"
@@ -13,10 +12,10 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
@@ -83,16 +82,16 @@ func (s *peerIndex) HandleMessage(msg *Message) error {
 }
 
 func (s *peerIndex) handlePublish(r *pb.PeerIndexMessage_Record) error {
-	if !verifyPeerIndexRecord(r) {
-		return errors.New("invalid record signature")
+	if err := dao.VerifyMessage(r); err != nil {
+		return err
 	}
 
 	return s.store.Insert(s.id, r)
 }
 
 func (s *peerIndex) handleUnpublish(r *pb.PeerIndexMessage_Record) error {
-	if !verifyPeerIndexRecord(r) {
-		return errors.New("invalid record signature")
+	if err := dao.VerifyMessage(r); err != nil {
+		return err
 	}
 
 	return s.store.Remove(s.id, r)
@@ -117,7 +116,7 @@ func (s *peerIndex) handleSearchRequest(m *pb.PeerIndexMessage_SearchRequest, or
 
 func (s *peerIndex) handleSearchResponse(m *pb.PeerIndexMessage_SearchResponse) error {
 	for _, r := range m.Records {
-		if !verifyPeerIndexRecord(r) {
+		if dao.VerifyMessage(r) != nil {
 			continue
 		}
 		if !sendPeerIndexSearchResponse(&s.searchResponseChans, m.RequestId, r) {
@@ -447,7 +446,7 @@ type peerIndexPublisher struct {
 
 func (p *peerIndexPublisher) update() error {
 	p.record.Timestamp = time.Now().Unix()
-	if err := signPeerIndexRecord(p.record, p.network.host.Key()); err != nil {
+	if err := dao.SignMessage(p.record, p.network.host.Key()); err != nil {
 		return err
 	}
 	return nil
@@ -491,49 +490,4 @@ func (p *peerIndexPublisher) unpublish() {
 			zap.Error(err),
 		)
 	}
-}
-
-type peerIndexMarshaler struct {
-	*pb.PeerIndexMessage_Record
-}
-
-func (r peerIndexMarshaler) Size() int {
-	return 12 + len(r.Hash) + len(r.Key) + len(r.HostId)
-}
-
-func (r peerIndexMarshaler) Marshal(b []byte) int {
-	n := copy(b, r.Hash)
-	n += copy(b[n:], r.Key)
-	n += copy(b[n:], r.HostId)
-	binary.BigEndian.PutUint32(b[n:], uint32(r.Port))
-	n += 4
-	binary.BigEndian.PutUint64(b[n:], uint64(r.Timestamp))
-	n += 8
-	return n
-}
-
-func signPeerIndexRecord(r *pb.PeerIndexMessage_Record, key *pb.Key) error {
-	if key.Type != pb.KeyType_KEY_TYPE_ED25519 {
-		return errors.New("unsupported key type")
-	}
-
-	m := peerIndexMarshaler{r}
-	b := pool.Get(uint16(m.Size()))
-	defer pool.Put(b)
-	m.Marshal(*b)
-
-	r.Signature = ed25519.Sign(ed25519.PrivateKey(key.Private), *b)
-	return nil
-}
-
-func verifyPeerIndexRecord(r *pb.PeerIndexMessage_Record) bool {
-	m := peerIndexMarshaler{r}
-	b := pool.Get(uint16(m.Size()))
-	defer pool.Put(b)
-	m.Marshal(*b)
-
-	if len(r.Key) != ed25519.PublicKeySize {
-		return false
-	}
-	return ed25519.Verify(r.Key, *b, r.Signature)
 }

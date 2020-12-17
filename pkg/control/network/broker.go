@@ -3,6 +3,7 @@ package network
 import (
 	"crypto/rand"
 
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/mpc"
 	"go.uber.org/zap"
 )
@@ -18,7 +19,7 @@ type broker struct {
 	logger *zap.Logger
 }
 
-func (p *broker) SendKeys(c ReadWriteFlusher, keys [][]byte) error {
+func (p *broker) SendKeys(c ioutil.ReadWriteFlusher, keys [][]byte) error {
 	rng, err := newRNG()
 	if err != nil {
 		return err
@@ -47,7 +48,7 @@ func (p *broker) SendKeys(c ReadWriteFlusher, keys [][]byte) error {
 	return nil
 }
 
-func (p *broker) ReceiveKeys(c ReadWriteFlusher, keys [][]byte) ([][]byte, error) {
+func (p *broker) ReceiveKeys(c ioutil.ReadWriteFlusher, keys [][]byte) ([][]byte, error) {
 	rng, err := newRNG()
 	if err != nil {
 		return nil, err

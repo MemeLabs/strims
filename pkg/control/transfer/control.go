@@ -1,4 +1,4 @@
-package swarm
+package transfer
 
 import (
 	"context"
@@ -72,7 +72,6 @@ func (t *Control) Run(ctx context.Context) {
 func (t *Control) handleNetworkStart(network *pb.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-
 }
 
 func (t *Control) handleNetworkStop(network *pb.Network) {
@@ -136,16 +135,16 @@ func (t *Control) Add(swarm *ppspp.Swarm) *Swarm {
 }
 
 // Remove ...
-func (t *Control) Remove(swarm *Swarm) {
+func (t *Control) Remove(swarmID ppspp.SwarmID) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	delete(t.swarms, swarm.ID)
-	t.observers.Swarm.Emit(event.SwarmRemove{Swarm: swarm.Swarm})
+	// delete(t.swarms, swarm.ID)
+	// t.observers.Swarm.Emit(event.SwarmRemove{Swarm: swarm.Swarm})
 }
 
 // List ...
-func (t *Control) List(swarm *Swarm) []*Swarm {
+func (t *Control) List() []*Swarm {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -153,21 +152,35 @@ func (t *Control) List(swarm *Swarm) []*Swarm {
 }
 
 // Publish ...
-func (t *Control) Publish(swarmID, networkID uint64) {
+func (t *Control) Publish(swarmID ppspp.SwarmID, networkKey []byte) {
+	client, ok := t.vpn.Client(networkKey)
+	if !ok {
+		return
+	}
+
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
+	_ = client
+
+	// swarm, ok := t.swarms[swarmID]
+	// if !ok {
+	// 	return
+	// }
+
+	// client.PeerIndex.Publish(swarm.ctx, swarm.Swarm.ID(), []byte{}, 0)
 }
 
 // Swarm ...
 type Swarm struct {
+	ctx      context.Context
 	ID       uint64
 	Swarm    *ppspp.Swarm
 	Networks []*Network
 }
 
 // Publish ...
-func (s *Swarm) Publish(networkID uint64) {
+func (s *Swarm) Publish(networkKey []byte) {
 	// s.Networks = append(s.Networks)
 }
 

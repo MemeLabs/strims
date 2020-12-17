@@ -38,7 +38,7 @@ func newDirectoryService(logger *zap.Logger, client *vpn.Client, key *pb.Key) (*
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
 		SwarmOptions: ppspp.SwarmOptions{
 			ChunkSize:  128,
-			LiveWindow: 1024 * 1024,
+			LiveWindow: 16 * 1024,
 			Integrity: integrity.VerifierOptions{
 				ProtectionMethod: integrity.ProtectionMethodSignAll,
 			},
@@ -103,8 +103,9 @@ func (d *directoryService) broadcast() error {
 
 	now := iotime.Load()
 
-	listings := d.listings.PeekRecentlyTouched(d.lastBroadcastTime)
-	for l, ok := listings.Next().(*listing); ok; l, ok = listings.Next().(*listing) {
+	for it := d.listings.PeekRecentlyTouched(d.lastBroadcastTime); it.Next(); {
+		l := it.Value().(*listing)
+
 		var event *pb.DirectoryServerEvent
 		if l.publishers.Len() == 0 && l.viewers.Len() == 0 {
 			d.listings.Delete(l)
@@ -138,8 +139,9 @@ func (d *directoryService) broadcast() error {
 		}
 	}
 
-	users := d.users.PeekRecentlyTouched(d.lastBroadcastTime)
-	for u, ok := users.Next().(*user); ok; u, ok = users.Next().(*user) {
+	for it := d.users.PeekRecentlyTouched(d.lastBroadcastTime); it.Next(); {
+		u := it.Value().(*user)
+
 		var keys [][]byte
 		u.sessions.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
 			it.(*session).viewedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
@@ -166,7 +168,7 @@ func (d *directoryService) broadcast() error {
 	eol := now.Add(-sessionTimeout)
 
 	for s, ok := d.sessions.Pop(eol).(*session); ok; s, ok = d.sessions.Pop(eol).(*session) {
-		u := d.users.GetOrInsert(&session{certificate: s.certificate.GetParent()}).(*user)
+		u := d.users.GetOrInsert(&user{certificate: s.certificate.GetParent()}).(*user)
 		u.sessions.Delete(s)
 		if u.sessions.Len() != 0 {
 			continue
@@ -219,7 +221,7 @@ func (d *directoryService) writeToStream(msg protoreflect.ProtoMessage) error {
 }
 
 func (d *directoryService) Publish(ctx context.Context, req *pb.DirectoryPublishRequest) (*pb.DirectoryPublishResponse, error) {
-	if err := dao.VerifyDirectoryListing(req.Listing); err != nil {
+	if err := dao.VerifyMessage(req.Listing); err != nil {
 		return nil, err
 	}
 
@@ -230,8 +232,8 @@ func (d *directoryService) Publish(ctx context.Context, req *pb.DirectoryPublish
 		listing:      req.Listing,
 		modifiedTime: iotime.Load(),
 	}).(*listing)
-	s := d.sessions.GetOrInsert(&session{certificate: ctx.(*rpc.VPNContext).Certificate()}).(*session)
-	u := d.users.GetOrInsert(&session{certificate: ctx.(*rpc.VPNContext).Certificate().GetParent()}).(*user)
+	s := d.sessions.GetOrInsert(&session{certificate: rpc.VPNCertificate(ctx)}).(*session)
+	u := d.users.GetOrInsert(&user{certificate: rpc.VPNCertificate(ctx).GetParent()}).(*user)
 
 	if req.Listing.Timestamp > l.listing.Timestamp {
 		l.listing = req.Listing
@@ -253,7 +255,7 @@ func (d *directoryService) Unpublish(ctx context.Context, req *pb.DirectoryUnpub
 	if !ok {
 		return nil, ErrListingNotFound
 	}
-	s, ok := d.sessions.Get(&session{certificate: ctx.(*rpc.VPNContext).Certificate()}).(*session)
+	s, ok := d.sessions.Get(&session{certificate: rpc.VPNCertificate(ctx)}).(*session)
 	if !ok {
 		return nil, ErrSessionNotFound
 	}
@@ -274,8 +276,8 @@ func (d *directoryService) Join(ctx context.Context, req *pb.DirectoryJoinReques
 	if !ok {
 		return nil, ErrListingNotFound
 	}
-	s := d.sessions.GetOrInsert(&session{certificate: ctx.(*rpc.VPNContext).Certificate()}).(*session)
-	u := d.users.GetOrInsert(&session{certificate: ctx.(*rpc.VPNContext).Certificate().GetParent()}).(*user)
+	s := d.sessions.GetOrInsert(&session{certificate: rpc.VPNCertificate(ctx)}).(*session)
+	u := d.users.GetOrInsert(&user{certificate: rpc.VPNCertificate(ctx).GetParent()}).(*user)
 
 	l.viewers.InsertNoReplace(s)
 	s.viewedListings.InsertNoReplace(l)
@@ -292,11 +294,11 @@ func (d *directoryService) Part(ctx context.Context, req *pb.DirectoryPartReques
 	if !ok {
 		return nil, ErrListingNotFound
 	}
-	s, ok := d.sessions.Get(&session{certificate: ctx.(*rpc.VPNContext).Certificate()}).(*session)
+	s, ok := d.sessions.Get(&session{certificate: rpc.VPNCertificate(ctx)}).(*session)
 	if !ok {
 		return nil, ErrSessionNotFound
 	}
-	d.users.Touch(&session{certificate: ctx.(*rpc.VPNContext).Certificate().GetParent()})
+	d.users.Touch(&user{certificate: rpc.VPNCertificate(ctx).GetParent()})
 
 	if l.viewers.Delete(s) == nil {
 		return nil, errors.New("not viewing this listing")
@@ -310,7 +312,7 @@ func (d *directoryService) Ping(ctx context.Context, req *pb.DirectoryPingReques
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	s, ok := d.sessions.Get(&session{certificate: ctx.(*rpc.VPNContext).Certificate()}).(*session)
+	s, ok := d.sessions.Get(&session{certificate: rpc.VPNCertificate(ctx)}).(*session)
 	if ok {
 		return nil, ErrSessionNotFound
 	}

@@ -3956,6 +3956,102 @@ export class CallChatClientResponse implements ICallChatClientResponse {
     public toJSON(): { [k: string]: any };
 }
 
+/** Properties of a SecondaryIndexKey. */
+export interface ISecondaryIndexKey {
+
+    /** SecondaryIndexKey key */
+    key?: (Uint8Array|null);
+
+    /** SecondaryIndexKey id */
+    id?: (number|null);
+}
+
+/** Represents a SecondaryIndexKey. */
+export class SecondaryIndexKey implements ISecondaryIndexKey {
+
+    /**
+     * Constructs a new SecondaryIndexKey.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ISecondaryIndexKey);
+
+    /** SecondaryIndexKey key. */
+    public key: Uint8Array;
+
+    /** SecondaryIndexKey id. */
+    public id: number;
+
+    /**
+     * Creates a new SecondaryIndexKey instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns SecondaryIndexKey instance
+     */
+    public static create(properties?: ISecondaryIndexKey): SecondaryIndexKey;
+
+    /**
+     * Encodes the specified SecondaryIndexKey message. Does not implicitly {@link SecondaryIndexKey.verify|verify} messages.
+     * @param message SecondaryIndexKey message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ISecondaryIndexKey, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified SecondaryIndexKey message, length delimited. Does not implicitly {@link SecondaryIndexKey.verify|verify} messages.
+     * @param message SecondaryIndexKey message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ISecondaryIndexKey, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a SecondaryIndexKey message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns SecondaryIndexKey
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): SecondaryIndexKey;
+
+    /**
+     * Decodes a SecondaryIndexKey message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns SecondaryIndexKey
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): SecondaryIndexKey;
+
+    /**
+     * Verifies a SecondaryIndexKey message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a SecondaryIndexKey message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns SecondaryIndexKey
+     */
+    public static fromObject(object: { [k: string]: any }): SecondaryIndexKey;
+
+    /**
+     * Creates a plain object from a SecondaryIndexKey message. Also converts values to other types if specified.
+     * @param message SecondaryIndexKey
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: SecondaryIndexKey, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this SecondaryIndexKey to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
 /** Properties of a PProfRequest. */
 export interface IPProfRequest {
 
@@ -4598,29 +4694,320 @@ export class TestDirectoryPublishResponse implements ITestDirectoryPublishRespon
     public toJSON(): { [k: string]: any };
 }
 
+/** Properties of a DirectoryListingSnippet. */
+export interface IDirectoryListingSnippet {
+
+    /** DirectoryListingSnippet title */
+    title?: (string|null);
+
+    /** DirectoryListingSnippet description */
+    description?: (string|null);
+
+    /** DirectoryListingSnippet tags */
+    tags?: (string[]|null);
+}
+
+/** Represents a DirectoryListingSnippet. */
+export class DirectoryListingSnippet implements IDirectoryListingSnippet {
+
+    /**
+     * Constructs a new DirectoryListingSnippet.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryListingSnippet);
+
+    /** DirectoryListingSnippet title. */
+    public title: string;
+
+    /** DirectoryListingSnippet description. */
+    public description: string;
+
+    /** DirectoryListingSnippet tags. */
+    public tags: string[];
+
+    /**
+     * Creates a new DirectoryListingSnippet instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryListingSnippet instance
+     */
+    public static create(properties?: IDirectoryListingSnippet): DirectoryListingSnippet;
+
+    /**
+     * Encodes the specified DirectoryListingSnippet message. Does not implicitly {@link DirectoryListingSnippet.verify|verify} messages.
+     * @param message DirectoryListingSnippet message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryListingSnippet, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryListingSnippet message, length delimited. Does not implicitly {@link DirectoryListingSnippet.verify|verify} messages.
+     * @param message DirectoryListingSnippet message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryListingSnippet, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryListingSnippet message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryListingSnippet
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryListingSnippet;
+
+    /**
+     * Decodes a DirectoryListingSnippet message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryListingSnippet
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryListingSnippet;
+
+    /**
+     * Verifies a DirectoryListingSnippet message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryListingSnippet message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryListingSnippet
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryListingSnippet;
+
+    /**
+     * Creates a plain object from a DirectoryListingSnippet message. Also converts values to other types if specified.
+     * @param message DirectoryListingSnippet
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryListingSnippet, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryListingSnippet to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryListingMedia. */
+export interface IDirectoryListingMedia {
+
+    /** DirectoryListingMedia startedAt */
+    startedAt?: (number|null);
+
+    /** DirectoryListingMedia mimeType */
+    mimeType?: (string|null);
+
+    /** DirectoryListingMedia bitrate */
+    bitrate?: (number|null);
+}
+
+/** Represents a DirectoryListingMedia. */
+export class DirectoryListingMedia implements IDirectoryListingMedia {
+
+    /**
+     * Constructs a new DirectoryListingMedia.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryListingMedia);
+
+    /** DirectoryListingMedia startedAt. */
+    public startedAt: number;
+
+    /** DirectoryListingMedia mimeType. */
+    public mimeType: string;
+
+    /** DirectoryListingMedia bitrate. */
+    public bitrate: number;
+
+    /**
+     * Creates a new DirectoryListingMedia instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryListingMedia instance
+     */
+    public static create(properties?: IDirectoryListingMedia): DirectoryListingMedia;
+
+    /**
+     * Encodes the specified DirectoryListingMedia message. Does not implicitly {@link DirectoryListingMedia.verify|verify} messages.
+     * @param message DirectoryListingMedia message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryListingMedia, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryListingMedia message, length delimited. Does not implicitly {@link DirectoryListingMedia.verify|verify} messages.
+     * @param message DirectoryListingMedia message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryListingMedia, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryListingMedia message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryListingMedia
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryListingMedia;
+
+    /**
+     * Decodes a DirectoryListingMedia message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryListingMedia
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryListingMedia;
+
+    /**
+     * Verifies a DirectoryListingMedia message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryListingMedia message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryListingMedia
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryListingMedia;
+
+    /**
+     * Creates a plain object from a DirectoryListingMedia message. Also converts values to other types if specified.
+     * @param message DirectoryListingMedia
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryListingMedia, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryListingMedia to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryListingService. */
+export interface IDirectoryListingService {
+
+    /** DirectoryListingService type */
+    type?: (string|null);
+}
+
+/** Represents a DirectoryListingService. */
+export class DirectoryListingService implements IDirectoryListingService {
+
+    /**
+     * Constructs a new DirectoryListingService.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryListingService);
+
+    /** DirectoryListingService type. */
+    public type: string;
+
+    /**
+     * Creates a new DirectoryListingService instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryListingService instance
+     */
+    public static create(properties?: IDirectoryListingService): DirectoryListingService;
+
+    /**
+     * Encodes the specified DirectoryListingService message. Does not implicitly {@link DirectoryListingService.verify|verify} messages.
+     * @param message DirectoryListingService message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryListingService, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryListingService message, length delimited. Does not implicitly {@link DirectoryListingService.verify|verify} messages.
+     * @param message DirectoryListingService message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryListingService, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryListingService message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryListingService
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryListingService;
+
+    /**
+     * Decodes a DirectoryListingService message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryListingService
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryListingService;
+
+    /**
+     * Verifies a DirectoryListingService message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryListingService message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryListingService
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryListingService;
+
+    /**
+     * Creates a plain object from a DirectoryListingService message. Also converts values to other types if specified.
+     * @param message DirectoryListingService
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryListingService, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryListingService to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
 /** Properties of a DirectoryListing. */
 export interface IDirectoryListing {
 
-    /** DirectoryListing key */
-    key?: (Uint8Array|null);
-
-    /** DirectoryListing mimeType */
-    mimeType?: (string|null);
-
-    /** DirectoryListing title */
-    title?: (string|null);
-
-    /** DirectoryListing description */
-    description?: (string|null);
-
-    /** DirectoryListing tags */
-    tags?: (string[]|null);
-
-    /** DirectoryListing extra */
-    extra?: (Uint8Array|null);
+    /** DirectoryListing creator */
+    creator?: (ICertificate|null);
 
     /** DirectoryListing timestamp */
     timestamp?: (number|null);
+
+    /** DirectoryListing snippet */
+    snippet?: (IDirectoryListingSnippet|null);
+
+    /** DirectoryListing media */
+    media?: (IDirectoryListingMedia|null);
+
+    /** DirectoryListing service */
+    service?: (IDirectoryListingService|null);
+
+    /** DirectoryListing key */
+    key?: (Uint8Array|null);
 
     /** DirectoryListing signature */
     signature?: (Uint8Array|null);
@@ -4635,29 +5022,29 @@ export class DirectoryListing implements IDirectoryListing {
      */
     constructor(properties?: IDirectoryListing);
 
-    /** DirectoryListing key. */
-    public key: Uint8Array;
-
-    /** DirectoryListing mimeType. */
-    public mimeType: string;
-
-    /** DirectoryListing title. */
-    public title: string;
-
-    /** DirectoryListing description. */
-    public description: string;
-
-    /** DirectoryListing tags. */
-    public tags: string[];
-
-    /** DirectoryListing extra. */
-    public extra: Uint8Array;
+    /** DirectoryListing creator. */
+    public creator?: (ICertificate|null);
 
     /** DirectoryListing timestamp. */
     public timestamp: number;
 
+    /** DirectoryListing snippet. */
+    public snippet?: (IDirectoryListingSnippet|null);
+
+    /** DirectoryListing media. */
+    public media?: (IDirectoryListingMedia|null);
+
+    /** DirectoryListing service. */
+    public service?: (IDirectoryListingService|null);
+
+    /** DirectoryListing key. */
+    public key: Uint8Array;
+
     /** DirectoryListing signature. */
     public signature: Uint8Array;
+
+    /** DirectoryListing content. */
+    public content?: ("media"|"service");
 
     /**
      * Creates a new DirectoryListing instance using the specified properties.
@@ -14234,6 +14621,96 @@ export class ProfileSummary implements IProfileSummary {
     public toJSON(): { [k: string]: any };
 }
 
+/** Properties of a ProfileID. */
+export interface IProfileID {
+
+    /** ProfileID nextId */
+    nextId?: (number|null);
+}
+
+/** Represents a ProfileID. */
+export class ProfileID implements IProfileID {
+
+    /**
+     * Constructs a new ProfileID.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IProfileID);
+
+    /** ProfileID nextId. */
+    public nextId: number;
+
+    /**
+     * Creates a new ProfileID instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns ProfileID instance
+     */
+    public static create(properties?: IProfileID): ProfileID;
+
+    /**
+     * Encodes the specified ProfileID message. Does not implicitly {@link ProfileID.verify|verify} messages.
+     * @param message ProfileID message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IProfileID, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified ProfileID message, length delimited. Does not implicitly {@link ProfileID.verify|verify} messages.
+     * @param message ProfileID message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IProfileID, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a ProfileID message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns ProfileID
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): ProfileID;
+
+    /**
+     * Decodes a ProfileID message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns ProfileID
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): ProfileID;
+
+    /**
+     * Verifies a ProfileID message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a ProfileID message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns ProfileID
+     */
+    public static fromObject(object: { [k: string]: any }): ProfileID;
+
+    /**
+     * Creates a plain object from a ProfileID message. Also converts values to other types if specified.
+     * @param message ProfileID
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: ProfileID, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this ProfileID to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
 /** Properties of a Network. */
 export interface INetwork {
 
@@ -16242,6 +16719,2814 @@ export class RPCCallStreamResponse implements IRPCCallStreamResponse {
 
     /**
      * Converts this RPCCallStreamResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressConfig. */
+export interface IVideoIngressConfig {
+
+    /** VideoIngressConfig enabled */
+    enabled?: (boolean|null);
+
+    /** VideoIngressConfig serverAddr */
+    serverAddr?: (string|null);
+
+    /** VideoIngressConfig publicServerAddr */
+    publicServerAddr?: (string|null);
+
+    /** VideoIngressConfig serviceNetworkKeys */
+    serviceNetworkKeys?: (Uint8Array[]|null);
+}
+
+/** Represents a VideoIngressConfig. */
+export class VideoIngressConfig implements IVideoIngressConfig {
+
+    /**
+     * Constructs a new VideoIngressConfig.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressConfig);
+
+    /** VideoIngressConfig enabled. */
+    public enabled: boolean;
+
+    /** VideoIngressConfig serverAddr. */
+    public serverAddr: string;
+
+    /** VideoIngressConfig publicServerAddr. */
+    public publicServerAddr: string;
+
+    /** VideoIngressConfig serviceNetworkKeys. */
+    public serviceNetworkKeys: Uint8Array[];
+
+    /**
+     * Creates a new VideoIngressConfig instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressConfig instance
+     */
+    public static create(properties?: IVideoIngressConfig): VideoIngressConfig;
+
+    /**
+     * Encodes the specified VideoIngressConfig message. Does not implicitly {@link VideoIngressConfig.verify|verify} messages.
+     * @param message VideoIngressConfig message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressConfig, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressConfig message, length delimited. Does not implicitly {@link VideoIngressConfig.verify|verify} messages.
+     * @param message VideoIngressConfig message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressConfig, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressConfig message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressConfig
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressConfig;
+
+    /**
+     * Decodes a VideoIngressConfig message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressConfig
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressConfig;
+
+    /**
+     * Verifies a VideoIngressConfig message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressConfig message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressConfig
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressConfig;
+
+    /**
+     * Creates a plain object from a VideoIngressConfig message. Also converts values to other types if specified.
+     * @param message VideoIngressConfig
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressConfig, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressConfig to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressChannel. */
+export interface IVideoIngressChannel {
+
+    /** VideoIngressChannel id */
+    id?: (number|null);
+
+    /** VideoIngressChannel local */
+    local?: (VideoIngressChannel.ILocal|null);
+
+    /** VideoIngressChannel localShare */
+    localShare?: (VideoIngressChannel.ILocalShare|null);
+
+    /** VideoIngressChannel remoteShare */
+    remoteShare?: (VideoIngressChannel.IRemoteShare|null);
+
+    /** VideoIngressChannel key */
+    key?: (IKey|null);
+
+    /** VideoIngressChannel token */
+    token?: (Uint8Array|null);
+
+    /** VideoIngressChannel directoryListingSnippet */
+    directoryListingSnippet?: (IDirectoryListingSnippet|null);
+}
+
+/** Represents a VideoIngressChannel. */
+export class VideoIngressChannel implements IVideoIngressChannel {
+
+    /**
+     * Constructs a new VideoIngressChannel.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressChannel);
+
+    /** VideoIngressChannel id. */
+    public id: number;
+
+    /** VideoIngressChannel local. */
+    public local?: (VideoIngressChannel.ILocal|null);
+
+    /** VideoIngressChannel localShare. */
+    public localShare?: (VideoIngressChannel.ILocalShare|null);
+
+    /** VideoIngressChannel remoteShare. */
+    public remoteShare?: (VideoIngressChannel.IRemoteShare|null);
+
+    /** VideoIngressChannel key. */
+    public key?: (IKey|null);
+
+    /** VideoIngressChannel token. */
+    public token: Uint8Array;
+
+    /** VideoIngressChannel directoryListingSnippet. */
+    public directoryListingSnippet?: (IDirectoryListingSnippet|null);
+
+    /** VideoIngressChannel owner. */
+    public owner?: ("local"|"localShare"|"remoteShare");
+
+    /**
+     * Creates a new VideoIngressChannel instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressChannel instance
+     */
+    public static create(properties?: IVideoIngressChannel): VideoIngressChannel;
+
+    /**
+     * Encodes the specified VideoIngressChannel message. Does not implicitly {@link VideoIngressChannel.verify|verify} messages.
+     * @param message VideoIngressChannel message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressChannel, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressChannel message, length delimited. Does not implicitly {@link VideoIngressChannel.verify|verify} messages.
+     * @param message VideoIngressChannel message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressChannel, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressChannel message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressChannel
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressChannel;
+
+    /**
+     * Decodes a VideoIngressChannel message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressChannel
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressChannel;
+
+    /**
+     * Verifies a VideoIngressChannel message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressChannel message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressChannel
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressChannel;
+
+    /**
+     * Creates a plain object from a VideoIngressChannel message. Also converts values to other types if specified.
+     * @param message VideoIngressChannel
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressChannel, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressChannel to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+export namespace VideoIngressChannel {
+
+    /** Properties of a Local. */
+    interface ILocal {
+
+        /** Local authKey */
+        authKey?: (Uint8Array|null);
+
+        /** Local networkKey */
+        networkKey?: (Uint8Array|null);
+    }
+
+    /** Represents a Local. */
+    class Local implements ILocal {
+
+        /**
+         * Constructs a new Local.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: VideoIngressChannel.ILocal);
+
+        /** Local authKey. */
+        public authKey: Uint8Array;
+
+        /** Local networkKey. */
+        public networkKey: Uint8Array;
+
+        /**
+         * Creates a new Local instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Local instance
+         */
+        public static create(properties?: VideoIngressChannel.ILocal): VideoIngressChannel.Local;
+
+        /**
+         * Encodes the specified Local message. Does not implicitly {@link VideoIngressChannel.Local.verify|verify} messages.
+         * @param message Local message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: VideoIngressChannel.ILocal, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Local message, length delimited. Does not implicitly {@link VideoIngressChannel.Local.verify|verify} messages.
+         * @param message Local message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: VideoIngressChannel.ILocal, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a Local message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Local
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressChannel.Local;
+
+        /**
+         * Decodes a Local message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Local
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressChannel.Local;
+
+        /**
+         * Verifies a Local message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a Local message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Local
+         */
+        public static fromObject(object: { [k: string]: any }): VideoIngressChannel.Local;
+
+        /**
+         * Creates a plain object from a Local message. Also converts values to other types if specified.
+         * @param message Local
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: VideoIngressChannel.Local, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Local to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a LocalShare. */
+    interface ILocalShare {
+
+        /** LocalShare certificate */
+        certificate?: (ICertificate|null);
+    }
+
+    /** Represents a LocalShare. */
+    class LocalShare implements ILocalShare {
+
+        /**
+         * Constructs a new LocalShare.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: VideoIngressChannel.ILocalShare);
+
+        /** LocalShare certificate. */
+        public certificate?: (ICertificate|null);
+
+        /**
+         * Creates a new LocalShare instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns LocalShare instance
+         */
+        public static create(properties?: VideoIngressChannel.ILocalShare): VideoIngressChannel.LocalShare;
+
+        /**
+         * Encodes the specified LocalShare message. Does not implicitly {@link VideoIngressChannel.LocalShare.verify|verify} messages.
+         * @param message LocalShare message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: VideoIngressChannel.ILocalShare, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified LocalShare message, length delimited. Does not implicitly {@link VideoIngressChannel.LocalShare.verify|verify} messages.
+         * @param message LocalShare message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: VideoIngressChannel.ILocalShare, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a LocalShare message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns LocalShare
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressChannel.LocalShare;
+
+        /**
+         * Decodes a LocalShare message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns LocalShare
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressChannel.LocalShare;
+
+        /**
+         * Verifies a LocalShare message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a LocalShare message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns LocalShare
+         */
+        public static fromObject(object: { [k: string]: any }): VideoIngressChannel.LocalShare;
+
+        /**
+         * Creates a plain object from a LocalShare message. Also converts values to other types if specified.
+         * @param message LocalShare
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: VideoIngressChannel.LocalShare, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this LocalShare to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a RemoteShare. */
+    interface IRemoteShare {
+
+        /** RemoteShare id */
+        id?: (number|null);
+
+        /** RemoteShare networkKey */
+        networkKey?: (Uint8Array|null);
+
+        /** RemoteShare serviceKey */
+        serviceKey?: (Uint8Array|null);
+
+        /** RemoteShare serviceSalt */
+        serviceSalt?: (Uint8Array|null);
+
+        /** RemoteShare serverAddr */
+        serverAddr?: (string|null);
+    }
+
+    /** Represents a RemoteShare. */
+    class RemoteShare implements IRemoteShare {
+
+        /**
+         * Constructs a new RemoteShare.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: VideoIngressChannel.IRemoteShare);
+
+        /** RemoteShare id. */
+        public id: number;
+
+        /** RemoteShare networkKey. */
+        public networkKey: Uint8Array;
+
+        /** RemoteShare serviceKey. */
+        public serviceKey: Uint8Array;
+
+        /** RemoteShare serviceSalt. */
+        public serviceSalt: Uint8Array;
+
+        /** RemoteShare serverAddr. */
+        public serverAddr: string;
+
+        /**
+         * Creates a new RemoteShare instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns RemoteShare instance
+         */
+        public static create(properties?: VideoIngressChannel.IRemoteShare): VideoIngressChannel.RemoteShare;
+
+        /**
+         * Encodes the specified RemoteShare message. Does not implicitly {@link VideoIngressChannel.RemoteShare.verify|verify} messages.
+         * @param message RemoteShare message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: VideoIngressChannel.IRemoteShare, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified RemoteShare message, length delimited. Does not implicitly {@link VideoIngressChannel.RemoteShare.verify|verify} messages.
+         * @param message RemoteShare message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: VideoIngressChannel.IRemoteShare, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a RemoteShare message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns RemoteShare
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressChannel.RemoteShare;
+
+        /**
+         * Decodes a RemoteShare message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns RemoteShare
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressChannel.RemoteShare;
+
+        /**
+         * Verifies a RemoteShare message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a RemoteShare message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns RemoteShare
+         */
+        public static fromObject(object: { [k: string]: any }): VideoIngressChannel.RemoteShare;
+
+        /**
+         * Creates a plain object from a RemoteShare message. Also converts values to other types if specified.
+         * @param message RemoteShare
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: VideoIngressChannel.RemoteShare, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this RemoteShare to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+}
+
+/** Properties of a VideoIngressStream. */
+export interface IVideoIngressStream {
+
+    /** VideoIngressStream id */
+    id?: (number|null);
+
+    /** VideoIngressStream channelId */
+    channelId?: (number|null);
+
+    /** VideoIngressStream createdAt */
+    createdAt?: (number|null);
+
+    /** VideoIngressStream updatedAt */
+    updatedAt?: (number|null);
+}
+
+/** Represents a VideoIngressStream. */
+export class VideoIngressStream implements IVideoIngressStream {
+
+    /**
+     * Constructs a new VideoIngressStream.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressStream);
+
+    /** VideoIngressStream id. */
+    public id: number;
+
+    /** VideoIngressStream channelId. */
+    public channelId: number;
+
+    /** VideoIngressStream createdAt. */
+    public createdAt: number;
+
+    /** VideoIngressStream updatedAt. */
+    public updatedAt: number;
+
+    /**
+     * Creates a new VideoIngressStream instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressStream instance
+     */
+    public static create(properties?: IVideoIngressStream): VideoIngressStream;
+
+    /**
+     * Encodes the specified VideoIngressStream message. Does not implicitly {@link VideoIngressStream.verify|verify} messages.
+     * @param message VideoIngressStream message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressStream, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressStream message, length delimited. Does not implicitly {@link VideoIngressStream.verify|verify} messages.
+     * @param message VideoIngressStream message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressStream, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressStream message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressStream
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressStream;
+
+    /**
+     * Decodes a VideoIngressStream message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressStream
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressStream;
+
+    /**
+     * Verifies a VideoIngressStream message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressStream message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressStream
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressStream;
+
+    /**
+     * Creates a plain object from a VideoIngressStream message. Also converts values to other types if specified.
+     * @param message VideoIngressStream
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressStream, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressStream to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressIsSupportedRequest. */
+export interface IVideoIngressIsSupportedRequest {
+}
+
+/** Represents a VideoIngressIsSupportedRequest. */
+export class VideoIngressIsSupportedRequest implements IVideoIngressIsSupportedRequest {
+
+    /**
+     * Constructs a new VideoIngressIsSupportedRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressIsSupportedRequest);
+
+    /**
+     * Creates a new VideoIngressIsSupportedRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressIsSupportedRequest instance
+     */
+    public static create(properties?: IVideoIngressIsSupportedRequest): VideoIngressIsSupportedRequest;
+
+    /**
+     * Encodes the specified VideoIngressIsSupportedRequest message. Does not implicitly {@link VideoIngressIsSupportedRequest.verify|verify} messages.
+     * @param message VideoIngressIsSupportedRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressIsSupportedRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressIsSupportedRequest message, length delimited. Does not implicitly {@link VideoIngressIsSupportedRequest.verify|verify} messages.
+     * @param message VideoIngressIsSupportedRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressIsSupportedRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressIsSupportedRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressIsSupportedRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressIsSupportedRequest;
+
+    /**
+     * Decodes a VideoIngressIsSupportedRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressIsSupportedRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressIsSupportedRequest;
+
+    /**
+     * Verifies a VideoIngressIsSupportedRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressIsSupportedRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressIsSupportedRequest
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressIsSupportedRequest;
+
+    /**
+     * Creates a plain object from a VideoIngressIsSupportedRequest message. Also converts values to other types if specified.
+     * @param message VideoIngressIsSupportedRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressIsSupportedRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressIsSupportedRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressIsSupportedResponse. */
+export interface IVideoIngressIsSupportedResponse {
+
+    /** VideoIngressIsSupportedResponse supported */
+    supported?: (boolean|null);
+}
+
+/** Represents a VideoIngressIsSupportedResponse. */
+export class VideoIngressIsSupportedResponse implements IVideoIngressIsSupportedResponse {
+
+    /**
+     * Constructs a new VideoIngressIsSupportedResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressIsSupportedResponse);
+
+    /** VideoIngressIsSupportedResponse supported. */
+    public supported: boolean;
+
+    /**
+     * Creates a new VideoIngressIsSupportedResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressIsSupportedResponse instance
+     */
+    public static create(properties?: IVideoIngressIsSupportedResponse): VideoIngressIsSupportedResponse;
+
+    /**
+     * Encodes the specified VideoIngressIsSupportedResponse message. Does not implicitly {@link VideoIngressIsSupportedResponse.verify|verify} messages.
+     * @param message VideoIngressIsSupportedResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressIsSupportedResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressIsSupportedResponse message, length delimited. Does not implicitly {@link VideoIngressIsSupportedResponse.verify|verify} messages.
+     * @param message VideoIngressIsSupportedResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressIsSupportedResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressIsSupportedResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressIsSupportedResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressIsSupportedResponse;
+
+    /**
+     * Decodes a VideoIngressIsSupportedResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressIsSupportedResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressIsSupportedResponse;
+
+    /**
+     * Verifies a VideoIngressIsSupportedResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressIsSupportedResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressIsSupportedResponse
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressIsSupportedResponse;
+
+    /**
+     * Creates a plain object from a VideoIngressIsSupportedResponse message. Also converts values to other types if specified.
+     * @param message VideoIngressIsSupportedResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressIsSupportedResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressIsSupportedResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressGetConfigRequest. */
+export interface IVideoIngressGetConfigRequest {
+}
+
+/** Represents a VideoIngressGetConfigRequest. */
+export class VideoIngressGetConfigRequest implements IVideoIngressGetConfigRequest {
+
+    /**
+     * Constructs a new VideoIngressGetConfigRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressGetConfigRequest);
+
+    /**
+     * Creates a new VideoIngressGetConfigRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressGetConfigRequest instance
+     */
+    public static create(properties?: IVideoIngressGetConfigRequest): VideoIngressGetConfigRequest;
+
+    /**
+     * Encodes the specified VideoIngressGetConfigRequest message. Does not implicitly {@link VideoIngressGetConfigRequest.verify|verify} messages.
+     * @param message VideoIngressGetConfigRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressGetConfigRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressGetConfigRequest message, length delimited. Does not implicitly {@link VideoIngressGetConfigRequest.verify|verify} messages.
+     * @param message VideoIngressGetConfigRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressGetConfigRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressGetConfigRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressGetConfigRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressGetConfigRequest;
+
+    /**
+     * Decodes a VideoIngressGetConfigRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressGetConfigRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressGetConfigRequest;
+
+    /**
+     * Verifies a VideoIngressGetConfigRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressGetConfigRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressGetConfigRequest
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressGetConfigRequest;
+
+    /**
+     * Creates a plain object from a VideoIngressGetConfigRequest message. Also converts values to other types if specified.
+     * @param message VideoIngressGetConfigRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressGetConfigRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressGetConfigRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressGetConfigResponse. */
+export interface IVideoIngressGetConfigResponse {
+
+    /** VideoIngressGetConfigResponse config */
+    config?: (IVideoIngressConfig|null);
+}
+
+/** Represents a VideoIngressGetConfigResponse. */
+export class VideoIngressGetConfigResponse implements IVideoIngressGetConfigResponse {
+
+    /**
+     * Constructs a new VideoIngressGetConfigResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressGetConfigResponse);
+
+    /** VideoIngressGetConfigResponse config. */
+    public config?: (IVideoIngressConfig|null);
+
+    /**
+     * Creates a new VideoIngressGetConfigResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressGetConfigResponse instance
+     */
+    public static create(properties?: IVideoIngressGetConfigResponse): VideoIngressGetConfigResponse;
+
+    /**
+     * Encodes the specified VideoIngressGetConfigResponse message. Does not implicitly {@link VideoIngressGetConfigResponse.verify|verify} messages.
+     * @param message VideoIngressGetConfigResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressGetConfigResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressGetConfigResponse message, length delimited. Does not implicitly {@link VideoIngressGetConfigResponse.verify|verify} messages.
+     * @param message VideoIngressGetConfigResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressGetConfigResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressGetConfigResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressGetConfigResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressGetConfigResponse;
+
+    /**
+     * Decodes a VideoIngressGetConfigResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressGetConfigResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressGetConfigResponse;
+
+    /**
+     * Verifies a VideoIngressGetConfigResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressGetConfigResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressGetConfigResponse
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressGetConfigResponse;
+
+    /**
+     * Creates a plain object from a VideoIngressGetConfigResponse message. Also converts values to other types if specified.
+     * @param message VideoIngressGetConfigResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressGetConfigResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressGetConfigResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressSetConfigRequest. */
+export interface IVideoIngressSetConfigRequest {
+
+    /** VideoIngressSetConfigRequest config */
+    config?: (IVideoIngressConfig|null);
+}
+
+/** Represents a VideoIngressSetConfigRequest. */
+export class VideoIngressSetConfigRequest implements IVideoIngressSetConfigRequest {
+
+    /**
+     * Constructs a new VideoIngressSetConfigRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressSetConfigRequest);
+
+    /** VideoIngressSetConfigRequest config. */
+    public config?: (IVideoIngressConfig|null);
+
+    /**
+     * Creates a new VideoIngressSetConfigRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressSetConfigRequest instance
+     */
+    public static create(properties?: IVideoIngressSetConfigRequest): VideoIngressSetConfigRequest;
+
+    /**
+     * Encodes the specified VideoIngressSetConfigRequest message. Does not implicitly {@link VideoIngressSetConfigRequest.verify|verify} messages.
+     * @param message VideoIngressSetConfigRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressSetConfigRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressSetConfigRequest message, length delimited. Does not implicitly {@link VideoIngressSetConfigRequest.verify|verify} messages.
+     * @param message VideoIngressSetConfigRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressSetConfigRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressSetConfigRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressSetConfigRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressSetConfigRequest;
+
+    /**
+     * Decodes a VideoIngressSetConfigRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressSetConfigRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressSetConfigRequest;
+
+    /**
+     * Verifies a VideoIngressSetConfigRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressSetConfigRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressSetConfigRequest
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressSetConfigRequest;
+
+    /**
+     * Creates a plain object from a VideoIngressSetConfigRequest message. Also converts values to other types if specified.
+     * @param message VideoIngressSetConfigRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressSetConfigRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressSetConfigRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressSetConfigResponse. */
+export interface IVideoIngressSetConfigResponse {
+
+    /** VideoIngressSetConfigResponse config */
+    config?: (IVideoIngressConfig|null);
+}
+
+/** Represents a VideoIngressSetConfigResponse. */
+export class VideoIngressSetConfigResponse implements IVideoIngressSetConfigResponse {
+
+    /**
+     * Constructs a new VideoIngressSetConfigResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressSetConfigResponse);
+
+    /** VideoIngressSetConfigResponse config. */
+    public config?: (IVideoIngressConfig|null);
+
+    /**
+     * Creates a new VideoIngressSetConfigResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressSetConfigResponse instance
+     */
+    public static create(properties?: IVideoIngressSetConfigResponse): VideoIngressSetConfigResponse;
+
+    /**
+     * Encodes the specified VideoIngressSetConfigResponse message. Does not implicitly {@link VideoIngressSetConfigResponse.verify|verify} messages.
+     * @param message VideoIngressSetConfigResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressSetConfigResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressSetConfigResponse message, length delimited. Does not implicitly {@link VideoIngressSetConfigResponse.verify|verify} messages.
+     * @param message VideoIngressSetConfigResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressSetConfigResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressSetConfigResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressSetConfigResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressSetConfigResponse;
+
+    /**
+     * Decodes a VideoIngressSetConfigResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressSetConfigResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressSetConfigResponse;
+
+    /**
+     * Verifies a VideoIngressSetConfigResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressSetConfigResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressSetConfigResponse
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressSetConfigResponse;
+
+    /**
+     * Creates a plain object from a VideoIngressSetConfigResponse message. Also converts values to other types if specified.
+     * @param message VideoIngressSetConfigResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressSetConfigResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressSetConfigResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressListStreamsRequest. */
+export interface IVideoIngressListStreamsRequest {
+}
+
+/** Represents a VideoIngressListStreamsRequest. */
+export class VideoIngressListStreamsRequest implements IVideoIngressListStreamsRequest {
+
+    /**
+     * Constructs a new VideoIngressListStreamsRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressListStreamsRequest);
+
+    /**
+     * Creates a new VideoIngressListStreamsRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressListStreamsRequest instance
+     */
+    public static create(properties?: IVideoIngressListStreamsRequest): VideoIngressListStreamsRequest;
+
+    /**
+     * Encodes the specified VideoIngressListStreamsRequest message. Does not implicitly {@link VideoIngressListStreamsRequest.verify|verify} messages.
+     * @param message VideoIngressListStreamsRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressListStreamsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressListStreamsRequest message, length delimited. Does not implicitly {@link VideoIngressListStreamsRequest.verify|verify} messages.
+     * @param message VideoIngressListStreamsRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressListStreamsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressListStreamsRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressListStreamsRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressListStreamsRequest;
+
+    /**
+     * Decodes a VideoIngressListStreamsRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressListStreamsRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressListStreamsRequest;
+
+    /**
+     * Verifies a VideoIngressListStreamsRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressListStreamsRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressListStreamsRequest
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressListStreamsRequest;
+
+    /**
+     * Creates a plain object from a VideoIngressListStreamsRequest message. Also converts values to other types if specified.
+     * @param message VideoIngressListStreamsRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressListStreamsRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressListStreamsRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressListStreamsResponse. */
+export interface IVideoIngressListStreamsResponse {
+
+    /** VideoIngressListStreamsResponse streams */
+    streams?: (IVideoIngressStream[]|null);
+}
+
+/** Represents a VideoIngressListStreamsResponse. */
+export class VideoIngressListStreamsResponse implements IVideoIngressListStreamsResponse {
+
+    /**
+     * Constructs a new VideoIngressListStreamsResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressListStreamsResponse);
+
+    /** VideoIngressListStreamsResponse streams. */
+    public streams: IVideoIngressStream[];
+
+    /**
+     * Creates a new VideoIngressListStreamsResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressListStreamsResponse instance
+     */
+    public static create(properties?: IVideoIngressListStreamsResponse): VideoIngressListStreamsResponse;
+
+    /**
+     * Encodes the specified VideoIngressListStreamsResponse message. Does not implicitly {@link VideoIngressListStreamsResponse.verify|verify} messages.
+     * @param message VideoIngressListStreamsResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressListStreamsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressListStreamsResponse message, length delimited. Does not implicitly {@link VideoIngressListStreamsResponse.verify|verify} messages.
+     * @param message VideoIngressListStreamsResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressListStreamsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressListStreamsResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressListStreamsResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressListStreamsResponse;
+
+    /**
+     * Decodes a VideoIngressListStreamsResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressListStreamsResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressListStreamsResponse;
+
+    /**
+     * Verifies a VideoIngressListStreamsResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressListStreamsResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressListStreamsResponse
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressListStreamsResponse;
+
+    /**
+     * Creates a plain object from a VideoIngressListStreamsResponse message. Also converts values to other types if specified.
+     * @param message VideoIngressListStreamsResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressListStreamsResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressListStreamsResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressListChannelsRequest. */
+export interface IVideoIngressListChannelsRequest {
+}
+
+/** Represents a VideoIngressListChannelsRequest. */
+export class VideoIngressListChannelsRequest implements IVideoIngressListChannelsRequest {
+
+    /**
+     * Constructs a new VideoIngressListChannelsRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressListChannelsRequest);
+
+    /**
+     * Creates a new VideoIngressListChannelsRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressListChannelsRequest instance
+     */
+    public static create(properties?: IVideoIngressListChannelsRequest): VideoIngressListChannelsRequest;
+
+    /**
+     * Encodes the specified VideoIngressListChannelsRequest message. Does not implicitly {@link VideoIngressListChannelsRequest.verify|verify} messages.
+     * @param message VideoIngressListChannelsRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressListChannelsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressListChannelsRequest message, length delimited. Does not implicitly {@link VideoIngressListChannelsRequest.verify|verify} messages.
+     * @param message VideoIngressListChannelsRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressListChannelsRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressListChannelsRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressListChannelsRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressListChannelsRequest;
+
+    /**
+     * Decodes a VideoIngressListChannelsRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressListChannelsRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressListChannelsRequest;
+
+    /**
+     * Verifies a VideoIngressListChannelsRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressListChannelsRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressListChannelsRequest
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressListChannelsRequest;
+
+    /**
+     * Creates a plain object from a VideoIngressListChannelsRequest message. Also converts values to other types if specified.
+     * @param message VideoIngressListChannelsRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressListChannelsRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressListChannelsRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressListChannelsResponse. */
+export interface IVideoIngressListChannelsResponse {
+
+    /** VideoIngressListChannelsResponse channels */
+    channels?: (IVideoIngressChannel[]|null);
+}
+
+/** Represents a VideoIngressListChannelsResponse. */
+export class VideoIngressListChannelsResponse implements IVideoIngressListChannelsResponse {
+
+    /**
+     * Constructs a new VideoIngressListChannelsResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressListChannelsResponse);
+
+    /** VideoIngressListChannelsResponse channels. */
+    public channels: IVideoIngressChannel[];
+
+    /**
+     * Creates a new VideoIngressListChannelsResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressListChannelsResponse instance
+     */
+    public static create(properties?: IVideoIngressListChannelsResponse): VideoIngressListChannelsResponse;
+
+    /**
+     * Encodes the specified VideoIngressListChannelsResponse message. Does not implicitly {@link VideoIngressListChannelsResponse.verify|verify} messages.
+     * @param message VideoIngressListChannelsResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressListChannelsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressListChannelsResponse message, length delimited. Does not implicitly {@link VideoIngressListChannelsResponse.verify|verify} messages.
+     * @param message VideoIngressListChannelsResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressListChannelsResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressListChannelsResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressListChannelsResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressListChannelsResponse;
+
+    /**
+     * Decodes a VideoIngressListChannelsResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressListChannelsResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressListChannelsResponse;
+
+    /**
+     * Verifies a VideoIngressListChannelsResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressListChannelsResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressListChannelsResponse
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressListChannelsResponse;
+
+    /**
+     * Creates a plain object from a VideoIngressListChannelsResponse message. Also converts values to other types if specified.
+     * @param message VideoIngressListChannelsResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressListChannelsResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressListChannelsResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressCreateChannelRequest. */
+export interface IVideoIngressCreateChannelRequest {
+
+    /** VideoIngressCreateChannelRequest directoryListingSnippet */
+    directoryListingSnippet?: (IDirectoryListingSnippet|null);
+
+    /** VideoIngressCreateChannelRequest networkKey */
+    networkKey?: (Uint8Array|null);
+}
+
+/** Represents a VideoIngressCreateChannelRequest. */
+export class VideoIngressCreateChannelRequest implements IVideoIngressCreateChannelRequest {
+
+    /**
+     * Constructs a new VideoIngressCreateChannelRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressCreateChannelRequest);
+
+    /** VideoIngressCreateChannelRequest directoryListingSnippet. */
+    public directoryListingSnippet?: (IDirectoryListingSnippet|null);
+
+    /** VideoIngressCreateChannelRequest networkKey. */
+    public networkKey: Uint8Array;
+
+    /**
+     * Creates a new VideoIngressCreateChannelRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressCreateChannelRequest instance
+     */
+    public static create(properties?: IVideoIngressCreateChannelRequest): VideoIngressCreateChannelRequest;
+
+    /**
+     * Encodes the specified VideoIngressCreateChannelRequest message. Does not implicitly {@link VideoIngressCreateChannelRequest.verify|verify} messages.
+     * @param message VideoIngressCreateChannelRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressCreateChannelRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressCreateChannelRequest message, length delimited. Does not implicitly {@link VideoIngressCreateChannelRequest.verify|verify} messages.
+     * @param message VideoIngressCreateChannelRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressCreateChannelRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressCreateChannelRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressCreateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressCreateChannelRequest;
+
+    /**
+     * Decodes a VideoIngressCreateChannelRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressCreateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressCreateChannelRequest;
+
+    /**
+     * Verifies a VideoIngressCreateChannelRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressCreateChannelRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressCreateChannelRequest
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressCreateChannelRequest;
+
+    /**
+     * Creates a plain object from a VideoIngressCreateChannelRequest message. Also converts values to other types if specified.
+     * @param message VideoIngressCreateChannelRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressCreateChannelRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressCreateChannelRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressCreateChannelResponse. */
+export interface IVideoIngressCreateChannelResponse {
+
+    /** VideoIngressCreateChannelResponse channel */
+    channel?: (IVideoIngressChannel|null);
+}
+
+/** Represents a VideoIngressCreateChannelResponse. */
+export class VideoIngressCreateChannelResponse implements IVideoIngressCreateChannelResponse {
+
+    /**
+     * Constructs a new VideoIngressCreateChannelResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressCreateChannelResponse);
+
+    /** VideoIngressCreateChannelResponse channel. */
+    public channel?: (IVideoIngressChannel|null);
+
+    /**
+     * Creates a new VideoIngressCreateChannelResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressCreateChannelResponse instance
+     */
+    public static create(properties?: IVideoIngressCreateChannelResponse): VideoIngressCreateChannelResponse;
+
+    /**
+     * Encodes the specified VideoIngressCreateChannelResponse message. Does not implicitly {@link VideoIngressCreateChannelResponse.verify|verify} messages.
+     * @param message VideoIngressCreateChannelResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressCreateChannelResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressCreateChannelResponse message, length delimited. Does not implicitly {@link VideoIngressCreateChannelResponse.verify|verify} messages.
+     * @param message VideoIngressCreateChannelResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressCreateChannelResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressCreateChannelResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressCreateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressCreateChannelResponse;
+
+    /**
+     * Decodes a VideoIngressCreateChannelResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressCreateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressCreateChannelResponse;
+
+    /**
+     * Verifies a VideoIngressCreateChannelResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressCreateChannelResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressCreateChannelResponse
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressCreateChannelResponse;
+
+    /**
+     * Creates a plain object from a VideoIngressCreateChannelResponse message. Also converts values to other types if specified.
+     * @param message VideoIngressCreateChannelResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressCreateChannelResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressCreateChannelResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressUpdateChannelRequest. */
+export interface IVideoIngressUpdateChannelRequest {
+
+    /** VideoIngressUpdateChannelRequest id */
+    id?: (number|null);
+
+    /** VideoIngressUpdateChannelRequest directoryListingSnippet */
+    directoryListingSnippet?: (IDirectoryListingSnippet|null);
+
+    /** VideoIngressUpdateChannelRequest networkKey */
+    networkKey?: (Uint8Array|null);
+}
+
+/** Represents a VideoIngressUpdateChannelRequest. */
+export class VideoIngressUpdateChannelRequest implements IVideoIngressUpdateChannelRequest {
+
+    /**
+     * Constructs a new VideoIngressUpdateChannelRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressUpdateChannelRequest);
+
+    /** VideoIngressUpdateChannelRequest id. */
+    public id: number;
+
+    /** VideoIngressUpdateChannelRequest directoryListingSnippet. */
+    public directoryListingSnippet?: (IDirectoryListingSnippet|null);
+
+    /** VideoIngressUpdateChannelRequest networkKey. */
+    public networkKey: Uint8Array;
+
+    /**
+     * Creates a new VideoIngressUpdateChannelRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressUpdateChannelRequest instance
+     */
+    public static create(properties?: IVideoIngressUpdateChannelRequest): VideoIngressUpdateChannelRequest;
+
+    /**
+     * Encodes the specified VideoIngressUpdateChannelRequest message. Does not implicitly {@link VideoIngressUpdateChannelRequest.verify|verify} messages.
+     * @param message VideoIngressUpdateChannelRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressUpdateChannelRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressUpdateChannelRequest message, length delimited. Does not implicitly {@link VideoIngressUpdateChannelRequest.verify|verify} messages.
+     * @param message VideoIngressUpdateChannelRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressUpdateChannelRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressUpdateChannelRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressUpdateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressUpdateChannelRequest;
+
+    /**
+     * Decodes a VideoIngressUpdateChannelRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressUpdateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressUpdateChannelRequest;
+
+    /**
+     * Verifies a VideoIngressUpdateChannelRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressUpdateChannelRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressUpdateChannelRequest
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressUpdateChannelRequest;
+
+    /**
+     * Creates a plain object from a VideoIngressUpdateChannelRequest message. Also converts values to other types if specified.
+     * @param message VideoIngressUpdateChannelRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressUpdateChannelRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressUpdateChannelRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressUpdateChannelResponse. */
+export interface IVideoIngressUpdateChannelResponse {
+
+    /** VideoIngressUpdateChannelResponse channel */
+    channel?: (IVideoIngressChannel|null);
+}
+
+/** Represents a VideoIngressUpdateChannelResponse. */
+export class VideoIngressUpdateChannelResponse implements IVideoIngressUpdateChannelResponse {
+
+    /**
+     * Constructs a new VideoIngressUpdateChannelResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressUpdateChannelResponse);
+
+    /** VideoIngressUpdateChannelResponse channel. */
+    public channel?: (IVideoIngressChannel|null);
+
+    /**
+     * Creates a new VideoIngressUpdateChannelResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressUpdateChannelResponse instance
+     */
+    public static create(properties?: IVideoIngressUpdateChannelResponse): VideoIngressUpdateChannelResponse;
+
+    /**
+     * Encodes the specified VideoIngressUpdateChannelResponse message. Does not implicitly {@link VideoIngressUpdateChannelResponse.verify|verify} messages.
+     * @param message VideoIngressUpdateChannelResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressUpdateChannelResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressUpdateChannelResponse message, length delimited. Does not implicitly {@link VideoIngressUpdateChannelResponse.verify|verify} messages.
+     * @param message VideoIngressUpdateChannelResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressUpdateChannelResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressUpdateChannelResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressUpdateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressUpdateChannelResponse;
+
+    /**
+     * Decodes a VideoIngressUpdateChannelResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressUpdateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressUpdateChannelResponse;
+
+    /**
+     * Verifies a VideoIngressUpdateChannelResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressUpdateChannelResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressUpdateChannelResponse
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressUpdateChannelResponse;
+
+    /**
+     * Creates a plain object from a VideoIngressUpdateChannelResponse message. Also converts values to other types if specified.
+     * @param message VideoIngressUpdateChannelResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressUpdateChannelResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressUpdateChannelResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressDeleteChannelRequest. */
+export interface IVideoIngressDeleteChannelRequest {
+
+    /** VideoIngressDeleteChannelRequest id */
+    id?: (number|null);
+}
+
+/** Represents a VideoIngressDeleteChannelRequest. */
+export class VideoIngressDeleteChannelRequest implements IVideoIngressDeleteChannelRequest {
+
+    /**
+     * Constructs a new VideoIngressDeleteChannelRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressDeleteChannelRequest);
+
+    /** VideoIngressDeleteChannelRequest id. */
+    public id: number;
+
+    /**
+     * Creates a new VideoIngressDeleteChannelRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressDeleteChannelRequest instance
+     */
+    public static create(properties?: IVideoIngressDeleteChannelRequest): VideoIngressDeleteChannelRequest;
+
+    /**
+     * Encodes the specified VideoIngressDeleteChannelRequest message. Does not implicitly {@link VideoIngressDeleteChannelRequest.verify|verify} messages.
+     * @param message VideoIngressDeleteChannelRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressDeleteChannelRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressDeleteChannelRequest message, length delimited. Does not implicitly {@link VideoIngressDeleteChannelRequest.verify|verify} messages.
+     * @param message VideoIngressDeleteChannelRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressDeleteChannelRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressDeleteChannelRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressDeleteChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressDeleteChannelRequest;
+
+    /**
+     * Decodes a VideoIngressDeleteChannelRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressDeleteChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressDeleteChannelRequest;
+
+    /**
+     * Verifies a VideoIngressDeleteChannelRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressDeleteChannelRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressDeleteChannelRequest
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressDeleteChannelRequest;
+
+    /**
+     * Creates a plain object from a VideoIngressDeleteChannelRequest message. Also converts values to other types if specified.
+     * @param message VideoIngressDeleteChannelRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressDeleteChannelRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressDeleteChannelRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressDeleteChannelResponse. */
+export interface IVideoIngressDeleteChannelResponse {
+}
+
+/** Represents a VideoIngressDeleteChannelResponse. */
+export class VideoIngressDeleteChannelResponse implements IVideoIngressDeleteChannelResponse {
+
+    /**
+     * Constructs a new VideoIngressDeleteChannelResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressDeleteChannelResponse);
+
+    /**
+     * Creates a new VideoIngressDeleteChannelResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressDeleteChannelResponse instance
+     */
+    public static create(properties?: IVideoIngressDeleteChannelResponse): VideoIngressDeleteChannelResponse;
+
+    /**
+     * Encodes the specified VideoIngressDeleteChannelResponse message. Does not implicitly {@link VideoIngressDeleteChannelResponse.verify|verify} messages.
+     * @param message VideoIngressDeleteChannelResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressDeleteChannelResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressDeleteChannelResponse message, length delimited. Does not implicitly {@link VideoIngressDeleteChannelResponse.verify|verify} messages.
+     * @param message VideoIngressDeleteChannelResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressDeleteChannelResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressDeleteChannelResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressDeleteChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressDeleteChannelResponse;
+
+    /**
+     * Decodes a VideoIngressDeleteChannelResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressDeleteChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressDeleteChannelResponse;
+
+    /**
+     * Verifies a VideoIngressDeleteChannelResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressDeleteChannelResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressDeleteChannelResponse
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressDeleteChannelResponse;
+
+    /**
+     * Creates a plain object from a VideoIngressDeleteChannelResponse message. Also converts values to other types if specified.
+     * @param message VideoIngressDeleteChannelResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressDeleteChannelResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressDeleteChannelResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressGetChannelURLRequest. */
+export interface IVideoIngressGetChannelURLRequest {
+
+    /** VideoIngressGetChannelURLRequest id */
+    id?: (number|null);
+}
+
+/** Represents a VideoIngressGetChannelURLRequest. */
+export class VideoIngressGetChannelURLRequest implements IVideoIngressGetChannelURLRequest {
+
+    /**
+     * Constructs a new VideoIngressGetChannelURLRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressGetChannelURLRequest);
+
+    /** VideoIngressGetChannelURLRequest id. */
+    public id: number;
+
+    /**
+     * Creates a new VideoIngressGetChannelURLRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressGetChannelURLRequest instance
+     */
+    public static create(properties?: IVideoIngressGetChannelURLRequest): VideoIngressGetChannelURLRequest;
+
+    /**
+     * Encodes the specified VideoIngressGetChannelURLRequest message. Does not implicitly {@link VideoIngressGetChannelURLRequest.verify|verify} messages.
+     * @param message VideoIngressGetChannelURLRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressGetChannelURLRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressGetChannelURLRequest message, length delimited. Does not implicitly {@link VideoIngressGetChannelURLRequest.verify|verify} messages.
+     * @param message VideoIngressGetChannelURLRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressGetChannelURLRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressGetChannelURLRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressGetChannelURLRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressGetChannelURLRequest;
+
+    /**
+     * Decodes a VideoIngressGetChannelURLRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressGetChannelURLRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressGetChannelURLRequest;
+
+    /**
+     * Verifies a VideoIngressGetChannelURLRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressGetChannelURLRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressGetChannelURLRequest
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressGetChannelURLRequest;
+
+    /**
+     * Creates a plain object from a VideoIngressGetChannelURLRequest message. Also converts values to other types if specified.
+     * @param message VideoIngressGetChannelURLRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressGetChannelURLRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressGetChannelURLRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressGetChannelURLResponse. */
+export interface IVideoIngressGetChannelURLResponse {
+
+    /** VideoIngressGetChannelURLResponse url */
+    url?: (string|null);
+
+    /** VideoIngressGetChannelURLResponse serverAddr */
+    serverAddr?: (string|null);
+
+    /** VideoIngressGetChannelURLResponse streamKey */
+    streamKey?: (string|null);
+}
+
+/** Represents a VideoIngressGetChannelURLResponse. */
+export class VideoIngressGetChannelURLResponse implements IVideoIngressGetChannelURLResponse {
+
+    /**
+     * Constructs a new VideoIngressGetChannelURLResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressGetChannelURLResponse);
+
+    /** VideoIngressGetChannelURLResponse url. */
+    public url: string;
+
+    /** VideoIngressGetChannelURLResponse serverAddr. */
+    public serverAddr: string;
+
+    /** VideoIngressGetChannelURLResponse streamKey. */
+    public streamKey: string;
+
+    /**
+     * Creates a new VideoIngressGetChannelURLResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressGetChannelURLResponse instance
+     */
+    public static create(properties?: IVideoIngressGetChannelURLResponse): VideoIngressGetChannelURLResponse;
+
+    /**
+     * Encodes the specified VideoIngressGetChannelURLResponse message. Does not implicitly {@link VideoIngressGetChannelURLResponse.verify|verify} messages.
+     * @param message VideoIngressGetChannelURLResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressGetChannelURLResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressGetChannelURLResponse message, length delimited. Does not implicitly {@link VideoIngressGetChannelURLResponse.verify|verify} messages.
+     * @param message VideoIngressGetChannelURLResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressGetChannelURLResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressGetChannelURLResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressGetChannelURLResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressGetChannelURLResponse;
+
+    /**
+     * Decodes a VideoIngressGetChannelURLResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressGetChannelURLResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressGetChannelURLResponse;
+
+    /**
+     * Verifies a VideoIngressGetChannelURLResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressGetChannelURLResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressGetChannelURLResponse
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressGetChannelURLResponse;
+
+    /**
+     * Creates a plain object from a VideoIngressGetChannelURLResponse message. Also converts values to other types if specified.
+     * @param message VideoIngressGetChannelURLResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressGetChannelURLResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressGetChannelURLResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressShareCreateChannelRequest. */
+export interface IVideoIngressShareCreateChannelRequest {
+
+    /** VideoIngressShareCreateChannelRequest directoryListingSnippet */
+    directoryListingSnippet?: (IDirectoryListingSnippet|null);
+}
+
+/** Represents a VideoIngressShareCreateChannelRequest. */
+export class VideoIngressShareCreateChannelRequest implements IVideoIngressShareCreateChannelRequest {
+
+    /**
+     * Constructs a new VideoIngressShareCreateChannelRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressShareCreateChannelRequest);
+
+    /** VideoIngressShareCreateChannelRequest directoryListingSnippet. */
+    public directoryListingSnippet?: (IDirectoryListingSnippet|null);
+
+    /**
+     * Creates a new VideoIngressShareCreateChannelRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressShareCreateChannelRequest instance
+     */
+    public static create(properties?: IVideoIngressShareCreateChannelRequest): VideoIngressShareCreateChannelRequest;
+
+    /**
+     * Encodes the specified VideoIngressShareCreateChannelRequest message. Does not implicitly {@link VideoIngressShareCreateChannelRequest.verify|verify} messages.
+     * @param message VideoIngressShareCreateChannelRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressShareCreateChannelRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressShareCreateChannelRequest message, length delimited. Does not implicitly {@link VideoIngressShareCreateChannelRequest.verify|verify} messages.
+     * @param message VideoIngressShareCreateChannelRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressShareCreateChannelRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressShareCreateChannelRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressShareCreateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressShareCreateChannelRequest;
+
+    /**
+     * Decodes a VideoIngressShareCreateChannelRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressShareCreateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressShareCreateChannelRequest;
+
+    /**
+     * Verifies a VideoIngressShareCreateChannelRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressShareCreateChannelRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressShareCreateChannelRequest
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressShareCreateChannelRequest;
+
+    /**
+     * Creates a plain object from a VideoIngressShareCreateChannelRequest message. Also converts values to other types if specified.
+     * @param message VideoIngressShareCreateChannelRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressShareCreateChannelRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressShareCreateChannelRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressShareCreateChannelResponse. */
+export interface IVideoIngressShareCreateChannelResponse {
+
+    /** VideoIngressShareCreateChannelResponse channel */
+    channel?: (IVideoIngressChannel|null);
+}
+
+/** Represents a VideoIngressShareCreateChannelResponse. */
+export class VideoIngressShareCreateChannelResponse implements IVideoIngressShareCreateChannelResponse {
+
+    /**
+     * Constructs a new VideoIngressShareCreateChannelResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressShareCreateChannelResponse);
+
+    /** VideoIngressShareCreateChannelResponse channel. */
+    public channel?: (IVideoIngressChannel|null);
+
+    /**
+     * Creates a new VideoIngressShareCreateChannelResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressShareCreateChannelResponse instance
+     */
+    public static create(properties?: IVideoIngressShareCreateChannelResponse): VideoIngressShareCreateChannelResponse;
+
+    /**
+     * Encodes the specified VideoIngressShareCreateChannelResponse message. Does not implicitly {@link VideoIngressShareCreateChannelResponse.verify|verify} messages.
+     * @param message VideoIngressShareCreateChannelResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressShareCreateChannelResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressShareCreateChannelResponse message, length delimited. Does not implicitly {@link VideoIngressShareCreateChannelResponse.verify|verify} messages.
+     * @param message VideoIngressShareCreateChannelResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressShareCreateChannelResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressShareCreateChannelResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressShareCreateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressShareCreateChannelResponse;
+
+    /**
+     * Decodes a VideoIngressShareCreateChannelResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressShareCreateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressShareCreateChannelResponse;
+
+    /**
+     * Verifies a VideoIngressShareCreateChannelResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressShareCreateChannelResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressShareCreateChannelResponse
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressShareCreateChannelResponse;
+
+    /**
+     * Creates a plain object from a VideoIngressShareCreateChannelResponse message. Also converts values to other types if specified.
+     * @param message VideoIngressShareCreateChannelResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressShareCreateChannelResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressShareCreateChannelResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressShareUpdateChannelRequest. */
+export interface IVideoIngressShareUpdateChannelRequest {
+
+    /** VideoIngressShareUpdateChannelRequest id */
+    id?: (number|null);
+
+    /** VideoIngressShareUpdateChannelRequest directoryListingSnippet */
+    directoryListingSnippet?: (IDirectoryListingSnippet|null);
+}
+
+/** Represents a VideoIngressShareUpdateChannelRequest. */
+export class VideoIngressShareUpdateChannelRequest implements IVideoIngressShareUpdateChannelRequest {
+
+    /**
+     * Constructs a new VideoIngressShareUpdateChannelRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressShareUpdateChannelRequest);
+
+    /** VideoIngressShareUpdateChannelRequest id. */
+    public id: number;
+
+    /** VideoIngressShareUpdateChannelRequest directoryListingSnippet. */
+    public directoryListingSnippet?: (IDirectoryListingSnippet|null);
+
+    /**
+     * Creates a new VideoIngressShareUpdateChannelRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressShareUpdateChannelRequest instance
+     */
+    public static create(properties?: IVideoIngressShareUpdateChannelRequest): VideoIngressShareUpdateChannelRequest;
+
+    /**
+     * Encodes the specified VideoIngressShareUpdateChannelRequest message. Does not implicitly {@link VideoIngressShareUpdateChannelRequest.verify|verify} messages.
+     * @param message VideoIngressShareUpdateChannelRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressShareUpdateChannelRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressShareUpdateChannelRequest message, length delimited. Does not implicitly {@link VideoIngressShareUpdateChannelRequest.verify|verify} messages.
+     * @param message VideoIngressShareUpdateChannelRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressShareUpdateChannelRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressShareUpdateChannelRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressShareUpdateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressShareUpdateChannelRequest;
+
+    /**
+     * Decodes a VideoIngressShareUpdateChannelRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressShareUpdateChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressShareUpdateChannelRequest;
+
+    /**
+     * Verifies a VideoIngressShareUpdateChannelRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressShareUpdateChannelRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressShareUpdateChannelRequest
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressShareUpdateChannelRequest;
+
+    /**
+     * Creates a plain object from a VideoIngressShareUpdateChannelRequest message. Also converts values to other types if specified.
+     * @param message VideoIngressShareUpdateChannelRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressShareUpdateChannelRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressShareUpdateChannelRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressShareUpdateChannelResponse. */
+export interface IVideoIngressShareUpdateChannelResponse {
+
+    /** VideoIngressShareUpdateChannelResponse channel */
+    channel?: (IVideoIngressChannel|null);
+}
+
+/** Represents a VideoIngressShareUpdateChannelResponse. */
+export class VideoIngressShareUpdateChannelResponse implements IVideoIngressShareUpdateChannelResponse {
+
+    /**
+     * Constructs a new VideoIngressShareUpdateChannelResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressShareUpdateChannelResponse);
+
+    /** VideoIngressShareUpdateChannelResponse channel. */
+    public channel?: (IVideoIngressChannel|null);
+
+    /**
+     * Creates a new VideoIngressShareUpdateChannelResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressShareUpdateChannelResponse instance
+     */
+    public static create(properties?: IVideoIngressShareUpdateChannelResponse): VideoIngressShareUpdateChannelResponse;
+
+    /**
+     * Encodes the specified VideoIngressShareUpdateChannelResponse message. Does not implicitly {@link VideoIngressShareUpdateChannelResponse.verify|verify} messages.
+     * @param message VideoIngressShareUpdateChannelResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressShareUpdateChannelResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressShareUpdateChannelResponse message, length delimited. Does not implicitly {@link VideoIngressShareUpdateChannelResponse.verify|verify} messages.
+     * @param message VideoIngressShareUpdateChannelResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressShareUpdateChannelResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressShareUpdateChannelResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressShareUpdateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressShareUpdateChannelResponse;
+
+    /**
+     * Decodes a VideoIngressShareUpdateChannelResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressShareUpdateChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressShareUpdateChannelResponse;
+
+    /**
+     * Verifies a VideoIngressShareUpdateChannelResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressShareUpdateChannelResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressShareUpdateChannelResponse
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressShareUpdateChannelResponse;
+
+    /**
+     * Creates a plain object from a VideoIngressShareUpdateChannelResponse message. Also converts values to other types if specified.
+     * @param message VideoIngressShareUpdateChannelResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressShareUpdateChannelResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressShareUpdateChannelResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressShareDeleteChannelRequest. */
+export interface IVideoIngressShareDeleteChannelRequest {
+
+    /** VideoIngressShareDeleteChannelRequest id */
+    id?: (number|null);
+}
+
+/** Represents a VideoIngressShareDeleteChannelRequest. */
+export class VideoIngressShareDeleteChannelRequest implements IVideoIngressShareDeleteChannelRequest {
+
+    /**
+     * Constructs a new VideoIngressShareDeleteChannelRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressShareDeleteChannelRequest);
+
+    /** VideoIngressShareDeleteChannelRequest id. */
+    public id: number;
+
+    /**
+     * Creates a new VideoIngressShareDeleteChannelRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressShareDeleteChannelRequest instance
+     */
+    public static create(properties?: IVideoIngressShareDeleteChannelRequest): VideoIngressShareDeleteChannelRequest;
+
+    /**
+     * Encodes the specified VideoIngressShareDeleteChannelRequest message. Does not implicitly {@link VideoIngressShareDeleteChannelRequest.verify|verify} messages.
+     * @param message VideoIngressShareDeleteChannelRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressShareDeleteChannelRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressShareDeleteChannelRequest message, length delimited. Does not implicitly {@link VideoIngressShareDeleteChannelRequest.verify|verify} messages.
+     * @param message VideoIngressShareDeleteChannelRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressShareDeleteChannelRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressShareDeleteChannelRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressShareDeleteChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressShareDeleteChannelRequest;
+
+    /**
+     * Decodes a VideoIngressShareDeleteChannelRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressShareDeleteChannelRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressShareDeleteChannelRequest;
+
+    /**
+     * Verifies a VideoIngressShareDeleteChannelRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressShareDeleteChannelRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressShareDeleteChannelRequest
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressShareDeleteChannelRequest;
+
+    /**
+     * Creates a plain object from a VideoIngressShareDeleteChannelRequest message. Also converts values to other types if specified.
+     * @param message VideoIngressShareDeleteChannelRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressShareDeleteChannelRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressShareDeleteChannelRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a VideoIngressShareDeleteChannelResponse. */
+export interface IVideoIngressShareDeleteChannelResponse {
+}
+
+/** Represents a VideoIngressShareDeleteChannelResponse. */
+export class VideoIngressShareDeleteChannelResponse implements IVideoIngressShareDeleteChannelResponse {
+
+    /**
+     * Constructs a new VideoIngressShareDeleteChannelResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IVideoIngressShareDeleteChannelResponse);
+
+    /**
+     * Creates a new VideoIngressShareDeleteChannelResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns VideoIngressShareDeleteChannelResponse instance
+     */
+    public static create(properties?: IVideoIngressShareDeleteChannelResponse): VideoIngressShareDeleteChannelResponse;
+
+    /**
+     * Encodes the specified VideoIngressShareDeleteChannelResponse message. Does not implicitly {@link VideoIngressShareDeleteChannelResponse.verify|verify} messages.
+     * @param message VideoIngressShareDeleteChannelResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IVideoIngressShareDeleteChannelResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified VideoIngressShareDeleteChannelResponse message, length delimited. Does not implicitly {@link VideoIngressShareDeleteChannelResponse.verify|verify} messages.
+     * @param message VideoIngressShareDeleteChannelResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IVideoIngressShareDeleteChannelResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a VideoIngressShareDeleteChannelResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns VideoIngressShareDeleteChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): VideoIngressShareDeleteChannelResponse;
+
+    /**
+     * Decodes a VideoIngressShareDeleteChannelResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns VideoIngressShareDeleteChannelResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): VideoIngressShareDeleteChannelResponse;
+
+    /**
+     * Verifies a VideoIngressShareDeleteChannelResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a VideoIngressShareDeleteChannelResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns VideoIngressShareDeleteChannelResponse
+     */
+    public static fromObject(object: { [k: string]: any }): VideoIngressShareDeleteChannelResponse;
+
+    /**
+     * Creates a plain object from a VideoIngressShareDeleteChannelResponse message. Also converts values to other types if specified.
+     * @param message VideoIngressShareDeleteChannelResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: VideoIngressShareDeleteChannelResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this VideoIngressShareDeleteChannelResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };

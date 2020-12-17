@@ -1,0 +1,10 @@
+syntax = "proto3";
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+option java_package = "gg.strims.ppspp.proto";
+option swift_prefix = "PB";
+
+message SecondaryIndexKey {
+  bytes key = 1;
+  uint64 id = 2;
+}

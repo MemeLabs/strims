@@ -4,14 +4,16 @@ import (
 	"context"
 	"errors"
 
+	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/control/app"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
 type bootstrapService struct {
-	Peer *app.Peer
-	App  *app.Control
+	Peer  *app.Peer
+	App   *app.Control
+	Store *dao.ProfileStore
 }
 
 func (s *bootstrapService) GetPublishEnabled(ctx context.Context, req *pb.BootstrapPeerGetPublishEnabledRequest) (*pb.BootstrapPeerGetPublishEnabledResponse, error) {
@@ -19,7 +21,7 @@ func (s *bootstrapService) GetPublishEnabled(ctx context.Context, req *pb.Bootst
 }
 
 func (s *bootstrapService) ListNetworks(ctx context.Context, req *pb.BootstrapPeerListNetworksRequest) (*pb.BootstrapPeerListNetworksResponse, error) {
-	return nil, errors.New("not implemented")
+	return nil, api.ErrNotImplemented
 }
 
 func (s *bootstrapService) Publish(ctx context.Context, req *pb.BootstrapPeerPublishRequest) (*pb.BootstrapPeerPublishResponse, error) {
@@ -27,7 +29,7 @@ func (s *bootstrapService) Publish(ctx context.Context, req *pb.BootstrapPeerPub
 		return nil, errors.New("not supported")
 	}
 
-	network, err := dao.NewNetworkFromCertificate(req.Certificate)
+	network, err := dao.NewNetworkFromCertificate(s.Store, req.Certificate)
 	if err != nil {
 		return nil, err
 	}

@@ -25,12 +25,12 @@ func (l *lru) Get(u keyer) keyer {
 }
 
 func (l *lru) PeekRecentlyTouched(eol time.Time) *lruIterator {
-	return &lruIterator{v: l.head, eol: eol}
+	return &lruIterator{next: l.head, eol: eol}
 }
 
 func (l *lru) GetOrInsert(u keyer) keyer {
 	i := &lruItem{item: u}
-	if ii := l.items.Get(i); ii == nil {
+	if ii := l.items.Get(i); ii != nil {
 		i = ii.(*lruItem)
 		u = i.item
 		l.remove(i)
@@ -106,23 +106,32 @@ type lruItem struct {
 	next *lruItem
 }
 
+func (i *lruItem) Key() []byte {
+	return i.item.Key()
+}
+
 func (i *lruItem) Less(o llrb.Item) bool {
 	return keyerLess(i.item, o)
 }
 
 type lruIterator struct {
-	v   *lruItem
-	eol time.Time
+	cur  *lruItem
+	next *lruItem
+	eol  time.Time
 }
 
-func (l *lruIterator) Next() keyer {
-	v := l.v
-	if v == nil || l.eol.Before(v.time) {
-		return nil
+func (l *lruIterator) Next() bool {
+	l.cur = l.next
+	if l.cur == nil || l.eol.After(l.cur.time) {
+		return false
 	}
-	l.v = v.next
+	l.next = l.cur.next
 
-	return v.item
+	return true
+}
+
+func (l *lruIterator) Value() keyer {
+	return l.cur.item
 }
 
 type lruKey struct {

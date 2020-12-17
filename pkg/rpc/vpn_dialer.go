@@ -128,7 +128,7 @@ func (t *VPNTransport) HandleMessage(msg *vpn.Message) error {
 		Port:   msg.Header.SrcPort,
 	}
 
-	ctx := &VPNContext{t.ctx, msg, cert}
+	ctx := context.WithValue(t.ctx, vpnCertificateKey, cert)
 	parentCallAccessor := &vpnParentCallAccessor{
 		addr:     addr,
 		id:       req.ParentId,
@@ -204,21 +204,12 @@ func (t *VPNTransport) verifyMessage(msg *vpn.Message, req *pb.Call, cert *pb.Ce
 // VPNCertFunc ...
 type VPNCertFunc func() *pb.Certificate
 
-// VPNContext smuggles the vpn message into rpc calls
-type VPNContext struct {
-	context.Context
-	message     *vpn.Message
-	certificate *pb.Certificate
-}
+type vpnCertificateKeyType struct{}
 
-// Message returns the vpn message the call arrived in
-func (c *VPNContext) Message() *vpn.Message {
-	return c.message
-}
+var vpnCertificateKey vpnCertificateKeyType
 
-// Certificate ...
-func (c *VPNContext) Certificate() *pb.Certificate {
-	return c.certificate
+func VPNCertificate(ctx context.Context) *pb.Certificate {
+	return ctx.Value(vpnCertificateKey).(*pb.Certificate)
 }
 
 type vpnCallMap struct {

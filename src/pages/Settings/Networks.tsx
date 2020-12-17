@@ -4,11 +4,11 @@ import { Controller, useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import Select from "react-select";
 
-import { InputError, InputLabel, TextInput } from "../components/Form";
-import { MainLayout } from "../components/MainLayout";
-import { useCall, useClient, useLazyCall } from "../contexts/Api";
-import { useProfile } from "../contexts/Profile";
-import * as pb from "../lib/pb";
+import { InputError, InputLabel, TextInput } from "../../components/Form";
+import { MainLayout } from "../../components/MainLayout";
+import { useCall, useClient, useLazyCall } from "../../contexts/Api";
+import { useProfile } from "../../contexts/Profile";
+import * as pb from "../../lib/pb";
 
 const NetworkForm = ({ onCreate }: { onCreate: (res: pb.CreateNetworkResponse) => void }) => {
   const [{ value, error, loading }, createNetwork] = useLazyCall("network", "create", {
@@ -228,24 +228,11 @@ const NetworksPage = () => {
   const [networksRes, getNetworks] = useCall("network", "list");
 
   return (
-    <MainLayout>
-      <div className="page_body">
-        <Link className="settings_link" to="/networks">
-          Networks
-        </Link>
-        <Link className="settings_link" to="/bootstrap-clients">
-          Bootstrap Clients
-        </Link>
-        <Link className="settings_link" to="/chat-servers">
-          Chat Servers
-        </Link>
-        <main className="network_page">
-          <NetworkForm onCreate={() => getNetworks()} />
-          <JoinForm onCreate={() => getNetworks()} />
-          <NetworkTable networks={networksRes.value?.networks} onDelete={() => getNetworks()} />
-        </main>
-      </div>
-    </MainLayout>
+    <main className="network_page">
+      <NetworkForm onCreate={() => getNetworks()} />
+      <JoinForm onCreate={() => getNetworks()} />
+      <NetworkTable networks={networksRes.value?.networks} onDelete={() => getNetworks()} />
+    </main>
   );
 };
 

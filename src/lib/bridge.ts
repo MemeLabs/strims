@@ -675,7 +675,7 @@ export class WorkerBridge {
           .then((tx: IDBTransaction) => {
             tx.oncomplete = () => done(null);
             tx.onerror = (e) => done(String(e));
-            tx.commit?.();
+            (tx as any).commit?.();
           })
           .catch((e) => done(String(e)));
       },

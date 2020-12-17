@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/dao/daotest"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/services/servicestest"
 	"github.com/stretchr/testify/assert"
@@ -29,7 +30,7 @@ func TestCA(t *testing.T) {
 	invitation, err := dao.NewInvitationV0(cluster.Nodes[0].Profile.Key, cluster.Network.Certificate)
 	assert.Nil(t, err)
 
-	network, err := dao.NewNetworkFromInvitationV0(invitation, cluster.Nodes[1].Profile)
+	network, err := dao.NewNetworkFromInvitationV0(&daotest.IDGenerator{}, invitation, cluster.Nodes[1].Profile)
 	assert.Nil(t, err)
 
 	csr, err := dao.NewCertificateRequest(

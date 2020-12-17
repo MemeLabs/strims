@@ -1,4 +1,4 @@
-package swarm
+package transfer
 
 import (
 	"github.com/MemeLabs/go-ppspp/pkg/api"

@@ -3,31 +3,21 @@
 
 .input {
   font-size: 1em;
-  padding: 0.5em;
+  padding: 0.5em 0.8em;
   margin: 0.25em 0;
   border-radius: 0.25em;
   box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
-
-  @include color-scheme('dark') {
-    background: $slate-400;
-    color: $gray-300;
-  }
-  @include color-scheme('light') {
-    background: $gray-500;
-    color: $slate-200;
-  }
+  background: var(--input-bg);
+  color: var(--input-color);
+  flex: 1;
 
   &::placeholder {
-    @include color-scheme('dark') {
-      color: $gray-100;
-    }
-    @include color-scheme('light') {
-      color: lighten($slate-500, 20);
-    }
+    color: var(--input-placeholder-color);
   }
 
   &:disabled {
-    background: $slate-300;
+    background: var(--input-disabled-bg);
+    color: var(--input-disabled-color);
   }
 }
 
@@ -81,6 +71,11 @@
       color: $slate-500;
     }
   }
+
+  &__body {
+    display: flex;
+    flex-direction: column;
+  }
 }
 
 .input_buttons {
@@ -91,18 +86,11 @@
 }
 
 .input_button {
-  cursor: pointer;
+  background: var(--input-bg);
 
-  @include color-scheme('dark') {
-    background: $gray-400;
-    color: #222;
-  }
-  @include color-scheme('light') {
-    background: $gray-200;
+  &:hover:not(:disabled) {
+    cursor: pointer;
 
-  }
-
-  &:hover {
     @include color-scheme('dark') {
       background: $gray-500;
       color: #222;
@@ -112,23 +100,23 @@
     }
   }
 
+  &:disabled {
+    background: var(--input-disabled-bg);
+    color: var(--input-disabled-color);
+  }
+
   &--borderless {
     border: none;
     box-shadow: none;
 
     &, &:hover {
-      @include color-scheme('dark') {
-        background: transparent;
-      }
-      @include color-scheme('light') {
-        background: transparent;
-      }
+      background: transparent;
     }
   }
 }
 
-.input_select {
-  color: black;
+.input_textarea {
+  resize: vertical;
 }
 
 .input_avatar {
@@ -162,5 +150,119 @@
     width: 80px;
     border-radius: 50%;
     object-fit: cover;
+  }
+}
+
+.thing_form {
+  max-width: 1000px;
+  display: flex;
+  flex-direction: column;
+
+  .input_label {
+    text-align: left;
+    border-width: 1px;
+    border-style: solid;
+    border-bottom-style: none;
+    padding: 10px;
+    margin: 0;
+
+    display: flex;
+    flex-direction: row;
+    border-color: var(--card-border);
+    background: var(--card-bg);
+
+    &:first-child {
+      border-top-left-radius: 5px;
+      border-top-right-radius: 5px;
+    }
+
+    &:last-child {
+      border-bottom-left-radius: 5px;
+      border-bottom-right-radius: 5px;
+      border-bottom-style: solid;
+    }
+
+    &__text {
+      display: block;
+      flex: 200px 0;
+      font-size: 0.8em;
+      line-height: 2em;
+    }
+
+    &__body {
+      flex: 1 1;
+    }
+
+    &__description {
+      font-size: 0.8em;
+      padding: 0.5em 0;
+    }
+  }
+}
+
+.input_select{
+  .react_select {
+    &-container {
+
+    }
+
+    &__single-value {
+      color: var(--input-color);
+    }
+
+    &__control {
+      box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
+      border-style: none;
+      background: var(--input-bg);
+      color: var(--input-color);
+    }
+
+    &__value-container {
+
+    }
+
+    &__indicators {
+
+    }
+
+    &__menu {
+      background: var(--input-bg);
+      color: var(--input-color);
+    }
+
+    &__menu-list {
+
+    }
+
+    &__option {
+      background: var(--input-bg);
+      color: var(--input-color);
+
+      &--is-disabled {
+        color: var(--input-disabled-color);
+      }
+
+      &--is-focused {
+        @include color-scheme('dark') {
+          background: $slate-500;
+          color: $gray-400;
+        }
+        @include color-scheme('light') {
+          background: $gray-400;
+          color: $slate-100;
+        }
+      }
+
+      &--is-selected {
+        @include color-scheme('dark') {
+          background: $slate-500;
+          color: $gray-400;
+        }
+        @include color-scheme('light') {
+          background: $gray-400;
+          color: $slate-100;
+        }
+      }
+    }
   }
 }

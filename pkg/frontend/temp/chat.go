@@ -17,8 +17,8 @@ func newChatService(logger *zap.Logger, store *dao.ProfileStore) api.ChatService
 
 // chatService ...
 type chatService struct {
-	logger   *zap.Logger
-	store *dao.ProfileStore
+	logger *zap.Logger
+	store  *dao.ProfileStore
 }
 
 // CreateChatServer ...
@@ -28,7 +28,7 @@ func (s *chatService) CreateServer(ctx context.Context, r *pb.CreateChatServerRe
 		return nil, err
 	}
 
-	server, err := dao.NewChatServer(r.NetworkKey, r.ChatRoom)
+	server, err := dao.NewChatServer(s.store, r.NetworkKey, r.ChatRoom)
 	if err != nil {
 		return nil, err
 	}

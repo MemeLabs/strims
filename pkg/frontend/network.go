@@ -43,7 +43,7 @@ type networkService struct {
 
 // Create ...
 func (s *networkService) Create(ctx context.Context, r *pb.CreateNetworkRequest) (*pb.CreateNetworkResponse, error) {
-	network, err := dao.NewNetwork(r.Name, r.Icon, s.profile)
+	network, err := dao.NewNetwork(s.store, r.Name, r.Icon, s.profile)
 	if err != nil {
 		return nil, err
 	}
@@ -57,7 +57,7 @@ func (s *networkService) Create(ctx context.Context, r *pb.CreateNetworkRequest)
 
 // Update ...
 func (s *networkService) Update(ctx context.Context, r *pb.UpdateNetworkRequest) (*pb.UpdateNetworkResponse, error) {
-	return nil, errors.New("not implemented")
+	return nil, api.ErrNotImplemented
 }
 
 // Delete ...
@@ -145,7 +145,7 @@ func (s *networkService) CreateFromInvitation(ctx context.Context, r *pb.CreateN
 		return nil, err
 	}
 
-	network, err := dao.NewNetworkFromInvitationV0(&invitation, s.profile)
+	network, err := dao.NewNetworkFromInvitationV0(s.store, &invitation, s.profile)
 	if err != nil {
 		return nil, err
 	}
@@ -161,12 +161,12 @@ func (s *networkService) CreateFromInvitation(ctx context.Context, r *pb.CreateN
 
 // StartVPN ...
 func (s *networkService) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (<-chan *pb.NetworkEvent, error) {
-	return nil, errors.New("not implemented")
+	return nil, api.ErrNotImplemented
 }
 
 // StopVPN ...
 func (s *networkService) StopVPN(ctx context.Context, r *pb.StopVPNRequest) (*pb.StopVPNResponse, error) {
-	return nil, errors.New("not implemented")
+	return nil, api.ErrNotImplemented
 }
 
 // GetDirectoryEvents ...

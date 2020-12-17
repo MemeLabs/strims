@@ -117,9 +117,8 @@ export class RPCHost {
       }
       res = h(call, arg);
     } catch (e) {
-      res = new pb.Error();
       // TODO: we may not want to expose this to remote hosts...
-      res.setMessage(e.message);
+      res = new pb.Error({ message: e.message });
     }
 
     if (res instanceof Readable) {

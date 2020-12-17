@@ -46,6 +46,10 @@
   },
   "go.useLanguageServer": true,
   "go.vetOnSave": "package",
+  "gopls": {
+    "usePlaceholders": true,
+    "staticcheck": false,
+  },
   "go.languageServerExperimentalFeatures": {
     "format": true,
     "autoComplete": true,
@@ -59,7 +63,7 @@
     "workspaceSymbols": true,
     "findReferences": true,
     "diagnostics": true,
-    "documentLink": true
+    "documentLink": true,
   },
   // "go.toolsEnvVars": {
   //   "GOOS": "js",

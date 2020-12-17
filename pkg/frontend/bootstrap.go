@@ -31,7 +31,7 @@ func (s *bootstrapService) CreateClient(ctx context.Context, r *pb.CreateBootstr
 	var err error
 	switch v := r.GetClientOptions().(type) {
 	case *pb.CreateBootstrapClientRequest_WebsocketOptions:
-		client, err = dao.NewWebSocketBootstrapClient(v.WebsocketOptions.Url, v.WebsocketOptions.InsecureSkipVerifyTls)
+		client, err = dao.NewWebSocketBootstrapClient(s.store, v.WebsocketOptions.Url, v.WebsocketOptions.InsecureSkipVerifyTls)
 	}
 	if err != nil {
 		return nil, err

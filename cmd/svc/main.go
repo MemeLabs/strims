@@ -70,12 +70,12 @@ func main() {
 		panic(err)
 	}
 
-	// t, err := newManager(logger)
-	// if err != nil {
-	// 	panic(err)
-	// }
-	// t.Run()
-	// return
+	t, err := newManager(logger)
+	if err != nil {
+		panic(err)
+	}
+	t.Run()
+	return
 
 	store, err := initProfileStore()
 	if err != nil {

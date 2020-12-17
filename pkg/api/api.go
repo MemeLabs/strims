@@ -2,9 +2,13 @@ package api
 
 import (
 	"context"
+	"errors"
 
 	"github.com/golang/protobuf/proto"
 )
+
+// ErrNotImplemented ...
+var ErrNotImplemented = errors.New("not implemented")
 
 // ServiceRegistry ...
 type ServiceRegistry interface {

@@ -11,6 +11,11 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
+// IDGenerator ...
+type IDGenerator interface {
+	GenerateID() (uint64, error)
+}
+
 var nextSnowflakeID uint64
 
 // GenerateSnowflake generate a 53 bit locally unique id

@@ -9,10 +9,12 @@ export const InputLabel = ({
   children,
   required,
   text,
+  description,
 }: {
   children: any;
-  required: boolean;
+  required?: boolean;
   text: string;
+  description?: string;
 }) => {
   const labelClass = clsx({
     "input_label": true,
@@ -21,8 +23,11 @@ export const InputLabel = ({
 
   return (
     <label className={labelClass}>
-      <span className="input_label__text">{text}</span>
-      {children}
+      <div className="input_label__text">{text}</div>
+      <div className="input_label__body">
+        {children}
+        {description && <div className="input_label__description">{description}</div>}
+      </div>
     </label>
   );
 };
@@ -51,6 +56,7 @@ export const TextInput = ({
   error,
   inputRef,
   label,
+  description,
   name,
   placeholder,
   required,
@@ -61,6 +67,7 @@ export const TextInput = ({
   error?: any;
   inputRef: React.Ref<HTMLInputElement>;
   label: string;
+  description?: string;
   name: string;
   placeholder: string;
   required?: boolean;
@@ -69,7 +76,7 @@ export const TextInput = ({
   defaultValue?: string;
 }) => {
   return (
-    <InputLabel required={required} text={label}>
+    <InputLabel required={required} text={label} description={description}>
       <input
         className="input input_text"
         name={name}
@@ -78,6 +85,73 @@ export const TextInput = ({
         type={type}
         disabled={disabled}
         defaultValue={defaultValue}
+      />
+      <InputError error={error} />
+    </InputLabel>
+  );
+};
+export const TextAreaInput = ({
+  error,
+  inputRef,
+  label,
+  description,
+  name,
+  placeholder,
+  required,
+  disabled,
+  defaultValue,
+}: {
+  error?: any;
+  inputRef: React.Ref<HTMLTextAreaElement>;
+  label: string;
+  description?: string;
+  name: string;
+  placeholder: string;
+  required?: boolean;
+  disabled?: boolean;
+  defaultValue?: string;
+}) => {
+  return (
+    <InputLabel required={required} text={label} description={description}>
+      <textarea
+        className="input input_textarea"
+        name={name}
+        placeholder={placeholder}
+        ref={inputRef}
+        disabled={disabled}
+        defaultValue={defaultValue}
+      />
+      <InputError error={error} />
+    </InputLabel>
+  );
+};
+
+export const ToggleInput = ({
+  error,
+  inputRef,
+  label,
+  description,
+  name,
+  disabled,
+  defaultValue,
+}: {
+  error?: any;
+  inputRef: React.Ref<HTMLInputElement>;
+  label: string;
+  description?: string;
+  name: string;
+  disabled?: boolean;
+  defaultValue?: boolean;
+}) => {
+  return (
+    <InputLabel text={label} description={description}>
+      <input
+        className="input input_toggle"
+        name={name}
+        ref={inputRef}
+        type="checkbox"
+        disabled={disabled}
+        defaultChecked={defaultValue}
       />
       <InputError error={error} />
     </InputLabel>

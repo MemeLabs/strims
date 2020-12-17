@@ -46,8 +46,8 @@ func GetChatServers(s kv.Store) (v []*pb.ChatServer, err error) {
 }
 
 // NewChatServer ...
-func NewChatServer(networkKey []byte, chatRoom *pb.ChatRoom) (*pb.ChatServer, error) {
-	id, err := GenerateSnowflake()
+func NewChatServer(g IDGenerator, networkKey []byte, chatRoom *pb.ChatRoom) (*pb.ChatServer, error) {
+	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
 	}

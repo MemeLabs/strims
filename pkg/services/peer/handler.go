@@ -5,13 +5,14 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/control/app"
+	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"go.uber.org/zap"
 )
 
 // NewPeerHandler ...
-func NewPeerHandler(logger *zap.Logger, app *app.Control) vnic.PeerHandler {
+func NewPeerHandler(logger *zap.Logger, app *app.Control, store *dao.ProfileStore) vnic.PeerHandler {
 	return func(peer *vnic.Peer) {
 		rw0, rw1 := peer.ChannelPair(vnic.PeerRPCClientPort, vnic.PeerRPCServerPort)
 
@@ -35,7 +36,7 @@ func NewPeerHandler(logger *zap.Logger, app *app.Control) vnic.PeerHandler {
 			Logger:           logger,
 			ReadWriteFlusher: rw1,
 		})
-		api.RegisterBootstrapPeerService(s, &bootstrapService{p, app})
+		api.RegisterBootstrapPeerService(s, &bootstrapService{p, app, store})
 		api.RegisterCAPeerService(s, &caService{p, app})
 		api.RegisterSwarmPeerService(s, &swarmService{p, app})
 		api.RegisterNetworkPeerService(s, &networkService{p, app})

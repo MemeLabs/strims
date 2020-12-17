@@ -38,10 +38,12 @@ func NewMutex(logger *zap.Logger, store *ProfileStore, key []byte) *Mutex {
 
 // Mutex ...
 type Mutex struct {
-	logger *zap.Logger
-	store  *ProfileStore
-	key    string
-	token  []byte
+	logger   *zap.Logger
+	store    *ProfileStore
+	key      string
+	token    []byte
+	held     bool
+	nextTick time.Duration
 }
 
 // Lock ...
@@ -53,14 +55,23 @@ func (m *Mutex) Lock(ctx context.Context) error {
 	return <-ch
 }
 
-func (m *Mutex) notifyLock(ctx context.Context, ch chan error) {
-	var held bool
-	var nextTick time.Duration
+// TryLock ...
+func (m *Mutex) TryLock(ctx context.Context) error {
+	if err := m.tryLock(time.Now()); err != nil {
+		return err
+	}
 
+	m.held = true
+	go m.notifyLock(ctx, nil)
+
+	return nil
+}
+
+func (m *Mutex) notifyLock(ctx context.Context, ch chan error) {
 	for {
 		select {
 		case <-ctx.Done():
-			if held {
+			if m.held {
 				if err := m.Release(); err != nil {
 					m.logger.Debug("releasing mutex failed", zap.Error(err))
 				}
@@ -69,25 +80,17 @@ func (m *Mutex) notifyLock(ctx context.Context, ch chan error) {
 			}
 			return
 
-		case t := <-time.After(nextTick):
-			if err := m.tryLock(t); err != nil {
-				fuzz := mutexRecheckMaxInterval - mutexRecheckMinInterval
-				nextTick = mutexRecheckMinInterval + fuzz*time.Duration(rand.Int31())/time.Duration(math.MaxInt32)
-				continue
-			}
-
-			if !held {
-				held = true
+		case t := <-time.After(m.nextTick):
+			if err := m.tryLock(t); err == nil && !m.held {
+				m.held = true
 				ch <- nil
 			}
-
-			nextTick = mutexRefreshInterval
 		}
 	}
 }
 
 func (m *Mutex) tryLock(t time.Time) error {
-	return m.store.Update(func(tx kv.RWTx) error {
+	err := m.store.Update(func(tx kv.RWTx) error {
 		now := t.UnixNano()
 
 		mu := &pb.Mutex{}
@@ -105,6 +108,15 @@ func (m *Mutex) tryLock(t time.Time) error {
 			Token: m.token,
 		})
 	})
+
+	if err != nil {
+		fuzz := mutexRecheckMaxInterval - mutexRecheckMinInterval
+		m.nextTick = mutexRecheckMinInterval + fuzz*time.Duration(rand.Int31())/time.Duration(math.MaxInt32)
+		return err
+	}
+
+	m.nextTick = mutexRefreshInterval
+	return nil
 }
 
 // Release ...

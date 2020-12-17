@@ -30,6 +30,7 @@ export const useCall = <S extends keyof Client, M extends FunctionPropertyNames<
 ) => {
   type Arguments = Parameters<Client[S][M]>;
   type Result = ResultType<Client[S][M]>;
+  type CallResult = ReturnType<Client[S][M]>;
   interface State {
     value?: Result;
     error?: Error;
@@ -81,7 +82,7 @@ export const useCall = <S extends keyof Client, M extends FunctionPropertyNames<
     }
   };
 
-  const call = (...args: Arguments) => {
+  const call = (...args: Arguments): CallResult => {
     /* eslint-disable prefer-spread */
     const service = client[serviceName];
     const method = service?.[methodName];
@@ -100,6 +101,7 @@ export const useCall = <S extends keyof Client, M extends FunctionPropertyNames<
     } else {
       handleComplete(value);
     }
+    return value;
   };
 
   React.useEffect(() => {
@@ -108,7 +110,7 @@ export const useCall = <S extends keyof Client, M extends FunctionPropertyNames<
     }
   }, [options.skip]);
 
-  return [state, call] as [State, (...arg: Arguments) => void];
+  return [state, call] as [State, (...arg: Arguments) => CallResult];
 };
 
 export const useLazyCall = <S extends keyof Client, M extends FunctionPropertyNames<Client[S]>>(

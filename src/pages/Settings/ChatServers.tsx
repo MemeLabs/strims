@@ -3,15 +3,15 @@ import { Controller, useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import Select, { OptionTypeBase } from "react-select";
 
-import { InputError, InputLabel, TextInput } from "../components/Form";
-import { MainLayout } from "../components/MainLayout";
-import { useCall, useLazyCall } from "../contexts/Api";
+import { InputError, InputLabel, TextInput } from "../../components/Form";
+import { MainLayout } from "../../components/MainLayout";
+import { useCall, useLazyCall } from "../../contexts/Api";
 import {
   CreateChatServerRequest,
   CreateChatServerResponse,
   ICertificate,
   IChatServer,
-} from "../lib/pb";
+} from "../../lib/pb";
 
 interface ChatServerFormData {
   name: string;
@@ -123,28 +123,12 @@ const ChatServersPage = () => {
   const [serversRes, getChatServers] = useCall("chat", "listServers");
 
   return (
-    <MainLayout>
-      <div className="page_body">
-        <Link className="settings_link" to="/networks">
-          Networks
-        </Link>
-        <Link className="settings_link" to="/bootstrap-clients">
-          Bootstrap Clients
-        </Link>
-        <Link className="settings_link" to="/chat-servers">
-          Chat Servers
-        </Link>
-        <main className="network_page">
-          <ChatServerForm onCreate={() => getChatServers()} />
-          <h1>Chat Servers</h1>
-          <p>Manage your chat servers</p>
-          <ChatServerTable
-            servers={serversRes.value?.chatServers}
-            onDelete={() => getChatServers()}
-          />
-        </main>
-      </div>
-    </MainLayout>
+    <main className="network_page">
+      <ChatServerForm onCreate={() => getChatServers()} />
+      <h1>Chat Servers</h1>
+      <p>Manage your chat servers</p>
+      <ChatServerTable servers={serversRes.value?.chatServers} onDelete={() => getChatServers()} />
+    </main>
   );
 };
 

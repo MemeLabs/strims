@@ -9,14 +9,14 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
-	"github.com/MemeLabs/go-ppspp/pkg/control/swarm"
+	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 
 	"go.uber.org/zap"
 )
 
 // NewPeerControl ...
-func NewPeerControl(logger *zap.Logger, observers *event.Observers, ca *ca.Control, network *network.Control, swarm *swarm.Control, bootstrap *bootstrap.Control) *PeerControl {
+func NewPeerControl(logger *zap.Logger, observers *event.Observers, ca *ca.Control, network *network.Control, transfer *transfer.Control, bootstrap *bootstrap.Control) *PeerControl {
 	events := make(chan interface{}, 128)
 	observers.Network.Notify(events)
 
@@ -25,7 +25,7 @@ func NewPeerControl(logger *zap.Logger, observers *event.Observers, ca *ca.Contr
 		observers: observers,
 		ca:        ca,
 		network:   network,
-		swarm:     swarm,
+		transfer:  transfer,
 		bootstrap: bootstrap,
 		peers:     map[uint64]*Peer{},
 	}
@@ -37,7 +37,7 @@ type PeerControl struct {
 	observers *event.Observers
 	ca        *ca.Control
 	network   *network.Control
-	swarm     *swarm.Control
+	transfer  *transfer.Control
 	bootstrap *bootstrap.Control
 
 	lock   sync.Mutex
@@ -61,7 +61,7 @@ func (t *PeerControl) Add(peer *vnic.Peer, client PeerClient) *Peer {
 		vnic:      peer,
 		client:    client,
 		network:   t.network.AddPeer(id, peer, client),
-		swarm:     t.swarm.AddPeer(id, peer, client),
+		transfer:  t.transfer.AddPeer(id, peer, client),
 		bootstrap: t.bootstrap.AddPeer(id, peer, client),
 	}
 
@@ -81,7 +81,7 @@ func (t *PeerControl) Remove(p *Peer) {
 	t.lock.Unlock()
 
 	t.network.RemovePeer(p.id)
-	t.swarm.RemovePeer(p.id)
+	t.transfer.RemovePeer(p.id)
 	t.bootstrap.RemovePeer(p.id)
 
 	t.observers.Peer.Emit(event.PeerRemove{ID: p.id})
@@ -115,7 +115,7 @@ type Peer struct {
 	client    PeerClient
 	vnic      *vnic.Peer
 	network   *network.Peer
-	swarm     *swarm.Peer
+	transfer  *transfer.Peer
 	bootstrap *bootstrap.Peer
 }
 
@@ -131,8 +131,8 @@ func (p *Peer) VNIC() *vnic.Peer { return p.vnic }
 // Network ...
 func (p *Peer) Network() *network.Peer { return p.network }
 
-// Swarm ...
-func (p *Peer) Swarm() *swarm.Peer { return p.swarm }
+// Transfer ...
+func (p *Peer) Transfer() *transfer.Peer { return p.transfer }
 
 // Bootstrap ...
 func (p *Peer) Bootstrap() *bootstrap.Peer { return p.bootstrap }

@@ -2,10 +2,10 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 
-import { InputError, TextInput } from "../components/Form";
-import { MainLayout } from "../components/MainLayout";
-import { useCall, useLazyCall } from "../contexts/Api";
-import * as pb from "../lib/pb";
+import { InputError, TextInput } from "../../components/Form";
+import { MainLayout } from "../../components/MainLayout";
+import { useCall, useLazyCall } from "../../contexts/Api";
+import * as pb from "../../lib/pb";
 
 const BootstrapClientForm = ({
   onCreate,
@@ -85,29 +85,16 @@ const BootstrapClientsPage = () => {
   const [bootstrapClientsRes, getBootstrapClients] = useCall("bootstrap", "listClients");
 
   return (
-    <MainLayout>
-      <div className="page_body">
-        <Link className="settings_link" to="/networks">
-          Networks
-        </Link>
-        <Link className="settings_link" to="/bootstrap-clients">
-          Bootstrap Clients
-        </Link>
-        <Link className="settings_link" to="/chat-servers">
-          Chat Servers
-        </Link>
-        <main className="network_page">
-          <BootstrapClientForm onCreate={() => getBootstrapClients()} />
-          <h1>BootstrapClients</h1>
-          <h2>Recommended BootstrapClients</h2>
-          <p>Manage your connected bootstrapClients</p>
-          <BootstrapClientTable
-            bootstrapClients={bootstrapClientsRes.value?.bootstrapClients}
-            onDelete={() => getBootstrapClients()}
-          />
-        </main>
-      </div>
-    </MainLayout>
+    <main className="network_page">
+      <BootstrapClientForm onCreate={() => getBootstrapClients()} />
+      <h1>BootstrapClients</h1>
+      <h2>Recommended BootstrapClients</h2>
+      <p>Manage your connected bootstrapClients</p>
+      <BootstrapClientTable
+        bootstrapClients={bootstrapClientsRes.value?.bootstrapClients}
+        onDelete={() => getBootstrapClients()}
+      />
+    </main>
   );
 };
 
