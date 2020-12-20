@@ -17,7 +17,7 @@ import (
 // VPNDialer ...
 type VPNDialer struct {
 	Logger   *zap.Logger
-	Client   *vpn.Client
+	Node     *vpn.Node
 	Key      []byte
 	Salt     []byte
 	CertFunc VPNCertFunc
@@ -25,7 +25,7 @@ type VPNDialer struct {
 
 // Dial ...
 func (d *VPNDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Transport, error) {
-	port, err := d.Client.Network.ReservePort()
+	port, err := d.Node.Network.ReservePort()
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +33,7 @@ func (d *VPNDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Transport,
 	return &VPNTransport{
 		ctx:         ctx,
 		logger:      d.Logger,
-		client:      d.Client,
+		node:        d.Node,
 		key:         d.Key,
 		salt:        d.Salt,
 		port:        port,
@@ -45,7 +45,7 @@ func (d *VPNDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Transport,
 // VPNServerDialer ...
 type VPNServerDialer struct {
 	Logger   *zap.Logger
-	Client   *vpn.Client
+	Node     *vpn.Node
 	Key      *pb.Key
 	Salt     []byte
 	CertFunc VPNCertFunc
@@ -53,7 +53,7 @@ type VPNServerDialer struct {
 
 // Dial ...
 func (d *VPNServerDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Transport, error) {
-	port, err := d.Client.Network.ReservePort()
+	port, err := d.Node.Network.ReservePort()
 	if err != nil {
 		return nil, err
 	}
@@ -61,7 +61,7 @@ func (d *VPNServerDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Tran
 	c := &VPNTransport{
 		ctx:         ctx,
 		logger:      d.Logger,
-		client:      d.Client,
+		node:        d.Node,
 		key:         d.Key.Public,
 		salt:        d.Salt,
 		port:        port,
@@ -70,10 +70,10 @@ func (d *VPNServerDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Tran
 	}
 
 	addr := &HostAddr{
-		HostID: d.Client.Host.VNIC().ID(),
+		HostID: d.Node.Host.VNIC().ID(),
 		Port:   port,
 	}
-	if err := PublishHostAddr(ctx, d.Client, d.Key, d.Salt, addr); err != nil {
+	if err := PublishHostAddr(ctx, d.Node, d.Key, d.Salt, addr); err != nil {
 		return nil, err
 	}
 
@@ -84,7 +84,7 @@ func (d *VPNServerDialer) Dial(ctx context.Context, dispatcher Dispatcher) (Tran
 type VPNTransport struct {
 	ctx         context.Context
 	logger      *zap.Logger
-	client      *vpn.Client
+	node        *vpn.Node
 	key         []byte
 	salt        []byte
 	certificate VPNCertFunc
@@ -96,14 +96,14 @@ type VPNTransport struct {
 
 // Listen ...
 func (t *VPNTransport) Listen() error {
-	if err := t.client.Network.SetHandler(t.port, t); err != nil {
+	if err := t.node.Network.SetHandler(t.port, t); err != nil {
 		return err
 	}
 
 	<-t.ctx.Done()
 
-	t.client.Network.RemoveHandler(t.port)
-	t.client.Network.ReleasePort(t.port)
+	t.node.Network.RemoveHandler(t.port)
+	t.node.Network.ReleasePort(t.port)
 
 	return t.ctx.Err()
 }
@@ -159,12 +159,12 @@ func (t *VPNTransport) send(ctx context.Context, call *pb.Call, addr *HostAddr) 
 	}
 	call.Headers[vpnCertificateHeader] = b.Bytes()
 
-	return t.client.Network.SendProto(addr.HostID, addr.Port, t.port, call)
+	return t.node.Network.SendProto(addr.HostID, addr.Port, t.port, call)
 }
 
 // Call ...
 func (t *VPNTransport) Call(call *CallOut, fn ResponseFunc) error {
-	addr, err := GetHostAddr(call.Context(), t.client, t.key, t.salt)
+	addr, err := GetHostAddr(call.Context(), t.node, t.key, t.salt)
 	if err != nil {
 		return err
 	}
@@ -208,6 +208,7 @@ type vpnCertificateKeyType struct{}
 
 var vpnCertificateKey vpnCertificateKeyType
 
+// VPNCertificate ...
 func VPNCertificate(ctx context.Context) *pb.Certificate {
 	return ctx.Value(vpnCertificateKey).(*pb.Certificate)
 }

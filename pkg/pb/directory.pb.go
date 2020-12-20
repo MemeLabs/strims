@@ -558,257 +558,6 @@ func (*DirectoryServerEvent_ViewerCountChange_) isDirectoryServerEvent_Body() {}
 
 func (*DirectoryServerEvent_ViewerStateChange_) isDirectoryServerEvent_Body() {}
 
-type CallDirectoryServerRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	NetworkKey []byte `protobuf:"bytes,1,opt,name=network_key,json=networkKey,proto3" json:"network_key,omitempty"`
-	// Types that are assignable to Body:
-	//	*CallDirectoryServerRequest_Listing
-	Body isCallDirectoryServerRequest_Body `protobuf_oneof:"body"`
-}
-
-func (x *CallDirectoryServerRequest) Reset() {
-	*x = CallDirectoryServerRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[8]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *CallDirectoryServerRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CallDirectoryServerRequest) ProtoMessage() {}
-
-func (x *CallDirectoryServerRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[8]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CallDirectoryServerRequest.ProtoReflect.Descriptor instead.
-func (*CallDirectoryServerRequest) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *CallDirectoryServerRequest) GetNetworkKey() []byte {
-	if x != nil {
-		return x.NetworkKey
-	}
-	return nil
-}
-
-func (m *CallDirectoryServerRequest) GetBody() isCallDirectoryServerRequest_Body {
-	if m != nil {
-		return m.Body
-	}
-	return nil
-}
-
-func (x *CallDirectoryServerRequest) GetListing() *CallDirectoryServerRequest_RemoveListing {
-	if x, ok := x.GetBody().(*CallDirectoryServerRequest_Listing); ok {
-		return x.Listing
-	}
-	return nil
-}
-
-type isCallDirectoryServerRequest_Body interface {
-	isCallDirectoryServerRequest_Body()
-}
-
-type CallDirectoryServerRequest_Listing struct {
-	Listing *CallDirectoryServerRequest_RemoveListing `protobuf:"bytes,2,opt,name=listing,proto3,oneof"`
-}
-
-func (*CallDirectoryServerRequest_Listing) isCallDirectoryServerRequest_Body() {}
-
-type OpenDirectoryClientRequest struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	NetworkKey []byte `protobuf:"bytes,1,opt,name=network_key,json=networkKey,proto3" json:"network_key,omitempty"`
-	ServerKey  []byte `protobuf:"bytes,2,opt,name=server_key,json=serverKey,proto3" json:"server_key,omitempty"`
-}
-
-func (x *OpenDirectoryClientRequest) Reset() {
-	*x = OpenDirectoryClientRequest{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[9]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *OpenDirectoryClientRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*OpenDirectoryClientRequest) ProtoMessage() {}
-
-func (x *OpenDirectoryClientRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[9]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use OpenDirectoryClientRequest.ProtoReflect.Descriptor instead.
-func (*OpenDirectoryClientRequest) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *OpenDirectoryClientRequest) GetNetworkKey() []byte {
-	if x != nil {
-		return x.NetworkKey
-	}
-	return nil
-}
-
-func (x *OpenDirectoryClientRequest) GetServerKey() []byte {
-	if x != nil {
-		return x.ServerKey
-	}
-	return nil
-}
-
-type DirectoryClientEvent struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	// Types that are assignable to Body:
-	//	*DirectoryClientEvent_Publish_
-	//	*DirectoryClientEvent_Unpublish_
-	//	*DirectoryClientEvent_Join_
-	//	*DirectoryClientEvent_Part_
-	//	*DirectoryClientEvent_Ping_
-	Body isDirectoryClientEvent_Body `protobuf_oneof:"body"`
-}
-
-func (x *DirectoryClientEvent) Reset() {
-	*x = DirectoryClientEvent{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[10]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *DirectoryClientEvent) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DirectoryClientEvent) ProtoMessage() {}
-
-func (x *DirectoryClientEvent) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[10]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DirectoryClientEvent.ProtoReflect.Descriptor instead.
-func (*DirectoryClientEvent) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{10}
-}
-
-func (m *DirectoryClientEvent) GetBody() isDirectoryClientEvent_Body {
-	if m != nil {
-		return m.Body
-	}
-	return nil
-}
-
-func (x *DirectoryClientEvent) GetPublish() *DirectoryClientEvent_Publish {
-	if x, ok := x.GetBody().(*DirectoryClientEvent_Publish_); ok {
-		return x.Publish
-	}
-	return nil
-}
-
-func (x *DirectoryClientEvent) GetUnpublish() *DirectoryClientEvent_Unpublish {
-	if x, ok := x.GetBody().(*DirectoryClientEvent_Unpublish_); ok {
-		return x.Unpublish
-	}
-	return nil
-}
-
-func (x *DirectoryClientEvent) GetJoin() *DirectoryClientEvent_Join {
-	if x, ok := x.GetBody().(*DirectoryClientEvent_Join_); ok {
-		return x.Join
-	}
-	return nil
-}
-
-func (x *DirectoryClientEvent) GetPart() *DirectoryClientEvent_Part {
-	if x, ok := x.GetBody().(*DirectoryClientEvent_Part_); ok {
-		return x.Part
-	}
-	return nil
-}
-
-func (x *DirectoryClientEvent) GetPing() *DirectoryClientEvent_Ping {
-	if x, ok := x.GetBody().(*DirectoryClientEvent_Ping_); ok {
-		return x.Ping
-	}
-	return nil
-}
-
-type isDirectoryClientEvent_Body interface {
-	isDirectoryClientEvent_Body()
-}
-
-type DirectoryClientEvent_Publish_ struct {
-	Publish *DirectoryClientEvent_Publish `protobuf:"bytes,1,opt,name=publish,proto3,oneof"`
-}
-
-type DirectoryClientEvent_Unpublish_ struct {
-	Unpublish *DirectoryClientEvent_Unpublish `protobuf:"bytes,2,opt,name=unpublish,proto3,oneof"`
-}
-
-type DirectoryClientEvent_Join_ struct {
-	Join *DirectoryClientEvent_Join `protobuf:"bytes,3,opt,name=join,proto3,oneof"`
-}
-
-type DirectoryClientEvent_Part_ struct {
-	Part *DirectoryClientEvent_Part `protobuf:"bytes,4,opt,name=part,proto3,oneof"`
-}
-
-type DirectoryClientEvent_Ping_ struct {
-	Ping *DirectoryClientEvent_Ping `protobuf:"bytes,5,opt,name=ping,proto3,oneof"`
-}
-
-func (*DirectoryClientEvent_Publish_) isDirectoryClientEvent_Body() {}
-
-func (*DirectoryClientEvent_Unpublish_) isDirectoryClientEvent_Body() {}
-
-func (*DirectoryClientEvent_Join_) isDirectoryClientEvent_Body() {}
-
-func (*DirectoryClientEvent_Part_) isDirectoryClientEvent_Body() {}
-
-func (*DirectoryClientEvent_Ping_) isDirectoryClientEvent_Body() {}
-
 type DirectoryPublishRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -820,7 +569,7 @@ type DirectoryPublishRequest struct {
 func (x *DirectoryPublishRequest) Reset() {
 	*x = DirectoryPublishRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[11]
+		mi := &file_directory_proto_msgTypes[8]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -833,7 +582,7 @@ func (x *DirectoryPublishRequest) String() string {
 func (*DirectoryPublishRequest) ProtoMessage() {}
 
 func (x *DirectoryPublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[11]
+	mi := &file_directory_proto_msgTypes[8]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -846,7 +595,7 @@ func (x *DirectoryPublishRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryPublishRequest.ProtoReflect.Descriptor instead.
 func (*DirectoryPublishRequest) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{11}
+	return file_directory_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *DirectoryPublishRequest) GetListing() *DirectoryListing {
@@ -865,7 +614,7 @@ type DirectoryPublishResponse struct {
 func (x *DirectoryPublishResponse) Reset() {
 	*x = DirectoryPublishResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[12]
+		mi := &file_directory_proto_msgTypes[9]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -878,7 +627,7 @@ func (x *DirectoryPublishResponse) String() string {
 func (*DirectoryPublishResponse) ProtoMessage() {}
 
 func (x *DirectoryPublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[12]
+	mi := &file_directory_proto_msgTypes[9]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -891,7 +640,7 @@ func (x *DirectoryPublishResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryPublishResponse.ProtoReflect.Descriptor instead.
 func (*DirectoryPublishResponse) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{12}
+	return file_directory_proto_rawDescGZIP(), []int{9}
 }
 
 type DirectoryUnpublishRequest struct {
@@ -905,7 +654,7 @@ type DirectoryUnpublishRequest struct {
 func (x *DirectoryUnpublishRequest) Reset() {
 	*x = DirectoryUnpublishRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[13]
+		mi := &file_directory_proto_msgTypes[10]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -918,7 +667,7 @@ func (x *DirectoryUnpublishRequest) String() string {
 func (*DirectoryUnpublishRequest) ProtoMessage() {}
 
 func (x *DirectoryUnpublishRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[13]
+	mi := &file_directory_proto_msgTypes[10]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -931,7 +680,7 @@ func (x *DirectoryUnpublishRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryUnpublishRequest.ProtoReflect.Descriptor instead.
 func (*DirectoryUnpublishRequest) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{13}
+	return file_directory_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *DirectoryUnpublishRequest) GetKey() []byte {
@@ -950,7 +699,7 @@ type DirectoryUnpublishResponse struct {
 func (x *DirectoryUnpublishResponse) Reset() {
 	*x = DirectoryUnpublishResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[14]
+		mi := &file_directory_proto_msgTypes[11]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -963,7 +712,7 @@ func (x *DirectoryUnpublishResponse) String() string {
 func (*DirectoryUnpublishResponse) ProtoMessage() {}
 
 func (x *DirectoryUnpublishResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[14]
+	mi := &file_directory_proto_msgTypes[11]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -976,7 +725,7 @@ func (x *DirectoryUnpublishResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryUnpublishResponse.ProtoReflect.Descriptor instead.
 func (*DirectoryUnpublishResponse) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{14}
+	return file_directory_proto_rawDescGZIP(), []int{11}
 }
 
 type DirectoryJoinRequest struct {
@@ -990,7 +739,7 @@ type DirectoryJoinRequest struct {
 func (x *DirectoryJoinRequest) Reset() {
 	*x = DirectoryJoinRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[15]
+		mi := &file_directory_proto_msgTypes[12]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1003,7 +752,7 @@ func (x *DirectoryJoinRequest) String() string {
 func (*DirectoryJoinRequest) ProtoMessage() {}
 
 func (x *DirectoryJoinRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[15]
+	mi := &file_directory_proto_msgTypes[12]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1016,7 +765,7 @@ func (x *DirectoryJoinRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryJoinRequest.ProtoReflect.Descriptor instead.
 func (*DirectoryJoinRequest) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{15}
+	return file_directory_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *DirectoryJoinRequest) GetKey() []byte {
@@ -1035,7 +784,7 @@ type DirectoryJoinResponse struct {
 func (x *DirectoryJoinResponse) Reset() {
 	*x = DirectoryJoinResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[16]
+		mi := &file_directory_proto_msgTypes[13]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1048,7 +797,7 @@ func (x *DirectoryJoinResponse) String() string {
 func (*DirectoryJoinResponse) ProtoMessage() {}
 
 func (x *DirectoryJoinResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[16]
+	mi := &file_directory_proto_msgTypes[13]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1061,7 +810,7 @@ func (x *DirectoryJoinResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryJoinResponse.ProtoReflect.Descriptor instead.
 func (*DirectoryJoinResponse) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{16}
+	return file_directory_proto_rawDescGZIP(), []int{13}
 }
 
 type DirectoryPartRequest struct {
@@ -1075,7 +824,7 @@ type DirectoryPartRequest struct {
 func (x *DirectoryPartRequest) Reset() {
 	*x = DirectoryPartRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[17]
+		mi := &file_directory_proto_msgTypes[14]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1088,7 +837,7 @@ func (x *DirectoryPartRequest) String() string {
 func (*DirectoryPartRequest) ProtoMessage() {}
 
 func (x *DirectoryPartRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[17]
+	mi := &file_directory_proto_msgTypes[14]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1101,7 +850,7 @@ func (x *DirectoryPartRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryPartRequest.ProtoReflect.Descriptor instead.
 func (*DirectoryPartRequest) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{17}
+	return file_directory_proto_rawDescGZIP(), []int{14}
 }
 
 func (x *DirectoryPartRequest) GetKey() []byte {
@@ -1120,7 +869,7 @@ type DirectoryPartResponse struct {
 func (x *DirectoryPartResponse) Reset() {
 	*x = DirectoryPartResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[18]
+		mi := &file_directory_proto_msgTypes[15]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1133,7 +882,7 @@ func (x *DirectoryPartResponse) String() string {
 func (*DirectoryPartResponse) ProtoMessage() {}
 
 func (x *DirectoryPartResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[18]
+	mi := &file_directory_proto_msgTypes[15]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1146,7 +895,7 @@ func (x *DirectoryPartResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryPartResponse.ProtoReflect.Descriptor instead.
 func (*DirectoryPartResponse) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{18}
+	return file_directory_proto_rawDescGZIP(), []int{15}
 }
 
 type DirectoryPingRequest struct {
@@ -1158,7 +907,7 @@ type DirectoryPingRequest struct {
 func (x *DirectoryPingRequest) Reset() {
 	*x = DirectoryPingRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[19]
+		mi := &file_directory_proto_msgTypes[16]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1171,7 +920,7 @@ func (x *DirectoryPingRequest) String() string {
 func (*DirectoryPingRequest) ProtoMessage() {}
 
 func (x *DirectoryPingRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[19]
+	mi := &file_directory_proto_msgTypes[16]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1184,7 +933,7 @@ func (x *DirectoryPingRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryPingRequest.ProtoReflect.Descriptor instead.
 func (*DirectoryPingRequest) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{19}
+	return file_directory_proto_rawDescGZIP(), []int{16}
 }
 
 type DirectoryPingResponse struct {
@@ -1196,7 +945,7 @@ type DirectoryPingResponse struct {
 func (x *DirectoryPingResponse) Reset() {
 	*x = DirectoryPingResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[20]
+		mi := &file_directory_proto_msgTypes[17]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1209,7 +958,7 @@ func (x *DirectoryPingResponse) String() string {
 func (*DirectoryPingResponse) ProtoMessage() {}
 
 func (x *DirectoryPingResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[20]
+	mi := &file_directory_proto_msgTypes[17]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1222,7 +971,7 @@ func (x *DirectoryPingResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DirectoryPingResponse.ProtoReflect.Descriptor instead.
 func (*DirectoryPingResponse) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{20}
+	return file_directory_proto_rawDescGZIP(), []int{17}
 }
 
 type DirectoryServerEvent_Publish struct {
@@ -1236,7 +985,7 @@ type DirectoryServerEvent_Publish struct {
 func (x *DirectoryServerEvent_Publish) Reset() {
 	*x = DirectoryServerEvent_Publish{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[21]
+		mi := &file_directory_proto_msgTypes[18]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1249,7 +998,7 @@ func (x *DirectoryServerEvent_Publish) String() string {
 func (*DirectoryServerEvent_Publish) ProtoMessage() {}
 
 func (x *DirectoryServerEvent_Publish) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[21]
+	mi := &file_directory_proto_msgTypes[18]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1283,7 +1032,7 @@ type DirectoryServerEvent_Unpublish struct {
 func (x *DirectoryServerEvent_Unpublish) Reset() {
 	*x = DirectoryServerEvent_Unpublish{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[22]
+		mi := &file_directory_proto_msgTypes[19]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1296,7 +1045,7 @@ func (x *DirectoryServerEvent_Unpublish) String() string {
 func (*DirectoryServerEvent_Unpublish) ProtoMessage() {}
 
 func (x *DirectoryServerEvent_Unpublish) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[22]
+	mi := &file_directory_proto_msgTypes[19]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1331,7 +1080,7 @@ type DirectoryServerEvent_ViewerCountChange struct {
 func (x *DirectoryServerEvent_ViewerCountChange) Reset() {
 	*x = DirectoryServerEvent_ViewerCountChange{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[23]
+		mi := &file_directory_proto_msgTypes[20]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1344,7 +1093,7 @@ func (x *DirectoryServerEvent_ViewerCountChange) String() string {
 func (*DirectoryServerEvent_ViewerCountChange) ProtoMessage() {}
 
 func (x *DirectoryServerEvent_ViewerCountChange) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[23]
+	mi := &file_directory_proto_msgTypes[20]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1387,7 +1136,7 @@ type DirectoryServerEvent_ViewerStateChange struct {
 func (x *DirectoryServerEvent_ViewerStateChange) Reset() {
 	*x = DirectoryServerEvent_ViewerStateChange{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[24]
+		mi := &file_directory_proto_msgTypes[21]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -1400,7 +1149,7 @@ func (x *DirectoryServerEvent_ViewerStateChange) String() string {
 func (*DirectoryServerEvent_ViewerStateChange) ProtoMessage() {}
 
 func (x *DirectoryServerEvent_ViewerStateChange) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[24]
+	mi := &file_directory_proto_msgTypes[21]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1435,296 +1184,6 @@ func (x *DirectoryServerEvent_ViewerStateChange) GetViewingKeys() [][]byte {
 		return x.ViewingKeys
 	}
 	return nil
-}
-
-type CallDirectoryServerRequest_RemoveListing struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Key []byte `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-}
-
-func (x *CallDirectoryServerRequest_RemoveListing) Reset() {
-	*x = CallDirectoryServerRequest_RemoveListing{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[25]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *CallDirectoryServerRequest_RemoveListing) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*CallDirectoryServerRequest_RemoveListing) ProtoMessage() {}
-
-func (x *CallDirectoryServerRequest_RemoveListing) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[25]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use CallDirectoryServerRequest_RemoveListing.ProtoReflect.Descriptor instead.
-func (*CallDirectoryServerRequest_RemoveListing) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{8, 0}
-}
-
-func (x *CallDirectoryServerRequest_RemoveListing) GetKey() []byte {
-	if x != nil {
-		return x.Key
-	}
-	return nil
-}
-
-type DirectoryClientEvent_Publish struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Listing   *DirectoryListing `protobuf:"bytes,1,opt,name=listing,proto3" json:"listing,omitempty"`
-	Signature []byte            `protobuf:"bytes,2,opt,name=signature,proto3" json:"signature,omitempty"`
-}
-
-func (x *DirectoryClientEvent_Publish) Reset() {
-	*x = DirectoryClientEvent_Publish{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[26]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *DirectoryClientEvent_Publish) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DirectoryClientEvent_Publish) ProtoMessage() {}
-
-func (x *DirectoryClientEvent_Publish) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[26]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DirectoryClientEvent_Publish.ProtoReflect.Descriptor instead.
-func (*DirectoryClientEvent_Publish) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{10, 0}
-}
-
-func (x *DirectoryClientEvent_Publish) GetListing() *DirectoryListing {
-	if x != nil {
-		return x.Listing
-	}
-	return nil
-}
-
-func (x *DirectoryClientEvent_Publish) GetSignature() []byte {
-	if x != nil {
-		return x.Signature
-	}
-	return nil
-}
-
-type DirectoryClientEvent_Unpublish struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Key []byte `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-}
-
-func (x *DirectoryClientEvent_Unpublish) Reset() {
-	*x = DirectoryClientEvent_Unpublish{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[27]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *DirectoryClientEvent_Unpublish) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DirectoryClientEvent_Unpublish) ProtoMessage() {}
-
-func (x *DirectoryClientEvent_Unpublish) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[27]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DirectoryClientEvent_Unpublish.ProtoReflect.Descriptor instead.
-func (*DirectoryClientEvent_Unpublish) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{10, 1}
-}
-
-func (x *DirectoryClientEvent_Unpublish) GetKey() []byte {
-	if x != nil {
-		return x.Key
-	}
-	return nil
-}
-
-type DirectoryClientEvent_Join struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Key []byte `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-}
-
-func (x *DirectoryClientEvent_Join) Reset() {
-	*x = DirectoryClientEvent_Join{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[28]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *DirectoryClientEvent_Join) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DirectoryClientEvent_Join) ProtoMessage() {}
-
-func (x *DirectoryClientEvent_Join) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[28]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DirectoryClientEvent_Join.ProtoReflect.Descriptor instead.
-func (*DirectoryClientEvent_Join) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{10, 2}
-}
-
-func (x *DirectoryClientEvent_Join) GetKey() []byte {
-	if x != nil {
-		return x.Key
-	}
-	return nil
-}
-
-type DirectoryClientEvent_Part struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Key []byte `protobuf:"bytes,1,opt,name=key,proto3" json:"key,omitempty"`
-}
-
-func (x *DirectoryClientEvent_Part) Reset() {
-	*x = DirectoryClientEvent_Part{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[29]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *DirectoryClientEvent_Part) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DirectoryClientEvent_Part) ProtoMessage() {}
-
-func (x *DirectoryClientEvent_Part) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[29]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DirectoryClientEvent_Part.ProtoReflect.Descriptor instead.
-func (*DirectoryClientEvent_Part) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{10, 3}
-}
-
-func (x *DirectoryClientEvent_Part) GetKey() []byte {
-	if x != nil {
-		return x.Key
-	}
-	return nil
-}
-
-type DirectoryClientEvent_Ping struct {
-	state         protoimpl.MessageState
-	sizeCache     protoimpl.SizeCache
-	unknownFields protoimpl.UnknownFields
-
-	Time int64 `protobuf:"varint,1,opt,name=time,proto3" json:"time,omitempty"`
-}
-
-func (x *DirectoryClientEvent_Ping) Reset() {
-	*x = DirectoryClientEvent_Ping{}
-	if protoimpl.UnsafeEnabled {
-		mi := &file_directory_proto_msgTypes[30]
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		ms.StoreMessageInfo(mi)
-	}
-}
-
-func (x *DirectoryClientEvent_Ping) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*DirectoryClientEvent_Ping) ProtoMessage() {}
-
-func (x *DirectoryClientEvent_Ping) ProtoReflect() protoreflect.Message {
-	mi := &file_directory_proto_msgTypes[30]
-	if protoimpl.UnsafeEnabled && x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use DirectoryClientEvent_Ping.ProtoReflect.Descriptor instead.
-func (*DirectoryClientEvent_Ping) Descriptor() ([]byte, []int) {
-	return file_directory_proto_rawDescGZIP(), []int{10, 4}
-}
-
-func (x *DirectoryClientEvent_Ping) GetTime() int64 {
-	if x != nil {
-		return x.Time
-	}
-	return 0
 }
 
 var File_directory_proto protoreflect.FileDescriptor
@@ -1814,83 +1273,34 @@ var file_directory_proto_rawDesc = []byte{
 	0x02, 0x20, 0x01, 0x28, 0x08, 0x52, 0x06, 0x6f, 0x6e, 0x6c, 0x69, 0x6e, 0x65, 0x12, 0x21, 0x0a,
 	0x0c, 0x76, 0x69, 0x65, 0x77, 0x69, 0x6e, 0x67, 0x5f, 0x6b, 0x65, 0x79, 0x73, 0x18, 0x03, 0x20,
 	0x03, 0x28, 0x0c, 0x52, 0x0b, 0x76, 0x69, 0x65, 0x77, 0x69, 0x6e, 0x67, 0x4b, 0x65, 0x79, 0x73,
-	0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0xaf, 0x01, 0x0a, 0x1a, 0x43, 0x61, 0x6c,
-	0x6c, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x53, 0x65, 0x72, 0x76, 0x65, 0x72,
-	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77, 0x6f,
-	0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e, 0x65,
-	0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x45, 0x0a, 0x07, 0x6c, 0x69, 0x73, 0x74,
-	0x69, 0x6e, 0x67, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x29, 0x2e, 0x43, 0x61, 0x6c, 0x6c,
-	0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x53, 0x65, 0x72, 0x76, 0x65, 0x72, 0x52,
-	0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x2e, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x4c, 0x69, 0x73,
-	0x74, 0x69, 0x6e, 0x67, 0x48, 0x00, 0x52, 0x07, 0x6c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x1a,
-	0x21, 0x0a, 0x0d, 0x52, 0x65, 0x6d, 0x6f, 0x76, 0x65, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67,
-	0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x6b,
-	0x65, 0x79, 0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0x5c, 0x0a, 0x1a, 0x4f, 0x70,
-	0x65, 0x6e, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x43, 0x6c, 0x69, 0x65, 0x6e,
-	0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x1f, 0x0a, 0x0b, 0x6e, 0x65, 0x74, 0x77,
-	0x6f, 0x72, 0x6b, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x0a, 0x6e,
-	0x65, 0x74, 0x77, 0x6f, 0x72, 0x6b, 0x4b, 0x65, 0x79, 0x12, 0x1d, 0x0a, 0x0a, 0x73, 0x65, 0x72,
-	0x76, 0x65, 0x72, 0x5f, 0x6b, 0x65, 0x79, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09, 0x73,
-	0x65, 0x72, 0x76, 0x65, 0x72, 0x4b, 0x65, 0x79, 0x22, 0xf5, 0x03, 0x0a, 0x14, 0x44, 0x69, 0x72,
-	0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x45, 0x76, 0x65, 0x6e,
-	0x74, 0x12, 0x39, 0x0a, 0x07, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x43, 0x6c,
-	0x69, 0x65, 0x6e, 0x74, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x2e, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73,
-	0x68, 0x48, 0x00, 0x52, 0x07, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12, 0x3f, 0x0a, 0x09,
-	0x75, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x1f, 0x2e, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x43, 0x6c, 0x69, 0x65, 0x6e,
-	0x74, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x2e, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68,
-	0x48, 0x00, 0x52, 0x09, 0x75, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12, 0x30, 0x0a,
-	0x04, 0x6a, 0x6f, 0x69, 0x6e, 0x18, 0x03, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e, 0x44, 0x69,
-	0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x45, 0x76, 0x65,
-	0x6e, 0x74, 0x2e, 0x4a, 0x6f, 0x69, 0x6e, 0x48, 0x00, 0x52, 0x04, 0x6a, 0x6f, 0x69, 0x6e, 0x12,
-	0x30, 0x0a, 0x04, 0x70, 0x61, 0x72, 0x74, 0x18, 0x04, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x1a, 0x2e,
-	0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x45,
-	0x76, 0x65, 0x6e, 0x74, 0x2e, 0x50, 0x61, 0x72, 0x74, 0x48, 0x00, 0x52, 0x04, 0x70, 0x61, 0x72,
-	0x74, 0x12, 0x30, 0x0a, 0x04, 0x70, 0x69, 0x6e, 0x67, 0x18, 0x05, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x1a, 0x2e, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x43, 0x6c, 0x69, 0x65, 0x6e,
-	0x74, 0x45, 0x76, 0x65, 0x6e, 0x74, 0x2e, 0x50, 0x69, 0x6e, 0x67, 0x48, 0x00, 0x52, 0x04, 0x70,
-	0x69, 0x6e, 0x67, 0x1a, 0x54, 0x0a, 0x07, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12, 0x2b,
-	0x0a, 0x07, 0x6c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32,
-	0x11, 0x2e, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x4c, 0x69, 0x73, 0x74, 0x69,
-	0x6e, 0x67, 0x52, 0x07, 0x6c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x12, 0x1c, 0x0a, 0x09, 0x73,
-	0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x09,
-	0x73, 0x69, 0x67, 0x6e, 0x61, 0x74, 0x75, 0x72, 0x65, 0x1a, 0x1d, 0x0a, 0x09, 0x55, 0x6e, 0x70,
-	0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x0c, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x1a, 0x18, 0x0a, 0x04, 0x4a, 0x6f, 0x69, 0x6e,
-	0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x6b,
-	0x65, 0x79, 0x1a, 0x18, 0x0a, 0x04, 0x50, 0x61, 0x72, 0x74, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65,
-	0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x1a, 0x1a, 0x0a, 0x04,
-	0x50, 0x69, 0x6e, 0x67, 0x12, 0x12, 0x0a, 0x04, 0x74, 0x69, 0x6d, 0x65, 0x18, 0x01, 0x20, 0x01,
-	0x28, 0x03, 0x52, 0x04, 0x74, 0x69, 0x6d, 0x65, 0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79,
-	0x22, 0x46, 0x0a, 0x17, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x50, 0x75, 0x62,
-	0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x2b, 0x0a, 0x07, 0x6c,
-	0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x44,
-	0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52,
-	0x07, 0x6c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x22, 0x1a, 0x0a, 0x18, 0x44, 0x69, 0x72, 0x65,
-	0x63, 0x74, 0x6f, 0x72, 0x79, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x2d, 0x0a, 0x19, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72,
-	0x79, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
+	0x42, 0x06, 0x0a, 0x04, 0x62, 0x6f, 0x64, 0x79, 0x22, 0x46, 0x0a, 0x17, 0x44, 0x69, 0x72, 0x65,
+	0x63, 0x74, 0x6f, 0x72, 0x79, 0x50, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x71, 0x75,
+	0x65, 0x73, 0x74, 0x12, 0x2b, 0x0a, 0x07, 0x6c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x0b, 0x32, 0x11, 0x2e, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79,
+	0x4c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67, 0x52, 0x07, 0x6c, 0x69, 0x73, 0x74, 0x69, 0x6e, 0x67,
+	0x22, 0x1a, 0x0a, 0x18, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x50, 0x75, 0x62,
+	0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x2d, 0x0a, 0x19,
+	0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69,
+	0x73, 0x68, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x22, 0x1c, 0x0a, 0x1a, 0x44,
+	0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73,
+	0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x28, 0x0a, 0x14, 0x44, 0x69, 0x72,
+	0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73,
 	0x74, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03,
-	0x6b, 0x65, 0x79, 0x22, 0x1c, 0x0a, 0x1a, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79,
-	0x55, 0x6e, 0x70, 0x75, 0x62, 0x6c, 0x69, 0x73, 0x68, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73,
-	0x65, 0x22, 0x28, 0x0a, 0x14, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x4a, 0x6f,
-	0x69, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79,
-	0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x22, 0x17, 0x0a, 0x15, 0x44,
-	0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x73, 0x70,
-	0x6f, 0x6e, 0x73, 0x65, 0x22, 0x28, 0x0a, 0x14, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72,
-	0x79, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x10, 0x0a, 0x03,
-	0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0c, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x22, 0x17,
-	0x0a, 0x15, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x50, 0x61, 0x72, 0x74, 0x52,
-	0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x16, 0x0a, 0x14, 0x44, 0x69, 0x72, 0x65, 0x63,
-	0x74, 0x6f, 0x72, 0x79, 0x50, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22,
-	0x17, 0x0a, 0x15, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x50, 0x69, 0x6e, 0x67,
-	0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x42, 0x44, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73,
-	0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74,
-	0x6f, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65,
-	0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f,
-	0x70, 0x6b, 0x67, 0x2f, 0x70, 0x62, 0x3b, 0x70, 0x62, 0xba, 0x02, 0x02, 0x50, 0x42, 0x62, 0x06,
-	0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x6b, 0x65, 0x79, 0x22, 0x17, 0x0a, 0x15, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79,
+	0x4a, 0x6f, 0x69, 0x6e, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22, 0x28, 0x0a, 0x14,
+	0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x71,
+	0x75, 0x65, 0x73, 0x74, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28,
+	0x0c, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x22, 0x17, 0x0a, 0x15, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74,
+	0x6f, 0x72, 0x79, 0x50, 0x61, 0x72, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x22,
+	0x16, 0x0a, 0x14, 0x44, 0x69, 0x72, 0x65, 0x63, 0x74, 0x6f, 0x72, 0x79, 0x50, 0x69, 0x6e, 0x67,
+	0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x17, 0x0a, 0x15, 0x44, 0x69, 0x72, 0x65, 0x63,
+	0x74, 0x6f, 0x72, 0x79, 0x50, 0x69, 0x6e, 0x67, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
+	0x42, 0x44, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70,
+	0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75,
+	0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67,
+	0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x62, 0x3b, 0x70,
+	0x62, 0xba, 0x02, 0x02, 0x50, 0x42, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -1905,64 +1315,48 @@ func file_directory_proto_rawDescGZIP() []byte {
 	return file_directory_proto_rawDescData
 }
 
-var file_directory_proto_msgTypes = make([]protoimpl.MessageInfo, 31)
+var file_directory_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_directory_proto_goTypes = []interface{}{
-	(*GetDirectoryEventsRequest)(nil),                // 0: GetDirectoryEventsRequest
-	(*TestDirectoryPublishRequest)(nil),              // 1: TestDirectoryPublishRequest
-	(*TestDirectoryPublishResponse)(nil),             // 2: TestDirectoryPublishResponse
-	(*DirectoryListingSnippet)(nil),                  // 3: DirectoryListingSnippet
-	(*DirectoryListingMedia)(nil),                    // 4: DirectoryListingMedia
-	(*DirectoryListingService)(nil),                  // 5: DirectoryListingService
-	(*DirectoryListing)(nil),                         // 6: DirectoryListing
-	(*DirectoryServerEvent)(nil),                     // 7: DirectoryServerEvent
-	(*CallDirectoryServerRequest)(nil),               // 8: CallDirectoryServerRequest
-	(*OpenDirectoryClientRequest)(nil),               // 9: OpenDirectoryClientRequest
-	(*DirectoryClientEvent)(nil),                     // 10: DirectoryClientEvent
-	(*DirectoryPublishRequest)(nil),                  // 11: DirectoryPublishRequest
-	(*DirectoryPublishResponse)(nil),                 // 12: DirectoryPublishResponse
-	(*DirectoryUnpublishRequest)(nil),                // 13: DirectoryUnpublishRequest
-	(*DirectoryUnpublishResponse)(nil),               // 14: DirectoryUnpublishResponse
-	(*DirectoryJoinRequest)(nil),                     // 15: DirectoryJoinRequest
-	(*DirectoryJoinResponse)(nil),                    // 16: DirectoryJoinResponse
-	(*DirectoryPartRequest)(nil),                     // 17: DirectoryPartRequest
-	(*DirectoryPartResponse)(nil),                    // 18: DirectoryPartResponse
-	(*DirectoryPingRequest)(nil),                     // 19: DirectoryPingRequest
-	(*DirectoryPingResponse)(nil),                    // 20: DirectoryPingResponse
-	(*DirectoryServerEvent_Publish)(nil),             // 21: DirectoryServerEvent.Publish
-	(*DirectoryServerEvent_Unpublish)(nil),           // 22: DirectoryServerEvent.Unpublish
-	(*DirectoryServerEvent_ViewerCountChange)(nil),   // 23: DirectoryServerEvent.ViewerCountChange
-	(*DirectoryServerEvent_ViewerStateChange)(nil),   // 24: DirectoryServerEvent.ViewerStateChange
-	(*CallDirectoryServerRequest_RemoveListing)(nil), // 25: CallDirectoryServerRequest.RemoveListing
-	(*DirectoryClientEvent_Publish)(nil),             // 26: DirectoryClientEvent.Publish
-	(*DirectoryClientEvent_Unpublish)(nil),           // 27: DirectoryClientEvent.Unpublish
-	(*DirectoryClientEvent_Join)(nil),                // 28: DirectoryClientEvent.Join
-	(*DirectoryClientEvent_Part)(nil),                // 29: DirectoryClientEvent.Part
-	(*DirectoryClientEvent_Ping)(nil),                // 30: DirectoryClientEvent.Ping
-	(*Certificate)(nil),                              // 31: Certificate
+	(*GetDirectoryEventsRequest)(nil),              // 0: GetDirectoryEventsRequest
+	(*TestDirectoryPublishRequest)(nil),            // 1: TestDirectoryPublishRequest
+	(*TestDirectoryPublishResponse)(nil),           // 2: TestDirectoryPublishResponse
+	(*DirectoryListingSnippet)(nil),                // 3: DirectoryListingSnippet
+	(*DirectoryListingMedia)(nil),                  // 4: DirectoryListingMedia
+	(*DirectoryListingService)(nil),                // 5: DirectoryListingService
+	(*DirectoryListing)(nil),                       // 6: DirectoryListing
+	(*DirectoryServerEvent)(nil),                   // 7: DirectoryServerEvent
+	(*DirectoryPublishRequest)(nil),                // 8: DirectoryPublishRequest
+	(*DirectoryPublishResponse)(nil),               // 9: DirectoryPublishResponse
+	(*DirectoryUnpublishRequest)(nil),              // 10: DirectoryUnpublishRequest
+	(*DirectoryUnpublishResponse)(nil),             // 11: DirectoryUnpublishResponse
+	(*DirectoryJoinRequest)(nil),                   // 12: DirectoryJoinRequest
+	(*DirectoryJoinResponse)(nil),                  // 13: DirectoryJoinResponse
+	(*DirectoryPartRequest)(nil),                   // 14: DirectoryPartRequest
+	(*DirectoryPartResponse)(nil),                  // 15: DirectoryPartResponse
+	(*DirectoryPingRequest)(nil),                   // 16: DirectoryPingRequest
+	(*DirectoryPingResponse)(nil),                  // 17: DirectoryPingResponse
+	(*DirectoryServerEvent_Publish)(nil),           // 18: DirectoryServerEvent.Publish
+	(*DirectoryServerEvent_Unpublish)(nil),         // 19: DirectoryServerEvent.Unpublish
+	(*DirectoryServerEvent_ViewerCountChange)(nil), // 20: DirectoryServerEvent.ViewerCountChange
+	(*DirectoryServerEvent_ViewerStateChange)(nil), // 21: DirectoryServerEvent.ViewerStateChange
+	(*Certificate)(nil),                            // 22: Certificate
 }
 var file_directory_proto_depIdxs = []int32{
-	31, // 0: DirectoryListing.creator:type_name -> Certificate
+	22, // 0: DirectoryListing.creator:type_name -> Certificate
 	3,  // 1: DirectoryListing.snippet:type_name -> DirectoryListingSnippet
 	4,  // 2: DirectoryListing.media:type_name -> DirectoryListingMedia
 	5,  // 3: DirectoryListing.service:type_name -> DirectoryListingService
-	21, // 4: DirectoryServerEvent.publish:type_name -> DirectoryServerEvent.Publish
-	22, // 5: DirectoryServerEvent.unpublish:type_name -> DirectoryServerEvent.Unpublish
-	23, // 6: DirectoryServerEvent.viewer_count_change:type_name -> DirectoryServerEvent.ViewerCountChange
-	24, // 7: DirectoryServerEvent.viewer_state_change:type_name -> DirectoryServerEvent.ViewerStateChange
-	25, // 8: CallDirectoryServerRequest.listing:type_name -> CallDirectoryServerRequest.RemoveListing
-	26, // 9: DirectoryClientEvent.publish:type_name -> DirectoryClientEvent.Publish
-	27, // 10: DirectoryClientEvent.unpublish:type_name -> DirectoryClientEvent.Unpublish
-	28, // 11: DirectoryClientEvent.join:type_name -> DirectoryClientEvent.Join
-	29, // 12: DirectoryClientEvent.part:type_name -> DirectoryClientEvent.Part
-	30, // 13: DirectoryClientEvent.ping:type_name -> DirectoryClientEvent.Ping
-	6,  // 14: DirectoryPublishRequest.listing:type_name -> DirectoryListing
-	6,  // 15: DirectoryServerEvent.Publish.listing:type_name -> DirectoryListing
-	6,  // 16: DirectoryClientEvent.Publish.listing:type_name -> DirectoryListing
-	17, // [17:17] is the sub-list for method output_type
-	17, // [17:17] is the sub-list for method input_type
-	17, // [17:17] is the sub-list for extension type_name
-	17, // [17:17] is the sub-list for extension extendee
-	0,  // [0:17] is the sub-list for field type_name
+	18, // 4: DirectoryServerEvent.publish:type_name -> DirectoryServerEvent.Publish
+	19, // 5: DirectoryServerEvent.unpublish:type_name -> DirectoryServerEvent.Unpublish
+	20, // 6: DirectoryServerEvent.viewer_count_change:type_name -> DirectoryServerEvent.ViewerCountChange
+	21, // 7: DirectoryServerEvent.viewer_state_change:type_name -> DirectoryServerEvent.ViewerStateChange
+	6,  // 8: DirectoryPublishRequest.listing:type_name -> DirectoryListing
+	6,  // 9: DirectoryServerEvent.Publish.listing:type_name -> DirectoryListing
+	10, // [10:10] is the sub-list for method output_type
+	10, // [10:10] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_directory_proto_init() }
@@ -2069,42 +1463,6 @@ func file_directory_proto_init() {
 			}
 		}
 		file_directory_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CallDirectoryServerRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_directory_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*OpenDirectoryClientRequest); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_directory_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DirectoryClientEvent); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_directory_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryPublishRequest); i {
 			case 0:
 				return &v.state
@@ -2116,7 +1474,7 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[9].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryPublishResponse); i {
 			case 0:
 				return &v.state
@@ -2128,7 +1486,7 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[10].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryUnpublishRequest); i {
 			case 0:
 				return &v.state
@@ -2140,7 +1498,7 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[11].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryUnpublishResponse); i {
 			case 0:
 				return &v.state
@@ -2152,7 +1510,7 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[12].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryJoinRequest); i {
 			case 0:
 				return &v.state
@@ -2164,7 +1522,7 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[13].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryJoinResponse); i {
 			case 0:
 				return &v.state
@@ -2176,7 +1534,7 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[14].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryPartRequest); i {
 			case 0:
 				return &v.state
@@ -2188,7 +1546,7 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[15].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryPartResponse); i {
 			case 0:
 				return &v.state
@@ -2200,7 +1558,7 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[16].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryPingRequest); i {
 			case 0:
 				return &v.state
@@ -2212,7 +1570,7 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[17].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryPingResponse); i {
 			case 0:
 				return &v.state
@@ -2224,7 +1582,7 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[18].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryServerEvent_Publish); i {
 			case 0:
 				return &v.state
@@ -2236,7 +1594,7 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[22].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[19].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryServerEvent_Unpublish); i {
 			case 0:
 				return &v.state
@@ -2248,7 +1606,7 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[23].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[20].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryServerEvent_ViewerCountChange); i {
 			case 0:
 				return &v.state
@@ -2260,80 +1618,8 @@ func file_directory_proto_init() {
 				return nil
 			}
 		}
-		file_directory_proto_msgTypes[24].Exporter = func(v interface{}, i int) interface{} {
+		file_directory_proto_msgTypes[21].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*DirectoryServerEvent_ViewerStateChange); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_directory_proto_msgTypes[25].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*CallDirectoryServerRequest_RemoveListing); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_directory_proto_msgTypes[26].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DirectoryClientEvent_Publish); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_directory_proto_msgTypes[27].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DirectoryClientEvent_Unpublish); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_directory_proto_msgTypes[28].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DirectoryClientEvent_Join); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_directory_proto_msgTypes[29].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DirectoryClientEvent_Part); i {
-			case 0:
-				return &v.state
-			case 1:
-				return &v.sizeCache
-			case 2:
-				return &v.unknownFields
-			default:
-				return nil
-			}
-		}
-		file_directory_proto_msgTypes[30].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*DirectoryClientEvent_Ping); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -2355,23 +1641,13 @@ func file_directory_proto_init() {
 		(*DirectoryServerEvent_ViewerCountChange_)(nil),
 		(*DirectoryServerEvent_ViewerStateChange_)(nil),
 	}
-	file_directory_proto_msgTypes[8].OneofWrappers = []interface{}{
-		(*CallDirectoryServerRequest_Listing)(nil),
-	}
-	file_directory_proto_msgTypes[10].OneofWrappers = []interface{}{
-		(*DirectoryClientEvent_Publish_)(nil),
-		(*DirectoryClientEvent_Unpublish_)(nil),
-		(*DirectoryClientEvent_Join_)(nil),
-		(*DirectoryClientEvent_Part_)(nil),
-		(*DirectoryClientEvent_Ping_)(nil),
-	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_directory_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   31,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

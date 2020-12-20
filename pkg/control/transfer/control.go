@@ -17,8 +17,8 @@ import (
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers) *Control {
 	events := make(chan interface{}, 128)
-	observers.Peer.Notify(events)
-	observers.Network.Notify(events)
+	observers.Local.Notify(events)
+	observers.Global.Notify(events)
 
 	return &Control{
 		logger:    logger,
@@ -129,7 +129,7 @@ func (t *Control) Add(swarm *ppspp.Swarm) *Swarm {
 	defer t.lock.Unlock()
 
 	t.swarms[s.ID] = s
-	t.observers.Swarm.Emit(event.SwarmAdd{Swarm: swarm})
+	t.observers.Local.Emit(event.SwarmAdd{Swarm: swarm})
 
 	return s
 }
@@ -153,7 +153,7 @@ func (t *Control) List() []*Swarm {
 
 // Publish ...
 func (t *Control) Publish(swarmID ppspp.SwarmID, networkKey []byte) {
-	client, ok := t.vpn.Client(networkKey)
+	node, ok := t.vpn.Node(networkKey)
 	if !ok {
 		return
 	}
@@ -161,14 +161,14 @@ func (t *Control) Publish(swarmID ppspp.SwarmID, networkKey []byte) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	_ = client
+	_ = node
 
 	// swarm, ok := t.swarms[swarmID]
 	// if !ok {
 	// 	return
 	// }
 
-	// client.PeerIndex.Publish(swarm.ctx, swarm.Swarm.ID(), []byte{}, 0)
+	// node.PeerIndex.Publish(swarm.ctx, swarm.Swarm.ID(), []byte{}, 0)
 }
 
 // Swarm ...

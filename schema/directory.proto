@@ -73,53 +73,6 @@ message DirectoryServerEvent {
   }
 }
 
-message CallDirectoryServerRequest {
-  message RemoveListing {
-    bytes key = 1;
-  }
-
-  bytes network_key = 1;
-  oneof body {
-    RemoveListing listing = 2;
-  }
-}
-
-message OpenDirectoryClientRequest {
-  bytes network_key = 1;
-  bytes server_key = 2;
-}
-
-message DirectoryClientEvent {
-  message Publish {
-    DirectoryListing listing = 1;
-    bytes signature = 2;
-  }
-
-  message Unpublish {
-    bytes key = 1;
-  }
-
-  message Join {
-    bytes key = 1;
-  }
-
-  message Part {
-    bytes key = 1;
-  }
-
-  message Ping {
-    int64 time = 1;
-  }
-
-  oneof body {
-    Publish publish = 1;
-    Unpublish unpublish = 2;
-    Join join = 3;
-    Part part = 4;
-    Ping ping = 5;
-  }
-}
-
 message DirectoryPublishRequest {
   DirectoryListing listing = 1;
 }

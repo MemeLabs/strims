@@ -9,19 +9,19 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/expfmt"
-	"go.uber.org/zap"
 )
 
-func newDebugService(logger *zap.Logger) api.DebugService {
-	return &debugService{logger}
+func init() {
+	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+		api.RegisterDebugService(server, &debugService{})
+	})
 }
 
 // debugService ...
-type debugService struct {
-	logger *zap.Logger
-}
+type debugService struct{}
 
 // PProf ...
 func (s *debugService) PProf(ctx context.Context, r *pb.PProfRequest) (*pb.PProfResponse, error) {

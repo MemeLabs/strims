@@ -18,7 +18,7 @@ var (
 
 type initProfileFunc func(profile *pb.Profile, store *dao.ProfileStore) error
 
-func newProfileService(ctx context.Context, logger *zap.Logger, store kv.BlobStore, initFunc initProfileFunc) (api.ProfileService, error) {
+func newProfileService(logger *zap.Logger, store kv.BlobStore, initFunc initProfileFunc) (api.ProfileService, error) {
 	metadata, err := dao.NewMetadataStore(store)
 	if err != nil {
 		return nil, err
@@ -68,12 +68,12 @@ func (s *profileService) Delete(ctx context.Context, r *pb.DeleteProfileRequest)
 	// }
 
 	// return &pb.DeleteProfileResponse{}, nil
-	return &pb.DeleteProfileResponse{}, ErrMethodNotImplemented
+	return &pb.DeleteProfileResponse{}, api.ErrNotImplemented
 }
 
 // Update ...
 func (s *profileService) Update(ctx context.Context, r *pb.UpdateProfileRequest) (*pb.UpdateProfileResponse, error) {
-	return &pb.UpdateProfileResponse{}, ErrMethodNotImplemented
+	return &pb.UpdateProfileResponse{}, api.ErrNotImplemented
 }
 
 // Load ...

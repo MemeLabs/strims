@@ -18,7 +18,7 @@ import (
 // NewPeerControl ...
 func NewPeerControl(logger *zap.Logger, observers *event.Observers, ca *ca.Control, network *network.Control, transfer *transfer.Control, bootstrap *bootstrap.Control) *PeerControl {
 	events := make(chan interface{}, 128)
-	observers.Network.Notify(events)
+	observers.Global.Notify(events)
 
 	return &PeerControl{
 		logger:    logger,
@@ -69,7 +69,7 @@ func (t *PeerControl) Add(peer *vnic.Peer, client PeerClient) *Peer {
 	t.peers[p.id] = p
 	t.lock.Unlock()
 
-	t.observers.Peer.Emit(event.PeerAdd{ID: id, VNIC: peer})
+	t.observers.Local.Emit(event.PeerAdd{ID: id, VNIC: peer})
 
 	return p
 }
@@ -84,7 +84,7 @@ func (t *PeerControl) Remove(p *Peer) {
 	t.transfer.RemovePeer(p.id)
 	t.bootstrap.RemovePeer(p.id)
 
-	t.observers.Peer.Emit(event.PeerRemove{ID: p.id})
+	t.observers.Local.Emit(event.PeerRemove{ID: p.id})
 }
 
 // Get ...

@@ -44,8 +44,7 @@ type Broker interface {
 // NewControl ...
 func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile, observers *event.Observers, dialer *dialer.Control) *Control {
 	events := make(chan interface{}, 128)
-	observers.Network.Notify(events)
-	observers.Peer.Notify(events)
+	observers.Global.Notify(events)
 
 	return &Control{
 		logger:           logger,
@@ -123,7 +122,7 @@ func (t *Control) handlePeerAdd(ctx context.Context, peerID uint64) {
 		if err := peer.negotiateNetworks(ctx); err != nil {
 			t.logger.Debug("network negotiation failed", zap.Error(err))
 		}
-		t.observers.Network.Emit(event.NetworkNegotiationComplete{})
+		t.observers.Local.Emit(event.NetworkNegotiationComplete{})
 	}()
 }
 
@@ -313,7 +312,7 @@ func (t *Control) startNetworks() {
 				logutil.ByteHex("key", cert.Key),
 			)
 
-			t.observers.Network.Emit(event.NetworkStart{Network: network})
+			t.observers.Local.Emit(event.NetworkStart{Network: network})
 		}
 	}
 }
@@ -407,7 +406,7 @@ func (t *Control) setCertificate(id uint64, cert *pb.Certificate) error {
 		func(network *pb.Network) {
 			t.certificates.Insert(network)
 			t.dialer.ReplaceOrInsertNetwork(network)
-			t.observers.Network.Emit(event.NetworkCertUpdate{Network: proto.Clone(network).(*pb.Network)})
+			t.observers.Global.Emit(event.NetworkCertUpdate{Network: proto.Clone(network).(*pb.Network)})
 		},
 	)
 }
@@ -448,8 +447,8 @@ func (t *Control) Add(network *pb.Network) error {
 	t.certificates.Insert(network)
 	t.dialer.ReplaceOrInsertNetwork(network)
 
-	t.observers.Network.Emit(event.NetworkAdd{Network: network})
-	t.observers.Network.Emit(event.NetworkStart{Network: network})
+	t.observers.Global.Emit(event.NetworkAdd{Network: network})
+	t.observers.Local.Emit(event.NetworkStart{Network: network})
 
 	return nil
 }
@@ -481,8 +480,8 @@ func (t *Control) Remove(id uint64) error {
 	t.certificates.Delete(networkKey)
 	delete(t.networks, id)
 
-	t.observers.Network.Emit(event.NetworkStop{Network: network})
-	t.observers.Network.Emit(event.NetworkRemove{Network: network})
+	t.observers.Local.Emit(event.NetworkStop{Network: network})
+	t.observers.Global.Emit(event.NetworkRemove{Network: network})
 
 	return nil
 }

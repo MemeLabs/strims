@@ -14,7 +14,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
@@ -28,8 +27,8 @@ import (
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile, observers *event.Observers, transfer *transfer.Control, dialer *dialer.Control, network *network.Control) *Control {
 	events := make(chan interface{}, 128)
-	observers.Network.Notify(events)
 	observers.Global.Notify(events)
+	observers.Local.Notify(events)
 
 	return &Control{
 		logger:         logger,
@@ -73,9 +72,9 @@ func (c *Control) Run(ctx context.Context) {
 				c.handleNetworkStart(ctx, e.Network)
 			case event.NetworkStop:
 				c.handleNetworkStop(e.Network)
-			case event.VideoIngressChannelUpdate:
+			case event.VideoChannelUpdate:
 				c.handleChannelUpdate(e.Channel)
-			case event.VideoIngressChannelRemove:
+			case event.VideoChannelRemove:
 				c.handleChannelRemove(e.ID)
 			}
 		case <-ctx.Done():
@@ -102,7 +101,7 @@ func (c *Control) handleNetworkStop(network *pb.Network) {
 	c.tryStopIngressShareServer(dao.GetRootCert(network.Certificate).Key)
 }
 
-func (c *Control) handleChannelUpdate(channel *pb.VideoIngressChannel) {
+func (c *Control) handleChannelUpdate(channel *pb.VideoChannel) {
 	c.ingressService.UpdateChannel(channel)
 }
 
@@ -186,12 +185,12 @@ func (c *Control) startIngressShareServer(ctx context.Context, networkKey []byte
 		return err
 	}
 
-	client, ok := c.vpn.Client(networkKey)
+	node, ok := c.vpn.Node(networkKey)
 	if !ok {
 		return errors.New("network not found")
 	}
 
-	service := newShareService(c.logger, client, c.store)
+	service := newShareService(c.logger, node, c.store)
 	if err != nil {
 		return err
 	}
@@ -216,7 +215,7 @@ func (c *Control) stopIngressServer() {
 func (c *Control) startIngressServer() {
 	c.ingressServer = &rtmpingress.Server{
 		Addr:         c.ingressConfig.ServerAddr,
-		HandleStream: c.ingressService.handleStream,
+		HandleStream: c.ingressService.HandleStream,
 	}
 
 	go func() {
@@ -242,127 +241,6 @@ func (c *Control) SetIngressConfig(config *pb.VideoIngressConfig) error {
 	}
 
 	c.reinitIngress(config)
-	return nil
-}
-
-// GetChannel ...
-func (c *Control) GetChannel(id uint64) (*pb.VideoIngressChannel, error) {
-	return dao.GetVideoIngressChannel(c.store, id)
-}
-
-// ListChannels ...
-func (c *Control) ListChannels() ([]*pb.VideoIngressChannel, error) {
-	// TODO: enrich channel data with liveness?
-	return dao.GetVideoIngressChannels(c.store)
-}
-
-// CreateChannel ...
-func (c *Control) CreateChannel(opts ...ChannelOption) (*pb.VideoIngressChannel, error) {
-	channel, err := dao.NewVideoIngressChannel(c.store)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := channelOptionSlice(opts).Apply(channel); err != nil {
-		return nil, err
-	}
-
-	if err := dao.UpsertVideoIngressChannel(c.store, channel); err != nil {
-		return nil, err
-	}
-
-	return channel, err
-}
-
-// UpdateChannel ...
-func (c *Control) UpdateChannel(id uint64, opts ...ChannelOption) (*pb.VideoIngressChannel, error) {
-	var channel *pb.VideoIngressChannel
-	err := c.store.Update(func(tx kv.RWTx) (err error) {
-		channel, err = dao.GetVideoIngressChannel(tx, id)
-		if err != nil {
-			return err
-		}
-
-		if err := channelOptionSlice(opts).Apply(channel); err != nil {
-			return err
-		}
-
-		return dao.UpsertVideoIngressChannel(c.store, channel)
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	c.observers.Global.Emit(event.VideoIngressChannelUpdate{Channel: channel})
-
-	return channel, err
-}
-
-// ChannelOption ...
-type ChannelOption func(channel *pb.VideoIngressChannel) error
-
-type channelOptionSlice []ChannelOption
-
-func (s channelOptionSlice) Apply(channel *pb.VideoIngressChannel) error {
-	for _, o := range s {
-		if err := o(channel); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// WithDirectorySnippet ...
-func WithDirectorySnippet(snippet *pb.DirectoryListingSnippet) ChannelOption {
-	return func(channel *pb.VideoIngressChannel) error {
-		channel.DirectoryListingSnippet = snippet
-		return nil
-	}
-}
-
-// WithLocalOwner ...
-func WithLocalOwner(profileKey, networkKey []byte) ChannelOption {
-	return func(channel *pb.VideoIngressChannel) error {
-		channel.Owner = &pb.VideoIngressChannel_Local_{
-			Local: &pb.VideoIngressChannel_Local{
-				AuthKey:    profileKey,
-				NetworkKey: networkKey,
-			},
-		}
-		return nil
-	}
-}
-
-// WithLocalShareOwner ...
-func WithLocalShareOwner(cert *pb.Certificate) ChannelOption {
-	return func(channel *pb.VideoIngressChannel) error {
-		channel.Owner = &pb.VideoIngressChannel_LocalShare_{
-			LocalShare: &pb.VideoIngressChannel_LocalShare{
-				Certificate: cert,
-			},
-		}
-		return nil
-	}
-}
-
-// WithRemoteShareOwner ...
-func WithRemoteShareOwner(share *pb.VideoIngressChannel_RemoteShare) ChannelOption {
-	return func(channel *pb.VideoIngressChannel) error {
-		channel.Owner = &pb.VideoIngressChannel_RemoteShare_{
-			RemoteShare: share,
-		}
-		return nil
-	}
-}
-
-// DeleteChannel ...
-func (c *Control) DeleteChannel(id uint64) error {
-	if err := dao.DeleteVideoIngressChannel(c.store, id); err != nil {
-		return err
-	}
-
-	c.observers.Global.Emit(event.VideoIngressChannelRemove{ID: id})
-
 	return nil
 }
 

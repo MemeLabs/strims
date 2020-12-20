@@ -17,8 +17,8 @@ import (
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) *Control {
 	events := make(chan interface{}, 128)
-	observers.Peer.Notify(events)
-	observers.Network.Notify(events)
+	observers.Local.Notify(events)
+	observers.Global.Notify(events)
 
 	return &Control{
 		logger:    logger,

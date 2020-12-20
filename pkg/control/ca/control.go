@@ -22,7 +22,7 @@ var ErrNetworkNotFound = errors.New("network not found")
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers, dialer *dialer.Control) *Control {
 	events := make(chan interface{}, 128)
-	observers.Network.Notify(events)
+	observers.Global.Notify(events)
 
 	return &Control{
 		logger:    logger,

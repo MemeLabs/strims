@@ -112,6 +112,8 @@ func (e *signableMessageEncoder) encode(rv reflect.Value, b []byte) int {
 	case reflect.Bool:
 		if rv.Bool() {
 			b[n] = 1
+		} else {
+			b[n] = 0
 		}
 		n++
 	case reflect.Int32:

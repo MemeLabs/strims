@@ -88,7 +88,11 @@ func TestNewCertificateRequest(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			_, err := NewCertificateRequest(tc.key, 0)
 			if tc.err != nil {
-				assert.EqualError(t, err, tc.err.Error())
+				if errs, ok := err.(Errors); ok {
+					assert.True(t, errs.Includes(tc.err), "received errors: %s, expected: %s", errs, tc.err)
+				} else {
+					assert.EqualError(t, err, tc.err.Error())
+				}
 			} else {
 				assert.Nil(t, err)
 			}
@@ -143,7 +147,11 @@ func TestVerifyCertificate(t *testing.T) {
 		t.Run(scenario, func(t *testing.T) {
 			err := VerifyCertificate(tc.cert)
 			if tc.err != nil {
-				assert.EqualError(t, err, tc.err.Error())
+				if errs, ok := err.(Errors); ok {
+					assert.True(t, errs.Includes(tc.err), "received errors: %s, expected: %s", errs, tc.err)
+				} else {
+					assert.EqualError(t, err, tc.err.Error())
+				}
 			} else {
 				assert.Nil(t, err)
 			}

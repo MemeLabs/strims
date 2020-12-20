@@ -9,12 +9,20 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/app"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
 
-func newBootstrapService(ctx context.Context, logger *zap.Logger, store *dao.ProfileStore, vpn *vpn.Host, app *app.Control) api.BootstrapService {
-	return &bootstrapService{logger, store, vpn, app}
+func init() {
+	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+		api.RegisterBootstrapService(server, &bootstrapService{
+			logger: params.Logger,
+			store:  params.Store,
+			vpn:    params.VPN,
+			app:    params.App,
+		})
+	})
 }
 
 // bootstrapService ...

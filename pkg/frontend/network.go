@@ -10,8 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/app"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
-	"go.uber.org/zap"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -20,24 +19,20 @@ var (
 	ErrAlreadyJoinedNetwork = errors.New("user already has a membership for that network")
 )
 
-func newNetworkService(ctx context.Context, logger *zap.Logger, profile *pb.Profile, store *dao.ProfileStore, vpnHost *vpn.Host, app *app.Control) api.NetworkService {
-	return &networkService{
-		ctx:     ctx,
-		logger:  logger,
-		profile: profile,
-		store:   store,
-		vpnHost: vpnHost,
-		app:     app,
-	}
+func init() {
+	RegisterService(func(server *rpc.Server, params *ServiceParams) {
+		api.RegisterNetworkService(server, &networkService{
+			profile: params.Profile,
+			store:   params.Store,
+			app:     params.App,
+		})
+	})
 }
 
 // networkService ...
 type networkService struct {
-	ctx     context.Context
-	logger  *zap.Logger
 	profile *pb.Profile
 	store   *dao.ProfileStore
-	vpnHost *vpn.Host
 	app     *app.Control
 }
 
@@ -194,7 +189,7 @@ func (s *networkService) GetDirectoryEvents(ctx context.Context, r *pb.GetDirect
 
 	// return ch, nil
 
-	return make(chan *pb.DirectoryServerEvent, 16), ErrMethodNotImplemented
+	return make(chan *pb.DirectoryServerEvent, 16), api.ErrNotImplemented
 }
 
 // TestDirectoryPublish ...
@@ -227,5 +222,5 @@ func (s *networkService) TestDirectoryPublish(ctx context.Context, r *pb.TestDir
 	// }
 
 	// return &pb.TestDirectoryPublishResponse{}, err
-	return &pb.TestDirectoryPublishResponse{}, ErrMethodNotImplemented
+	return &pb.TestDirectoryPublishResponse{}, api.ErrNotImplemented
 }

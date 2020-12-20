@@ -70,7 +70,7 @@ func (t *Control) RemoveNetwork(network *pb.Network) {
 	t.certs.Delete(&hostCertKey{dao.GetRootCert(network.Certificate).Key})
 }
 
-func (t *Control) hostCertAndVPNClient(networkKey []byte) (*hostCert, *vpn.Client, error) {
+func (t *Control) hostCertAndVPNNode(networkKey []byte) (*hostCert, *vpn.Node, error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -78,23 +78,23 @@ func (t *Control) hostCertAndVPNClient(networkKey []byte) (*hostCert, *vpn.Clien
 	if cert == nil {
 		return nil, nil, errors.New("host certificate not found")
 	}
-	client, ok := t.vpn.Client(networkKey)
+	node, ok := t.vpn.Node(networkKey)
 	if !ok {
 		return nil, nil, errors.New("network not found")
 	}
-	return cert.(*hostCert), client, nil
+	return cert.(*hostCert), node, nil
 }
 
 // ServerDialer ...
 func (t *Control) ServerDialer(networkKey []byte, key *pb.Key, salt []byte) (rpc.Dialer, error) {
-	cert, client, err := t.hostCertAndVPNClient(networkKey)
+	cert, node, err := t.hostCertAndVPNNode(networkKey)
 	if err != nil {
 		return nil, err
 	}
 
 	return &rpc.VPNServerDialer{
 		Logger:   t.logger,
-		Client:   client,
+		Node:     node,
 		Key:      key,
 		Salt:     salt,
 		CertFunc: cert.Load,
@@ -112,14 +112,14 @@ func (t *Control) Server(networkKey []byte, key *pb.Key, salt []byte) (*rpc.Serv
 
 // ClientDialer ...
 func (t *Control) ClientDialer(networkKey, key, salt []byte) (rpc.Dialer, error) {
-	cert, client, err := t.hostCertAndVPNClient(networkKey)
+	cert, node, err := t.hostCertAndVPNNode(networkKey)
 	if err != nil {
 		return nil, err
 	}
 
 	return &rpc.VPNDialer{
 		Logger:   t.logger,
-		Client:   client,
+		Node:     node,
 		Key:      key,
 		Salt:     salt,
 		CertFunc: cert.Load,

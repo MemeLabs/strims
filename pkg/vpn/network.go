@@ -3,7 +3,6 @@ package vpn
 import (
 	"errors"
 	"fmt"
-	"log"
 	"math"
 	"sync"
 	"sync/atomic"
@@ -224,7 +223,6 @@ func (n *Network) handleFrame(p *vnic.Peer, f vnic.Frame) error {
 	lastHopIndex := m.Trailer.Hops - 1
 
 	if lastHopIndex < 0 || !m.Trailer.Entries[lastHopIndex].HostID.Equals(p.HostID()) {
-		log.Println("caught by new memes...")
 		return errors.New("message last hop trailer mismatch")
 	}
 
@@ -296,12 +294,10 @@ func (n *Network) handleMessage(m *Message) error {
 	}
 
 	if m.Trailer.Contains(n.host.ID()) {
-		n.logger.Debug("dropping message we've already forwarded")
 		return nil
 	}
 
 	if m.Trailer.Hops >= maxMessageHops {
-		// n.logger.Debug("dropping message after too many hops")
 		return nil
 	}
 
@@ -379,6 +375,19 @@ func (n *Network) sendMessage(m *Message) error {
 // MessageHandler ...
 type MessageHandler interface {
 	HandleMessage(m *Message) error
+}
+
+// MessageHandlerFunc ...
+func MessageHandlerFunc(fn func(*Message) error) MessageHandler {
+	return &messageHandlerFunc{fn}
+}
+
+type messageHandlerFunc struct {
+	handleMessage func(*Message) error
+}
+
+func (h *messageHandlerFunc) HandleMessage(msg *Message) error {
+	return h.handleMessage(msg)
 }
 
 // TODO: handle eviction

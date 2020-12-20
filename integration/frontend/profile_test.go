@@ -48,7 +48,7 @@ func TestCreateProfile(t *testing.T) {
 		},
 	}
 
-	client := api.NewFrontendRPCClient(td.Client(&driver.ClientOptions{}))
+	client := api.NewProfileClient(td.Client(&driver.ClientOptions{}))
 	for scenario, tc := range tcs {
 		t.Run(scenario, func(t *testing.T) {
 			assert := assert.New(t)
@@ -57,7 +57,7 @@ func TestCreateProfile(t *testing.T) {
 			defer cancel()
 
 			res := &pb.CreateProfileResponse{}
-			err := client.CreateProfile(ctx, tc.req, res)
+			err := client.Create(ctx, tc.req, res)
 			if err == nil {
 				assert.Equal(tc.expected.res.GetProfile().GetName(), res.GetProfile().GetName())
 			} else {

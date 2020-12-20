@@ -53,7 +53,7 @@ type ingressService struct {
 	streams map[uint64]*ingressStream
 }
 
-func (s *ingressService) UpdateChannel(channel *pb.VideoIngressChannel) {
+func (s *ingressService) UpdateChannel(channel *pb.VideoChannel) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -71,7 +71,7 @@ func (s *ingressService) RemoveChannel(id uint64) {
 	}
 }
 
-func (s *ingressService) handleStream(a *rtmpingress.StreamAddr, c *rtmpingress.Conn) {
+func (s *ingressService) HandleStream(a *rtmpingress.StreamAddr, c *rtmpingress.Conn) {
 	defer c.Close()
 
 	stream, err := newIngressStream(s.logger, s.store, s.transfer, s.dialer, s.network, s.transcoder, a, c)
@@ -136,7 +136,7 @@ func newIngressStream(
 		conn:      conn,
 	}
 
-	s.channel, err = dao.GetVideoIngressChannelByStreamKey(store, addr.Key)
+	s.channel, err = dao.GetVideoChannelByStreamKey(store, addr.Key)
 	if err != nil {
 		return nil, fmt.Errorf("getting channel: %w", err)
 	}
@@ -173,7 +173,7 @@ type ingressStream struct {
 	closeOnce sync.Once
 
 	startTime time.Time
-	channel   *pb.VideoIngressChannel
+	channel   *pb.VideoChannel
 	conn      io.Closer
 
 	swarm *ppspp.Swarm
@@ -221,33 +221,33 @@ func (s *ingressStream) openWriter(key *pb.Key) (*ppspp.Swarm, ioutil.WriteFlush
 	return w.Swarm(), cw, nil
 }
 
-func (s *ingressStream) channelNetworkKey(channel *pb.VideoIngressChannel) []byte {
+func (s *ingressStream) channelNetworkKey(channel *pb.VideoChannel) []byte {
 	switch o := channel.Owner.(type) {
-	case *pb.VideoIngressChannel_Local_:
+	case *pb.VideoChannel_Local_:
 		return o.Local.NetworkKey
-	case *pb.VideoIngressChannel_LocalShare_:
+	case *pb.VideoChannel_LocalShare_:
 		return dao.GetRootCert(o.LocalShare.Certificate).Key
 	default:
 		panic("unsupported channel")
 	}
 }
 
-func (s *ingressStream) channelCreatorCert(channel *pb.VideoIngressChannel) (*pb.Certificate, error) {
+func (s *ingressStream) channelCreatorCert(channel *pb.VideoChannel) (*pb.Certificate, error) {
 	switch o := channel.Owner.(type) {
-	case *pb.VideoIngressChannel_Local_:
+	case *pb.VideoChannel_Local_:
 		cert, ok := s.network.Certificate(o.Local.NetworkKey)
 		if !ok {
 			return nil, errors.New("network certificate not found")
 		}
 		return cert, nil
-	case *pb.VideoIngressChannel_LocalShare_:
+	case *pb.VideoChannel_LocalShare_:
 		return o.LocalShare.Certificate, nil
 	default:
 		return nil, errors.New("unsupported channel")
 	}
 }
 
-func (s *ingressStream) publishDirectoryListing(channel *pb.VideoIngressChannel) error {
+func (s *ingressStream) publishDirectoryListing(channel *pb.VideoChannel) error {
 	networkKey := s.channelNetworkKey(channel)
 	creator, err := s.channelCreatorCert(channel)
 	if err != nil {

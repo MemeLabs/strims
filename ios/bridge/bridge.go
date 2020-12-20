@@ -9,9 +9,9 @@ import (
 	"path"
 
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
+	"github.com/MemeLabs/go-ppspp/pkg/control/network"
+	"github.com/MemeLabs/go-ppspp/pkg/frontend"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/service"
-	"github.com/MemeLabs/go-ppspp/pkg/services/network"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -44,7 +44,7 @@ func NewGoSide(s SwiftSide) (*GoSide, error) {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}
 
-	srv, err := service.New(service.Options{
+	srv := &frontend.Server{
 		Store:  kv,
 		Logger: logger,
 		NewVPNHost: func(key *pb.Key) (*vpn.Host, error) {
@@ -60,7 +60,7 @@ func NewGoSide(s SwiftSide) (*GoSide, error) {
 			return vpn.New(logger, vnicHost)
 		},
 		Broker: network.NewBroker(logger),
-	})
+	}
 	if err != nil {
 		return nil, fmt.Errorf("error creating service: %w", err)
 	}

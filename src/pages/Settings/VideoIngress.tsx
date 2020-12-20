@@ -17,7 +17,7 @@ import {
 import { PrivateRoute } from "../../components/PrivateRoute";
 import { useCall, useClient, useLazyCall } from "../../contexts/Api";
 import hostRegex from "../../lib/hostRegex";
-import { ICertificate, IVideoIngressChannel, IVideoIngressConfig } from "../../lib/pb";
+import { ICertificate, IVideoChannel, IVideoIngressConfig } from "../../lib/pb";
 
 const rootCertificate = (cert: ICertificate): ICertificate =>
   cert.parent ? rootCertificate(cert.parent) : cert;
@@ -188,19 +188,19 @@ const VideoIngressConfigForm = () => {
   );
 };
 
-interface VideoIngressChannelFormData {
+interface VideoChannelFormData {
   title: string;
   description: string;
   tags: Array<SelectOption>;
   networkKey: SelectOption;
 }
 
-interface VideoIngressChannelFormProps {
-  data?: VideoIngressChannelFormData;
-  onSubmit: SubmitHandler<VideoIngressChannelFormData>;
+interface VideoChannelFormProps {
+  data?: VideoChannelFormData;
+  onSubmit: SubmitHandler<VideoChannelFormData>;
 }
 
-const VideoIngressChannelForm: React.FC<VideoIngressChannelFormProps> = ({ onSubmit }) => {
+const VideoChannelForm: React.FC<VideoChannelFormProps> = ({ onSubmit }) => {
   const client = useClient();
 
   const {
@@ -211,12 +211,13 @@ const VideoIngressChannelForm: React.FC<VideoIngressChannelFormProps> = ({ onSub
     errors,
     formState,
     watch,
-  } = useForm<VideoIngressChannelFormData>({
+  } = useForm<VideoChannelFormData>({
     mode: "onBlur",
     defaultValues: {
       title: "",
       description: "",
       tags: [],
+      networkKey: null,
     },
   });
 
@@ -332,10 +333,10 @@ const VideoIngressChannelForm: React.FC<VideoIngressChannelFormProps> = ({ onSub
   );
 };
 
-const VideoIngressChannels = () => {
-  const [channelsRes, listChannels] = useCall("videoIngress", "listChannels");
-  const [, createChannel] = useLazyCall("videoIngress", "createChannel");
-  const [, deleteChannel] = useLazyCall("videoIngress", "deleteChannel", {
+const VideoChannels = () => {
+  const [channelsRes, listChannels] = useCall("videoChannel", "list");
+  const [, createChannel] = useLazyCall("videoChannel", "create");
+  const [, deleteChannel] = useLazyCall("videoChannel", "delete", {
     onComplete: listChannels,
   });
 
@@ -351,9 +352,9 @@ const VideoIngressChannels = () => {
     listChannels();
   }, []);
 
-  const rows = channelsRes.value?.channels?.map((channel, i) => {
+  const rows = channelsRes.value?.channels?.map((channel) => {
     return (
-      <VideoIngressChannelTableItem
+      <VideoChannelTableItem
         key={channel.id}
         channel={channel}
         onDelete={() => deleteChannel({ id: channel.id })}
@@ -363,7 +364,7 @@ const VideoIngressChannels = () => {
 
   return (
     <>
-      <VideoIngressChannelForm onSubmit={handleSubmit} />
+      <VideoChannelForm onSubmit={handleSubmit} />
       <div className="thing_list">
         <div>Active Channels ({rows?.length || 0})</div>
         {rows}
@@ -372,23 +373,23 @@ const VideoIngressChannels = () => {
   );
 };
 
-interface VideoIngressChannelTableItemProps {
-  channel: IVideoIngressChannel;
+interface VideoChannelTableItemProps {
+  channel: IVideoChannel;
   onDelete: () => void;
 }
 
-const VideoIngressChannelTableItem = ({ channel, onDelete }: VideoIngressChannelTableItemProps) => {
+const VideoChannelTableItem = ({ channel, onDelete }: VideoChannelTableItemProps) => {
   const [channelURLRes] = useCall("videoIngress", "getChannelURL", { args: [{ id: channel.id }] });
 
   return (
-    <div className="thing_list__item" key={channel.id}>
+    <div className="thing_list__item">
       <div>
         <div>{channel.directoryListingSnippet?.title}</div>
         <div>{channel.directoryListingSnippet?.description}</div>
         <div>{channelURLRes.value?.url}</div>
         <div>
-          {channel.directoryListingSnippet?.tags.map((tag) => (
-            <span>{tag}</span>
+          {channel.directoryListingSnippet?.tags.map((tag, i) => (
+            <span key={i}>{tag}</span>
           ))}
         </div>
       </div>
@@ -407,11 +408,7 @@ const VideoIngressPage = () => {
     <main className="network_page">
       <Switch>
         <PrivateRoute path="/settings/video-ingress" exact component={VideoIngressConfigForm} />
-        <PrivateRoute
-          path="/settings/video-ingress/channels"
-          exact
-          component={VideoIngressChannels}
-        />
+        <PrivateRoute path="/settings/video-ingress/channels" exact component={VideoChannels} />
       </Switch>
     </main>
   );

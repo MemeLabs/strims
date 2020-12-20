@@ -33,34 +33,6 @@ export default class VideoIngress {
       this.host.call("VideoIngress/ListStreams", new pb.VideoIngressListStreamsRequest(arg))
     );
   }
-  public listChannels(
-    arg: pb.IVideoIngressListChannelsRequest = new pb.VideoIngressListChannelsRequest()
-  ): Promise<pb.VideoIngressListChannelsResponse> {
-    return this.host.expectOne(
-      this.host.call("VideoIngress/ListChannels", new pb.VideoIngressListChannelsRequest(arg))
-    );
-  }
-  public createChannel(
-    arg: pb.IVideoIngressCreateChannelRequest = new pb.VideoIngressCreateChannelRequest()
-  ): Promise<pb.VideoIngressCreateChannelResponse> {
-    return this.host.expectOne(
-      this.host.call("VideoIngress/CreateChannel", new pb.VideoIngressCreateChannelRequest(arg))
-    );
-  }
-  public updateChannel(
-    arg: pb.IVideoIngressUpdateChannelRequest = new pb.VideoIngressUpdateChannelRequest()
-  ): Promise<pb.VideoIngressUpdateChannelResponse> {
-    return this.host.expectOne(
-      this.host.call("VideoIngress/UpdateChannel", new pb.VideoIngressUpdateChannelRequest(arg))
-    );
-  }
-  public deleteChannel(
-    arg: pb.IVideoIngressDeleteChannelRequest = new pb.VideoIngressDeleteChannelRequest()
-  ): Promise<pb.VideoIngressDeleteChannelResponse> {
-    return this.host.expectOne(
-      this.host.call("VideoIngress/DeleteChannel", new pb.VideoIngressDeleteChannelRequest(arg))
-    );
-  }
   public getChannelURL(
     arg: pb.IVideoIngressGetChannelURLRequest = new pb.VideoIngressGetChannelURLRequest()
   ): Promise<pb.VideoIngressGetChannelURLResponse> {

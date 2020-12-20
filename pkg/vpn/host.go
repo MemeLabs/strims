@@ -53,7 +53,7 @@ type Host struct {
 	logger               *zap.Logger
 	vnic                 *vnic.Host
 	clientsLock          sync.Mutex
-	clients              clientMap
+	nodes                nodeMap
 	networkObservers     event.Observer
 	peerNetworkObservers event.Observer
 	recentMessageIDs     *lru.Cache
@@ -86,12 +86,12 @@ func (h *Host) NotifyPeerNetwork(ch chan PeerNetwork) {
 }
 
 // AddNetwork ...
-func (h *Host) AddNetwork(cert *pb.Certificate) (*Client, error) {
+func (h *Host) AddNetwork(cert *pb.Certificate) (*Node, error) {
 	h.clientsLock.Lock()
 	defer h.clientsLock.Unlock()
 
 	key := dao.GetRootCert(cert).Key
-	if _, ok := h.clients.Get(key); ok {
+	if _, ok := h.nodes.Get(key); ok {
 		return nil, ErrDuplicateNetworkKey
 	}
 
@@ -110,18 +110,18 @@ func (h *Host) AddNetwork(cert *pb.Certificate) (*Client, error) {
 		return nil, err
 	}
 
-	c := &Client{
+	node := &Node{
 		Host:         h,
 		Network:      network,
 		HashTable:    hashTable,
 		PeerIndex:    peerIndex,
 		PeerExchange: peerExchange,
 	}
-	h.clients.Insert(c)
+	h.nodes.Insert(node)
 
 	h.networkObservers.Emit(network)
 
-	return c, nil
+	return node, nil
 }
 
 // RemoveNetwork ...
@@ -129,7 +129,7 @@ func (h *Host) RemoveNetwork(key []byte) error {
 	h.clientsLock.Lock()
 	defer h.clientsLock.Unlock()
 
-	client, ok := h.clients.Delete(key)
+	client, ok := h.nodes.Delete(key)
 	if !ok {
 		return ErrNetworkNotFound
 	}
@@ -138,59 +138,59 @@ func (h *Host) RemoveNetwork(key []byte) error {
 	return nil
 }
 
-// Client ...
-func (h *Host) Client(key []byte) (*Client, bool) {
+// Node ...
+func (h *Host) Node(key []byte) (*Node, bool) {
 	h.clientsLock.Lock()
 	defer h.clientsLock.Unlock()
-	return h.clients.Get(key)
+	return h.nodes.Get(key)
 }
 
-type clientMap struct {
+type nodeMap struct {
 	m llrb.LLRB
 }
 
-func (m *clientMap) Insert(c *Client) {
-	m.m.InsertNoReplace(&clientMapItem{c.Network.Key(), c})
+func (m *nodeMap) Insert(c *Node) {
+	m.m.InsertNoReplace(&nodeMapItem{c.Network.Key(), c})
 }
 
-func (m *clientMap) Delete(k []byte) (*Client, bool) {
-	if i := m.m.Delete(&clientMapItem{k: k}); i != nil {
-		return i.(*clientMapItem).v, true
+func (m *nodeMap) Delete(k []byte) (*Node, bool) {
+	if i := m.m.Delete(&nodeMapItem{k: k}); i != nil {
+		return i.(*nodeMapItem).v, true
 	}
 	return nil, false
 }
 
-func (m *clientMap) Get(k []byte) (*Client, bool) {
-	if i := m.m.Get(&clientMapItem{k: k}); i != nil {
-		return i.(*clientMapItem).v, true
+func (m *nodeMap) Get(k []byte) (*Node, bool) {
+	if i := m.m.Get(&nodeMapItem{k: k}); i != nil {
+		return i.(*nodeMapItem).v, true
 	}
 	return nil, false
 }
 
-func (m *clientMap) Len() int {
+func (m *nodeMap) Len() int {
 	return m.m.Len()
 }
 
-func (m *clientMap) Each(f func(v *Client) bool) {
+func (m *nodeMap) Each(f func(v *Node) bool) {
 	m.m.AscendGreaterOrEqual(llrb.Inf(-1), func(i llrb.Item) bool {
-		return f(i.(*clientMapItem).v)
+		return f(i.(*nodeMapItem).v)
 	})
 }
 
-type clientMapItem struct {
+type nodeMapItem struct {
 	k []byte
-	v *Client
+	v *Node
 }
 
-func (t *clientMapItem) Less(oi llrb.Item) bool {
-	if o, ok := oi.(*clientMapItem); ok {
+func (t *nodeMapItem) Less(oi llrb.Item) bool {
+	if o, ok := oi.(*nodeMapItem); ok {
 		return bytes.Compare(t.k, o.k) == -1
 	}
 	return !oi.Less(t)
 }
 
-// Client ...
-type Client struct {
+// Node ...
+type Node struct {
 	Host         *Host
 	Network      *Network
 	HashTable    HashTable

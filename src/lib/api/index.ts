@@ -6,6 +6,7 @@ import Chat from "./chatClient";
 import Debug from "./debugClient";
 import Network from "./networkClient";
 import Profile from "./profileClient";
+import VideoChannel from "./videoChannelClient";
 import Video from "./videoClient";
 import VideoIngress from "./videoIngressClient";
 
@@ -17,6 +18,7 @@ export default class Client {
   public chat: Chat;
   public video: Video;
   public videoIngress: VideoIngress;
+  public videoChannel: VideoChannel;
 
   constructor(w: Writable, r: Readable) {
     const host = new RPCHost(w, r);
@@ -27,5 +29,6 @@ export default class Client {
     this.chat = new Chat(host);
     this.video = new Video(host);
     this.videoIngress = new VideoIngress(host);
+    this.videoChannel = new VideoChannel(host);
   }
 }

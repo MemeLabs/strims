@@ -2,7 +2,6 @@ package frontend
 
 import (
 	"context"
-	"errors"
 	"io"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
@@ -20,11 +19,18 @@ import (
 // use a higher limit here to prevent errors while streaming video from the ui.
 const serverMaxMessageBytes = 10 * 1024 * 1024
 
-// ErrMethodNotImplemented ...
-var ErrMethodNotImplemented = errors.New("method not implemented")
-
 // VPNFunc ...
 type VPNFunc func(key *pb.Key) (*vpn.Host, error)
+
+// ServiceFunc ...
+type ServiceFunc func(server *rpc.Server, params *ServiceParams)
+
+var services []ServiceFunc
+
+// RegisterService ...
+func RegisterService(fn ServiceFunc) {
+	services = append(services, fn)
+}
 
 // Server ...
 type Server struct {
@@ -69,14 +75,6 @@ type Instance struct {
 	profile *pb.Profile
 	store   *dao.ProfileStore
 	app     *app.Control
-
-	Profile      api.ProfileService
-	Network      api.NetworkService
-	Debug        api.DebugService
-	Bootstrap    api.BootstrapService
-	Chat         api.ChatService
-	Video        api.VideoService
-	VideoIngress api.VideoIngressService
 }
 
 func (c *Instance) initProfileService(ctx context.Context, store kv.BlobStore, newVPN VPNFunc) error {
@@ -84,16 +82,14 @@ func (c *Instance) initProfileService(ctx context.Context, store kv.BlobStore, n
 		if err := c.Init(ctx, profile, store); err != nil {
 			return err
 		}
-		c.registerServices()
 		return nil
 	}
 
-	var err error
-	c.Profile, err = newProfileService(ctx, c.logger, store, init)
+	profileService, err := newProfileService(c.logger, store, init)
 	if err != nil {
 		return err
 	}
-	api.RegisterProfileService(c.server, c.Profile)
+	api.RegisterProfileService(c.server, profileService)
 
 	return nil
 }
@@ -105,31 +101,31 @@ func (c *Instance) Init(ctx context.Context, profile *pb.Profile, store *dao.Pro
 		return err
 	}
 
-	// TODO: put this somewhere
-	// network.NewPeerHandler(c.logger, c.broker, vpn, store, profile)
 	c.app = app.NewControl(c.logger, c.broker, vpn, store, profile)
 	go c.app.Run(ctx)
 
 	vpn.VNIC().AddPeerHandler(peer.NewPeerHandler(c.logger, c.app, store))
 
-	c.Network = newNetworkService(ctx, c.logger, profile, store, vpn, c.app)
-	c.Debug = newDebugService(c.logger)
-
-	c.Bootstrap = newBootstrapService(ctx, c.logger, store, vpn, c.app)
-
-	// c.Chat = newChatService(c.logger, store)
-	// c.Video = newVideoService(c.logger, store)
-
-	c.VideoIngress = newVideoIngressService(ctx, c.logger, profile, store, vpn, c.app)
+	for _, fn := range services {
+		fn(c.server, &ServiceParams{
+			Context: ctx,
+			Logger:  c.logger,
+			Profile: profile,
+			Store:   store,
+			VPN:     vpn,
+			App:     c.app,
+		})
+	}
 
 	return nil
 }
 
-func (c *Instance) registerServices() {
-	api.RegisterNetworkService(c.server, c.Network)
-	api.RegisterDebugService(c.server, c.Debug)
-	api.RegisterBootstrapService(c.server, c.Bootstrap)
-	// api.RegisterChatService(c.server, c.Chat)
-	// api.RegisterVideoService(c.server, c.Video)
-	api.RegisterVideoIngressService(c.server, c.VideoIngress)
+// ServiceParams ...
+type ServiceParams struct {
+	Context context.Context
+	Logger  *zap.Logger
+	Profile *pb.Profile
+	Store   *dao.ProfileStore
+	VPN     *vpn.Host
+	App     *app.Control
 }

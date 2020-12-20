@@ -19,16 +19,16 @@ type HostAddr struct {
 }
 
 // PublishLocalHostAddr ...
-func PublishLocalHostAddr(ctx context.Context, c *vpn.Client, key *pb.Key, salt []byte, port uint16) error {
+func PublishLocalHostAddr(ctx context.Context, node *vpn.Node, key *pb.Key, salt []byte, port uint16) error {
 	addr := &HostAddr{
-		HostID: c.Host.VNIC().ID(),
+		HostID: node.Host.VNIC().ID(),
 		Port:   port,
 	}
-	return PublishHostAddr(ctx, c, key, salt, addr)
+	return PublishHostAddr(ctx, node, key, salt, addr)
 }
 
 // PublishHostAddr ...
-func PublishHostAddr(ctx context.Context, c *vpn.Client, key *pb.Key, salt []byte, addr *HostAddr) error {
+func PublishHostAddr(ctx context.Context, node *vpn.Node, key *pb.Key, salt []byte, addr *HostAddr) error {
 	b, err := proto.Marshal(&pb.NetworkAddress{
 		HostId: addr.HostID.Bytes(nil),
 		Port:   uint32(addr.Port),
@@ -37,13 +37,13 @@ func PublishHostAddr(ctx context.Context, c *vpn.Client, key *pb.Key, salt []byt
 		return err
 	}
 
-	_, err = c.HashTable.Set(ctx, key, salt, b)
+	_, err = node.HashTable.Set(ctx, key, salt, b)
 	return err
 }
 
 // GetHostAddr ...
-func GetHostAddr(ctx context.Context, c *vpn.Client, key, salt []byte) (*HostAddr, error) {
-	values, err := c.HashTable.Get(ctx, key, salt)
+func GetHostAddr(ctx context.Context, node *vpn.Node, key, salt []byte) (*HostAddr, error) {
+	values, err := node.HashTable.Get(ctx, key, salt)
 	if err != nil {
 		return nil, fmt.Errorf("address request failed: %w", ctx.Err())
 	}

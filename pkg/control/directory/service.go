@@ -14,7 +14,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/prefixstream"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
-	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -34,7 +33,7 @@ var (
 	ErrUserNotFound    = errors.New("user not found")
 )
 
-func newDirectoryService(logger *zap.Logger, client *vpn.Client, key *pb.Key) (*directoryService, error) {
+func newDirectoryService(logger *zap.Logger, key *pb.Key) (*directoryService, error) {
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
 		SwarmOptions: ppspp.SwarmOptions{
 			ChunkSize:  128,

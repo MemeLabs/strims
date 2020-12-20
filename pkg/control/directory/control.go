@@ -25,7 +25,7 @@ var (
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers, dialer *dialer.Control) *Control {
 	events := make(chan interface{}, 128)
-	observers.Network.Notify(events)
+	observers.Global.Notify(events)
 
 	return &Control{
 		logger:    logger,
@@ -94,12 +94,7 @@ func (t *Control) startServer(ctx context.Context, network *pb.Network) error {
 		return err
 	}
 
-	client, ok := t.vpn.Client(network.Key.Public)
-	if !ok {
-		return ErrNetworkNotFound
-	}
-
-	service, err := newDirectoryService(t.logger, client, network.Key)
+	service, err := newDirectoryService(t.logger, network.Key)
 	if err != nil {
 		return err
 	}

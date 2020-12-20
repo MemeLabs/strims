@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/dao/daotest"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/memkv"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
@@ -52,12 +53,12 @@ func NewNode(logger *zap.Logger, i int) (*Node, error) {
 	}
 
 	return &Node{
-		ID:      id,
-		Store:   profileStore,
-		Profile: profile,
-		VNIC:    vnicHost,
-		VPN:     vpnHost,
-		peers:   map[string]struct{}{},
+		Store:     profileStore,
+		Profile:   profile,
+		VNIC:      vnicHost,
+		VPN:       vpnHost,
+		profileID: id,
+		peers:     map[string]struct{}{},
 	}, nil
 }
 
@@ -65,14 +66,14 @@ func NewNode(logger *zap.Logger, i int) (*Node, error) {
 type Node struct {
 	Store    *dao.ProfileStore
 	Profile  *pb.Profile
-	ID       kademlia.ID
 	VNIC     *vnic.Host
 	VPN      *vpn.Host
-	Client   *vpn.Client
+	Node     *vpn.Node
 	HostCert *pb.Certificate
 
-	peers map[string]struct{}
-	conns []*ppspptest.MeterConn
+	profileID kademlia.ID
+	peers     map[string]struct{}
+	conns     []*ppspptest.MeterConn
 }
 
 // NewCluster ...
@@ -105,12 +106,12 @@ func (c *Cluster) Run() error {
 	}
 
 	var err error
-	c.Network, err = dao.NewNetwork("network", nil, c.Nodes[0].Profile)
+	c.Network, err = dao.NewNetwork(&daotest.IDGenerator{}, "network", nil, c.Nodes[0].Profile)
 	if err != nil {
 		return err
 	}
 
-	c.Nodes[0].Client, err = c.Nodes[0].VPN.AddNetwork(c.Network.Certificate)
+	c.Nodes[0].Node, err = c.Nodes[0].VPN.AddNetwork(c.Network.Certificate)
 	if err != nil {
 		return err
 	}
@@ -126,7 +127,7 @@ func (c *Cluster) Run() error {
 		}
 		node.HostCert = hostCert
 
-		node.Client, err = node.VPN.AddNetwork(peerCert)
+		node.Node, err = node.VPN.AddNetwork(peerCert)
 		if err != nil {
 			return err
 		}
@@ -148,7 +149,7 @@ func (c *Cluster) Run() error {
 
 		n := 0
 		off := 1
-		k := c.PeersPerNode / 2
+		k := (c.PeersPerNode + 1) / 2
 		for n < c.PeersPerNode && k != 0 {
 			for j := off; j < off+k && j < len(sortedNodes); j++ {
 				if _, ok := c.Nodes[i].peers[sortedNodes[j].VNIC.ID().String()]; ok {
@@ -182,7 +183,7 @@ func (c *Cluster) Run() error {
 	// init node network links
 	for _, node := range c.Nodes {
 		for _, peer := range node.VNIC.Peers() {
-			node.Client.Network.AddPeer(peer, 10000, 10000)
+			node.Node.Network.AddPeer(peer, 10000, 10000)
 		}
 	}
 
@@ -235,5 +236,5 @@ func (s nodesByXOrDistance) Swap(i, j int) {
 }
 
 func (s nodesByXOrDistance) Less(i, j int) bool {
-	return s.id.XOr(s.nodes[i].ID).Less(s.id.XOr(s.nodes[j].ID))
+	return s.id.XOr(s.nodes[i].VNIC.ID()).Less(s.id.XOr(s.nodes[j].VNIC.ID()))
 }

@@ -2,12 +2,12 @@ package event
 
 import "github.com/MemeLabs/go-ppspp/pkg/pb"
 
-// VideoIngressChannelUpdate ...
-type VideoIngressChannelUpdate struct {
-	Channel *pb.VideoIngressChannel
+// VideoChannelUpdate ...
+type VideoChannelUpdate struct {
+	Channel *pb.VideoChannel
 }
 
-// VideoIngressChannelRemove ...
-type VideoIngressChannelRemove struct {
+// VideoChannelRemove ...
+type VideoChannelRemove struct {
 	ID uint64
 }

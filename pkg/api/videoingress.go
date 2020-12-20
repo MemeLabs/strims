@@ -12,10 +12,6 @@ func RegisterVideoIngressService(host ServiceRegistry, service VideoIngressServi
 	host.RegisterMethod("VideoIngress/GetConfig", service.GetConfig)
 	host.RegisterMethod("VideoIngress/SetConfig", service.SetConfig)
 	host.RegisterMethod("VideoIngress/ListStreams", service.ListStreams)
-	host.RegisterMethod("VideoIngress/ListChannels", service.ListChannels)
-	host.RegisterMethod("VideoIngress/CreateChannel", service.CreateChannel)
-	host.RegisterMethod("VideoIngress/UpdateChannel", service.UpdateChannel)
-	host.RegisterMethod("VideoIngress/DeleteChannel", service.DeleteChannel)
 	host.RegisterMethod("VideoIngress/GetChannelURL", service.GetChannelURL)
 }
 
@@ -37,22 +33,6 @@ type VideoIngressService interface {
 		ctx context.Context,
 		req *pb.VideoIngressListStreamsRequest,
 	) (*pb.VideoIngressListStreamsResponse, error)
-	ListChannels(
-		ctx context.Context,
-		req *pb.VideoIngressListChannelsRequest,
-	) (*pb.VideoIngressListChannelsResponse, error)
-	CreateChannel(
-		ctx context.Context,
-		req *pb.VideoIngressCreateChannelRequest,
-	) (*pb.VideoIngressCreateChannelResponse, error)
-	UpdateChannel(
-		ctx context.Context,
-		req *pb.VideoIngressUpdateChannelRequest,
-	) (*pb.VideoIngressUpdateChannelResponse, error)
-	DeleteChannel(
-		ctx context.Context,
-		req *pb.VideoIngressDeleteChannelRequest,
-	) (*pb.VideoIngressDeleteChannelResponse, error)
 	GetChannelURL(
 		ctx context.Context,
 		req *pb.VideoIngressGetChannelURLRequest,
@@ -103,42 +83,6 @@ func (c *VideoIngressClient) ListStreams(
 	res *pb.VideoIngressListStreamsResponse,
 ) error {
 	return c.client.CallUnary(ctx, "VideoIngress/ListStreams", req, res)
-}
-
-// ListChannels ...
-func (c *VideoIngressClient) ListChannels(
-	ctx context.Context,
-	req *pb.VideoIngressListChannelsRequest,
-	res *pb.VideoIngressListChannelsResponse,
-) error {
-	return c.client.CallUnary(ctx, "VideoIngress/ListChannels", req, res)
-}
-
-// CreateChannel ...
-func (c *VideoIngressClient) CreateChannel(
-	ctx context.Context,
-	req *pb.VideoIngressCreateChannelRequest,
-	res *pb.VideoIngressCreateChannelResponse,
-) error {
-	return c.client.CallUnary(ctx, "VideoIngress/CreateChannel", req, res)
-}
-
-// UpdateChannel ...
-func (c *VideoIngressClient) UpdateChannel(
-	ctx context.Context,
-	req *pb.VideoIngressUpdateChannelRequest,
-	res *pb.VideoIngressUpdateChannelResponse,
-) error {
-	return c.client.CallUnary(ctx, "VideoIngress/UpdateChannel", req, res)
-}
-
-// DeleteChannel ...
-func (c *VideoIngressClient) DeleteChannel(
-	ctx context.Context,
-	req *pb.VideoIngressDeleteChannelRequest,
-	res *pb.VideoIngressDeleteChannelResponse,
-) error {
-	return c.client.CallUnary(ctx, "VideoIngress/DeleteChannel", req, res)
 }
 
 // GetChannelURL ...
