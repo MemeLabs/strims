@@ -4,11 +4,11 @@ import { BrowserRouter } from "react-router-dom";
 import { Provider as ApiProvider } from "../contexts/Api";
 import { Provider as ProfileProvider } from "../contexts/Profile";
 import { Provider as ThemeProvider } from "../contexts/Theme";
-import Client from "../lib/api";
+import { FrontendClient } from "../lib/api";
 
 const LoadingMessage = () => <p className="loading_message">loading</p>;
 
-const Provider = ({ client, children }: { client: Client; children: any }) => (
+const Provider = ({ client, children }: { client: FrontendClient; children: any }) => (
   <BrowserRouter>
     <React.Suspense fallback={<LoadingMessage />}>
       <ApiProvider value={client}>

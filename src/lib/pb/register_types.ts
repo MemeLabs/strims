@@ -45,6 +45,8 @@ registerType("DirectoryPartRequest", pb.DirectoryPartRequest);
 registerType("DirectoryPartResponse", pb.DirectoryPartResponse);
 registerType("DirectoryPingRequest", pb.DirectoryPingRequest);
 registerType("DirectoryPingResponse", pb.DirectoryPingResponse);
+registerType("FundingTestRequest", pb.FundingTestRequest);
+registerType("FundingTestResponse", pb.FundingTestResponse);
 registerType("HashTableMessage", pb.HashTableMessage);
 registerType("ServerConfig", pb.ServerConfig);
 registerType("NickservNick", pb.NickservNick);

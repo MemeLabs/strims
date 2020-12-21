@@ -1,11 +1,11 @@
 import * as React from "react";
 import { useTitle } from "react-use";
 
-import Client from "../lib/api";
+import { FrontendClient } from "../lib/api";
 import Provider from "./Provider";
 import Router from "./Router";
 
-const App = ({ client }: { client: Client }) => {
+const App = ({ client }: { client: FrontendClient }) => {
   // React.useEffect(() => {
   //   client.startHLSIngress(new pb.StartHLSIngressRequest());
   //   client.startHLSEgress(new pb.StartHLSEgressRequest());

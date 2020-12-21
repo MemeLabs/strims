@@ -17,6 +17,8 @@
     "svc": "nodemon --watch ./pkg --watch ./cmd/svc -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly -ldflags \"-X github.com/MemeLabs/go-ppspp/pkg/version.Platform=svc\" ./cmd/svc || exit 1'",
     "test:native": "nodemon --watch ./pkg --watch ./integration -e go --delay 0.1 --signal SIGINT --exec 'go test -mod=readonly ./integration/frontend -tags native -count 1 -v 1 || exit 1'",
     "dev:svc": "run-p pb:* svc",
+    "funding": "nodemon --watch ./pkg --watch ./cmd/svc -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly ./cmd/funding || exit 1'",
+    "dev:funding": "run-p pb:* funding web:webpack",
     "build": "webpack --mode production"
   },
   "devDependencies": {

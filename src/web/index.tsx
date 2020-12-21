@@ -4,7 +4,7 @@ import * as React from "react";
 import * as ReactDOM from "react-dom";
 import Worker from "worker-loader!./svc.worker";
 
-import Client from "../lib/api";
+import { FrontendClient } from "../lib/api";
 import { WindowBridge } from "../lib/bridge";
 import { WSReadWriter } from "../lib/ws";
 import App from "../root/App";
@@ -16,7 +16,7 @@ import App from "../root/App";
   // });
 
   const ws: any = new WSReadWriter(`wss://${location.host}/manage`);
-  const client = new Client(ws, ws);
+  const client = new FrontendClient(ws, ws);
 
   const root = document.createElement("div");
   root.setAttribute("id", "root");

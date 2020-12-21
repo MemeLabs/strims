@@ -1,8 +1,8 @@
 import * as React from "react";
 
-import { FrontendClient } from "../lib/api";
+import { FundingClient } from "../../lib/api";
 
-export const ClientContext = React.createContext<FrontendClient>(null);
+export const ClientContext = React.createContext<FundingClient>(null);
 
 export const { Provider } = ClientContext;
 
@@ -11,12 +11,12 @@ type FunctionPropertyNames<T> = { [K in keyof T]: T[K] extends AnyFunction ? K :
 type ResultType<T extends AnyFunction> = ReturnType<T> extends Promise<infer U> ? U : ReturnType<T>;
 
 export interface Options<
-  S extends keyof FrontendClient,
-  M extends FunctionPropertyNames<FrontendClient[S]>
+  S extends keyof FundingClient,
+  M extends FunctionPropertyNames<FundingClient[S]>
 > {
   skip?: boolean;
-  args?: Parameters<FrontendClient[S][M]>;
-  onComplete?: (data: ResultType<FrontendClient[S][M]>) => void;
+  args?: Parameters<FundingClient[S][M]>;
+  onComplete?: (data: ResultType<FundingClient[S][M]>) => void;
   onError?: (error: Error) => void;
 }
 
@@ -27,16 +27,16 @@ const defaultOptions = {
 export const useClient = () => React.useContext(ClientContext);
 
 export const useCall = <
-  S extends keyof FrontendClient,
-  M extends FunctionPropertyNames<FrontendClient[S]>
+  S extends keyof FundingClient,
+  M extends FunctionPropertyNames<FundingClient[S]>
 >(
   serviceName: S,
   methodName: M,
   options: Options<S, M> = {}
 ) => {
-  type Arguments = Parameters<FrontendClient[S][M]>;
-  type Result = ResultType<FrontendClient[S][M]>;
-  type CallResult = ReturnType<FrontendClient[S][M]>;
+  type Arguments = Parameters<FundingClient[S][M]>;
+  type Result = ResultType<FundingClient[S][M]>;
+  type CallResult = ReturnType<FundingClient[S][M]>;
   interface State {
     value?: Result;
     error?: Error;
@@ -120,8 +120,8 @@ export const useCall = <
 };
 
 export const useLazyCall = <
-  S extends keyof FrontendClient,
-  M extends FunctionPropertyNames<FrontendClient[S]>
+  S extends keyof FundingClient,
+  M extends FunctionPropertyNames<FundingClient[S]>
 >(
   serviceName: S,
   methodName: M,

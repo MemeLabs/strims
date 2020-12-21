@@ -61,6 +61,11 @@ module.exports = (env, argv) => {
       chunks: ["test"],
       title: "test",
     }),
+    new HtmlWebpackPlugin({
+      filename: "funding.html",
+      chunks: ["funding"],
+      title: "funding",
+    }),
     new webpack.HotModuleReplacementPlugin(),
   ];
 
@@ -120,6 +125,7 @@ module.exports = (env, argv) => {
       entry: {
         index: path.join(__dirname, "src", "web", "index.tsx"),
         test: path.join(__dirname, "src", "web", "test.ts"),
+        funding: path.join(__dirname, "src", "funding", "index.tsx"),
       },
       devtool,
       output: {
@@ -142,6 +148,10 @@ module.exports = (env, argv) => {
           },
           "/manage": {
             target: "ws://localhost:8083",
+            ws: true,
+          },
+          "/api": {
+            target: "ws://localhost:8084",
             ws: true,
           },
         },

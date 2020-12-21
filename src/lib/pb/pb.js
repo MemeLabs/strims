@@ -13549,6 +13549,380 @@ export const DirectoryPingResponse = $root.DirectoryPingResponse = (() => {
     return DirectoryPingResponse;
 })();
 
+export const FundingTestRequest = $root.FundingTestRequest = (() => {
+
+    /**
+     * Properties of a FundingTestRequest.
+     * @exports IFundingTestRequest
+     * @interface IFundingTestRequest
+     * @property {string|null} [name] FundingTestRequest name
+     */
+
+    /**
+     * Constructs a new FundingTestRequest.
+     * @exports FundingTestRequest
+     * @classdesc Represents a FundingTestRequest.
+     * @implements IFundingTestRequest
+     * @constructor
+     * @param {IFundingTestRequest=} [properties] Properties to set
+     */
+    function FundingTestRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * FundingTestRequest name.
+     * @member {string} name
+     * @memberof FundingTestRequest
+     * @instance
+     */
+    FundingTestRequest.prototype.name = "";
+
+    /**
+     * Creates a new FundingTestRequest instance using the specified properties.
+     * @function create
+     * @memberof FundingTestRequest
+     * @static
+     * @param {IFundingTestRequest=} [properties] Properties to set
+     * @returns {FundingTestRequest} FundingTestRequest instance
+     */
+    FundingTestRequest.create = function create(properties) {
+        return new FundingTestRequest(properties);
+    };
+
+    /**
+     * Encodes the specified FundingTestRequest message. Does not implicitly {@link FundingTestRequest.verify|verify} messages.
+     * @function encode
+     * @memberof FundingTestRequest
+     * @static
+     * @param {IFundingTestRequest} message FundingTestRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    FundingTestRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.name != null && Object.hasOwnProperty.call(message, "name"))
+            writer.uint32(/* id 1, wireType 2 =*/10).string(message.name);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified FundingTestRequest message, length delimited. Does not implicitly {@link FundingTestRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof FundingTestRequest
+     * @static
+     * @param {IFundingTestRequest} message FundingTestRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    FundingTestRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a FundingTestRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof FundingTestRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {FundingTestRequest} FundingTestRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    FundingTestRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.FundingTestRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.name = reader.string();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a FundingTestRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof FundingTestRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {FundingTestRequest} FundingTestRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    FundingTestRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a FundingTestRequest message.
+     * @function verify
+     * @memberof FundingTestRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    FundingTestRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.name != null && message.hasOwnProperty("name"))
+            if (!$util.isString(message.name))
+                return "name: string expected";
+        return null;
+    };
+
+    /**
+     * Creates a FundingTestRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof FundingTestRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {FundingTestRequest} FundingTestRequest
+     */
+    FundingTestRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.FundingTestRequest)
+            return object;
+        let message = new $root.FundingTestRequest();
+        if (object.name != null)
+            message.name = String(object.name);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a FundingTestRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof FundingTestRequest
+     * @static
+     * @param {FundingTestRequest} message FundingTestRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    FundingTestRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.name = "";
+        if (message.name != null && message.hasOwnProperty("name"))
+            object.name = message.name;
+        return object;
+    };
+
+    /**
+     * Converts this FundingTestRequest to JSON.
+     * @function toJSON
+     * @memberof FundingTestRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    FundingTestRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return FundingTestRequest;
+})();
+
+export const FundingTestResponse = $root.FundingTestResponse = (() => {
+
+    /**
+     * Properties of a FundingTestResponse.
+     * @exports IFundingTestResponse
+     * @interface IFundingTestResponse
+     * @property {string|null} [message] FundingTestResponse message
+     */
+
+    /**
+     * Constructs a new FundingTestResponse.
+     * @exports FundingTestResponse
+     * @classdesc Represents a FundingTestResponse.
+     * @implements IFundingTestResponse
+     * @constructor
+     * @param {IFundingTestResponse=} [properties] Properties to set
+     */
+    function FundingTestResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * FundingTestResponse message.
+     * @member {string} message
+     * @memberof FundingTestResponse
+     * @instance
+     */
+    FundingTestResponse.prototype.message = "";
+
+    /**
+     * Creates a new FundingTestResponse instance using the specified properties.
+     * @function create
+     * @memberof FundingTestResponse
+     * @static
+     * @param {IFundingTestResponse=} [properties] Properties to set
+     * @returns {FundingTestResponse} FundingTestResponse instance
+     */
+    FundingTestResponse.create = function create(properties) {
+        return new FundingTestResponse(properties);
+    };
+
+    /**
+     * Encodes the specified FundingTestResponse message. Does not implicitly {@link FundingTestResponse.verify|verify} messages.
+     * @function encode
+     * @memberof FundingTestResponse
+     * @static
+     * @param {IFundingTestResponse} message FundingTestResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    FundingTestResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.message != null && Object.hasOwnProperty.call(message, "message"))
+            writer.uint32(/* id 1, wireType 2 =*/10).string(message.message);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified FundingTestResponse message, length delimited. Does not implicitly {@link FundingTestResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof FundingTestResponse
+     * @static
+     * @param {IFundingTestResponse} message FundingTestResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    FundingTestResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a FundingTestResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof FundingTestResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {FundingTestResponse} FundingTestResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    FundingTestResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.FundingTestResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.message = reader.string();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a FundingTestResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof FundingTestResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {FundingTestResponse} FundingTestResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    FundingTestResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a FundingTestResponse message.
+     * @function verify
+     * @memberof FundingTestResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    FundingTestResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.message != null && message.hasOwnProperty("message"))
+            if (!$util.isString(message.message))
+                return "message: string expected";
+        return null;
+    };
+
+    /**
+     * Creates a FundingTestResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof FundingTestResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {FundingTestResponse} FundingTestResponse
+     */
+    FundingTestResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.FundingTestResponse)
+            return object;
+        let message = new $root.FundingTestResponse();
+        if (object.message != null)
+            message.message = String(object.message);
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a FundingTestResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof FundingTestResponse
+     * @static
+     * @param {FundingTestResponse} message FundingTestResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    FundingTestResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.message = "";
+        if (message.message != null && message.hasOwnProperty("message"))
+            object.message = message.message;
+        return object;
+    };
+
+    /**
+     * Converts this FundingTestResponse to JSON.
+     * @function toJSON
+     * @memberof FundingTestResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    FundingTestResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return FundingTestResponse;
+})();
+
 export const HashTableMessage = $root.HashTableMessage = (() => {
 
     /**

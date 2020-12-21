@@ -4,13 +4,14 @@ import { RPCHost } from "../rpc/host";
 import Bootstrap from "./bootstrapClient";
 import Chat from "./chatClient";
 import Debug from "./debugClient";
+import Funding from "./fundingClient";
 import Network from "./networkClient";
 import Profile from "./profileClient";
 import VideoChannel from "./videoChannelClient";
 import Video from "./videoClient";
 import VideoIngress from "./videoIngressClient";
 
-export default class Client {
+export class FrontendClient {
   public bootstrap: Bootstrap;
   public debug: Debug;
   public network: Network;
@@ -30,5 +31,14 @@ export default class Client {
     this.video = new Video(host);
     this.videoIngress = new VideoIngress(host);
     this.videoChannel = new VideoChannel(host);
+  }
+}
+
+export class FundingClient {
+  public funding: Funding;
+
+  constructor(w: Writable, r: Readable) {
+    const host = new RPCHost(w, r);
+    this.funding = new Funding(host);
   }
 }
