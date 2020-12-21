@@ -10,6 +10,7 @@ import com.squareup.wire.ProtoReader
 import com.squareup.wire.ProtoWriter
 import com.squareup.wire.Syntax.PROTO_3
 import com.squareup.wire.WireField
+import com.squareup.wire.internal.immutableCopyOf
 import com.squareup.wire.internal.sanitize
 import kotlin.Any
 import kotlin.AssertionError
@@ -20,8 +21,10 @@ import kotlin.Int
 import kotlin.Long
 import kotlin.Nothing
 import kotlin.String
+import kotlin.collections.Map
 import kotlin.hashCode
 import kotlin.jvm.JvmField
+import kotlin.lazy
 import okio.ByteString
 
 class Call(
@@ -50,8 +53,16 @@ class Call(
     label = WireField.Label.OMIT_IDENTITY
   )
   val argument: AnyMessage? = null,
+  headers: Map<String, ByteString> = emptyMap(),
   unknownFields: ByteString = ByteString.EMPTY
 ) : Message<Call, Nothing>(ADAPTER, unknownFields) {
+  @field:WireField(
+    tag = 5,
+    keyAdapter = "com.squareup.wire.ProtoAdapter#STRING",
+    adapter = "com.squareup.wire.ProtoAdapter#BYTES"
+  )
+  val headers: Map<String, ByteString> = immutableCopyOf("headers", headers)
+
   @Deprecated(
     message = "Shouldn't be used in Kotlin",
     level = DeprecationLevel.HIDDEN
@@ -66,6 +77,7 @@ class Call(
     if (parent_id != other.parent_id) return false
     if (method != other.method) return false
     if (argument != other.argument) return false
+    if (headers != other.headers) return false
     return true
   }
 
@@ -77,6 +89,7 @@ class Call(
       result = result * 37 + parent_id.hashCode()
       result = result * 37 + method.hashCode()
       result = result * 37 + argument.hashCode()
+      result = result * 37 + headers.hashCode()
       super.hashCode = result
     }
     return result
@@ -88,6 +101,7 @@ class Call(
     result += """parent_id=$parent_id"""
     result += """method=${sanitize(method)}"""
     if (argument != null) result += """argument=$argument"""
+    if (headers.isNotEmpty()) result += """headers=$headers"""
     return result.joinToString(prefix = "Call{", separator = ", ", postfix = "}")
   }
 
@@ -96,8 +110,9 @@ class Call(
     parent_id: Long = this.parent_id,
     method: String = this.method,
     argument: AnyMessage? = this.argument,
+    headers: Map<String, ByteString> = this.headers,
     unknownFields: ByteString = this.unknownFields
-  ): Call = Call(id, parent_id, method, argument, unknownFields)
+  ): Call = Call(id, parent_id, method, argument, headers, unknownFields)
 
   companion object {
     @JvmField
@@ -108,6 +123,9 @@ class Call(
       PROTO_3, 
       null
     ) {
+      private val headersAdapter: ProtoAdapter<Map<String, ByteString>> by lazy {
+          ProtoAdapter.newMapAdapter(ProtoAdapter.STRING, ProtoAdapter.BYTES) }
+
       override fun encodedSize(value: Call): Int {
         var size = value.unknownFields.size
         if (value.id != 0L) size += ProtoAdapter.UINT64.encodedSizeWithTag(1, value.id)
@@ -115,6 +133,7 @@ class Call(
             value.parent_id)
         if (value.method != "") size += ProtoAdapter.STRING.encodedSizeWithTag(3, value.method)
         if (value.argument != null) size += AnyMessage.ADAPTER.encodedSizeWithTag(4, value.argument)
+        size += headersAdapter.encodedSizeWithTag(5, value.headers)
         return size
       }
 
@@ -123,6 +142,7 @@ class Call(
         if (value.parent_id != 0L) ProtoAdapter.UINT64.encodeWithTag(writer, 2, value.parent_id)
         if (value.method != "") ProtoAdapter.STRING.encodeWithTag(writer, 3, value.method)
         if (value.argument != null) AnyMessage.ADAPTER.encodeWithTag(writer, 4, value.argument)
+        headersAdapter.encodeWithTag(writer, 5, value.headers)
         writer.writeBytes(value.unknownFields)
       }
 
@@ -131,12 +151,14 @@ class Call(
         var parent_id: Long = 0L
         var method: String = ""
         var argument: AnyMessage? = null
+        val headers = mutableMapOf<String, ByteString>()
         val unknownFields = reader.forEachTag { tag ->
           when (tag) {
             1 -> id = ProtoAdapter.UINT64.decode(reader)
             2 -> parent_id = ProtoAdapter.UINT64.decode(reader)
             3 -> method = ProtoAdapter.STRING.decode(reader)
             4 -> argument = AnyMessage.ADAPTER.decode(reader)
+            5 -> headers.putAll(headersAdapter.decode(reader))
             else -> reader.readUnknownField(tag)
           }
         }
@@ -145,6 +167,7 @@ class Call(
           parent_id = parent_id,
           method = method,
           argument = argument,
+          headers = headers,
           unknownFields = unknownFields
         )
       }

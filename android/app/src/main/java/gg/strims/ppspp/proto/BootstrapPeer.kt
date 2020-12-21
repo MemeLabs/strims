@@ -26,11 +26,11 @@ import okio.ByteString
 class BootstrapPeer(
   @field:WireField(
     tag = 1,
-    adapter = "com.squareup.wire.ProtoAdapter#BYTES",
+    adapter = "com.squareup.wire.ProtoAdapter#UINT64",
     label = WireField.Label.OMIT_IDENTITY,
-    jsonName = "hostId"
+    jsonName = "peerId"
   )
-  val host_id: ByteString = ByteString.EMPTY,
+  val peer_id: Long = 0L,
   @field:WireField(
     tag = 2,
     adapter = "com.squareup.wire.ProtoAdapter#STRING",
@@ -49,7 +49,7 @@ class BootstrapPeer(
     if (other === this) return true
     if (other !is BootstrapPeer) return false
     if (unknownFields != other.unknownFields) return false
-    if (host_id != other.host_id) return false
+    if (peer_id != other.peer_id) return false
     if (label != other.label) return false
     return true
   }
@@ -58,7 +58,7 @@ class BootstrapPeer(
     var result = super.hashCode
     if (result == 0) {
       result = unknownFields.hashCode()
-      result = result * 37 + host_id.hashCode()
+      result = result * 37 + peer_id.hashCode()
       result = result * 37 + label.hashCode()
       super.hashCode = result
     }
@@ -67,16 +67,16 @@ class BootstrapPeer(
 
   override fun toString(): String {
     val result = mutableListOf<String>()
-    result += """host_id=$host_id"""
+    result += """peer_id=$peer_id"""
     result += """label=${sanitize(label)}"""
     return result.joinToString(prefix = "BootstrapPeer{", separator = ", ", postfix = "}")
   }
 
   fun copy(
-    host_id: ByteString = this.host_id,
+    peer_id: Long = this.peer_id,
     label: String = this.label,
     unknownFields: ByteString = this.unknownFields
-  ): BootstrapPeer = BootstrapPeer(host_id, label, unknownFields)
+  ): BootstrapPeer = BootstrapPeer(peer_id, label, unknownFields)
 
   companion object {
     @JvmField
@@ -89,31 +89,29 @@ class BootstrapPeer(
     ) {
       override fun encodedSize(value: BootstrapPeer): Int {
         var size = value.unknownFields.size
-        if (value.host_id != ByteString.EMPTY) size += ProtoAdapter.BYTES.encodedSizeWithTag(1,
-            value.host_id)
+        if (value.peer_id != 0L) size += ProtoAdapter.UINT64.encodedSizeWithTag(1, value.peer_id)
         if (value.label != "") size += ProtoAdapter.STRING.encodedSizeWithTag(2, value.label)
         return size
       }
 
       override fun encode(writer: ProtoWriter, value: BootstrapPeer) {
-        if (value.host_id != ByteString.EMPTY) ProtoAdapter.BYTES.encodeWithTag(writer, 1,
-            value.host_id)
+        if (value.peer_id != 0L) ProtoAdapter.UINT64.encodeWithTag(writer, 1, value.peer_id)
         if (value.label != "") ProtoAdapter.STRING.encodeWithTag(writer, 2, value.label)
         writer.writeBytes(value.unknownFields)
       }
 
       override fun decode(reader: ProtoReader): BootstrapPeer {
-        var host_id: ByteString = ByteString.EMPTY
+        var peer_id: Long = 0L
         var label: String = ""
         val unknownFields = reader.forEachTag { tag ->
           when (tag) {
-            1 -> host_id = ProtoAdapter.BYTES.decode(reader)
+            1 -> peer_id = ProtoAdapter.UINT64.decode(reader)
             2 -> label = ProtoAdapter.STRING.decode(reader)
             else -> reader.readUnknownField(tag)
           }
         }
         return BootstrapPeer(
-          host_id = host_id,
+          peer_id = peer_id,
           label = label,
           unknownFields = unknownFields
         )

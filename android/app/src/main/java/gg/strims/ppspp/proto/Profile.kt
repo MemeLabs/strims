@@ -52,7 +52,6 @@ class Profile(
   )
   val key: Key? = null,
   networks: List<Network> = emptyList(),
-  network_memberships: List<NetworkMembership> = emptyList(),
   unknownFields: ByteString = ByteString.EMPTY
 ) : Message<Profile, Nothing>(ADAPTER, unknownFields) {
   @field:WireField(
@@ -61,15 +60,6 @@ class Profile(
     label = WireField.Label.REPEATED
   )
   val networks: List<Network> = immutableCopyOf("networks", networks)
-
-  @field:WireField(
-    tag = 6,
-    adapter = "gg.strims.ppspp.proto.NetworkMembership#ADAPTER",
-    label = WireField.Label.REPEATED,
-    jsonName = "networkMemberships"
-  )
-  val network_memberships: List<NetworkMembership> = immutableCopyOf("network_memberships",
-      network_memberships)
 
   @Deprecated(
     message = "Shouldn't be used in Kotlin",
@@ -86,7 +76,6 @@ class Profile(
     if (secret != other.secret) return false
     if (key != other.key) return false
     if (networks != other.networks) return false
-    if (network_memberships != other.network_memberships) return false
     return true
   }
 
@@ -99,7 +88,6 @@ class Profile(
       result = result * 37 + secret.hashCode()
       result = result * 37 + key.hashCode()
       result = result * 37 + networks.hashCode()
-      result = result * 37 + network_memberships.hashCode()
       super.hashCode = result
     }
     return result
@@ -112,7 +100,6 @@ class Profile(
     result += """secret=$secret"""
     if (key != null) result += """key=$key"""
     if (networks.isNotEmpty()) result += """networks=$networks"""
-    if (network_memberships.isNotEmpty()) result += """network_memberships=$network_memberships"""
     return result.joinToString(prefix = "Profile{", separator = ", ", postfix = "}")
   }
 
@@ -122,9 +109,8 @@ class Profile(
     secret: ByteString = this.secret,
     key: Key? = this.key,
     networks: List<Network> = this.networks,
-    network_memberships: List<NetworkMembership> = this.network_memberships,
     unknownFields: ByteString = this.unknownFields
-  ): Profile = Profile(id, name, secret, key, networks, network_memberships, unknownFields)
+  ): Profile = Profile(id, name, secret, key, networks, unknownFields)
 
   companion object {
     @JvmField
@@ -143,8 +129,6 @@ class Profile(
             value.secret)
         if (value.key != null) size += Key.ADAPTER.encodedSizeWithTag(4, value.key)
         size += Network.ADAPTER.asRepeated().encodedSizeWithTag(5, value.networks)
-        size += NetworkMembership.ADAPTER.asRepeated().encodedSizeWithTag(6,
-            value.network_memberships)
         return size
       }
 
@@ -155,7 +139,6 @@ class Profile(
             value.secret)
         if (value.key != null) Key.ADAPTER.encodeWithTag(writer, 4, value.key)
         Network.ADAPTER.asRepeated().encodeWithTag(writer, 5, value.networks)
-        NetworkMembership.ADAPTER.asRepeated().encodeWithTag(writer, 6, value.network_memberships)
         writer.writeBytes(value.unknownFields)
       }
 
@@ -165,7 +148,6 @@ class Profile(
         var secret: ByteString = ByteString.EMPTY
         var key: Key? = null
         val networks = mutableListOf<Network>()
-        val network_memberships = mutableListOf<NetworkMembership>()
         val unknownFields = reader.forEachTag { tag ->
           when (tag) {
             1 -> id = ProtoAdapter.UINT64.decode(reader)
@@ -173,7 +155,6 @@ class Profile(
             3 -> secret = ProtoAdapter.BYTES.decode(reader)
             4 -> key = Key.ADAPTER.decode(reader)
             5 -> networks.add(Network.ADAPTER.decode(reader))
-            6 -> network_memberships.add(NetworkMembership.ADAPTER.decode(reader))
             else -> reader.readUnknownField(tag)
           }
         }
@@ -183,7 +164,6 @@ class Profile(
           secret = secret,
           key = key,
           networks = networks,
-          network_memberships = network_memberships,
           unknownFields = unknownFields
         )
       }
@@ -191,7 +171,6 @@ class Profile(
       override fun redact(value: Profile): Profile = value.copy(
         key = value.key?.let(Key.ADAPTER::redact),
         networks = value.networks.redactElements(Network.ADAPTER),
-        network_memberships = value.network_memberships.redactElements(NetworkMembership.ADAPTER),
         unknownFields = ByteString.EMPTY
       )
     }

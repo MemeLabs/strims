@@ -1,5 +1,6 @@
 package gg.strims.ppspp
 
+import android.app.Application
 import android.net.Uri
 import android.os.Bundle
 import android.util.Log
@@ -7,7 +8,6 @@ import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.foundation.Text
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.layout.Row
 import androidx.compose.material.Button
 import androidx.compose.material.MaterialTheme
 import androidx.compose.material.OutlinedTextField
@@ -23,6 +23,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.viewinterop.viewModel
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
 import androidx.ui.tooling.preview.Preview
 import com.google.android.exoplayer2.SimpleExoPlayer
@@ -34,8 +35,8 @@ import com.google.android.exoplayer2.util.Util
 import gg.strims.ppspp.profile.PasswordState
 import gg.strims.ppspp.profile.UsernameState
 import gg.strims.ppspp.proto.*
-import gg.strims.ppspp.rpc.FrontendRPCClient
-import gg.strims.ppspp.rpc.RPCEvent
+import gg.strims.ppspp.rpc.*
+import gg.strims.ppspp.rpc.BootstrapClient
 import gg.strims.ppspp.ui.PpsppTheme
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -43,24 +44,23 @@ import kotlinx.coroutines.runBlocking
 import okio.ByteString
 import okio.ByteString.Companion.decodeBase64
 
+
 private const val TAG = "ppspp"
 
-class ProfileViewModel: ViewModel() {
+class ProfileViewModel(filepath: String): ViewModel() {
     var isSignedIn: MutableLiveData<Boolean> = MutableLiveData(false)
     var profile: MutableLiveData<Profile> = MutableLiveData(null)
 
-    private lateinit var client: FrontendRPCClient
-
-    fun setClient(client: FrontendRPCClient) {
-        this.client = client
-    }
+    private var client = ProfileClient(filepath)
 
     fun createProfile(username: String, password: String) {
         viewModelScope.launch {
             try {
-                profile.setValue(client.createProfile(
-                    CreateProfileRequest(name = username, password = password)
-                ).profile)
+                profile.setValue(
+                    client.create(
+                        CreateProfileRequest(name = username, password = password)
+                    ).profile
+                )
                 isSignedIn.setValue(true)
                 Log.i(TAG, "profile: ${profile.value}")
             } catch (e: Exception) {
@@ -72,8 +72,8 @@ class ProfileViewModel: ViewModel() {
     fun login(username: String, password: String) {
         viewModelScope.launch {
             try {
-                val profiles = client.getProfiles(GetProfilesRequest()).profiles
-                profile.setValue(client.loadProfile(
+                val profiles = client.list().profiles
+                profile.setValue(client.load(
                     LoadProfileRequest(
                         id = (profiles
                             .filter { p -> p.name == username }
@@ -92,74 +92,62 @@ class ProfileViewModel: ViewModel() {
 }
 
 // TODO: break this down
-class MainViewModel: ViewModel() {
+class MainViewModel(filepath: String): ViewModel() {
     private var addr = "10.0.2.2:8082"
     var videoUrl: MutableState<String> = mutableStateOf("")
     var inSwarm: MutableLiveData<Boolean> = MutableLiveData(false)
-    private lateinit var client: FrontendRPCClient
+    private var bootstrap = BootstrapClient(filepath)
+    private var video = VideoClient(filepath)
+    private var network = NetworkClient(filepath)
 
-    fun setClient(client: FrontendRPCClient) {
-        this.client = client
-    }
-
-    fun createBootstrapClient(): BootstrapClient? {
-        var bootstrapClient: BootstrapClient? = null
+    fun createBootstrapClient() {
         viewModelScope.launch {
             try {
-                bootstrapClient = client.createBootstrapClient(
+                bootstrap.createClient(
                     CreateBootstrapClientRequest(
                         websocket_options = BootstrapClientWebSocketOptions(
                             url = "ws://$addr/test-bootstrap",
                             insecure_skip_verify_tls = true,
                         )
                     )
-                ).bootstrap_client
+                )
                 return@launch
-            } catch(e: Exception) {
+            } catch (e: Exception) {
                 Log.e(TAG, "failed to create bootstrap client: $e")
             }
         }
-        return bootstrapClient
     }
 
-    fun loadInviteCert(cert: String): NetworkMembership? {
-        var networkMembership: NetworkMembership? = null
+    fun loadInviteCert(cert: String) {
         viewModelScope.launch {
             try {
-                networkMembership = client.createNetworkMembershipFromInvitation(
-                    CreateNetworkMembershipFromInvitationRequest(invitation_b64 = cert)
-                ).membership
+                network.createFromInvitation(CreateNetworkFromInvitationRequest(invitation_b64 = cert))
             } catch (e: Exception) {
                 Log.e(TAG, "creating network membership from invite failed: $e")
             }
             return@launch
         }
-        return networkMembership
     }
 
-    fun createNetwork(): Network? {
-        var network: Network? = null
+    fun createNetwork() {
         viewModelScope.launch {
             try {
-                network = client.createNetwork(CreateNetworkRequest(name = "test")).network
+                network.create(CreateNetworkRequest(name = "test"))
             } catch (e: Exception) {
                 Log.e(TAG, "failed to create network: $e")
             }
         }
-        return network
     }
 
     private fun publishSwarm(swarmID: Long) {
         viewModelScope.launch {
             try {
-                val memberships = client.getNetworkMemberships().network_memberships
-                memberships.map {
-                    client.publishSwarm(
-                        PublishSwarmRequest(id = swarmID, network_key = rootCert(it.certificate!!).key)
-                    )
-                }
-            } catch(e: Exception) {
-                Log.e(TAG, "failed to publish swarm: $e")
+//                val memberships = client.getNetworkMemberships().network_memberships
+//                video.publishSwarm(
+//                    PublishSwarmRequest(id = swarmID, network_key = rootCert(it.certificate!!).key)
+//                )
+            } catch (e: Exception) {
+                Log.e(TAG, "failed to publish swarm($swarmID): $e")
             }
         }
     }
@@ -167,12 +155,12 @@ class MainViewModel: ViewModel() {
     private fun startHLSEgress(video_id: Long) {
         viewModelScope.launch {
             try {
-                val resp =  client.startHLSEgress(StartHLSEgressRequest(video_id = video_id))
+                val resp = video.startHLSEgress(StartHLSEgressRequest(video_id = video_id))
                 // TODO: pause until first chunk is loaded
                 runBlocking { delay(5000) }
                 videoUrl.value = resp.url
                 Log.i(TAG, videoUrl.value)
-            } catch(e: Exception) {
+            } catch (e: Exception) {
                 Log.e(TAG, "failed to start HLS egress: $e")
             }
         }
@@ -181,7 +169,7 @@ class MainViewModel: ViewModel() {
     fun startVPN() {
         viewModelScope.launch {
             try {
-                val vpn = client.startVPN(StartVPNRequest(enable_bootstrap_publishing = false))
+                val vpn = network.startVPN(StartVPNRequest(enable_bootstrap_publishing = false))
                 vpn.delegate = { event: NetworkEvent?, eventType: RPCEvent ->
                     when (eventType) {
                         RPCEvent.data -> Log.i(TAG, "vpn event: ${event!!}")
@@ -192,7 +180,7 @@ class MainViewModel: ViewModel() {
                     }
                 }
                 Log.i(TAG, "started vpn")
-            } catch(e: Exception) {
+            } catch (e: Exception) {
                 Log.e(TAG, "start vpn failed: $e")
             }
         }
@@ -200,9 +188,11 @@ class MainViewModel: ViewModel() {
 
     fun joinVideoSwarm(swarmKey: ByteString) {
         viewModelScope.launch {
-            val videoClient = client.openVideoClient(VideoClientOpenRequest(
-                swarm_key = swarmKey,
-            ))
+            val videoClient = video.openClient(
+                OpenVideoClientRequest(
+                    swarm_key = swarmKey,
+                )
+            )
             videoClient.delegate = { event: VideoClientEvent?, eventType: RPCEvent ->
                 Log.i(TAG, eventType.toString())
                 when (eventType) {
@@ -213,7 +203,10 @@ class MainViewModel: ViewModel() {
                                 publishSwarm(event.open.id)
                                 startHLSEgress(event.open.id)
                             }
-                            (event.data != null) -> Log.i(TAG, "video data: ${event.data.data.size}")
+                            (event.data != null) -> Log.i(
+                                TAG,
+                                "video data: ${event.data.data.size}"
+                            )
                             (event.close != null) -> Log.i(TAG, "close")
                             else -> Log.e(TAG, "vpn rpc error")
                         }
@@ -260,8 +253,18 @@ fun Login() {
         Spacer(Modifier.padding(10.dp))
         Row {
             loginButtons(
-                onLogin = { viewModel.login(username = usernameState.text, password = passwordState.text) } ,
-                onCreate = { viewModel.createProfile(username = usernameState.text, password = passwordState.text) },
+                onLogin = {
+                    viewModel.login(
+                        username = usernameState.text,
+                        password = passwordState.text
+                    )
+                },
+                onCreate = {
+                    viewModel.createProfile(
+                        username = usernameState.text,
+                        password = passwordState.text
+                    )
+                },
             )
         }
     }
@@ -358,17 +361,22 @@ fun MainScreen() {
     }
 }
 
+@Suppress("UNCHECKED_CAST")
+class ProfileViewModelFactory(private val someString: String): ViewModelProvider.NewInstanceFactory() {
+    override fun <T : ViewModel?> create(modelClass: Class<T>): T = ProfileViewModel(someString) as T
+}
+
+@Suppress("UNCHECKED_CAST")
+class MainViewModelFactory(private val someString: String): ViewModelProvider.NewInstanceFactory() {
+    override fun <T : ViewModel?> create(modelClass: Class<T>): T = MainViewModel(someString) as T
+}
+
 class MainActivity : AppCompatActivity() {
-    private val mvm: MainViewModel by viewModels()
-    private val pvm: ProfileViewModel by viewModels()
-    private lateinit var client: FrontendRPCClient
+    private val mvm: MainViewModel by viewModels { MainViewModelFactory(filesDir.canonicalPath) }
+    private val pvm: ProfileViewModel by viewModels { ProfileViewModelFactory(filesDir.canonicalPath) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        client = FrontendRPCClient(filepath = filesDir.canonicalPath)
-        // TODO: pass client around properly
-        pvm.setClient(client)
-        mvm.setClient(client)
         setContent {
             PpsppTheme {
                 // A surface container using the 'background' color from the theme

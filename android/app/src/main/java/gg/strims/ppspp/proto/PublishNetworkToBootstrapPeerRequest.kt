@@ -25,11 +25,11 @@ import okio.ByteString
 class PublishNetworkToBootstrapPeerRequest(
   @field:WireField(
     tag = 1,
-    adapter = "com.squareup.wire.ProtoAdapter#BYTES",
+    adapter = "com.squareup.wire.ProtoAdapter#UINT64",
     label = WireField.Label.OMIT_IDENTITY,
-    jsonName = "hostId"
+    jsonName = "peerId"
   )
-  val host_id: ByteString = ByteString.EMPTY,
+  val peer_id: Long = 0L,
   @field:WireField(
     tag = 2,
     adapter = "gg.strims.ppspp.proto.Network#ADAPTER",
@@ -48,7 +48,7 @@ class PublishNetworkToBootstrapPeerRequest(
     if (other === this) return true
     if (other !is PublishNetworkToBootstrapPeerRequest) return false
     if (unknownFields != other.unknownFields) return false
-    if (host_id != other.host_id) return false
+    if (peer_id != other.peer_id) return false
     if (network != other.network) return false
     return true
   }
@@ -57,7 +57,7 @@ class PublishNetworkToBootstrapPeerRequest(
     var result = super.hashCode
     if (result == 0) {
       result = unknownFields.hashCode()
-      result = result * 37 + host_id.hashCode()
+      result = result * 37 + peer_id.hashCode()
       result = result * 37 + network.hashCode()
       super.hashCode = result
     }
@@ -66,17 +66,17 @@ class PublishNetworkToBootstrapPeerRequest(
 
   override fun toString(): String {
     val result = mutableListOf<String>()
-    result += """host_id=$host_id"""
+    result += """peer_id=$peer_id"""
     if (network != null) result += """network=$network"""
     return result.joinToString(prefix = "PublishNetworkToBootstrapPeerRequest{", separator = ", ",
         postfix = "}")
   }
 
   fun copy(
-    host_id: ByteString = this.host_id,
+    peer_id: Long = this.peer_id,
     network: Network? = this.network,
     unknownFields: ByteString = this.unknownFields
-  ): PublishNetworkToBootstrapPeerRequest = PublishNetworkToBootstrapPeerRequest(host_id, network,
+  ): PublishNetworkToBootstrapPeerRequest = PublishNetworkToBootstrapPeerRequest(peer_id, network,
       unknownFields)
 
   companion object {
@@ -91,31 +91,29 @@ class PublishNetworkToBootstrapPeerRequest(
     ) {
       override fun encodedSize(value: PublishNetworkToBootstrapPeerRequest): Int {
         var size = value.unknownFields.size
-        if (value.host_id != ByteString.EMPTY) size += ProtoAdapter.BYTES.encodedSizeWithTag(1,
-            value.host_id)
+        if (value.peer_id != 0L) size += ProtoAdapter.UINT64.encodedSizeWithTag(1, value.peer_id)
         if (value.network != null) size += Network.ADAPTER.encodedSizeWithTag(2, value.network)
         return size
       }
 
       override fun encode(writer: ProtoWriter, value: PublishNetworkToBootstrapPeerRequest) {
-        if (value.host_id != ByteString.EMPTY) ProtoAdapter.BYTES.encodeWithTag(writer, 1,
-            value.host_id)
+        if (value.peer_id != 0L) ProtoAdapter.UINT64.encodeWithTag(writer, 1, value.peer_id)
         if (value.network != null) Network.ADAPTER.encodeWithTag(writer, 2, value.network)
         writer.writeBytes(value.unknownFields)
       }
 
       override fun decode(reader: ProtoReader): PublishNetworkToBootstrapPeerRequest {
-        var host_id: ByteString = ByteString.EMPTY
+        var peer_id: Long = 0L
         var network: Network? = null
         val unknownFields = reader.forEachTag { tag ->
           when (tag) {
-            1 -> host_id = ProtoAdapter.BYTES.decode(reader)
+            1 -> peer_id = ProtoAdapter.UINT64.decode(reader)
             2 -> network = Network.ADAPTER.decode(reader)
             else -> reader.readUnknownField(tag)
           }
         }
         return PublishNetworkToBootstrapPeerRequest(
-          host_id = host_id,
+          peer_id = peer_id,
           network = network,
           unknownFields = unknownFields
         )
