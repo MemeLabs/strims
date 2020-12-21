@@ -48,6 +48,19 @@ class Network(
     label = WireField.Label.OMIT_IDENTITY
   )
   val certificate: Certificate? = null,
+  @field:WireField(
+    tag = 5,
+    adapter = "gg.strims.ppspp.proto.NetworkIcon#ADAPTER",
+    label = WireField.Label.OMIT_IDENTITY
+  )
+  val icon: NetworkIcon? = null,
+  @field:WireField(
+    tag = 6,
+    adapter = "com.squareup.wire.ProtoAdapter#STRING",
+    label = WireField.Label.OMIT_IDENTITY,
+    jsonName = "altProfileName"
+  )
+  val alt_profile_name: String = "",
   unknownFields: ByteString = ByteString.EMPTY
 ) : Message<Network, Nothing>(ADAPTER, unknownFields) {
   @Deprecated(
@@ -64,6 +77,8 @@ class Network(
     if (name != other.name) return false
     if (key != other.key) return false
     if (certificate != other.certificate) return false
+    if (icon != other.icon) return false
+    if (alt_profile_name != other.alt_profile_name) return false
     return true
   }
 
@@ -75,6 +90,8 @@ class Network(
       result = result * 37 + name.hashCode()
       result = result * 37 + key.hashCode()
       result = result * 37 + certificate.hashCode()
+      result = result * 37 + icon.hashCode()
+      result = result * 37 + alt_profile_name.hashCode()
       super.hashCode = result
     }
     return result
@@ -86,6 +103,8 @@ class Network(
     result += """name=${sanitize(name)}"""
     if (key != null) result += """key=$key"""
     if (certificate != null) result += """certificate=$certificate"""
+    if (icon != null) result += """icon=$icon"""
+    result += """alt_profile_name=${sanitize(alt_profile_name)}"""
     return result.joinToString(prefix = "Network{", separator = ", ", postfix = "}")
   }
 
@@ -94,8 +113,10 @@ class Network(
     name: String = this.name,
     key: Key? = this.key,
     certificate: Certificate? = this.certificate,
+    icon: NetworkIcon? = this.icon,
+    alt_profile_name: String = this.alt_profile_name,
     unknownFields: ByteString = this.unknownFields
-  ): Network = Network(id, name, key, certificate, unknownFields)
+  ): Network = Network(id, name, key, certificate, icon, alt_profile_name, unknownFields)
 
   companion object {
     @JvmField
@@ -113,6 +134,9 @@ class Network(
         if (value.key != null) size += Key.ADAPTER.encodedSizeWithTag(3, value.key)
         if (value.certificate != null) size += Certificate.ADAPTER.encodedSizeWithTag(4,
             value.certificate)
+        if (value.icon != null) size += NetworkIcon.ADAPTER.encodedSizeWithTag(5, value.icon)
+        if (value.alt_profile_name != "") size += ProtoAdapter.STRING.encodedSizeWithTag(6,
+            value.alt_profile_name)
         return size
       }
 
@@ -122,6 +146,9 @@ class Network(
         if (value.key != null) Key.ADAPTER.encodeWithTag(writer, 3, value.key)
         if (value.certificate != null) Certificate.ADAPTER.encodeWithTag(writer, 4,
             value.certificate)
+        if (value.icon != null) NetworkIcon.ADAPTER.encodeWithTag(writer, 5, value.icon)
+        if (value.alt_profile_name != "") ProtoAdapter.STRING.encodeWithTag(writer, 6,
+            value.alt_profile_name)
         writer.writeBytes(value.unknownFields)
       }
 
@@ -130,12 +157,16 @@ class Network(
         var name: String = ""
         var key: Key? = null
         var certificate: Certificate? = null
+        var icon: NetworkIcon? = null
+        var alt_profile_name: String = ""
         val unknownFields = reader.forEachTag { tag ->
           when (tag) {
             1 -> id = ProtoAdapter.UINT64.decode(reader)
             2 -> name = ProtoAdapter.STRING.decode(reader)
             3 -> key = Key.ADAPTER.decode(reader)
             4 -> certificate = Certificate.ADAPTER.decode(reader)
+            5 -> icon = NetworkIcon.ADAPTER.decode(reader)
+            6 -> alt_profile_name = ProtoAdapter.STRING.decode(reader)
             else -> reader.readUnknownField(tag)
           }
         }
@@ -144,6 +175,8 @@ class Network(
           name = name,
           key = key,
           certificate = certificate,
+          icon = icon,
+          alt_profile_name = alt_profile_name,
           unknownFields = unknownFields
         )
       }
@@ -151,6 +184,7 @@ class Network(
       override fun redact(value: Network): Network = value.copy(
         key = value.key?.let(Key.ADAPTER::redact),
         certificate = value.certificate?.let(Certificate.ADAPTER::redact),
+        icon = value.icon?.let(NetworkIcon.ADAPTER::redact),
         unknownFields = ByteString.EMPTY
       )
     }

@@ -45,40 +45,40 @@ class Certificate(
   )
   val key_usage: Int = 0,
   @field:WireField(
-    tag = 9,
+    tag = 4,
     adapter = "com.squareup.wire.ProtoAdapter#STRING",
     label = WireField.Label.OMIT_IDENTITY
   )
   val subject: String = "",
   @field:WireField(
-    tag = 4,
+    tag = 5,
     adapter = "com.squareup.wire.ProtoAdapter#UINT64",
     label = WireField.Label.OMIT_IDENTITY,
     jsonName = "notBefore"
   )
   val not_before: Long = 0L,
   @field:WireField(
-    tag = 5,
+    tag = 6,
     adapter = "com.squareup.wire.ProtoAdapter#UINT64",
     label = WireField.Label.OMIT_IDENTITY,
     jsonName = "notAfter"
   )
   val not_after: Long = 0L,
   @field:WireField(
-    tag = 6,
+    tag = 7,
     adapter = "com.squareup.wire.ProtoAdapter#BYTES",
     label = WireField.Label.OMIT_IDENTITY,
     jsonName = "serialNumber"
   )
   val serial_number: ByteString = ByteString.EMPTY,
   @field:WireField(
-    tag = 7,
+    tag = 8,
     adapter = "com.squareup.wire.ProtoAdapter#BYTES",
     label = WireField.Label.OMIT_IDENTITY
   )
   val signature: ByteString = ByteString.EMPTY,
   @field:WireField(
-    tag = 8,
+    tag = 9,
     adapter = "gg.strims.ppspp.proto.Certificate#ADAPTER"
   )
   val parent: Certificate? = null,
@@ -171,16 +171,16 @@ class Certificate(
         if (value.key_type != KeyType.KEY_TYPE_UNDEFINED) size +=
             KeyType.ADAPTER.encodedSizeWithTag(2, value.key_type)
         if (value.key_usage != 0) size += ProtoAdapter.UINT32.encodedSizeWithTag(3, value.key_usage)
-        if (value.subject != "") size += ProtoAdapter.STRING.encodedSizeWithTag(9, value.subject)
-        if (value.not_before != 0L) size += ProtoAdapter.UINT64.encodedSizeWithTag(4,
+        if (value.subject != "") size += ProtoAdapter.STRING.encodedSizeWithTag(4, value.subject)
+        if (value.not_before != 0L) size += ProtoAdapter.UINT64.encodedSizeWithTag(5,
             value.not_before)
-        if (value.not_after != 0L) size += ProtoAdapter.UINT64.encodedSizeWithTag(5,
+        if (value.not_after != 0L) size += ProtoAdapter.UINT64.encodedSizeWithTag(6,
             value.not_after)
         if (value.serial_number != ByteString.EMPTY) size +=
-            ProtoAdapter.BYTES.encodedSizeWithTag(6, value.serial_number)
-        if (value.signature != ByteString.EMPTY) size += ProtoAdapter.BYTES.encodedSizeWithTag(7,
+            ProtoAdapter.BYTES.encodedSizeWithTag(7, value.serial_number)
+        if (value.signature != ByteString.EMPTY) size += ProtoAdapter.BYTES.encodedSizeWithTag(8,
             value.signature)
-        size += Certificate.ADAPTER.encodedSizeWithTag(8, value.parent)
+        size += Certificate.ADAPTER.encodedSizeWithTag(9, value.parent)
         return size
       }
 
@@ -189,14 +189,14 @@ class Certificate(
         if (value.key_type != KeyType.KEY_TYPE_UNDEFINED) KeyType.ADAPTER.encodeWithTag(writer, 2,
             value.key_type)
         if (value.key_usage != 0) ProtoAdapter.UINT32.encodeWithTag(writer, 3, value.key_usage)
-        if (value.subject != "") ProtoAdapter.STRING.encodeWithTag(writer, 9, value.subject)
-        if (value.not_before != 0L) ProtoAdapter.UINT64.encodeWithTag(writer, 4, value.not_before)
-        if (value.not_after != 0L) ProtoAdapter.UINT64.encodeWithTag(writer, 5, value.not_after)
-        if (value.serial_number != ByteString.EMPTY) ProtoAdapter.BYTES.encodeWithTag(writer, 6,
+        if (value.subject != "") ProtoAdapter.STRING.encodeWithTag(writer, 4, value.subject)
+        if (value.not_before != 0L) ProtoAdapter.UINT64.encodeWithTag(writer, 5, value.not_before)
+        if (value.not_after != 0L) ProtoAdapter.UINT64.encodeWithTag(writer, 6, value.not_after)
+        if (value.serial_number != ByteString.EMPTY) ProtoAdapter.BYTES.encodeWithTag(writer, 7,
             value.serial_number)
-        if (value.signature != ByteString.EMPTY) ProtoAdapter.BYTES.encodeWithTag(writer, 7,
+        if (value.signature != ByteString.EMPTY) ProtoAdapter.BYTES.encodeWithTag(writer, 8,
             value.signature)
-        Certificate.ADAPTER.encodeWithTag(writer, 8, value.parent)
+        Certificate.ADAPTER.encodeWithTag(writer, 9, value.parent)
         writer.writeBytes(value.unknownFields)
       }
 
@@ -219,12 +219,12 @@ class Certificate(
               reader.addUnknownField(tag, FieldEncoding.VARINT, e.value.toLong())
             }
             3 -> key_usage = ProtoAdapter.UINT32.decode(reader)
-            9 -> subject = ProtoAdapter.STRING.decode(reader)
-            4 -> not_before = ProtoAdapter.UINT64.decode(reader)
-            5 -> not_after = ProtoAdapter.UINT64.decode(reader)
-            6 -> serial_number = ProtoAdapter.BYTES.decode(reader)
-            7 -> signature = ProtoAdapter.BYTES.decode(reader)
-            8 -> parent = Certificate.ADAPTER.decode(reader)
+            4 -> subject = ProtoAdapter.STRING.decode(reader)
+            5 -> not_before = ProtoAdapter.UINT64.decode(reader)
+            6 -> not_after = ProtoAdapter.UINT64.decode(reader)
+            7 -> serial_number = ProtoAdapter.BYTES.decode(reader)
+            8 -> signature = ProtoAdapter.BYTES.decode(reader)
+            9 -> parent = Certificate.ADAPTER.decode(reader)
             else -> reader.readUnknownField(tag)
           }
         }

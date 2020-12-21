@@ -11,6 +11,8 @@ import com.squareup.wire.Syntax
 import com.squareup.wire.Syntax.PROTO_3
 import com.squareup.wire.WireField
 import com.squareup.wire.internal.countNonNull
+import com.squareup.wire.internal.immutableCopyOf
+import com.squareup.wire.internal.sanitize
 import kotlin.Any
 import kotlin.AssertionError
 import kotlin.Boolean
@@ -20,6 +22,7 @@ import kotlin.Int
 import kotlin.Long
 import kotlin.Nothing
 import kotlin.String
+import kotlin.collections.List
 import kotlin.hashCode
 import kotlin.jvm.JvmField
 import okio.ByteString
@@ -37,19 +40,21 @@ class DirectoryServerEvent(
   val unpublish: Unpublish? = null,
   @field:WireField(
     tag = 3,
-    adapter = "gg.strims.ppspp.proto.DirectoryServerEvent${'$'}ViewerChange#ADAPTER"
+    adapter = "gg.strims.ppspp.proto.DirectoryServerEvent${'$'}ViewerCountChange#ADAPTER",
+    jsonName = "viewerCountChange"
   )
-  val open: ViewerChange? = null,
+  val viewer_count_change: ViewerCountChange? = null,
   @field:WireField(
     tag = 4,
-    adapter = "gg.strims.ppspp.proto.DirectoryServerEvent${'$'}Ping#ADAPTER"
+    adapter = "gg.strims.ppspp.proto.DirectoryServerEvent${'$'}ViewerStateChange#ADAPTER",
+    jsonName = "viewerStateChange"
   )
-  val ping: Ping? = null,
+  val viewer_state_change: ViewerStateChange? = null,
   unknownFields: ByteString = ByteString.EMPTY
 ) : Message<DirectoryServerEvent, Nothing>(ADAPTER, unknownFields) {
   init {
-    require(countNonNull(publish, unpublish, open, ping) <= 1) {
-      "At most one of publish, unpublish, open, ping may be non-null"
+    require(countNonNull(publish, unpublish, viewer_count_change, viewer_state_change) <= 1) {
+      "At most one of publish, unpublish, viewer_count_change, viewer_state_change may be non-null"
     }
   }
 
@@ -65,8 +70,8 @@ class DirectoryServerEvent(
     if (unknownFields != other.unknownFields) return false
     if (publish != other.publish) return false
     if (unpublish != other.unpublish) return false
-    if (open != other.open) return false
-    if (ping != other.ping) return false
+    if (viewer_count_change != other.viewer_count_change) return false
+    if (viewer_state_change != other.viewer_state_change) return false
     return true
   }
 
@@ -76,8 +81,8 @@ class DirectoryServerEvent(
       result = unknownFields.hashCode()
       result = result * 37 + publish.hashCode()
       result = result * 37 + unpublish.hashCode()
-      result = result * 37 + open.hashCode()
-      result = result * 37 + ping.hashCode()
+      result = result * 37 + viewer_count_change.hashCode()
+      result = result * 37 + viewer_state_change.hashCode()
       super.hashCode = result
     }
     return result
@@ -87,18 +92,19 @@ class DirectoryServerEvent(
     val result = mutableListOf<String>()
     if (publish != null) result += """publish=$publish"""
     if (unpublish != null) result += """unpublish=$unpublish"""
-    if (open != null) result += """open=$open"""
-    if (ping != null) result += """ping=$ping"""
+    if (viewer_count_change != null) result += """viewer_count_change=$viewer_count_change"""
+    if (viewer_state_change != null) result += """viewer_state_change=$viewer_state_change"""
     return result.joinToString(prefix = "DirectoryServerEvent{", separator = ", ", postfix = "}")
   }
 
   fun copy(
     publish: Publish? = this.publish,
     unpublish: Unpublish? = this.unpublish,
-    open: ViewerChange? = this.open,
-    ping: Ping? = this.ping,
+    viewer_count_change: ViewerCountChange? = this.viewer_count_change,
+    viewer_state_change: ViewerStateChange? = this.viewer_state_change,
     unknownFields: ByteString = this.unknownFields
-  ): DirectoryServerEvent = DirectoryServerEvent(publish, unpublish, open, ping, unknownFields)
+  ): DirectoryServerEvent = DirectoryServerEvent(publish, unpublish, viewer_count_change,
+      viewer_state_change, unknownFields)
 
   companion object {
     @JvmField
@@ -113,38 +119,38 @@ class DirectoryServerEvent(
         var size = value.unknownFields.size
         size += Publish.ADAPTER.encodedSizeWithTag(1, value.publish)
         size += Unpublish.ADAPTER.encodedSizeWithTag(2, value.unpublish)
-        size += ViewerChange.ADAPTER.encodedSizeWithTag(3, value.open)
-        size += Ping.ADAPTER.encodedSizeWithTag(4, value.ping)
+        size += ViewerCountChange.ADAPTER.encodedSizeWithTag(3, value.viewer_count_change)
+        size += ViewerStateChange.ADAPTER.encodedSizeWithTag(4, value.viewer_state_change)
         return size
       }
 
       override fun encode(writer: ProtoWriter, value: DirectoryServerEvent) {
         Publish.ADAPTER.encodeWithTag(writer, 1, value.publish)
         Unpublish.ADAPTER.encodeWithTag(writer, 2, value.unpublish)
-        ViewerChange.ADAPTER.encodeWithTag(writer, 3, value.open)
-        Ping.ADAPTER.encodeWithTag(writer, 4, value.ping)
+        ViewerCountChange.ADAPTER.encodeWithTag(writer, 3, value.viewer_count_change)
+        ViewerStateChange.ADAPTER.encodeWithTag(writer, 4, value.viewer_state_change)
         writer.writeBytes(value.unknownFields)
       }
 
       override fun decode(reader: ProtoReader): DirectoryServerEvent {
         var publish: Publish? = null
         var unpublish: Unpublish? = null
-        var open: ViewerChange? = null
-        var ping: Ping? = null
+        var viewer_count_change: ViewerCountChange? = null
+        var viewer_state_change: ViewerStateChange? = null
         val unknownFields = reader.forEachTag { tag ->
           when (tag) {
             1 -> publish = Publish.ADAPTER.decode(reader)
             2 -> unpublish = Unpublish.ADAPTER.decode(reader)
-            3 -> open = ViewerChange.ADAPTER.decode(reader)
-            4 -> ping = Ping.ADAPTER.decode(reader)
+            3 -> viewer_count_change = ViewerCountChange.ADAPTER.decode(reader)
+            4 -> viewer_state_change = ViewerStateChange.ADAPTER.decode(reader)
             else -> reader.readUnknownField(tag)
           }
         }
         return DirectoryServerEvent(
           publish = publish,
           unpublish = unpublish,
-          open = open,
-          ping = ping,
+          viewer_count_change = viewer_count_change,
+          viewer_state_change = viewer_state_change,
           unknownFields = unknownFields
         )
       }
@@ -152,8 +158,8 @@ class DirectoryServerEvent(
       override fun redact(value: DirectoryServerEvent): DirectoryServerEvent = value.copy(
         publish = value.publish?.let(Publish.ADAPTER::redact),
         unpublish = value.unpublish?.let(Unpublish.ADAPTER::redact),
-        open = value.open?.let(ViewerChange.ADAPTER::redact),
-        ping = value.ping?.let(Ping.ADAPTER::redact),
+        viewer_count_change = value.viewer_count_change?.let(ViewerCountChange.ADAPTER::redact),
+        viewer_state_change = value.viewer_state_change?.let(ViewerStateChange.ADAPTER::redact),
         unknownFields = ByteString.EMPTY
       )
     }
@@ -335,7 +341,7 @@ class DirectoryServerEvent(
     }
   }
 
-  class ViewerChange(
+  class ViewerCountChange(
     @field:WireField(
       tag = 1,
       adapter = "com.squareup.wire.ProtoAdapter#BYTES",
@@ -349,7 +355,7 @@ class DirectoryServerEvent(
     )
     val count: Int = 0,
     unknownFields: ByteString = ByteString.EMPTY
-  ) : Message<ViewerChange, Nothing>(ADAPTER, unknownFields) {
+  ) : Message<ViewerCountChange, Nothing>(ADAPTER, unknownFields) {
     @Deprecated(
       message = "Shouldn't be used in Kotlin",
       level = DeprecationLevel.HIDDEN
@@ -358,7 +364,7 @@ class DirectoryServerEvent(
 
     override fun equals(other: Any?): Boolean {
       if (other === this) return true
-      if (other !is ViewerChange) return false
+      if (other !is ViewerCountChange) return false
       if (unknownFields != other.unknownFields) return false
       if (key != other.key) return false
       if (count != other.count) return false
@@ -380,25 +386,25 @@ class DirectoryServerEvent(
       val result = mutableListOf<String>()
       result += """key=$key"""
       result += """count=$count"""
-      return result.joinToString(prefix = "ViewerChange{", separator = ", ", postfix = "}")
+      return result.joinToString(prefix = "ViewerCountChange{", separator = ", ", postfix = "}")
     }
 
     fun copy(
       key: ByteString = this.key,
       count: Int = this.count,
       unknownFields: ByteString = this.unknownFields
-    ): ViewerChange = ViewerChange(key, count, unknownFields)
+    ): ViewerCountChange = ViewerCountChange(key, count, unknownFields)
 
     companion object {
       @JvmField
-      val ADAPTER: ProtoAdapter<ViewerChange> = object : ProtoAdapter<ViewerChange>(
+      val ADAPTER: ProtoAdapter<ViewerCountChange> = object : ProtoAdapter<ViewerCountChange>(
         FieldEncoding.LENGTH_DELIMITED, 
-        ViewerChange::class, 
-        "type.googleapis.com/DirectoryServerEvent.ViewerChange", 
+        ViewerCountChange::class, 
+        "type.googleapis.com/DirectoryServerEvent.ViewerCountChange", 
         PROTO_3, 
         null
       ) {
-        override fun encodedSize(value: ViewerChange): Int {
+        override fun encodedSize(value: ViewerCountChange): Int {
           var size = value.unknownFields.size
           if (value.key != ByteString.EMPTY) size += ProtoAdapter.BYTES.encodedSizeWithTag(1,
               value.key)
@@ -406,13 +412,13 @@ class DirectoryServerEvent(
           return size
         }
 
-        override fun encode(writer: ProtoWriter, value: ViewerChange) {
+        override fun encode(writer: ProtoWriter, value: ViewerCountChange) {
           if (value.key != ByteString.EMPTY) ProtoAdapter.BYTES.encodeWithTag(writer, 1, value.key)
           if (value.count != 0) ProtoAdapter.UINT32.encodeWithTag(writer, 2, value.count)
           writer.writeBytes(value.unknownFields)
         }
 
-        override fun decode(reader: ProtoReader): ViewerChange {
+        override fun decode(reader: ProtoReader): ViewerCountChange {
           var key: ByteString = ByteString.EMPTY
           var count: Int = 0
           val unknownFields = reader.forEachTag { tag ->
@@ -422,14 +428,14 @@ class DirectoryServerEvent(
               else -> reader.readUnknownField(tag)
             }
           }
-          return ViewerChange(
+          return ViewerCountChange(
             key = key,
             count = count,
             unknownFields = unknownFields
           )
         }
 
-        override fun redact(value: ViewerChange): ViewerChange = value.copy(
+        override fun redact(value: ViewerCountChange): ViewerCountChange = value.copy(
           unknownFields = ByteString.EMPTY
         )
       }
@@ -438,15 +444,30 @@ class DirectoryServerEvent(
     }
   }
 
-  class Ping(
+  class ViewerStateChange(
     @field:WireField(
       tag = 1,
-      adapter = "com.squareup.wire.ProtoAdapter#INT64",
+      adapter = "com.squareup.wire.ProtoAdapter#STRING",
       label = WireField.Label.OMIT_IDENTITY
     )
-    val time: Long = 0L,
+    val subject: String = "",
+    @field:WireField(
+      tag = 2,
+      adapter = "com.squareup.wire.ProtoAdapter#BOOL",
+      label = WireField.Label.OMIT_IDENTITY
+    )
+    val online: Boolean = false,
+    viewing_keys: List<ByteString> = emptyList(),
     unknownFields: ByteString = ByteString.EMPTY
-  ) : Message<Ping, Nothing>(ADAPTER, unknownFields) {
+  ) : Message<ViewerStateChange, Nothing>(ADAPTER, unknownFields) {
+    @field:WireField(
+      tag = 3,
+      adapter = "com.squareup.wire.ProtoAdapter#BYTES",
+      label = WireField.Label.REPEATED,
+      jsonName = "viewingKeys"
+    )
+    val viewing_keys: List<ByteString> = immutableCopyOf("viewing_keys", viewing_keys)
+
     @Deprecated(
       message = "Shouldn't be used in Kotlin",
       level = DeprecationLevel.HIDDEN
@@ -455,9 +476,11 @@ class DirectoryServerEvent(
 
     override fun equals(other: Any?): Boolean {
       if (other === this) return true
-      if (other !is Ping) return false
+      if (other !is ViewerStateChange) return false
       if (unknownFields != other.unknownFields) return false
-      if (time != other.time) return false
+      if (subject != other.subject) return false
+      if (online != other.online) return false
+      if (viewing_keys != other.viewing_keys) return false
       return true
     }
 
@@ -465,7 +488,9 @@ class DirectoryServerEvent(
       var result = super.hashCode
       if (result == 0) {
         result = unknownFields.hashCode()
-        result = result * 37 + time.hashCode()
+        result = result * 37 + subject.hashCode()
+        result = result * 37 + online.hashCode()
+        result = result * 37 + viewing_keys.hashCode()
         super.hashCode = result
       }
       return result
@@ -473,48 +498,64 @@ class DirectoryServerEvent(
 
     override fun toString(): String {
       val result = mutableListOf<String>()
-      result += """time=$time"""
-      return result.joinToString(prefix = "Ping{", separator = ", ", postfix = "}")
+      result += """subject=${sanitize(subject)}"""
+      result += """online=$online"""
+      if (viewing_keys.isNotEmpty()) result += """viewing_keys=$viewing_keys"""
+      return result.joinToString(prefix = "ViewerStateChange{", separator = ", ", postfix = "}")
     }
 
-    fun copy(time: Long = this.time, unknownFields: ByteString = this.unknownFields): Ping =
-        Ping(time, unknownFields)
+    fun copy(
+      subject: String = this.subject,
+      online: Boolean = this.online,
+      viewing_keys: List<ByteString> = this.viewing_keys,
+      unknownFields: ByteString = this.unknownFields
+    ): ViewerStateChange = ViewerStateChange(subject, online, viewing_keys, unknownFields)
 
     companion object {
       @JvmField
-      val ADAPTER: ProtoAdapter<Ping> = object : ProtoAdapter<Ping>(
+      val ADAPTER: ProtoAdapter<ViewerStateChange> = object : ProtoAdapter<ViewerStateChange>(
         FieldEncoding.LENGTH_DELIMITED, 
-        Ping::class, 
-        "type.googleapis.com/DirectoryServerEvent.Ping", 
+        ViewerStateChange::class, 
+        "type.googleapis.com/DirectoryServerEvent.ViewerStateChange", 
         PROTO_3, 
         null
       ) {
-        override fun encodedSize(value: Ping): Int {
+        override fun encodedSize(value: ViewerStateChange): Int {
           var size = value.unknownFields.size
-          if (value.time != 0L) size += ProtoAdapter.INT64.encodedSizeWithTag(1, value.time)
+          if (value.subject != "") size += ProtoAdapter.STRING.encodedSizeWithTag(1, value.subject)
+          if (value.online != false) size += ProtoAdapter.BOOL.encodedSizeWithTag(2, value.online)
+          size += ProtoAdapter.BYTES.asRepeated().encodedSizeWithTag(3, value.viewing_keys)
           return size
         }
 
-        override fun encode(writer: ProtoWriter, value: Ping) {
-          if (value.time != 0L) ProtoAdapter.INT64.encodeWithTag(writer, 1, value.time)
+        override fun encode(writer: ProtoWriter, value: ViewerStateChange) {
+          if (value.subject != "") ProtoAdapter.STRING.encodeWithTag(writer, 1, value.subject)
+          if (value.online != false) ProtoAdapter.BOOL.encodeWithTag(writer, 2, value.online)
+          ProtoAdapter.BYTES.asRepeated().encodeWithTag(writer, 3, value.viewing_keys)
           writer.writeBytes(value.unknownFields)
         }
 
-        override fun decode(reader: ProtoReader): Ping {
-          var time: Long = 0L
+        override fun decode(reader: ProtoReader): ViewerStateChange {
+          var subject: String = ""
+          var online: Boolean = false
+          val viewing_keys = mutableListOf<ByteString>()
           val unknownFields = reader.forEachTag { tag ->
             when (tag) {
-              1 -> time = ProtoAdapter.INT64.decode(reader)
+              1 -> subject = ProtoAdapter.STRING.decode(reader)
+              2 -> online = ProtoAdapter.BOOL.decode(reader)
+              3 -> viewing_keys.add(ProtoAdapter.BYTES.decode(reader))
               else -> reader.readUnknownField(tag)
             }
           }
-          return Ping(
-            time = time,
+          return ViewerStateChange(
+            subject = subject,
+            online = online,
+            viewing_keys = viewing_keys,
             unknownFields = unknownFields
           )
         }
 
-        override fun redact(value: Ping): Ping = value.copy(
+        override fun redact(value: ViewerStateChange): ViewerStateChange = value.copy(
           unknownFields = ByteString.EMPTY
         )
       }

@@ -505,6 +505,13 @@ class HashTableMessage(
       label = WireField.Label.OMIT_IDENTITY
     )
     val hash: ByteString = ByteString.EMPTY,
+    @field:WireField(
+      tag = 3,
+      adapter = "com.squareup.wire.ProtoAdapter#INT64",
+      label = WireField.Label.OMIT_IDENTITY,
+      jsonName = "ifModifiedSince"
+    )
+    val if_modified_since: Long = 0L,
     unknownFields: ByteString = ByteString.EMPTY
   ) : Message<GetRequest, Nothing>(ADAPTER, unknownFields) {
     @Deprecated(
@@ -519,6 +526,7 @@ class HashTableMessage(
       if (unknownFields != other.unknownFields) return false
       if (request_id != other.request_id) return false
       if (hash != other.hash) return false
+      if (if_modified_since != other.if_modified_since) return false
       return true
     }
 
@@ -528,6 +536,7 @@ class HashTableMessage(
         result = unknownFields.hashCode()
         result = result * 37 + request_id.hashCode()
         result = result * 37 + hash.hashCode()
+        result = result * 37 + if_modified_since.hashCode()
         super.hashCode = result
       }
       return result
@@ -537,14 +546,16 @@ class HashTableMessage(
       val result = mutableListOf<String>()
       result += """request_id=$request_id"""
       result += """hash=$hash"""
+      result += """if_modified_since=$if_modified_since"""
       return result.joinToString(prefix = "GetRequest{", separator = ", ", postfix = "}")
     }
 
     fun copy(
       request_id: Long = this.request_id,
       hash: ByteString = this.hash,
+      if_modified_since: Long = this.if_modified_since,
       unknownFields: ByteString = this.unknownFields
-    ): GetRequest = GetRequest(request_id, hash, unknownFields)
+    ): GetRequest = GetRequest(request_id, hash, if_modified_since, unknownFields)
 
     companion object {
       @JvmField
@@ -561,6 +572,8 @@ class HashTableMessage(
               value.request_id)
           if (value.hash != ByteString.EMPTY) size += ProtoAdapter.BYTES.encodedSizeWithTag(2,
               value.hash)
+          if (value.if_modified_since != 0L) size += ProtoAdapter.INT64.encodedSizeWithTag(3,
+              value.if_modified_since)
           return size
         }
 
@@ -568,22 +581,27 @@ class HashTableMessage(
           if (value.request_id != 0L) ProtoAdapter.UINT64.encodeWithTag(writer, 1, value.request_id)
           if (value.hash != ByteString.EMPTY) ProtoAdapter.BYTES.encodeWithTag(writer, 2,
               value.hash)
+          if (value.if_modified_since != 0L) ProtoAdapter.INT64.encodeWithTag(writer, 3,
+              value.if_modified_since)
           writer.writeBytes(value.unknownFields)
         }
 
         override fun decode(reader: ProtoReader): GetRequest {
           var request_id: Long = 0L
           var hash: ByteString = ByteString.EMPTY
+          var if_modified_since: Long = 0L
           val unknownFields = reader.forEachTag { tag ->
             when (tag) {
               1 -> request_id = ProtoAdapter.UINT64.decode(reader)
               2 -> hash = ProtoAdapter.BYTES.decode(reader)
+              3 -> if_modified_since = ProtoAdapter.INT64.decode(reader)
               else -> reader.readUnknownField(tag)
             }
           }
           return GetRequest(
             request_id = request_id,
             hash = hash,
+            if_modified_since = if_modified_since,
             unknownFields = unknownFields
           )
         }
