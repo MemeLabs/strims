@@ -1,0 +1,43 @@
+name: Lint and build ios app
+
+on:
+  pull_request:
+    paths:
+      - 'ios/**'
+  push:
+    branches:
+      - master
+    paths:
+      - 'ios/**'
+
+jobs:
+  main:
+    name: Lint & Build Debug
+    runs-on: macOS-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: set up swift-format
+        run: |
+          git clone -b swift-5.3-branch https://github.com/apple/swift-format.git
+          cd swift-format
+          swift build -c release --disable-sandbox --build-path '.build'
+          mv .build .. && cd ..
+          sudo cp -f .build/release/swift-format /usr/local/bin/swift-format
+      - name: set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '^1.14'
+      - name: Build Go bridge
+        run: |
+          go get golang.org/x/mobile/cmd/gomobile
+          go mod download
+          gomobile init
+          gomobile bind -target ios -o ./App/Bridge.framework ./bridge
+      - name: Build Debug
+        working-directory: ./ios/App
+        run: |
+          xcodebuild -scheme App build
+      - name: lint
+        working-directory: ./ios/App
+        run: swift format lint --configuration .swift-format -r .
+
