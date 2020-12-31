@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v2
       - name: set up swift-format
         run: |
-          git clone -b swift-5.3-branch https://github.com/apple/swift-format.git
+          git clone -b swift-5.3-branch https://github.com/apple/swift-format.git --single-branch
           cd swift-format
           swift build -c release --disable-sandbox --build-path '.build'
           mv .build .. && cd ..
@@ -28,6 +28,7 @@ jobs:
         with:
           go-version: '^1.14'
       - name: Build Go bridge
+        working-directory: ./ios/App
         run: |
           go get golang.org/x/mobile/cmd/gomobile
           go mod download
