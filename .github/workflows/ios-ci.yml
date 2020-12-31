@@ -28,7 +28,7 @@ jobs:
         with:
           go-version: '^1.14'
       - name: Build Go bridge
-        working-directory: ./ios/App
+        working-directory: ./ios
         run: |
           go get golang.org/x/mobile/cmd/gomobile
           go mod download
