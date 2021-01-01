@@ -1,4 +1,4 @@
-name: Lint and build android app
+name: lint and build android app
 on:
   pull_request:
     paths:
@@ -11,28 +11,24 @@ on:
 
 jobs:
   main:
-    name: Lint & Build Debug
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: set up JDK 1.8
+      - name: Set up Ruby 2.6
+        uses: actions/setup-ruby@v1
+        with:
+          ruby-version: 2.6.x
+      - name: Install Dependencies
+        working-directory: ./android
+        run: gem install bundler && bundle install
+      - name: set up JDK 11
         uses: actions/setup-java@v1
         with:
-          java-version: 1.8
+          java-version: 11 
       - name: set up Go
         uses: actions/setup-go@v2
         with:
           go-version: '^1.14'
-      - name: Install NDK
-        env:
-          ANDROID_BUILD_TOOLS_VERSION: 27.0.3
-          ANDROID_PLATFORM_VERSION: "android-28"
-          ANDROID_NDK_HOME: $ANDROID_HOME/ndk/21.3.6528147
-        run: |
-          echo "y" | sudo /usr/local/lib/android/sdk/tools/bin/sdkmanager "platform-tools"
-          echo "y" | sudo /usr/local/lib/android/sdk/tools/bin/sdkmanager "build-tools;$ANDROID_BUILD_TOOLS_VERSION"
-          echo "y" | sudo /usr/local/lib/android/sdk/tools/bin/sdkmanager "platforms;$ANDROID_PLATFORM_VERSION"
-          echo "y" | sudo /usr/local/lib/android/sdk/tools/bin/sdkmanager "ndk-bundle"
       - name: Build Go bridge
         run: |
           go get golang.org/x/mobile/cmd/gomobile
@@ -40,9 +36,6 @@ jobs:
           gomobile init
           mkdir ./android/app/libs
           gomobile bind -o ./android/app/libs/bridge.aar -target=android ./android/bridge
-      - name: Lint
+      - name: Fastlane build
         working-directory: ./android
-        run: bash ./gradlew lint
-      - name: Build Debug APK
-        working-directory: ./android
-        run: bash ./gradlew assembleDebug --stacktrace
+        run: fastlane build
