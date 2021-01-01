@@ -36,9 +36,6 @@ jobs:
           gomobile init
           mkdir ./android/app/libs
           gomobile bind -o ./android/app/libs/bridge.aar -target=android ./android/bridge
-      - name: Fastlane lint
-        working-directory: ./android
-        run: fastlane lint
       - name: Fastlane build
         working-directory: ./android
         run: fastlane build
