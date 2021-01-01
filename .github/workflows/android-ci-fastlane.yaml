@@ -19,6 +19,7 @@ jobs:
         with:
           ruby-version: 2.6.x
       - name: Install Dependencies
+        working-directory: ./android
         run: gem install bundler && bundle install
       - name: Build Go bridge
         run: |
