@@ -21,6 +21,10 @@ jobs:
       - name: Install Dependencies
         working-directory: ./android
         run: gem install bundler && bundle install
+      - name: set up Go
+        uses: actions/setup-go@v2
+        with:
+          go-version: '^1.14'
       - name: Build Go bridge
         run: |
           go get golang.org/x/mobile/cmd/gomobile
