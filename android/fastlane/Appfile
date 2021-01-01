@@ -1,0 +1,2 @@
+package_name("gg.strims.ppspp")
+json_key_file("./api-play-store-key.json")

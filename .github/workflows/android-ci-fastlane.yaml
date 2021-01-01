@@ -1,0 +1,35 @@
+name: Lint and build android app
+on:
+  pull_request:
+    paths:
+      - 'android/**'
+  push:
+    branches:
+      - master
+    paths:
+      - 'android/**'
+
+jobs:
+  main:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: Set up Ruby 2.6
+        uses: actions/setup-ruby@v1
+        with:
+          ruby-version: 2.6.x
+      - name: Install Dependencies
+        run: gem install bundler && bundle install
+      - name: Build Go bridge
+        run: |
+          go get golang.org/x/mobile/cmd/gomobile
+          go mod download
+          gomobile init
+          mkdir ./android/app/libs
+          gomobile bind -o ./android/app/libs/bridge.aar -target=android ./android/bridge
+      - name: Fastlane lint
+        working-directory: ./android
+        run: fastlane lint
+      - name: Fastlane build
+        working-directory: ./android
+        run: fastlane build
