@@ -105,7 +105,7 @@ module.exports = (env, argv) => {
       rules: [scriptModuleRule, styleModuleRule, staticModuleRule],
     },
     resolve: {
-      extensions: [".tsx", ".ts", ".js"],
+      extensions: [".tsx", ".ts", ".js", ".json"],
     },
     node: {
       __dirname: false,

@@ -24,9 +24,8 @@ const hostCertValidDuration = time.Hour
 const (
 	HashTablePort uint16 = iota + 10
 	PeerIndexPort
-	PeerExchangePort
-	DirectoryPort
-	SwarmServicePort
+
+	PeerExchangePort uint16 = 1001
 )
 
 // peer link ports

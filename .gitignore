@@ -8,3 +8,6 @@ schema/sanitized/*.proto
 *.wasm
 **/infra.yaml
 **/*.sqlite
+.gradle/*
+funding/config.json
+android/fastlane/*.json

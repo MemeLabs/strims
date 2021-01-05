@@ -142,7 +142,7 @@ func newIngressStream(
 	}
 
 	mu := dao.NewMutex(logger, store, strconv.AppendUint(nil, s.channel.Id, 10))
-	if err := mu.TryLock(ctx); err != nil {
+	if _, err := mu.TryLock(ctx); err != nil {
 		return nil, fmt.Errorf("acquiring stream lock: %w", err)
 	}
 
@@ -151,6 +151,9 @@ func newIngressStream(
 		s.Close()
 		return nil, fmt.Errorf("opening output stream: %w", err)
 	}
+
+	s.transferID = s.transfer.Add(s.swarm, []byte{})
+	s.transfer.Publish(s.transferID, s.channelNetworkKey(s.channel))
 
 	if err := s.publishDirectoryListing(s.channel); err != nil {
 		s.Close()
@@ -176,8 +179,9 @@ type ingressStream struct {
 	channel   *pb.VideoChannel
 	conn      io.Closer
 
-	swarm *ppspp.Swarm
-	w     ioutil.WriteFlusher
+	swarm      *ppspp.Swarm
+	transferID []byte
+	w          ioutil.WriteFlusher
 }
 
 func (s *ingressStream) Close() {
@@ -185,10 +189,7 @@ func (s *ingressStream) Close() {
 		s.cancelCtx()
 		s.conn.Close()
 
-		if s.swarm != nil {
-			s.swarm.Close()
-		}
-
+		s.transfer.Remove(s.transferID)
 		s.unpublishDirectoryListing()
 	})
 }
@@ -216,8 +217,6 @@ func (s *ingressStream) openWriter(key *pb.Key) (*ppspp.Swarm, ioutil.WriteFlush
 		return nil, nil, err
 	}
 
-	s.transfer.Add(w.Swarm())
-	s.transfer.Publish(w.Swarm().ID(), s.channelNetworkKey(s.channel))
 	return w.Swarm(), cw, nil
 }
 
@@ -267,6 +266,7 @@ func (s *ingressStream) publishDirectoryListing(channel *pb.VideoChannel) error 
 			Media: &pb.DirectoryListingMedia{
 				StartedAt: s.startTime.Unix(),
 				MimeType:  rtmpingress.TranscoderMimeType,
+				SwarmUri:  s.swarm.URI().String(),
 			},
 		},
 	}

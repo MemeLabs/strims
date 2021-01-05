@@ -21,18 +21,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// PeerClient ..
-type PeerClient interface {
-	Bootstrap() *api.BootstrapPeerClient
-	Network() *api.NetworkPeerClient
-	CA() *api.CAPeerClient
-}
-
 // NewPeer ...
 func NewPeer(
 	id uint64,
 	peer *vnic.Peer,
-	client PeerClient,
+	client api.PeerClient,
 	logger *zap.Logger,
 	observers *event.Observers,
 	broker Broker,
@@ -59,7 +52,7 @@ func NewPeer(
 type Peer struct {
 	id           uint64
 	peer         *vnic.Peer
-	client       PeerClient
+	client       api.PeerClient
 	logger       *zap.Logger
 	observers    *event.Observers
 	broker       Broker
@@ -169,7 +162,7 @@ func (p *Peer) closeNetworkWithoutNotifyingPeer(networkKey []byte) error {
 	}
 	node.Network.RemovePeer(p.peer.HostID())
 
-	p.observers.Local.Emit(event.NetworkPeerClose{
+	p.observers.EmitLocal(event.NetworkPeerClose{
 		PeerID:     p.id,
 		NetworkID:  li.(*networkBinding).networkID,
 		NetworkKey: networkKey,
@@ -273,7 +266,7 @@ func (p *Peer) exchangeBindingsAsReceiver(ctx context.Context, keys [][]byte) er
 			return err
 		}
 
-		p.observers.Local.Emit(event.NetworkPeerBindings{PeerID: p.id, NetworkKeys: keys})
+		p.observers.EmitLocal(event.NetworkPeerBindings{PeerID: p.id, NetworkKeys: keys})
 
 		return p.handleNetworkBindings(networkBindings, peerNetworkBindings)
 	}
@@ -293,7 +286,7 @@ func (p *Peer) exchangeBindingsAsSender(ctx context.Context, keys [][]byte) erro
 			return err
 		}
 
-		p.observers.Local.Emit(event.NetworkPeerBindings{PeerID: p.id, NetworkKeys: keys})
+		p.observers.EmitLocal(event.NetworkPeerBindings{PeerID: p.id, NetworkKeys: keys})
 
 		networkBindings, err := p.sendNetworkBindings(ctx, keys)
 		if err != nil {
@@ -409,7 +402,7 @@ func (p *Peer) openNetwork(link *networkBinding) error {
 	}
 	node.Network.AddPeer(p.peer, link.localPort, link.peerPort)
 
-	p.observers.Local.Emit(event.NetworkPeerOpen{
+	p.observers.EmitLocal(event.NetworkPeerOpen{
 		PeerID:     p.id,
 		NetworkID:  link.networkID,
 		NetworkKey: link.networkKey,

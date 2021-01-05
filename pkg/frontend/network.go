@@ -7,7 +7,7 @@ import (
 	"fmt"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
-	"github.com/MemeLabs/go-ppspp/pkg/control/app"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
@@ -33,7 +33,7 @@ func init() {
 type networkService struct {
 	profile *pb.Profile
 	store   *dao.ProfileStore
-	app     *app.Control
+	app     control.AppControl
 }
 
 // Create ...
@@ -165,7 +165,7 @@ func (s *networkService) StopVPN(ctx context.Context, r *pb.StopVPNRequest) (*pb
 }
 
 // GetDirectoryEvents ...
-func (s *networkService) GetDirectoryEvents(ctx context.Context, r *pb.GetDirectoryEventsRequest) (<-chan *pb.DirectoryServerEvent, error) {
+func (s *networkService) GetDirectoryEvents(ctx context.Context, r *pb.GetDirectoryEventsRequest) (<-chan *pb.DirectoryEvent, error) {
 	// ctl, err := s.getNetworkController(ctx)
 	// if err != nil {
 	// 	return nil, err
@@ -177,7 +177,7 @@ func (s *networkService) GetDirectoryEvents(ctx context.Context, r *pb.GetDirect
 	// 	return nil, errors.New("unknown network")
 	// }
 
-	// ch := make(chan *pb.DirectoryServerEvent, 16)
+	// ch := make(chan *pb.DirectoryEvent, 16)
 	// svc.Directory.NotifyEvents(ch)
 
 	// // TDOO: automatically remove closed channels from event.Observables
@@ -189,7 +189,7 @@ func (s *networkService) GetDirectoryEvents(ctx context.Context, r *pb.GetDirect
 
 	// return ch, nil
 
-	return make(chan *pb.DirectoryServerEvent, 16), api.ErrNotImplemented
+	return make(chan *pb.DirectoryEvent, 16), api.ErrNotImplemented
 }
 
 // TestDirectoryPublish ...

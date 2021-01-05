@@ -47,27 +47,31 @@ type Mutex struct {
 }
 
 // Lock ...
-func (m *Mutex) Lock(ctx context.Context) error {
+func (m *Mutex) Lock(ctx context.Context) (context.Context, error) {
 	ch := make(chan error)
+	ctx, cancel := context.WithCancel(ctx)
+	go m.poll(ctx, cancel, ch)
 
-	go m.notifyLock(ctx, ch)
-
-	return <-ch
+	return ctx, <-ch
 }
 
 // TryLock ...
-func (m *Mutex) TryLock(ctx context.Context) error {
-	if err := m.tryLock(time.Now()); err != nil {
-		return err
+func (m *Mutex) TryLock(ctx context.Context) (context.Context, error) {
+	if err := m.try(time.Now()); err != nil {
+		return nil, err
 	}
 
 	m.held = true
-	go m.notifyLock(ctx, nil)
 
-	return nil
+	ctx, cancel := context.WithCancel(ctx)
+	go m.poll(ctx, cancel, nil)
+
+	return ctx, nil
 }
 
-func (m *Mutex) notifyLock(ctx context.Context, ch chan error) {
+func (m *Mutex) poll(ctx context.Context, cancel context.CancelFunc, ch chan error) {
+	defer cancel()
+
 	for {
 		select {
 		case <-ctx.Done():
@@ -81,15 +85,18 @@ func (m *Mutex) notifyLock(ctx context.Context, ch chan error) {
 			return
 
 		case t := <-time.After(m.nextTick):
-			if err := m.tryLock(t); err == nil && !m.held {
+			if err := m.try(t); err == nil && !m.held {
 				m.held = true
 				ch <- nil
+			} else if err != nil && m.held {
+				m.held = false
+				return
 			}
 		}
 	}
 }
 
-func (m *Mutex) tryLock(t time.Time) error {
+func (m *Mutex) try(t time.Time) error {
 	err := m.store.Update(func(tx kv.RWTx) error {
 		now := t.UnixNano()
 

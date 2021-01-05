@@ -38,12 +38,15 @@ func NewClient(logger *zap.Logger, dialer Dialer) (*Client, error) {
 		return nil, err
 	}
 
+	ready := make(chan struct{})
 	go func() {
+		close(ready)
 		if err := transport.Listen(); err != nil && !errors.Is(err, context.Canceled) {
 			logger.Debug("client closed with error", zap.Error(err))
 		}
 		cancel()
 	}()
+	<-ready
 
 	c := &Client{
 		logger:    logger,

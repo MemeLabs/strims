@@ -8,6 +8,12 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/byterope"
 )
 
+// errors ...
+var (
+	ErrBufferUnderrun = errors.New("buffer underrun")
+	ErrClosed         = errors.New("cannot read from closed buffer")
+)
+
 // NewBuffer ...
 func NewBuffer(size, chunkSize int) (c *Buffer, err error) {
 	if size&(size-1) != 0 {
@@ -24,7 +30,7 @@ func NewBuffer(size, chunkSize int) (c *Buffer, err error) {
 		next:      binmap.None,
 		prev:      binmap.None,
 		ready:     make(chan struct{}),
-		readable:  make(chan struct{}, 1),
+		readable:  make(chan error, 1),
 	}, nil
 }
 
@@ -39,7 +45,7 @@ type Buffer struct {
 	lock      sync.Mutex
 	readyOnce sync.Once
 	ready     chan struct{}
-	readable  chan struct{}
+	readable  chan error
 	next      binmap.Bin
 	prev      binmap.Bin
 	off       uint64
@@ -56,6 +62,11 @@ func (s *Buffer) Consume(c Chunk) bool {
 
 	s.set(c.Bin, c.Data)
 	return true
+}
+
+// Close ...
+func (s *Buffer) Close() {
+	s.readable <- ErrClosed
 }
 
 // Set ...
@@ -75,7 +86,10 @@ func (s *Buffer) set(b binmap.Bin, d []byte) {
 
 	s.bins.Set(b)
 	if !b.Contains(s.next) {
-		// TODO: if s.next < s.tail() s.readable <- ErrDiscontinuity
+		if s.next < s.tail() {
+			// TODO: move next past the discontinuity
+			s.readable <- ErrBufferUnderrun
+		}
 		return
 	}
 
@@ -86,7 +100,7 @@ func (s *Buffer) set(b binmap.Bin, d []byte) {
 	s.next = next
 
 	select {
-	case s.readable <- struct{}{}:
+	case s.readable <- nil:
 	default:
 	}
 }
@@ -168,7 +182,11 @@ func (s *Buffer) Read(p []byte) (int, error) {
 	if s.next == s.prev {
 		// HAX: sync.Cond is broken https://github.com/golang/go/issues/21165
 		s.lock.Unlock()
-		<-s.readable
+
+		if err := <-s.readable; err != nil {
+			return 0, err
+		}
+
 		s.lock.Lock()
 	}
 	defer s.lock.Unlock()

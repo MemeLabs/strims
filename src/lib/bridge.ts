@@ -610,6 +610,7 @@ export class WorkerBridge {
           {
             type: EVENT_TYPE_DATA,
             data: buffer,
+            timestamp: Date.now(),
           },
           [buffer]
         ),

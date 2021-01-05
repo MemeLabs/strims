@@ -15,5 +15,5 @@ func Store(t int64) {
 
 // Load ...
 func Load() time.Time {
-	return time.Unix(timestamp/1000, (timestamp%1000)*1000000).UTC()
+	return time.Unix(timestamp/1000, (timestamp%1000)*1000000)
 }

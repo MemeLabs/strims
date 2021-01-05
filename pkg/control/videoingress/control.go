@@ -27,8 +27,7 @@ import (
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile, observers *event.Observers, transfer *transfer.Control, dialer *dialer.Control, network *network.Control) *Control {
 	events := make(chan interface{}, 128)
-	observers.Global.Notify(events)
-	observers.Local.Notify(events)
+	observers.Notify(events)
 
 	return &Control{
 		logger:         logger,
@@ -88,7 +87,7 @@ func (c *Control) handleNetworkStart(ctx context.Context, network *pb.Network) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	networkKey := dao.GetRootCert(network.Certificate).Key
+	networkKey := dao.NetworkKey(network)
 	if c.ingressConfig.Enabled && sortutil.SearchBytes(c.ingressConfig.ServiceNetworkKeys, networkKey) != -1 {
 		c.tryStartIngressShareServer(networkKey)
 	}
@@ -98,7 +97,7 @@ func (c *Control) handleNetworkStop(network *pb.Network) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	c.tryStopIngressShareServer(dao.GetRootCert(network.Certificate).Key)
+	c.tryStopIngressShareServer(dao.NetworkKey(network))
 }
 
 func (c *Control) handleChannelUpdate(channel *pb.VideoChannel) {

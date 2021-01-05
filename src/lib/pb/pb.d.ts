@@ -4267,6 +4267,9 @@ export interface IDirectoryListingMedia {
 
     /** DirectoryListingMedia bitrate */
     bitrate?: (number|null);
+
+    /** DirectoryListingMedia swarmUri */
+    swarmUri?: (string|null);
 }
 
 /** Represents a DirectoryListingMedia. */
@@ -4286,6 +4289,9 @@ export class DirectoryListingMedia implements IDirectoryListingMedia {
 
     /** DirectoryListingMedia bitrate. */
     public bitrate: number;
+
+    /** DirectoryListingMedia swarmUri. */
+    public swarmUri: string;
 
     /**
      * Creates a new DirectoryListingMedia instance using the specified properties.
@@ -4577,118 +4583,130 @@ export class DirectoryListing implements IDirectoryListing {
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a DirectoryServerEvent. */
-export interface IDirectoryServerEvent {
+/** Properties of a DirectoryEvent. */
+export interface IDirectoryEvent {
 
-    /** DirectoryServerEvent publish */
-    publish?: (DirectoryServerEvent.IPublish|null);
+    /** DirectoryEvent publish */
+    publish?: (DirectoryEvent.IPublish|null);
 
-    /** DirectoryServerEvent unpublish */
-    unpublish?: (DirectoryServerEvent.IUnpublish|null);
+    /** DirectoryEvent unpublish */
+    unpublish?: (DirectoryEvent.IUnpublish|null);
 
-    /** DirectoryServerEvent viewerCountChange */
-    viewerCountChange?: (DirectoryServerEvent.IViewerCountChange|null);
+    /** DirectoryEvent viewerCountChange */
+    viewerCountChange?: (DirectoryEvent.IViewerCountChange|null);
 
-    /** DirectoryServerEvent viewerStateChange */
-    viewerStateChange?: (DirectoryServerEvent.IViewerStateChange|null);
+    /** DirectoryEvent viewerStateChange */
+    viewerStateChange?: (DirectoryEvent.IViewerStateChange|null);
+
+    /** DirectoryEvent ping */
+    ping?: (DirectoryEvent.IPing|null);
+
+    /** DirectoryEvent padding */
+    padding?: (DirectoryEvent.IPadding|null);
 }
 
-/** Represents a DirectoryServerEvent. */
-export class DirectoryServerEvent implements IDirectoryServerEvent {
+/** Represents a DirectoryEvent. */
+export class DirectoryEvent implements IDirectoryEvent {
 
     /**
-     * Constructs a new DirectoryServerEvent.
+     * Constructs a new DirectoryEvent.
      * @param [properties] Properties to set
      */
-    constructor(properties?: IDirectoryServerEvent);
+    constructor(properties?: IDirectoryEvent);
 
-    /** DirectoryServerEvent publish. */
-    public publish?: (DirectoryServerEvent.IPublish|null);
+    /** DirectoryEvent publish. */
+    public publish?: (DirectoryEvent.IPublish|null);
 
-    /** DirectoryServerEvent unpublish. */
-    public unpublish?: (DirectoryServerEvent.IUnpublish|null);
+    /** DirectoryEvent unpublish. */
+    public unpublish?: (DirectoryEvent.IUnpublish|null);
 
-    /** DirectoryServerEvent viewerCountChange. */
-    public viewerCountChange?: (DirectoryServerEvent.IViewerCountChange|null);
+    /** DirectoryEvent viewerCountChange. */
+    public viewerCountChange?: (DirectoryEvent.IViewerCountChange|null);
 
-    /** DirectoryServerEvent viewerStateChange. */
-    public viewerStateChange?: (DirectoryServerEvent.IViewerStateChange|null);
+    /** DirectoryEvent viewerStateChange. */
+    public viewerStateChange?: (DirectoryEvent.IViewerStateChange|null);
 
-    /** DirectoryServerEvent body. */
-    public body?: ("publish"|"unpublish"|"viewerCountChange"|"viewerStateChange");
+    /** DirectoryEvent ping. */
+    public ping?: (DirectoryEvent.IPing|null);
+
+    /** DirectoryEvent padding. */
+    public padding?: (DirectoryEvent.IPadding|null);
+
+    /** DirectoryEvent body. */
+    public body?: ("publish"|"unpublish"|"viewerCountChange"|"viewerStateChange"|"ping"|"padding");
 
     /**
-     * Creates a new DirectoryServerEvent instance using the specified properties.
+     * Creates a new DirectoryEvent instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns DirectoryServerEvent instance
+     * @returns DirectoryEvent instance
      */
-    public static create(properties?: IDirectoryServerEvent): DirectoryServerEvent;
+    public static create(properties?: IDirectoryEvent): DirectoryEvent;
 
     /**
-     * Encodes the specified DirectoryServerEvent message. Does not implicitly {@link DirectoryServerEvent.verify|verify} messages.
-     * @param message DirectoryServerEvent message or plain object to encode
+     * Encodes the specified DirectoryEvent message. Does not implicitly {@link DirectoryEvent.verify|verify} messages.
+     * @param message DirectoryEvent message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: IDirectoryServerEvent, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: IDirectoryEvent, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified DirectoryServerEvent message, length delimited. Does not implicitly {@link DirectoryServerEvent.verify|verify} messages.
-     * @param message DirectoryServerEvent message or plain object to encode
+     * Encodes the specified DirectoryEvent message, length delimited. Does not implicitly {@link DirectoryEvent.verify|verify} messages.
+     * @param message DirectoryEvent message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: IDirectoryServerEvent, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: IDirectoryEvent, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a DirectoryServerEvent message from the specified reader or buffer.
+     * Decodes a DirectoryEvent message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns DirectoryServerEvent
+     * @returns DirectoryEvent
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryServerEvent;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryEvent;
 
     /**
-     * Decodes a DirectoryServerEvent message from the specified reader or buffer, length delimited.
+     * Decodes a DirectoryEvent message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns DirectoryServerEvent
+     * @returns DirectoryEvent
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryServerEvent;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryEvent;
 
     /**
-     * Verifies a DirectoryServerEvent message.
+     * Verifies a DirectoryEvent message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a DirectoryServerEvent message from a plain object. Also converts values to their respective internal types.
+     * Creates a DirectoryEvent message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns DirectoryServerEvent
+     * @returns DirectoryEvent
      */
-    public static fromObject(object: { [k: string]: any }): DirectoryServerEvent;
+    public static fromObject(object: { [k: string]: any }): DirectoryEvent;
 
     /**
-     * Creates a plain object from a DirectoryServerEvent message. Also converts values to other types if specified.
-     * @param message DirectoryServerEvent
+     * Creates a plain object from a DirectoryEvent message. Also converts values to other types if specified.
+     * @param message DirectoryEvent
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: DirectoryServerEvent, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: DirectoryEvent, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this DirectoryServerEvent to JSON.
+     * Converts this DirectoryEvent to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-export namespace DirectoryServerEvent {
+export namespace DirectoryEvent {
 
     /** Properties of a Publish. */
     interface IPublish {
@@ -4704,7 +4722,7 @@ export namespace DirectoryServerEvent {
          * Constructs a new Publish.
          * @param [properties] Properties to set
          */
-        constructor(properties?: DirectoryServerEvent.IPublish);
+        constructor(properties?: DirectoryEvent.IPublish);
 
         /** Publish listing. */
         public listing?: (IDirectoryListing|null);
@@ -4714,23 +4732,23 @@ export namespace DirectoryServerEvent {
          * @param [properties] Properties to set
          * @returns Publish instance
          */
-        public static create(properties?: DirectoryServerEvent.IPublish): DirectoryServerEvent.Publish;
+        public static create(properties?: DirectoryEvent.IPublish): DirectoryEvent.Publish;
 
         /**
-         * Encodes the specified Publish message. Does not implicitly {@link DirectoryServerEvent.Publish.verify|verify} messages.
+         * Encodes the specified Publish message. Does not implicitly {@link DirectoryEvent.Publish.verify|verify} messages.
          * @param message Publish message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encode(message: DirectoryServerEvent.IPublish, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encode(message: DirectoryEvent.IPublish, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Encodes the specified Publish message, length delimited. Does not implicitly {@link DirectoryServerEvent.Publish.verify|verify} messages.
+         * Encodes the specified Publish message, length delimited. Does not implicitly {@link DirectoryEvent.Publish.verify|verify} messages.
          * @param message Publish message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encodeDelimited(message: DirectoryServerEvent.IPublish, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encodeDelimited(message: DirectoryEvent.IPublish, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
          * Decodes a Publish message from the specified reader or buffer.
@@ -4740,7 +4758,7 @@ export namespace DirectoryServerEvent {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryServerEvent.Publish;
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryEvent.Publish;
 
         /**
          * Decodes a Publish message from the specified reader or buffer, length delimited.
@@ -4749,7 +4767,7 @@ export namespace DirectoryServerEvent {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryServerEvent.Publish;
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryEvent.Publish;
 
         /**
          * Verifies a Publish message.
@@ -4763,7 +4781,7 @@ export namespace DirectoryServerEvent {
          * @param object Plain object
          * @returns Publish
          */
-        public static fromObject(object: { [k: string]: any }): DirectoryServerEvent.Publish;
+        public static fromObject(object: { [k: string]: any }): DirectoryEvent.Publish;
 
         /**
          * Creates a plain object from a Publish message. Also converts values to other types if specified.
@@ -4771,7 +4789,7 @@ export namespace DirectoryServerEvent {
          * @param [options] Conversion options
          * @returns Plain object
          */
-        public static toObject(message: DirectoryServerEvent.Publish, options?: $protobuf.IConversionOptions): { [k: string]: any };
+        public static toObject(message: DirectoryEvent.Publish, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
         /**
          * Converts this Publish to JSON.
@@ -4794,7 +4812,7 @@ export namespace DirectoryServerEvent {
          * Constructs a new Unpublish.
          * @param [properties] Properties to set
          */
-        constructor(properties?: DirectoryServerEvent.IUnpublish);
+        constructor(properties?: DirectoryEvent.IUnpublish);
 
         /** Unpublish key. */
         public key: Uint8Array;
@@ -4804,23 +4822,23 @@ export namespace DirectoryServerEvent {
          * @param [properties] Properties to set
          * @returns Unpublish instance
          */
-        public static create(properties?: DirectoryServerEvent.IUnpublish): DirectoryServerEvent.Unpublish;
+        public static create(properties?: DirectoryEvent.IUnpublish): DirectoryEvent.Unpublish;
 
         /**
-         * Encodes the specified Unpublish message. Does not implicitly {@link DirectoryServerEvent.Unpublish.verify|verify} messages.
+         * Encodes the specified Unpublish message. Does not implicitly {@link DirectoryEvent.Unpublish.verify|verify} messages.
          * @param message Unpublish message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encode(message: DirectoryServerEvent.IUnpublish, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encode(message: DirectoryEvent.IUnpublish, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Encodes the specified Unpublish message, length delimited. Does not implicitly {@link DirectoryServerEvent.Unpublish.verify|verify} messages.
+         * Encodes the specified Unpublish message, length delimited. Does not implicitly {@link DirectoryEvent.Unpublish.verify|verify} messages.
          * @param message Unpublish message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encodeDelimited(message: DirectoryServerEvent.IUnpublish, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encodeDelimited(message: DirectoryEvent.IUnpublish, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
          * Decodes an Unpublish message from the specified reader or buffer.
@@ -4830,7 +4848,7 @@ export namespace DirectoryServerEvent {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryServerEvent.Unpublish;
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryEvent.Unpublish;
 
         /**
          * Decodes an Unpublish message from the specified reader or buffer, length delimited.
@@ -4839,7 +4857,7 @@ export namespace DirectoryServerEvent {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryServerEvent.Unpublish;
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryEvent.Unpublish;
 
         /**
          * Verifies an Unpublish message.
@@ -4853,7 +4871,7 @@ export namespace DirectoryServerEvent {
          * @param object Plain object
          * @returns Unpublish
          */
-        public static fromObject(object: { [k: string]: any }): DirectoryServerEvent.Unpublish;
+        public static fromObject(object: { [k: string]: any }): DirectoryEvent.Unpublish;
 
         /**
          * Creates a plain object from an Unpublish message. Also converts values to other types if specified.
@@ -4861,7 +4879,7 @@ export namespace DirectoryServerEvent {
          * @param [options] Conversion options
          * @returns Plain object
          */
-        public static toObject(message: DirectoryServerEvent.Unpublish, options?: $protobuf.IConversionOptions): { [k: string]: any };
+        public static toObject(message: DirectoryEvent.Unpublish, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
         /**
          * Converts this Unpublish to JSON.
@@ -4887,7 +4905,7 @@ export namespace DirectoryServerEvent {
          * Constructs a new ViewerCountChange.
          * @param [properties] Properties to set
          */
-        constructor(properties?: DirectoryServerEvent.IViewerCountChange);
+        constructor(properties?: DirectoryEvent.IViewerCountChange);
 
         /** ViewerCountChange key. */
         public key: Uint8Array;
@@ -4900,23 +4918,23 @@ export namespace DirectoryServerEvent {
          * @param [properties] Properties to set
          * @returns ViewerCountChange instance
          */
-        public static create(properties?: DirectoryServerEvent.IViewerCountChange): DirectoryServerEvent.ViewerCountChange;
+        public static create(properties?: DirectoryEvent.IViewerCountChange): DirectoryEvent.ViewerCountChange;
 
         /**
-         * Encodes the specified ViewerCountChange message. Does not implicitly {@link DirectoryServerEvent.ViewerCountChange.verify|verify} messages.
+         * Encodes the specified ViewerCountChange message. Does not implicitly {@link DirectoryEvent.ViewerCountChange.verify|verify} messages.
          * @param message ViewerCountChange message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encode(message: DirectoryServerEvent.IViewerCountChange, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encode(message: DirectoryEvent.IViewerCountChange, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Encodes the specified ViewerCountChange message, length delimited. Does not implicitly {@link DirectoryServerEvent.ViewerCountChange.verify|verify} messages.
+         * Encodes the specified ViewerCountChange message, length delimited. Does not implicitly {@link DirectoryEvent.ViewerCountChange.verify|verify} messages.
          * @param message ViewerCountChange message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encodeDelimited(message: DirectoryServerEvent.IViewerCountChange, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encodeDelimited(message: DirectoryEvent.IViewerCountChange, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
          * Decodes a ViewerCountChange message from the specified reader or buffer.
@@ -4926,7 +4944,7 @@ export namespace DirectoryServerEvent {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryServerEvent.ViewerCountChange;
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryEvent.ViewerCountChange;
 
         /**
          * Decodes a ViewerCountChange message from the specified reader or buffer, length delimited.
@@ -4935,7 +4953,7 @@ export namespace DirectoryServerEvent {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryServerEvent.ViewerCountChange;
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryEvent.ViewerCountChange;
 
         /**
          * Verifies a ViewerCountChange message.
@@ -4949,7 +4967,7 @@ export namespace DirectoryServerEvent {
          * @param object Plain object
          * @returns ViewerCountChange
          */
-        public static fromObject(object: { [k: string]: any }): DirectoryServerEvent.ViewerCountChange;
+        public static fromObject(object: { [k: string]: any }): DirectoryEvent.ViewerCountChange;
 
         /**
          * Creates a plain object from a ViewerCountChange message. Also converts values to other types if specified.
@@ -4957,7 +4975,7 @@ export namespace DirectoryServerEvent {
          * @param [options] Conversion options
          * @returns Plain object
          */
-        public static toObject(message: DirectoryServerEvent.ViewerCountChange, options?: $protobuf.IConversionOptions): { [k: string]: any };
+        public static toObject(message: DirectoryEvent.ViewerCountChange, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
         /**
          * Converts this ViewerCountChange to JSON.
@@ -4986,7 +5004,7 @@ export namespace DirectoryServerEvent {
          * Constructs a new ViewerStateChange.
          * @param [properties] Properties to set
          */
-        constructor(properties?: DirectoryServerEvent.IViewerStateChange);
+        constructor(properties?: DirectoryEvent.IViewerStateChange);
 
         /** ViewerStateChange subject. */
         public subject: string;
@@ -5002,23 +5020,23 @@ export namespace DirectoryServerEvent {
          * @param [properties] Properties to set
          * @returns ViewerStateChange instance
          */
-        public static create(properties?: DirectoryServerEvent.IViewerStateChange): DirectoryServerEvent.ViewerStateChange;
+        public static create(properties?: DirectoryEvent.IViewerStateChange): DirectoryEvent.ViewerStateChange;
 
         /**
-         * Encodes the specified ViewerStateChange message. Does not implicitly {@link DirectoryServerEvent.ViewerStateChange.verify|verify} messages.
+         * Encodes the specified ViewerStateChange message. Does not implicitly {@link DirectoryEvent.ViewerStateChange.verify|verify} messages.
          * @param message ViewerStateChange message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encode(message: DirectoryServerEvent.IViewerStateChange, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encode(message: DirectoryEvent.IViewerStateChange, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
-         * Encodes the specified ViewerStateChange message, length delimited. Does not implicitly {@link DirectoryServerEvent.ViewerStateChange.verify|verify} messages.
+         * Encodes the specified ViewerStateChange message, length delimited. Does not implicitly {@link DirectoryEvent.ViewerStateChange.verify|verify} messages.
          * @param message ViewerStateChange message or plain object to encode
          * @param [writer] Writer to encode to
          * @returns Writer
          */
-        public static encodeDelimited(message: DirectoryServerEvent.IViewerStateChange, writer?: $protobuf.Writer): $protobuf.Writer;
+        public static encodeDelimited(message: DirectoryEvent.IViewerStateChange, writer?: $protobuf.Writer): $protobuf.Writer;
 
         /**
          * Decodes a ViewerStateChange message from the specified reader or buffer.
@@ -5028,7 +5046,7 @@ export namespace DirectoryServerEvent {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryServerEvent.ViewerStateChange;
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryEvent.ViewerStateChange;
 
         /**
          * Decodes a ViewerStateChange message from the specified reader or buffer, length delimited.
@@ -5037,7 +5055,7 @@ export namespace DirectoryServerEvent {
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
-        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryServerEvent.ViewerStateChange;
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryEvent.ViewerStateChange;
 
         /**
          * Verifies a ViewerStateChange message.
@@ -5051,7 +5069,7 @@ export namespace DirectoryServerEvent {
          * @param object Plain object
          * @returns ViewerStateChange
          */
-        public static fromObject(object: { [k: string]: any }): DirectoryServerEvent.ViewerStateChange;
+        public static fromObject(object: { [k: string]: any }): DirectoryEvent.ViewerStateChange;
 
         /**
          * Creates a plain object from a ViewerStateChange message. Also converts values to other types if specified.
@@ -5059,10 +5077,190 @@ export namespace DirectoryServerEvent {
          * @param [options] Conversion options
          * @returns Plain object
          */
-        public static toObject(message: DirectoryServerEvent.ViewerStateChange, options?: $protobuf.IConversionOptions): { [k: string]: any };
+        public static toObject(message: DirectoryEvent.ViewerStateChange, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
         /**
          * Converts this ViewerStateChange to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a Ping. */
+    interface IPing {
+
+        /** Ping time */
+        time?: (number|null);
+    }
+
+    /** Represents a Ping. */
+    class Ping implements IPing {
+
+        /**
+         * Constructs a new Ping.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: DirectoryEvent.IPing);
+
+        /** Ping time. */
+        public time: number;
+
+        /**
+         * Creates a new Ping instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Ping instance
+         */
+        public static create(properties?: DirectoryEvent.IPing): DirectoryEvent.Ping;
+
+        /**
+         * Encodes the specified Ping message. Does not implicitly {@link DirectoryEvent.Ping.verify|verify} messages.
+         * @param message Ping message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: DirectoryEvent.IPing, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Ping message, length delimited. Does not implicitly {@link DirectoryEvent.Ping.verify|verify} messages.
+         * @param message Ping message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: DirectoryEvent.IPing, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a Ping message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Ping
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryEvent.Ping;
+
+        /**
+         * Decodes a Ping message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Ping
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryEvent.Ping;
+
+        /**
+         * Verifies a Ping message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a Ping message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Ping
+         */
+        public static fromObject(object: { [k: string]: any }): DirectoryEvent.Ping;
+
+        /**
+         * Creates a plain object from a Ping message. Also converts values to other types if specified.
+         * @param message Ping
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: DirectoryEvent.Ping, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Ping to JSON.
+         * @returns JSON object
+         */
+        public toJSON(): { [k: string]: any };
+    }
+
+    /** Properties of a Padding. */
+    interface IPadding {
+
+        /** Padding data */
+        data?: (Uint8Array|null);
+    }
+
+    /** Represents a Padding. */
+    class Padding implements IPadding {
+
+        /**
+         * Constructs a new Padding.
+         * @param [properties] Properties to set
+         */
+        constructor(properties?: DirectoryEvent.IPadding);
+
+        /** Padding data. */
+        public data: Uint8Array;
+
+        /**
+         * Creates a new Padding instance using the specified properties.
+         * @param [properties] Properties to set
+         * @returns Padding instance
+         */
+        public static create(properties?: DirectoryEvent.IPadding): DirectoryEvent.Padding;
+
+        /**
+         * Encodes the specified Padding message. Does not implicitly {@link DirectoryEvent.Padding.verify|verify} messages.
+         * @param message Padding message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encode(message: DirectoryEvent.IPadding, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Encodes the specified Padding message, length delimited. Does not implicitly {@link DirectoryEvent.Padding.verify|verify} messages.
+         * @param message Padding message or plain object to encode
+         * @param [writer] Writer to encode to
+         * @returns Writer
+         */
+        public static encodeDelimited(message: DirectoryEvent.IPadding, writer?: $protobuf.Writer): $protobuf.Writer;
+
+        /**
+         * Decodes a Padding message from the specified reader or buffer.
+         * @param reader Reader or buffer to decode from
+         * @param [length] Message length if known beforehand
+         * @returns Padding
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryEvent.Padding;
+
+        /**
+         * Decodes a Padding message from the specified reader or buffer, length delimited.
+         * @param reader Reader or buffer to decode from
+         * @returns Padding
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryEvent.Padding;
+
+        /**
+         * Verifies a Padding message.
+         * @param message Plain object to verify
+         * @returns `null` if valid, otherwise the reason why it is not
+         */
+        public static verify(message: { [k: string]: any }): (string|null);
+
+        /**
+         * Creates a Padding message from a plain object. Also converts values to their respective internal types.
+         * @param object Plain object
+         * @returns Padding
+         */
+        public static fromObject(object: { [k: string]: any }): DirectoryEvent.Padding;
+
+        /**
+         * Creates a plain object from a Padding message. Also converts values to other types if specified.
+         * @param message Padding
+         * @param [options] Conversion options
+         * @returns Plain object
+         */
+        public static toObject(message: DirectoryEvent.Padding, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+        /**
+         * Converts this Padding to JSON.
          * @returns JSON object
          */
         public toJSON(): { [k: string]: any };
@@ -5933,6 +6131,678 @@ export class DirectoryPingResponse implements IDirectoryPingResponse {
     public toJSON(): { [k: string]: any };
 }
 
+/** Properties of a DirectoryFrontendOpenRequest. */
+export interface IDirectoryFrontendOpenRequest {
+
+    /** DirectoryFrontendOpenRequest networkKey */
+    networkKey?: (Uint8Array|null);
+}
+
+/** Represents a DirectoryFrontendOpenRequest. */
+export class DirectoryFrontendOpenRequest implements IDirectoryFrontendOpenRequest {
+
+    /**
+     * Constructs a new DirectoryFrontendOpenRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryFrontendOpenRequest);
+
+    /** DirectoryFrontendOpenRequest networkKey. */
+    public networkKey: Uint8Array;
+
+    /**
+     * Creates a new DirectoryFrontendOpenRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryFrontendOpenRequest instance
+     */
+    public static create(properties?: IDirectoryFrontendOpenRequest): DirectoryFrontendOpenRequest;
+
+    /**
+     * Encodes the specified DirectoryFrontendOpenRequest message. Does not implicitly {@link DirectoryFrontendOpenRequest.verify|verify} messages.
+     * @param message DirectoryFrontendOpenRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryFrontendOpenRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryFrontendOpenRequest message, length delimited. Does not implicitly {@link DirectoryFrontendOpenRequest.verify|verify} messages.
+     * @param message DirectoryFrontendOpenRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryFrontendOpenRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryFrontendOpenRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryFrontendOpenRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryFrontendOpenRequest;
+
+    /**
+     * Decodes a DirectoryFrontendOpenRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryFrontendOpenRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryFrontendOpenRequest;
+
+    /**
+     * Verifies a DirectoryFrontendOpenRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryFrontendOpenRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryFrontendOpenRequest
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryFrontendOpenRequest;
+
+    /**
+     * Creates a plain object from a DirectoryFrontendOpenRequest message. Also converts values to other types if specified.
+     * @param message DirectoryFrontendOpenRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryFrontendOpenRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryFrontendOpenRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryFrontendOpenResponse. */
+export interface IDirectoryFrontendOpenResponse {
+
+    /** DirectoryFrontendOpenResponse event */
+    event?: (IDirectoryEvent|null);
+}
+
+/** Represents a DirectoryFrontendOpenResponse. */
+export class DirectoryFrontendOpenResponse implements IDirectoryFrontendOpenResponse {
+
+    /**
+     * Constructs a new DirectoryFrontendOpenResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryFrontendOpenResponse);
+
+    /** DirectoryFrontendOpenResponse event. */
+    public event?: (IDirectoryEvent|null);
+
+    /**
+     * Creates a new DirectoryFrontendOpenResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryFrontendOpenResponse instance
+     */
+    public static create(properties?: IDirectoryFrontendOpenResponse): DirectoryFrontendOpenResponse;
+
+    /**
+     * Encodes the specified DirectoryFrontendOpenResponse message. Does not implicitly {@link DirectoryFrontendOpenResponse.verify|verify} messages.
+     * @param message DirectoryFrontendOpenResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryFrontendOpenResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryFrontendOpenResponse message, length delimited. Does not implicitly {@link DirectoryFrontendOpenResponse.verify|verify} messages.
+     * @param message DirectoryFrontendOpenResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryFrontendOpenResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryFrontendOpenResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryFrontendOpenResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryFrontendOpenResponse;
+
+    /**
+     * Decodes a DirectoryFrontendOpenResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryFrontendOpenResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryFrontendOpenResponse;
+
+    /**
+     * Verifies a DirectoryFrontendOpenResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryFrontendOpenResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryFrontendOpenResponse
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryFrontendOpenResponse;
+
+    /**
+     * Creates a plain object from a DirectoryFrontendOpenResponse message. Also converts values to other types if specified.
+     * @param message DirectoryFrontendOpenResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryFrontendOpenResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryFrontendOpenResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryFrontendTestRequest. */
+export interface IDirectoryFrontendTestRequest {
+
+    /** DirectoryFrontendTestRequest networkKey */
+    networkKey?: (Uint8Array|null);
+}
+
+/** Represents a DirectoryFrontendTestRequest. */
+export class DirectoryFrontendTestRequest implements IDirectoryFrontendTestRequest {
+
+    /**
+     * Constructs a new DirectoryFrontendTestRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryFrontendTestRequest);
+
+    /** DirectoryFrontendTestRequest networkKey. */
+    public networkKey: Uint8Array;
+
+    /**
+     * Creates a new DirectoryFrontendTestRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryFrontendTestRequest instance
+     */
+    public static create(properties?: IDirectoryFrontendTestRequest): DirectoryFrontendTestRequest;
+
+    /**
+     * Encodes the specified DirectoryFrontendTestRequest message. Does not implicitly {@link DirectoryFrontendTestRequest.verify|verify} messages.
+     * @param message DirectoryFrontendTestRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryFrontendTestRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryFrontendTestRequest message, length delimited. Does not implicitly {@link DirectoryFrontendTestRequest.verify|verify} messages.
+     * @param message DirectoryFrontendTestRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryFrontendTestRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryFrontendTestRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryFrontendTestRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryFrontendTestRequest;
+
+    /**
+     * Decodes a DirectoryFrontendTestRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryFrontendTestRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryFrontendTestRequest;
+
+    /**
+     * Verifies a DirectoryFrontendTestRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryFrontendTestRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryFrontendTestRequest
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryFrontendTestRequest;
+
+    /**
+     * Creates a plain object from a DirectoryFrontendTestRequest message. Also converts values to other types if specified.
+     * @param message DirectoryFrontendTestRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryFrontendTestRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryFrontendTestRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a DirectoryFrontendTestResponse. */
+export interface IDirectoryFrontendTestResponse {
+}
+
+/** Represents a DirectoryFrontendTestResponse. */
+export class DirectoryFrontendTestResponse implements IDirectoryFrontendTestResponse {
+
+    /**
+     * Constructs a new DirectoryFrontendTestResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IDirectoryFrontendTestResponse);
+
+    /**
+     * Creates a new DirectoryFrontendTestResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns DirectoryFrontendTestResponse instance
+     */
+    public static create(properties?: IDirectoryFrontendTestResponse): DirectoryFrontendTestResponse;
+
+    /**
+     * Encodes the specified DirectoryFrontendTestResponse message. Does not implicitly {@link DirectoryFrontendTestResponse.verify|verify} messages.
+     * @param message DirectoryFrontendTestResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IDirectoryFrontendTestResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified DirectoryFrontendTestResponse message, length delimited. Does not implicitly {@link DirectoryFrontendTestResponse.verify|verify} messages.
+     * @param message DirectoryFrontendTestResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IDirectoryFrontendTestResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a DirectoryFrontendTestResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns DirectoryFrontendTestResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): DirectoryFrontendTestResponse;
+
+    /**
+     * Decodes a DirectoryFrontendTestResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns DirectoryFrontendTestResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): DirectoryFrontendTestResponse;
+
+    /**
+     * Verifies a DirectoryFrontendTestResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a DirectoryFrontendTestResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns DirectoryFrontendTestResponse
+     */
+    public static fromObject(object: { [k: string]: any }): DirectoryFrontendTestResponse;
+
+    /**
+     * Creates a plain object from a DirectoryFrontendTestResponse message. Also converts values to other types if specified.
+     * @param message DirectoryFrontendTestResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: DirectoryFrontendTestResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this DirectoryFrontendTestResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a FundingBalance. */
+export interface IFundingBalance {
+
+    /** FundingBalance total */
+    total?: (number|null);
+
+    /** FundingBalance asOf */
+    asOf?: (number|null);
+}
+
+/** Represents a FundingBalance. */
+export class FundingBalance implements IFundingBalance {
+
+    /**
+     * Constructs a new FundingBalance.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IFundingBalance);
+
+    /** FundingBalance total. */
+    public total: number;
+
+    /** FundingBalance asOf. */
+    public asOf: number;
+
+    /**
+     * Creates a new FundingBalance instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns FundingBalance instance
+     */
+    public static create(properties?: IFundingBalance): FundingBalance;
+
+    /**
+     * Encodes the specified FundingBalance message. Does not implicitly {@link FundingBalance.verify|verify} messages.
+     * @param message FundingBalance message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IFundingBalance, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified FundingBalance message, length delimited. Does not implicitly {@link FundingBalance.verify|verify} messages.
+     * @param message FundingBalance message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IFundingBalance, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a FundingBalance message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns FundingBalance
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): FundingBalance;
+
+    /**
+     * Decodes a FundingBalance message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns FundingBalance
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): FundingBalance;
+
+    /**
+     * Verifies a FundingBalance message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a FundingBalance message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns FundingBalance
+     */
+    public static fromObject(object: { [k: string]: any }): FundingBalance;
+
+    /**
+     * Creates a plain object from a FundingBalance message. Also converts values to other types if specified.
+     * @param message FundingBalance
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: FundingBalance, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this FundingBalance to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a FundingTransaction. */
+export interface IFundingTransaction {
+
+    /** FundingTransaction subject */
+    subject?: (string|null);
+
+    /** FundingTransaction note */
+    note?: (string|null);
+
+    /** FundingTransaction date */
+    date?: (number|null);
+
+    /** FundingTransaction amount */
+    amount?: (number|null);
+
+    /** FundingTransaction ending */
+    ending?: (number|null);
+
+    /** FundingTransaction available */
+    available?: (number|null);
+}
+
+/** Represents a FundingTransaction. */
+export class FundingTransaction implements IFundingTransaction {
+
+    /**
+     * Constructs a new FundingTransaction.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IFundingTransaction);
+
+    /** FundingTransaction subject. */
+    public subject: string;
+
+    /** FundingTransaction note. */
+    public note: string;
+
+    /** FundingTransaction date. */
+    public date: number;
+
+    /** FundingTransaction amount. */
+    public amount: number;
+
+    /** FundingTransaction ending. */
+    public ending: number;
+
+    /** FundingTransaction available. */
+    public available: number;
+
+    /**
+     * Creates a new FundingTransaction instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns FundingTransaction instance
+     */
+    public static create(properties?: IFundingTransaction): FundingTransaction;
+
+    /**
+     * Encodes the specified FundingTransaction message. Does not implicitly {@link FundingTransaction.verify|verify} messages.
+     * @param message FundingTransaction message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IFundingTransaction, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified FundingTransaction message, length delimited. Does not implicitly {@link FundingTransaction.verify|verify} messages.
+     * @param message FundingTransaction message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IFundingTransaction, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a FundingTransaction message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns FundingTransaction
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): FundingTransaction;
+
+    /**
+     * Decodes a FundingTransaction message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns FundingTransaction
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): FundingTransaction;
+
+    /**
+     * Verifies a FundingTransaction message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a FundingTransaction message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns FundingTransaction
+     */
+    public static fromObject(object: { [k: string]: any }): FundingTransaction;
+
+    /**
+     * Creates a plain object from a FundingTransaction message. Also converts values to other types if specified.
+     * @param message FundingTransaction
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: FundingTransaction, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this FundingTransaction to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a FundingSummary. */
+export interface IFundingSummary {
+
+    /** FundingSummary balance */
+    balance?: (IFundingBalance|null);
+
+    /** FundingSummary subplans */
+    subplans?: ({ [k: string]: string }|null);
+
+    /** FundingSummary transactions */
+    transactions?: (IFundingTransaction[]|null);
+}
+
+/** Represents a FundingSummary. */
+export class FundingSummary implements IFundingSummary {
+
+    /**
+     * Constructs a new FundingSummary.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IFundingSummary);
+
+    /** FundingSummary balance. */
+    public balance?: (IFundingBalance|null);
+
+    /** FundingSummary subplans. */
+    public subplans: { [k: string]: string };
+
+    /** FundingSummary transactions. */
+    public transactions: IFundingTransaction[];
+
+    /**
+     * Creates a new FundingSummary instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns FundingSummary instance
+     */
+    public static create(properties?: IFundingSummary): FundingSummary;
+
+    /**
+     * Encodes the specified FundingSummary message. Does not implicitly {@link FundingSummary.verify|verify} messages.
+     * @param message FundingSummary message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IFundingSummary, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified FundingSummary message, length delimited. Does not implicitly {@link FundingSummary.verify|verify} messages.
+     * @param message FundingSummary message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IFundingSummary, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a FundingSummary message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns FundingSummary
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): FundingSummary;
+
+    /**
+     * Decodes a FundingSummary message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns FundingSummary
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): FundingSummary;
+
+    /**
+     * Verifies a FundingSummary message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a FundingSummary message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns FundingSummary
+     */
+    public static fromObject(object: { [k: string]: any }): FundingSummary;
+
+    /**
+     * Creates a plain object from a FundingSummary message. Also converts values to other types if specified.
+     * @param message FundingSummary
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: FundingSummary, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this FundingSummary to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
 /** Properties of a FundingTestRequest. */
 export interface IFundingTestRequest {
 
@@ -6108,6 +6978,360 @@ export class FundingTestResponse implements IFundingTestResponse {
 
     /**
      * Converts this FundingTestResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a FundingGetSummaryRequest. */
+export interface IFundingGetSummaryRequest {
+}
+
+/** Represents a FundingGetSummaryRequest. */
+export class FundingGetSummaryRequest implements IFundingGetSummaryRequest {
+
+    /**
+     * Constructs a new FundingGetSummaryRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IFundingGetSummaryRequest);
+
+    /**
+     * Creates a new FundingGetSummaryRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns FundingGetSummaryRequest instance
+     */
+    public static create(properties?: IFundingGetSummaryRequest): FundingGetSummaryRequest;
+
+    /**
+     * Encodes the specified FundingGetSummaryRequest message. Does not implicitly {@link FundingGetSummaryRequest.verify|verify} messages.
+     * @param message FundingGetSummaryRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IFundingGetSummaryRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified FundingGetSummaryRequest message, length delimited. Does not implicitly {@link FundingGetSummaryRequest.verify|verify} messages.
+     * @param message FundingGetSummaryRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IFundingGetSummaryRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a FundingGetSummaryRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns FundingGetSummaryRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): FundingGetSummaryRequest;
+
+    /**
+     * Decodes a FundingGetSummaryRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns FundingGetSummaryRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): FundingGetSummaryRequest;
+
+    /**
+     * Verifies a FundingGetSummaryRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a FundingGetSummaryRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns FundingGetSummaryRequest
+     */
+    public static fromObject(object: { [k: string]: any }): FundingGetSummaryRequest;
+
+    /**
+     * Creates a plain object from a FundingGetSummaryRequest message. Also converts values to other types if specified.
+     * @param message FundingGetSummaryRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: FundingGetSummaryRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this FundingGetSummaryRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a FundingGetSummaryResponse. */
+export interface IFundingGetSummaryResponse {
+
+    /** FundingGetSummaryResponse summary */
+    summary?: (IFundingSummary|null);
+}
+
+/** Represents a FundingGetSummaryResponse. */
+export class FundingGetSummaryResponse implements IFundingGetSummaryResponse {
+
+    /**
+     * Constructs a new FundingGetSummaryResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IFundingGetSummaryResponse);
+
+    /** FundingGetSummaryResponse summary. */
+    public summary?: (IFundingSummary|null);
+
+    /**
+     * Creates a new FundingGetSummaryResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns FundingGetSummaryResponse instance
+     */
+    public static create(properties?: IFundingGetSummaryResponse): FundingGetSummaryResponse;
+
+    /**
+     * Encodes the specified FundingGetSummaryResponse message. Does not implicitly {@link FundingGetSummaryResponse.verify|verify} messages.
+     * @param message FundingGetSummaryResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IFundingGetSummaryResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified FundingGetSummaryResponse message, length delimited. Does not implicitly {@link FundingGetSummaryResponse.verify|verify} messages.
+     * @param message FundingGetSummaryResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IFundingGetSummaryResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a FundingGetSummaryResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns FundingGetSummaryResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): FundingGetSummaryResponse;
+
+    /**
+     * Decodes a FundingGetSummaryResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns FundingGetSummaryResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): FundingGetSummaryResponse;
+
+    /**
+     * Verifies a FundingGetSummaryResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a FundingGetSummaryResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns FundingGetSummaryResponse
+     */
+    public static fromObject(object: { [k: string]: any }): FundingGetSummaryResponse;
+
+    /**
+     * Creates a plain object from a FundingGetSummaryResponse message. Also converts values to other types if specified.
+     * @param message FundingGetSummaryResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: FundingGetSummaryResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this FundingGetSummaryResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a FundingCreateSubPlanRequest. */
+export interface IFundingCreateSubPlanRequest {
+
+    /** FundingCreateSubPlanRequest price */
+    price?: (string|null);
+}
+
+/** Represents a FundingCreateSubPlanRequest. */
+export class FundingCreateSubPlanRequest implements IFundingCreateSubPlanRequest {
+
+    /**
+     * Constructs a new FundingCreateSubPlanRequest.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IFundingCreateSubPlanRequest);
+
+    /** FundingCreateSubPlanRequest price. */
+    public price: string;
+
+    /**
+     * Creates a new FundingCreateSubPlanRequest instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns FundingCreateSubPlanRequest instance
+     */
+    public static create(properties?: IFundingCreateSubPlanRequest): FundingCreateSubPlanRequest;
+
+    /**
+     * Encodes the specified FundingCreateSubPlanRequest message. Does not implicitly {@link FundingCreateSubPlanRequest.verify|verify} messages.
+     * @param message FundingCreateSubPlanRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IFundingCreateSubPlanRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified FundingCreateSubPlanRequest message, length delimited. Does not implicitly {@link FundingCreateSubPlanRequest.verify|verify} messages.
+     * @param message FundingCreateSubPlanRequest message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IFundingCreateSubPlanRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a FundingCreateSubPlanRequest message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns FundingCreateSubPlanRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): FundingCreateSubPlanRequest;
+
+    /**
+     * Decodes a FundingCreateSubPlanRequest message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns FundingCreateSubPlanRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): FundingCreateSubPlanRequest;
+
+    /**
+     * Verifies a FundingCreateSubPlanRequest message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a FundingCreateSubPlanRequest message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns FundingCreateSubPlanRequest
+     */
+    public static fromObject(object: { [k: string]: any }): FundingCreateSubPlanRequest;
+
+    /**
+     * Creates a plain object from a FundingCreateSubPlanRequest message. Also converts values to other types if specified.
+     * @param message FundingCreateSubPlanRequest
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: FundingCreateSubPlanRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this FundingCreateSubPlanRequest to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a FundingCreateSubPlanResponse. */
+export interface IFundingCreateSubPlanResponse {
+
+    /** FundingCreateSubPlanResponse subPlanId */
+    subPlanId?: (string|null);
+}
+
+/** Represents a FundingCreateSubPlanResponse. */
+export class FundingCreateSubPlanResponse implements IFundingCreateSubPlanResponse {
+
+    /**
+     * Constructs a new FundingCreateSubPlanResponse.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: IFundingCreateSubPlanResponse);
+
+    /** FundingCreateSubPlanResponse subPlanId. */
+    public subPlanId: string;
+
+    /**
+     * Creates a new FundingCreateSubPlanResponse instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns FundingCreateSubPlanResponse instance
+     */
+    public static create(properties?: IFundingCreateSubPlanResponse): FundingCreateSubPlanResponse;
+
+    /**
+     * Encodes the specified FundingCreateSubPlanResponse message. Does not implicitly {@link FundingCreateSubPlanResponse.verify|verify} messages.
+     * @param message FundingCreateSubPlanResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: IFundingCreateSubPlanResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified FundingCreateSubPlanResponse message, length delimited. Does not implicitly {@link FundingCreateSubPlanResponse.verify|verify} messages.
+     * @param message FundingCreateSubPlanResponse message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: IFundingCreateSubPlanResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a FundingCreateSubPlanResponse message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns FundingCreateSubPlanResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): FundingCreateSubPlanResponse;
+
+    /**
+     * Decodes a FundingCreateSubPlanResponse message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns FundingCreateSubPlanResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): FundingCreateSubPlanResponse;
+
+    /**
+     * Verifies a FundingCreateSubPlanResponse message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a FundingCreateSubPlanResponse message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns FundingCreateSubPlanResponse
+     */
+    public static fromObject(object: { [k: string]: any }): FundingCreateSubPlanResponse;
+
+    /**
+     * Creates a plain object from a FundingCreateSubPlanResponse message. Also converts values to other types if specified.
+     * @param message FundingCreateSubPlanResponse
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: FundingCreateSubPlanResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this FundingCreateSubPlanResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -8645,190 +9869,190 @@ export namespace PeerIndexMessage {
     }
 }
 
-/** Properties of a SwarmPeerAnnounceSwarmRequest. */
-export interface ISwarmPeerAnnounceSwarmRequest {
+/** Properties of a TransferPeerAnnounceSwarmRequest. */
+export interface ITransferPeerAnnounceSwarmRequest {
 
-    /** SwarmPeerAnnounceSwarmRequest id */
-    id?: (Uint8Array|null);
+    /** TransferPeerAnnounceSwarmRequest swarmId */
+    swarmId?: (Uint8Array|null);
 
-    /** SwarmPeerAnnounceSwarmRequest port */
+    /** TransferPeerAnnounceSwarmRequest port */
     port?: (number|null);
 }
 
-/** Represents a SwarmPeerAnnounceSwarmRequest. */
-export class SwarmPeerAnnounceSwarmRequest implements ISwarmPeerAnnounceSwarmRequest {
+/** Represents a TransferPeerAnnounceSwarmRequest. */
+export class TransferPeerAnnounceSwarmRequest implements ITransferPeerAnnounceSwarmRequest {
 
     /**
-     * Constructs a new SwarmPeerAnnounceSwarmRequest.
+     * Constructs a new TransferPeerAnnounceSwarmRequest.
      * @param [properties] Properties to set
      */
-    constructor(properties?: ISwarmPeerAnnounceSwarmRequest);
+    constructor(properties?: ITransferPeerAnnounceSwarmRequest);
 
-    /** SwarmPeerAnnounceSwarmRequest id. */
-    public id: Uint8Array;
+    /** TransferPeerAnnounceSwarmRequest swarmId. */
+    public swarmId: Uint8Array;
 
-    /** SwarmPeerAnnounceSwarmRequest port. */
+    /** TransferPeerAnnounceSwarmRequest port. */
     public port: number;
 
     /**
-     * Creates a new SwarmPeerAnnounceSwarmRequest instance using the specified properties.
+     * Creates a new TransferPeerAnnounceSwarmRequest instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns SwarmPeerAnnounceSwarmRequest instance
+     * @returns TransferPeerAnnounceSwarmRequest instance
      */
-    public static create(properties?: ISwarmPeerAnnounceSwarmRequest): SwarmPeerAnnounceSwarmRequest;
+    public static create(properties?: ITransferPeerAnnounceSwarmRequest): TransferPeerAnnounceSwarmRequest;
 
     /**
-     * Encodes the specified SwarmPeerAnnounceSwarmRequest message. Does not implicitly {@link SwarmPeerAnnounceSwarmRequest.verify|verify} messages.
-     * @param message SwarmPeerAnnounceSwarmRequest message or plain object to encode
+     * Encodes the specified TransferPeerAnnounceSwarmRequest message. Does not implicitly {@link TransferPeerAnnounceSwarmRequest.verify|verify} messages.
+     * @param message TransferPeerAnnounceSwarmRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: ISwarmPeerAnnounceSwarmRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: ITransferPeerAnnounceSwarmRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified SwarmPeerAnnounceSwarmRequest message, length delimited. Does not implicitly {@link SwarmPeerAnnounceSwarmRequest.verify|verify} messages.
-     * @param message SwarmPeerAnnounceSwarmRequest message or plain object to encode
+     * Encodes the specified TransferPeerAnnounceSwarmRequest message, length delimited. Does not implicitly {@link TransferPeerAnnounceSwarmRequest.verify|verify} messages.
+     * @param message TransferPeerAnnounceSwarmRequest message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: ISwarmPeerAnnounceSwarmRequest, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: ITransferPeerAnnounceSwarmRequest, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a SwarmPeerAnnounceSwarmRequest message from the specified reader or buffer.
+     * Decodes a TransferPeerAnnounceSwarmRequest message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns SwarmPeerAnnounceSwarmRequest
+     * @returns TransferPeerAnnounceSwarmRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): SwarmPeerAnnounceSwarmRequest;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): TransferPeerAnnounceSwarmRequest;
 
     /**
-     * Decodes a SwarmPeerAnnounceSwarmRequest message from the specified reader or buffer, length delimited.
+     * Decodes a TransferPeerAnnounceSwarmRequest message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns SwarmPeerAnnounceSwarmRequest
+     * @returns TransferPeerAnnounceSwarmRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): SwarmPeerAnnounceSwarmRequest;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): TransferPeerAnnounceSwarmRequest;
 
     /**
-     * Verifies a SwarmPeerAnnounceSwarmRequest message.
+     * Verifies a TransferPeerAnnounceSwarmRequest message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a SwarmPeerAnnounceSwarmRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a TransferPeerAnnounceSwarmRequest message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns SwarmPeerAnnounceSwarmRequest
+     * @returns TransferPeerAnnounceSwarmRequest
      */
-    public static fromObject(object: { [k: string]: any }): SwarmPeerAnnounceSwarmRequest;
+    public static fromObject(object: { [k: string]: any }): TransferPeerAnnounceSwarmRequest;
 
     /**
-     * Creates a plain object from a SwarmPeerAnnounceSwarmRequest message. Also converts values to other types if specified.
-     * @param message SwarmPeerAnnounceSwarmRequest
+     * Creates a plain object from a TransferPeerAnnounceSwarmRequest message. Also converts values to other types if specified.
+     * @param message TransferPeerAnnounceSwarmRequest
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: SwarmPeerAnnounceSwarmRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: TransferPeerAnnounceSwarmRequest, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this SwarmPeerAnnounceSwarmRequest to JSON.
+     * Converts this TransferPeerAnnounceSwarmRequest to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
 }
 
-/** Properties of a SwarmPeerAnnounceSwarmResponse. */
-export interface ISwarmPeerAnnounceSwarmResponse {
+/** Properties of a TransferPeerAnnounceSwarmResponse. */
+export interface ITransferPeerAnnounceSwarmResponse {
 
-    /** SwarmPeerAnnounceSwarmResponse port */
+    /** TransferPeerAnnounceSwarmResponse port */
     port?: (number|null);
 }
 
-/** Represents a SwarmPeerAnnounceSwarmResponse. */
-export class SwarmPeerAnnounceSwarmResponse implements ISwarmPeerAnnounceSwarmResponse {
+/** Represents a TransferPeerAnnounceSwarmResponse. */
+export class TransferPeerAnnounceSwarmResponse implements ITransferPeerAnnounceSwarmResponse {
 
     /**
-     * Constructs a new SwarmPeerAnnounceSwarmResponse.
+     * Constructs a new TransferPeerAnnounceSwarmResponse.
      * @param [properties] Properties to set
      */
-    constructor(properties?: ISwarmPeerAnnounceSwarmResponse);
+    constructor(properties?: ITransferPeerAnnounceSwarmResponse);
 
-    /** SwarmPeerAnnounceSwarmResponse port. */
+    /** TransferPeerAnnounceSwarmResponse port. */
     public port: number;
 
-    /** SwarmPeerAnnounceSwarmResponse body. */
+    /** TransferPeerAnnounceSwarmResponse body. */
     public body?: "port";
 
     /**
-     * Creates a new SwarmPeerAnnounceSwarmResponse instance using the specified properties.
+     * Creates a new TransferPeerAnnounceSwarmResponse instance using the specified properties.
      * @param [properties] Properties to set
-     * @returns SwarmPeerAnnounceSwarmResponse instance
+     * @returns TransferPeerAnnounceSwarmResponse instance
      */
-    public static create(properties?: ISwarmPeerAnnounceSwarmResponse): SwarmPeerAnnounceSwarmResponse;
+    public static create(properties?: ITransferPeerAnnounceSwarmResponse): TransferPeerAnnounceSwarmResponse;
 
     /**
-     * Encodes the specified SwarmPeerAnnounceSwarmResponse message. Does not implicitly {@link SwarmPeerAnnounceSwarmResponse.verify|verify} messages.
-     * @param message SwarmPeerAnnounceSwarmResponse message or plain object to encode
+     * Encodes the specified TransferPeerAnnounceSwarmResponse message. Does not implicitly {@link TransferPeerAnnounceSwarmResponse.verify|verify} messages.
+     * @param message TransferPeerAnnounceSwarmResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encode(message: ISwarmPeerAnnounceSwarmResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encode(message: ITransferPeerAnnounceSwarmResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Encodes the specified SwarmPeerAnnounceSwarmResponse message, length delimited. Does not implicitly {@link SwarmPeerAnnounceSwarmResponse.verify|verify} messages.
-     * @param message SwarmPeerAnnounceSwarmResponse message or plain object to encode
+     * Encodes the specified TransferPeerAnnounceSwarmResponse message, length delimited. Does not implicitly {@link TransferPeerAnnounceSwarmResponse.verify|verify} messages.
+     * @param message TransferPeerAnnounceSwarmResponse message or plain object to encode
      * @param [writer] Writer to encode to
      * @returns Writer
      */
-    public static encodeDelimited(message: ISwarmPeerAnnounceSwarmResponse, writer?: $protobuf.Writer): $protobuf.Writer;
+    public static encodeDelimited(message: ITransferPeerAnnounceSwarmResponse, writer?: $protobuf.Writer): $protobuf.Writer;
 
     /**
-     * Decodes a SwarmPeerAnnounceSwarmResponse message from the specified reader or buffer.
+     * Decodes a TransferPeerAnnounceSwarmResponse message from the specified reader or buffer.
      * @param reader Reader or buffer to decode from
      * @param [length] Message length if known beforehand
-     * @returns SwarmPeerAnnounceSwarmResponse
+     * @returns TransferPeerAnnounceSwarmResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): SwarmPeerAnnounceSwarmResponse;
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): TransferPeerAnnounceSwarmResponse;
 
     /**
-     * Decodes a SwarmPeerAnnounceSwarmResponse message from the specified reader or buffer, length delimited.
+     * Decodes a TransferPeerAnnounceSwarmResponse message from the specified reader or buffer, length delimited.
      * @param reader Reader or buffer to decode from
-     * @returns SwarmPeerAnnounceSwarmResponse
+     * @returns TransferPeerAnnounceSwarmResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): SwarmPeerAnnounceSwarmResponse;
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): TransferPeerAnnounceSwarmResponse;
 
     /**
-     * Verifies a SwarmPeerAnnounceSwarmResponse message.
+     * Verifies a TransferPeerAnnounceSwarmResponse message.
      * @param message Plain object to verify
      * @returns `null` if valid, otherwise the reason why it is not
      */
     public static verify(message: { [k: string]: any }): (string|null);
 
     /**
-     * Creates a SwarmPeerAnnounceSwarmResponse message from a plain object. Also converts values to their respective internal types.
+     * Creates a TransferPeerAnnounceSwarmResponse message from a plain object. Also converts values to their respective internal types.
      * @param object Plain object
-     * @returns SwarmPeerAnnounceSwarmResponse
+     * @returns TransferPeerAnnounceSwarmResponse
      */
-    public static fromObject(object: { [k: string]: any }): SwarmPeerAnnounceSwarmResponse;
+    public static fromObject(object: { [k: string]: any }): TransferPeerAnnounceSwarmResponse;
 
     /**
-     * Creates a plain object from a SwarmPeerAnnounceSwarmResponse message. Also converts values to other types if specified.
-     * @param message SwarmPeerAnnounceSwarmResponse
+     * Creates a plain object from a TransferPeerAnnounceSwarmResponse message. Also converts values to other types if specified.
+     * @param message TransferPeerAnnounceSwarmResponse
      * @param [options] Conversion options
      * @returns Plain object
      */
-    public static toObject(message: SwarmPeerAnnounceSwarmResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
+    public static toObject(message: TransferPeerAnnounceSwarmResponse, options?: $protobuf.IConversionOptions): { [k: string]: any };
 
     /**
-     * Converts this SwarmPeerAnnounceSwarmResponse to JSON.
+     * Converts this TransferPeerAnnounceSwarmResponse to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };
@@ -15495,6 +16719,96 @@ export class RPCCallStreamResponse implements IRPCCallStreamResponse {
 
     /**
      * Converts this RPCCallStreamResponse to JSON.
+     * @returns JSON object
+     */
+    public toJSON(): { [k: string]: any };
+}
+
+/** Properties of a Transfer. */
+export interface ITransfer {
+
+    /** Transfer id */
+    id?: (Uint8Array|null);
+}
+
+/** Represents a Transfer. */
+export class Transfer implements ITransfer {
+
+    /**
+     * Constructs a new Transfer.
+     * @param [properties] Properties to set
+     */
+    constructor(properties?: ITransfer);
+
+    /** Transfer id. */
+    public id: Uint8Array;
+
+    /**
+     * Creates a new Transfer instance using the specified properties.
+     * @param [properties] Properties to set
+     * @returns Transfer instance
+     */
+    public static create(properties?: ITransfer): Transfer;
+
+    /**
+     * Encodes the specified Transfer message. Does not implicitly {@link Transfer.verify|verify} messages.
+     * @param message Transfer message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encode(message: ITransfer, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Encodes the specified Transfer message, length delimited. Does not implicitly {@link Transfer.verify|verify} messages.
+     * @param message Transfer message or plain object to encode
+     * @param [writer] Writer to encode to
+     * @returns Writer
+     */
+    public static encodeDelimited(message: ITransfer, writer?: $protobuf.Writer): $protobuf.Writer;
+
+    /**
+     * Decodes a Transfer message from the specified reader or buffer.
+     * @param reader Reader or buffer to decode from
+     * @param [length] Message length if known beforehand
+     * @returns Transfer
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decode(reader: ($protobuf.Reader|Uint8Array), length?: number): Transfer;
+
+    /**
+     * Decodes a Transfer message from the specified reader or buffer, length delimited.
+     * @param reader Reader or buffer to decode from
+     * @returns Transfer
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    public static decodeDelimited(reader: ($protobuf.Reader|Uint8Array)): Transfer;
+
+    /**
+     * Verifies a Transfer message.
+     * @param message Plain object to verify
+     * @returns `null` if valid, otherwise the reason why it is not
+     */
+    public static verify(message: { [k: string]: any }): (string|null);
+
+    /**
+     * Creates a Transfer message from a plain object. Also converts values to their respective internal types.
+     * @param object Plain object
+     * @returns Transfer
+     */
+    public static fromObject(object: { [k: string]: any }): Transfer;
+
+    /**
+     * Creates a plain object from a Transfer message. Also converts values to other types if specified.
+     * @param message Transfer
+     * @param [options] Conversion options
+     * @returns Plain object
+     */
+    public static toObject(message: Transfer, options?: $protobuf.IConversionOptions): { [k: string]: any };
+
+    /**
+     * Converts this Transfer to JSON.
      * @returns JSON object
      */
     public toJSON(): { [k: string]: any };

@@ -419,7 +419,6 @@ func newPeerIndexPublisher(ctx context.Context, logger *zap.Logger, network *Net
 
 	record := &pb.PeerIndexMessage_Record{
 		Hash:   hash,
-		Key:    network.host.Key().Public,
 		HostId: network.host.ID().Bytes(nil),
 		Port:   uint32(port),
 	}

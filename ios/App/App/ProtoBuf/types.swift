@@ -36,7 +36,7 @@ func registerAnyTypes() {
   Google_Protobuf_Any.register(messageType: PBTestDirectoryPublishRequest.self)
   Google_Protobuf_Any.register(messageType: PBTestDirectoryPublishResponse.self)
   Google_Protobuf_Any.register(messageType: PBDirectoryListing.self)
-  Google_Protobuf_Any.register(messageType: PBDirectoryServerEvent.self)
+  Google_Protobuf_Any.register(messageType: PBDirectoryEvent.self)
   Google_Protobuf_Any.register(messageType: PBCallDirectoryServerRequest.self)
   Google_Protobuf_Any.register(messageType: PBOpenDirectoryClientRequest.self)
   Google_Protobuf_Any.register(messageType: PBDirectoryClientEvent.self)

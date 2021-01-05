@@ -5,6 +5,8 @@ package wasmio
 import (
 	"sync"
 	"syscall/js"
+
+	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 )
 
 var busBuffers = sync.Pool{
@@ -107,6 +109,8 @@ func (p *Bus) closeWithError(err error) {
 }
 
 func (p *Bus) onData(this js.Value, args []js.Value) interface{} {
+	iotime.Store(int64(args[2].Float()))
+
 	n := args[1].Int()
 	b := busBuffers.Get().([]byte)
 

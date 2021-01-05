@@ -17,11 +17,13 @@
     "svc": "nodemon --watch ./pkg --watch ./cmd/svc -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly -ldflags \"-X github.com/MemeLabs/go-ppspp/pkg/version.Platform=svc\" ./cmd/svc || exit 1'",
     "test:native": "nodemon --watch ./pkg --watch ./integration -e go --delay 0.1 --signal SIGINT --exec 'go test -mod=readonly ./integration/frontend -tags native -count 1 -v 1 || exit 1'",
     "dev:svc": "run-p pb:* svc",
-    "funding": "nodemon --watch ./pkg --watch ./cmd/svc -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly ./cmd/funding || exit 1'",
+    "funding": "nodemon --watch ./pkg --watch ./funding/cmd/server -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly ./funding/cmd/server --path ./funding/config.json || exit 1'",
     "dev:funding": "run-p pb:* funding web:webpack",
     "build": "webpack --mode production"
   },
   "devDependencies": {
+    "@paypal/paypal-js": "^2.1.0-beta.7",
+    "@paypal/react-paypal-js": "^3.0.3",
     "@types/dom-mediacapture-record": "^1.0.7",
     "@types/ip-regex": "^4.1.1",
     "@types/prismjs": "^1.16.2",

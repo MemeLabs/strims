@@ -4,6 +4,26 @@ option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
 option java_package = "gg.strims.ppspp.proto";
 option swift_prefix = "PB";
 
+message FundingBalance {
+  float total = 1;
+  int64 as_of = 4;
+}
+
+message FundingTransaction {
+  string subject = 1;
+  string note = 2;
+  int64 date = 3;
+  float amount = 4;
+  float ending = 5;
+  float available = 6;
+}
+
+message FundingSummary {
+  FundingBalance balance = 1;
+  map<string, string> subplans = 2;
+  repeated FundingTransaction transactions = 3;
+}
+
 message FundingTestRequest {
   string name = 1;
 }
@@ -12,6 +32,22 @@ message FundingTestResponse {
   string message = 1;
 }
 
+message FundingGetSummaryRequest {}
+
+message FundingGetSummaryResponse {
+  FundingSummary summary = 1;
+}
+
+message FundingCreateSubPlanRequest {
+  string price = 1;
+}
+
+message FundingCreateSubPlanResponse {
+  string sub_plan_id = 1;
+}
+
 service Funding {
   rpc Test(FundingTestRequest) returns (FundingTestResponse);
+  rpc GetSummary(FundingGetSummaryRequest) returns (FundingGetSummaryResponse);
+  rpc CreateSubPlan(FundingCreateSubPlanRequest) returns (FundingCreateSubPlanResponse);
 }

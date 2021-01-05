@@ -8,7 +8,7 @@ import (
 	"fmt"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
-	"github.com/MemeLabs/go-ppspp/pkg/control/app"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
@@ -26,7 +26,7 @@ func init() {
 // videoIngressService ...
 type videoIngressService struct {
 	profile *pb.Profile
-	app     *app.Control
+	app     control.AppControl
 }
 
 func (s *videoIngressService) IsSupported(ctx context.Context, r *pb.VideoIngressIsSupportedRequest) (*pb.VideoIngressIsSupportedResponse, error) {

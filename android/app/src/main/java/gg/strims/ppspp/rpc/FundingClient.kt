@@ -8,4 +8,14 @@ class FundingClient(filepath: String) : RPCClient(filepath) {
     ): FundingTestResponse =
         this.callUnary("Funding/Test", arg)
 
+    suspend fun getSummary(
+        arg: FundingGetSummaryRequest = FundingGetSummaryRequest()
+    ): FundingGetSummaryResponse =
+        this.callUnary("Funding/GetSummary", arg)
+
+    suspend fun createSubPlan(
+        arg: FundingCreateSubPlanRequest = FundingCreateSubPlanRequest()
+    ): FundingCreateSubPlanResponse =
+        this.callUnary("Funding/CreateSubPlan", arg)
+
 }

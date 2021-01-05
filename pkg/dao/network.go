@@ -175,3 +175,8 @@ func NewInvitationV0(key *pb.Key, cert *pb.Certificate) (*pb.InvitationV0, error
 		Certificate: inviteCert,
 	}, nil
 }
+
+// NetworkKey ...
+func NetworkKey(network *pb.Network) []byte {
+	return GetRootCert(network.Certificate).Key
+}

@@ -25,6 +25,211 @@ const (
 // of the legacy proto package is being used.
 const _ = proto.ProtoPackageIsVersion4
 
+type FundingBalance struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Total float32 `protobuf:"fixed32,1,opt,name=total,proto3" json:"total,omitempty"`
+	AsOf  int64   `protobuf:"varint,4,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
+}
+
+func (x *FundingBalance) Reset() {
+	*x = FundingBalance{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_funding_proto_msgTypes[0]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FundingBalance) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FundingBalance) ProtoMessage() {}
+
+func (x *FundingBalance) ProtoReflect() protoreflect.Message {
+	mi := &file_funding_proto_msgTypes[0]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FundingBalance.ProtoReflect.Descriptor instead.
+func (*FundingBalance) Descriptor() ([]byte, []int) {
+	return file_funding_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *FundingBalance) GetTotal() float32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+func (x *FundingBalance) GetAsOf() int64 {
+	if x != nil {
+		return x.AsOf
+	}
+	return 0
+}
+
+type FundingTransaction struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Subject   string  `protobuf:"bytes,1,opt,name=subject,proto3" json:"subject,omitempty"`
+	Note      string  `protobuf:"bytes,2,opt,name=note,proto3" json:"note,omitempty"`
+	Date      int64   `protobuf:"varint,3,opt,name=date,proto3" json:"date,omitempty"`
+	Amount    float32 `protobuf:"fixed32,4,opt,name=amount,proto3" json:"amount,omitempty"`
+	Ending    float32 `protobuf:"fixed32,5,opt,name=ending,proto3" json:"ending,omitempty"`
+	Available float32 `protobuf:"fixed32,6,opt,name=available,proto3" json:"available,omitempty"`
+}
+
+func (x *FundingTransaction) Reset() {
+	*x = FundingTransaction{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_funding_proto_msgTypes[1]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FundingTransaction) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FundingTransaction) ProtoMessage() {}
+
+func (x *FundingTransaction) ProtoReflect() protoreflect.Message {
+	mi := &file_funding_proto_msgTypes[1]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FundingTransaction.ProtoReflect.Descriptor instead.
+func (*FundingTransaction) Descriptor() ([]byte, []int) {
+	return file_funding_proto_rawDescGZIP(), []int{1}
+}
+
+func (x *FundingTransaction) GetSubject() string {
+	if x != nil {
+		return x.Subject
+	}
+	return ""
+}
+
+func (x *FundingTransaction) GetNote() string {
+	if x != nil {
+		return x.Note
+	}
+	return ""
+}
+
+func (x *FundingTransaction) GetDate() int64 {
+	if x != nil {
+		return x.Date
+	}
+	return 0
+}
+
+func (x *FundingTransaction) GetAmount() float32 {
+	if x != nil {
+		return x.Amount
+	}
+	return 0
+}
+
+func (x *FundingTransaction) GetEnding() float32 {
+	if x != nil {
+		return x.Ending
+	}
+	return 0
+}
+
+func (x *FundingTransaction) GetAvailable() float32 {
+	if x != nil {
+		return x.Available
+	}
+	return 0
+}
+
+type FundingSummary struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Balance      *FundingBalance       `protobuf:"bytes,1,opt,name=balance,proto3" json:"balance,omitempty"`
+	Subplans     map[string]string     `protobuf:"bytes,2,rep,name=subplans,proto3" json:"subplans,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
+	Transactions []*FundingTransaction `protobuf:"bytes,3,rep,name=transactions,proto3" json:"transactions,omitempty"`
+}
+
+func (x *FundingSummary) Reset() {
+	*x = FundingSummary{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_funding_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FundingSummary) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FundingSummary) ProtoMessage() {}
+
+func (x *FundingSummary) ProtoReflect() protoreflect.Message {
+	mi := &file_funding_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FundingSummary.ProtoReflect.Descriptor instead.
+func (*FundingSummary) Descriptor() ([]byte, []int) {
+	return file_funding_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *FundingSummary) GetBalance() *FundingBalance {
+	if x != nil {
+		return x.Balance
+	}
+	return nil
+}
+
+func (x *FundingSummary) GetSubplans() map[string]string {
+	if x != nil {
+		return x.Subplans
+	}
+	return nil
+}
+
+func (x *FundingSummary) GetTransactions() []*FundingTransaction {
+	if x != nil {
+		return x.Transactions
+	}
+	return nil
+}
+
 type FundingTestRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -36,7 +241,7 @@ type FundingTestRequest struct {
 func (x *FundingTestRequest) Reset() {
 	*x = FundingTestRequest{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_funding_proto_msgTypes[0]
+		mi := &file_funding_proto_msgTypes[3]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -49,7 +254,7 @@ func (x *FundingTestRequest) String() string {
 func (*FundingTestRequest) ProtoMessage() {}
 
 func (x *FundingTestRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_funding_proto_msgTypes[0]
+	mi := &file_funding_proto_msgTypes[3]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -62,7 +267,7 @@ func (x *FundingTestRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FundingTestRequest.ProtoReflect.Descriptor instead.
 func (*FundingTestRequest) Descriptor() ([]byte, []int) {
-	return file_funding_proto_rawDescGZIP(), []int{0}
+	return file_funding_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *FundingTestRequest) GetName() string {
@@ -83,7 +288,7 @@ type FundingTestResponse struct {
 func (x *FundingTestResponse) Reset() {
 	*x = FundingTestResponse{}
 	if protoimpl.UnsafeEnabled {
-		mi := &file_funding_proto_msgTypes[1]
+		mi := &file_funding_proto_msgTypes[4]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		ms.StoreMessageInfo(mi)
 	}
@@ -96,7 +301,7 @@ func (x *FundingTestResponse) String() string {
 func (*FundingTestResponse) ProtoMessage() {}
 
 func (x *FundingTestResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_funding_proto_msgTypes[1]
+	mi := &file_funding_proto_msgTypes[4]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -109,7 +314,7 @@ func (x *FundingTestResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FundingTestResponse.ProtoReflect.Descriptor instead.
 func (*FundingTestResponse) Descriptor() ([]byte, []int) {
-	return file_funding_proto_rawDescGZIP(), []int{1}
+	return file_funding_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *FundingTestResponse) GetMessage() string {
@@ -119,21 +324,243 @@ func (x *FundingTestResponse) GetMessage() string {
 	return ""
 }
 
+type FundingGetSummaryRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+}
+
+func (x *FundingGetSummaryRequest) Reset() {
+	*x = FundingGetSummaryRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_funding_proto_msgTypes[5]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FundingGetSummaryRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FundingGetSummaryRequest) ProtoMessage() {}
+
+func (x *FundingGetSummaryRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_funding_proto_msgTypes[5]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FundingGetSummaryRequest.ProtoReflect.Descriptor instead.
+func (*FundingGetSummaryRequest) Descriptor() ([]byte, []int) {
+	return file_funding_proto_rawDescGZIP(), []int{5}
+}
+
+type FundingGetSummaryResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Summary *FundingSummary `protobuf:"bytes,1,opt,name=summary,proto3" json:"summary,omitempty"`
+}
+
+func (x *FundingGetSummaryResponse) Reset() {
+	*x = FundingGetSummaryResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_funding_proto_msgTypes[6]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FundingGetSummaryResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FundingGetSummaryResponse) ProtoMessage() {}
+
+func (x *FundingGetSummaryResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_funding_proto_msgTypes[6]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FundingGetSummaryResponse.ProtoReflect.Descriptor instead.
+func (*FundingGetSummaryResponse) Descriptor() ([]byte, []int) {
+	return file_funding_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *FundingGetSummaryResponse) GetSummary() *FundingSummary {
+	if x != nil {
+		return x.Summary
+	}
+	return nil
+}
+
+type FundingCreateSubPlanRequest struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	Price string `protobuf:"bytes,1,opt,name=price,proto3" json:"price,omitempty"`
+}
+
+func (x *FundingCreateSubPlanRequest) Reset() {
+	*x = FundingCreateSubPlanRequest{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_funding_proto_msgTypes[7]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FundingCreateSubPlanRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FundingCreateSubPlanRequest) ProtoMessage() {}
+
+func (x *FundingCreateSubPlanRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_funding_proto_msgTypes[7]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FundingCreateSubPlanRequest.ProtoReflect.Descriptor instead.
+func (*FundingCreateSubPlanRequest) Descriptor() ([]byte, []int) {
+	return file_funding_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *FundingCreateSubPlanRequest) GetPrice() string {
+	if x != nil {
+		return x.Price
+	}
+	return ""
+}
+
+type FundingCreateSubPlanResponse struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	SubPlanId string `protobuf:"bytes,1,opt,name=sub_plan_id,json=subPlanId,proto3" json:"sub_plan_id,omitempty"`
+}
+
+func (x *FundingCreateSubPlanResponse) Reset() {
+	*x = FundingCreateSubPlanResponse{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_funding_proto_msgTypes[8]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *FundingCreateSubPlanResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FundingCreateSubPlanResponse) ProtoMessage() {}
+
+func (x *FundingCreateSubPlanResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_funding_proto_msgTypes[8]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FundingCreateSubPlanResponse.ProtoReflect.Descriptor instead.
+func (*FundingCreateSubPlanResponse) Descriptor() ([]byte, []int) {
+	return file_funding_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *FundingCreateSubPlanResponse) GetSubPlanId() string {
+	if x != nil {
+		return x.SubPlanId
+	}
+	return ""
+}
+
 var File_funding_proto protoreflect.FileDescriptor
 
 var file_funding_proto_rawDesc = []byte{
 	0x0a, 0x0d, 0x66, 0x75, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x22,
-	0x28, 0x0a, 0x12, 0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x54, 0x65, 0x73, 0x74, 0x52, 0x65,
-	0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x18, 0x01, 0x20,
-	0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x2f, 0x0a, 0x13, 0x46, 0x75, 0x6e,
-	0x64, 0x69, 0x6e, 0x67, 0x54, 0x65, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65,
-	0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28,
-	0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x42, 0x44, 0x0a, 0x15, 0x67, 0x67,
-	0x2e, 0x73, 0x74, 0x72, 0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72,
-	0x6f, 0x74, 0x6f, 0x5a, 0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f,
-	0x4d, 0x65, 0x6d, 0x65, 0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70,
-	0x70, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x62, 0x3b, 0x70, 0x62, 0xba, 0x02, 0x02, 0x50, 0x42,
-	0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x3b, 0x0a, 0x0e, 0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x42, 0x61, 0x6c, 0x61, 0x6e, 0x63,
+	0x65, 0x12, 0x14, 0x0a, 0x05, 0x74, 0x6f, 0x74, 0x61, 0x6c, 0x18, 0x01, 0x20, 0x01, 0x28, 0x02,
+	0x52, 0x05, 0x74, 0x6f, 0x74, 0x61, 0x6c, 0x12, 0x13, 0x0a, 0x05, 0x61, 0x73, 0x5f, 0x6f, 0x66,
+	0x18, 0x04, 0x20, 0x01, 0x28, 0x03, 0x52, 0x04, 0x61, 0x73, 0x4f, 0x66, 0x22, 0xa4, 0x01, 0x0a,
+	0x12, 0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x54, 0x72, 0x61, 0x6e, 0x73, 0x61, 0x63, 0x74,
+	0x69, 0x6f, 0x6e, 0x12, 0x18, 0x0a, 0x07, 0x73, 0x75, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x73, 0x75, 0x62, 0x6a, 0x65, 0x63, 0x74, 0x12, 0x12, 0x0a,
+	0x04, 0x6e, 0x6f, 0x74, 0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x6f, 0x74,
+	0x65, 0x12, 0x12, 0x0a, 0x04, 0x64, 0x61, 0x74, 0x65, 0x18, 0x03, 0x20, 0x01, 0x28, 0x03, 0x52,
+	0x04, 0x64, 0x61, 0x74, 0x65, 0x12, 0x16, 0x0a, 0x06, 0x61, 0x6d, 0x6f, 0x75, 0x6e, 0x74, 0x18,
+	0x04, 0x20, 0x01, 0x28, 0x02, 0x52, 0x06, 0x61, 0x6d, 0x6f, 0x75, 0x6e, 0x74, 0x12, 0x16, 0x0a,
+	0x06, 0x65, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x18, 0x05, 0x20, 0x01, 0x28, 0x02, 0x52, 0x06, 0x65,
+	0x6e, 0x64, 0x69, 0x6e, 0x67, 0x12, 0x1c, 0x0a, 0x09, 0x61, 0x76, 0x61, 0x69, 0x6c, 0x61, 0x62,
+	0x6c, 0x65, 0x18, 0x06, 0x20, 0x01, 0x28, 0x02, 0x52, 0x09, 0x61, 0x76, 0x61, 0x69, 0x6c, 0x61,
+	0x62, 0x6c, 0x65, 0x22, 0xec, 0x01, 0x0a, 0x0e, 0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x53,
+	0x75, 0x6d, 0x6d, 0x61, 0x72, 0x79, 0x12, 0x29, 0x0a, 0x07, 0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63,
+	0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0f, 0x2e, 0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e,
+	0x67, 0x42, 0x61, 0x6c, 0x61, 0x6e, 0x63, 0x65, 0x52, 0x07, 0x62, 0x61, 0x6c, 0x61, 0x6e, 0x63,
+	0x65, 0x12, 0x39, 0x0a, 0x08, 0x73, 0x75, 0x62, 0x70, 0x6c, 0x61, 0x6e, 0x73, 0x18, 0x02, 0x20,
+	0x03, 0x28, 0x0b, 0x32, 0x1d, 0x2e, 0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x53, 0x75, 0x6d,
+	0x6d, 0x61, 0x72, 0x79, 0x2e, 0x53, 0x75, 0x62, 0x70, 0x6c, 0x61, 0x6e, 0x73, 0x45, 0x6e, 0x74,
+	0x72, 0x79, 0x52, 0x08, 0x73, 0x75, 0x62, 0x70, 0x6c, 0x61, 0x6e, 0x73, 0x12, 0x37, 0x0a, 0x0c,
+	0x74, 0x72, 0x61, 0x6e, 0x73, 0x61, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x73, 0x18, 0x03, 0x20, 0x03,
+	0x28, 0x0b, 0x32, 0x13, 0x2e, 0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x54, 0x72, 0x61, 0x6e,
+	0x73, 0x61, 0x63, 0x74, 0x69, 0x6f, 0x6e, 0x52, 0x0c, 0x74, 0x72, 0x61, 0x6e, 0x73, 0x61, 0x63,
+	0x74, 0x69, 0x6f, 0x6e, 0x73, 0x1a, 0x3b, 0x0a, 0x0d, 0x53, 0x75, 0x62, 0x70, 0x6c, 0x61, 0x6e,
+	0x73, 0x45, 0x6e, 0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20,
+	0x01, 0x28, 0x09, 0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75,
+	0x65, 0x18, 0x02, 0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02,
+	0x38, 0x01, 0x22, 0x28, 0x0a, 0x12, 0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x54, 0x65, 0x73,
+	0x74, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x12, 0x12, 0x0a, 0x04, 0x6e, 0x61, 0x6d, 0x65,
+	0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x04, 0x6e, 0x61, 0x6d, 0x65, 0x22, 0x2f, 0x0a, 0x13,
+	0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x54, 0x65, 0x73, 0x74, 0x52, 0x65, 0x73, 0x70, 0x6f,
+	0x6e, 0x73, 0x65, 0x12, 0x18, 0x0a, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x18, 0x01,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x07, 0x6d, 0x65, 0x73, 0x73, 0x61, 0x67, 0x65, 0x22, 0x1a, 0x0a,
+	0x18, 0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x47, 0x65, 0x74, 0x53, 0x75, 0x6d, 0x6d, 0x61,
+	0x72, 0x79, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74, 0x22, 0x46, 0x0a, 0x19, 0x46, 0x75, 0x6e,
+	0x64, 0x69, 0x6e, 0x67, 0x47, 0x65, 0x74, 0x53, 0x75, 0x6d, 0x6d, 0x61, 0x72, 0x79, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x29, 0x0a, 0x07, 0x73, 0x75, 0x6d, 0x6d, 0x61, 0x72,
+	0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b, 0x32, 0x0f, 0x2e, 0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e,
+	0x67, 0x53, 0x75, 0x6d, 0x6d, 0x61, 0x72, 0x79, 0x52, 0x07, 0x73, 0x75, 0x6d, 0x6d, 0x61, 0x72,
+	0x79, 0x22, 0x33, 0x0a, 0x1b, 0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e, 0x67, 0x43, 0x72, 0x65, 0x61,
+	0x74, 0x65, 0x53, 0x75, 0x62, 0x50, 0x6c, 0x61, 0x6e, 0x52, 0x65, 0x71, 0x75, 0x65, 0x73, 0x74,
+	0x12, 0x14, 0x0a, 0x05, 0x70, 0x72, 0x69, 0x63, 0x65, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52,
+	0x05, 0x70, 0x72, 0x69, 0x63, 0x65, 0x22, 0x3e, 0x0a, 0x1c, 0x46, 0x75, 0x6e, 0x64, 0x69, 0x6e,
+	0x67, 0x43, 0x72, 0x65, 0x61, 0x74, 0x65, 0x53, 0x75, 0x62, 0x50, 0x6c, 0x61, 0x6e, 0x52, 0x65,
+	0x73, 0x70, 0x6f, 0x6e, 0x73, 0x65, 0x12, 0x1e, 0x0a, 0x0b, 0x73, 0x75, 0x62, 0x5f, 0x70, 0x6c,
+	0x61, 0x6e, 0x5f, 0x69, 0x64, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09, 0x52, 0x09, 0x73, 0x75, 0x62,
+	0x50, 0x6c, 0x61, 0x6e, 0x49, 0x64, 0x42, 0x44, 0x0a, 0x15, 0x67, 0x67, 0x2e, 0x73, 0x74, 0x72,
+	0x69, 0x6d, 0x73, 0x2e, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x5a,
+	0x26, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x4d, 0x65, 0x6d, 0x65,
+	0x4c, 0x61, 0x62, 0x73, 0x2f, 0x67, 0x6f, 0x2d, 0x70, 0x70, 0x73, 0x70, 0x70, 0x2f, 0x70, 0x6b,
+	0x67, 0x2f, 0x70, 0x62, 0x3b, 0x70, 0x62, 0xba, 0x02, 0x02, 0x50, 0x42, 0x62, 0x06, 0x70, 0x72,
+	0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -148,17 +575,29 @@ func file_funding_proto_rawDescGZIP() []byte {
 	return file_funding_proto_rawDescData
 }
 
-var file_funding_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_funding_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_funding_proto_goTypes = []interface{}{
-	(*FundingTestRequest)(nil),  // 0: FundingTestRequest
-	(*FundingTestResponse)(nil), // 1: FundingTestResponse
+	(*FundingBalance)(nil),               // 0: FundingBalance
+	(*FundingTransaction)(nil),           // 1: FundingTransaction
+	(*FundingSummary)(nil),               // 2: FundingSummary
+	(*FundingTestRequest)(nil),           // 3: FundingTestRequest
+	(*FundingTestResponse)(nil),          // 4: FundingTestResponse
+	(*FundingGetSummaryRequest)(nil),     // 5: FundingGetSummaryRequest
+	(*FundingGetSummaryResponse)(nil),    // 6: FundingGetSummaryResponse
+	(*FundingCreateSubPlanRequest)(nil),  // 7: FundingCreateSubPlanRequest
+	(*FundingCreateSubPlanResponse)(nil), // 8: FundingCreateSubPlanResponse
+	nil,                                  // 9: FundingSummary.SubplansEntry
 }
 var file_funding_proto_depIdxs = []int32{
-	0, // [0:0] is the sub-list for method output_type
-	0, // [0:0] is the sub-list for method input_type
-	0, // [0:0] is the sub-list for extension type_name
-	0, // [0:0] is the sub-list for extension extendee
-	0, // [0:0] is the sub-list for field type_name
+	0, // 0: FundingSummary.balance:type_name -> FundingBalance
+	9, // 1: FundingSummary.subplans:type_name -> FundingSummary.SubplansEntry
+	1, // 2: FundingSummary.transactions:type_name -> FundingTransaction
+	2, // 3: FundingGetSummaryResponse.summary:type_name -> FundingSummary
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_funding_proto_init() }
@@ -168,7 +607,7 @@ func file_funding_proto_init() {
 	}
 	if !protoimpl.UnsafeEnabled {
 		file_funding_proto_msgTypes[0].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*FundingTestRequest); i {
+			switch v := v.(*FundingBalance); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -180,7 +619,91 @@ func file_funding_proto_init() {
 			}
 		}
 		file_funding_proto_msgTypes[1].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*FundingTransaction); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_funding_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*FundingSummary); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_funding_proto_msgTypes[3].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*FundingTestRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_funding_proto_msgTypes[4].Exporter = func(v interface{}, i int) interface{} {
 			switch v := v.(*FundingTestResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_funding_proto_msgTypes[5].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*FundingGetSummaryRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_funding_proto_msgTypes[6].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*FundingGetSummaryResponse); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_funding_proto_msgTypes[7].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*FundingCreateSubPlanRequest); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
+		file_funding_proto_msgTypes[8].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*FundingCreateSubPlanResponse); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -198,7 +721,7 @@ func file_funding_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_funding_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

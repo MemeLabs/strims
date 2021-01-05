@@ -70,12 +70,12 @@ func main() {
 		panic(err)
 	}
 
-	t, err := newManager(logger)
-	if err != nil {
-		panic(err)
-	}
-	t.Run()
-	return
+	// t, err := newManager(logger)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	// t.Run()
+	// return
 
 	store, err := initProfileStore()
 	if err != nil {
@@ -135,7 +135,11 @@ func initProfileStore() (*dao.ProfileStore, error) {
 	name := "test"
 	pw := "test"
 
-	if len(profiles) == 0 {
+	var found bool
+	for _, p := range profiles {
+		found = found || p.Name == name
+	}
+	if !found {
 		_, profileStore, err := dao.CreateProfile(ds, name, pw)
 		return profileStore, err
 	}

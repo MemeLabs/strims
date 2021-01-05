@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/bootstrap"
 	"github.com/MemeLabs/go-ppspp/pkg/control/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
@@ -19,15 +20,15 @@ import (
 )
 
 // NewControl ...
-func NewControl(logger *zap.Logger, broker network.Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile) *Control {
+func NewControl(logger *zap.Logger, broker network.Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile) control.AppControl {
 	observers := &event.Observers{}
 
 	var (
 		dialerControl       = dialer.NewControl(logger, vpn, profile)
-		caControl           = ca.NewControl(logger, vpn, store, observers, dialerControl)
-		directoryControl    = directory.NewControl(logger, vpn, store, observers, dialerControl)
-		networkControl      = network.NewControl(logger, broker, vpn, store, profile, observers, dialerControl)
 		transferControl     = transfer.NewControl(logger, vpn, observers)
+		caControl           = ca.NewControl(logger, vpn, store, observers, dialerControl)
+		directoryControl    = directory.NewControl(logger, vpn, store, observers, dialerControl, transferControl)
+		networkControl      = network.NewControl(logger, broker, vpn, store, profile, observers, dialerControl)
 		bootstrapControl    = bootstrap.NewControl(logger, vpn, store, observers)
 		videoingressControl = videoingress.NewControl(logger, vpn, store, profile, observers, transferControl, dialerControl, networkControl)
 		videochannelControl = videochannel.NewControl(logger, vpn, store, observers)
@@ -73,28 +74,28 @@ func (c *Control) Run(ctx context.Context) {
 }
 
 // Dialer ...
-func (c *Control) Dialer() *dialer.Control { return c.dialer }
+func (c *Control) Dialer() control.DialerControl { return c.dialer }
 
 // CA ...
-func (c *Control) CA() *ca.Control { return c.ca }
+func (c *Control) CA() control.CAControl { return c.ca }
 
 // Directory ...
-func (c *Control) Directory() *directory.Control { return c.directory }
+func (c *Control) Directory() control.DirectoryControl { return c.directory }
 
 // Peer ...
-func (c *Control) Peer() *PeerControl { return c.peer }
+func (c *Control) Peer() control.PeerControl { return c.peer }
 
 // Network ...
-func (c *Control) Network() *network.Control { return c.network }
+func (c *Control) Network() control.NetworkControl { return c.network }
 
 // Transfer ...
-func (c *Control) Transfer() *transfer.Control { return c.transfer }
+func (c *Control) Transfer() control.TransferControl { return c.transfer }
 
 // Bootstrap ...
-func (c *Control) Bootstrap() *bootstrap.Control { return c.bootstrap }
+func (c *Control) Bootstrap() control.BootstrapControl { return c.bootstrap }
 
 // VideoIngress ...
-func (c *Control) VideoIngress() *videoingress.Control { return c.videoingress }
+func (c *Control) VideoIngress() control.VideoIngressControl { return c.videoingress }
 
 // VideoChannel ...
-func (c *Control) VideoChannel() *videochannel.Control { return c.videochannel }
+func (c *Control) VideoChannel() control.VideoChannelControl { return c.videochannel }

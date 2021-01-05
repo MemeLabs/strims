@@ -17,8 +17,8 @@ import (
 	"go.uber.org/zap"
 )
 
-// NewNode ...
-func NewNode(logger *zap.Logger, i int) (*Node, error) {
+// NewHost ...
+func NewHost(logger *zap.Logger, i int) (*Host, error) {
 	profile, err := dao.NewProfile(fmt.Sprintf("user %d", i))
 	if err != nil {
 		return nil, err
@@ -52,7 +52,7 @@ func NewNode(logger *zap.Logger, i int) (*Node, error) {
 		return nil, err
 	}
 
-	return &Node{
+	return &Host{
 		Store:     profileStore,
 		Profile:   profile,
 		VNIC:      vnicHost,
@@ -62,14 +62,15 @@ func NewNode(logger *zap.Logger, i int) (*Node, error) {
 	}, nil
 }
 
-// Node ...
-type Node struct {
+// Host ...
+type Host struct {
 	Store    *dao.ProfileStore
 	Profile  *pb.Profile
 	VNIC     *vnic.Host
 	VPN      *vpn.Host
 	Node     *vpn.Node
 	HostCert *pb.Certificate
+	Network  *pb.Network
 
 	profileID kademlia.ID
 	peers     map[string]struct{}
@@ -88,86 +89,89 @@ func NewCluster(logger *zap.Logger) (*Cluster, error) {
 
 // Cluster ...
 type Cluster struct {
-	Logger       *zap.Logger
-	NodeCount    int
-	PeersPerNode int
-	Network      *pb.Network
-	Nodes        []*Node
+	Logger             *zap.Logger
+	NodeCount          int
+	PeersPerNode       int
+	Hosts              []*Host
+	SkipNetworkBinding bool
 }
 
 // Run ...
 func (c *Cluster) Run() error {
 	for i := 0; i < c.NodeCount; i++ {
-		n, err := NewNode(c.Logger, i)
+		n, err := NewHost(c.Logger, i)
 		if err != nil {
 			return err
 		}
-		c.Nodes = append(c.Nodes, n)
+		c.Hosts = append(c.Hosts, n)
 	}
 
-	var err error
-	c.Network, err = dao.NewNetwork(&daotest.IDGenerator{}, "network", nil, c.Nodes[0].Profile)
+	network, err := dao.NewNetwork(&daotest.IDGenerator{}, "network", nil, c.Hosts[0].Profile)
+	c.Hosts[0].Network = network
+	if err != nil {
+		return err
+	}
+	err = dao.UpsertNetwork(c.Hosts[0].Store, network)
 	if err != nil {
 		return err
 	}
 
-	c.Nodes[0].Node, err = c.Nodes[0].VPN.AddNetwork(c.Network.Certificate)
-	if err != nil {
-		return err
-	}
-
-	for _, node := range c.Nodes[1:] {
-		peerCert, err := createCert(node.Profile.Key, node.Profile.Name, c.Network.Key, c.Network.Certificate)
+	for _, node := range c.Hosts[1:] {
+		peerCert, err := createCert(node.Profile.Key, node.Profile.Name, network.Key, network.Certificate.GetParent())
 		if err != nil {
 			return err
 		}
-		hostCert, err := createCert(node.Profile.Key, node.Profile.Name, c.Network.Key, c.Network.Certificate)
+		hostCert, err := createCert(node.Profile.Key, node.Profile.Name, network.Key, network.Certificate.GetParent())
 		if err != nil {
 			return err
 		}
 		node.HostCert = hostCert
 
-		node.Node, err = node.VPN.AddNetwork(peerCert)
+		node.Network, err = dao.NewNetworkFromCertificate(node.Store, peerCert)
+		if err != nil {
+			return err
+		}
+		err = dao.UpsertNetwork(node.Store, node.Network)
 		if err != nil {
 			return err
 		}
 	}
 
 	wg := sync.WaitGroup{}
-	for _, node := range c.Nodes {
+	for _, node := range c.Hosts {
 		node.VNIC.AddPeerHandler(func(p *vnic.Peer) {
 			wg.Done()
 		})
 	}
 
 	// init node links
-	sortedNodes := make([]*Node, len(c.Nodes))
-	copy(sortedNodes, c.Nodes)
+	sortedNodes := make([]*Host, len(c.Hosts))
+	copy(sortedNodes, c.Hosts)
 
-	for i := 0; i < len(c.Nodes); i++ {
-		sort.Sort(&nodesByXOrDistance{c.Nodes[i].VNIC.ID(), sortedNodes})
+	for i := 0; i < len(c.Hosts); i++ {
+		sort.Sort(&nodesByXOrDistance{c.Hosts[i].VNIC.ID(), sortedNodes})
 
 		n := 0
 		off := 1
 		k := (c.PeersPerNode + 1) / 2
 		for n < c.PeersPerNode && k != 0 {
 			for j := off; j < off+k && j < len(sortedNodes); j++ {
-				if _, ok := c.Nodes[i].peers[sortedNodes[j].VNIC.ID().String()]; ok {
+				if _, ok := c.Hosts[i].peers[sortedNodes[j].VNIC.ID().String()]; ok {
 					continue
 				}
-				c.Nodes[i].peers[sortedNodes[j].VNIC.ID().String()] = struct{}{}
-				sortedNodes[j].peers[c.Nodes[i].VNIC.ID().String()] = struct{}{}
+				c.Hosts[i].peers[sortedNodes[j].VNIC.ID().String()] = struct{}{}
+				sortedNodes[j].peers[c.Hosts[i].VNIC.ID().String()] = struct{}{}
 
 				c0, c1 := ppspptest.NewUnbufferedConnPair()
 
 				mc0 := ppspptest.NewMeterConn(c0)
 				mc1 := ppspptest.NewMeterConn(c1)
 
-				c.Nodes[i].conns = append(c.Nodes[i].conns, mc0)
+				c.Hosts[i].conns = append(c.Hosts[i].conns, mc0)
 				sortedNodes[j].conns = append(sortedNodes[j].conns, mc1)
 
 				wg.Add(2)
-				c.Nodes[i].VNIC.AddLink(mc0)
+				c.Hosts[i].VNIC.AddLink(mc0)
 				sortedNodes[j].VNIC.AddLink(mc1)
 
 				n++
@@ -180,8 +184,17 @@ func (c *Cluster) Run() error {
 
 	wg.Wait()
 
+	if c.SkipNetworkBinding {
+		return nil
+	}
+
 	// init node network links
-	for _, node := range c.Nodes {
+	for _, node := range c.Hosts {
+		node.Node, err = node.VPN.AddNetwork(node.Network.Certificate)
+		if err != nil {
+			return err
+		}
+
 		for _, peer := range node.VNIC.Peers() {
 			node.Node.Network.AddPeer(peer, 10000, 10000)
 		}
@@ -200,7 +213,7 @@ func createCert(key *pb.Key, subject string, signingKey *pb.Key, signingCert *pb
 		return nil, err
 	}
 
-	cert, err := dao.SignCertificateRequest(csr, time.Hour*24, signingKey)
+	cert, err := dao.SignCertificateRequest(csr, time.Hour*24*365, signingKey)
 	if err != nil {
 		return nil, err
 	}
@@ -224,7 +237,7 @@ func (h *messageHandler) HandleMessage(msg *vpn.Message) error {
 
 type nodesByXOrDistance struct {
 	id    kademlia.ID
-	nodes []*Node
+	nodes []*Host
 }
 
 func (s nodesByXOrDistance) Len() int {

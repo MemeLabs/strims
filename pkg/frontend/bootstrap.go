@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
-	"github.com/MemeLabs/go-ppspp/pkg/control/app"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
@@ -30,7 +30,7 @@ type bootstrapService struct {
 	logger *zap.Logger
 	store  *dao.ProfileStore
 	vpn    *vpn.Host
-	app    *app.Control
+	app    control.AppControl
 }
 
 // CreateClient ...

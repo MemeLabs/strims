@@ -76,41 +76,41 @@ public struct PBDirectoryListing {
   public init() {}
 }
 
-public struct PBDirectoryServerEvent {
+public struct PBDirectoryEvent {
   // SwiftProtobuf.Message conformance is added in an extension below. See the
   // `Message` and `Message+*Additions` files in the SwiftProtobuf library for
   // methods supported on all messages.
 
-  public var body: PBDirectoryServerEvent.OneOf_Body? = nil
+  public var body: PBDirectoryEvent.OneOf_Body? = nil
 
-  public var publish: PBDirectoryServerEvent.Publish {
+  public var publish: PBDirectoryEvent.Publish {
     get {
       if case .publish(let v)? = body {return v}
-      return PBDirectoryServerEvent.Publish()
+      return PBDirectoryEvent.Publish()
     }
     set {body = .publish(newValue)}
   }
 
-  public var unpublish: PBDirectoryServerEvent.Unpublish {
+  public var unpublish: PBDirectoryEvent.Unpublish {
     get {
       if case .unpublish(let v)? = body {return v}
-      return PBDirectoryServerEvent.Unpublish()
+      return PBDirectoryEvent.Unpublish()
     }
     set {body = .unpublish(newValue)}
   }
 
-  public var `open`: PBDirectoryServerEvent.ViewerChange {
+  public var `open`: PBDirectoryEvent.ViewerChange {
     get {
       if case .open(let v)? = body {return v}
-      return PBDirectoryServerEvent.ViewerChange()
+      return PBDirectoryEvent.ViewerChange()
     }
     set {body = .open(newValue)}
   }
 
-  public var ping: PBDirectoryServerEvent.Ping {
+  public var ping: PBDirectoryEvent.Ping {
     get {
       if case .ping(let v)? = body {return v}
-      return PBDirectoryServerEvent.Ping()
+      return PBDirectoryEvent.Ping()
     }
     set {body = .ping(newValue)}
   }
@@ -118,13 +118,13 @@ public struct PBDirectoryServerEvent {
   public var unknownFields = SwiftProtobuf.UnknownStorage()
 
   public enum OneOf_Body: Equatable {
-    case publish(PBDirectoryServerEvent.Publish)
-    case unpublish(PBDirectoryServerEvent.Unpublish)
-    case `open`(PBDirectoryServerEvent.ViewerChange)
-    case ping(PBDirectoryServerEvent.Ping)
+    case publish(PBDirectoryEvent.Publish)
+    case unpublish(PBDirectoryEvent.Unpublish)
+    case `open`(PBDirectoryEvent.ViewerChange)
+    case ping(PBDirectoryEvent.Ping)
 
   #if !swift(>=4.1)
-    public static func ==(lhs: PBDirectoryServerEvent.OneOf_Body, rhs: PBDirectoryServerEvent.OneOf_Body) -> Bool {
+    public static func ==(lhs: PBDirectoryEvent.OneOf_Body, rhs: PBDirectoryEvent.OneOf_Body) -> Bool {
       switch (lhs, rhs) {
       case (.publish(let l), .publish(let r)): return l == r
       case (.unpublish(let l), .unpublish(let r)): return l == r
@@ -540,8 +540,8 @@ extension PBDirectoryListing: SwiftProtobuf.Message, SwiftProtobuf._MessageImple
   }
 }
 
-extension PBDirectoryServerEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = "DirectoryServerEvent"
+extension PBDirectoryEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = "DirectoryEvent"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "publish"),
     2: .same(proto: "unpublish"),
@@ -553,7 +553,7 @@ extension PBDirectoryServerEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     while let fieldNumber = try decoder.nextFieldNumber() {
       switch fieldNumber {
       case 1:
-        var v: PBDirectoryServerEvent.Publish?
+        var v: PBDirectoryEvent.Publish?
         if let current = self.body {
           try decoder.handleConflictingOneOf()
           if case .publish(let m) = current {v = m}
@@ -561,7 +561,7 @@ extension PBDirectoryServerEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageI
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.body = .publish(v)}
       case 2:
-        var v: PBDirectoryServerEvent.Unpublish?
+        var v: PBDirectoryEvent.Unpublish?
         if let current = self.body {
           try decoder.handleConflictingOneOf()
           if case .unpublish(let m) = current {v = m}
@@ -569,7 +569,7 @@ extension PBDirectoryServerEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageI
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.body = .unpublish(v)}
       case 3:
-        var v: PBDirectoryServerEvent.ViewerChange?
+        var v: PBDirectoryEvent.ViewerChange?
         if let current = self.body {
           try decoder.handleConflictingOneOf()
           if case .open(let m) = current {v = m}
@@ -577,7 +577,7 @@ extension PBDirectoryServerEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageI
         try decoder.decodeSingularMessageField(value: &v)
         if let v = v {self.body = .open(v)}
       case 4:
-        var v: PBDirectoryServerEvent.Ping?
+        var v: PBDirectoryEvent.Ping?
         if let current = self.body {
           try decoder.handleConflictingOneOf()
           if case .ping(let m) = current {v = m}
@@ -604,15 +604,15 @@ extension PBDirectoryServerEvent: SwiftProtobuf.Message, SwiftProtobuf._MessageI
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBDirectoryServerEvent, rhs: PBDirectoryServerEvent) -> Bool {
+  public static func ==(lhs: PBDirectoryEvent, rhs: PBDirectoryEvent) -> Bool {
     if lhs.body != rhs.body {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBDirectoryServerEvent.Publish: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = PBDirectoryServerEvent.protoMessageName + ".Publish"
+extension PBDirectoryEvent.Publish: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBDirectoryEvent.protoMessageName + ".Publish"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "listing"),
   ]
@@ -633,15 +633,15 @@ extension PBDirectoryServerEvent.Publish: SwiftProtobuf.Message, SwiftProtobuf._
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBDirectoryServerEvent.Publish, rhs: PBDirectoryServerEvent.Publish) -> Bool {
+  public static func ==(lhs: PBDirectoryEvent.Publish, rhs: PBDirectoryEvent.Publish) -> Bool {
     if lhs._listing != rhs._listing {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBDirectoryServerEvent.Unpublish: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = PBDirectoryServerEvent.protoMessageName + ".Unpublish"
+extension PBDirectoryEvent.Unpublish: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBDirectoryEvent.protoMessageName + ".Unpublish"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "key"),
   ]
@@ -662,15 +662,15 @@ extension PBDirectoryServerEvent.Unpublish: SwiftProtobuf.Message, SwiftProtobuf
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBDirectoryServerEvent.Unpublish, rhs: PBDirectoryServerEvent.Unpublish) -> Bool {
+  public static func ==(lhs: PBDirectoryEvent.Unpublish, rhs: PBDirectoryEvent.Unpublish) -> Bool {
     if lhs.key != rhs.key {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true
   }
 }
 
-extension PBDirectoryServerEvent.ViewerChange: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = PBDirectoryServerEvent.protoMessageName + ".ViewerChange"
+extension PBDirectoryEvent.ViewerChange: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBDirectoryEvent.protoMessageName + ".ViewerChange"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "key"),
     2: .same(proto: "count"),
@@ -696,7 +696,7 @@ extension PBDirectoryServerEvent.ViewerChange: SwiftProtobuf.Message, SwiftProto
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBDirectoryServerEvent.ViewerChange, rhs: PBDirectoryServerEvent.ViewerChange) -> Bool {
+  public static func ==(lhs: PBDirectoryEvent.ViewerChange, rhs: PBDirectoryEvent.ViewerChange) -> Bool {
     if lhs.key != rhs.key {return false}
     if lhs.count != rhs.count {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
@@ -704,8 +704,8 @@ extension PBDirectoryServerEvent.ViewerChange: SwiftProtobuf.Message, SwiftProto
   }
 }
 
-extension PBDirectoryServerEvent.Ping: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
-  public static let protoMessageName: String = PBDirectoryServerEvent.protoMessageName + ".Ping"
+extension PBDirectoryEvent.Ping: SwiftProtobuf.Message, SwiftProtobuf._MessageImplementationBase, SwiftProtobuf._ProtoNameProviding {
+  public static let protoMessageName: String = PBDirectoryEvent.protoMessageName + ".Ping"
   public static let _protobuf_nameMap: SwiftProtobuf._NameMap = [
     1: .same(proto: "time"),
   ]
@@ -726,7 +726,7 @@ extension PBDirectoryServerEvent.Ping: SwiftProtobuf.Message, SwiftProtobuf._Mes
     try unknownFields.traverse(visitor: &visitor)
   }
 
-  public static func ==(lhs: PBDirectoryServerEvent.Ping, rhs: PBDirectoryServerEvent.Ping) -> Bool {
+  public static func ==(lhs: PBDirectoryEvent.Ping, rhs: PBDirectoryEvent.Ping) -> Bool {
     if lhs.time != rhs.time {return false}
     if lhs.unknownFields != rhs.unknownFields {return false}
     return true

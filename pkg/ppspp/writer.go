@@ -21,6 +21,8 @@ func NewWriter(o WriterOptions) (*Writer, error) {
 		return nil, err
 	}
 
+	s.store.SetOffset(0)
+
 	w, err := integrity.NewWriter(o.Key.Private, integrity.SwarmWriterOptions{
 		LiveSignatureAlgorithm: s.liveSignatureAlgorithm(),
 		ProtectionMethod:       s.contentIntegrityProtectionMethod(),
