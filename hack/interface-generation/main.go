@@ -7,7 +7,9 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"runtime"
 	"strings"
+	"sync"
 	"text/template"
 
 	"github.com/emicklei/proto"
@@ -58,6 +60,18 @@ func main() {
 	funcMap["ToCamel"] = ToCamel
 	funcMap["ToPascal"] = ImportToPascalCase
 
+	paths := make(chan string, 128)
+	var wg sync.WaitGroup
+
+	for i := 0; i < runtime.NumCPU(); i++ {
+		go func() {
+			for path := range paths {
+				processFile(path)
+				wg.Done()
+			}
+		}()
+	}
+
 	err = filepath.Walk(path.Join(wd, "schema"), func(path string, info os.FileInfo, err error) error {
 		if err != nil {
 			return err
@@ -65,30 +79,36 @@ func main() {
 		if info.IsDir() {
 			return nil
 		}
-		f, err := os.Open(path)
-		if err != nil {
-			return err
-		}
-		parser := proto.NewParser(f)
-		res, err := parser.Parse()
-		if err != nil {
-			return err
-		}
-		var imports []*proto.Import
-		proto.Walk(res, proto.WithImport(func(i *proto.Import) {
-			imports = append(imports, i)
-		}))
 
-		proto.Walk(res, proto.WithService(func(s *proto.Service) {
-			genService(ProtoService{s, imports})
-		}))
+		paths <- path
+		wg.Add(1)
 
 		return nil
 	})
 
+	wg.Wait()
+}
+
+func processFile(path string) error {
+	f, err := os.Open(path)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
+	parser := proto.NewParser(f)
+	res, err := parser.Parse()
+	if err != nil {
+		return err
+	}
+	var imports []*proto.Import
+	proto.Walk(res, proto.WithImport(func(i *proto.Import) {
+		imports = append(imports, i)
+	}))
+
+	proto.Walk(res, proto.WithService(func(s *proto.Service) {
+		genService(ProtoService{s, imports})
+	}))
+
+	return nil
 }
 
 func genService(service ProtoService) {

@@ -44,7 +44,7 @@ type Broker interface {
 // NewControl ...
 func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile, observers *event.Observers, dialer *dialer.Control) *Control {
 	events := make(chan interface{}, 128)
-	observers.Global.Notify(events)
+	observers.Notify(events)
 
 	return &Control{
 		logger:           logger,
@@ -122,7 +122,7 @@ func (t *Control) handlePeerAdd(ctx context.Context, peerID uint64) {
 		if err := peer.negotiateNetworks(ctx); err != nil {
 			t.logger.Debug("network negotiation failed", zap.Error(err))
 		}
-		t.observers.Local.Emit(event.NetworkNegotiationComplete{})
+		t.observers.EmitLocal(event.NetworkNegotiationComplete{})
 	}()
 }
 
@@ -262,7 +262,7 @@ func (t *Control) renewCertificateWithPeer(ctx context.Context, network *pb.Netw
 }
 
 // AddPeer ...
-func (t *Control) AddPeer(id uint64, peer *vnic.Peer, client PeerClient) *Peer {
+func (t *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Peer {
 	p := NewPeer(id, peer, client, t.logger, t.observers, t.broker, t.vpn, t.certificates)
 
 	t.lock.Lock()
@@ -312,7 +312,7 @@ func (t *Control) startNetworks() {
 				logutil.ByteHex("key", cert.Key),
 			)
 
-			t.observers.Local.Emit(event.NetworkStart{Network: network})
+			t.observers.EmitLocal(event.NetworkStart{Network: network})
 		}
 	}
 }
@@ -406,7 +406,7 @@ func (t *Control) setCertificate(id uint64, cert *pb.Certificate) error {
 		func(network *pb.Network) {
 			t.certificates.Insert(network)
 			t.dialer.ReplaceOrInsertNetwork(network)
-			t.observers.Global.Emit(event.NetworkCertUpdate{Network: proto.Clone(network).(*pb.Network)})
+			t.observers.EmitGlobal(event.NetworkCertUpdate{Network: proto.Clone(network).(*pb.Network)})
 		},
 	)
 }
@@ -447,8 +447,8 @@ func (t *Control) Add(network *pb.Network) error {
 	t.certificates.Insert(network)
 	t.dialer.ReplaceOrInsertNetwork(network)
 
-	t.observers.Global.Emit(event.NetworkAdd{Network: network})
-	t.observers.Local.Emit(event.NetworkStart{Network: network})
+	t.observers.EmitGlobal(event.NetworkAdd{Network: network})
+	t.observers.EmitLocal(event.NetworkStart{Network: network})
 
 	return nil
 }
@@ -472,7 +472,7 @@ func (t *Control) Remove(id uint64) error {
 		p.closeNetwork(networkKey)
 	}
 
-	if err := t.vpn.RemoveNetwork(dao.GetRootCert(network.Certificate).Key); err != nil {
+	if err := t.vpn.RemoveNetwork(dao.NetworkKey(network)); err != nil {
 		return err
 	}
 
@@ -480,8 +480,8 @@ func (t *Control) Remove(id uint64) error {
 	t.certificates.Delete(networkKey)
 	delete(t.networks, id)
 
-	t.observers.Local.Emit(event.NetworkStop{Network: network})
-	t.observers.Global.Emit(event.NetworkRemove{Network: network})
+	t.observers.EmitLocal(event.NetworkStop{Network: network})
+	t.observers.EmitGlobal(event.NetworkRemove{Network: network})
 
 	return nil
 }

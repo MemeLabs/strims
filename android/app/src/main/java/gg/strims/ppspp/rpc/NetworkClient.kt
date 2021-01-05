@@ -50,7 +50,7 @@ class NetworkClient(filepath: String) : RPCClient(filepath) {
 
     suspend fun getDirectoryEvents(
         arg: GetDirectoryEventsRequest = GetDirectoryEventsRequest()
-    ): RPCResponseStream<DirectoryServerEvent> =
+    ): RPCResponseStream<DirectoryEvent> =
         this.callStreaming("Network/GetDirectoryEvents", arg)
 
     suspend fun testDirectoryPublish(

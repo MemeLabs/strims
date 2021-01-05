@@ -68,6 +68,8 @@ export class RPCHost {
       objectMode: true,
     });
 
+    e.on("close", () => this.call("CANCEL", new pb.Cancel(), call.id));
+
     this.callbacks.set(call.id, (r: any) => {
       if (r instanceof pb.Error) {
         this.callbacks.delete(call.id);
@@ -122,18 +124,18 @@ export class RPCHost {
     }
 
     if (res instanceof Readable) {
-      res.on("data", (d) => this.call("callback", d, call.id));
-      res.on("close", () => this.call("callback", new pb.Close(), call.id));
+      res.on("data", (d) => this.call("CALLBACK", d, call.id));
+      res.on("close", () => this.call("CALLBACK", new pb.Close(), call.id));
     } else if (res instanceof Promise) {
-      res.then((d) => this.call("callback", d, call.id));
+      res.then((d) => this.call("CALLBACK", d, call.id));
       res.catch(({ message }) => {
         const e = new pb.Error({ message });
-        this.call("callback", e, call.id);
+        this.call("CALLBACK", e, call.id);
       });
     } else if (res instanceof protobuf.Message) {
-      this.call("callback", res, call.id);
+      this.call("CALLBACK", res, call.id);
     } else if (res === undefined) {
-      this.call("callback", new pb.Undefined(), call.id);
+      this.call("CALLBACK", new pb.Undefined(), call.id);
     } else {
       throw new Error(`unsupported rpc return value: ${res}`);
     }

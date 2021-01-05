@@ -54,7 +54,7 @@ export default class Network {
   }
   public getDirectoryEvents(
     arg: pb.IGetDirectoryEventsRequest = new pb.GetDirectoryEventsRequest()
-  ): GenericReadable<pb.DirectoryServerEvent> {
+  ): GenericReadable<pb.DirectoryEvent> {
     return this.host.expectMany(
       this.host.call("Network/GetDirectoryEvents", new pb.GetDirectoryEventsRequest(arg))
     );

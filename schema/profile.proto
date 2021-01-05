@@ -240,6 +240,6 @@ service Network {
   rpc CreateFromInvitation(CreateNetworkFromInvitationRequest) returns (CreateNetworkFromInvitationResponse);
   rpc StartVPN(StartVPNRequest) returns (stream NetworkEvent);
   rpc StopVPN(StopVPNRequest) returns (StopVPNResponse);
-  rpc GetDirectoryEvents(GetDirectoryEventsRequest) returns (stream DirectoryServerEvent);
+  rpc GetDirectoryEvents(GetDirectoryEventsRequest) returns (stream DirectoryEvent);
   rpc TestDirectoryPublish(TestDirectoryPublishRequest) returns (TestDirectoryPublishResponse);
 }

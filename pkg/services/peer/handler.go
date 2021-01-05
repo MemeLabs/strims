@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
-	"github.com/MemeLabs/go-ppspp/pkg/control/app"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
@@ -12,7 +12,7 @@ import (
 )
 
 // NewPeerHandler ...
-func NewPeerHandler(logger *zap.Logger, app *app.Control, store *dao.ProfileStore) vnic.PeerHandler {
+func NewPeerHandler(logger *zap.Logger, app control.AppControl, store *dao.ProfileStore) vnic.PeerHandler {
 	return func(peer *vnic.Peer) {
 		rw0, rw1 := peer.ChannelPair(vnic.PeerRPCClientPort, vnic.PeerRPCServerPort)
 
@@ -28,7 +28,7 @@ func NewPeerHandler(logger *zap.Logger, app *app.Control, store *dao.ProfileStor
 			client:    c,
 			bootstrap: api.NewBootstrapPeerClient(c),
 			ca:        api.NewCAPeerClient(c),
-			swarm:     api.NewSwarmPeerClient(c),
+			transfer:  api.NewTransferPeerClient(c),
 			network:   api.NewNetworkPeerClient(c),
 		})
 
@@ -38,7 +38,7 @@ func NewPeerHandler(logger *zap.Logger, app *app.Control, store *dao.ProfileStor
 		})
 		api.RegisterBootstrapPeerService(s, &bootstrapService{p, app, store})
 		api.RegisterCAPeerService(s, &caService{p, app})
-		api.RegisterSwarmPeerService(s, &swarmService{p, app})
+		api.RegisterTransferPeerService(s, &transferService{p, app})
 		api.RegisterNetworkPeerService(s, &networkService{p, app})
 
 		go func() {
@@ -56,11 +56,11 @@ type client struct {
 	client    *rpc.Client
 	bootstrap *api.BootstrapPeerClient
 	ca        *api.CAPeerClient
-	swarm     *api.SwarmPeerClient
+	transfer  *api.TransferPeerClient
 	network   *api.NetworkPeerClient
 }
 
 func (c *client) Bootstrap() *api.BootstrapPeerClient { return c.bootstrap }
 func (c *client) CA() *api.CAPeerClient               { return c.ca }
-func (c *client) Swarm() *api.SwarmPeerClient         { return c.swarm }
+func (c *client) Transfer() *api.TransferPeerClient   { return c.transfer }
 func (c *client) Network() *api.NetworkPeerClient     { return c.network }

@@ -25,6 +25,7 @@ message DirectoryListingMedia {
   int64 started_at = 1;
   string mime_type = 2;
   uint32 bitrate = 3;
+  string swarm_uri = 4;
 }
 
 message DirectoryListingService {
@@ -45,7 +46,7 @@ message DirectoryListing {
   bytes signature = 10002;
 }
 
-message DirectoryServerEvent {
+message DirectoryEvent {
   message Publish {
     DirectoryListing listing = 1;
   }
@@ -65,11 +66,21 @@ message DirectoryServerEvent {
     repeated bytes viewing_keys = 3;
   }
 
+  message Ping {
+    int64 time = 1;
+  }
+
+  message Padding {
+    bytes data = 1;
+  }
+
   oneof body {
     Publish publish = 1;
     Unpublish unpublish = 2;
     ViewerCountChange viewer_count_change = 3;
     ViewerStateChange viewer_state_change = 4;
+    Ping ping = 5;
+    Padding padding = 6;
   }
 }
 
@@ -101,11 +112,29 @@ message DirectoryPingRequest {}
 
 message DirectoryPingResponse {}
 
-
 service Directory {
   rpc Publish(DirectoryPublishRequest) returns (DirectoryPublishResponse);
   rpc Unpublish(DirectoryUnpublishRequest) returns (DirectoryUnpublishResponse);
   rpc Join(DirectoryJoinRequest) returns (DirectoryJoinResponse);
   rpc Part(DirectoryPartRequest) returns (DirectoryPartResponse);
   rpc Ping(DirectoryPingRequest) returns (DirectoryPingResponse);
+}
+
+message DirectoryFrontendOpenRequest {
+  bytes network_key = 1;
+}
+
+message DirectoryFrontendOpenResponse {
+  DirectoryEvent event = 1;
+}
+
+message DirectoryFrontendTestRequest {
+  bytes network_key = 1;
+}
+
+message DirectoryFrontendTestResponse {}
+
+service DirectoryFrontend {
+  rpc Open(DirectoryFrontendOpenRequest) returns (stream DirectoryFrontendOpenResponse);
+  rpc Test(DirectoryFrontendTestRequest) returns (DirectoryFrontendTestResponse);
 }

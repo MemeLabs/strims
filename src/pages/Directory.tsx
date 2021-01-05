@@ -8,14 +8,14 @@ import { MainLayout } from "../components/MainLayout";
 import { useClient, useLazyCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
-import { DirectoryServerEvent, IDirectoryListing } from "../lib/pb";
+import { DirectoryEvent, IDirectoryListing } from "../lib/pb";
 
 interface Listing {
   key: string;
   listing: IDirectoryListing;
 }
 
-const directoryReducer = (listings: Listing[], action: DirectoryServerEvent): Listing[] => {
+const directoryReducer = (listings: Listing[], action: DirectoryEvent): Listing[] => {
   switch (action.body) {
     case "publish": {
       const listing: Listing = {
@@ -47,16 +47,14 @@ const Directory = () => {
   const networkKey = Base64.toUint8Array(params.networkKey);
 
   React.useEffect(() => {
-    client.network.startVPN().on("data", (vpnEvent) => {
-      if (vpnEvent.networkOpen) {
-        const events = client.network.getDirectoryEvents({ networkKey });
-        events.on("data", dispatch);
-      }
-    });
+    const events = client.directory.open({ networkKey });
+    events.on("data", (e) => console.log(e));
+    events.on("close", () => console.log("directory event stream closed"));
+    return () => events.destroy();
   }, []);
 
   const handleTestClick = async () => {
-    const res = await client.network.testDirectoryPublish({ networkKey });
+    const res = await client.directory.test({ networkKey });
     console.log(res);
   };
 

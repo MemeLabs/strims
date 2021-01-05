@@ -237,7 +237,7 @@ type peerExchange struct {
 
 // HandleMessage ...
 func (s *peerExchange) HandleMessage(msg *Message) error {
-	if !msg.Header.DstID.Equals(s.network.host.ID()) || msg.Trailer.Hops == 0 {
+	if !msg.Verify(0) {
 		return nil
 	}
 

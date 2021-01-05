@@ -25,3 +25,9 @@ type Control struct{}
 
 // Run ...
 func (c *Control) Run(ctx context.Context) {}
+
+// GetIngressConfig ...
+func (c *Control) GetIngressConfig() (*pb.VideoIngressConfig, error) { return nil, nil }
+
+// SetIngressConfig ...
+func (c *Control) SetIngressConfig(config *pb.VideoIngressConfig) error { return nil }

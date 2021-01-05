@@ -250,5 +250,7 @@ func (s *Swarm) Close() error {
 		c.Close()
 	}
 
+	s.store.Close()
+
 	return nil
 }

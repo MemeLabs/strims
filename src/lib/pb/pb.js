@@ -9814,6 +9814,7 @@ export const DirectoryListingMedia = $root.DirectoryListingMedia = (() => {
      * @property {number|null} [startedAt] DirectoryListingMedia startedAt
      * @property {string|null} [mimeType] DirectoryListingMedia mimeType
      * @property {number|null} [bitrate] DirectoryListingMedia bitrate
+     * @property {string|null} [swarmUri] DirectoryListingMedia swarmUri
      */
 
     /**
@@ -9856,6 +9857,14 @@ export const DirectoryListingMedia = $root.DirectoryListingMedia = (() => {
     DirectoryListingMedia.prototype.bitrate = 0;
 
     /**
+     * DirectoryListingMedia swarmUri.
+     * @member {string} swarmUri
+     * @memberof DirectoryListingMedia
+     * @instance
+     */
+    DirectoryListingMedia.prototype.swarmUri = "";
+
+    /**
      * Creates a new DirectoryListingMedia instance using the specified properties.
      * @function create
      * @memberof DirectoryListingMedia
@@ -9885,6 +9894,8 @@ export const DirectoryListingMedia = $root.DirectoryListingMedia = (() => {
             writer.uint32(/* id 2, wireType 2 =*/18).string(message.mimeType);
         if (message.bitrate != null && Object.hasOwnProperty.call(message, "bitrate"))
             writer.uint32(/* id 3, wireType 0 =*/24).uint32(message.bitrate);
+        if (message.swarmUri != null && Object.hasOwnProperty.call(message, "swarmUri"))
+            writer.uint32(/* id 4, wireType 2 =*/34).string(message.swarmUri);
         return writer;
     };
 
@@ -9927,6 +9938,9 @@ export const DirectoryListingMedia = $root.DirectoryListingMedia = (() => {
                 break;
             case 3:
                 message.bitrate = reader.uint32();
+                break;
+            case 4:
+                message.swarmUri = reader.string();
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -9972,6 +9986,9 @@ export const DirectoryListingMedia = $root.DirectoryListingMedia = (() => {
         if (message.bitrate != null && message.hasOwnProperty("bitrate"))
             if (!$util.isInteger(message.bitrate))
                 return "bitrate: integer expected";
+        if (message.swarmUri != null && message.hasOwnProperty("swarmUri"))
+            if (!$util.isString(message.swarmUri))
+                return "swarmUri: string expected";
         return null;
     };
 
@@ -10000,6 +10017,8 @@ export const DirectoryListingMedia = $root.DirectoryListingMedia = (() => {
             message.mimeType = String(object.mimeType);
         if (object.bitrate != null)
             message.bitrate = object.bitrate >>> 0;
+        if (object.swarmUri != null)
+            message.swarmUri = String(object.swarmUri);
         return message;
     };
 
@@ -10024,6 +10043,7 @@ export const DirectoryListingMedia = $root.DirectoryListingMedia = (() => {
                 object.startedAt = options.longs === String ? "0" : 0;
             object.mimeType = "";
             object.bitrate = 0;
+            object.swarmUri = "";
         }
         if (message.startedAt != null && message.hasOwnProperty("startedAt"))
             if (typeof message.startedAt === "number")
@@ -10034,6 +10054,8 @@ export const DirectoryListingMedia = $root.DirectoryListingMedia = (() => {
             object.mimeType = message.mimeType;
         if (message.bitrate != null && message.hasOwnProperty("bitrate"))
             object.bitrate = message.bitrate;
+        if (message.swarmUri != null && message.hasOwnProperty("swarmUri"))
+            object.swarmUri = message.swarmUri;
         return object;
     };
 
@@ -10637,27 +10659,29 @@ export const DirectoryListing = $root.DirectoryListing = (() => {
     return DirectoryListing;
 })();
 
-export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
+export const DirectoryEvent = $root.DirectoryEvent = (() => {
 
     /**
-     * Properties of a DirectoryServerEvent.
-     * @exports IDirectoryServerEvent
-     * @interface IDirectoryServerEvent
-     * @property {DirectoryServerEvent.IPublish|null} [publish] DirectoryServerEvent publish
-     * @property {DirectoryServerEvent.IUnpublish|null} [unpublish] DirectoryServerEvent unpublish
-     * @property {DirectoryServerEvent.IViewerCountChange|null} [viewerCountChange] DirectoryServerEvent viewerCountChange
-     * @property {DirectoryServerEvent.IViewerStateChange|null} [viewerStateChange] DirectoryServerEvent viewerStateChange
+     * Properties of a DirectoryEvent.
+     * @exports IDirectoryEvent
+     * @interface IDirectoryEvent
+     * @property {DirectoryEvent.IPublish|null} [publish] DirectoryEvent publish
+     * @property {DirectoryEvent.IUnpublish|null} [unpublish] DirectoryEvent unpublish
+     * @property {DirectoryEvent.IViewerCountChange|null} [viewerCountChange] DirectoryEvent viewerCountChange
+     * @property {DirectoryEvent.IViewerStateChange|null} [viewerStateChange] DirectoryEvent viewerStateChange
+     * @property {DirectoryEvent.IPing|null} [ping] DirectoryEvent ping
+     * @property {DirectoryEvent.IPadding|null} [padding] DirectoryEvent padding
      */
 
     /**
-     * Constructs a new DirectoryServerEvent.
-     * @exports DirectoryServerEvent
-     * @classdesc Represents a DirectoryServerEvent.
-     * @implements IDirectoryServerEvent
+     * Constructs a new DirectoryEvent.
+     * @exports DirectoryEvent
+     * @classdesc Represents a DirectoryEvent.
+     * @implements IDirectoryEvent
      * @constructor
-     * @param {IDirectoryServerEvent=} [properties] Properties to set
+     * @param {IDirectoryEvent=} [properties] Properties to set
      */
-    function DirectoryServerEvent(properties) {
+    function DirectoryEvent(properties) {
         if (properties)
             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
@@ -10665,128 +10689,154 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
     }
 
     /**
-     * DirectoryServerEvent publish.
-     * @member {DirectoryServerEvent.IPublish|null|undefined} publish
-     * @memberof DirectoryServerEvent
+     * DirectoryEvent publish.
+     * @member {DirectoryEvent.IPublish|null|undefined} publish
+     * @memberof DirectoryEvent
      * @instance
      */
-    DirectoryServerEvent.prototype.publish = null;
+    DirectoryEvent.prototype.publish = null;
 
     /**
-     * DirectoryServerEvent unpublish.
-     * @member {DirectoryServerEvent.IUnpublish|null|undefined} unpublish
-     * @memberof DirectoryServerEvent
+     * DirectoryEvent unpublish.
+     * @member {DirectoryEvent.IUnpublish|null|undefined} unpublish
+     * @memberof DirectoryEvent
      * @instance
      */
-    DirectoryServerEvent.prototype.unpublish = null;
+    DirectoryEvent.prototype.unpublish = null;
 
     /**
-     * DirectoryServerEvent viewerCountChange.
-     * @member {DirectoryServerEvent.IViewerCountChange|null|undefined} viewerCountChange
-     * @memberof DirectoryServerEvent
+     * DirectoryEvent viewerCountChange.
+     * @member {DirectoryEvent.IViewerCountChange|null|undefined} viewerCountChange
+     * @memberof DirectoryEvent
      * @instance
      */
-    DirectoryServerEvent.prototype.viewerCountChange = null;
+    DirectoryEvent.prototype.viewerCountChange = null;
 
     /**
-     * DirectoryServerEvent viewerStateChange.
-     * @member {DirectoryServerEvent.IViewerStateChange|null|undefined} viewerStateChange
-     * @memberof DirectoryServerEvent
+     * DirectoryEvent viewerStateChange.
+     * @member {DirectoryEvent.IViewerStateChange|null|undefined} viewerStateChange
+     * @memberof DirectoryEvent
      * @instance
      */
-    DirectoryServerEvent.prototype.viewerStateChange = null;
+    DirectoryEvent.prototype.viewerStateChange = null;
+
+    /**
+     * DirectoryEvent ping.
+     * @member {DirectoryEvent.IPing|null|undefined} ping
+     * @memberof DirectoryEvent
+     * @instance
+     */
+    DirectoryEvent.prototype.ping = null;
+
+    /**
+     * DirectoryEvent padding.
+     * @member {DirectoryEvent.IPadding|null|undefined} padding
+     * @memberof DirectoryEvent
+     * @instance
+     */
+    DirectoryEvent.prototype.padding = null;
 
     // OneOf field names bound to virtual getters and setters
     let $oneOfFields;
 
     /**
-     * DirectoryServerEvent body.
-     * @member {"publish"|"unpublish"|"viewerCountChange"|"viewerStateChange"|undefined} body
-     * @memberof DirectoryServerEvent
+     * DirectoryEvent body.
+     * @member {"publish"|"unpublish"|"viewerCountChange"|"viewerStateChange"|"ping"|"padding"|undefined} body
+     * @memberof DirectoryEvent
      * @instance
      */
-    Object.defineProperty(DirectoryServerEvent.prototype, "body", {
-        get: $util.oneOfGetter($oneOfFields = ["publish", "unpublish", "viewerCountChange", "viewerStateChange"]),
+    Object.defineProperty(DirectoryEvent.prototype, "body", {
+        get: $util.oneOfGetter($oneOfFields = ["publish", "unpublish", "viewerCountChange", "viewerStateChange", "ping", "padding"]),
         set: $util.oneOfSetter($oneOfFields)
     });
 
     /**
-     * Creates a new DirectoryServerEvent instance using the specified properties.
+     * Creates a new DirectoryEvent instance using the specified properties.
      * @function create
-     * @memberof DirectoryServerEvent
+     * @memberof DirectoryEvent
      * @static
-     * @param {IDirectoryServerEvent=} [properties] Properties to set
-     * @returns {DirectoryServerEvent} DirectoryServerEvent instance
+     * @param {IDirectoryEvent=} [properties] Properties to set
+     * @returns {DirectoryEvent} DirectoryEvent instance
      */
-    DirectoryServerEvent.create = function create(properties) {
-        return new DirectoryServerEvent(properties);
+    DirectoryEvent.create = function create(properties) {
+        return new DirectoryEvent(properties);
     };
 
     /**
-     * Encodes the specified DirectoryServerEvent message. Does not implicitly {@link DirectoryServerEvent.verify|verify} messages.
+     * Encodes the specified DirectoryEvent message. Does not implicitly {@link DirectoryEvent.verify|verify} messages.
      * @function encode
-     * @memberof DirectoryServerEvent
+     * @memberof DirectoryEvent
      * @static
-     * @param {IDirectoryServerEvent} message DirectoryServerEvent message or plain object to encode
+     * @param {IDirectoryEvent} message DirectoryEvent message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    DirectoryServerEvent.encode = function encode(message, writer) {
+    DirectoryEvent.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
         if (message.publish != null && Object.hasOwnProperty.call(message, "publish"))
-            $root.DirectoryServerEvent.Publish.encode(message.publish, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+            $root.DirectoryEvent.Publish.encode(message.publish, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
         if (message.unpublish != null && Object.hasOwnProperty.call(message, "unpublish"))
-            $root.DirectoryServerEvent.Unpublish.encode(message.unpublish, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
+            $root.DirectoryEvent.Unpublish.encode(message.unpublish, writer.uint32(/* id 2, wireType 2 =*/18).fork()).ldelim();
         if (message.viewerCountChange != null && Object.hasOwnProperty.call(message, "viewerCountChange"))
-            $root.DirectoryServerEvent.ViewerCountChange.encode(message.viewerCountChange, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
+            $root.DirectoryEvent.ViewerCountChange.encode(message.viewerCountChange, writer.uint32(/* id 3, wireType 2 =*/26).fork()).ldelim();
         if (message.viewerStateChange != null && Object.hasOwnProperty.call(message, "viewerStateChange"))
-            $root.DirectoryServerEvent.ViewerStateChange.encode(message.viewerStateChange, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+            $root.DirectoryEvent.ViewerStateChange.encode(message.viewerStateChange, writer.uint32(/* id 4, wireType 2 =*/34).fork()).ldelim();
+        if (message.ping != null && Object.hasOwnProperty.call(message, "ping"))
+            $root.DirectoryEvent.Ping.encode(message.ping, writer.uint32(/* id 5, wireType 2 =*/42).fork()).ldelim();
+        if (message.padding != null && Object.hasOwnProperty.call(message, "padding"))
+            $root.DirectoryEvent.Padding.encode(message.padding, writer.uint32(/* id 6, wireType 2 =*/50).fork()).ldelim();
         return writer;
     };
 
     /**
-     * Encodes the specified DirectoryServerEvent message, length delimited. Does not implicitly {@link DirectoryServerEvent.verify|verify} messages.
+     * Encodes the specified DirectoryEvent message, length delimited. Does not implicitly {@link DirectoryEvent.verify|verify} messages.
      * @function encodeDelimited
-     * @memberof DirectoryServerEvent
+     * @memberof DirectoryEvent
      * @static
-     * @param {IDirectoryServerEvent} message DirectoryServerEvent message or plain object to encode
+     * @param {IDirectoryEvent} message DirectoryEvent message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    DirectoryServerEvent.encodeDelimited = function encodeDelimited(message, writer) {
+    DirectoryEvent.encodeDelimited = function encodeDelimited(message, writer) {
         return this.encode(message, writer).ldelim();
     };
 
     /**
-     * Decodes a DirectoryServerEvent message from the specified reader or buffer.
+     * Decodes a DirectoryEvent message from the specified reader or buffer.
      * @function decode
-     * @memberof DirectoryServerEvent
+     * @memberof DirectoryEvent
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @param {number} [length] Message length if known beforehand
-     * @returns {DirectoryServerEvent} DirectoryServerEvent
+     * @returns {DirectoryEvent} DirectoryEvent
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    DirectoryServerEvent.decode = function decode(reader, length) {
+    DirectoryEvent.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryServerEvent();
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryEvent();
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.publish = $root.DirectoryServerEvent.Publish.decode(reader, reader.uint32());
+                message.publish = $root.DirectoryEvent.Publish.decode(reader, reader.uint32());
                 break;
             case 2:
-                message.unpublish = $root.DirectoryServerEvent.Unpublish.decode(reader, reader.uint32());
+                message.unpublish = $root.DirectoryEvent.Unpublish.decode(reader, reader.uint32());
                 break;
             case 3:
-                message.viewerCountChange = $root.DirectoryServerEvent.ViewerCountChange.decode(reader, reader.uint32());
+                message.viewerCountChange = $root.DirectoryEvent.ViewerCountChange.decode(reader, reader.uint32());
                 break;
             case 4:
-                message.viewerStateChange = $root.DirectoryServerEvent.ViewerStateChange.decode(reader, reader.uint32());
+                message.viewerStateChange = $root.DirectoryEvent.ViewerStateChange.decode(reader, reader.uint32());
+                break;
+            case 5:
+                message.ping = $root.DirectoryEvent.Ping.decode(reader, reader.uint32());
+                break;
+            case 6:
+                message.padding = $root.DirectoryEvent.Padding.decode(reader, reader.uint32());
                 break;
             default:
                 reader.skipType(tag & 7);
@@ -10797,37 +10847,37 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
     };
 
     /**
-     * Decodes a DirectoryServerEvent message from the specified reader or buffer, length delimited.
+     * Decodes a DirectoryEvent message from the specified reader or buffer, length delimited.
      * @function decodeDelimited
-     * @memberof DirectoryServerEvent
+     * @memberof DirectoryEvent
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {DirectoryServerEvent} DirectoryServerEvent
+     * @returns {DirectoryEvent} DirectoryEvent
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    DirectoryServerEvent.decodeDelimited = function decodeDelimited(reader) {
+    DirectoryEvent.decodeDelimited = function decodeDelimited(reader) {
         if (!(reader instanceof $Reader))
             reader = new $Reader(reader);
         return this.decode(reader, reader.uint32());
     };
 
     /**
-     * Verifies a DirectoryServerEvent message.
+     * Verifies a DirectoryEvent message.
      * @function verify
-     * @memberof DirectoryServerEvent
+     * @memberof DirectoryEvent
      * @static
      * @param {Object.<string,*>} message Plain object to verify
      * @returns {string|null} `null` if valid, otherwise the reason why it is not
      */
-    DirectoryServerEvent.verify = function verify(message) {
+    DirectoryEvent.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
         let properties = {};
         if (message.publish != null && message.hasOwnProperty("publish")) {
             properties.body = 1;
             {
-                let error = $root.DirectoryServerEvent.Publish.verify(message.publish);
+                let error = $root.DirectoryEvent.Publish.verify(message.publish);
                 if (error)
                     return "publish." + error;
             }
@@ -10837,7 +10887,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
                 return "body: multiple values";
             properties.body = 1;
             {
-                let error = $root.DirectoryServerEvent.Unpublish.verify(message.unpublish);
+                let error = $root.DirectoryEvent.Unpublish.verify(message.unpublish);
                 if (error)
                     return "unpublish." + error;
             }
@@ -10847,7 +10897,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
                 return "body: multiple values";
             properties.body = 1;
             {
-                let error = $root.DirectoryServerEvent.ViewerCountChange.verify(message.viewerCountChange);
+                let error = $root.DirectoryEvent.ViewerCountChange.verify(message.viewerCountChange);
                 if (error)
                     return "viewerCountChange." + error;
             }
@@ -10857,112 +10907,152 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
                 return "body: multiple values";
             properties.body = 1;
             {
-                let error = $root.DirectoryServerEvent.ViewerStateChange.verify(message.viewerStateChange);
+                let error = $root.DirectoryEvent.ViewerStateChange.verify(message.viewerStateChange);
                 if (error)
                     return "viewerStateChange." + error;
+            }
+        }
+        if (message.ping != null && message.hasOwnProperty("ping")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.DirectoryEvent.Ping.verify(message.ping);
+                if (error)
+                    return "ping." + error;
+            }
+        }
+        if (message.padding != null && message.hasOwnProperty("padding")) {
+            if (properties.body === 1)
+                return "body: multiple values";
+            properties.body = 1;
+            {
+                let error = $root.DirectoryEvent.Padding.verify(message.padding);
+                if (error)
+                    return "padding." + error;
             }
         }
         return null;
     };
 
     /**
-     * Creates a DirectoryServerEvent message from a plain object. Also converts values to their respective internal types.
+     * Creates a DirectoryEvent message from a plain object. Also converts values to their respective internal types.
      * @function fromObject
-     * @memberof DirectoryServerEvent
+     * @memberof DirectoryEvent
      * @static
      * @param {Object.<string,*>} object Plain object
-     * @returns {DirectoryServerEvent} DirectoryServerEvent
+     * @returns {DirectoryEvent} DirectoryEvent
      */
-    DirectoryServerEvent.fromObject = function fromObject(object) {
-        if (object instanceof $root.DirectoryServerEvent)
+    DirectoryEvent.fromObject = function fromObject(object) {
+        if (object instanceof $root.DirectoryEvent)
             return object;
-        let message = new $root.DirectoryServerEvent();
+        let message = new $root.DirectoryEvent();
         if (object.publish != null) {
             if (typeof object.publish !== "object")
-                throw TypeError(".DirectoryServerEvent.publish: object expected");
-            message.publish = $root.DirectoryServerEvent.Publish.fromObject(object.publish);
+                throw TypeError(".DirectoryEvent.publish: object expected");
+            message.publish = $root.DirectoryEvent.Publish.fromObject(object.publish);
         }
         if (object.unpublish != null) {
             if (typeof object.unpublish !== "object")
-                throw TypeError(".DirectoryServerEvent.unpublish: object expected");
-            message.unpublish = $root.DirectoryServerEvent.Unpublish.fromObject(object.unpublish);
+                throw TypeError(".DirectoryEvent.unpublish: object expected");
+            message.unpublish = $root.DirectoryEvent.Unpublish.fromObject(object.unpublish);
         }
         if (object.viewerCountChange != null) {
             if (typeof object.viewerCountChange !== "object")
-                throw TypeError(".DirectoryServerEvent.viewerCountChange: object expected");
-            message.viewerCountChange = $root.DirectoryServerEvent.ViewerCountChange.fromObject(object.viewerCountChange);
+                throw TypeError(".DirectoryEvent.viewerCountChange: object expected");
+            message.viewerCountChange = $root.DirectoryEvent.ViewerCountChange.fromObject(object.viewerCountChange);
         }
         if (object.viewerStateChange != null) {
             if (typeof object.viewerStateChange !== "object")
-                throw TypeError(".DirectoryServerEvent.viewerStateChange: object expected");
-            message.viewerStateChange = $root.DirectoryServerEvent.ViewerStateChange.fromObject(object.viewerStateChange);
+                throw TypeError(".DirectoryEvent.viewerStateChange: object expected");
+            message.viewerStateChange = $root.DirectoryEvent.ViewerStateChange.fromObject(object.viewerStateChange);
+        }
+        if (object.ping != null) {
+            if (typeof object.ping !== "object")
+                throw TypeError(".DirectoryEvent.ping: object expected");
+            message.ping = $root.DirectoryEvent.Ping.fromObject(object.ping);
+        }
+        if (object.padding != null) {
+            if (typeof object.padding !== "object")
+                throw TypeError(".DirectoryEvent.padding: object expected");
+            message.padding = $root.DirectoryEvent.Padding.fromObject(object.padding);
         }
         return message;
     };
 
     /**
-     * Creates a plain object from a DirectoryServerEvent message. Also converts values to other types if specified.
+     * Creates a plain object from a DirectoryEvent message. Also converts values to other types if specified.
      * @function toObject
-     * @memberof DirectoryServerEvent
+     * @memberof DirectoryEvent
      * @static
-     * @param {DirectoryServerEvent} message DirectoryServerEvent
+     * @param {DirectoryEvent} message DirectoryEvent
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    DirectoryServerEvent.toObject = function toObject(message, options) {
+    DirectoryEvent.toObject = function toObject(message, options) {
         if (!options)
             options = {};
         let object = {};
         if (message.publish != null && message.hasOwnProperty("publish")) {
-            object.publish = $root.DirectoryServerEvent.Publish.toObject(message.publish, options);
+            object.publish = $root.DirectoryEvent.Publish.toObject(message.publish, options);
             if (options.oneofs)
                 object.body = "publish";
         }
         if (message.unpublish != null && message.hasOwnProperty("unpublish")) {
-            object.unpublish = $root.DirectoryServerEvent.Unpublish.toObject(message.unpublish, options);
+            object.unpublish = $root.DirectoryEvent.Unpublish.toObject(message.unpublish, options);
             if (options.oneofs)
                 object.body = "unpublish";
         }
         if (message.viewerCountChange != null && message.hasOwnProperty("viewerCountChange")) {
-            object.viewerCountChange = $root.DirectoryServerEvent.ViewerCountChange.toObject(message.viewerCountChange, options);
+            object.viewerCountChange = $root.DirectoryEvent.ViewerCountChange.toObject(message.viewerCountChange, options);
             if (options.oneofs)
                 object.body = "viewerCountChange";
         }
         if (message.viewerStateChange != null && message.hasOwnProperty("viewerStateChange")) {
-            object.viewerStateChange = $root.DirectoryServerEvent.ViewerStateChange.toObject(message.viewerStateChange, options);
+            object.viewerStateChange = $root.DirectoryEvent.ViewerStateChange.toObject(message.viewerStateChange, options);
             if (options.oneofs)
                 object.body = "viewerStateChange";
+        }
+        if (message.ping != null && message.hasOwnProperty("ping")) {
+            object.ping = $root.DirectoryEvent.Ping.toObject(message.ping, options);
+            if (options.oneofs)
+                object.body = "ping";
+        }
+        if (message.padding != null && message.hasOwnProperty("padding")) {
+            object.padding = $root.DirectoryEvent.Padding.toObject(message.padding, options);
+            if (options.oneofs)
+                object.body = "padding";
         }
         return object;
     };
 
     /**
-     * Converts this DirectoryServerEvent to JSON.
+     * Converts this DirectoryEvent to JSON.
      * @function toJSON
-     * @memberof DirectoryServerEvent
+     * @memberof DirectoryEvent
      * @instance
      * @returns {Object.<string,*>} JSON object
      */
-    DirectoryServerEvent.prototype.toJSON = function toJSON() {
+    DirectoryEvent.prototype.toJSON = function toJSON() {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
 
-    DirectoryServerEvent.Publish = (function() {
+    DirectoryEvent.Publish = (function() {
 
         /**
          * Properties of a Publish.
-         * @memberof DirectoryServerEvent
+         * @memberof DirectoryEvent
          * @interface IPublish
          * @property {IDirectoryListing|null} [listing] Publish listing
          */
 
         /**
          * Constructs a new Publish.
-         * @memberof DirectoryServerEvent
+         * @memberof DirectoryEvent
          * @classdesc Represents a Publish.
          * @implements IPublish
          * @constructor
-         * @param {DirectoryServerEvent.IPublish=} [properties] Properties to set
+         * @param {DirectoryEvent.IPublish=} [properties] Properties to set
          */
         function Publish(properties) {
             if (properties)
@@ -10974,7 +11064,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Publish listing.
          * @member {IDirectoryListing|null|undefined} listing
-         * @memberof DirectoryServerEvent.Publish
+         * @memberof DirectoryEvent.Publish
          * @instance
          */
         Publish.prototype.listing = null;
@@ -10982,21 +11072,21 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Creates a new Publish instance using the specified properties.
          * @function create
-         * @memberof DirectoryServerEvent.Publish
+         * @memberof DirectoryEvent.Publish
          * @static
-         * @param {DirectoryServerEvent.IPublish=} [properties] Properties to set
-         * @returns {DirectoryServerEvent.Publish} Publish instance
+         * @param {DirectoryEvent.IPublish=} [properties] Properties to set
+         * @returns {DirectoryEvent.Publish} Publish instance
          */
         Publish.create = function create(properties) {
             return new Publish(properties);
         };
 
         /**
-         * Encodes the specified Publish message. Does not implicitly {@link DirectoryServerEvent.Publish.verify|verify} messages.
+         * Encodes the specified Publish message. Does not implicitly {@link DirectoryEvent.Publish.verify|verify} messages.
          * @function encode
-         * @memberof DirectoryServerEvent.Publish
+         * @memberof DirectoryEvent.Publish
          * @static
-         * @param {DirectoryServerEvent.IPublish} message Publish message or plain object to encode
+         * @param {DirectoryEvent.IPublish} message Publish message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -11009,11 +11099,11 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         };
 
         /**
-         * Encodes the specified Publish message, length delimited. Does not implicitly {@link DirectoryServerEvent.Publish.verify|verify} messages.
+         * Encodes the specified Publish message, length delimited. Does not implicitly {@link DirectoryEvent.Publish.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof DirectoryServerEvent.Publish
+         * @memberof DirectoryEvent.Publish
          * @static
-         * @param {DirectoryServerEvent.IPublish} message Publish message or plain object to encode
+         * @param {DirectoryEvent.IPublish} message Publish message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -11024,18 +11114,18 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Decodes a Publish message from the specified reader or buffer.
          * @function decode
-         * @memberof DirectoryServerEvent.Publish
+         * @memberof DirectoryEvent.Publish
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {DirectoryServerEvent.Publish} Publish
+         * @returns {DirectoryEvent.Publish} Publish
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
         Publish.decode = function decode(reader, length) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryServerEvent.Publish();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryEvent.Publish();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
@@ -11053,10 +11143,10 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Decodes a Publish message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof DirectoryServerEvent.Publish
+         * @memberof DirectoryEvent.Publish
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {DirectoryServerEvent.Publish} Publish
+         * @returns {DirectoryEvent.Publish} Publish
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
@@ -11069,7 +11159,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Verifies a Publish message.
          * @function verify
-         * @memberof DirectoryServerEvent.Publish
+         * @memberof DirectoryEvent.Publish
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
@@ -11088,18 +11178,18 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Creates a Publish message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof DirectoryServerEvent.Publish
+         * @memberof DirectoryEvent.Publish
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {DirectoryServerEvent.Publish} Publish
+         * @returns {DirectoryEvent.Publish} Publish
          */
         Publish.fromObject = function fromObject(object) {
-            if (object instanceof $root.DirectoryServerEvent.Publish)
+            if (object instanceof $root.DirectoryEvent.Publish)
                 return object;
-            let message = new $root.DirectoryServerEvent.Publish();
+            let message = new $root.DirectoryEvent.Publish();
             if (object.listing != null) {
                 if (typeof object.listing !== "object")
-                    throw TypeError(".DirectoryServerEvent.Publish.listing: object expected");
+                    throw TypeError(".DirectoryEvent.Publish.listing: object expected");
                 message.listing = $root.DirectoryListing.fromObject(object.listing);
             }
             return message;
@@ -11108,9 +11198,9 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Creates a plain object from a Publish message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof DirectoryServerEvent.Publish
+         * @memberof DirectoryEvent.Publish
          * @static
-         * @param {DirectoryServerEvent.Publish} message Publish
+         * @param {DirectoryEvent.Publish} message Publish
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
@@ -11128,7 +11218,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Converts this Publish to JSON.
          * @function toJSON
-         * @memberof DirectoryServerEvent.Publish
+         * @memberof DirectoryEvent.Publish
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
@@ -11139,22 +11229,22 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         return Publish;
     })();
 
-    DirectoryServerEvent.Unpublish = (function() {
+    DirectoryEvent.Unpublish = (function() {
 
         /**
          * Properties of an Unpublish.
-         * @memberof DirectoryServerEvent
+         * @memberof DirectoryEvent
          * @interface IUnpublish
          * @property {Uint8Array|null} [key] Unpublish key
          */
 
         /**
          * Constructs a new Unpublish.
-         * @memberof DirectoryServerEvent
+         * @memberof DirectoryEvent
          * @classdesc Represents an Unpublish.
          * @implements IUnpublish
          * @constructor
-         * @param {DirectoryServerEvent.IUnpublish=} [properties] Properties to set
+         * @param {DirectoryEvent.IUnpublish=} [properties] Properties to set
          */
         function Unpublish(properties) {
             if (properties)
@@ -11166,7 +11256,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Unpublish key.
          * @member {Uint8Array} key
-         * @memberof DirectoryServerEvent.Unpublish
+         * @memberof DirectoryEvent.Unpublish
          * @instance
          */
         Unpublish.prototype.key = $util.newBuffer([]);
@@ -11174,21 +11264,21 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Creates a new Unpublish instance using the specified properties.
          * @function create
-         * @memberof DirectoryServerEvent.Unpublish
+         * @memberof DirectoryEvent.Unpublish
          * @static
-         * @param {DirectoryServerEvent.IUnpublish=} [properties] Properties to set
-         * @returns {DirectoryServerEvent.Unpublish} Unpublish instance
+         * @param {DirectoryEvent.IUnpublish=} [properties] Properties to set
+         * @returns {DirectoryEvent.Unpublish} Unpublish instance
          */
         Unpublish.create = function create(properties) {
             return new Unpublish(properties);
         };
 
         /**
-         * Encodes the specified Unpublish message. Does not implicitly {@link DirectoryServerEvent.Unpublish.verify|verify} messages.
+         * Encodes the specified Unpublish message. Does not implicitly {@link DirectoryEvent.Unpublish.verify|verify} messages.
          * @function encode
-         * @memberof DirectoryServerEvent.Unpublish
+         * @memberof DirectoryEvent.Unpublish
          * @static
-         * @param {DirectoryServerEvent.IUnpublish} message Unpublish message or plain object to encode
+         * @param {DirectoryEvent.IUnpublish} message Unpublish message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -11201,11 +11291,11 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         };
 
         /**
-         * Encodes the specified Unpublish message, length delimited. Does not implicitly {@link DirectoryServerEvent.Unpublish.verify|verify} messages.
+         * Encodes the specified Unpublish message, length delimited. Does not implicitly {@link DirectoryEvent.Unpublish.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof DirectoryServerEvent.Unpublish
+         * @memberof DirectoryEvent.Unpublish
          * @static
-         * @param {DirectoryServerEvent.IUnpublish} message Unpublish message or plain object to encode
+         * @param {DirectoryEvent.IUnpublish} message Unpublish message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -11216,18 +11306,18 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Decodes an Unpublish message from the specified reader or buffer.
          * @function decode
-         * @memberof DirectoryServerEvent.Unpublish
+         * @memberof DirectoryEvent.Unpublish
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {DirectoryServerEvent.Unpublish} Unpublish
+         * @returns {DirectoryEvent.Unpublish} Unpublish
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
         Unpublish.decode = function decode(reader, length) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryServerEvent.Unpublish();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryEvent.Unpublish();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
@@ -11245,10 +11335,10 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Decodes an Unpublish message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof DirectoryServerEvent.Unpublish
+         * @memberof DirectoryEvent.Unpublish
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {DirectoryServerEvent.Unpublish} Unpublish
+         * @returns {DirectoryEvent.Unpublish} Unpublish
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
@@ -11261,7 +11351,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Verifies an Unpublish message.
          * @function verify
-         * @memberof DirectoryServerEvent.Unpublish
+         * @memberof DirectoryEvent.Unpublish
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
@@ -11278,15 +11368,15 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Creates an Unpublish message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof DirectoryServerEvent.Unpublish
+         * @memberof DirectoryEvent.Unpublish
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {DirectoryServerEvent.Unpublish} Unpublish
+         * @returns {DirectoryEvent.Unpublish} Unpublish
          */
         Unpublish.fromObject = function fromObject(object) {
-            if (object instanceof $root.DirectoryServerEvent.Unpublish)
+            if (object instanceof $root.DirectoryEvent.Unpublish)
                 return object;
-            let message = new $root.DirectoryServerEvent.Unpublish();
+            let message = new $root.DirectoryEvent.Unpublish();
             if (object.key != null)
                 if (typeof object.key === "string")
                     $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
@@ -11298,9 +11388,9 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Creates a plain object from an Unpublish message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof DirectoryServerEvent.Unpublish
+         * @memberof DirectoryEvent.Unpublish
          * @static
-         * @param {DirectoryServerEvent.Unpublish} message Unpublish
+         * @param {DirectoryEvent.Unpublish} message Unpublish
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
@@ -11324,7 +11414,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Converts this Unpublish to JSON.
          * @function toJSON
-         * @memberof DirectoryServerEvent.Unpublish
+         * @memberof DirectoryEvent.Unpublish
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
@@ -11335,11 +11425,11 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         return Unpublish;
     })();
 
-    DirectoryServerEvent.ViewerCountChange = (function() {
+    DirectoryEvent.ViewerCountChange = (function() {
 
         /**
          * Properties of a ViewerCountChange.
-         * @memberof DirectoryServerEvent
+         * @memberof DirectoryEvent
          * @interface IViewerCountChange
          * @property {Uint8Array|null} [key] ViewerCountChange key
          * @property {number|null} [count] ViewerCountChange count
@@ -11347,11 +11437,11 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
 
         /**
          * Constructs a new ViewerCountChange.
-         * @memberof DirectoryServerEvent
+         * @memberof DirectoryEvent
          * @classdesc Represents a ViewerCountChange.
          * @implements IViewerCountChange
          * @constructor
-         * @param {DirectoryServerEvent.IViewerCountChange=} [properties] Properties to set
+         * @param {DirectoryEvent.IViewerCountChange=} [properties] Properties to set
          */
         function ViewerCountChange(properties) {
             if (properties)
@@ -11363,7 +11453,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * ViewerCountChange key.
          * @member {Uint8Array} key
-         * @memberof DirectoryServerEvent.ViewerCountChange
+         * @memberof DirectoryEvent.ViewerCountChange
          * @instance
          */
         ViewerCountChange.prototype.key = $util.newBuffer([]);
@@ -11371,7 +11461,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * ViewerCountChange count.
          * @member {number} count
-         * @memberof DirectoryServerEvent.ViewerCountChange
+         * @memberof DirectoryEvent.ViewerCountChange
          * @instance
          */
         ViewerCountChange.prototype.count = 0;
@@ -11379,21 +11469,21 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Creates a new ViewerCountChange instance using the specified properties.
          * @function create
-         * @memberof DirectoryServerEvent.ViewerCountChange
+         * @memberof DirectoryEvent.ViewerCountChange
          * @static
-         * @param {DirectoryServerEvent.IViewerCountChange=} [properties] Properties to set
-         * @returns {DirectoryServerEvent.ViewerCountChange} ViewerCountChange instance
+         * @param {DirectoryEvent.IViewerCountChange=} [properties] Properties to set
+         * @returns {DirectoryEvent.ViewerCountChange} ViewerCountChange instance
          */
         ViewerCountChange.create = function create(properties) {
             return new ViewerCountChange(properties);
         };
 
         /**
-         * Encodes the specified ViewerCountChange message. Does not implicitly {@link DirectoryServerEvent.ViewerCountChange.verify|verify} messages.
+         * Encodes the specified ViewerCountChange message. Does not implicitly {@link DirectoryEvent.ViewerCountChange.verify|verify} messages.
          * @function encode
-         * @memberof DirectoryServerEvent.ViewerCountChange
+         * @memberof DirectoryEvent.ViewerCountChange
          * @static
-         * @param {DirectoryServerEvent.IViewerCountChange} message ViewerCountChange message or plain object to encode
+         * @param {DirectoryEvent.IViewerCountChange} message ViewerCountChange message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -11408,11 +11498,11 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         };
 
         /**
-         * Encodes the specified ViewerCountChange message, length delimited. Does not implicitly {@link DirectoryServerEvent.ViewerCountChange.verify|verify} messages.
+         * Encodes the specified ViewerCountChange message, length delimited. Does not implicitly {@link DirectoryEvent.ViewerCountChange.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof DirectoryServerEvent.ViewerCountChange
+         * @memberof DirectoryEvent.ViewerCountChange
          * @static
-         * @param {DirectoryServerEvent.IViewerCountChange} message ViewerCountChange message or plain object to encode
+         * @param {DirectoryEvent.IViewerCountChange} message ViewerCountChange message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -11423,18 +11513,18 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Decodes a ViewerCountChange message from the specified reader or buffer.
          * @function decode
-         * @memberof DirectoryServerEvent.ViewerCountChange
+         * @memberof DirectoryEvent.ViewerCountChange
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {DirectoryServerEvent.ViewerCountChange} ViewerCountChange
+         * @returns {DirectoryEvent.ViewerCountChange} ViewerCountChange
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
         ViewerCountChange.decode = function decode(reader, length) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryServerEvent.ViewerCountChange();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryEvent.ViewerCountChange();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
@@ -11455,10 +11545,10 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Decodes a ViewerCountChange message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof DirectoryServerEvent.ViewerCountChange
+         * @memberof DirectoryEvent.ViewerCountChange
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {DirectoryServerEvent.ViewerCountChange} ViewerCountChange
+         * @returns {DirectoryEvent.ViewerCountChange} ViewerCountChange
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
@@ -11471,7 +11561,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Verifies a ViewerCountChange message.
          * @function verify
-         * @memberof DirectoryServerEvent.ViewerCountChange
+         * @memberof DirectoryEvent.ViewerCountChange
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
@@ -11491,15 +11581,15 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Creates a ViewerCountChange message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof DirectoryServerEvent.ViewerCountChange
+         * @memberof DirectoryEvent.ViewerCountChange
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {DirectoryServerEvent.ViewerCountChange} ViewerCountChange
+         * @returns {DirectoryEvent.ViewerCountChange} ViewerCountChange
          */
         ViewerCountChange.fromObject = function fromObject(object) {
-            if (object instanceof $root.DirectoryServerEvent.ViewerCountChange)
+            if (object instanceof $root.DirectoryEvent.ViewerCountChange)
                 return object;
-            let message = new $root.DirectoryServerEvent.ViewerCountChange();
+            let message = new $root.DirectoryEvent.ViewerCountChange();
             if (object.key != null)
                 if (typeof object.key === "string")
                     $util.base64.decode(object.key, message.key = $util.newBuffer($util.base64.length(object.key)), 0);
@@ -11513,9 +11603,9 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Creates a plain object from a ViewerCountChange message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof DirectoryServerEvent.ViewerCountChange
+         * @memberof DirectoryEvent.ViewerCountChange
          * @static
-         * @param {DirectoryServerEvent.ViewerCountChange} message ViewerCountChange
+         * @param {DirectoryEvent.ViewerCountChange} message ViewerCountChange
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
@@ -11543,7 +11633,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Converts this ViewerCountChange to JSON.
          * @function toJSON
-         * @memberof DirectoryServerEvent.ViewerCountChange
+         * @memberof DirectoryEvent.ViewerCountChange
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
@@ -11554,11 +11644,11 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         return ViewerCountChange;
     })();
 
-    DirectoryServerEvent.ViewerStateChange = (function() {
+    DirectoryEvent.ViewerStateChange = (function() {
 
         /**
          * Properties of a ViewerStateChange.
-         * @memberof DirectoryServerEvent
+         * @memberof DirectoryEvent
          * @interface IViewerStateChange
          * @property {string|null} [subject] ViewerStateChange subject
          * @property {boolean|null} [online] ViewerStateChange online
@@ -11567,11 +11657,11 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
 
         /**
          * Constructs a new ViewerStateChange.
-         * @memberof DirectoryServerEvent
+         * @memberof DirectoryEvent
          * @classdesc Represents a ViewerStateChange.
          * @implements IViewerStateChange
          * @constructor
-         * @param {DirectoryServerEvent.IViewerStateChange=} [properties] Properties to set
+         * @param {DirectoryEvent.IViewerStateChange=} [properties] Properties to set
          */
         function ViewerStateChange(properties) {
             this.viewingKeys = [];
@@ -11584,7 +11674,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * ViewerStateChange subject.
          * @member {string} subject
-         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @memberof DirectoryEvent.ViewerStateChange
          * @instance
          */
         ViewerStateChange.prototype.subject = "";
@@ -11592,7 +11682,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * ViewerStateChange online.
          * @member {boolean} online
-         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @memberof DirectoryEvent.ViewerStateChange
          * @instance
          */
         ViewerStateChange.prototype.online = false;
@@ -11600,7 +11690,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * ViewerStateChange viewingKeys.
          * @member {Array.<Uint8Array>} viewingKeys
-         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @memberof DirectoryEvent.ViewerStateChange
          * @instance
          */
         ViewerStateChange.prototype.viewingKeys = $util.emptyArray;
@@ -11608,21 +11698,21 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Creates a new ViewerStateChange instance using the specified properties.
          * @function create
-         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @memberof DirectoryEvent.ViewerStateChange
          * @static
-         * @param {DirectoryServerEvent.IViewerStateChange=} [properties] Properties to set
-         * @returns {DirectoryServerEvent.ViewerStateChange} ViewerStateChange instance
+         * @param {DirectoryEvent.IViewerStateChange=} [properties] Properties to set
+         * @returns {DirectoryEvent.ViewerStateChange} ViewerStateChange instance
          */
         ViewerStateChange.create = function create(properties) {
             return new ViewerStateChange(properties);
         };
 
         /**
-         * Encodes the specified ViewerStateChange message. Does not implicitly {@link DirectoryServerEvent.ViewerStateChange.verify|verify} messages.
+         * Encodes the specified ViewerStateChange message. Does not implicitly {@link DirectoryEvent.ViewerStateChange.verify|verify} messages.
          * @function encode
-         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @memberof DirectoryEvent.ViewerStateChange
          * @static
-         * @param {DirectoryServerEvent.IViewerStateChange} message ViewerStateChange message or plain object to encode
+         * @param {DirectoryEvent.IViewerStateChange} message ViewerStateChange message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -11640,11 +11730,11 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         };
 
         /**
-         * Encodes the specified ViewerStateChange message, length delimited. Does not implicitly {@link DirectoryServerEvent.ViewerStateChange.verify|verify} messages.
+         * Encodes the specified ViewerStateChange message, length delimited. Does not implicitly {@link DirectoryEvent.ViewerStateChange.verify|verify} messages.
          * @function encodeDelimited
-         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @memberof DirectoryEvent.ViewerStateChange
          * @static
-         * @param {DirectoryServerEvent.IViewerStateChange} message ViewerStateChange message or plain object to encode
+         * @param {DirectoryEvent.IViewerStateChange} message ViewerStateChange message or plain object to encode
          * @param {$protobuf.Writer} [writer] Writer to encode to
          * @returns {$protobuf.Writer} Writer
          */
@@ -11655,18 +11745,18 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Decodes a ViewerStateChange message from the specified reader or buffer.
          * @function decode
-         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @memberof DirectoryEvent.ViewerStateChange
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
          * @param {number} [length] Message length if known beforehand
-         * @returns {DirectoryServerEvent.ViewerStateChange} ViewerStateChange
+         * @returns {DirectoryEvent.ViewerStateChange} ViewerStateChange
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
         ViewerStateChange.decode = function decode(reader, length) {
             if (!(reader instanceof $Reader))
                 reader = $Reader.create(reader);
-            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryServerEvent.ViewerStateChange();
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryEvent.ViewerStateChange();
             while (reader.pos < end) {
                 let tag = reader.uint32();
                 switch (tag >>> 3) {
@@ -11692,10 +11782,10 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Decodes a ViewerStateChange message from the specified reader or buffer, length delimited.
          * @function decodeDelimited
-         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @memberof DirectoryEvent.ViewerStateChange
          * @static
          * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-         * @returns {DirectoryServerEvent.ViewerStateChange} ViewerStateChange
+         * @returns {DirectoryEvent.ViewerStateChange} ViewerStateChange
          * @throws {Error} If the payload is not a reader or valid buffer
          * @throws {$protobuf.util.ProtocolError} If required fields are missing
          */
@@ -11708,7 +11798,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Verifies a ViewerStateChange message.
          * @function verify
-         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @memberof DirectoryEvent.ViewerStateChange
          * @static
          * @param {Object.<string,*>} message Plain object to verify
          * @returns {string|null} `null` if valid, otherwise the reason why it is not
@@ -11735,22 +11825,22 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Creates a ViewerStateChange message from a plain object. Also converts values to their respective internal types.
          * @function fromObject
-         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @memberof DirectoryEvent.ViewerStateChange
          * @static
          * @param {Object.<string,*>} object Plain object
-         * @returns {DirectoryServerEvent.ViewerStateChange} ViewerStateChange
+         * @returns {DirectoryEvent.ViewerStateChange} ViewerStateChange
          */
         ViewerStateChange.fromObject = function fromObject(object) {
-            if (object instanceof $root.DirectoryServerEvent.ViewerStateChange)
+            if (object instanceof $root.DirectoryEvent.ViewerStateChange)
                 return object;
-            let message = new $root.DirectoryServerEvent.ViewerStateChange();
+            let message = new $root.DirectoryEvent.ViewerStateChange();
             if (object.subject != null)
                 message.subject = String(object.subject);
             if (object.online != null)
                 message.online = Boolean(object.online);
             if (object.viewingKeys) {
                 if (!Array.isArray(object.viewingKeys))
-                    throw TypeError(".DirectoryServerEvent.ViewerStateChange.viewingKeys: array expected");
+                    throw TypeError(".DirectoryEvent.ViewerStateChange.viewingKeys: array expected");
                 message.viewingKeys = [];
                 for (let i = 0; i < object.viewingKeys.length; ++i)
                     if (typeof object.viewingKeys[i] === "string")
@@ -11764,9 +11854,9 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Creates a plain object from a ViewerStateChange message. Also converts values to other types if specified.
          * @function toObject
-         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @memberof DirectoryEvent.ViewerStateChange
          * @static
-         * @param {DirectoryServerEvent.ViewerStateChange} message ViewerStateChange
+         * @param {DirectoryEvent.ViewerStateChange} message ViewerStateChange
          * @param {$protobuf.IConversionOptions} [options] Conversion options
          * @returns {Object.<string,*>} Plain object
          */
@@ -11795,7 +11885,7 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         /**
          * Converts this ViewerStateChange to JSON.
          * @function toJSON
-         * @memberof DirectoryServerEvent.ViewerStateChange
+         * @memberof DirectoryEvent.ViewerStateChange
          * @instance
          * @returns {Object.<string,*>} JSON object
          */
@@ -11806,7 +11896,404 @@ export const DirectoryServerEvent = $root.DirectoryServerEvent = (() => {
         return ViewerStateChange;
     })();
 
-    return DirectoryServerEvent;
+    DirectoryEvent.Ping = (function() {
+
+        /**
+         * Properties of a Ping.
+         * @memberof DirectoryEvent
+         * @interface IPing
+         * @property {number|null} [time] Ping time
+         */
+
+        /**
+         * Constructs a new Ping.
+         * @memberof DirectoryEvent
+         * @classdesc Represents a Ping.
+         * @implements IPing
+         * @constructor
+         * @param {DirectoryEvent.IPing=} [properties] Properties to set
+         */
+        function Ping(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Ping time.
+         * @member {number} time
+         * @memberof DirectoryEvent.Ping
+         * @instance
+         */
+        Ping.prototype.time = $util.Long ? $util.Long.fromBits(0,0,false) : 0;
+
+        /**
+         * Creates a new Ping instance using the specified properties.
+         * @function create
+         * @memberof DirectoryEvent.Ping
+         * @static
+         * @param {DirectoryEvent.IPing=} [properties] Properties to set
+         * @returns {DirectoryEvent.Ping} Ping instance
+         */
+        Ping.create = function create(properties) {
+            return new Ping(properties);
+        };
+
+        /**
+         * Encodes the specified Ping message. Does not implicitly {@link DirectoryEvent.Ping.verify|verify} messages.
+         * @function encode
+         * @memberof DirectoryEvent.Ping
+         * @static
+         * @param {DirectoryEvent.IPing} message Ping message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Ping.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.time != null && Object.hasOwnProperty.call(message, "time"))
+                writer.uint32(/* id 1, wireType 0 =*/8).int64(message.time);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Ping message, length delimited. Does not implicitly {@link DirectoryEvent.Ping.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof DirectoryEvent.Ping
+         * @static
+         * @param {DirectoryEvent.IPing} message Ping message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Ping.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Ping message from the specified reader or buffer.
+         * @function decode
+         * @memberof DirectoryEvent.Ping
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {DirectoryEvent.Ping} Ping
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Ping.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryEvent.Ping();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.time = reader.int64();
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Ping message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof DirectoryEvent.Ping
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {DirectoryEvent.Ping} Ping
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Ping.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Ping message.
+         * @function verify
+         * @memberof DirectoryEvent.Ping
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Ping.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.time != null && message.hasOwnProperty("time"))
+                if (!$util.isInteger(message.time) && !(message.time && $util.isInteger(message.time.low) && $util.isInteger(message.time.high)))
+                    return "time: integer|Long expected";
+            return null;
+        };
+
+        /**
+         * Creates a Ping message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof DirectoryEvent.Ping
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {DirectoryEvent.Ping} Ping
+         */
+        Ping.fromObject = function fromObject(object) {
+            if (object instanceof $root.DirectoryEvent.Ping)
+                return object;
+            let message = new $root.DirectoryEvent.Ping();
+            if (object.time != null)
+                if ($util.Long)
+                    (message.time = $util.Long.fromValue(object.time)).unsigned = false;
+                else if (typeof object.time === "string")
+                    message.time = parseInt(object.time, 10);
+                else if (typeof object.time === "number")
+                    message.time = object.time;
+                else if (typeof object.time === "object")
+                    message.time = new $util.LongBits(object.time.low >>> 0, object.time.high >>> 0).toNumber();
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a Ping message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof DirectoryEvent.Ping
+         * @static
+         * @param {DirectoryEvent.Ping} message Ping
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Ping.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                if ($util.Long) {
+                    let long = new $util.Long(0, 0, false);
+                    object.time = options.longs === String ? long.toString() : options.longs === Number ? long.toNumber() : long;
+                } else
+                    object.time = options.longs === String ? "0" : 0;
+            if (message.time != null && message.hasOwnProperty("time"))
+                if (typeof message.time === "number")
+                    object.time = options.longs === String ? String(message.time) : message.time;
+                else
+                    object.time = options.longs === String ? $util.Long.prototype.toString.call(message.time) : options.longs === Number ? new $util.LongBits(message.time.low >>> 0, message.time.high >>> 0).toNumber() : message.time;
+            return object;
+        };
+
+        /**
+         * Converts this Ping to JSON.
+         * @function toJSON
+         * @memberof DirectoryEvent.Ping
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Ping.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Ping;
+    })();
+
+    DirectoryEvent.Padding = (function() {
+
+        /**
+         * Properties of a Padding.
+         * @memberof DirectoryEvent
+         * @interface IPadding
+         * @property {Uint8Array|null} [data] Padding data
+         */
+
+        /**
+         * Constructs a new Padding.
+         * @memberof DirectoryEvent
+         * @classdesc Represents a Padding.
+         * @implements IPadding
+         * @constructor
+         * @param {DirectoryEvent.IPadding=} [properties] Properties to set
+         */
+        function Padding(properties) {
+            if (properties)
+                for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                    if (properties[keys[i]] != null)
+                        this[keys[i]] = properties[keys[i]];
+        }
+
+        /**
+         * Padding data.
+         * @member {Uint8Array} data
+         * @memberof DirectoryEvent.Padding
+         * @instance
+         */
+        Padding.prototype.data = $util.newBuffer([]);
+
+        /**
+         * Creates a new Padding instance using the specified properties.
+         * @function create
+         * @memberof DirectoryEvent.Padding
+         * @static
+         * @param {DirectoryEvent.IPadding=} [properties] Properties to set
+         * @returns {DirectoryEvent.Padding} Padding instance
+         */
+        Padding.create = function create(properties) {
+            return new Padding(properties);
+        };
+
+        /**
+         * Encodes the specified Padding message. Does not implicitly {@link DirectoryEvent.Padding.verify|verify} messages.
+         * @function encode
+         * @memberof DirectoryEvent.Padding
+         * @static
+         * @param {DirectoryEvent.IPadding} message Padding message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Padding.encode = function encode(message, writer) {
+            if (!writer)
+                writer = $Writer.create();
+            if (message.data != null && Object.hasOwnProperty.call(message, "data"))
+                writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.data);
+            return writer;
+        };
+
+        /**
+         * Encodes the specified Padding message, length delimited. Does not implicitly {@link DirectoryEvent.Padding.verify|verify} messages.
+         * @function encodeDelimited
+         * @memberof DirectoryEvent.Padding
+         * @static
+         * @param {DirectoryEvent.IPadding} message Padding message or plain object to encode
+         * @param {$protobuf.Writer} [writer] Writer to encode to
+         * @returns {$protobuf.Writer} Writer
+         */
+        Padding.encodeDelimited = function encodeDelimited(message, writer) {
+            return this.encode(message, writer).ldelim();
+        };
+
+        /**
+         * Decodes a Padding message from the specified reader or buffer.
+         * @function decode
+         * @memberof DirectoryEvent.Padding
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @param {number} [length] Message length if known beforehand
+         * @returns {DirectoryEvent.Padding} Padding
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Padding.decode = function decode(reader, length) {
+            if (!(reader instanceof $Reader))
+                reader = $Reader.create(reader);
+            let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryEvent.Padding();
+            while (reader.pos < end) {
+                let tag = reader.uint32();
+                switch (tag >>> 3) {
+                case 1:
+                    message.data = reader.bytes();
+                    break;
+                default:
+                    reader.skipType(tag & 7);
+                    break;
+                }
+            }
+            return message;
+        };
+
+        /**
+         * Decodes a Padding message from the specified reader or buffer, length delimited.
+         * @function decodeDelimited
+         * @memberof DirectoryEvent.Padding
+         * @static
+         * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+         * @returns {DirectoryEvent.Padding} Padding
+         * @throws {Error} If the payload is not a reader or valid buffer
+         * @throws {$protobuf.util.ProtocolError} If required fields are missing
+         */
+        Padding.decodeDelimited = function decodeDelimited(reader) {
+            if (!(reader instanceof $Reader))
+                reader = new $Reader(reader);
+            return this.decode(reader, reader.uint32());
+        };
+
+        /**
+         * Verifies a Padding message.
+         * @function verify
+         * @memberof DirectoryEvent.Padding
+         * @static
+         * @param {Object.<string,*>} message Plain object to verify
+         * @returns {string|null} `null` if valid, otherwise the reason why it is not
+         */
+        Padding.verify = function verify(message) {
+            if (typeof message !== "object" || message === null)
+                return "object expected";
+            if (message.data != null && message.hasOwnProperty("data"))
+                if (!(message.data && typeof message.data.length === "number" || $util.isString(message.data)))
+                    return "data: buffer expected";
+            return null;
+        };
+
+        /**
+         * Creates a Padding message from a plain object. Also converts values to their respective internal types.
+         * @function fromObject
+         * @memberof DirectoryEvent.Padding
+         * @static
+         * @param {Object.<string,*>} object Plain object
+         * @returns {DirectoryEvent.Padding} Padding
+         */
+        Padding.fromObject = function fromObject(object) {
+            if (object instanceof $root.DirectoryEvent.Padding)
+                return object;
+            let message = new $root.DirectoryEvent.Padding();
+            if (object.data != null)
+                if (typeof object.data === "string")
+                    $util.base64.decode(object.data, message.data = $util.newBuffer($util.base64.length(object.data)), 0);
+                else if (object.data.length)
+                    message.data = object.data;
+            return message;
+        };
+
+        /**
+         * Creates a plain object from a Padding message. Also converts values to other types if specified.
+         * @function toObject
+         * @memberof DirectoryEvent.Padding
+         * @static
+         * @param {DirectoryEvent.Padding} message Padding
+         * @param {$protobuf.IConversionOptions} [options] Conversion options
+         * @returns {Object.<string,*>} Plain object
+         */
+        Padding.toObject = function toObject(message, options) {
+            if (!options)
+                options = {};
+            let object = {};
+            if (options.defaults)
+                if (options.bytes === String)
+                    object.data = "";
+                else {
+                    object.data = [];
+                    if (options.bytes !== Array)
+                        object.data = $util.newBuffer(object.data);
+                }
+            if (message.data != null && message.hasOwnProperty("data"))
+                object.data = options.bytes === String ? $util.base64.encode(message.data, 0, message.data.length) : options.bytes === Array ? Array.prototype.slice.call(message.data) : message.data;
+            return object;
+        };
+
+        /**
+         * Converts this Padding to JSON.
+         * @function toJSON
+         * @memberof DirectoryEvent.Padding
+         * @instance
+         * @returns {Object.<string,*>} JSON object
+         */
+        Padding.prototype.toJSON = function toJSON() {
+            return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+        };
+
+        return Padding;
+    })();
+
+    return DirectoryEvent;
 })();
 
 export const DirectoryPublishRequest = $root.DirectoryPublishRequest = (() => {
@@ -13547,6 +14034,750 @@ export const DirectoryPingResponse = $root.DirectoryPingResponse = (() => {
     };
 
     return DirectoryPingResponse;
+})();
+
+export const DirectoryFrontendOpenRequest = $root.DirectoryFrontendOpenRequest = (() => {
+
+    /**
+     * Properties of a DirectoryFrontendOpenRequest.
+     * @exports IDirectoryFrontendOpenRequest
+     * @interface IDirectoryFrontendOpenRequest
+     * @property {Uint8Array|null} [networkKey] DirectoryFrontendOpenRequest networkKey
+     */
+
+    /**
+     * Constructs a new DirectoryFrontendOpenRequest.
+     * @exports DirectoryFrontendOpenRequest
+     * @classdesc Represents a DirectoryFrontendOpenRequest.
+     * @implements IDirectoryFrontendOpenRequest
+     * @constructor
+     * @param {IDirectoryFrontendOpenRequest=} [properties] Properties to set
+     */
+    function DirectoryFrontendOpenRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * DirectoryFrontendOpenRequest networkKey.
+     * @member {Uint8Array} networkKey
+     * @memberof DirectoryFrontendOpenRequest
+     * @instance
+     */
+    DirectoryFrontendOpenRequest.prototype.networkKey = $util.newBuffer([]);
+
+    /**
+     * Creates a new DirectoryFrontendOpenRequest instance using the specified properties.
+     * @function create
+     * @memberof DirectoryFrontendOpenRequest
+     * @static
+     * @param {IDirectoryFrontendOpenRequest=} [properties] Properties to set
+     * @returns {DirectoryFrontendOpenRequest} DirectoryFrontendOpenRequest instance
+     */
+    DirectoryFrontendOpenRequest.create = function create(properties) {
+        return new DirectoryFrontendOpenRequest(properties);
+    };
+
+    /**
+     * Encodes the specified DirectoryFrontendOpenRequest message. Does not implicitly {@link DirectoryFrontendOpenRequest.verify|verify} messages.
+     * @function encode
+     * @memberof DirectoryFrontendOpenRequest
+     * @static
+     * @param {IDirectoryFrontendOpenRequest} message DirectoryFrontendOpenRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryFrontendOpenRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.networkKey);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified DirectoryFrontendOpenRequest message, length delimited. Does not implicitly {@link DirectoryFrontendOpenRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof DirectoryFrontendOpenRequest
+     * @static
+     * @param {IDirectoryFrontendOpenRequest} message DirectoryFrontendOpenRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryFrontendOpenRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a DirectoryFrontendOpenRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof DirectoryFrontendOpenRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {DirectoryFrontendOpenRequest} DirectoryFrontendOpenRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryFrontendOpenRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryFrontendOpenRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.networkKey = reader.bytes();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a DirectoryFrontendOpenRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof DirectoryFrontendOpenRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {DirectoryFrontendOpenRequest} DirectoryFrontendOpenRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryFrontendOpenRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a DirectoryFrontendOpenRequest message.
+     * @function verify
+     * @memberof DirectoryFrontendOpenRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    DirectoryFrontendOpenRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+            if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
+                return "networkKey: buffer expected";
+        return null;
+    };
+
+    /**
+     * Creates a DirectoryFrontendOpenRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof DirectoryFrontendOpenRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {DirectoryFrontendOpenRequest} DirectoryFrontendOpenRequest
+     */
+    DirectoryFrontendOpenRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.DirectoryFrontendOpenRequest)
+            return object;
+        let message = new $root.DirectoryFrontendOpenRequest();
+        if (object.networkKey != null)
+            if (typeof object.networkKey === "string")
+                $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
+            else if (object.networkKey.length)
+                message.networkKey = object.networkKey;
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a DirectoryFrontendOpenRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof DirectoryFrontendOpenRequest
+     * @static
+     * @param {DirectoryFrontendOpenRequest} message DirectoryFrontendOpenRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    DirectoryFrontendOpenRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if (options.bytes === String)
+                object.networkKey = "";
+            else {
+                object.networkKey = [];
+                if (options.bytes !== Array)
+                    object.networkKey = $util.newBuffer(object.networkKey);
+            }
+        if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+            object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
+        return object;
+    };
+
+    /**
+     * Converts this DirectoryFrontendOpenRequest to JSON.
+     * @function toJSON
+     * @memberof DirectoryFrontendOpenRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    DirectoryFrontendOpenRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return DirectoryFrontendOpenRequest;
+})();
+
+export const DirectoryFrontendOpenResponse = $root.DirectoryFrontendOpenResponse = (() => {
+
+    /**
+     * Properties of a DirectoryFrontendOpenResponse.
+     * @exports IDirectoryFrontendOpenResponse
+     * @interface IDirectoryFrontendOpenResponse
+     * @property {IDirectoryEvent|null} [event] DirectoryFrontendOpenResponse event
+     */
+
+    /**
+     * Constructs a new DirectoryFrontendOpenResponse.
+     * @exports DirectoryFrontendOpenResponse
+     * @classdesc Represents a DirectoryFrontendOpenResponse.
+     * @implements IDirectoryFrontendOpenResponse
+     * @constructor
+     * @param {IDirectoryFrontendOpenResponse=} [properties] Properties to set
+     */
+    function DirectoryFrontendOpenResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * DirectoryFrontendOpenResponse event.
+     * @member {IDirectoryEvent|null|undefined} event
+     * @memberof DirectoryFrontendOpenResponse
+     * @instance
+     */
+    DirectoryFrontendOpenResponse.prototype.event = null;
+
+    /**
+     * Creates a new DirectoryFrontendOpenResponse instance using the specified properties.
+     * @function create
+     * @memberof DirectoryFrontendOpenResponse
+     * @static
+     * @param {IDirectoryFrontendOpenResponse=} [properties] Properties to set
+     * @returns {DirectoryFrontendOpenResponse} DirectoryFrontendOpenResponse instance
+     */
+    DirectoryFrontendOpenResponse.create = function create(properties) {
+        return new DirectoryFrontendOpenResponse(properties);
+    };
+
+    /**
+     * Encodes the specified DirectoryFrontendOpenResponse message. Does not implicitly {@link DirectoryFrontendOpenResponse.verify|verify} messages.
+     * @function encode
+     * @memberof DirectoryFrontendOpenResponse
+     * @static
+     * @param {IDirectoryFrontendOpenResponse} message DirectoryFrontendOpenResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryFrontendOpenResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.event != null && Object.hasOwnProperty.call(message, "event"))
+            $root.DirectoryEvent.encode(message.event, writer.uint32(/* id 1, wireType 2 =*/10).fork()).ldelim();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified DirectoryFrontendOpenResponse message, length delimited. Does not implicitly {@link DirectoryFrontendOpenResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof DirectoryFrontendOpenResponse
+     * @static
+     * @param {IDirectoryFrontendOpenResponse} message DirectoryFrontendOpenResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryFrontendOpenResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a DirectoryFrontendOpenResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof DirectoryFrontendOpenResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {DirectoryFrontendOpenResponse} DirectoryFrontendOpenResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryFrontendOpenResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryFrontendOpenResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.event = $root.DirectoryEvent.decode(reader, reader.uint32());
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a DirectoryFrontendOpenResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof DirectoryFrontendOpenResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {DirectoryFrontendOpenResponse} DirectoryFrontendOpenResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryFrontendOpenResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a DirectoryFrontendOpenResponse message.
+     * @function verify
+     * @memberof DirectoryFrontendOpenResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    DirectoryFrontendOpenResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.event != null && message.hasOwnProperty("event")) {
+            let error = $root.DirectoryEvent.verify(message.event);
+            if (error)
+                return "event." + error;
+        }
+        return null;
+    };
+
+    /**
+     * Creates a DirectoryFrontendOpenResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof DirectoryFrontendOpenResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {DirectoryFrontendOpenResponse} DirectoryFrontendOpenResponse
+     */
+    DirectoryFrontendOpenResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.DirectoryFrontendOpenResponse)
+            return object;
+        let message = new $root.DirectoryFrontendOpenResponse();
+        if (object.event != null) {
+            if (typeof object.event !== "object")
+                throw TypeError(".DirectoryFrontendOpenResponse.event: object expected");
+            message.event = $root.DirectoryEvent.fromObject(object.event);
+        }
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a DirectoryFrontendOpenResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof DirectoryFrontendOpenResponse
+     * @static
+     * @param {DirectoryFrontendOpenResponse} message DirectoryFrontendOpenResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    DirectoryFrontendOpenResponse.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            object.event = null;
+        if (message.event != null && message.hasOwnProperty("event"))
+            object.event = $root.DirectoryEvent.toObject(message.event, options);
+        return object;
+    };
+
+    /**
+     * Converts this DirectoryFrontendOpenResponse to JSON.
+     * @function toJSON
+     * @memberof DirectoryFrontendOpenResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    DirectoryFrontendOpenResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return DirectoryFrontendOpenResponse;
+})();
+
+export const DirectoryFrontendTestRequest = $root.DirectoryFrontendTestRequest = (() => {
+
+    /**
+     * Properties of a DirectoryFrontendTestRequest.
+     * @exports IDirectoryFrontendTestRequest
+     * @interface IDirectoryFrontendTestRequest
+     * @property {Uint8Array|null} [networkKey] DirectoryFrontendTestRequest networkKey
+     */
+
+    /**
+     * Constructs a new DirectoryFrontendTestRequest.
+     * @exports DirectoryFrontendTestRequest
+     * @classdesc Represents a DirectoryFrontendTestRequest.
+     * @implements IDirectoryFrontendTestRequest
+     * @constructor
+     * @param {IDirectoryFrontendTestRequest=} [properties] Properties to set
+     */
+    function DirectoryFrontendTestRequest(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * DirectoryFrontendTestRequest networkKey.
+     * @member {Uint8Array} networkKey
+     * @memberof DirectoryFrontendTestRequest
+     * @instance
+     */
+    DirectoryFrontendTestRequest.prototype.networkKey = $util.newBuffer([]);
+
+    /**
+     * Creates a new DirectoryFrontendTestRequest instance using the specified properties.
+     * @function create
+     * @memberof DirectoryFrontendTestRequest
+     * @static
+     * @param {IDirectoryFrontendTestRequest=} [properties] Properties to set
+     * @returns {DirectoryFrontendTestRequest} DirectoryFrontendTestRequest instance
+     */
+    DirectoryFrontendTestRequest.create = function create(properties) {
+        return new DirectoryFrontendTestRequest(properties);
+    };
+
+    /**
+     * Encodes the specified DirectoryFrontendTestRequest message. Does not implicitly {@link DirectoryFrontendTestRequest.verify|verify} messages.
+     * @function encode
+     * @memberof DirectoryFrontendTestRequest
+     * @static
+     * @param {IDirectoryFrontendTestRequest} message DirectoryFrontendTestRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryFrontendTestRequest.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.networkKey != null && Object.hasOwnProperty.call(message, "networkKey"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.networkKey);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified DirectoryFrontendTestRequest message, length delimited. Does not implicitly {@link DirectoryFrontendTestRequest.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof DirectoryFrontendTestRequest
+     * @static
+     * @param {IDirectoryFrontendTestRequest} message DirectoryFrontendTestRequest message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryFrontendTestRequest.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a DirectoryFrontendTestRequest message from the specified reader or buffer.
+     * @function decode
+     * @memberof DirectoryFrontendTestRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {DirectoryFrontendTestRequest} DirectoryFrontendTestRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryFrontendTestRequest.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryFrontendTestRequest();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.networkKey = reader.bytes();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a DirectoryFrontendTestRequest message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof DirectoryFrontendTestRequest
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {DirectoryFrontendTestRequest} DirectoryFrontendTestRequest
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryFrontendTestRequest.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a DirectoryFrontendTestRequest message.
+     * @function verify
+     * @memberof DirectoryFrontendTestRequest
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    DirectoryFrontendTestRequest.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+            if (!(message.networkKey && typeof message.networkKey.length === "number" || $util.isString(message.networkKey)))
+                return "networkKey: buffer expected";
+        return null;
+    };
+
+    /**
+     * Creates a DirectoryFrontendTestRequest message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof DirectoryFrontendTestRequest
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {DirectoryFrontendTestRequest} DirectoryFrontendTestRequest
+     */
+    DirectoryFrontendTestRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.DirectoryFrontendTestRequest)
+            return object;
+        let message = new $root.DirectoryFrontendTestRequest();
+        if (object.networkKey != null)
+            if (typeof object.networkKey === "string")
+                $util.base64.decode(object.networkKey, message.networkKey = $util.newBuffer($util.base64.length(object.networkKey)), 0);
+            else if (object.networkKey.length)
+                message.networkKey = object.networkKey;
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a DirectoryFrontendTestRequest message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof DirectoryFrontendTestRequest
+     * @static
+     * @param {DirectoryFrontendTestRequest} message DirectoryFrontendTestRequest
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    DirectoryFrontendTestRequest.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if (options.bytes === String)
+                object.networkKey = "";
+            else {
+                object.networkKey = [];
+                if (options.bytes !== Array)
+                    object.networkKey = $util.newBuffer(object.networkKey);
+            }
+        if (message.networkKey != null && message.hasOwnProperty("networkKey"))
+            object.networkKey = options.bytes === String ? $util.base64.encode(message.networkKey, 0, message.networkKey.length) : options.bytes === Array ? Array.prototype.slice.call(message.networkKey) : message.networkKey;
+        return object;
+    };
+
+    /**
+     * Converts this DirectoryFrontendTestRequest to JSON.
+     * @function toJSON
+     * @memberof DirectoryFrontendTestRequest
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    DirectoryFrontendTestRequest.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return DirectoryFrontendTestRequest;
+})();
+
+export const DirectoryFrontendTestResponse = $root.DirectoryFrontendTestResponse = (() => {
+
+    /**
+     * Properties of a DirectoryFrontendTestResponse.
+     * @exports IDirectoryFrontendTestResponse
+     * @interface IDirectoryFrontendTestResponse
+     */
+
+    /**
+     * Constructs a new DirectoryFrontendTestResponse.
+     * @exports DirectoryFrontendTestResponse
+     * @classdesc Represents a DirectoryFrontendTestResponse.
+     * @implements IDirectoryFrontendTestResponse
+     * @constructor
+     * @param {IDirectoryFrontendTestResponse=} [properties] Properties to set
+     */
+    function DirectoryFrontendTestResponse(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Creates a new DirectoryFrontendTestResponse instance using the specified properties.
+     * @function create
+     * @memberof DirectoryFrontendTestResponse
+     * @static
+     * @param {IDirectoryFrontendTestResponse=} [properties] Properties to set
+     * @returns {DirectoryFrontendTestResponse} DirectoryFrontendTestResponse instance
+     */
+    DirectoryFrontendTestResponse.create = function create(properties) {
+        return new DirectoryFrontendTestResponse(properties);
+    };
+
+    /**
+     * Encodes the specified DirectoryFrontendTestResponse message. Does not implicitly {@link DirectoryFrontendTestResponse.verify|verify} messages.
+     * @function encode
+     * @memberof DirectoryFrontendTestResponse
+     * @static
+     * @param {IDirectoryFrontendTestResponse} message DirectoryFrontendTestResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryFrontendTestResponse.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        return writer;
+    };
+
+    /**
+     * Encodes the specified DirectoryFrontendTestResponse message, length delimited. Does not implicitly {@link DirectoryFrontendTestResponse.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof DirectoryFrontendTestResponse
+     * @static
+     * @param {IDirectoryFrontendTestResponse} message DirectoryFrontendTestResponse message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    DirectoryFrontendTestResponse.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a DirectoryFrontendTestResponse message from the specified reader or buffer.
+     * @function decode
+     * @memberof DirectoryFrontendTestResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {DirectoryFrontendTestResponse} DirectoryFrontendTestResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryFrontendTestResponse.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.DirectoryFrontendTestResponse();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a DirectoryFrontendTestResponse message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof DirectoryFrontendTestResponse
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {DirectoryFrontendTestResponse} DirectoryFrontendTestResponse
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    DirectoryFrontendTestResponse.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a DirectoryFrontendTestResponse message.
+     * @function verify
+     * @memberof DirectoryFrontendTestResponse
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    DirectoryFrontendTestResponse.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        return null;
+    };
+
+    /**
+     * Creates a DirectoryFrontendTestResponse message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof DirectoryFrontendTestResponse
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {DirectoryFrontendTestResponse} DirectoryFrontendTestResponse
+     */
+    DirectoryFrontendTestResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.DirectoryFrontendTestResponse)
+            return object;
+        return new $root.DirectoryFrontendTestResponse();
+    };
+
+    /**
+     * Creates a plain object from a DirectoryFrontendTestResponse message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof DirectoryFrontendTestResponse
+     * @static
+     * @param {DirectoryFrontendTestResponse} message DirectoryFrontendTestResponse
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    DirectoryFrontendTestResponse.toObject = function toObject() {
+        return {};
+    };
+
+    /**
+     * Converts this DirectoryFrontendTestResponse to JSON.
+     * @function toJSON
+     * @memberof DirectoryFrontendTestResponse
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    DirectoryFrontendTestResponse.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return DirectoryFrontendTestResponse;
 })();
 
 export const FundingTestRequest = $root.FundingTestRequest = (() => {
@@ -20225,25 +21456,25 @@ export const PeerIndexMessage = $root.PeerIndexMessage = (() => {
     return PeerIndexMessage;
 })();
 
-export const SwarmPeerAnnounceSwarmRequest = $root.SwarmPeerAnnounceSwarmRequest = (() => {
+export const TransferPeerAnnounceSwarmRequest = $root.TransferPeerAnnounceSwarmRequest = (() => {
 
     /**
-     * Properties of a SwarmPeerAnnounceSwarmRequest.
-     * @exports ISwarmPeerAnnounceSwarmRequest
-     * @interface ISwarmPeerAnnounceSwarmRequest
-     * @property {Uint8Array|null} [id] SwarmPeerAnnounceSwarmRequest id
-     * @property {number|null} [port] SwarmPeerAnnounceSwarmRequest port
+     * Properties of a TransferPeerAnnounceSwarmRequest.
+     * @exports ITransferPeerAnnounceSwarmRequest
+     * @interface ITransferPeerAnnounceSwarmRequest
+     * @property {Uint8Array|null} [swarmId] TransferPeerAnnounceSwarmRequest swarmId
+     * @property {number|null} [port] TransferPeerAnnounceSwarmRequest port
      */
 
     /**
-     * Constructs a new SwarmPeerAnnounceSwarmRequest.
-     * @exports SwarmPeerAnnounceSwarmRequest
-     * @classdesc Represents a SwarmPeerAnnounceSwarmRequest.
-     * @implements ISwarmPeerAnnounceSwarmRequest
+     * Constructs a new TransferPeerAnnounceSwarmRequest.
+     * @exports TransferPeerAnnounceSwarmRequest
+     * @classdesc Represents a TransferPeerAnnounceSwarmRequest.
+     * @implements ITransferPeerAnnounceSwarmRequest
      * @constructor
-     * @param {ISwarmPeerAnnounceSwarmRequest=} [properties] Properties to set
+     * @param {ITransferPeerAnnounceSwarmRequest=} [properties] Properties to set
      */
-    function SwarmPeerAnnounceSwarmRequest(properties) {
+    function TransferPeerAnnounceSwarmRequest(properties) {
         if (properties)
             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
@@ -20251,85 +21482,85 @@ export const SwarmPeerAnnounceSwarmRequest = $root.SwarmPeerAnnounceSwarmRequest
     }
 
     /**
-     * SwarmPeerAnnounceSwarmRequest id.
-     * @member {Uint8Array} id
-     * @memberof SwarmPeerAnnounceSwarmRequest
+     * TransferPeerAnnounceSwarmRequest swarmId.
+     * @member {Uint8Array} swarmId
+     * @memberof TransferPeerAnnounceSwarmRequest
      * @instance
      */
-    SwarmPeerAnnounceSwarmRequest.prototype.id = $util.newBuffer([]);
+    TransferPeerAnnounceSwarmRequest.prototype.swarmId = $util.newBuffer([]);
 
     /**
-     * SwarmPeerAnnounceSwarmRequest port.
+     * TransferPeerAnnounceSwarmRequest port.
      * @member {number} port
-     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @memberof TransferPeerAnnounceSwarmRequest
      * @instance
      */
-    SwarmPeerAnnounceSwarmRequest.prototype.port = 0;
+    TransferPeerAnnounceSwarmRequest.prototype.port = 0;
 
     /**
-     * Creates a new SwarmPeerAnnounceSwarmRequest instance using the specified properties.
+     * Creates a new TransferPeerAnnounceSwarmRequest instance using the specified properties.
      * @function create
-     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @memberof TransferPeerAnnounceSwarmRequest
      * @static
-     * @param {ISwarmPeerAnnounceSwarmRequest=} [properties] Properties to set
-     * @returns {SwarmPeerAnnounceSwarmRequest} SwarmPeerAnnounceSwarmRequest instance
+     * @param {ITransferPeerAnnounceSwarmRequest=} [properties] Properties to set
+     * @returns {TransferPeerAnnounceSwarmRequest} TransferPeerAnnounceSwarmRequest instance
      */
-    SwarmPeerAnnounceSwarmRequest.create = function create(properties) {
-        return new SwarmPeerAnnounceSwarmRequest(properties);
+    TransferPeerAnnounceSwarmRequest.create = function create(properties) {
+        return new TransferPeerAnnounceSwarmRequest(properties);
     };
 
     /**
-     * Encodes the specified SwarmPeerAnnounceSwarmRequest message. Does not implicitly {@link SwarmPeerAnnounceSwarmRequest.verify|verify} messages.
+     * Encodes the specified TransferPeerAnnounceSwarmRequest message. Does not implicitly {@link TransferPeerAnnounceSwarmRequest.verify|verify} messages.
      * @function encode
-     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @memberof TransferPeerAnnounceSwarmRequest
      * @static
-     * @param {ISwarmPeerAnnounceSwarmRequest} message SwarmPeerAnnounceSwarmRequest message or plain object to encode
+     * @param {ITransferPeerAnnounceSwarmRequest} message TransferPeerAnnounceSwarmRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    SwarmPeerAnnounceSwarmRequest.encode = function encode(message, writer) {
+    TransferPeerAnnounceSwarmRequest.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
-        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
-            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.id);
+        if (message.swarmId != null && Object.hasOwnProperty.call(message, "swarmId"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.swarmId);
         if (message.port != null && Object.hasOwnProperty.call(message, "port"))
             writer.uint32(/* id 2, wireType 0 =*/16).uint32(message.port);
         return writer;
     };
 
     /**
-     * Encodes the specified SwarmPeerAnnounceSwarmRequest message, length delimited. Does not implicitly {@link SwarmPeerAnnounceSwarmRequest.verify|verify} messages.
+     * Encodes the specified TransferPeerAnnounceSwarmRequest message, length delimited. Does not implicitly {@link TransferPeerAnnounceSwarmRequest.verify|verify} messages.
      * @function encodeDelimited
-     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @memberof TransferPeerAnnounceSwarmRequest
      * @static
-     * @param {ISwarmPeerAnnounceSwarmRequest} message SwarmPeerAnnounceSwarmRequest message or plain object to encode
+     * @param {ITransferPeerAnnounceSwarmRequest} message TransferPeerAnnounceSwarmRequest message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    SwarmPeerAnnounceSwarmRequest.encodeDelimited = function encodeDelimited(message, writer) {
+    TransferPeerAnnounceSwarmRequest.encodeDelimited = function encodeDelimited(message, writer) {
         return this.encode(message, writer).ldelim();
     };
 
     /**
-     * Decodes a SwarmPeerAnnounceSwarmRequest message from the specified reader or buffer.
+     * Decodes a TransferPeerAnnounceSwarmRequest message from the specified reader or buffer.
      * @function decode
-     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @memberof TransferPeerAnnounceSwarmRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @param {number} [length] Message length if known beforehand
-     * @returns {SwarmPeerAnnounceSwarmRequest} SwarmPeerAnnounceSwarmRequest
+     * @returns {TransferPeerAnnounceSwarmRequest} TransferPeerAnnounceSwarmRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    SwarmPeerAnnounceSwarmRequest.decode = function decode(reader, length) {
+    TransferPeerAnnounceSwarmRequest.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.SwarmPeerAnnounceSwarmRequest();
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.TransferPeerAnnounceSwarmRequest();
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
             case 1:
-                message.id = reader.bytes();
+                message.swarmId = reader.bytes();
                 break;
             case 2:
                 message.port = reader.uint32();
@@ -20343,35 +21574,35 @@ export const SwarmPeerAnnounceSwarmRequest = $root.SwarmPeerAnnounceSwarmRequest
     };
 
     /**
-     * Decodes a SwarmPeerAnnounceSwarmRequest message from the specified reader or buffer, length delimited.
+     * Decodes a TransferPeerAnnounceSwarmRequest message from the specified reader or buffer, length delimited.
      * @function decodeDelimited
-     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @memberof TransferPeerAnnounceSwarmRequest
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {SwarmPeerAnnounceSwarmRequest} SwarmPeerAnnounceSwarmRequest
+     * @returns {TransferPeerAnnounceSwarmRequest} TransferPeerAnnounceSwarmRequest
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    SwarmPeerAnnounceSwarmRequest.decodeDelimited = function decodeDelimited(reader) {
+    TransferPeerAnnounceSwarmRequest.decodeDelimited = function decodeDelimited(reader) {
         if (!(reader instanceof $Reader))
             reader = new $Reader(reader);
         return this.decode(reader, reader.uint32());
     };
 
     /**
-     * Verifies a SwarmPeerAnnounceSwarmRequest message.
+     * Verifies a TransferPeerAnnounceSwarmRequest message.
      * @function verify
-     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @memberof TransferPeerAnnounceSwarmRequest
      * @static
      * @param {Object.<string,*>} message Plain object to verify
      * @returns {string|null} `null` if valid, otherwise the reason why it is not
      */
-    SwarmPeerAnnounceSwarmRequest.verify = function verify(message) {
+    TransferPeerAnnounceSwarmRequest.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
-        if (message.id != null && message.hasOwnProperty("id"))
-            if (!(message.id && typeof message.id.length === "number" || $util.isString(message.id)))
-                return "id: buffer expected";
+        if (message.swarmId != null && message.hasOwnProperty("swarmId"))
+            if (!(message.swarmId && typeof message.swarmId.length === "number" || $util.isString(message.swarmId)))
+                return "swarmId: buffer expected";
         if (message.port != null && message.hasOwnProperty("port"))
             if (!$util.isInteger(message.port))
                 return "port: integer expected";
@@ -20379,89 +21610,89 @@ export const SwarmPeerAnnounceSwarmRequest = $root.SwarmPeerAnnounceSwarmRequest
     };
 
     /**
-     * Creates a SwarmPeerAnnounceSwarmRequest message from a plain object. Also converts values to their respective internal types.
+     * Creates a TransferPeerAnnounceSwarmRequest message from a plain object. Also converts values to their respective internal types.
      * @function fromObject
-     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @memberof TransferPeerAnnounceSwarmRequest
      * @static
      * @param {Object.<string,*>} object Plain object
-     * @returns {SwarmPeerAnnounceSwarmRequest} SwarmPeerAnnounceSwarmRequest
+     * @returns {TransferPeerAnnounceSwarmRequest} TransferPeerAnnounceSwarmRequest
      */
-    SwarmPeerAnnounceSwarmRequest.fromObject = function fromObject(object) {
-        if (object instanceof $root.SwarmPeerAnnounceSwarmRequest)
+    TransferPeerAnnounceSwarmRequest.fromObject = function fromObject(object) {
+        if (object instanceof $root.TransferPeerAnnounceSwarmRequest)
             return object;
-        let message = new $root.SwarmPeerAnnounceSwarmRequest();
-        if (object.id != null)
-            if (typeof object.id === "string")
-                $util.base64.decode(object.id, message.id = $util.newBuffer($util.base64.length(object.id)), 0);
-            else if (object.id.length)
-                message.id = object.id;
+        let message = new $root.TransferPeerAnnounceSwarmRequest();
+        if (object.swarmId != null)
+            if (typeof object.swarmId === "string")
+                $util.base64.decode(object.swarmId, message.swarmId = $util.newBuffer($util.base64.length(object.swarmId)), 0);
+            else if (object.swarmId.length)
+                message.swarmId = object.swarmId;
         if (object.port != null)
             message.port = object.port >>> 0;
         return message;
     };
 
     /**
-     * Creates a plain object from a SwarmPeerAnnounceSwarmRequest message. Also converts values to other types if specified.
+     * Creates a plain object from a TransferPeerAnnounceSwarmRequest message. Also converts values to other types if specified.
      * @function toObject
-     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @memberof TransferPeerAnnounceSwarmRequest
      * @static
-     * @param {SwarmPeerAnnounceSwarmRequest} message SwarmPeerAnnounceSwarmRequest
+     * @param {TransferPeerAnnounceSwarmRequest} message TransferPeerAnnounceSwarmRequest
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    SwarmPeerAnnounceSwarmRequest.toObject = function toObject(message, options) {
+    TransferPeerAnnounceSwarmRequest.toObject = function toObject(message, options) {
         if (!options)
             options = {};
         let object = {};
         if (options.defaults) {
             if (options.bytes === String)
-                object.id = "";
+                object.swarmId = "";
             else {
-                object.id = [];
+                object.swarmId = [];
                 if (options.bytes !== Array)
-                    object.id = $util.newBuffer(object.id);
+                    object.swarmId = $util.newBuffer(object.swarmId);
             }
             object.port = 0;
         }
-        if (message.id != null && message.hasOwnProperty("id"))
-            object.id = options.bytes === String ? $util.base64.encode(message.id, 0, message.id.length) : options.bytes === Array ? Array.prototype.slice.call(message.id) : message.id;
+        if (message.swarmId != null && message.hasOwnProperty("swarmId"))
+            object.swarmId = options.bytes === String ? $util.base64.encode(message.swarmId, 0, message.swarmId.length) : options.bytes === Array ? Array.prototype.slice.call(message.swarmId) : message.swarmId;
         if (message.port != null && message.hasOwnProperty("port"))
             object.port = message.port;
         return object;
     };
 
     /**
-     * Converts this SwarmPeerAnnounceSwarmRequest to JSON.
+     * Converts this TransferPeerAnnounceSwarmRequest to JSON.
      * @function toJSON
-     * @memberof SwarmPeerAnnounceSwarmRequest
+     * @memberof TransferPeerAnnounceSwarmRequest
      * @instance
      * @returns {Object.<string,*>} JSON object
      */
-    SwarmPeerAnnounceSwarmRequest.prototype.toJSON = function toJSON() {
+    TransferPeerAnnounceSwarmRequest.prototype.toJSON = function toJSON() {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
 
-    return SwarmPeerAnnounceSwarmRequest;
+    return TransferPeerAnnounceSwarmRequest;
 })();
 
-export const SwarmPeerAnnounceSwarmResponse = $root.SwarmPeerAnnounceSwarmResponse = (() => {
+export const TransferPeerAnnounceSwarmResponse = $root.TransferPeerAnnounceSwarmResponse = (() => {
 
     /**
-     * Properties of a SwarmPeerAnnounceSwarmResponse.
-     * @exports ISwarmPeerAnnounceSwarmResponse
-     * @interface ISwarmPeerAnnounceSwarmResponse
-     * @property {number|null} [port] SwarmPeerAnnounceSwarmResponse port
+     * Properties of a TransferPeerAnnounceSwarmResponse.
+     * @exports ITransferPeerAnnounceSwarmResponse
+     * @interface ITransferPeerAnnounceSwarmResponse
+     * @property {number|null} [port] TransferPeerAnnounceSwarmResponse port
      */
 
     /**
-     * Constructs a new SwarmPeerAnnounceSwarmResponse.
-     * @exports SwarmPeerAnnounceSwarmResponse
-     * @classdesc Represents a SwarmPeerAnnounceSwarmResponse.
-     * @implements ISwarmPeerAnnounceSwarmResponse
+     * Constructs a new TransferPeerAnnounceSwarmResponse.
+     * @exports TransferPeerAnnounceSwarmResponse
+     * @classdesc Represents a TransferPeerAnnounceSwarmResponse.
+     * @implements ITransferPeerAnnounceSwarmResponse
      * @constructor
-     * @param {ISwarmPeerAnnounceSwarmResponse=} [properties] Properties to set
+     * @param {ITransferPeerAnnounceSwarmResponse=} [properties] Properties to set
      */
-    function SwarmPeerAnnounceSwarmResponse(properties) {
+    function TransferPeerAnnounceSwarmResponse(properties) {
         if (properties)
             for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
                 if (properties[keys[i]] != null)
@@ -20469,49 +21700,49 @@ export const SwarmPeerAnnounceSwarmResponse = $root.SwarmPeerAnnounceSwarmRespon
     }
 
     /**
-     * SwarmPeerAnnounceSwarmResponse port.
+     * TransferPeerAnnounceSwarmResponse port.
      * @member {number} port
-     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @memberof TransferPeerAnnounceSwarmResponse
      * @instance
      */
-    SwarmPeerAnnounceSwarmResponse.prototype.port = 0;
+    TransferPeerAnnounceSwarmResponse.prototype.port = 0;
 
     // OneOf field names bound to virtual getters and setters
     let $oneOfFields;
 
     /**
-     * SwarmPeerAnnounceSwarmResponse body.
+     * TransferPeerAnnounceSwarmResponse body.
      * @member {"port"|undefined} body
-     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @memberof TransferPeerAnnounceSwarmResponse
      * @instance
      */
-    Object.defineProperty(SwarmPeerAnnounceSwarmResponse.prototype, "body", {
+    Object.defineProperty(TransferPeerAnnounceSwarmResponse.prototype, "body", {
         get: $util.oneOfGetter($oneOfFields = ["port"]),
         set: $util.oneOfSetter($oneOfFields)
     });
 
     /**
-     * Creates a new SwarmPeerAnnounceSwarmResponse instance using the specified properties.
+     * Creates a new TransferPeerAnnounceSwarmResponse instance using the specified properties.
      * @function create
-     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @memberof TransferPeerAnnounceSwarmResponse
      * @static
-     * @param {ISwarmPeerAnnounceSwarmResponse=} [properties] Properties to set
-     * @returns {SwarmPeerAnnounceSwarmResponse} SwarmPeerAnnounceSwarmResponse instance
+     * @param {ITransferPeerAnnounceSwarmResponse=} [properties] Properties to set
+     * @returns {TransferPeerAnnounceSwarmResponse} TransferPeerAnnounceSwarmResponse instance
      */
-    SwarmPeerAnnounceSwarmResponse.create = function create(properties) {
-        return new SwarmPeerAnnounceSwarmResponse(properties);
+    TransferPeerAnnounceSwarmResponse.create = function create(properties) {
+        return new TransferPeerAnnounceSwarmResponse(properties);
     };
 
     /**
-     * Encodes the specified SwarmPeerAnnounceSwarmResponse message. Does not implicitly {@link SwarmPeerAnnounceSwarmResponse.verify|verify} messages.
+     * Encodes the specified TransferPeerAnnounceSwarmResponse message. Does not implicitly {@link TransferPeerAnnounceSwarmResponse.verify|verify} messages.
      * @function encode
-     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @memberof TransferPeerAnnounceSwarmResponse
      * @static
-     * @param {ISwarmPeerAnnounceSwarmResponse} message SwarmPeerAnnounceSwarmResponse message or plain object to encode
+     * @param {ITransferPeerAnnounceSwarmResponse} message TransferPeerAnnounceSwarmResponse message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    SwarmPeerAnnounceSwarmResponse.encode = function encode(message, writer) {
+    TransferPeerAnnounceSwarmResponse.encode = function encode(message, writer) {
         if (!writer)
             writer = $Writer.create();
         if (message.port != null && Object.hasOwnProperty.call(message, "port"))
@@ -20520,33 +21751,33 @@ export const SwarmPeerAnnounceSwarmResponse = $root.SwarmPeerAnnounceSwarmRespon
     };
 
     /**
-     * Encodes the specified SwarmPeerAnnounceSwarmResponse message, length delimited. Does not implicitly {@link SwarmPeerAnnounceSwarmResponse.verify|verify} messages.
+     * Encodes the specified TransferPeerAnnounceSwarmResponse message, length delimited. Does not implicitly {@link TransferPeerAnnounceSwarmResponse.verify|verify} messages.
      * @function encodeDelimited
-     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @memberof TransferPeerAnnounceSwarmResponse
      * @static
-     * @param {ISwarmPeerAnnounceSwarmResponse} message SwarmPeerAnnounceSwarmResponse message or plain object to encode
+     * @param {ITransferPeerAnnounceSwarmResponse} message TransferPeerAnnounceSwarmResponse message or plain object to encode
      * @param {$protobuf.Writer} [writer] Writer to encode to
      * @returns {$protobuf.Writer} Writer
      */
-    SwarmPeerAnnounceSwarmResponse.encodeDelimited = function encodeDelimited(message, writer) {
+    TransferPeerAnnounceSwarmResponse.encodeDelimited = function encodeDelimited(message, writer) {
         return this.encode(message, writer).ldelim();
     };
 
     /**
-     * Decodes a SwarmPeerAnnounceSwarmResponse message from the specified reader or buffer.
+     * Decodes a TransferPeerAnnounceSwarmResponse message from the specified reader or buffer.
      * @function decode
-     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @memberof TransferPeerAnnounceSwarmResponse
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
      * @param {number} [length] Message length if known beforehand
-     * @returns {SwarmPeerAnnounceSwarmResponse} SwarmPeerAnnounceSwarmResponse
+     * @returns {TransferPeerAnnounceSwarmResponse} TransferPeerAnnounceSwarmResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    SwarmPeerAnnounceSwarmResponse.decode = function decode(reader, length) {
+    TransferPeerAnnounceSwarmResponse.decode = function decode(reader, length) {
         if (!(reader instanceof $Reader))
             reader = $Reader.create(reader);
-        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.SwarmPeerAnnounceSwarmResponse();
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.TransferPeerAnnounceSwarmResponse();
         while (reader.pos < end) {
             let tag = reader.uint32();
             switch (tag >>> 3) {
@@ -20562,30 +21793,30 @@ export const SwarmPeerAnnounceSwarmResponse = $root.SwarmPeerAnnounceSwarmRespon
     };
 
     /**
-     * Decodes a SwarmPeerAnnounceSwarmResponse message from the specified reader or buffer, length delimited.
+     * Decodes a TransferPeerAnnounceSwarmResponse message from the specified reader or buffer, length delimited.
      * @function decodeDelimited
-     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @memberof TransferPeerAnnounceSwarmResponse
      * @static
      * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
-     * @returns {SwarmPeerAnnounceSwarmResponse} SwarmPeerAnnounceSwarmResponse
+     * @returns {TransferPeerAnnounceSwarmResponse} TransferPeerAnnounceSwarmResponse
      * @throws {Error} If the payload is not a reader or valid buffer
      * @throws {$protobuf.util.ProtocolError} If required fields are missing
      */
-    SwarmPeerAnnounceSwarmResponse.decodeDelimited = function decodeDelimited(reader) {
+    TransferPeerAnnounceSwarmResponse.decodeDelimited = function decodeDelimited(reader) {
         if (!(reader instanceof $Reader))
             reader = new $Reader(reader);
         return this.decode(reader, reader.uint32());
     };
 
     /**
-     * Verifies a SwarmPeerAnnounceSwarmResponse message.
+     * Verifies a TransferPeerAnnounceSwarmResponse message.
      * @function verify
-     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @memberof TransferPeerAnnounceSwarmResponse
      * @static
      * @param {Object.<string,*>} message Plain object to verify
      * @returns {string|null} `null` if valid, otherwise the reason why it is not
      */
-    SwarmPeerAnnounceSwarmResponse.verify = function verify(message) {
+    TransferPeerAnnounceSwarmResponse.verify = function verify(message) {
         if (typeof message !== "object" || message === null)
             return "object expected";
         let properties = {};
@@ -20598,32 +21829,32 @@ export const SwarmPeerAnnounceSwarmResponse = $root.SwarmPeerAnnounceSwarmRespon
     };
 
     /**
-     * Creates a SwarmPeerAnnounceSwarmResponse message from a plain object. Also converts values to their respective internal types.
+     * Creates a TransferPeerAnnounceSwarmResponse message from a plain object. Also converts values to their respective internal types.
      * @function fromObject
-     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @memberof TransferPeerAnnounceSwarmResponse
      * @static
      * @param {Object.<string,*>} object Plain object
-     * @returns {SwarmPeerAnnounceSwarmResponse} SwarmPeerAnnounceSwarmResponse
+     * @returns {TransferPeerAnnounceSwarmResponse} TransferPeerAnnounceSwarmResponse
      */
-    SwarmPeerAnnounceSwarmResponse.fromObject = function fromObject(object) {
-        if (object instanceof $root.SwarmPeerAnnounceSwarmResponse)
+    TransferPeerAnnounceSwarmResponse.fromObject = function fromObject(object) {
+        if (object instanceof $root.TransferPeerAnnounceSwarmResponse)
             return object;
-        let message = new $root.SwarmPeerAnnounceSwarmResponse();
+        let message = new $root.TransferPeerAnnounceSwarmResponse();
         if (object.port != null)
             message.port = object.port >>> 0;
         return message;
     };
 
     /**
-     * Creates a plain object from a SwarmPeerAnnounceSwarmResponse message. Also converts values to other types if specified.
+     * Creates a plain object from a TransferPeerAnnounceSwarmResponse message. Also converts values to other types if specified.
      * @function toObject
-     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @memberof TransferPeerAnnounceSwarmResponse
      * @static
-     * @param {SwarmPeerAnnounceSwarmResponse} message SwarmPeerAnnounceSwarmResponse
+     * @param {TransferPeerAnnounceSwarmResponse} message TransferPeerAnnounceSwarmResponse
      * @param {$protobuf.IConversionOptions} [options] Conversion options
      * @returns {Object.<string,*>} Plain object
      */
-    SwarmPeerAnnounceSwarmResponse.toObject = function toObject(message, options) {
+    TransferPeerAnnounceSwarmResponse.toObject = function toObject(message, options) {
         if (!options)
             options = {};
         let object = {};
@@ -20636,17 +21867,17 @@ export const SwarmPeerAnnounceSwarmResponse = $root.SwarmPeerAnnounceSwarmRespon
     };
 
     /**
-     * Converts this SwarmPeerAnnounceSwarmResponse to JSON.
+     * Converts this TransferPeerAnnounceSwarmResponse to JSON.
      * @function toJSON
-     * @memberof SwarmPeerAnnounceSwarmResponse
+     * @memberof TransferPeerAnnounceSwarmResponse
      * @instance
      * @returns {Object.<string,*>} JSON object
      */
-    SwarmPeerAnnounceSwarmResponse.prototype.toJSON = function toJSON() {
+    TransferPeerAnnounceSwarmResponse.prototype.toJSON = function toJSON() {
         return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
     };
 
-    return SwarmPeerAnnounceSwarmResponse;
+    return TransferPeerAnnounceSwarmResponse;
 })();
 
 export const CAPeerRenewRequest = $root.CAPeerRenewRequest = (() => {
@@ -35717,6 +36948,202 @@ export const RPCCallStreamResponse = $root.RPCCallStreamResponse = (() => {
     };
 
     return RPCCallStreamResponse;
+})();
+
+export const Transfer = $root.Transfer = (() => {
+
+    /**
+     * Properties of a Transfer.
+     * @exports ITransfer
+     * @interface ITransfer
+     * @property {Uint8Array|null} [id] Transfer id
+     */
+
+    /**
+     * Constructs a new Transfer.
+     * @exports Transfer
+     * @classdesc Represents a Transfer.
+     * @implements ITransfer
+     * @constructor
+     * @param {ITransfer=} [properties] Properties to set
+     */
+    function Transfer(properties) {
+        if (properties)
+            for (let keys = Object.keys(properties), i = 0; i < keys.length; ++i)
+                if (properties[keys[i]] != null)
+                    this[keys[i]] = properties[keys[i]];
+    }
+
+    /**
+     * Transfer id.
+     * @member {Uint8Array} id
+     * @memberof Transfer
+     * @instance
+     */
+    Transfer.prototype.id = $util.newBuffer([]);
+
+    /**
+     * Creates a new Transfer instance using the specified properties.
+     * @function create
+     * @memberof Transfer
+     * @static
+     * @param {ITransfer=} [properties] Properties to set
+     * @returns {Transfer} Transfer instance
+     */
+    Transfer.create = function create(properties) {
+        return new Transfer(properties);
+    };
+
+    /**
+     * Encodes the specified Transfer message. Does not implicitly {@link Transfer.verify|verify} messages.
+     * @function encode
+     * @memberof Transfer
+     * @static
+     * @param {ITransfer} message Transfer message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Transfer.encode = function encode(message, writer) {
+        if (!writer)
+            writer = $Writer.create();
+        if (message.id != null && Object.hasOwnProperty.call(message, "id"))
+            writer.uint32(/* id 1, wireType 2 =*/10).bytes(message.id);
+        return writer;
+    };
+
+    /**
+     * Encodes the specified Transfer message, length delimited. Does not implicitly {@link Transfer.verify|verify} messages.
+     * @function encodeDelimited
+     * @memberof Transfer
+     * @static
+     * @param {ITransfer} message Transfer message or plain object to encode
+     * @param {$protobuf.Writer} [writer] Writer to encode to
+     * @returns {$protobuf.Writer} Writer
+     */
+    Transfer.encodeDelimited = function encodeDelimited(message, writer) {
+        return this.encode(message, writer).ldelim();
+    };
+
+    /**
+     * Decodes a Transfer message from the specified reader or buffer.
+     * @function decode
+     * @memberof Transfer
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @param {number} [length] Message length if known beforehand
+     * @returns {Transfer} Transfer
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Transfer.decode = function decode(reader, length) {
+        if (!(reader instanceof $Reader))
+            reader = $Reader.create(reader);
+        let end = length === undefined ? reader.len : reader.pos + length, message = new $root.Transfer();
+        while (reader.pos < end) {
+            let tag = reader.uint32();
+            switch (tag >>> 3) {
+            case 1:
+                message.id = reader.bytes();
+                break;
+            default:
+                reader.skipType(tag & 7);
+                break;
+            }
+        }
+        return message;
+    };
+
+    /**
+     * Decodes a Transfer message from the specified reader or buffer, length delimited.
+     * @function decodeDelimited
+     * @memberof Transfer
+     * @static
+     * @param {$protobuf.Reader|Uint8Array} reader Reader or buffer to decode from
+     * @returns {Transfer} Transfer
+     * @throws {Error} If the payload is not a reader or valid buffer
+     * @throws {$protobuf.util.ProtocolError} If required fields are missing
+     */
+    Transfer.decodeDelimited = function decodeDelimited(reader) {
+        if (!(reader instanceof $Reader))
+            reader = new $Reader(reader);
+        return this.decode(reader, reader.uint32());
+    };
+
+    /**
+     * Verifies a Transfer message.
+     * @function verify
+     * @memberof Transfer
+     * @static
+     * @param {Object.<string,*>} message Plain object to verify
+     * @returns {string|null} `null` if valid, otherwise the reason why it is not
+     */
+    Transfer.verify = function verify(message) {
+        if (typeof message !== "object" || message === null)
+            return "object expected";
+        if (message.id != null && message.hasOwnProperty("id"))
+            if (!(message.id && typeof message.id.length === "number" || $util.isString(message.id)))
+                return "id: buffer expected";
+        return null;
+    };
+
+    /**
+     * Creates a Transfer message from a plain object. Also converts values to their respective internal types.
+     * @function fromObject
+     * @memberof Transfer
+     * @static
+     * @param {Object.<string,*>} object Plain object
+     * @returns {Transfer} Transfer
+     */
+    Transfer.fromObject = function fromObject(object) {
+        if (object instanceof $root.Transfer)
+            return object;
+        let message = new $root.Transfer();
+        if (object.id != null)
+            if (typeof object.id === "string")
+                $util.base64.decode(object.id, message.id = $util.newBuffer($util.base64.length(object.id)), 0);
+            else if (object.id.length)
+                message.id = object.id;
+        return message;
+    };
+
+    /**
+     * Creates a plain object from a Transfer message. Also converts values to other types if specified.
+     * @function toObject
+     * @memberof Transfer
+     * @static
+     * @param {Transfer} message Transfer
+     * @param {$protobuf.IConversionOptions} [options] Conversion options
+     * @returns {Object.<string,*>} Plain object
+     */
+    Transfer.toObject = function toObject(message, options) {
+        if (!options)
+            options = {};
+        let object = {};
+        if (options.defaults)
+            if (options.bytes === String)
+                object.id = "";
+            else {
+                object.id = [];
+                if (options.bytes !== Array)
+                    object.id = $util.newBuffer(object.id);
+            }
+        if (message.id != null && message.hasOwnProperty("id"))
+            object.id = options.bytes === String ? $util.base64.encode(message.id, 0, message.id.length) : options.bytes === Array ? Array.prototype.slice.call(message.id) : message.id;
+        return object;
+    };
+
+    /**
+     * Converts this Transfer to JSON.
+     * @function toJSON
+     * @memberof Transfer
+     * @instance
+     * @returns {Object.<string,*>} JSON object
+     */
+    Transfer.prototype.toJSON = function toJSON() {
+        return this.constructor.toObject(this, $protobuf.util.toJSONOptions);
+    };
+
+    return Transfer;
 })();
 
 export const VideoChannel = $root.VideoChannel = (() => {

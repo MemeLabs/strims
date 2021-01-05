@@ -3,25 +3,24 @@ package directory
 import (
 	"context"
 	"errors"
+	"log"
 	"sync"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
-	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
-	"github.com/MemeLabs/go-ppspp/pkg/prefixstream"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
-	"google.golang.org/protobuf/proto"
-	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 const broadcastInterval = time.Second
 const sessionTimeout = time.Minute * 15
+const pingInterval = time.Minute * 15
 
 // AddressSalt ...
 var AddressSalt = []byte("directory")
@@ -33,56 +32,70 @@ var (
 	ErrUserNotFound    = errors.New("user not found")
 )
 
-func newDirectoryService(logger *zap.Logger, key *pb.Key) (*directoryService, error) {
+const chunkSize = 128
+
+var swarmOptions = ppspp.SwarmOptions{
+	ChunkSize:  chunkSize,
+	LiveWindow: 16 * 1024,
+	Integrity: integrity.VerifierOptions{
+		ProtectionMethod: integrity.ProtectionMethodSignAll,
+	},
+}
+
+func newDirectoryService(logger *zap.Logger, key *pb.Key, transfer *transfer.Control) (*directoryService, error) {
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
-		SwarmOptions: ppspp.SwarmOptions{
-			ChunkSize:  128,
-			LiveWindow: 16 * 1024,
-			Integrity: integrity.VerifierOptions{
-				ProtectionMethod: integrity.ProtectionMethodSignAll,
-			},
-		},
-		Key: key,
+		SwarmOptions: swarmOptions,
+		Key:          key,
 	})
 	if err != nil {
 		return nil, err
 	}
 
+	transferID := transfer.Add(w.Swarm(), AddressSalt)
+	transfer.Publish(transferID, key.Public)
+
 	return &directoryService{
 		logger:          logger,
+		transfer:        transfer,
 		done:            make(chan struct{}),
 		broadcastTicker: time.NewTicker(broadcastInterval),
-		w:               prefixstream.NewWriter(w),
+		eventWriter:     newEventWriter(w),
 		swarm:           w.Swarm(),
+		transferID:      transferID,
+		eventReader:     newEventReader(w.Swarm().Reader()),
 	}, nil
 }
 
 type directoryService struct {
 	logger            *zap.Logger
+	transfer          *transfer.Control
 	closeOnce         sync.Once
 	done              chan struct{}
 	broadcastTicker   *time.Ticker
 	lastBroadcastTime time.Time
-	w                 *prefixstream.Writer
+	eventWriter       *eventWriter
 	swarm             *ppspp.Swarm
+	transferID        []byte
 	lock              sync.Mutex
 	listings          lru
 	sessions          lru
 	users             lru
 	certificate       *pb.Certificate
+	*eventReader
 }
 
 func (d *directoryService) Run(ctx context.Context) error {
+	defer d.Close()
+
 	for {
 		select {
-		case <-d.broadcastTicker.C:
-			if err := d.broadcast(); err != nil {
+		case now := <-d.broadcastTicker.C:
+			if err := d.broadcast(now); err != nil {
 				return err
 			}
 		case <-d.done:
 			return errors.New("closed")
 		case <-ctx.Done():
-			d.Close()
 			return ctx.Err()
 		}
 	}
@@ -90,55 +103,55 @@ func (d *directoryService) Run(ctx context.Context) error {
 
 func (d *directoryService) Close() {
 	d.closeOnce.Do(func() {
-		// TODO: shut down swarm...
+		d.transfer.Remove(d.transferID)
 		d.broadcastTicker.Stop()
 		close(d.done)
 	})
 }
 
-func (d *directoryService) broadcast() error {
+func (d *directoryService) broadcast(now time.Time) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	now := iotime.Load()
-
 	for it := d.listings.PeekRecentlyTouched(d.lastBroadcastTime); it.Next(); {
+		log.Println("recently added listing")
 		l := it.Value().(*listing)
 
-		var event *pb.DirectoryServerEvent
+		var event *pb.DirectoryEvent
 		if l.publishers.Len() == 0 && l.viewers.Len() == 0 {
 			d.listings.Delete(l)
-			event = &pb.DirectoryServerEvent{
-				Body: &pb.DirectoryServerEvent_Unpublish_{
-					Unpublish: &pb.DirectoryServerEvent_Unpublish{
+			event = &pb.DirectoryEvent{
+				Body: &pb.DirectoryEvent_Unpublish_{
+					Unpublish: &pb.DirectoryEvent_Unpublish{
 						Key: l.listing.Key,
 					},
 				},
 			}
 		} else if l.modifiedTime.After(d.lastBroadcastTime) {
-			event = &pb.DirectoryServerEvent{
-				Body: &pb.DirectoryServerEvent_Publish_{
-					Publish: &pb.DirectoryServerEvent_Publish{
+			event = &pb.DirectoryEvent{
+				Body: &pb.DirectoryEvent_Publish_{
+					Publish: &pb.DirectoryEvent_Publish{
 						Listing: l.listing,
 					},
 				},
 			}
 		} else {
-			event = &pb.DirectoryServerEvent{
-				Body: &pb.DirectoryServerEvent_ViewerCountChange_{
-					ViewerCountChange: &pb.DirectoryServerEvent_ViewerCountChange{
+			event = &pb.DirectoryEvent{
+				Body: &pb.DirectoryEvent_ViewerCountChange_{
+					ViewerCountChange: &pb.DirectoryEvent_ViewerCountChange{
 						Key:   l.listing.Key,
 						Count: uint32(l.viewers.Len()),
 					},
 				},
 			}
 		}
-		if err := d.writeToStream(event); err != nil {
+		if err := d.eventWriter.Write(event); err != nil {
 			return err
 		}
 	}
 
 	for it := d.users.PeekRecentlyTouched(d.lastBroadcastTime); it.Next(); {
+		log.Println("recently added user")
 		u := it.Value().(*user)
 
 		var keys [][]byte
@@ -150,16 +163,16 @@ func (d *directoryService) broadcast() error {
 			return true
 		})
 
-		event := &pb.DirectoryServerEvent{
-			Body: &pb.DirectoryServerEvent_ViewerStateChange_{
-				ViewerStateChange: &pb.DirectoryServerEvent_ViewerStateChange{
+		event := &pb.DirectoryEvent{
+			Body: &pb.DirectoryEvent_ViewerStateChange_{
+				ViewerStateChange: &pb.DirectoryEvent_ViewerStateChange{
 					Subject:     u.certificate.Subject,
 					Online:      true,
 					ViewingKeys: keys,
 				},
 			},
 		}
-		if err := d.writeToStream(event); err != nil {
+		if err := d.eventWriter.Write(event); err != nil {
 			return err
 		}
 	}
@@ -175,48 +188,45 @@ func (d *directoryService) broadcast() error {
 
 		d.users.Delete(u)
 
-		event := &pb.DirectoryServerEvent{
-			Body: &pb.DirectoryServerEvent_ViewerStateChange_{
-				ViewerStateChange: &pb.DirectoryServerEvent_ViewerStateChange{
+		event := &pb.DirectoryEvent{
+			Body: &pb.DirectoryEvent_ViewerStateChange_{
+				ViewerStateChange: &pb.DirectoryEvent_ViewerStateChange{
 					Subject: u.certificate.Subject,
 					Online:  false,
 				},
 			},
 		}
-		if err := d.writeToStream(event); err != nil {
+		if err := d.eventWriter.Write(event); err != nil {
 			return err
 		}
 	}
 
 	for l, ok := d.listings.Pop(eol).(*listing); ok; l, ok = d.listings.Pop(eol).(*listing) {
-		event := &pb.DirectoryServerEvent{
-			Body: &pb.DirectoryServerEvent_Unpublish_{
-				Unpublish: &pb.DirectoryServerEvent_Unpublish{
+		event := &pb.DirectoryEvent{
+			Body: &pb.DirectoryEvent_Unpublish_{
+				Unpublish: &pb.DirectoryEvent_Unpublish{
 					Key: l.listing.Key,
 				},
 			},
 		}
-		if err := d.writeToStream(event); err != nil {
+		if err := d.eventWriter.Write(event); err != nil {
 			return err
 		}
 	}
 
-	d.lastBroadcastTime = now
-	return nil
-}
-
-func (d *directoryService) writeToStream(msg protoreflect.ProtoMessage) error {
-	b := pool.Get(uint16(proto.Size(msg)))
-	defer pool.Put(b)
-
-	var err error
-	*b, err = proto.MarshalOptions{}.MarshalAppend((*b)[:0], msg)
-	if err != nil {
+	event := &pb.DirectoryEvent{
+		Body: &pb.DirectoryEvent_Ping_{
+			Ping: &pb.DirectoryEvent_Ping{
+				Time: now.Unix(),
+			},
+		},
+	}
+	if err := d.eventWriter.Write(event); err != nil {
 		return err
 	}
 
-	_, err = d.w.Write(*b)
-	return err
+	d.lastBroadcastTime = now
+	return nil
 }
 
 func (d *directoryService) Publish(ctx context.Context, req *pb.DirectoryPublishRequest) (*pb.DirectoryPublishResponse, error) {

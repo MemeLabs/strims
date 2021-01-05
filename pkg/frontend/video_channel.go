@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
-	"github.com/MemeLabs/go-ppspp/pkg/control/app"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/videochannel"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
@@ -22,7 +22,7 @@ func init() {
 // videoChannelService ...
 type videoChannelService struct {
 	profile *pb.Profile
-	app     *app.Control
+	app     control.AppControl
 }
 
 func (s *videoChannelService) List(ctx context.Context, r *pb.VideoChannelListRequest) (*pb.VideoChannelListResponse, error) {

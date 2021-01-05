@@ -5,6 +5,7 @@ import (
 	"io"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/app"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
@@ -74,7 +75,7 @@ type Instance struct {
 
 	profile *pb.Profile
 	store   *dao.ProfileStore
-	app     *app.Control
+	app     control.AppControl
 }
 
 func (c *Instance) initProfileService(ctx context.Context, store kv.BlobStore, newVPN VPNFunc) error {
@@ -127,5 +128,5 @@ type ServiceParams struct {
 	Profile *pb.Profile
 	Store   *dao.ProfileStore
 	VPN     *vpn.Host
-	App     *app.Control
+	App     control.AppControl
 }

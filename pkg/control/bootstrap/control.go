@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
@@ -17,8 +18,7 @@ import (
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) *Control {
 	events := make(chan interface{}, 128)
-	observers.Local.Notify(events)
-	observers.Global.Notify(events)
+	observers.Notify(events)
 
 	return &Control{
 		logger:    logger,
@@ -78,7 +78,7 @@ func (t *Control) handlePeerAdd(ctx context.Context, id uint64) {
 }
 
 // AddPeer ...
-func (t *Control) AddPeer(id uint64, peer *vnic.Peer, client PeerClient) *Peer {
+func (t *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Peer {
 	p := &Peer{
 		vnic:   peer,
 		client: client,

@@ -1,6 +1,7 @@
 package videochannel
 
 import (
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
@@ -39,7 +40,7 @@ func (c *Control) ListChannels() ([]*pb.VideoChannel, error) {
 }
 
 // CreateChannel ...
-func (c *Control) CreateChannel(opts ...ChannelOption) (*pb.VideoChannel, error) {
+func (c *Control) CreateChannel(opts ...control.VideoChannelOption) (*pb.VideoChannel, error) {
 	channel, err := dao.NewVideoChannel(c.store)
 	if err != nil {
 		return nil, err
@@ -57,7 +58,7 @@ func (c *Control) CreateChannel(opts ...ChannelOption) (*pb.VideoChannel, error)
 }
 
 // UpdateChannel ...
-func (c *Control) UpdateChannel(id uint64, opts ...ChannelOption) (*pb.VideoChannel, error) {
+func (c *Control) UpdateChannel(id uint64, opts ...control.VideoChannelOption) (*pb.VideoChannel, error) {
 	var channel *pb.VideoChannel
 	err := c.store.Update(func(tx kv.RWTx) (err error) {
 		channel, err = dao.GetVideoChannel(tx, id)
@@ -75,15 +76,12 @@ func (c *Control) UpdateChannel(id uint64, opts ...ChannelOption) (*pb.VideoChan
 		return nil, err
 	}
 
-	c.observers.Global.Emit(event.VideoChannelUpdate{Channel: channel})
+	c.observers.EmitGlobal(event.VideoChannelUpdate{Channel: channel})
 
 	return channel, err
 }
 
-// ChannelOption ...
-type ChannelOption func(channel *pb.VideoChannel) error
-
-type channelOptionSlice []ChannelOption
+type channelOptionSlice []control.VideoChannelOption
 
 func (s channelOptionSlice) Apply(channel *pb.VideoChannel) error {
 	for _, o := range s {
@@ -95,7 +93,7 @@ func (s channelOptionSlice) Apply(channel *pb.VideoChannel) error {
 }
 
 // WithDirectorySnippet ...
-func WithDirectorySnippet(snippet *pb.DirectoryListingSnippet) ChannelOption {
+func WithDirectorySnippet(snippet *pb.DirectoryListingSnippet) control.VideoChannelOption {
 	return func(channel *pb.VideoChannel) error {
 		channel.DirectoryListingSnippet = snippet
 		return nil
@@ -103,7 +101,7 @@ func WithDirectorySnippet(snippet *pb.DirectoryListingSnippet) ChannelOption {
 }
 
 // WithLocalOwner ...
-func WithLocalOwner(profileKey, networkKey []byte) ChannelOption {
+func WithLocalOwner(profileKey, networkKey []byte) control.VideoChannelOption {
 	return func(channel *pb.VideoChannel) error {
 		channel.Owner = &pb.VideoChannel_Local_{
 			Local: &pb.VideoChannel_Local{
@@ -116,7 +114,7 @@ func WithLocalOwner(profileKey, networkKey []byte) ChannelOption {
 }
 
 // WithLocalShareOwner ...
-func WithLocalShareOwner(cert *pb.Certificate) ChannelOption {
+func WithLocalShareOwner(cert *pb.Certificate) control.VideoChannelOption {
 	return func(channel *pb.VideoChannel) error {
 		channel.Owner = &pb.VideoChannel_LocalShare_{
 			LocalShare: &pb.VideoChannel_LocalShare{
@@ -128,7 +126,7 @@ func WithLocalShareOwner(cert *pb.Certificate) ChannelOption {
 }
 
 // WithRemoteShareOwner ...
-func WithRemoteShareOwner(share *pb.VideoChannel_RemoteShare) ChannelOption {
+func WithRemoteShareOwner(share *pb.VideoChannel_RemoteShare) control.VideoChannelOption {
 	return func(channel *pb.VideoChannel) error {
 		channel.Owner = &pb.VideoChannel_RemoteShare_{
 			RemoteShare: share,
@@ -143,7 +141,7 @@ func (c *Control) DeleteChannel(id uint64) error {
 		return err
 	}
 
-	c.observers.Global.Emit(event.VideoChannelRemove{ID: id})
+	c.observers.EmitGlobal(event.VideoChannelRemove{ID: id})
 
 	return nil
 }

@@ -10,13 +10,13 @@ import { WSReadWriter } from "../lib/ws";
 import App from "../root/App";
 
 (async () => {
-  // const bridge = new WindowBridge(Worker as any);
-  // const client = await new Promise<Client>((resolve) => {
-  //   bridge.once("busopen:default", (b: any) => resolve(new Client(b, b)));
-  // });
+  const bridge = new WindowBridge(Worker as any);
+  const client = await new Promise<FrontendClient>((resolve) => {
+    bridge.once("busopen:default", (b: any) => resolve(new FrontendClient(b, b)));
+  });
 
-  const ws: any = new WSReadWriter(`wss://${location.host}/manage`);
-  const client = new FrontendClient(ws, ws);
+  // const ws: any = new WSReadWriter(`wss://${location.host}/manage`);
+  // const client = new FrontendClient(ws, ws);
 
   const root = document.createElement("div");
   root.setAttribute("id", "root");

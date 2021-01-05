@@ -5,6 +5,7 @@ import (
 	"sync/atomic"
 
 	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/bootstrap"
 	"github.com/MemeLabs/go-ppspp/pkg/control/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
@@ -18,7 +19,7 @@ import (
 // NewPeerControl ...
 func NewPeerControl(logger *zap.Logger, observers *event.Observers, ca *ca.Control, network *network.Control, transfer *transfer.Control, bootstrap *bootstrap.Control) *PeerControl {
 	events := make(chan interface{}, 128)
-	observers.Global.Notify(events)
+	observers.Notify(events)
 
 	return &PeerControl{
 		logger:    logger,
@@ -45,16 +46,8 @@ type PeerControl struct {
 	peers  map[uint64]*Peer
 }
 
-// PeerClient ..
-type PeerClient interface {
-	Swarm() *api.SwarmPeerClient
-	Bootstrap() *api.BootstrapPeerClient
-	CA() *api.CAPeerClient
-	Network() *api.NetworkPeerClient
-}
-
 // Add ...
-func (t *PeerControl) Add(peer *vnic.Peer, client PeerClient) *Peer {
+func (t *PeerControl) Add(peer *vnic.Peer, client api.PeerClient) control.Peer {
 	id := atomic.AddUint64(&t.nextID, 1)
 	p := &Peer{
 		id:        id,
@@ -69,37 +62,37 @@ func (t *PeerControl) Add(peer *vnic.Peer, client PeerClient) *Peer {
 	t.peers[p.id] = p
 	t.lock.Unlock()
 
-	t.observers.Local.Emit(event.PeerAdd{ID: id, VNIC: peer})
+	t.observers.EmitLocal(event.PeerAdd{ID: id, VNIC: peer})
 
 	return p
 }
 
 // Remove ...
-func (t *PeerControl) Remove(p *Peer) {
+func (t *PeerControl) Remove(p control.Peer) {
 	t.lock.Lock()
-	delete(t.peers, p.id)
+	delete(t.peers, p.ID())
 	t.lock.Unlock()
 
-	t.network.RemovePeer(p.id)
-	t.transfer.RemovePeer(p.id)
-	t.bootstrap.RemovePeer(p.id)
+	t.network.RemovePeer(p.ID())
+	t.transfer.RemovePeer(p.ID())
+	t.bootstrap.RemovePeer(p.ID())
 
-	t.observers.Local.Emit(event.PeerRemove{ID: p.id})
+	t.observers.EmitLocal(event.PeerRemove{ID: p.ID()})
 }
 
 // Get ...
-func (t *PeerControl) Get(id uint64) *Peer {
+func (t *PeerControl) Get(id uint64) control.Peer {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	return t.peers[id]
 }
 
 // List ...
-func (t *PeerControl) List() []*Peer {
+func (t *PeerControl) List() []control.Peer {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	peers := make([]*Peer, len(t.peers))
+	peers := make([]control.Peer, len(t.peers))
 	var n int
 	for _, p := range t.peers {
 		peers[n] = p
@@ -112,7 +105,7 @@ func (t *PeerControl) List() []*Peer {
 // Peer ...
 type Peer struct {
 	id        uint64
-	client    PeerClient
+	client    api.PeerClient
 	vnic      *vnic.Peer
 	network   *network.Peer
 	transfer  *transfer.Peer
@@ -123,16 +116,16 @@ type Peer struct {
 func (p *Peer) ID() uint64 { return p.id }
 
 // Client ...
-func (p *Peer) Client() PeerClient { return p.client }
+func (p *Peer) Client() api.PeerClient { return p.client }
 
 // VNIC ...
 func (p *Peer) VNIC() *vnic.Peer { return p.vnic }
 
 // Network ...
-func (p *Peer) Network() *network.Peer { return p.network }
+func (p *Peer) Network() control.NetworkPeerControl { return p.network }
 
 // Transfer ...
-func (p *Peer) Transfer() *transfer.Peer { return p.transfer }
+func (p *Peer) Transfer() control.TransferPeerControl { return p.transfer }
 
 // Bootstrap ...
-func (p *Peer) Bootstrap() *bootstrap.Peer { return p.bootstrap }
+func (p *Peer) Bootstrap() control.BootstrapPeerControl { return p.bootstrap }

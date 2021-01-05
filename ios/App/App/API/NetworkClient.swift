@@ -43,7 +43,7 @@ class NetworkClient {
   public func stopVPN(_ arg: PBStopVPNRequest = PBStopVPNRequest()) -> Promise<PBStopVPNResponse> {
     return self.client.callUnary("Network/StopVPN", arg)
   }
-  public func getDirectoryEvents(_ arg: PBGetDirectoryEventsRequest = PBGetDirectoryEventsRequest()) throws -> RPCResponseStream<PBDirectoryServerEvent> {
+  public func getDirectoryEvents(_ arg: PBGetDirectoryEventsRequest = PBGetDirectoryEventsRequest()) throws -> RPCResponseStream<PBDirectoryEvent> {
     return try self.client.callStreaming("Network/GetDirectoryEvents", arg)
   }
   public func testDirectoryPublish(_ arg: PBTestDirectoryPublishRequest = PBTestDirectoryPublishRequest()) -> Promise<PBTestDirectoryPublishResponse> {

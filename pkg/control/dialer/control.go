@@ -54,7 +54,7 @@ func (t *Control) ReplaceOrInsertNetwork(network *pb.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	it := t.certs.Get(&hostCertKey{dao.GetRootCert(network.Certificate).Key})
+	it := t.certs.Get(&hostCertKey{dao.NetworkKey(network)})
 	if it == nil {
 		t.certs.ReplaceOrInsert(&hostCert{cert: cert})
 	} else {
@@ -67,7 +67,7 @@ func (t *Control) RemoveNetwork(network *pb.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	t.certs.Delete(&hostCertKey{dao.GetRootCert(network.Certificate).Key})
+	t.certs.Delete(&hostCertKey{dao.NetworkKey(network)})
 }
 
 func (t *Control) hostCertAndVPNNode(networkKey []byte) (*hostCert, *vpn.Node, error) {

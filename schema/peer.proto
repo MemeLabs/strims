@@ -6,19 +6,19 @@ option swift_prefix = "PB";
 
 import "profile.proto";
 
-message SwarmPeerAnnounceSwarmRequest {
-  bytes id = 1;
+message TransferPeerAnnounceSwarmRequest {
+  bytes swarm_id = 1;
   uint32 port = 2;
 }
 
-message SwarmPeerAnnounceSwarmResponse {
+message TransferPeerAnnounceSwarmResponse {
   oneof body {
     uint32 port = 1;
   }
 }
 
-service SwarmPeer {
-  rpc AnnounceSwarm(SwarmPeerAnnounceSwarmRequest) returns (SwarmPeerAnnounceSwarmResponse);
+service TransferPeer {
+  rpc AnnounceSwarm(TransferPeerAnnounceSwarmRequest) returns (TransferPeerAnnounceSwarmResponse);
 }
 
 message CAPeerRenewRequest {

@@ -62,7 +62,7 @@ type NetworkService interface {
 	GetDirectoryEvents(
 		ctx context.Context,
 		req *pb.GetDirectoryEventsRequest,
-	) (<-chan *pb.DirectoryServerEvent, error)
+	) (<-chan *pb.DirectoryEvent, error)
 	TestDirectoryPublish(
 		ctx context.Context,
 		req *pb.TestDirectoryPublishRequest,
@@ -164,7 +164,7 @@ func (c *NetworkClient) StopVPN(
 func (c *NetworkClient) GetDirectoryEvents(
 	ctx context.Context,
 	req *pb.GetDirectoryEventsRequest,
-	res chan *pb.DirectoryServerEvent,
+	res chan *pb.DirectoryEvent,
 ) error {
 	return c.client.CallStreaming(ctx, "Network/GetDirectoryEvents", req, res)
 }
