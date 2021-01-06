@@ -16,12 +16,16 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/davecgh/go-spew/spew"
 	pp "github.com/plutov/paypal/v3"
+	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
 	"go.uber.org/zap"
+
+	_ "github.com/lib/pq"
 )
 
 type Funding struct {
+	logger *zap.Logger
 	paypal *paypal.Paypal
 	db     *sql.DB
 
@@ -30,7 +34,10 @@ type Funding struct {
 
 type config struct {
 	Paypal *paypal.Config `json:"paypal"`
-	DBPath string         `json:"db_path"`
+	DBName string         `json:"db_name"`
+	DBUser string         `json:"db_user"`
+	DBPass string         `json:"db_pass"`
+	DBHost string         `json:"db_host"`
 }
 
 func New(cfgPath string, logger *zap.Logger) (*Funding, error) {
@@ -49,7 +56,8 @@ func New(cfgPath string, logger *zap.Logger) (*Funding, error) {
 		return nil, fmt.Errorf("failed to unmarshal cfg contents: %w", err)
 	}
 
-	db, err := sql.Open("sqlite3", config.DBPath)
+	connStr := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", config.DBUser, config.DBPass, config.DBName)
+	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("faied to open db: %w", err)
 	}
@@ -61,6 +69,7 @@ func New(cfgPath string, logger *zap.Logger) (*Funding, error) {
 
 	boil.SetDB(db)
 	f := &Funding{
+		logger: logger,
 		paypal: pc,
 		db:     db,
 	}
@@ -89,8 +98,8 @@ func (f *Funding) LoadSummary(ctx context.Context) error {
 	for i, t := range transactionsRes {
 		transactions[i] = &pb.FundingTransaction{
 			Subject:   t.Subject,
-			Note:      t.Note,
-			Date:      t.Date,
+			Note:      t.Note.String,
+			Date:      int64(t.Date),
 			Amount:    float32(t.Amount),
 			Ending:    float32(t.Ending),
 			Available: float32(t.Available),
@@ -142,7 +151,7 @@ func (f *Funding) CreateSubPlan(ctx context.Context, price string) (string, erro
 	subplan := models.Subplan{
 		PlanID:  res.ID,
 		Price:   price,
-		Default: 0,
+		Default: false,
 	}
 
 	if err := subplan.InsertG(ctx, boil.Infer()); err != nil {
@@ -184,9 +193,11 @@ func (f *Funding) ValidWebhook(r *http.Request, webhookID string) (bool, error) 
 }
 
 func (f *Funding) InsertTransaction(body []byte) error {
-	var event pp.WebhookEvent
+	fmt.Println(string(body))
+
+	event := new(pp.WebhookEvent)
 	if err := json.Unmarshal(body, &event); err != nil {
-		return err
+		return fmt.Errorf("failed to unmarshal hook event: %w", err)
 	}
 
 	spew.Dump(event)
@@ -214,7 +225,7 @@ func (f *Funding) seedDB(ctx context.Context) error {
 		return fmt.Errorf("failed to query subplans: %w", err)
 	}
 
-	if len(transactionsRes) > 0 || len(subplansRes) > 0 {
+	if len(transactionsRes) > 1 || len(subplansRes) > 1 {
 		return nil
 	}
 
@@ -225,16 +236,17 @@ func (f *Funding) seedDB(ctx context.Context) error {
 
 	for _, t := range ts {
 		nt := models.Transaction{
-			Date:      t.GetDate(),
+			Date:      int(t.GetDate()),
 			Subject:   t.GetSubject(),
-			Note:      t.GetNote(),
-			Amount:    float64(t.GetAmount()),
-			Ending:    float64(t.GetEnding()),
-			Available: float64(t.GetAvailable()),
+			Note:      null.StringFrom(t.Note),
+			Currency:  "USD",
+			Amount:    t.GetAmount(),
+			Ending:    t.GetEnding(),
+			Available: t.GetAvailable(),
 			Service:   "paypal",
 		}
 		if err := nt.InsertG(ctx, boil.Infer()); err != nil {
-			return fmt.Errorf("failed to insert transaction: %w", err)
+			f.logger.Error("failed to insert transactionw", zap.Error(err))
 		}
 	}
 
@@ -247,11 +259,11 @@ func (f *Funding) seedDB(ctx context.Context) error {
 		ns := models.Subplan{
 			PlanID:  k,
 			Price:   v,
-			Default: 1,
+			Default: false,
 		}
 
 		if ns.Price == "1.00" {
-			ns.Default = 1
+			ns.Default = true
 		}
 
 		if err := ns.InsertG(ctx, boil.Infer()); err != nil {

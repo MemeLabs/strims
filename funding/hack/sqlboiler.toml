@@ -4,5 +4,9 @@ no-hooks            = true
 add-global-variants = true
 struct-tag-casing   = "camel"
 
-[sqlite3]
-dbname = "./funding.sqlite"
+[psql]
+host    = "localhost"
+dbname  = "strims"
+user    = "strims"
+pass    = "strims"
+sslmode = "disable"

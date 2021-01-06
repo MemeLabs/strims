@@ -427,7 +427,7 @@ func testSubscriptionsSelect(t *testing.T) {
 }
 
 var (
-	subscriptionDBTypes = map[string]string{`ID`: `INTEGER`, `SubPlanID`: `TEXT`, `StartDate`: `INTEGER`, `EndDate`: `INTEGER`}
+	subscriptionDBTypes = map[string]string{`ID`: `smallint`, `SubPlanID`: `text`, `StartDate`: `integer`, `EndDate`: `integer`}
 	_                   = bytes.MinRead
 )
 
@@ -539,5 +539,53 @@ func testSubscriptionsSliceUpdateAll(t *testing.T) {
 		t.Error(err)
 	} else if rowsAff != 1 {
 		t.Error("wanted one record updated but got", rowsAff)
+	}
+}
+
+func testSubscriptionsUpsert(t *testing.T) {
+	t.Parallel()
+
+	if len(subscriptionAllColumns) == len(subscriptionPrimaryKeyColumns) {
+		t.Skip("Skipping table with only primary key columns")
+	}
+
+	seed := randomize.NewSeed()
+	var err error
+	// Attempt the INSERT side of an UPSERT
+	o := Subscription{}
+	if err = randomize.Struct(seed, &o, subscriptionDBTypes, true); err != nil {
+		t.Errorf("Unable to randomize Subscription struct: %s", err)
+	}
+
+	ctx := context.Background()
+	tx := MustTx(boil.BeginTx(ctx, nil))
+	defer func() { _ = tx.Rollback() }()
+	if err = o.Upsert(ctx, tx, false, nil, boil.Infer(), boil.Infer()); err != nil {
+		t.Errorf("Unable to upsert Subscription: %s", err)
+	}
+
+	count, err := Subscriptions().Count(ctx, tx)
+	if err != nil {
+		t.Error(err)
+	}
+	if count != 1 {
+		t.Error("want one record, got:", count)
+	}
+
+	// Attempt the UPDATE side of an UPSERT
+	if err = randomize.Struct(seed, &o, subscriptionDBTypes, false, subscriptionPrimaryKeyColumns...); err != nil {
+		t.Errorf("Unable to randomize Subscription struct: %s", err)
+	}
+
+	if err = o.Upsert(ctx, tx, true, nil, boil.Infer(), boil.Infer()); err != nil {
+		t.Errorf("Unable to upsert Subscription: %s", err)
+	}
+
+	count, err = Subscriptions().Count(ctx, tx)
+	if err != nil {
+		t.Error(err)
+	}
+	if count != 1 {
+		t.Error("want one record, got:", count)
 	}
 }

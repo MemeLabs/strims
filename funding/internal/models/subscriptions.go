@@ -8,12 +8,12 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/friendsofgo/errors"
-	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
@@ -23,10 +23,10 @@ import (
 
 // Subscription is an object representing the database table.
 type Subscription struct {
-	ID        null.Int64 `boil:"id" json:"id,omitempty" toml:"id" yaml:"id,omitempty"`
-	SubPlanID string     `boil:"sub_plan_id" json:"subPlanID" toml:"subPlanID" yaml:"subPlanID"`
-	StartDate int64      `boil:"start_date" json:"startDate" toml:"startDate" yaml:"startDate"`
-	EndDate   int64      `boil:"end_date" json:"endDate" toml:"endDate" yaml:"endDate"`
+	ID        int16  `boil:"id" json:"id" toml:"id" yaml:"id"`
+	SubPlanID string `boil:"sub_plan_id" json:"subPlanID" toml:"subPlanID" yaml:"subPlanID"`
+	StartDate int    `boil:"start_date" json:"startDate" toml:"startDate" yaml:"startDate"`
+	EndDate   int    `boil:"end_date" json:"endDate" toml:"endDate" yaml:"endDate"`
 
 	R *subscriptionR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L subscriptionL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -46,16 +46,39 @@ var SubscriptionColumns = struct {
 
 // Generated where
 
+type whereHelperint struct{ field string }
+
+func (w whereHelperint) EQ(x int) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.EQ, x) }
+func (w whereHelperint) NEQ(x int) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.NEQ, x) }
+func (w whereHelperint) LT(x int) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.LT, x) }
+func (w whereHelperint) LTE(x int) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LTE, x) }
+func (w whereHelperint) GT(x int) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.GT, x) }
+func (w whereHelperint) GTE(x int) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GTE, x) }
+func (w whereHelperint) IN(slice []int) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereIn(fmt.Sprintf("%s IN ?", w.field), values...)
+}
+func (w whereHelperint) NIN(slice []int) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
+}
+
 var SubscriptionWhere = struct {
-	ID        whereHelpernull_Int64
+	ID        whereHelperint16
 	SubPlanID whereHelperstring
-	StartDate whereHelperint64
-	EndDate   whereHelperint64
+	StartDate whereHelperint
+	EndDate   whereHelperint
 }{
-	ID:        whereHelpernull_Int64{field: "\"subscriptions\".\"id\""},
+	ID:        whereHelperint16{field: "\"subscriptions\".\"id\""},
 	SubPlanID: whereHelperstring{field: "\"subscriptions\".\"sub_plan_id\""},
-	StartDate: whereHelperint64{field: "\"subscriptions\".\"start_date\""},
-	EndDate:   whereHelperint64{field: "\"subscriptions\".\"end_date\""},
+	StartDate: whereHelperint{field: "\"subscriptions\".\"start_date\""},
+	EndDate:   whereHelperint{field: "\"subscriptions\".\"end_date\""},
 }
 
 // SubscriptionRels is where relationship names are stored.
@@ -76,8 +99,8 @@ type subscriptionL struct{}
 
 var (
 	subscriptionAllColumns            = []string{"id", "sub_plan_id", "start_date", "end_date"}
-	subscriptionColumnsWithoutDefault = []string{}
-	subscriptionColumnsWithDefault    = []string{"id", "sub_plan_id", "start_date", "end_date"}
+	subscriptionColumnsWithoutDefault = []string{"sub_plan_id", "start_date", "end_date"}
+	subscriptionColumnsWithDefault    = []string{"id"}
 	subscriptionPrimaryKeyColumns     = []string{"id"}
 )
 
@@ -199,13 +222,13 @@ func Subscriptions(mods ...qm.QueryMod) subscriptionQuery {
 }
 
 // FindSubscriptionG retrieves a single record by ID.
-func FindSubscriptionG(ctx context.Context, iD null.Int64, selectCols ...string) (*Subscription, error) {
+func FindSubscriptionG(ctx context.Context, iD int16, selectCols ...string) (*Subscription, error) {
 	return FindSubscription(ctx, boil.GetContextDB(), iD, selectCols...)
 }
 
 // FindSubscription retrieves a single record by ID with an executor.
 // If selectCols is empty Find will return all columns.
-func FindSubscription(ctx context.Context, exec boil.ContextExecutor, iD null.Int64, selectCols ...string) (*Subscription, error) {
+func FindSubscription(ctx context.Context, exec boil.ContextExecutor, iD int16, selectCols ...string) (*Subscription, error) {
 	subscriptionObj := &Subscription{}
 
 	sel := "*"
@@ -213,7 +236,7 @@ func FindSubscription(ctx context.Context, exec boil.ContextExecutor, iD null.In
 		sel = strings.Join(strmangle.IdentQuoteSlice(dialect.LQ, dialect.RQ, selectCols), ",")
 	}
 	query := fmt.Sprintf(
-		"select %s from \"subscriptions\" where \"id\"=?", sel,
+		"select %s from \"subscriptions\" where \"id\"=$1", sel,
 	)
 
 	q := queries.Raw(query, iD)
@@ -275,7 +298,7 @@ func (o *Subscription) Insert(ctx context.Context, exec boil.ContextExecutor, co
 		var queryOutput, queryReturning string
 
 		if len(cache.retMapping) != 0 {
-			cache.retQuery = fmt.Sprintf("SELECT \"%s\" FROM \"subscriptions\" WHERE %s", strings.Join(returnColumns, "\",\""), strmangle.WhereClause("\"", "\"", 0, subscriptionPrimaryKeyColumns))
+			queryReturning = fmt.Sprintf(" RETURNING \"%s\"", strings.Join(returnColumns, "\",\""))
 		}
 
 		cache.query = fmt.Sprintf(cache.query, queryOutput, queryReturning)
@@ -289,33 +312,17 @@ func (o *Subscription) Insert(ctx context.Context, exec boil.ContextExecutor, co
 		fmt.Fprintln(writer, cache.query)
 		fmt.Fprintln(writer, vals)
 	}
-	_, err = exec.ExecContext(ctx, cache.query, vals...)
+
+	if len(cache.retMapping) != 0 {
+		err = exec.QueryRowContext(ctx, cache.query, vals...).Scan(queries.PtrsFromMapping(value, cache.retMapping)...)
+	} else {
+		_, err = exec.ExecContext(ctx, cache.query, vals...)
+	}
 
 	if err != nil {
 		return errors.Wrap(err, "models: unable to insert into subscriptions")
 	}
 
-	var identifierCols []interface{}
-
-	if len(cache.retMapping) == 0 {
-		goto CacheNoHooks
-	}
-
-	identifierCols = []interface{}{
-		o.ID,
-	}
-
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, cache.retQuery)
-		fmt.Fprintln(writer, identifierCols...)
-	}
-	err = exec.QueryRowContext(ctx, cache.retQuery, identifierCols...).Scan(queries.PtrsFromMapping(value, cache.retMapping)...)
-	if err != nil {
-		return errors.Wrap(err, "models: unable to populate default values for subscriptions")
-	}
-
-CacheNoHooks:
 	if !cached {
 		subscriptionInsertCacheMut.Lock()
 		subscriptionInsertCache[key] = cache
@@ -355,8 +362,8 @@ func (o *Subscription) Update(ctx context.Context, exec boil.ContextExecutor, co
 		}
 
 		cache.query = fmt.Sprintf("UPDATE \"subscriptions\" SET %s WHERE %s",
-			strmangle.SetParamNames("\"", "\"", 0, wl),
-			strmangle.WhereClause("\"", "\"", 0, subscriptionPrimaryKeyColumns),
+			strmangle.SetParamNames("\"", "\"", 1, wl),
+			strmangle.WhereClause("\"", "\"", len(wl)+1, subscriptionPrimaryKeyColumns),
 		)
 		cache.valueMapping, err = queries.BindMapping(subscriptionType, subscriptionMapping, append(wl, subscriptionPrimaryKeyColumns...))
 		if err != nil {
@@ -446,8 +453,8 @@ func (o SubscriptionSlice) UpdateAll(ctx context.Context, exec boil.ContextExecu
 	}
 
 	sql := fmt.Sprintf("UPDATE \"subscriptions\" SET %s WHERE %s",
-		strmangle.SetParamNames("\"", "\"", 0, colNames),
-		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 0, subscriptionPrimaryKeyColumns, len(o)))
+		strmangle.SetParamNames("\"", "\"", 1, colNames),
+		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), len(colNames)+1, subscriptionPrimaryKeyColumns, len(o)))
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
@@ -466,6 +473,122 @@ func (o SubscriptionSlice) UpdateAll(ctx context.Context, exec boil.ContextExecu
 	return rowsAff, nil
 }
 
+// UpsertG attempts an insert, and does an update or ignore on conflict.
+func (o *Subscription) UpsertG(ctx context.Context, updateOnConflict bool, conflictColumns []string, updateColumns, insertColumns boil.Columns) error {
+	return o.Upsert(ctx, boil.GetContextDB(), updateOnConflict, conflictColumns, updateColumns, insertColumns)
+}
+
+// Upsert attempts an insert using an executor, and does an update or ignore on conflict.
+// See boil.Columns documentation for how to properly use updateColumns and insertColumns.
+func (o *Subscription) Upsert(ctx context.Context, exec boil.ContextExecutor, updateOnConflict bool, conflictColumns []string, updateColumns, insertColumns boil.Columns) error {
+	if o == nil {
+		return errors.New("models: no subscriptions provided for upsert")
+	}
+
+	nzDefaults := queries.NonZeroDefaultSet(subscriptionColumnsWithDefault, o)
+
+	// Build cache key in-line uglily - mysql vs psql problems
+	buf := strmangle.GetBuffer()
+	if updateOnConflict {
+		buf.WriteByte('t')
+	} else {
+		buf.WriteByte('f')
+	}
+	buf.WriteByte('.')
+	for _, c := range conflictColumns {
+		buf.WriteString(c)
+	}
+	buf.WriteByte('.')
+	buf.WriteString(strconv.Itoa(updateColumns.Kind))
+	for _, c := range updateColumns.Cols {
+		buf.WriteString(c)
+	}
+	buf.WriteByte('.')
+	buf.WriteString(strconv.Itoa(insertColumns.Kind))
+	for _, c := range insertColumns.Cols {
+		buf.WriteString(c)
+	}
+	buf.WriteByte('.')
+	for _, c := range nzDefaults {
+		buf.WriteString(c)
+	}
+	key := buf.String()
+	strmangle.PutBuffer(buf)
+
+	subscriptionUpsertCacheMut.RLock()
+	cache, cached := subscriptionUpsertCache[key]
+	subscriptionUpsertCacheMut.RUnlock()
+
+	var err error
+
+	if !cached {
+		insert, ret := insertColumns.InsertColumnSet(
+			subscriptionAllColumns,
+			subscriptionColumnsWithDefault,
+			subscriptionColumnsWithoutDefault,
+			nzDefaults,
+		)
+		update := updateColumns.UpdateColumnSet(
+			subscriptionAllColumns,
+			subscriptionPrimaryKeyColumns,
+		)
+
+		if updateOnConflict && len(update) == 0 {
+			return errors.New("models: unable to upsert subscriptions, could not build update column list")
+		}
+
+		conflict := conflictColumns
+		if len(conflict) == 0 {
+			conflict = make([]string, len(subscriptionPrimaryKeyColumns))
+			copy(conflict, subscriptionPrimaryKeyColumns)
+		}
+		cache.query = buildUpsertQueryPostgres(dialect, "\"subscriptions\"", updateOnConflict, ret, update, conflict, insert)
+
+		cache.valueMapping, err = queries.BindMapping(subscriptionType, subscriptionMapping, insert)
+		if err != nil {
+			return err
+		}
+		if len(ret) != 0 {
+			cache.retMapping, err = queries.BindMapping(subscriptionType, subscriptionMapping, ret)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	value := reflect.Indirect(reflect.ValueOf(o))
+	vals := queries.ValuesFromMapping(value, cache.valueMapping)
+	var returns []interface{}
+	if len(cache.retMapping) != 0 {
+		returns = queries.PtrsFromMapping(value, cache.retMapping)
+	}
+
+	if boil.IsDebug(ctx) {
+		writer := boil.DebugWriterFrom(ctx)
+		fmt.Fprintln(writer, cache.query)
+		fmt.Fprintln(writer, vals)
+	}
+	if len(cache.retMapping) != 0 {
+		err = exec.QueryRowContext(ctx, cache.query, vals...).Scan(returns...)
+		if err == sql.ErrNoRows {
+			err = nil // Postgres doesn't return anything when there's no update
+		}
+	} else {
+		_, err = exec.ExecContext(ctx, cache.query, vals...)
+	}
+	if err != nil {
+		return errors.Wrap(err, "models: unable to upsert subscriptions")
+	}
+
+	if !cached {
+		subscriptionUpsertCacheMut.Lock()
+		subscriptionUpsertCache[key] = cache
+		subscriptionUpsertCacheMut.Unlock()
+	}
+
+	return nil
+}
+
 // DeleteG deletes a single Subscription record.
 // DeleteG will match against the primary key column to find the record to delete.
 func (o *Subscription) DeleteG(ctx context.Context) (int64, error) {
@@ -480,7 +603,7 @@ func (o *Subscription) Delete(ctx context.Context, exec boil.ContextExecutor) (i
 	}
 
 	args := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), subscriptionPrimaryKeyMapping)
-	sql := "DELETE FROM \"subscriptions\" WHERE \"id\"=?"
+	sql := "DELETE FROM \"subscriptions\" WHERE \"id\"=$1"
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
@@ -543,7 +666,7 @@ func (o SubscriptionSlice) DeleteAll(ctx context.Context, exec boil.ContextExecu
 	}
 
 	sql := "DELETE FROM \"subscriptions\" WHERE " +
-		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 0, subscriptionPrimaryKeyColumns, len(o))
+		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 1, subscriptionPrimaryKeyColumns, len(o))
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
@@ -609,7 +732,7 @@ func (o *SubscriptionSlice) ReloadAll(ctx context.Context, exec boil.ContextExec
 	}
 
 	sql := "SELECT \"subscriptions\".* FROM \"subscriptions\" WHERE " +
-		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 0, subscriptionPrimaryKeyColumns, len(*o))
+		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 1, subscriptionPrimaryKeyColumns, len(*o))
 
 	q := queries.Raw(sql, args...)
 
@@ -624,14 +747,14 @@ func (o *SubscriptionSlice) ReloadAll(ctx context.Context, exec boil.ContextExec
 }
 
 // SubscriptionExistsG checks if the Subscription row exists.
-func SubscriptionExistsG(ctx context.Context, iD null.Int64) (bool, error) {
+func SubscriptionExistsG(ctx context.Context, iD int16) (bool, error) {
 	return SubscriptionExists(ctx, boil.GetContextDB(), iD)
 }
 
 // SubscriptionExists checks if the Subscription row exists.
-func SubscriptionExists(ctx context.Context, exec boil.ContextExecutor, iD null.Int64) (bool, error) {
+func SubscriptionExists(ctx context.Context, exec boil.ContextExecutor, iD int16) (bool, error) {
 	var exists bool
-	sql := "select exists(select 1 from \"subscriptions\" where \"id\"=? limit 1)"
+	sql := "select exists(select 1 from \"subscriptions\" where \"id\"=$1 limit 1)"
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)

@@ -8,12 +8,12 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/friendsofgo/errors"
-	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
@@ -23,10 +23,10 @@ import (
 
 // Subplan is an object representing the database table.
 type Subplan struct {
-	ID      null.Int64 `boil:"id" json:"id,omitempty" toml:"id" yaml:"id,omitempty"`
-	PlanID  string     `boil:"plan_id" json:"planID" toml:"planID" yaml:"planID"`
-	Price   string     `boil:"price" json:"price" toml:"price" yaml:"price"`
-	Default int64      `boil:"default" json:"default" toml:"default" yaml:"default"`
+	ID      int16  `boil:"id" json:"id" toml:"id" yaml:"id"`
+	PlanID  string `boil:"plan_id" json:"planID" toml:"planID" yaml:"planID"`
+	Price   string `boil:"price" json:"price" toml:"price" yaml:"price"`
+	Default bool   `boil:"default" json:"default" toml:"default" yaml:"default"`
 
 	R *subplanR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L subplanL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -46,27 +46,27 @@ var SubplanColumns = struct {
 
 // Generated where
 
-type whereHelpernull_Int64 struct{ field string }
+type whereHelperint16 struct{ field string }
 
-func (w whereHelpernull_Int64) EQ(x null.Int64) qm.QueryMod {
-	return qmhelper.WhereNullEQ(w.field, false, x)
+func (w whereHelperint16) EQ(x int16) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.EQ, x) }
+func (w whereHelperint16) NEQ(x int16) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.NEQ, x) }
+func (w whereHelperint16) LT(x int16) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.LT, x) }
+func (w whereHelperint16) LTE(x int16) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LTE, x) }
+func (w whereHelperint16) GT(x int16) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.GT, x) }
+func (w whereHelperint16) GTE(x int16) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GTE, x) }
+func (w whereHelperint16) IN(slice []int16) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereIn(fmt.Sprintf("%s IN ?", w.field), values...)
 }
-func (w whereHelpernull_Int64) NEQ(x null.Int64) qm.QueryMod {
-	return qmhelper.WhereNullEQ(w.field, true, x)
-}
-func (w whereHelpernull_Int64) IsNull() qm.QueryMod    { return qmhelper.WhereIsNull(w.field) }
-func (w whereHelpernull_Int64) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
-func (w whereHelpernull_Int64) LT(x null.Int64) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LT, x)
-}
-func (w whereHelpernull_Int64) LTE(x null.Int64) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LTE, x)
-}
-func (w whereHelpernull_Int64) GT(x null.Int64) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GT, x)
-}
-func (w whereHelpernull_Int64) GTE(x null.Int64) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GTE, x)
+func (w whereHelperint16) NIN(slice []int16) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
 }
 
 type whereHelperstring struct{ field string }
@@ -92,39 +92,25 @@ func (w whereHelperstring) NIN(slice []string) qm.QueryMod {
 	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
 }
 
-type whereHelperint64 struct{ field string }
+type whereHelperbool struct{ field string }
 
-func (w whereHelperint64) EQ(x int64) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.EQ, x) }
-func (w whereHelperint64) NEQ(x int64) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.NEQ, x) }
-func (w whereHelperint64) LT(x int64) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.LT, x) }
-func (w whereHelperint64) LTE(x int64) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LTE, x) }
-func (w whereHelperint64) GT(x int64) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.GT, x) }
-func (w whereHelperint64) GTE(x int64) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GTE, x) }
-func (w whereHelperint64) IN(slice []int64) qm.QueryMod {
-	values := make([]interface{}, 0, len(slice))
-	for _, value := range slice {
-		values = append(values, value)
-	}
-	return qm.WhereIn(fmt.Sprintf("%s IN ?", w.field), values...)
-}
-func (w whereHelperint64) NIN(slice []int64) qm.QueryMod {
-	values := make([]interface{}, 0, len(slice))
-	for _, value := range slice {
-		values = append(values, value)
-	}
-	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
-}
+func (w whereHelperbool) EQ(x bool) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.EQ, x) }
+func (w whereHelperbool) NEQ(x bool) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.NEQ, x) }
+func (w whereHelperbool) LT(x bool) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.LT, x) }
+func (w whereHelperbool) LTE(x bool) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LTE, x) }
+func (w whereHelperbool) GT(x bool) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.GT, x) }
+func (w whereHelperbool) GTE(x bool) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GTE, x) }
 
 var SubplanWhere = struct {
-	ID      whereHelpernull_Int64
+	ID      whereHelperint16
 	PlanID  whereHelperstring
 	Price   whereHelperstring
-	Default whereHelperint64
+	Default whereHelperbool
 }{
-	ID:      whereHelpernull_Int64{field: "\"subplans\".\"id\""},
+	ID:      whereHelperint16{field: "\"subplans\".\"id\""},
 	PlanID:  whereHelperstring{field: "\"subplans\".\"plan_id\""},
 	Price:   whereHelperstring{field: "\"subplans\".\"price\""},
-	Default: whereHelperint64{field: "\"subplans\".\"default\""},
+	Default: whereHelperbool{field: "\"subplans\".\"default\""},
 }
 
 // SubplanRels is where relationship names are stored.
@@ -145,8 +131,8 @@ type subplanL struct{}
 
 var (
 	subplanAllColumns            = []string{"id", "plan_id", "price", "default"}
-	subplanColumnsWithoutDefault = []string{}
-	subplanColumnsWithDefault    = []string{"id", "plan_id", "price", "default"}
+	subplanColumnsWithoutDefault = []string{"plan_id", "price", "default"}
+	subplanColumnsWithDefault    = []string{"id"}
 	subplanPrimaryKeyColumns     = []string{"id"}
 )
 
@@ -268,13 +254,13 @@ func Subplans(mods ...qm.QueryMod) subplanQuery {
 }
 
 // FindSubplanG retrieves a single record by ID.
-func FindSubplanG(ctx context.Context, iD null.Int64, selectCols ...string) (*Subplan, error) {
+func FindSubplanG(ctx context.Context, iD int16, selectCols ...string) (*Subplan, error) {
 	return FindSubplan(ctx, boil.GetContextDB(), iD, selectCols...)
 }
 
 // FindSubplan retrieves a single record by ID with an executor.
 // If selectCols is empty Find will return all columns.
-func FindSubplan(ctx context.Context, exec boil.ContextExecutor, iD null.Int64, selectCols ...string) (*Subplan, error) {
+func FindSubplan(ctx context.Context, exec boil.ContextExecutor, iD int16, selectCols ...string) (*Subplan, error) {
 	subplanObj := &Subplan{}
 
 	sel := "*"
@@ -282,7 +268,7 @@ func FindSubplan(ctx context.Context, exec boil.ContextExecutor, iD null.Int64, 
 		sel = strings.Join(strmangle.IdentQuoteSlice(dialect.LQ, dialect.RQ, selectCols), ",")
 	}
 	query := fmt.Sprintf(
-		"select %s from \"subplans\" where \"id\"=?", sel,
+		"select %s from \"subplans\" where \"id\"=$1", sel,
 	)
 
 	q := queries.Raw(query, iD)
@@ -344,7 +330,7 @@ func (o *Subplan) Insert(ctx context.Context, exec boil.ContextExecutor, columns
 		var queryOutput, queryReturning string
 
 		if len(cache.retMapping) != 0 {
-			cache.retQuery = fmt.Sprintf("SELECT \"%s\" FROM \"subplans\" WHERE %s", strings.Join(returnColumns, "\",\""), strmangle.WhereClause("\"", "\"", 0, subplanPrimaryKeyColumns))
+			queryReturning = fmt.Sprintf(" RETURNING \"%s\"", strings.Join(returnColumns, "\",\""))
 		}
 
 		cache.query = fmt.Sprintf(cache.query, queryOutput, queryReturning)
@@ -358,33 +344,17 @@ func (o *Subplan) Insert(ctx context.Context, exec boil.ContextExecutor, columns
 		fmt.Fprintln(writer, cache.query)
 		fmt.Fprintln(writer, vals)
 	}
-	_, err = exec.ExecContext(ctx, cache.query, vals...)
+
+	if len(cache.retMapping) != 0 {
+		err = exec.QueryRowContext(ctx, cache.query, vals...).Scan(queries.PtrsFromMapping(value, cache.retMapping)...)
+	} else {
+		_, err = exec.ExecContext(ctx, cache.query, vals...)
+	}
 
 	if err != nil {
 		return errors.Wrap(err, "models: unable to insert into subplans")
 	}
 
-	var identifierCols []interface{}
-
-	if len(cache.retMapping) == 0 {
-		goto CacheNoHooks
-	}
-
-	identifierCols = []interface{}{
-		o.ID,
-	}
-
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, cache.retQuery)
-		fmt.Fprintln(writer, identifierCols...)
-	}
-	err = exec.QueryRowContext(ctx, cache.retQuery, identifierCols...).Scan(queries.PtrsFromMapping(value, cache.retMapping)...)
-	if err != nil {
-		return errors.Wrap(err, "models: unable to populate default values for subplans")
-	}
-
-CacheNoHooks:
 	if !cached {
 		subplanInsertCacheMut.Lock()
 		subplanInsertCache[key] = cache
@@ -424,8 +394,8 @@ func (o *Subplan) Update(ctx context.Context, exec boil.ContextExecutor, columns
 		}
 
 		cache.query = fmt.Sprintf("UPDATE \"subplans\" SET %s WHERE %s",
-			strmangle.SetParamNames("\"", "\"", 0, wl),
-			strmangle.WhereClause("\"", "\"", 0, subplanPrimaryKeyColumns),
+			strmangle.SetParamNames("\"", "\"", 1, wl),
+			strmangle.WhereClause("\"", "\"", len(wl)+1, subplanPrimaryKeyColumns),
 		)
 		cache.valueMapping, err = queries.BindMapping(subplanType, subplanMapping, append(wl, subplanPrimaryKeyColumns...))
 		if err != nil {
@@ -515,8 +485,8 @@ func (o SubplanSlice) UpdateAll(ctx context.Context, exec boil.ContextExecutor, 
 	}
 
 	sql := fmt.Sprintf("UPDATE \"subplans\" SET %s WHERE %s",
-		strmangle.SetParamNames("\"", "\"", 0, colNames),
-		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 0, subplanPrimaryKeyColumns, len(o)))
+		strmangle.SetParamNames("\"", "\"", 1, colNames),
+		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), len(colNames)+1, subplanPrimaryKeyColumns, len(o)))
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
@@ -535,6 +505,122 @@ func (o SubplanSlice) UpdateAll(ctx context.Context, exec boil.ContextExecutor, 
 	return rowsAff, nil
 }
 
+// UpsertG attempts an insert, and does an update or ignore on conflict.
+func (o *Subplan) UpsertG(ctx context.Context, updateOnConflict bool, conflictColumns []string, updateColumns, insertColumns boil.Columns) error {
+	return o.Upsert(ctx, boil.GetContextDB(), updateOnConflict, conflictColumns, updateColumns, insertColumns)
+}
+
+// Upsert attempts an insert using an executor, and does an update or ignore on conflict.
+// See boil.Columns documentation for how to properly use updateColumns and insertColumns.
+func (o *Subplan) Upsert(ctx context.Context, exec boil.ContextExecutor, updateOnConflict bool, conflictColumns []string, updateColumns, insertColumns boil.Columns) error {
+	if o == nil {
+		return errors.New("models: no subplans provided for upsert")
+	}
+
+	nzDefaults := queries.NonZeroDefaultSet(subplanColumnsWithDefault, o)
+
+	// Build cache key in-line uglily - mysql vs psql problems
+	buf := strmangle.GetBuffer()
+	if updateOnConflict {
+		buf.WriteByte('t')
+	} else {
+		buf.WriteByte('f')
+	}
+	buf.WriteByte('.')
+	for _, c := range conflictColumns {
+		buf.WriteString(c)
+	}
+	buf.WriteByte('.')
+	buf.WriteString(strconv.Itoa(updateColumns.Kind))
+	for _, c := range updateColumns.Cols {
+		buf.WriteString(c)
+	}
+	buf.WriteByte('.')
+	buf.WriteString(strconv.Itoa(insertColumns.Kind))
+	for _, c := range insertColumns.Cols {
+		buf.WriteString(c)
+	}
+	buf.WriteByte('.')
+	for _, c := range nzDefaults {
+		buf.WriteString(c)
+	}
+	key := buf.String()
+	strmangle.PutBuffer(buf)
+
+	subplanUpsertCacheMut.RLock()
+	cache, cached := subplanUpsertCache[key]
+	subplanUpsertCacheMut.RUnlock()
+
+	var err error
+
+	if !cached {
+		insert, ret := insertColumns.InsertColumnSet(
+			subplanAllColumns,
+			subplanColumnsWithDefault,
+			subplanColumnsWithoutDefault,
+			nzDefaults,
+		)
+		update := updateColumns.UpdateColumnSet(
+			subplanAllColumns,
+			subplanPrimaryKeyColumns,
+		)
+
+		if updateOnConflict && len(update) == 0 {
+			return errors.New("models: unable to upsert subplans, could not build update column list")
+		}
+
+		conflict := conflictColumns
+		if len(conflict) == 0 {
+			conflict = make([]string, len(subplanPrimaryKeyColumns))
+			copy(conflict, subplanPrimaryKeyColumns)
+		}
+		cache.query = buildUpsertQueryPostgres(dialect, "\"subplans\"", updateOnConflict, ret, update, conflict, insert)
+
+		cache.valueMapping, err = queries.BindMapping(subplanType, subplanMapping, insert)
+		if err != nil {
+			return err
+		}
+		if len(ret) != 0 {
+			cache.retMapping, err = queries.BindMapping(subplanType, subplanMapping, ret)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	value := reflect.Indirect(reflect.ValueOf(o))
+	vals := queries.ValuesFromMapping(value, cache.valueMapping)
+	var returns []interface{}
+	if len(cache.retMapping) != 0 {
+		returns = queries.PtrsFromMapping(value, cache.retMapping)
+	}
+
+	if boil.IsDebug(ctx) {
+		writer := boil.DebugWriterFrom(ctx)
+		fmt.Fprintln(writer, cache.query)
+		fmt.Fprintln(writer, vals)
+	}
+	if len(cache.retMapping) != 0 {
+		err = exec.QueryRowContext(ctx, cache.query, vals...).Scan(returns...)
+		if err == sql.ErrNoRows {
+			err = nil // Postgres doesn't return anything when there's no update
+		}
+	} else {
+		_, err = exec.ExecContext(ctx, cache.query, vals...)
+	}
+	if err != nil {
+		return errors.Wrap(err, "models: unable to upsert subplans")
+	}
+
+	if !cached {
+		subplanUpsertCacheMut.Lock()
+		subplanUpsertCache[key] = cache
+		subplanUpsertCacheMut.Unlock()
+	}
+
+	return nil
+}
+
 // DeleteG deletes a single Subplan record.
 // DeleteG will match against the primary key column to find the record to delete.
 func (o *Subplan) DeleteG(ctx context.Context) (int64, error) {
@@ -549,7 +635,7 @@ func (o *Subplan) Delete(ctx context.Context, exec boil.ContextExecutor) (int64,
 	}
 
 	args := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), subplanPrimaryKeyMapping)
-	sql := "DELETE FROM \"subplans\" WHERE \"id\"=?"
+	sql := "DELETE FROM \"subplans\" WHERE \"id\"=$1"
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
@@ -612,7 +698,7 @@ func (o SubplanSlice) DeleteAll(ctx context.Context, exec boil.ContextExecutor) 
 	}
 
 	sql := "DELETE FROM \"subplans\" WHERE " +
-		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 0, subplanPrimaryKeyColumns, len(o))
+		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 1, subplanPrimaryKeyColumns, len(o))
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
@@ -678,7 +764,7 @@ func (o *SubplanSlice) ReloadAll(ctx context.Context, exec boil.ContextExecutor)
 	}
 
 	sql := "SELECT \"subplans\".* FROM \"subplans\" WHERE " +
-		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 0, subplanPrimaryKeyColumns, len(*o))
+		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 1, subplanPrimaryKeyColumns, len(*o))
 
 	q := queries.Raw(sql, args...)
 
@@ -693,14 +779,14 @@ func (o *SubplanSlice) ReloadAll(ctx context.Context, exec boil.ContextExecutor)
 }
 
 // SubplanExistsG checks if the Subplan row exists.
-func SubplanExistsG(ctx context.Context, iD null.Int64) (bool, error) {
+func SubplanExistsG(ctx context.Context, iD int16) (bool, error) {
 	return SubplanExists(ctx, boil.GetContextDB(), iD)
 }
 
 // SubplanExists checks if the Subplan row exists.
-func SubplanExists(ctx context.Context, exec boil.ContextExecutor, iD null.Int64) (bool, error) {
+func SubplanExists(ctx context.Context, exec boil.ContextExecutor, iD int16) (bool, error) {
 	var exists bool
-	sql := "select exists(select 1 from \"subplans\" where \"id\"=? limit 1)"
+	sql := "select exists(select 1 from \"subplans\" where \"id\"=$1 limit 1)"
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)

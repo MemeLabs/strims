@@ -427,7 +427,7 @@ func testSubplansSelect(t *testing.T) {
 }
 
 var (
-	subplanDBTypes = map[string]string{`ID`: `INTEGER`, `PlanID`: `TEXT`, `Price`: `TEXT`, `Default`: `INTEGER`}
+	subplanDBTypes = map[string]string{`ID`: `smallint`, `PlanID`: `text`, `Price`: `text`, `Default`: `boolean`}
 	_              = bytes.MinRead
 )
 
@@ -539,5 +539,53 @@ func testSubplansSliceUpdateAll(t *testing.T) {
 		t.Error(err)
 	} else if rowsAff != 1 {
 		t.Error("wanted one record updated but got", rowsAff)
+	}
+}
+
+func testSubplansUpsert(t *testing.T) {
+	t.Parallel()
+
+	if len(subplanAllColumns) == len(subplanPrimaryKeyColumns) {
+		t.Skip("Skipping table with only primary key columns")
+	}
+
+	seed := randomize.NewSeed()
+	var err error
+	// Attempt the INSERT side of an UPSERT
+	o := Subplan{}
+	if err = randomize.Struct(seed, &o, subplanDBTypes, true); err != nil {
+		t.Errorf("Unable to randomize Subplan struct: %s", err)
+	}
+
+	ctx := context.Background()
+	tx := MustTx(boil.BeginTx(ctx, nil))
+	defer func() { _ = tx.Rollback() }()
+	if err = o.Upsert(ctx, tx, false, nil, boil.Infer(), boil.Infer()); err != nil {
+		t.Errorf("Unable to upsert Subplan: %s", err)
+	}
+
+	count, err := Subplans().Count(ctx, tx)
+	if err != nil {
+		t.Error(err)
+	}
+	if count != 1 {
+		t.Error("want one record, got:", count)
+	}
+
+	// Attempt the UPDATE side of an UPSERT
+	if err = randomize.Struct(seed, &o, subplanDBTypes, false, subplanPrimaryKeyColumns...); err != nil {
+		t.Errorf("Unable to randomize Subplan struct: %s", err)
+	}
+
+	if err = o.Upsert(ctx, tx, true, nil, boil.Infer(), boil.Infer()); err != nil {
+		t.Errorf("Unable to upsert Subplan: %s", err)
+	}
+
+	count, err = Subplans().Count(ctx, tx)
+	if err != nil {
+		t.Error(err)
+	}
+	if count != 1 {
+		t.Error("want one record, got:", count)
 	}
 }

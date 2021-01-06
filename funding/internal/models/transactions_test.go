@@ -427,7 +427,7 @@ func testTransactionsSelect(t *testing.T) {
 }
 
 var (
-	transactionDBTypes = map[string]string{`ID`: `INTEGER`, `Date`: `INTEGER`, `Subject`: `TEXT`, `Note`: `TEXT`, `Currency`: `TEXT`, `Amount`: `REAL`, `Ending`: `REAL`, `Available`: `REAL`, `Service`: `TEXT`}
+	transactionDBTypes = map[string]string{`ID`: `smallint`, `Date`: `integer`, `Subject`: `text`, `Note`: `text`, `Currency`: `text`, `Amount`: `real`, `Ending`: `real`, `Available`: `real`, `Service`: `text`}
 	_                  = bytes.MinRead
 )
 
@@ -539,5 +539,53 @@ func testTransactionsSliceUpdateAll(t *testing.T) {
 		t.Error(err)
 	} else if rowsAff != 1 {
 		t.Error("wanted one record updated but got", rowsAff)
+	}
+}
+
+func testTransactionsUpsert(t *testing.T) {
+	t.Parallel()
+
+	if len(transactionAllColumns) == len(transactionPrimaryKeyColumns) {
+		t.Skip("Skipping table with only primary key columns")
+	}
+
+	seed := randomize.NewSeed()
+	var err error
+	// Attempt the INSERT side of an UPSERT
+	o := Transaction{}
+	if err = randomize.Struct(seed, &o, transactionDBTypes, true); err != nil {
+		t.Errorf("Unable to randomize Transaction struct: %s", err)
+	}
+
+	ctx := context.Background()
+	tx := MustTx(boil.BeginTx(ctx, nil))
+	defer func() { _ = tx.Rollback() }()
+	if err = o.Upsert(ctx, tx, false, nil, boil.Infer(), boil.Infer()); err != nil {
+		t.Errorf("Unable to upsert Transaction: %s", err)
+	}
+
+	count, err := Transactions().Count(ctx, tx)
+	if err != nil {
+		t.Error(err)
+	}
+	if count != 1 {
+		t.Error("want one record, got:", count)
+	}
+
+	// Attempt the UPDATE side of an UPSERT
+	if err = randomize.Struct(seed, &o, transactionDBTypes, false, transactionPrimaryKeyColumns...); err != nil {
+		t.Errorf("Unable to randomize Transaction struct: %s", err)
+	}
+
+	if err = o.Upsert(ctx, tx, true, nil, boil.Infer(), boil.Infer()); err != nil {
+		t.Errorf("Unable to upsert Transaction: %s", err)
+	}
+
+	count, err = Transactions().Count(ctx, tx)
+	if err != nil {
+		t.Error(err)
+	}
+	if count != 1 {
+		t.Error("want one record, got:", count)
 	}
 }

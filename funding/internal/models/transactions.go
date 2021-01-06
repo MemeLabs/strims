@@ -8,6 +8,7 @@ import (
 	"database/sql"
 	"fmt"
 	"reflect"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -23,15 +24,15 @@ import (
 
 // Transaction is an object representing the database table.
 type Transaction struct {
-	ID        null.Int64 `boil:"id" json:"id,omitempty" toml:"id" yaml:"id,omitempty"`
-	Date      int64      `boil:"date" json:"date" toml:"date" yaml:"date"`
-	Subject   string     `boil:"subject" json:"subject" toml:"subject" yaml:"subject"`
-	Note      string     `boil:"note" json:"note" toml:"note" yaml:"note"`
-	Currency  string     `boil:"currency" json:"currency" toml:"currency" yaml:"currency"`
-	Amount    float64    `boil:"amount" json:"amount" toml:"amount" yaml:"amount"`
-	Ending    float64    `boil:"ending" json:"ending" toml:"ending" yaml:"ending"`
-	Available float64    `boil:"available" json:"available" toml:"available" yaml:"available"`
-	Service   string     `boil:"service" json:"service" toml:"service" yaml:"service"`
+	ID        int16       `boil:"id" json:"id" toml:"id" yaml:"id"`
+	Date      int         `boil:"date" json:"date" toml:"date" yaml:"date"`
+	Subject   string      `boil:"subject" json:"subject" toml:"subject" yaml:"subject"`
+	Note      null.String `boil:"note" json:"note,omitempty" toml:"note" yaml:"note,omitempty"`
+	Currency  string      `boil:"currency" json:"currency" toml:"currency" yaml:"currency"`
+	Amount    float32     `boil:"amount" json:"amount" toml:"amount" yaml:"amount"`
+	Ending    float32     `boil:"ending" json:"ending" toml:"ending" yaml:"ending"`
+	Available float32     `boil:"available" json:"available" toml:"available" yaml:"available"`
+	Service   string      `boil:"service" json:"service" toml:"service" yaml:"service"`
 
 	R *transactionR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L transactionL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -61,28 +62,51 @@ var TransactionColumns = struct {
 
 // Generated where
 
-type whereHelperfloat64 struct{ field string }
+type whereHelpernull_String struct{ field string }
 
-func (w whereHelperfloat64) EQ(x float64) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.EQ, x) }
-func (w whereHelperfloat64) NEQ(x float64) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.NEQ, x)
+func (w whereHelpernull_String) EQ(x null.String) qm.QueryMod {
+	return qmhelper.WhereNullEQ(w.field, false, x)
 }
-func (w whereHelperfloat64) LT(x float64) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LT, x) }
-func (w whereHelperfloat64) LTE(x float64) qm.QueryMod {
+func (w whereHelpernull_String) NEQ(x null.String) qm.QueryMod {
+	return qmhelper.WhereNullEQ(w.field, true, x)
+}
+func (w whereHelpernull_String) IsNull() qm.QueryMod    { return qmhelper.WhereIsNull(w.field) }
+func (w whereHelpernull_String) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
+func (w whereHelpernull_String) LT(x null.String) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.LT, x)
+}
+func (w whereHelpernull_String) LTE(x null.String) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.LTE, x)
 }
-func (w whereHelperfloat64) GT(x float64) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GT, x) }
-func (w whereHelperfloat64) GTE(x float64) qm.QueryMod {
+func (w whereHelpernull_String) GT(x null.String) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.GT, x)
+}
+func (w whereHelpernull_String) GTE(x null.String) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.GTE, x)
 }
-func (w whereHelperfloat64) IN(slice []float64) qm.QueryMod {
+
+type whereHelperfloat32 struct{ field string }
+
+func (w whereHelperfloat32) EQ(x float32) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.EQ, x) }
+func (w whereHelperfloat32) NEQ(x float32) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.NEQ, x)
+}
+func (w whereHelperfloat32) LT(x float32) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LT, x) }
+func (w whereHelperfloat32) LTE(x float32) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.LTE, x)
+}
+func (w whereHelperfloat32) GT(x float32) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GT, x) }
+func (w whereHelperfloat32) GTE(x float32) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.GTE, x)
+}
+func (w whereHelperfloat32) IN(slice []float32) qm.QueryMod {
 	values := make([]interface{}, 0, len(slice))
 	for _, value := range slice {
 		values = append(values, value)
 	}
 	return qm.WhereIn(fmt.Sprintf("%s IN ?", w.field), values...)
 }
-func (w whereHelperfloat64) NIN(slice []float64) qm.QueryMod {
+func (w whereHelperfloat32) NIN(slice []float32) qm.QueryMod {
 	values := make([]interface{}, 0, len(slice))
 	for _, value := range slice {
 		values = append(values, value)
@@ -91,24 +115,24 @@ func (w whereHelperfloat64) NIN(slice []float64) qm.QueryMod {
 }
 
 var TransactionWhere = struct {
-	ID        whereHelpernull_Int64
-	Date      whereHelperint64
+	ID        whereHelperint16
+	Date      whereHelperint
 	Subject   whereHelperstring
-	Note      whereHelperstring
+	Note      whereHelpernull_String
 	Currency  whereHelperstring
-	Amount    whereHelperfloat64
-	Ending    whereHelperfloat64
-	Available whereHelperfloat64
+	Amount    whereHelperfloat32
+	Ending    whereHelperfloat32
+	Available whereHelperfloat32
 	Service   whereHelperstring
 }{
-	ID:        whereHelpernull_Int64{field: "\"transactions\".\"id\""},
-	Date:      whereHelperint64{field: "\"transactions\".\"date\""},
+	ID:        whereHelperint16{field: "\"transactions\".\"id\""},
+	Date:      whereHelperint{field: "\"transactions\".\"date\""},
 	Subject:   whereHelperstring{field: "\"transactions\".\"subject\""},
-	Note:      whereHelperstring{field: "\"transactions\".\"note\""},
+	Note:      whereHelpernull_String{field: "\"transactions\".\"note\""},
 	Currency:  whereHelperstring{field: "\"transactions\".\"currency\""},
-	Amount:    whereHelperfloat64{field: "\"transactions\".\"amount\""},
-	Ending:    whereHelperfloat64{field: "\"transactions\".\"ending\""},
-	Available: whereHelperfloat64{field: "\"transactions\".\"available\""},
+	Amount:    whereHelperfloat32{field: "\"transactions\".\"amount\""},
+	Ending:    whereHelperfloat32{field: "\"transactions\".\"ending\""},
+	Available: whereHelperfloat32{field: "\"transactions\".\"available\""},
 	Service:   whereHelperstring{field: "\"transactions\".\"service\""},
 }
 
@@ -130,8 +154,8 @@ type transactionL struct{}
 
 var (
 	transactionAllColumns            = []string{"id", "date", "subject", "note", "currency", "amount", "ending", "available", "service"}
-	transactionColumnsWithoutDefault = []string{}
-	transactionColumnsWithDefault    = []string{"id", "date", "subject", "note", "currency", "amount", "ending", "available", "service"}
+	transactionColumnsWithoutDefault = []string{"date", "subject", "note", "currency", "amount", "ending", "available", "service"}
+	transactionColumnsWithDefault    = []string{"id"}
 	transactionPrimaryKeyColumns     = []string{"id"}
 )
 
@@ -253,13 +277,13 @@ func Transactions(mods ...qm.QueryMod) transactionQuery {
 }
 
 // FindTransactionG retrieves a single record by ID.
-func FindTransactionG(ctx context.Context, iD null.Int64, selectCols ...string) (*Transaction, error) {
+func FindTransactionG(ctx context.Context, iD int16, selectCols ...string) (*Transaction, error) {
 	return FindTransaction(ctx, boil.GetContextDB(), iD, selectCols...)
 }
 
 // FindTransaction retrieves a single record by ID with an executor.
 // If selectCols is empty Find will return all columns.
-func FindTransaction(ctx context.Context, exec boil.ContextExecutor, iD null.Int64, selectCols ...string) (*Transaction, error) {
+func FindTransaction(ctx context.Context, exec boil.ContextExecutor, iD int16, selectCols ...string) (*Transaction, error) {
 	transactionObj := &Transaction{}
 
 	sel := "*"
@@ -267,7 +291,7 @@ func FindTransaction(ctx context.Context, exec boil.ContextExecutor, iD null.Int
 		sel = strings.Join(strmangle.IdentQuoteSlice(dialect.LQ, dialect.RQ, selectCols), ",")
 	}
 	query := fmt.Sprintf(
-		"select %s from \"transactions\" where \"id\"=?", sel,
+		"select %s from \"transactions\" where \"id\"=$1", sel,
 	)
 
 	q := queries.Raw(query, iD)
@@ -329,7 +353,7 @@ func (o *Transaction) Insert(ctx context.Context, exec boil.ContextExecutor, col
 		var queryOutput, queryReturning string
 
 		if len(cache.retMapping) != 0 {
-			cache.retQuery = fmt.Sprintf("SELECT \"%s\" FROM \"transactions\" WHERE %s", strings.Join(returnColumns, "\",\""), strmangle.WhereClause("\"", "\"", 0, transactionPrimaryKeyColumns))
+			queryReturning = fmt.Sprintf(" RETURNING \"%s\"", strings.Join(returnColumns, "\",\""))
 		}
 
 		cache.query = fmt.Sprintf(cache.query, queryOutput, queryReturning)
@@ -343,33 +367,17 @@ func (o *Transaction) Insert(ctx context.Context, exec boil.ContextExecutor, col
 		fmt.Fprintln(writer, cache.query)
 		fmt.Fprintln(writer, vals)
 	}
-	_, err = exec.ExecContext(ctx, cache.query, vals...)
+
+	if len(cache.retMapping) != 0 {
+		err = exec.QueryRowContext(ctx, cache.query, vals...).Scan(queries.PtrsFromMapping(value, cache.retMapping)...)
+	} else {
+		_, err = exec.ExecContext(ctx, cache.query, vals...)
+	}
 
 	if err != nil {
 		return errors.Wrap(err, "models: unable to insert into transactions")
 	}
 
-	var identifierCols []interface{}
-
-	if len(cache.retMapping) == 0 {
-		goto CacheNoHooks
-	}
-
-	identifierCols = []interface{}{
-		o.ID,
-	}
-
-	if boil.IsDebug(ctx) {
-		writer := boil.DebugWriterFrom(ctx)
-		fmt.Fprintln(writer, cache.retQuery)
-		fmt.Fprintln(writer, identifierCols...)
-	}
-	err = exec.QueryRowContext(ctx, cache.retQuery, identifierCols...).Scan(queries.PtrsFromMapping(value, cache.retMapping)...)
-	if err != nil {
-		return errors.Wrap(err, "models: unable to populate default values for transactions")
-	}
-
-CacheNoHooks:
 	if !cached {
 		transactionInsertCacheMut.Lock()
 		transactionInsertCache[key] = cache
@@ -409,8 +417,8 @@ func (o *Transaction) Update(ctx context.Context, exec boil.ContextExecutor, col
 		}
 
 		cache.query = fmt.Sprintf("UPDATE \"transactions\" SET %s WHERE %s",
-			strmangle.SetParamNames("\"", "\"", 0, wl),
-			strmangle.WhereClause("\"", "\"", 0, transactionPrimaryKeyColumns),
+			strmangle.SetParamNames("\"", "\"", 1, wl),
+			strmangle.WhereClause("\"", "\"", len(wl)+1, transactionPrimaryKeyColumns),
 		)
 		cache.valueMapping, err = queries.BindMapping(transactionType, transactionMapping, append(wl, transactionPrimaryKeyColumns...))
 		if err != nil {
@@ -500,8 +508,8 @@ func (o TransactionSlice) UpdateAll(ctx context.Context, exec boil.ContextExecut
 	}
 
 	sql := fmt.Sprintf("UPDATE \"transactions\" SET %s WHERE %s",
-		strmangle.SetParamNames("\"", "\"", 0, colNames),
-		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 0, transactionPrimaryKeyColumns, len(o)))
+		strmangle.SetParamNames("\"", "\"", 1, colNames),
+		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), len(colNames)+1, transactionPrimaryKeyColumns, len(o)))
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
@@ -520,6 +528,122 @@ func (o TransactionSlice) UpdateAll(ctx context.Context, exec boil.ContextExecut
 	return rowsAff, nil
 }
 
+// UpsertG attempts an insert, and does an update or ignore on conflict.
+func (o *Transaction) UpsertG(ctx context.Context, updateOnConflict bool, conflictColumns []string, updateColumns, insertColumns boil.Columns) error {
+	return o.Upsert(ctx, boil.GetContextDB(), updateOnConflict, conflictColumns, updateColumns, insertColumns)
+}
+
+// Upsert attempts an insert using an executor, and does an update or ignore on conflict.
+// See boil.Columns documentation for how to properly use updateColumns and insertColumns.
+func (o *Transaction) Upsert(ctx context.Context, exec boil.ContextExecutor, updateOnConflict bool, conflictColumns []string, updateColumns, insertColumns boil.Columns) error {
+	if o == nil {
+		return errors.New("models: no transactions provided for upsert")
+	}
+
+	nzDefaults := queries.NonZeroDefaultSet(transactionColumnsWithDefault, o)
+
+	// Build cache key in-line uglily - mysql vs psql problems
+	buf := strmangle.GetBuffer()
+	if updateOnConflict {
+		buf.WriteByte('t')
+	} else {
+		buf.WriteByte('f')
+	}
+	buf.WriteByte('.')
+	for _, c := range conflictColumns {
+		buf.WriteString(c)
+	}
+	buf.WriteByte('.')
+	buf.WriteString(strconv.Itoa(updateColumns.Kind))
+	for _, c := range updateColumns.Cols {
+		buf.WriteString(c)
+	}
+	buf.WriteByte('.')
+	buf.WriteString(strconv.Itoa(insertColumns.Kind))
+	for _, c := range insertColumns.Cols {
+		buf.WriteString(c)
+	}
+	buf.WriteByte('.')
+	for _, c := range nzDefaults {
+		buf.WriteString(c)
+	}
+	key := buf.String()
+	strmangle.PutBuffer(buf)
+
+	transactionUpsertCacheMut.RLock()
+	cache, cached := transactionUpsertCache[key]
+	transactionUpsertCacheMut.RUnlock()
+
+	var err error
+
+	if !cached {
+		insert, ret := insertColumns.InsertColumnSet(
+			transactionAllColumns,
+			transactionColumnsWithDefault,
+			transactionColumnsWithoutDefault,
+			nzDefaults,
+		)
+		update := updateColumns.UpdateColumnSet(
+			transactionAllColumns,
+			transactionPrimaryKeyColumns,
+		)
+
+		if updateOnConflict && len(update) == 0 {
+			return errors.New("models: unable to upsert transactions, could not build update column list")
+		}
+
+		conflict := conflictColumns
+		if len(conflict) == 0 {
+			conflict = make([]string, len(transactionPrimaryKeyColumns))
+			copy(conflict, transactionPrimaryKeyColumns)
+		}
+		cache.query = buildUpsertQueryPostgres(dialect, "\"transactions\"", updateOnConflict, ret, update, conflict, insert)
+
+		cache.valueMapping, err = queries.BindMapping(transactionType, transactionMapping, insert)
+		if err != nil {
+			return err
+		}
+		if len(ret) != 0 {
+			cache.retMapping, err = queries.BindMapping(transactionType, transactionMapping, ret)
+			if err != nil {
+				return err
+			}
+		}
+	}
+
+	value := reflect.Indirect(reflect.ValueOf(o))
+	vals := queries.ValuesFromMapping(value, cache.valueMapping)
+	var returns []interface{}
+	if len(cache.retMapping) != 0 {
+		returns = queries.PtrsFromMapping(value, cache.retMapping)
+	}
+
+	if boil.IsDebug(ctx) {
+		writer := boil.DebugWriterFrom(ctx)
+		fmt.Fprintln(writer, cache.query)
+		fmt.Fprintln(writer, vals)
+	}
+	if len(cache.retMapping) != 0 {
+		err = exec.QueryRowContext(ctx, cache.query, vals...).Scan(returns...)
+		if err == sql.ErrNoRows {
+			err = nil // Postgres doesn't return anything when there's no update
+		}
+	} else {
+		_, err = exec.ExecContext(ctx, cache.query, vals...)
+	}
+	if err != nil {
+		return errors.Wrap(err, "models: unable to upsert transactions")
+	}
+
+	if !cached {
+		transactionUpsertCacheMut.Lock()
+		transactionUpsertCache[key] = cache
+		transactionUpsertCacheMut.Unlock()
+	}
+
+	return nil
+}
+
 // DeleteG deletes a single Transaction record.
 // DeleteG will match against the primary key column to find the record to delete.
 func (o *Transaction) DeleteG(ctx context.Context) (int64, error) {
@@ -534,7 +658,7 @@ func (o *Transaction) Delete(ctx context.Context, exec boil.ContextExecutor) (in
 	}
 
 	args := queries.ValuesFromMapping(reflect.Indirect(reflect.ValueOf(o)), transactionPrimaryKeyMapping)
-	sql := "DELETE FROM \"transactions\" WHERE \"id\"=?"
+	sql := "DELETE FROM \"transactions\" WHERE \"id\"=$1"
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
@@ -597,7 +721,7 @@ func (o TransactionSlice) DeleteAll(ctx context.Context, exec boil.ContextExecut
 	}
 
 	sql := "DELETE FROM \"transactions\" WHERE " +
-		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 0, transactionPrimaryKeyColumns, len(o))
+		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 1, transactionPrimaryKeyColumns, len(o))
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)
@@ -663,7 +787,7 @@ func (o *TransactionSlice) ReloadAll(ctx context.Context, exec boil.ContextExecu
 	}
 
 	sql := "SELECT \"transactions\".* FROM \"transactions\" WHERE " +
-		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 0, transactionPrimaryKeyColumns, len(*o))
+		strmangle.WhereClauseRepeated(string(dialect.LQ), string(dialect.RQ), 1, transactionPrimaryKeyColumns, len(*o))
 
 	q := queries.Raw(sql, args...)
 
@@ -678,14 +802,14 @@ func (o *TransactionSlice) ReloadAll(ctx context.Context, exec boil.ContextExecu
 }
 
 // TransactionExistsG checks if the Transaction row exists.
-func TransactionExistsG(ctx context.Context, iD null.Int64) (bool, error) {
+func TransactionExistsG(ctx context.Context, iD int16) (bool, error) {
 	return TransactionExists(ctx, boil.GetContextDB(), iD)
 }
 
 // TransactionExists checks if the Transaction row exists.
-func TransactionExists(ctx context.Context, exec boil.ContextExecutor, iD null.Int64) (bool, error) {
+func TransactionExists(ctx context.Context, exec boil.ContextExecutor, iD int16) (bool, error) {
 	var exists bool
-	sql := "select exists(select 1 from \"transactions\" where \"id\"=? limit 1)"
+	sql := "select exists(select 1 from \"transactions\" where \"id\"=$1 limit 1)"
 
 	if boil.IsDebug(ctx) {
 		writer := boil.DebugWriterFrom(ctx)

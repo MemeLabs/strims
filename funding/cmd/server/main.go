@@ -14,7 +14,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/gorilla/websocket"
-	_ "github.com/mattn/go-sqlite3"
 	"go.uber.org/zap"
 )
 
@@ -41,6 +40,7 @@ func main() {
 		},
 		fundingService: &fundingService{
 			backend: b,
+			logger:  logger,
 		},
 	}
 
@@ -86,6 +86,7 @@ func (s *fundingServer) handleAPI(w http.ResponseWriter, r *http.Request) {
 
 type fundingService struct {
 	backend *backend.Funding
+	logger  *zap.Logger
 }
 
 func (s *fundingService) Test(ctx context.Context, req *pb.FundingTestRequest) (*pb.FundingTestResponse, error) {
@@ -110,7 +111,7 @@ func (s *fundingService) CreateSubPlan(ctx context.Context, req *pb.FundingCreat
 }
 
 func (s *fundingService) setupWebhooks(m *http.ServeMux) error {
-	m.HandleFunc("/hooks/transaction", s.newTransaction)
+	m.HandleFunc("/hooks/transaction", s.handleHook)
 	/*
 		webhooks, err := s.paypal.Client.ListWebhooks("")
 		if err != nil {
@@ -125,7 +126,7 @@ func (s *fundingService) setupWebhooks(m *http.ServeMux) error {
 	return nil
 }
 
-func (s *fundingService) newTransaction(w http.ResponseWriter, r *http.Request) {
+func (s *fundingService) handleHook(w http.ResponseWriter, r *http.Request) {
 	var webhookid string
 
 	valid, err := s.backend.ValidWebhook(r, webhookid)
@@ -147,7 +148,7 @@ func (s *fundingService) newTransaction(w http.ResponseWriter, r *http.Request) 
 
 	// insert transaction
 	if err := s.backend.InsertTransaction(body); err != nil {
-		// TODO: err handle
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 

@@ -1,3 +1,3 @@
 package main
 
-//go:generate sqlboiler -c "sqlboiler.toml" sqlite3
+//go:generate sqlboiler -c "sqlboiler.toml" psql
