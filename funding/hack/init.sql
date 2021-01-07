@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS "subplans" (
 );
 
 CREATE TABLE IF NOT EXISTS "subscriptions" (
-  "id"        SMALLSERIAL PRIMARY KEY,
+  "id"          SMALLSERIAL PRIMARY KEY,
   "sub_plan_id" TEXT NOT NULL,
   "start_date"  INTEGER NOT NULL,
   "end_date"    INTEGER NOT NULL
