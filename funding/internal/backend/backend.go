@@ -38,6 +38,7 @@ type config struct {
 	DBUser string         `json:"db_user"`
 	DBPass string         `json:"db_pass"`
 	DBHost string         `json:"db_host"`
+	DBPort int            `json:"db_port"`
 }
 
 func New(cfgPath string, logger *zap.Logger) (*Funding, error) {
@@ -56,7 +57,7 @@ func New(cfgPath string, logger *zap.Logger) (*Funding, error) {
 		return nil, fmt.Errorf("failed to unmarshal cfg contents: %w", err)
 	}
 
-	connStr := fmt.Sprintf("user=%s password=%s dbname=%s sslmode=disable", config.DBUser, config.DBPass, config.DBName)
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", config.DBHost, config.DBPort, config.DBUser, config.DBPass, config.DBName)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, fmt.Errorf("faied to open db: %w", err)

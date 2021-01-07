@@ -184,7 +184,7 @@ module.exports = (env, argv) => {
         fs: false,
       },
       resolve: {
-        extensions: [".go", ".tsx", ".ts", ".js"],
+        extensions: [".go", ".tsx", ".ts", ".js", ".json"],
         // fallback: {
         //   "fs": false,
         //   "stream": require.resolve("stream-browserify"),
