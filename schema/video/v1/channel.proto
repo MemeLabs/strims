@@ -1,0 +1,78 @@
+syntax = "proto3";
+
+package strims.video.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1;video";
+option java_package = "gg.strims.video.v1";
+option swift_prefix = "SVO";
+
+import "type/certificate.proto";
+import "type/key.proto";
+import "network/v1/directory.proto";
+
+message VideoChannel {
+  message Local {
+    bytes auth_key = 1;
+    bytes network_key = 2;
+  }
+
+  message LocalShare {
+    strims.type.Certificate certificate = 1;
+  }
+
+  message RemoteShare {
+    uint64 id = 1;
+    bytes network_key = 2;
+    bytes service_key = 3;
+    bytes service_salt = 4;
+    string server_addr = 5;
+  }
+
+  uint64 id = 1;
+  oneof owner {
+    Local local = 1001;
+    LocalShare local_share = 1002;
+    RemoteShare remote_share = 1003;
+  }
+  strims.type.Key key = 2;
+  bytes token = 3;
+  strims.network.v1.DirectoryListingSnippet directory_listing_snippet = 4;
+}
+
+message VideoChannelListRequest {}
+
+message VideoChannelListResponse {
+  repeated VideoChannel channels = 1;
+}
+
+message VideoChannelCreateRequest {
+  strims.network.v1.DirectoryListingSnippet directory_listing_snippet = 1;
+  bytes network_key = 2;
+}
+
+message VideoChannelCreateResponse {
+  VideoChannel channel = 1;
+}
+
+message VideoChannelUpdateRequest {
+  uint64 id = 1;
+  strims.network.v1.DirectoryListingSnippet directory_listing_snippet = 2;
+  bytes network_key = 3;
+}
+
+message VideoChannelUpdateResponse {
+  VideoChannel channel = 1;
+}
+
+message VideoChannelDeleteRequest {
+  uint64 id = 1;
+}
+
+message VideoChannelDeleteResponse {}
+
+service VideoChannelFrontend {
+  rpc List(VideoChannelListRequest) returns (VideoChannelListResponse);
+  rpc Create(VideoChannelCreateRequest) returns (VideoChannelCreateResponse);
+  rpc Update(VideoChannelUpdateRequest) returns (VideoChannelUpdateResponse);
+  rpc Delete(VideoChannelDeleteRequest) returns (VideoChannelDeleteResponse);
+}

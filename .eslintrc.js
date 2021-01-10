@@ -32,6 +32,7 @@ module.exports = {
     "@typescript-eslint/no-misused-promises": "off",
     "@typescript-eslint/no-use-before-define": "off",
     "@typescript-eslint/unified-signatures": "off",
+    "@typescript-eslint/no-namespace": "off",
     "jsdoc/newline-after-description": "off",
     "prefer-arrow/prefer-arrow-functions": "error",
     "complexity": "off",

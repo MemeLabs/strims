@@ -1,0 +1,49 @@
+syntax = "proto3";
+
+package strims.network.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1;network";
+option java_package = "gg.strims.network.v1";
+option swift_prefix = "SNT";
+
+import "type/certificate.proto";
+
+message NetworkPeerNegotiateRequest {
+  uint32 key_count = 1;
+}
+
+message NetworkPeerNegotiateResponse {
+  uint32 key_count = 1;
+}
+
+message NetworkPeerBinding {
+  uint32 port = 1;
+  strims.type.Certificate certificate = 2;
+}
+
+message NetworkPeerOpenRequest {
+  repeated NetworkPeerBinding bindings = 1;
+}
+
+message NetworkPeerOpenResponse {
+  repeated NetworkPeerBinding bindings = 1;
+}
+
+message NetworkPeerCloseRequest {
+  bytes key = 1;
+}
+
+message NetworkPeerCloseResponse {}
+
+message NetworkPeerUpdateCertificateRequest {
+  strims.type.Certificate certificate = 1;
+}
+
+message NetworkPeerUpdateCertificateResponse {}
+
+service NetworkPeer {
+  rpc Negotiate(NetworkPeerNegotiateRequest) returns (NetworkPeerNegotiateResponse);
+  rpc Open(NetworkPeerOpenRequest) returns (NetworkPeerOpenResponse);
+  rpc Close(NetworkPeerCloseRequest) returns (NetworkPeerCloseResponse);
+  rpc UpdateCertificate(NetworkPeerUpdateCertificateRequest) returns (NetworkPeerUpdateCertificateResponse);
+}

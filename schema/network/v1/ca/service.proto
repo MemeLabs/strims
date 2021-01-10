@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package strims.network.v1.ca;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca;ca";
+option java_package = "gg.strims.network.v1.ca";
+option swift_prefix = "SNC";
+
+import "type/certificate.proto";
+
+message CARenewRequest {
+  strims.type.Certificate certificate = 1;
+  strims.type.CertificateRequest certificate_request = 2;
+}
+
+message CARenewResponse {
+  strims.type.Certificate certificate = 1;
+}
+
+service CA {
+  rpc Renew(CARenewRequest) returns (CARenewResponse);
+}

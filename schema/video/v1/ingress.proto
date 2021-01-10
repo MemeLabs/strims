@@ -1,0 +1,94 @@
+syntax = "proto3";
+
+package strims.video.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1;video";
+option java_package = "gg.strims.video.v1";
+option swift_prefix = "SVO";
+
+import "video/v1/channel.proto";
+import "network/v1/directory.proto";
+
+message VideoIngressConfig {
+  bool enabled = 1;
+  string server_addr = 2;
+  string public_server_addr = 3;
+  repeated bytes service_network_keys = 4;
+}
+
+message VideoIngressStream {
+  uint64 id = 1;
+  uint64 channel_id = 2;
+  int64 created_at = 3;
+  int64 updated_at = 4;
+}
+
+message VideoIngressIsSupportedRequest {}
+
+message VideoIngressIsSupportedResponse {
+  bool supported = 1;
+}
+
+message VideoIngressGetConfigRequest {}
+
+message VideoIngressGetConfigResponse {
+  VideoIngressConfig config = 1;
+}
+
+message VideoIngressSetConfigRequest {
+  VideoIngressConfig config = 1;
+}
+
+message VideoIngressSetConfigResponse {
+  VideoIngressConfig config = 1;
+}
+
+message VideoIngressListStreamsRequest {}
+
+message VideoIngressListStreamsResponse {
+  repeated VideoIngressStream streams = 1;
+}
+
+message VideoIngressGetChannelURLRequest {
+  uint64 id = 1;
+}
+
+message VideoIngressGetChannelURLResponse {
+  string url = 1;
+  string server_addr = 2;
+  string stream_key = 3;
+}
+
+service VideoIngress {
+  rpc IsSupported(VideoIngressIsSupportedRequest) returns (VideoIngressIsSupportedResponse);
+  rpc GetConfig(VideoIngressGetConfigRequest) returns (VideoIngressGetConfigResponse);
+  rpc SetConfig(VideoIngressSetConfigRequest) returns (VideoIngressSetConfigResponse);
+  rpc ListStreams(VideoIngressListStreamsRequest) returns (VideoIngressListStreamsResponse);
+  rpc GetChannelURL(VideoIngressGetChannelURLRequest) returns (VideoIngressGetChannelURLResponse);
+}
+
+message VideoIngressShareCreateChannelRequest {
+  strims.network.v1.DirectoryListingSnippet directory_listing_snippet = 1;
+}
+
+message VideoIngressShareCreateChannelResponse {
+  VideoChannel channel = 1;
+}
+
+message VideoIngressShareUpdateChannelRequest {
+  strims.network.v1.DirectoryListingSnippet directory_listing_snippet = 1;
+}
+
+message VideoIngressShareUpdateChannelResponse {
+  VideoChannel channel = 1;
+}
+
+message VideoIngressShareDeleteChannelRequest {}
+
+message VideoIngressShareDeleteChannelResponse {}
+
+service VideoIngressShare {
+  rpc CreateChannel(VideoIngressShareCreateChannelRequest) returns (VideoIngressShareCreateChannelResponse);
+  rpc UpdateChannel(VideoIngressShareUpdateChannelRequest) returns (VideoIngressShareUpdateChannelResponse);
+  rpc DeleteChannel(VideoIngressShareDeleteChannelRequest) returns (VideoIngressShareDeleteChannelResponse);
+}

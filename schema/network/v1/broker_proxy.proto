@@ -1,0 +1,66 @@
+syntax = "proto3";
+
+package strims.network.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1;network";
+option java_package = "gg.strims.network.v1";
+option swift_prefix = "SNT";
+
+message BrokerProxyRequest {
+  int32 conn_mtu = 1;
+}
+
+message BrokerProxyEvent {
+  message Open {
+    uint64 proxy_id = 1;
+  }
+
+  message Data {
+    bytes data = 1;
+  }
+
+  message Read {}
+
+  oneof body {
+    Open open = 1;
+    Data data = 2;
+    Read read = 3;
+  }
+}
+
+message BrokerProxySendKeysRequest {
+  uint64 proxy_id = 1;
+  repeated bytes keys = 2;
+}
+
+message BrokerProxySendKeysResponse {}
+
+message BrokerProxyReceiveKeysRequest {
+  uint64 proxy_id = 1;
+  repeated bytes keys = 2;
+}
+
+message BrokerProxyReceiveKeysResponse {
+  repeated bytes keys = 1;
+}
+
+message BrokerProxyDataRequest {
+  uint64 proxy_id = 1;
+  bytes data = 2;
+}
+
+message BrokerProxyDataResponse {}
+
+message BrokerProxyCloseRequest {
+  uint64 proxy_id = 1;
+}
+
+message BrokerProxyCloseResponse {}
+
+service BrokerProxy {
+  rpc Open(BrokerProxyRequest) returns (stream BrokerProxyEvent);
+  rpc SendKeys(BrokerProxySendKeysRequest) returns (BrokerProxySendKeysResponse);
+  rpc ReceiveKeys(BrokerProxyReceiveKeysRequest) returns (BrokerProxyReceiveKeysResponse);
+  rpc Data(BrokerProxyDataRequest) returns (BrokerProxyDataResponse);
+  rpc Close(BrokerProxyCloseRequest) returns (BrokerProxyCloseResponse);
+}

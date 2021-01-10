@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package strims.network.v1.bootstrap;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap;bootstrap";
+option java_package = "gg.strims.network.v1.bootstrap";
+option swift_prefix = "SNB";
+
+import "type/certificate.proto";
+
+message BootstrapPeerGetPublishEnabledRequest {}
+
+message BootstrapPeerGetPublishEnabledResponse {
+  bool enabled = 1;
+}
+
+message BootstrapPeerListNetworksRequest {}
+
+message BootstrapPeerListNetworksResponse {
+
+}
+
+message BootstrapPeerPublishRequest {
+  strims.type.Certificate certificate = 1;
+}
+
+message BootstrapPeerPublishResponse {}
+
+service PeerService {
+  rpc GetPublishEnabled(BootstrapPeerGetPublishEnabledRequest) returns (BootstrapPeerGetPublishEnabledResponse);
+  rpc ListNetworks(BootstrapPeerListNetworksRequest) returns (BootstrapPeerListNetworksResponse);
+  rpc Publish(BootstrapPeerPublishRequest) returns (BootstrapPeerPublishResponse);
+}

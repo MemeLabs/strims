@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package strims.network.v1.bootstrap;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap;bootstrap";
+option java_package = "gg.strims.network.v1.bootstrap";
+option swift_prefix = "SNB";
+
+import "type/certificate.proto";
+import "network/v1/network.proto";
+
+message BootstrapClient {
+  uint64 id = 1;
+  oneof client_options {
+    BootstrapClientWebSocketOptions websocket_options = 2;
+  }
+}
+
+message BootstrapClientWebSocketOptions {
+  string url = 1;
+  bool insecure_skip_verify_tls = 2;
+}
+
+message CreateBootstrapClientRequest {
+  oneof client_options {
+    BootstrapClientWebSocketOptions websocket_options = 1;
+  }
+}
+
+message CreateBootstrapClientResponse {
+  BootstrapClient bootstrap_client = 1;
+}
+
+message UpdateBootstrapClientRequest {
+  uint64 id = 1;
+  oneof client_options {
+    BootstrapClientWebSocketOptions websocket_options = 2;
+  }
+}
+
+message UpdateBootstrapClientResponse {
+  BootstrapClient bootstrap_client = 1;
+}
+
+message DeleteBootstrapClientRequest {
+  uint64 id = 1;
+}
+
+message DeleteBootstrapClientResponse {}
+
+message GetBootstrapClientRequest {
+  uint64 id = 1;
+}
+
+message GetBootstrapClientResponse {
+  BootstrapClient bootstrap_client = 1;
+}
+
+message ListBootstrapClientsRequest {}
+
+message ListBootstrapClientsResponse {
+  repeated BootstrapClient bootstrap_clients = 1;
+}
+
+message ListBootstrapPeersRequest {}
+
+message ListBootstrapPeersResponse {
+  repeated BootstrapPeer peers = 1;
+}
+
+message BootstrapPeer {
+  uint64 peer_id = 1;
+  string label = 2;
+}
+
+message BootstrapServiceMessage {
+  message BrokerOffer {}
+
+  message PublishRequest {
+    string name = 1;
+    strims.type.Certificate certificate = 2;
+  }
+
+  message PublishResponse {
+    oneof body {
+      string error = 1;
+    }
+  }
+
+  oneof body {
+    BrokerOffer broker_offer = 1;
+    PublishRequest publish_request = 2;
+    PublishResponse publish_response = 3;
+  }
+}
+
+message PublishNetworkToBootstrapPeerRequest {
+  uint64 peer_id = 1;
+  strims.network.v1.Network network = 2;
+}
+
+message PublishNetworkToBootstrapPeerResponse {}
+
+service Bootstrap {
+  rpc CreateClient(CreateBootstrapClientRequest) returns (CreateBootstrapClientResponse);
+  rpc UpdateClient(UpdateBootstrapClientRequest) returns (UpdateBootstrapClientResponse);
+  rpc DeleteClient(DeleteBootstrapClientRequest) returns (DeleteBootstrapClientResponse);
+  rpc GetClient(GetBootstrapClientRequest) returns (GetBootstrapClientResponse);
+  rpc ListClients(ListBootstrapClientsRequest) returns (ListBootstrapClientsResponse);
+  rpc ListPeers(ListBootstrapPeersRequest) returns (ListBootstrapPeersResponse);
+  rpc PublishNetworkToPeer(PublishNetworkToBootstrapPeerRequest) returns (PublishNetworkToBootstrapPeerResponse);
+}

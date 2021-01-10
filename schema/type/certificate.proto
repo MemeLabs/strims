@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package strims.type;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/type/key;key";
+option java_package = "gg.strims.type";
+option swift_prefix = "STP";
+
+import "type/key.proto";
+
+message CertificateRequest {
+  bytes key = 1;
+  strims.type.KeyType key_type = 2;
+  uint32 key_usage = 3;
+  string subject = 5;
+  bytes signature = 4;
+}
+
+message Certificate {
+  bytes key = 1;
+  strims.type.KeyType key_type = 2;
+  uint32 key_usage = 3;
+  string subject = 4;
+  uint64 not_before = 5;
+  uint64 not_after = 6;
+  bytes serial_number = 7;
+  bytes signature = 8;
+  oneof parent_oneof {
+    Certificate parent = 9;
+  }
+}
+
+enum KeyUsage {
+  KEY_USAGE_UNDEFINED = 0;
+  // PEER allows bearer to connect with members of the signator's network
+  KEY_USAGE_PEER = 1;
+  // BOOTSTRAP allows the bearer to connect to a network's signators. Invites
+  // including transient keys with bootstrap certs allow new members to request
+  // peer certs.
+  KEY_USAGE_BOOTSTRAP = 2;
+  // SIGN allows the bearer to sign certificates.
+  KEY_USAGE_SIGN = 4;
+  // BROKER allows the bearer to negotiate connections between a network's
+  // members.
+  KEY_USAGE_BROKER = 8;
+  // ENCIPHERMENT allows the key to be used for encrypting messages.
+  KEY_USAGE_ENCIPHERMENT = 16;
+}

@@ -1,0 +1,136 @@
+syntax = "proto3";
+
+package strims.video.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1;video";
+option java_package = "gg.strims.video.v1";
+option swift_prefix = "SVO";
+
+// import "type/key.proto";
+// import "network/v1/directory.proto";
+
+// message JoinSwarmRequest {
+//   string swarm_uri = 1;
+// }
+// message JoinSwarmResponse {}
+// message LeaveSwarmRequest {
+//   string swarm_uri = 1;
+// }
+// message LeaveSwarmResponse {}
+// message GetIngressStreamsRequest {}
+// message GetIngressStreamsResponse {
+//   string swarm_uri = 1;
+// }
+// message StartRTMPIngressRequest {}
+// message StartRTMPIngressResponse {}
+// message StartHLSEgressRequest {
+//   uint64 video_id = 1;
+//   string address = 2;
+// }
+// message StartHLSEgressResponse {
+//   uint64 id = 1;
+//   string url = 2;
+// }
+// message StopHLSEgressRequest {
+//   uint64 id = 1;
+// }
+// message StopHLSEgressResponse {}
+
+// message StartSwarmRequest {}
+// message StartSwarmResponse {
+//   uint64 id = 1;
+// }
+// message WriteToSwarmRequest {
+//   uint64 id = 1;
+//   bytes data = 2;
+// }
+// message WriteToSwarmResponse {
+//   string error = 1;
+// }
+// message StopSwarmRequest {
+//   uint64 id = 1;
+// }
+// message StopSwarmResponse {}
+// message PublishSwarmRequest {
+//   uint64 id = 1;
+//   bytes network_key = 2;
+// }
+// message PublishSwarmResponse {}
+
+// message OpenVideoServerRequest {}
+// message VideoServerOpenResponse {
+//   uint64 id = 1;
+// }
+
+// message WriteToVideoServerRequest {
+//   uint64 id = 1;
+//   bytes data = 2;
+//   bool flush = 3;
+// }
+// message WriteToVideoServerResponse {}
+
+// message OpenVideoClientRequest {
+//   bytes swarm_key = 1;
+//   bool emit_data = 2;
+// }
+
+// message VideoClientEvent {
+//   message Data {
+//     bytes data = 1;
+//     bool flush = 2;
+//   }
+
+//   message Open {
+//     uint64 id = 1;
+//   }
+
+//   message Close {}
+
+//   oneof body {
+//     Data data = 1;
+//     Open open = 2;
+//     Close close = 3;
+//   }
+// }
+
+// message VideoClientCallRequest {
+//   message Data {
+//     bytes body = 1;
+//   }
+
+//   message RunServer {}
+
+//   message RunClient {}
+
+//   uint32 id = 1;
+//   oneof body {
+//     Data data = 2;
+//     RunClient run_client = 3;
+//     RunServer run_server = 4;
+//   }
+// }
+
+// message SwarmThingMessage {
+//   message Open {
+//     bytes swarm_id = 1;
+//     uint32 port = 2;
+//   }
+
+//   message Close {
+//     bytes swarm_id = 1;
+//   }
+
+//   oneof body {
+//     Open open = 1;
+//     Close close = 2;
+//   }
+// }
+
+// service VideoFrontend {
+//   rpc OpenClient(OpenVideoClientRequest) returns (stream VideoClientEvent);
+//   rpc OpenServer(OpenVideoServerRequest) returns (VideoServerOpenResponse);
+//   rpc WriteToServer(WriteToVideoServerRequest) returns (WriteToVideoServerResponse);
+//   rpc PublishSwarm(PublishSwarmRequest) returns (PublishSwarmResponse);
+//   rpc StartHLSEgress(StartHLSEgressRequest) returns (StartHLSEgressResponse);
+//   rpc StopHLSEgress(StopHLSEgressRequest) returns (StopHLSEgressResponse);
+// }

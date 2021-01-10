@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package strims.funding.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/funding/v1;funding";
+option java_package = "gg.strims.funding.v1";
+option swift_prefix = "SFG";
+
+message FundingTestRequest {
+  string name = 1;
+}
+
+message FundingTestResponse {
+  string message = 1;
+}
+
+service Funding {
+  rpc Test(FundingTestRequest) returns (FundingTestResponse);
+}

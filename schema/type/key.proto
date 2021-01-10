@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+package strims.type;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/type/key;key";
+option java_package = "gg.strims.type";
+option swift_prefix = "STP";
+
+message Key {
+  KeyType type = 1;
+  bytes private = 2;
+  bytes public = 3;
+}
+
+enum KeyType {
+  KEY_TYPE_UNDEFINED = 0;
+  KEY_TYPE_ED25519 = 1;
+  KEY_TYPE_X25519 = 2;
+}

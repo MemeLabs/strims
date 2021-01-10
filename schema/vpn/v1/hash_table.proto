@@ -1,0 +1,43 @@
+syntax = "proto3";
+
+package strims.vpn.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/vpn/v1;vpn";
+option java_package = "gg.strims.vpn.v1";
+option swift_prefix = "SVN";
+
+message HashTableMessage {
+  message Record {
+    bytes key = 1;
+    bytes salt = 2;
+    bytes value = 3;
+    int64 timestamp = 4;
+    bytes signature = 5;
+  }
+
+  message Publish {
+    Record record = 1;
+  }
+
+  message Unpublish {
+    Record record = 1;
+  }
+
+  message GetRequest {
+    uint64 request_id = 1;
+    bytes hash = 2;
+    int64 if_modified_since = 3;
+  }
+
+  message GetResponse {
+    uint64 request_id = 1;
+    Record record = 2;
+  }
+
+  oneof body {
+    Publish publish = 1;
+    Unpublish unpublish = 2;
+    GetRequest get_request = 3;
+    GetResponse get_response = 4;
+  }
+}

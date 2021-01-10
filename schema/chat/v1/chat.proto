@@ -1,0 +1,181 @@
+syntax = "proto3";
+
+package strims.chat.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+option java_package = "gg.strims.ppspp.proto";
+option swift_prefix = "PB";
+
+import "type/key.proto";
+
+message CreateChatServerRequest {
+  bytes network_key = 2;
+  ChatRoom chat_room = 3;
+}
+message CreateChatServerResponse {
+  ChatServer chat_server = 1;
+}
+message UpdateChatServerRequest {
+  uint64 id = 1;
+  bytes network_key = 2;
+  ChatRoom server_key = 3;
+}
+message UpdateChatServerResponse {
+  ChatServer chat_server = 1;
+}
+message DeleteChatServerRequest {
+  uint64 id = 1;
+}
+message DeleteChatServerResponse {}
+message GetChatServerRequest {
+  uint64 id = 1;
+}
+message GetChatServerResponse {
+  ChatServer chat_server = 1;
+}
+message ListChatServersRequest {}
+message ListChatServersResponse {
+  repeated ChatServer chat_servers = 1;
+}
+
+message OpenChatServerRequest {
+  ChatServer server = 1;
+}
+
+message ChatServerEvent {
+  message Open {
+    uint64 server_id = 1;
+  }
+
+  message Close {}
+
+  oneof body {
+    Open open = 1;
+    Close close = 2;
+  }
+}
+
+message CallChatServerRequest {
+  message Close {}
+
+  uint64 server_id = 1;
+  oneof body {
+    Close close = 2;
+  }
+}
+
+message OpenChatClientRequest {
+  bytes network_key = 1;
+  bytes server_key = 2;
+}
+
+message ChatClientEvent {
+  message Open {
+    uint64 client_id = 1;
+  }
+
+  message Message {
+    int64 sent_time = 1;
+    int64 server_time = 2;
+    string nick = 3;
+    string body = 4;
+    MessageEntities entities = 5;
+  }
+
+  message Close {}
+
+  oneof body {
+    Open open = 1;
+    Message message = 2;
+    Close close = 3;
+  }
+}
+
+message ChatRoom {
+  string name = 1;
+}
+
+message ChatServer {
+  uint64 id  = 1;
+  bytes network_key = 2;
+  strims.type.Key key = 3;
+  ChatRoom chat_room = 4;
+}
+
+message MessageEntities {
+  message Bounds {
+    int64 start = 1;
+    int64 end = 2;
+  }
+
+  message Link {
+    Bounds bounds = 1;
+    string url = 2;
+  }
+
+  message Emote {
+    Bounds bounds = 1;
+    string name = 2;
+    repeated string modifiers = 3;
+    int64 combo = 4;
+  }
+
+  message Nick {
+    Bounds bounds = 1;
+    string nick = 2;
+  }
+
+  message Tag {
+    Bounds bounds = 1;
+    string name = 2;
+  }
+
+  message CodeBlock {
+    Bounds bounds = 1;
+  }
+
+  message Spoiler {
+    Bounds bounds = 1;
+  }
+
+  message GenericEntity {
+    Bounds bounds = 1;
+  }
+
+  repeated Link links = 1;
+  repeated Emote emotes = 2;
+  repeated Nick nicks = 3;
+  repeated Tag tags = 4;
+  repeated CodeBlock code_blocks = 5;
+  repeated Spoiler spoilers = 6;
+  GenericEntity green_text = 7;
+  GenericEntity self_message = 8;
+}
+
+message CallChatClientRequest {
+  message Message {
+    int64 time = 1;
+    string body = 2;
+  }
+
+  message Close {}
+
+  uint64 client_id = 1;
+  oneof body {
+    Message message = 2;
+    Close close = 3;
+  }
+}
+
+message CallChatClientResponse {}
+
+service Chat {
+  rpc CreateServer(CreateChatServerRequest) returns (CreateChatServerResponse);
+  rpc UpdateServer(UpdateChatServerRequest) returns (UpdateChatServerResponse);
+  rpc DeleteServer(DeleteChatServerRequest) returns (DeleteChatServerResponse);
+  rpc GetServer(GetChatServerRequest) returns (GetChatServerResponse);
+  rpc ListServers(ListChatServersRequest) returns (ListChatServersResponse);
+  rpc OpenServer(OpenChatServerRequest) returns (stream ChatServerEvent);
+  rpc OpenClient(OpenChatClientRequest) returns (stream ChatClientEvent);
+  rpc CallClient(CallChatClientRequest) returns (CallChatClientResponse);
+}

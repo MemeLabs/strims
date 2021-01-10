@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package strims.transfer.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1;transfer";
+option java_package = "gg.strims.transfer.v1";
+option swift_prefix = "STX";
+
+message TransferPeerAnnounceSwarmRequest {
+  bytes swarm_id = 1;
+  uint32 port = 2;
+}
+
+message TransferPeerAnnounceSwarmResponse {
+  oneof body {
+    uint32 port = 1;
+  }
+}
+
+service TransferPeer {
+  rpc AnnounceSwarm(TransferPeerAnnounceSwarmRequest) returns (TransferPeerAnnounceSwarmResponse);
+}

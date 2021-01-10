@@ -1,0 +1,142 @@
+syntax = "proto3";
+
+package strims.network.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1;network";
+option java_package = "gg.strims.network.v1";
+option swift_prefix = "SNT";
+
+import "type/certificate.proto";
+
+message GetDirectoryEventsRequest {
+  bytes network_key = 1;
+}
+
+message TestDirectoryPublishRequest {
+  bytes network_key = 1;
+}
+message TestDirectoryPublishResponse {}
+
+message DirectoryListingSnippet {
+  string title = 1;
+  string description = 2;
+  repeated string tags = 3;
+}
+
+message DirectoryListingMedia {
+  int64 started_at = 1;
+  string mime_type = 2;
+  uint32 bitrate = 3;
+  string swarm_uri = 4;
+}
+
+message DirectoryListingService {
+  string type = 1;
+}
+
+message DirectoryListing {
+  strims.type.Certificate creator = 1;
+  int64 timestamp = 2;
+  DirectoryListingSnippet snippet = 3;
+
+  oneof content {
+    DirectoryListingMedia media = 1001;
+    DirectoryListingService service = 1002;
+  }
+
+  bytes key = 10001;
+  bytes signature = 10002;
+}
+
+message DirectoryEvent {
+  message Publish {
+    DirectoryListing listing = 1;
+  }
+
+  message Unpublish {
+    bytes key = 1;
+  }
+
+  message ViewerCountChange {
+    bytes key = 1;
+    uint32 count = 2;
+  }
+
+  message ViewerStateChange {
+    string subject = 1;
+    bool online = 2;
+    repeated bytes viewing_keys = 3;
+  }
+
+  message Ping {
+    int64 time = 1;
+  }
+
+  message Padding {
+    bytes data = 1;
+  }
+
+  oneof body {
+    Publish publish = 1;
+    Unpublish unpublish = 2;
+    ViewerCountChange viewer_count_change = 3;
+    ViewerStateChange viewer_state_change = 4;
+    Ping ping = 5;
+    Padding padding = 6;
+  }
+}
+
+message DirectoryPublishRequest {
+  DirectoryListing listing = 1;
+}
+
+message DirectoryPublishResponse {}
+
+message DirectoryUnpublishRequest {
+  bytes key = 1;
+}
+
+message DirectoryUnpublishResponse {}
+
+message DirectoryJoinRequest {
+  bytes key = 1;
+}
+
+message DirectoryJoinResponse {}
+
+message DirectoryPartRequest {
+  bytes key = 1;
+}
+
+message DirectoryPartResponse {}
+
+message DirectoryPingRequest {}
+
+message DirectoryPingResponse {}
+
+service Directory {
+  rpc Publish(DirectoryPublishRequest) returns (DirectoryPublishResponse);
+  rpc Unpublish(DirectoryUnpublishRequest) returns (DirectoryUnpublishResponse);
+  rpc Join(DirectoryJoinRequest) returns (DirectoryJoinResponse);
+  rpc Part(DirectoryPartRequest) returns (DirectoryPartResponse);
+  rpc Ping(DirectoryPingRequest) returns (DirectoryPingResponse);
+}
+
+message DirectoryFrontendOpenRequest {
+  bytes network_key = 1;
+}
+
+message DirectoryFrontendOpenResponse {
+  DirectoryEvent event = 1;
+}
+
+message DirectoryFrontendTestRequest {
+  bytes network_key = 1;
+}
+
+message DirectoryFrontendTestResponse {}
+
+service DirectoryFrontend {
+  rpc Open(DirectoryFrontendOpenRequest) returns (stream DirectoryFrontendOpenResponse);
+  rpc Test(DirectoryFrontendTestRequest) returns (DirectoryFrontendTestResponse);
+}
