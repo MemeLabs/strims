@@ -75,8 +75,8 @@ export default class Writer {
     return this.uint64(v);
   }
 
-  bool(v: number): Writer {
-    return this.uint32(1);
+  bool(v: boolean): Writer {
+    return this.uint32(v ? 1 : 0);
   }
 
   enum(v: number): Writer {

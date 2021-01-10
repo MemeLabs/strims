@@ -10,7 +10,7 @@ export interface ICall {
   id?: bigint;
   parentId?: bigint;
   method?: string;
-  argument?: google_protobuf_IAny;
+  argument?: google_protobuf_IAny | undefined;
   headers?: Map<string, Uint8Array> | { [key: string]: Uint8Array };
 }
 

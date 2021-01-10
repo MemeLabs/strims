@@ -9,8 +9,8 @@ import {
 } from "../../../type/certificate";
 
 export interface ICARenewRequest {
-  certificate?: strims_type_ICertificate;
-  certificateRequest?: strims_type_ICertificateRequest;
+  certificate?: strims_type_ICertificate | undefined;
+  certificateRequest?: strims_type_ICertificateRequest | undefined;
 }
 
 export class CARenewRequest {
@@ -52,7 +52,7 @@ export class CARenewRequest {
 }
 
 export interface ICARenewResponse {
-  certificate?: strims_type_ICertificate;
+  certificate?: strims_type_ICertificate | undefined;
 }
 
 export class CARenewResponse {

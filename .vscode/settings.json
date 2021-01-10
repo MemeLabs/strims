@@ -65,6 +65,13 @@
     "diagnostics": true,
     "documentLink": true,
   },
+  "protoc": {
+    "path": "/usr/local/bin/protoc",
+    "compile_on_save": false,
+    "options": [
+      "--proto_path=${workspaceRoot}/schema",
+    ]
+  }
   // "go.toolsEnvVars": {
   //   "GOOS": "js",
   //   "GOARCH": "wasm"

@@ -186,7 +186,11 @@ func (g *generator) generateMessage(m pgs.Message) {
 	// constructor argument interface
 	g.linef(`export interface I%s {`, className)
 	for _, f := range m.NonOneOfFields() {
-		g.linef(`%s?: %s;`, g.fieldName(f), g.fieldInfo(f).tsIfType)
+		undef := ""
+		if f.Type().IsEmbed() {
+			undef = " | undefined"
+		}
+		g.linef(`%s?: %s%s;`, g.fieldName(f), g.fieldInfo(f).tsIfType, undef)
 	}
 	for _, o := range m.OneOfs() {
 		g.linef(`%s?: %s`, o.Name().LowerCamelCase(), g.oneOfNameWithPrefix(o, "I"))
@@ -206,7 +210,7 @@ func (g *generator) generateMessage(m pgs.Message) {
 		}
 	}
 	for _, o := range m.OneOfs() {
-		g.linef(`%s: %s;`, o.Name().LowerCamelCase(), g.oneOfName(o))
+		g.linef(`%s: %s;`, o.Name().LowerCamelCase(), g.oneOfNameWithPrefix(o, "T"))
 	}
 	g.lineBreak()
 
@@ -277,7 +281,7 @@ func (g *generator) generateMessage(m pgs.Message) {
 		oname := o.Name().LowerCamelCase()
 		g.linef(`switch (m.%s.case) {`, oname)
 		for _, f := range o.Fields() {
-			g.linef(`case %d:`, f.Descriptor().GetNumber())
+			g.linef(`case %s.%s:`, className, g.oneOfCaseName(f))
 			fname := g.fieldName(f)
 			fi := g.fieldInfo(f)
 			wireKey := int(f.Descriptor().GetNumber()<<3) | fi.wireType
@@ -309,9 +313,6 @@ func (g *generator) generateMessage(m pgs.Message) {
 		for _, f := range m.Fields() {
 			g.linef(`case %d:`, f.Descriptor().GetNumber())
 			name := g.fieldName(f).String()
-			if f.InOneOf() {
-				name = fmt.Sprintf("%s.%s", f.OneOf().Name().LowerCamelCase(), name)
-			}
 			fi := g.fieldInfo(f)
 			if f.Type().IsRepeated() {
 				if f.Type().Element().IsEmbed() {
@@ -345,6 +346,13 @@ func (g *generator) generateMessage(m pgs.Message) {
 				g.line(`}`)
 				g.linef(`m.%s.set(key, value)`, name)
 				g.line(`}`)
+			} else if f.InOneOf() {
+				oneOfName := f.OneOf().Name().LowerCamelCase()
+				if f.Type().IsEmbed() {
+					g.linef(`m.%s = new %s({ %s: %s.decode(r, r.uint32()) });`, oneOfName, g.oneOfName(f.OneOf()), name, fi.tsBaseType)
+				} else {
+					g.linef(`m.%s = new %s({ %s: r.%s() });`, oneOfName, g.oneOfName(f.OneOf()), name, fi.codecFunc)
+				}
 			} else {
 				if f.Type().IsEmbed() {
 					g.linef(`m.%s = %s.decode(r, r.uint32());`, name, fi.tsBaseType)
@@ -383,90 +391,84 @@ func (g *generator) generateMessage(m pgs.Message) {
 	}
 }
 
+func (g *generator) oneOfCaseName(f pgs.Field) string {
+	return fmt.Sprintf("%sCase.%s", f.OneOf().Name().UpperCamelCase(), f.Name().ScreamingSnakeCase())
+}
+
 func (g *generator) generateOneOf(o pgs.OneOf) {
 	className := fmt.Sprintf("%sOneOf", o.Name().UpperCamelCase())
 	caseName := fmt.Sprintf("%sCase", o.Name().UpperCamelCase())
 
-	// constructor argument interface
-	g.linef(`export type I%s =`, className)
-	for i, f := range o.Fields() {
-		delim := ""
-		if i != 0 {
-			delim = "|"
-		}
-		g.linef(`%s{ %s: %s }`, delim, g.fieldName(f), g.fieldInfo(f).tsIfType)
-	}
-	g.line(`;`)
-	g.lineBreak()
-
-	g.linef(`export class %s {`, className)
-
-	// properties
-	for _, f := range o.Fields() {
-		fi := g.fieldInfo(f)
-		if f.Type().IsEmbed() {
-			g.linef(`private _%s: %s | undefined;`, g.fieldName(f), fi.tsType)
-		} else {
-			g.linef(`private _%s: %s = %s;`, g.fieldName(f), fi.tsType, fi.zeroValue)
-		}
-	}
-	g.linef(`private _case: %s = 0;`, caseName)
-	g.lineBreak()
-
-	// constructor
-	g.linef(`constructor(v?: I%s) {`, className)
-	for _, f := range o.Fields() {
-		name := g.fieldName(f)
-		if f.Type().IsEmbed() {
-			g.linef(`if (v && "%s" in v) this.%s = new %s(v.%s);`, name, name, g.fieldInfo(f).tsType, name)
-		} else {
-			g.linef(`if (v && "%s" in v) this.%s = v.%s;`, name, name, name)
-		}
-	}
-	g.line(`}`)
-	g.lineBreak()
-
-	g.line(`public clear() {`)
-	for _, f := range o.Fields() {
-		name := g.fieldName(f)
-		if f.Type().IsMap() {
-			g.linef(`this._%s.clear();`, name)
-		} else if f.Type().IsEmbed() {
-			g.linef(`this._%s = undefined;`, name)
-		} else {
-			g.linef(`this._%s = %s;`, name, g.fieldInfo(f).zeroValue)
-		}
-	}
-	g.linef(`this._case = %s.NOT_SET;`, caseName)
-	g.line(`}`)
-	g.lineBreak()
-	g.linef(`get case(): %s {`, caseName)
-	g.line(`return this._case;`)
-	g.line(`}`)
-
-	for _, f := range o.Fields() {
-		name := g.fieldName(f)
-		fi := g.fieldInfo(f)
-		g.lineBreak()
-		g.linef(`set %s(v: %s) {`, name, fi.tsType)
-		g.line(`this.clear();`)
-		g.linef(`this._%s = v;`, name)
-		g.linef(`this._case = %s.%s;`, caseName, f.Name().ScreamingSnakeCase())
-		g.line(`}`)
-		g.lineBreak()
-		g.linef(`get %s(): %s {`, name, fi.tsType)
-		g.linef(`return this._%s;`, name)
-		g.line(`}`)
-	}
-
-	g.line(`}`)
-	g.lineBreak()
 	g.linef(`export enum %s {`, caseName)
 	g.line(`NOT_SET = 0,`)
 	for _, f := range o.Fields() {
 		g.linef(`%s = %d,`, f.Name().ScreamingSnakeCase(), f.Descriptor().GetNumber())
 	}
 	g.line(`}`)
+	g.lineBreak()
+
+	// constructor argument interface
+	g.linef(`export type I%s =`, className)
+	g.linef(`{ case?: %s.NOT_SET }`, caseName)
+	for _, f := range o.Fields() {
+		g.linef(`|{ case?: %s, %s: %s }`, g.oneOfCaseName(f), g.fieldName(f), g.fieldInfo(f).tsIfType)
+	}
+	g.line(`;`)
+	g.lineBreak()
+
+	// cases
+	g.linef(`export type T%s = Readonly<`, className)
+	g.linef(`{ case: %s.NOT_SET }`, caseName)
+	for _, f := range o.Fields() {
+		g.linef(`|{ case: %s, %s: %s }`, g.oneOfCaseName(f), g.fieldName(f), g.fieldInfo(f).tsType)
+	}
+	g.line(`>;`)
+	g.lineBreak()
+
+	g.linef(`class %sImpl {`, className)
+
+	// properties
+	for _, f := range o.Fields() {
+		fi := g.fieldInfo(f)
+		if f.Type().IsEmbed() {
+			g.linef(`%s: %s;`, g.fieldName(f), fi.tsType)
+		} else {
+			g.linef(`%s: %s;`, g.fieldName(f), fi.tsType)
+		}
+	}
+	g.linef(`case: %s = %s.NOT_SET;`, caseName, caseName)
+	g.lineBreak()
+
+	// constructor
+	g.linef(`constructor(v?: I%s) {`, className)
+	for i, f := range o.Fields() {
+		name := g.fieldName(f)
+		if i != 0 {
+			g.linef(`} else`)
+		}
+		g.linef(`if (v && "%s" in v) {`, name)
+		g.linef(`this.case = %s;`, g.oneOfCaseName(f))
+		if f.Type().IsEmbed() {
+			g.linef(`this.%s = new %s(v.%s);`, name, g.fieldInfo(f).tsType, name)
+		} else {
+			g.linef(`this.%s = v.%s;`, name, name)
+		}
+	}
+	g.line(`}`)
+	g.line(`}`)
+	g.line(`}`)
+	g.lineBreak()
+
+	g.linef(`export const %s = %sImpl as {`, className, className)
+	g.linef(`new (): Readonly<{ case: %s.NOT_SET }>;`, caseName)
+	g.linef(`new <T extends I%s>(v: T): Readonly<`, className)
+	for _, f := range o.Fields() {
+		fi := g.fieldInfo(f)
+		g.linef(`T extends { %s: %s } ? { case: %s, %s: %s } :`, g.fieldName(f), fi.tsIfType, g.oneOfCaseName(f), g.fieldName(f), fi.tsType)
+	}
+	g.line(`never`)
+	g.line(`>;`)
+	g.line(`};`)
 	g.lineBreak()
 }
 

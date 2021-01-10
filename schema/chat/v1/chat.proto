@@ -2,9 +2,9 @@ syntax = "proto3";
 
 package strims.chat.v1;
 
-option go_package = "github.com/MemeLabs/go-ppspp/pkg/pb;pb";
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1;chat";
 option java_package = "gg.strims.ppspp.proto";
-option swift_prefix = "PB";
+option swift_prefix = "SCH";
 
 import "type/key.proto";
 

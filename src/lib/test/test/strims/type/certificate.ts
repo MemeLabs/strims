@@ -90,7 +90,7 @@ export class Certificate {
   notAfter: bigint = BigInt(0);
   serialNumber: Uint8Array = new Uint8Array();
   signature: Uint8Array = new Uint8Array();
-  parentOneof: Certificate.ParentOneofOneOf;
+  parentOneof: Certificate.TParentOneofOneOf;
 
   constructor(v?: ICertificate) {
     this.key = v?.key || new Uint8Array();
@@ -115,7 +115,7 @@ export class Certificate {
     if (m.serialNumber) w.uint32(58).bytes(m.serialNumber);
     if (m.signature) w.uint32(66).bytes(m.signature);
     switch (m.parentOneof.case) {
-      case 9:
+      case Certificate.ParentOneofCase.PARENT:
       Certificate.encode(m.parentOneof.parent, w.uint32(74).fork()).ldelim();
       break;
     }
@@ -154,7 +154,7 @@ export class Certificate {
         m.signature = r.bytes();
         break;
         case 9:
-        m.parentOneof.parent = Certificate.decode(r, r.uint32());
+        m.parentOneof = new Certificate.ParentOneofOneOf({ parent: Certificate.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -166,42 +166,40 @@ export class Certificate {
 }
 
 export namespace Certificate {
-  export type IParentOneofOneOf =
-  { parent: ICertificate }
-  ;
-
-  export class ParentOneofOneOf {
-    private _parent: Certificate | undefined;
-    private _case: ParentOneofCase = 0;
-
-    constructor(v?: IParentOneofOneOf) {
-      if (v && "parent" in v) this.parent = new Certificate(v.parent);
-    }
-
-    public clear() {
-      this._parent = undefined;
-      this._case = ParentOneofCase.NOT_SET;
-    }
-
-    get case(): ParentOneofCase {
-      return this._case;
-    }
-
-    set parent(v: Certificate) {
-      this.clear();
-      this._parent = v;
-      this._case = ParentOneofCase.PARENT;
-    }
-
-    get parent(): Certificate {
-      return this._parent;
-    }
-  }
-
   export enum ParentOneofCase {
     NOT_SET = 0,
     PARENT = 9,
   }
+
+  export type IParentOneofOneOf =
+  { case?: ParentOneofCase.NOT_SET }
+  |{ case?: ParentOneofCase.PARENT, parent: ICertificate }
+  ;
+
+  export type TParentOneofOneOf = Readonly<
+  { case: ParentOneofCase.NOT_SET }
+  |{ case: ParentOneofCase.PARENT, parent: Certificate }
+  >;
+
+  class ParentOneofOneOfImpl {
+    parent: Certificate;
+    case: ParentOneofCase = ParentOneofCase.NOT_SET;
+
+    constructor(v?: IParentOneofOneOf) {
+      if (v && "parent" in v) {
+        this.case = ParentOneofCase.PARENT;
+        this.parent = new Certificate(v.parent);
+      }
+    }
+  }
+
+  export const ParentOneofOneOf = ParentOneofOneOfImpl as {
+    new (): Readonly<{ case: ParentOneofCase.NOT_SET }>;
+    new <T extends IParentOneofOneOf>(v: T): Readonly<
+    T extends { parent: ICertificate } ? { case: ParentOneofCase.PARENT, parent: Certificate } :
+    never
+    >;
+  };
 
 }
 

@@ -50,7 +50,7 @@ export interface ITransferPeerAnnounceSwarmResponse {
 }
 
 export class TransferPeerAnnounceSwarmResponse {
-  body: TransferPeerAnnounceSwarmResponse.BodyOneOf;
+  body: TransferPeerAnnounceSwarmResponse.TBodyOneOf;
 
   constructor(v?: ITransferPeerAnnounceSwarmResponse) {
     this.body = new TransferPeerAnnounceSwarmResponse.BodyOneOf(v?.body);
@@ -59,7 +59,7 @@ export class TransferPeerAnnounceSwarmResponse {
   static encode(m: TransferPeerAnnounceSwarmResponse, w?: Writer): Writer {
     if (!w) w = new Writer(1024);
     switch (m.body.case) {
-      case 1:
+      case TransferPeerAnnounceSwarmResponse.BodyCase.PORT:
       w.uint32(8).uint32(m.body.port);
       break;
     }
@@ -74,7 +74,7 @@ export class TransferPeerAnnounceSwarmResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body.port = r.uint32();
+        m.body = new TransferPeerAnnounceSwarmResponse.BodyOneOf({ port: r.uint32() });
         break;
         default:
         r.skipType(tag & 7);
@@ -86,42 +86,40 @@ export class TransferPeerAnnounceSwarmResponse {
 }
 
 export namespace TransferPeerAnnounceSwarmResponse {
-  export type IBodyOneOf =
-  { port: number }
-  ;
-
-  export class BodyOneOf {
-    private _port: number = 0;
-    private _case: BodyCase = 0;
-
-    constructor(v?: IBodyOneOf) {
-      if (v && "port" in v) this.port = v.port;
-    }
-
-    public clear() {
-      this._port = 0;
-      this._case = BodyCase.NOT_SET;
-    }
-
-    get case(): BodyCase {
-      return this._case;
-    }
-
-    set port(v: number) {
-      this.clear();
-      this._port = v;
-      this._case = BodyCase.PORT;
-    }
-
-    get port(): number {
-      return this._port;
-    }
-  }
-
   export enum BodyCase {
     NOT_SET = 0,
     PORT = 1,
   }
+
+  export type IBodyOneOf =
+  { case?: BodyCase.NOT_SET }
+  |{ case?: BodyCase.PORT, port: number }
+  ;
+
+  export type TBodyOneOf = Readonly<
+  { case: BodyCase.NOT_SET }
+  |{ case: BodyCase.PORT, port: number }
+  >;
+
+  class BodyOneOfImpl {
+    port: number;
+    case: BodyCase = BodyCase.NOT_SET;
+
+    constructor(v?: IBodyOneOf) {
+      if (v && "port" in v) {
+        this.case = BodyCase.PORT;
+        this.port = v.port;
+      }
+    }
+  }
+
+  export const BodyOneOf = BodyOneOfImpl as {
+    new (): Readonly<{ case: BodyCase.NOT_SET }>;
+    new <T extends IBodyOneOf>(v: T): Readonly<
+    T extends { port: number } ? { case: BodyCase.PORT, port: number } :
+    never
+    >;
+  };
 
 }
 

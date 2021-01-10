@@ -51,7 +51,7 @@ export class CreateProfileRequest {
 
 export interface ICreateProfileResponse {
   sessionId?: string;
-  profile?: IProfile;
+  profile?: IProfile | undefined;
 }
 
 export class CreateProfileResponse {
@@ -136,7 +136,7 @@ export class UpdateProfileRequest {
 }
 
 export interface IUpdateProfileResponse {
-  profile?: IProfile;
+  profile?: IProfile | undefined;
 }
 
 export class UpdateProfileResponse {
@@ -279,7 +279,7 @@ export class LoadProfileRequest {
 
 export interface ILoadProfileResponse {
   sessionId?: string;
-  profile?: IProfile;
+  profile?: IProfile | undefined;
 }
 
 export class LoadProfileResponse {
@@ -357,7 +357,7 @@ export class GetProfileRequest {
 }
 
 export interface IGetProfileResponse {
-  profile?: IProfile;
+  profile?: IProfile | undefined;
 }
 
 export class GetProfileResponse {
@@ -486,7 +486,7 @@ export class LoadSessionRequest {
 
 export interface ILoadSessionResponse {
   sessionId?: string;
-  profile?: IProfile;
+  profile?: IProfile | undefined;
 }
 
 export class LoadSessionResponse {
@@ -534,7 +534,7 @@ export interface IStorageKey {
 
 export class StorageKey {
   kdfType: KDFType = 0;
-  kdfOptions: StorageKey.KdfOptionsOneOf;
+  kdfOptions: StorageKey.TKdfOptionsOneOf;
 
   constructor(v?: IStorageKey) {
     this.kdfType = v?.kdfType || 0;
@@ -545,7 +545,7 @@ export class StorageKey {
     if (!w) w = new Writer(1024);
     if (m.kdfType) w.uint32(8).uint32(m.kdfType);
     switch (m.kdfOptions.case) {
-      case 2:
+      case StorageKey.KdfOptionsCase.PBKDF2_OPTIONS:
       StorageKey.PBKDF2Options.encode(m.kdfOptions.pbkdf2Options, w.uint32(18).fork()).ldelim();
       break;
     }
@@ -563,7 +563,7 @@ export class StorageKey {
         m.kdfType = r.uint32();
         break;
         case 2:
-        m.kdfOptions.pbkdf2Options = StorageKey.PBKDF2Options.decode(r, r.uint32());
+        m.kdfOptions = new StorageKey.KdfOptionsOneOf({ pbkdf2Options: StorageKey.PBKDF2Options.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -575,42 +575,40 @@ export class StorageKey {
 }
 
 export namespace StorageKey {
-  export type IKdfOptionsOneOf =
-  { pbkdf2Options: StorageKey.IPBKDF2Options }
-  ;
-
-  export class KdfOptionsOneOf {
-    private _pbkdf2Options: StorageKey.PBKDF2Options | undefined;
-    private _case: KdfOptionsCase = 0;
-
-    constructor(v?: IKdfOptionsOneOf) {
-      if (v && "pbkdf2Options" in v) this.pbkdf2Options = new StorageKey.PBKDF2Options(v.pbkdf2Options);
-    }
-
-    public clear() {
-      this._pbkdf2Options = undefined;
-      this._case = KdfOptionsCase.NOT_SET;
-    }
-
-    get case(): KdfOptionsCase {
-      return this._case;
-    }
-
-    set pbkdf2Options(v: StorageKey.PBKDF2Options) {
-      this.clear();
-      this._pbkdf2Options = v;
-      this._case = KdfOptionsCase.PBKDF2_OPTIONS;
-    }
-
-    get pbkdf2Options(): StorageKey.PBKDF2Options {
-      return this._pbkdf2Options;
-    }
-  }
-
   export enum KdfOptionsCase {
     NOT_SET = 0,
     PBKDF2_OPTIONS = 2,
   }
+
+  export type IKdfOptionsOneOf =
+  { case?: KdfOptionsCase.NOT_SET }
+  |{ case?: KdfOptionsCase.PBKDF2_OPTIONS, pbkdf2Options: StorageKey.IPBKDF2Options }
+  ;
+
+  export type TKdfOptionsOneOf = Readonly<
+  { case: KdfOptionsCase.NOT_SET }
+  |{ case: KdfOptionsCase.PBKDF2_OPTIONS, pbkdf2Options: StorageKey.PBKDF2Options }
+  >;
+
+  class KdfOptionsOneOfImpl {
+    pbkdf2Options: StorageKey.PBKDF2Options;
+    case: KdfOptionsCase = KdfOptionsCase.NOT_SET;
+
+    constructor(v?: IKdfOptionsOneOf) {
+      if (v && "pbkdf2Options" in v) {
+        this.case = KdfOptionsCase.PBKDF2_OPTIONS;
+        this.pbkdf2Options = new StorageKey.PBKDF2Options(v.pbkdf2Options);
+      }
+    }
+  }
+
+  export const KdfOptionsOneOf = KdfOptionsOneOfImpl as {
+    new (): Readonly<{ case: KdfOptionsCase.NOT_SET }>;
+    new <T extends IKdfOptionsOneOf>(v: T): Readonly<
+    T extends { pbkdf2Options: StorageKey.IPBKDF2Options } ? { case: KdfOptionsCase.PBKDF2_OPTIONS, pbkdf2Options: StorageKey.PBKDF2Options } :
+    never
+    >;
+  };
 
   export interface IPBKDF2Options {
     iterations?: number;
@@ -668,7 +666,7 @@ export interface IProfile {
   id?: bigint;
   name?: string;
   secret?: Uint8Array;
-  key?: strims_type_IKey;
+  key?: strims_type_IKey | undefined;
 }
 
 export class Profile {

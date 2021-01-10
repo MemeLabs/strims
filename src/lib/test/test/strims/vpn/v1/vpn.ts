@@ -51,7 +51,7 @@ export class NetworkAddress {
 
 export interface IPeerInit {
   protocolVersion?: number;
-  certificate?: strims_type_ICertificate;
+  certificate?: strims_type_ICertificate | undefined;
   nodePlatform?: string;
   nodeVersion?: string;
 }

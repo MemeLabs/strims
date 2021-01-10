@@ -242,9 +242,9 @@ export class DirectoryListingService {
 }
 
 export interface IDirectoryListing {
-  creator?: strims_type_ICertificate;
+  creator?: strims_type_ICertificate | undefined;
   timestamp?: bigint;
-  snippet?: IDirectoryListingSnippet;
+  snippet?: IDirectoryListingSnippet | undefined;
   key?: Uint8Array;
   signature?: Uint8Array;
   content?: DirectoryListing.IContentOneOf
@@ -256,7 +256,7 @@ export class DirectoryListing {
   snippet: DirectoryListingSnippet | undefined;
   key: Uint8Array = new Uint8Array();
   signature: Uint8Array = new Uint8Array();
-  content: DirectoryListing.ContentOneOf;
+  content: DirectoryListing.TContentOneOf;
 
   constructor(v?: IDirectoryListing) {
     this.creator = v?.creator && new strims_type_Certificate(v.creator);
@@ -275,10 +275,10 @@ export class DirectoryListing {
     if (m.key) w.uint32(80010).bytes(m.key);
     if (m.signature) w.uint32(80018).bytes(m.signature);
     switch (m.content.case) {
-      case 1001:
+      case DirectoryListing.ContentCase.MEDIA:
       DirectoryListingMedia.encode(m.content.media, w.uint32(8010).fork()).ldelim();
       break;
-      case 1002:
+      case DirectoryListing.ContentCase.SERVICE:
       DirectoryListingService.encode(m.content.service, w.uint32(8018).fork()).ldelim();
       break;
     }
@@ -302,10 +302,10 @@ export class DirectoryListing {
         m.snippet = DirectoryListingSnippet.decode(r, r.uint32());
         break;
         case 1001:
-        m.content.media = DirectoryListingMedia.decode(r, r.uint32());
+        m.content = new DirectoryListing.ContentOneOf({ media: DirectoryListingMedia.decode(r, r.uint32()) });
         break;
         case 1002:
-        m.content.service = DirectoryListingService.decode(r, r.uint32());
+        m.content = new DirectoryListing.ContentOneOf({ service: DirectoryListingService.decode(r, r.uint32()) });
         break;
         case 10001:
         m.key = r.bytes();
@@ -323,57 +323,49 @@ export class DirectoryListing {
 }
 
 export namespace DirectoryListing {
-  export type IContentOneOf =
-  { media: IDirectoryListingMedia }
-  |{ service: IDirectoryListingService }
-  ;
-
-  export class ContentOneOf {
-    private _media: DirectoryListingMedia | undefined;
-    private _service: DirectoryListingService | undefined;
-    private _case: ContentCase = 0;
-
-    constructor(v?: IContentOneOf) {
-      if (v && "media" in v) this.media = new DirectoryListingMedia(v.media);
-      if (v && "service" in v) this.service = new DirectoryListingService(v.service);
-    }
-
-    public clear() {
-      this._media = undefined;
-      this._service = undefined;
-      this._case = ContentCase.NOT_SET;
-    }
-
-    get case(): ContentCase {
-      return this._case;
-    }
-
-    set media(v: DirectoryListingMedia) {
-      this.clear();
-      this._media = v;
-      this._case = ContentCase.MEDIA;
-    }
-
-    get media(): DirectoryListingMedia {
-      return this._media;
-    }
-
-    set service(v: DirectoryListingService) {
-      this.clear();
-      this._service = v;
-      this._case = ContentCase.SERVICE;
-    }
-
-    get service(): DirectoryListingService {
-      return this._service;
-    }
-  }
-
   export enum ContentCase {
     NOT_SET = 0,
     MEDIA = 1001,
     SERVICE = 1002,
   }
+
+  export type IContentOneOf =
+  { case?: ContentCase.NOT_SET }
+  |{ case?: ContentCase.MEDIA, media: IDirectoryListingMedia }
+  |{ case?: ContentCase.SERVICE, service: IDirectoryListingService }
+  ;
+
+  export type TContentOneOf = Readonly<
+  { case: ContentCase.NOT_SET }
+  |{ case: ContentCase.MEDIA, media: DirectoryListingMedia }
+  |{ case: ContentCase.SERVICE, service: DirectoryListingService }
+  >;
+
+  class ContentOneOfImpl {
+    media: DirectoryListingMedia;
+    service: DirectoryListingService;
+    case: ContentCase = ContentCase.NOT_SET;
+
+    constructor(v?: IContentOneOf) {
+      if (v && "media" in v) {
+        this.case = ContentCase.MEDIA;
+        this.media = new DirectoryListingMedia(v.media);
+      } else
+      if (v && "service" in v) {
+        this.case = ContentCase.SERVICE;
+        this.service = new DirectoryListingService(v.service);
+      }
+    }
+  }
+
+  export const ContentOneOf = ContentOneOfImpl as {
+    new (): Readonly<{ case: ContentCase.NOT_SET }>;
+    new <T extends IContentOneOf>(v: T): Readonly<
+    T extends { media: IDirectoryListingMedia } ? { case: ContentCase.MEDIA, media: DirectoryListingMedia } :
+    T extends { service: IDirectoryListingService } ? { case: ContentCase.SERVICE, service: DirectoryListingService } :
+    never
+    >;
+  };
 
 }
 
@@ -382,7 +374,7 @@ export interface IDirectoryEvent {
 }
 
 export class DirectoryEvent {
-  body: DirectoryEvent.BodyOneOf;
+  body: DirectoryEvent.TBodyOneOf;
 
   constructor(v?: IDirectoryEvent) {
     this.body = new DirectoryEvent.BodyOneOf(v?.body);
@@ -391,22 +383,22 @@ export class DirectoryEvent {
   static encode(m: DirectoryEvent, w?: Writer): Writer {
     if (!w) w = new Writer(1024);
     switch (m.body.case) {
-      case 1:
+      case DirectoryEvent.BodyCase.PUBLISH:
       DirectoryEvent.Publish.encode(m.body.publish, w.uint32(10).fork()).ldelim();
       break;
-      case 2:
+      case DirectoryEvent.BodyCase.UNPUBLISH:
       DirectoryEvent.Unpublish.encode(m.body.unpublish, w.uint32(18).fork()).ldelim();
       break;
-      case 3:
+      case DirectoryEvent.BodyCase.VIEWER_COUNT_CHANGE:
       DirectoryEvent.ViewerCountChange.encode(m.body.viewerCountChange, w.uint32(26).fork()).ldelim();
       break;
-      case 4:
+      case DirectoryEvent.BodyCase.VIEWER_STATE_CHANGE:
       DirectoryEvent.ViewerStateChange.encode(m.body.viewerStateChange, w.uint32(34).fork()).ldelim();
       break;
-      case 5:
+      case DirectoryEvent.BodyCase.PING:
       DirectoryEvent.Ping.encode(m.body.ping, w.uint32(42).fork()).ldelim();
       break;
-      case 6:
+      case DirectoryEvent.BodyCase.PADDING:
       DirectoryEvent.Padding.encode(m.body.padding, w.uint32(50).fork()).ldelim();
       break;
     }
@@ -421,22 +413,22 @@ export class DirectoryEvent {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body.publish = DirectoryEvent.Publish.decode(r, r.uint32());
+        m.body = new DirectoryEvent.BodyOneOf({ publish: DirectoryEvent.Publish.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body.unpublish = DirectoryEvent.Unpublish.decode(r, r.uint32());
+        m.body = new DirectoryEvent.BodyOneOf({ unpublish: DirectoryEvent.Unpublish.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body.viewerCountChange = DirectoryEvent.ViewerCountChange.decode(r, r.uint32());
+        m.body = new DirectoryEvent.BodyOneOf({ viewerCountChange: DirectoryEvent.ViewerCountChange.decode(r, r.uint32()) });
         break;
         case 4:
-        m.body.viewerStateChange = DirectoryEvent.ViewerStateChange.decode(r, r.uint32());
+        m.body = new DirectoryEvent.BodyOneOf({ viewerStateChange: DirectoryEvent.ViewerStateChange.decode(r, r.uint32()) });
         break;
         case 5:
-        m.body.ping = DirectoryEvent.Ping.decode(r, r.uint32());
+        m.body = new DirectoryEvent.BodyOneOf({ ping: DirectoryEvent.Ping.decode(r, r.uint32()) });
         break;
         case 6:
-        m.body.padding = DirectoryEvent.Padding.decode(r, r.uint32());
+        m.body = new DirectoryEvent.BodyOneOf({ padding: DirectoryEvent.Padding.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -448,108 +440,6 @@ export class DirectoryEvent {
 }
 
 export namespace DirectoryEvent {
-  export type IBodyOneOf =
-  { publish: DirectoryEvent.IPublish }
-  |{ unpublish: DirectoryEvent.IUnpublish }
-  |{ viewerCountChange: DirectoryEvent.IViewerCountChange }
-  |{ viewerStateChange: DirectoryEvent.IViewerStateChange }
-  |{ ping: DirectoryEvent.IPing }
-  |{ padding: DirectoryEvent.IPadding }
-  ;
-
-  export class BodyOneOf {
-    private _publish: DirectoryEvent.Publish | undefined;
-    private _unpublish: DirectoryEvent.Unpublish | undefined;
-    private _viewerCountChange: DirectoryEvent.ViewerCountChange | undefined;
-    private _viewerStateChange: DirectoryEvent.ViewerStateChange | undefined;
-    private _ping: DirectoryEvent.Ping | undefined;
-    private _padding: DirectoryEvent.Padding | undefined;
-    private _case: BodyCase = 0;
-
-    constructor(v?: IBodyOneOf) {
-      if (v && "publish" in v) this.publish = new DirectoryEvent.Publish(v.publish);
-      if (v && "unpublish" in v) this.unpublish = new DirectoryEvent.Unpublish(v.unpublish);
-      if (v && "viewerCountChange" in v) this.viewerCountChange = new DirectoryEvent.ViewerCountChange(v.viewerCountChange);
-      if (v && "viewerStateChange" in v) this.viewerStateChange = new DirectoryEvent.ViewerStateChange(v.viewerStateChange);
-      if (v && "ping" in v) this.ping = new DirectoryEvent.Ping(v.ping);
-      if (v && "padding" in v) this.padding = new DirectoryEvent.Padding(v.padding);
-    }
-
-    public clear() {
-      this._publish = undefined;
-      this._unpublish = undefined;
-      this._viewerCountChange = undefined;
-      this._viewerStateChange = undefined;
-      this._ping = undefined;
-      this._padding = undefined;
-      this._case = BodyCase.NOT_SET;
-    }
-
-    get case(): BodyCase {
-      return this._case;
-    }
-
-    set publish(v: DirectoryEvent.Publish) {
-      this.clear();
-      this._publish = v;
-      this._case = BodyCase.PUBLISH;
-    }
-
-    get publish(): DirectoryEvent.Publish {
-      return this._publish;
-    }
-
-    set unpublish(v: DirectoryEvent.Unpublish) {
-      this.clear();
-      this._unpublish = v;
-      this._case = BodyCase.UNPUBLISH;
-    }
-
-    get unpublish(): DirectoryEvent.Unpublish {
-      return this._unpublish;
-    }
-
-    set viewerCountChange(v: DirectoryEvent.ViewerCountChange) {
-      this.clear();
-      this._viewerCountChange = v;
-      this._case = BodyCase.VIEWER_COUNT_CHANGE;
-    }
-
-    get viewerCountChange(): DirectoryEvent.ViewerCountChange {
-      return this._viewerCountChange;
-    }
-
-    set viewerStateChange(v: DirectoryEvent.ViewerStateChange) {
-      this.clear();
-      this._viewerStateChange = v;
-      this._case = BodyCase.VIEWER_STATE_CHANGE;
-    }
-
-    get viewerStateChange(): DirectoryEvent.ViewerStateChange {
-      return this._viewerStateChange;
-    }
-
-    set ping(v: DirectoryEvent.Ping) {
-      this.clear();
-      this._ping = v;
-      this._case = BodyCase.PING;
-    }
-
-    get ping(): DirectoryEvent.Ping {
-      return this._ping;
-    }
-
-    set padding(v: DirectoryEvent.Padding) {
-      this.clear();
-      this._padding = v;
-      this._case = BodyCase.PADDING;
-    }
-
-    get padding(): DirectoryEvent.Padding {
-      return this._padding;
-    }
-  }
-
   export enum BodyCase {
     NOT_SET = 0,
     PUBLISH = 1,
@@ -560,8 +450,78 @@ export namespace DirectoryEvent {
     PADDING = 6,
   }
 
+  export type IBodyOneOf =
+  { case?: BodyCase.NOT_SET }
+  |{ case?: BodyCase.PUBLISH, publish: DirectoryEvent.IPublish }
+  |{ case?: BodyCase.UNPUBLISH, unpublish: DirectoryEvent.IUnpublish }
+  |{ case?: BodyCase.VIEWER_COUNT_CHANGE, viewerCountChange: DirectoryEvent.IViewerCountChange }
+  |{ case?: BodyCase.VIEWER_STATE_CHANGE, viewerStateChange: DirectoryEvent.IViewerStateChange }
+  |{ case?: BodyCase.PING, ping: DirectoryEvent.IPing }
+  |{ case?: BodyCase.PADDING, padding: DirectoryEvent.IPadding }
+  ;
+
+  export type TBodyOneOf = Readonly<
+  { case: BodyCase.NOT_SET }
+  |{ case: BodyCase.PUBLISH, publish: DirectoryEvent.Publish }
+  |{ case: BodyCase.UNPUBLISH, unpublish: DirectoryEvent.Unpublish }
+  |{ case: BodyCase.VIEWER_COUNT_CHANGE, viewerCountChange: DirectoryEvent.ViewerCountChange }
+  |{ case: BodyCase.VIEWER_STATE_CHANGE, viewerStateChange: DirectoryEvent.ViewerStateChange }
+  |{ case: BodyCase.PING, ping: DirectoryEvent.Ping }
+  |{ case: BodyCase.PADDING, padding: DirectoryEvent.Padding }
+  >;
+
+  class BodyOneOfImpl {
+    publish: DirectoryEvent.Publish;
+    unpublish: DirectoryEvent.Unpublish;
+    viewerCountChange: DirectoryEvent.ViewerCountChange;
+    viewerStateChange: DirectoryEvent.ViewerStateChange;
+    ping: DirectoryEvent.Ping;
+    padding: DirectoryEvent.Padding;
+    case: BodyCase = BodyCase.NOT_SET;
+
+    constructor(v?: IBodyOneOf) {
+      if (v && "publish" in v) {
+        this.case = BodyCase.PUBLISH;
+        this.publish = new DirectoryEvent.Publish(v.publish);
+      } else
+      if (v && "unpublish" in v) {
+        this.case = BodyCase.UNPUBLISH;
+        this.unpublish = new DirectoryEvent.Unpublish(v.unpublish);
+      } else
+      if (v && "viewerCountChange" in v) {
+        this.case = BodyCase.VIEWER_COUNT_CHANGE;
+        this.viewerCountChange = new DirectoryEvent.ViewerCountChange(v.viewerCountChange);
+      } else
+      if (v && "viewerStateChange" in v) {
+        this.case = BodyCase.VIEWER_STATE_CHANGE;
+        this.viewerStateChange = new DirectoryEvent.ViewerStateChange(v.viewerStateChange);
+      } else
+      if (v && "ping" in v) {
+        this.case = BodyCase.PING;
+        this.ping = new DirectoryEvent.Ping(v.ping);
+      } else
+      if (v && "padding" in v) {
+        this.case = BodyCase.PADDING;
+        this.padding = new DirectoryEvent.Padding(v.padding);
+      }
+    }
+  }
+
+  export const BodyOneOf = BodyOneOfImpl as {
+    new (): Readonly<{ case: BodyCase.NOT_SET }>;
+    new <T extends IBodyOneOf>(v: T): Readonly<
+    T extends { publish: DirectoryEvent.IPublish } ? { case: BodyCase.PUBLISH, publish: DirectoryEvent.Publish } :
+    T extends { unpublish: DirectoryEvent.IUnpublish } ? { case: BodyCase.UNPUBLISH, unpublish: DirectoryEvent.Unpublish } :
+    T extends { viewerCountChange: DirectoryEvent.IViewerCountChange } ? { case: BodyCase.VIEWER_COUNT_CHANGE, viewerCountChange: DirectoryEvent.ViewerCountChange } :
+    T extends { viewerStateChange: DirectoryEvent.IViewerStateChange } ? { case: BodyCase.VIEWER_STATE_CHANGE, viewerStateChange: DirectoryEvent.ViewerStateChange } :
+    T extends { ping: DirectoryEvent.IPing } ? { case: BodyCase.PING, ping: DirectoryEvent.Ping } :
+    T extends { padding: DirectoryEvent.IPadding } ? { case: BodyCase.PADDING, padding: DirectoryEvent.Padding } :
+    never
+    >;
+  };
+
   export interface IPublish {
-    listing?: IDirectoryListing;
+    listing?: IDirectoryListing | undefined;
   }
 
   export class Publish {
@@ -800,7 +760,7 @@ export namespace DirectoryEvent {
 }
 
 export interface IDirectoryPublishRequest {
-  listing?: IDirectoryListing;
+  listing?: IDirectoryListing | undefined;
 }
 
 export class DirectoryPublishRequest {
@@ -1100,7 +1060,7 @@ export class DirectoryFrontendOpenRequest {
 }
 
 export interface IDirectoryFrontendOpenResponse {
-  event?: IDirectoryEvent;
+  event?: IDirectoryEvent | undefined;
 }
 
 export class DirectoryFrontendOpenResponse {

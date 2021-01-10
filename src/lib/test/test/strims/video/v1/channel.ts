@@ -16,9 +16,9 @@ import {
 
 export interface IVideoChannel {
   id?: bigint;
-  key?: strims_type_IKey;
+  key?: strims_type_IKey | undefined;
   token?: Uint8Array;
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
+  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
   owner?: VideoChannel.IOwnerOneOf
 }
 
@@ -27,7 +27,7 @@ export class VideoChannel {
   key: strims_type_Key | undefined;
   token: Uint8Array = new Uint8Array();
   directoryListingSnippet: strims_network_v1_DirectoryListingSnippet | undefined;
-  owner: VideoChannel.OwnerOneOf;
+  owner: VideoChannel.TOwnerOneOf;
 
   constructor(v?: IVideoChannel) {
     this.id = v?.id || BigInt(0);
@@ -44,13 +44,13 @@ export class VideoChannel {
     if (m.token) w.uint32(26).bytes(m.token);
     if (m.directoryListingSnippet) strims_network_v1_DirectoryListingSnippet.encode(m.directoryListingSnippet, w.uint32(34).fork()).ldelim();
     switch (m.owner.case) {
-      case 1001:
+      case VideoChannel.OwnerCase.LOCAL:
       VideoChannel.Local.encode(m.owner.local, w.uint32(8010).fork()).ldelim();
       break;
-      case 1002:
+      case VideoChannel.OwnerCase.LOCAL_SHARE:
       VideoChannel.LocalShare.encode(m.owner.localShare, w.uint32(8018).fork()).ldelim();
       break;
-      case 1003:
+      case VideoChannel.OwnerCase.REMOTE_SHARE:
       VideoChannel.RemoteShare.encode(m.owner.remoteShare, w.uint32(8026).fork()).ldelim();
       break;
     }
@@ -68,13 +68,13 @@ export class VideoChannel {
         m.id = r.uint64();
         break;
         case 1001:
-        m.owner.local = VideoChannel.Local.decode(r, r.uint32());
+        m.owner = new VideoChannel.OwnerOneOf({ local: VideoChannel.Local.decode(r, r.uint32()) });
         break;
         case 1002:
-        m.owner.localShare = VideoChannel.LocalShare.decode(r, r.uint32());
+        m.owner = new VideoChannel.OwnerOneOf({ localShare: VideoChannel.LocalShare.decode(r, r.uint32()) });
         break;
         case 1003:
-        m.owner.remoteShare = VideoChannel.RemoteShare.decode(r, r.uint32());
+        m.owner = new VideoChannel.OwnerOneOf({ remoteShare: VideoChannel.RemoteShare.decode(r, r.uint32()) });
         break;
         case 2:
         m.key = strims_type_Key.decode(r, r.uint32());
@@ -95,72 +95,58 @@ export class VideoChannel {
 }
 
 export namespace VideoChannel {
-  export type IOwnerOneOf =
-  { local: VideoChannel.ILocal }
-  |{ localShare: VideoChannel.ILocalShare }
-  |{ remoteShare: VideoChannel.IRemoteShare }
-  ;
-
-  export class OwnerOneOf {
-    private _local: VideoChannel.Local | undefined;
-    private _localShare: VideoChannel.LocalShare | undefined;
-    private _remoteShare: VideoChannel.RemoteShare | undefined;
-    private _case: OwnerCase = 0;
-
-    constructor(v?: IOwnerOneOf) {
-      if (v && "local" in v) this.local = new VideoChannel.Local(v.local);
-      if (v && "localShare" in v) this.localShare = new VideoChannel.LocalShare(v.localShare);
-      if (v && "remoteShare" in v) this.remoteShare = new VideoChannel.RemoteShare(v.remoteShare);
-    }
-
-    public clear() {
-      this._local = undefined;
-      this._localShare = undefined;
-      this._remoteShare = undefined;
-      this._case = OwnerCase.NOT_SET;
-    }
-
-    get case(): OwnerCase {
-      return this._case;
-    }
-
-    set local(v: VideoChannel.Local) {
-      this.clear();
-      this._local = v;
-      this._case = OwnerCase.LOCAL;
-    }
-
-    get local(): VideoChannel.Local {
-      return this._local;
-    }
-
-    set localShare(v: VideoChannel.LocalShare) {
-      this.clear();
-      this._localShare = v;
-      this._case = OwnerCase.LOCAL_SHARE;
-    }
-
-    get localShare(): VideoChannel.LocalShare {
-      return this._localShare;
-    }
-
-    set remoteShare(v: VideoChannel.RemoteShare) {
-      this.clear();
-      this._remoteShare = v;
-      this._case = OwnerCase.REMOTE_SHARE;
-    }
-
-    get remoteShare(): VideoChannel.RemoteShare {
-      return this._remoteShare;
-    }
-  }
-
   export enum OwnerCase {
     NOT_SET = 0,
     LOCAL = 1001,
     LOCAL_SHARE = 1002,
     REMOTE_SHARE = 1003,
   }
+
+  export type IOwnerOneOf =
+  { case?: OwnerCase.NOT_SET }
+  |{ case?: OwnerCase.LOCAL, local: VideoChannel.ILocal }
+  |{ case?: OwnerCase.LOCAL_SHARE, localShare: VideoChannel.ILocalShare }
+  |{ case?: OwnerCase.REMOTE_SHARE, remoteShare: VideoChannel.IRemoteShare }
+  ;
+
+  export type TOwnerOneOf = Readonly<
+  { case: OwnerCase.NOT_SET }
+  |{ case: OwnerCase.LOCAL, local: VideoChannel.Local }
+  |{ case: OwnerCase.LOCAL_SHARE, localShare: VideoChannel.LocalShare }
+  |{ case: OwnerCase.REMOTE_SHARE, remoteShare: VideoChannel.RemoteShare }
+  >;
+
+  class OwnerOneOfImpl {
+    local: VideoChannel.Local;
+    localShare: VideoChannel.LocalShare;
+    remoteShare: VideoChannel.RemoteShare;
+    case: OwnerCase = OwnerCase.NOT_SET;
+
+    constructor(v?: IOwnerOneOf) {
+      if (v && "local" in v) {
+        this.case = OwnerCase.LOCAL;
+        this.local = new VideoChannel.Local(v.local);
+      } else
+      if (v && "localShare" in v) {
+        this.case = OwnerCase.LOCAL_SHARE;
+        this.localShare = new VideoChannel.LocalShare(v.localShare);
+      } else
+      if (v && "remoteShare" in v) {
+        this.case = OwnerCase.REMOTE_SHARE;
+        this.remoteShare = new VideoChannel.RemoteShare(v.remoteShare);
+      }
+    }
+  }
+
+  export const OwnerOneOf = OwnerOneOfImpl as {
+    new (): Readonly<{ case: OwnerCase.NOT_SET }>;
+    new <T extends IOwnerOneOf>(v: T): Readonly<
+    T extends { local: VideoChannel.ILocal } ? { case: OwnerCase.LOCAL, local: VideoChannel.Local } :
+    T extends { localShare: VideoChannel.ILocalShare } ? { case: OwnerCase.LOCAL_SHARE, localShare: VideoChannel.LocalShare } :
+    T extends { remoteShare: VideoChannel.IRemoteShare } ? { case: OwnerCase.REMOTE_SHARE, remoteShare: VideoChannel.RemoteShare } :
+    never
+    >;
+  };
 
   export interface ILocal {
     authKey?: Uint8Array;
@@ -206,7 +192,7 @@ export namespace VideoChannel {
   }
 
   export interface ILocalShare {
-    certificate?: strims_type_ICertificate;
+    certificate?: strims_type_ICertificate | undefined;
   }
 
   export class LocalShare {
@@ -364,7 +350,7 @@ export class VideoChannelListResponse {
 }
 
 export interface IVideoChannelCreateRequest {
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
+  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
   networkKey?: Uint8Array;
 }
 
@@ -407,7 +393,7 @@ export class VideoChannelCreateRequest {
 }
 
 export interface IVideoChannelCreateResponse {
-  channel?: IVideoChannel;
+  channel?: IVideoChannel | undefined;
 }
 
 export class VideoChannelCreateResponse {
@@ -444,7 +430,7 @@ export class VideoChannelCreateResponse {
 
 export interface IVideoChannelUpdateRequest {
   id?: bigint;
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
+  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
   networkKey?: Uint8Array;
 }
 
@@ -493,7 +479,7 @@ export class VideoChannelUpdateRequest {
 }
 
 export interface IVideoChannelUpdateResponse {
-  channel?: IVideoChannel;
+  channel?: IVideoChannel | undefined;
 }
 
 export class VideoChannelUpdateResponse {

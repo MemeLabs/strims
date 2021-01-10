@@ -7,7 +7,7 @@ export interface IPeerExchangeMessage {
 }
 
 export class PeerExchangeMessage {
-  body: PeerExchangeMessage.BodyOneOf;
+  body: PeerExchangeMessage.TBodyOneOf;
 
   constructor(v?: IPeerExchangeMessage) {
     this.body = new PeerExchangeMessage.BodyOneOf(v?.body);
@@ -16,22 +16,22 @@ export class PeerExchangeMessage {
   static encode(m: PeerExchangeMessage, w?: Writer): Writer {
     if (!w) w = new Writer(1024);
     switch (m.body.case) {
-      case 1:
+      case PeerExchangeMessage.BodyCase.REQUEST:
       PeerExchangeMessage.Request.encode(m.body.request, w.uint32(10).fork()).ldelim();
       break;
-      case 2:
+      case PeerExchangeMessage.BodyCase.RESPONSE:
       PeerExchangeMessage.Response.encode(m.body.response, w.uint32(18).fork()).ldelim();
       break;
-      case 3:
+      case PeerExchangeMessage.BodyCase.OFFER:
       PeerExchangeMessage.Offer.encode(m.body.offer, w.uint32(26).fork()).ldelim();
       break;
-      case 4:
+      case PeerExchangeMessage.BodyCase.ANSWER:
       PeerExchangeMessage.Answer.encode(m.body.answer, w.uint32(34).fork()).ldelim();
       break;
-      case 5:
+      case PeerExchangeMessage.BodyCase.ICE_CANDIDATE:
       PeerExchangeMessage.IceCandidate.encode(m.body.iceCandidate, w.uint32(42).fork()).ldelim();
       break;
-      case 6:
+      case PeerExchangeMessage.BodyCase.CALLBACK_REQUEST:
       PeerExchangeMessage.CallbackRequest.encode(m.body.callbackRequest, w.uint32(50).fork()).ldelim();
       break;
     }
@@ -46,22 +46,22 @@ export class PeerExchangeMessage {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body.request = PeerExchangeMessage.Request.decode(r, r.uint32());
+        m.body = new PeerExchangeMessage.BodyOneOf({ request: PeerExchangeMessage.Request.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body.response = PeerExchangeMessage.Response.decode(r, r.uint32());
+        m.body = new PeerExchangeMessage.BodyOneOf({ response: PeerExchangeMessage.Response.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body.offer = PeerExchangeMessage.Offer.decode(r, r.uint32());
+        m.body = new PeerExchangeMessage.BodyOneOf({ offer: PeerExchangeMessage.Offer.decode(r, r.uint32()) });
         break;
         case 4:
-        m.body.answer = PeerExchangeMessage.Answer.decode(r, r.uint32());
+        m.body = new PeerExchangeMessage.BodyOneOf({ answer: PeerExchangeMessage.Answer.decode(r, r.uint32()) });
         break;
         case 5:
-        m.body.iceCandidate = PeerExchangeMessage.IceCandidate.decode(r, r.uint32());
+        m.body = new PeerExchangeMessage.BodyOneOf({ iceCandidate: PeerExchangeMessage.IceCandidate.decode(r, r.uint32()) });
         break;
         case 6:
-        m.body.callbackRequest = PeerExchangeMessage.CallbackRequest.decode(r, r.uint32());
+        m.body = new PeerExchangeMessage.BodyOneOf({ callbackRequest: PeerExchangeMessage.CallbackRequest.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -73,108 +73,6 @@ export class PeerExchangeMessage {
 }
 
 export namespace PeerExchangeMessage {
-  export type IBodyOneOf =
-  { request: PeerExchangeMessage.IRequest }
-  |{ response: PeerExchangeMessage.IResponse }
-  |{ offer: PeerExchangeMessage.IOffer }
-  |{ answer: PeerExchangeMessage.IAnswer }
-  |{ iceCandidate: PeerExchangeMessage.IIceCandidate }
-  |{ callbackRequest: PeerExchangeMessage.ICallbackRequest }
-  ;
-
-  export class BodyOneOf {
-    private _request: PeerExchangeMessage.Request | undefined;
-    private _response: PeerExchangeMessage.Response | undefined;
-    private _offer: PeerExchangeMessage.Offer | undefined;
-    private _answer: PeerExchangeMessage.Answer | undefined;
-    private _iceCandidate: PeerExchangeMessage.IceCandidate | undefined;
-    private _callbackRequest: PeerExchangeMessage.CallbackRequest | undefined;
-    private _case: BodyCase = 0;
-
-    constructor(v?: IBodyOneOf) {
-      if (v && "request" in v) this.request = new PeerExchangeMessage.Request(v.request);
-      if (v && "response" in v) this.response = new PeerExchangeMessage.Response(v.response);
-      if (v && "offer" in v) this.offer = new PeerExchangeMessage.Offer(v.offer);
-      if (v && "answer" in v) this.answer = new PeerExchangeMessage.Answer(v.answer);
-      if (v && "iceCandidate" in v) this.iceCandidate = new PeerExchangeMessage.IceCandidate(v.iceCandidate);
-      if (v && "callbackRequest" in v) this.callbackRequest = new PeerExchangeMessage.CallbackRequest(v.callbackRequest);
-    }
-
-    public clear() {
-      this._request = undefined;
-      this._response = undefined;
-      this._offer = undefined;
-      this._answer = undefined;
-      this._iceCandidate = undefined;
-      this._callbackRequest = undefined;
-      this._case = BodyCase.NOT_SET;
-    }
-
-    get case(): BodyCase {
-      return this._case;
-    }
-
-    set request(v: PeerExchangeMessage.Request) {
-      this.clear();
-      this._request = v;
-      this._case = BodyCase.REQUEST;
-    }
-
-    get request(): PeerExchangeMessage.Request {
-      return this._request;
-    }
-
-    set response(v: PeerExchangeMessage.Response) {
-      this.clear();
-      this._response = v;
-      this._case = BodyCase.RESPONSE;
-    }
-
-    get response(): PeerExchangeMessage.Response {
-      return this._response;
-    }
-
-    set offer(v: PeerExchangeMessage.Offer) {
-      this.clear();
-      this._offer = v;
-      this._case = BodyCase.OFFER;
-    }
-
-    get offer(): PeerExchangeMessage.Offer {
-      return this._offer;
-    }
-
-    set answer(v: PeerExchangeMessage.Answer) {
-      this.clear();
-      this._answer = v;
-      this._case = BodyCase.ANSWER;
-    }
-
-    get answer(): PeerExchangeMessage.Answer {
-      return this._answer;
-    }
-
-    set iceCandidate(v: PeerExchangeMessage.IceCandidate) {
-      this.clear();
-      this._iceCandidate = v;
-      this._case = BodyCase.ICE_CANDIDATE;
-    }
-
-    get iceCandidate(): PeerExchangeMessage.IceCandidate {
-      return this._iceCandidate;
-    }
-
-    set callbackRequest(v: PeerExchangeMessage.CallbackRequest) {
-      this.clear();
-      this._callbackRequest = v;
-      this._case = BodyCase.CALLBACK_REQUEST;
-    }
-
-    get callbackRequest(): PeerExchangeMessage.CallbackRequest {
-      return this._callbackRequest;
-    }
-  }
-
   export enum BodyCase {
     NOT_SET = 0,
     REQUEST = 1,
@@ -184,6 +82,76 @@ export namespace PeerExchangeMessage {
     ICE_CANDIDATE = 5,
     CALLBACK_REQUEST = 6,
   }
+
+  export type IBodyOneOf =
+  { case?: BodyCase.NOT_SET }
+  |{ case?: BodyCase.REQUEST, request: PeerExchangeMessage.IRequest }
+  |{ case?: BodyCase.RESPONSE, response: PeerExchangeMessage.IResponse }
+  |{ case?: BodyCase.OFFER, offer: PeerExchangeMessage.IOffer }
+  |{ case?: BodyCase.ANSWER, answer: PeerExchangeMessage.IAnswer }
+  |{ case?: BodyCase.ICE_CANDIDATE, iceCandidate: PeerExchangeMessage.IIceCandidate }
+  |{ case?: BodyCase.CALLBACK_REQUEST, callbackRequest: PeerExchangeMessage.ICallbackRequest }
+  ;
+
+  export type TBodyOneOf = Readonly<
+  { case: BodyCase.NOT_SET }
+  |{ case: BodyCase.REQUEST, request: PeerExchangeMessage.Request }
+  |{ case: BodyCase.RESPONSE, response: PeerExchangeMessage.Response }
+  |{ case: BodyCase.OFFER, offer: PeerExchangeMessage.Offer }
+  |{ case: BodyCase.ANSWER, answer: PeerExchangeMessage.Answer }
+  |{ case: BodyCase.ICE_CANDIDATE, iceCandidate: PeerExchangeMessage.IceCandidate }
+  |{ case: BodyCase.CALLBACK_REQUEST, callbackRequest: PeerExchangeMessage.CallbackRequest }
+  >;
+
+  class BodyOneOfImpl {
+    request: PeerExchangeMessage.Request;
+    response: PeerExchangeMessage.Response;
+    offer: PeerExchangeMessage.Offer;
+    answer: PeerExchangeMessage.Answer;
+    iceCandidate: PeerExchangeMessage.IceCandidate;
+    callbackRequest: PeerExchangeMessage.CallbackRequest;
+    case: BodyCase = BodyCase.NOT_SET;
+
+    constructor(v?: IBodyOneOf) {
+      if (v && "request" in v) {
+        this.case = BodyCase.REQUEST;
+        this.request = new PeerExchangeMessage.Request(v.request);
+      } else
+      if (v && "response" in v) {
+        this.case = BodyCase.RESPONSE;
+        this.response = new PeerExchangeMessage.Response(v.response);
+      } else
+      if (v && "offer" in v) {
+        this.case = BodyCase.OFFER;
+        this.offer = new PeerExchangeMessage.Offer(v.offer);
+      } else
+      if (v && "answer" in v) {
+        this.case = BodyCase.ANSWER;
+        this.answer = new PeerExchangeMessage.Answer(v.answer);
+      } else
+      if (v && "iceCandidate" in v) {
+        this.case = BodyCase.ICE_CANDIDATE;
+        this.iceCandidate = new PeerExchangeMessage.IceCandidate(v.iceCandidate);
+      } else
+      if (v && "callbackRequest" in v) {
+        this.case = BodyCase.CALLBACK_REQUEST;
+        this.callbackRequest = new PeerExchangeMessage.CallbackRequest(v.callbackRequest);
+      }
+    }
+  }
+
+  export const BodyOneOf = BodyOneOfImpl as {
+    new (): Readonly<{ case: BodyCase.NOT_SET }>;
+    new <T extends IBodyOneOf>(v: T): Readonly<
+    T extends { request: PeerExchangeMessage.IRequest } ? { case: BodyCase.REQUEST, request: PeerExchangeMessage.Request } :
+    T extends { response: PeerExchangeMessage.IResponse } ? { case: BodyCase.RESPONSE, response: PeerExchangeMessage.Response } :
+    T extends { offer: PeerExchangeMessage.IOffer } ? { case: BodyCase.OFFER, offer: PeerExchangeMessage.Offer } :
+    T extends { answer: PeerExchangeMessage.IAnswer } ? { case: BodyCase.ANSWER, answer: PeerExchangeMessage.Answer } :
+    T extends { iceCandidate: PeerExchangeMessage.IIceCandidate } ? { case: BodyCase.ICE_CANDIDATE, iceCandidate: PeerExchangeMessage.IceCandidate } :
+    T extends { callbackRequest: PeerExchangeMessage.ICallbackRequest } ? { case: BodyCase.CALLBACK_REQUEST, callbackRequest: PeerExchangeMessage.CallbackRequest } :
+    never
+    >;
+  };
 
   export interface IRequest {
     count?: number;

@@ -201,7 +201,7 @@ export class VideoIngressGetConfigRequest {
 }
 
 export interface IVideoIngressGetConfigResponse {
-  config?: IVideoIngressConfig;
+  config?: IVideoIngressConfig | undefined;
 }
 
 export class VideoIngressGetConfigResponse {
@@ -237,7 +237,7 @@ export class VideoIngressGetConfigResponse {
 }
 
 export interface IVideoIngressSetConfigRequest {
-  config?: IVideoIngressConfig;
+  config?: IVideoIngressConfig | undefined;
 }
 
 export class VideoIngressSetConfigRequest {
@@ -273,7 +273,7 @@ export class VideoIngressSetConfigRequest {
 }
 
 export interface IVideoIngressSetConfigResponse {
-  config?: IVideoIngressConfig;
+  config?: IVideoIngressConfig | undefined;
 }
 
 export class VideoIngressSetConfigResponse {
@@ -451,7 +451,7 @@ export class VideoIngressGetChannelURLResponse {
 }
 
 export interface IVideoIngressShareCreateChannelRequest {
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
+  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
 }
 
 export class VideoIngressShareCreateChannelRequest {
@@ -487,7 +487,7 @@ export class VideoIngressShareCreateChannelRequest {
 }
 
 export interface IVideoIngressShareCreateChannelResponse {
-  channel?: strims_video_v1_IVideoChannel;
+  channel?: strims_video_v1_IVideoChannel | undefined;
 }
 
 export class VideoIngressShareCreateChannelResponse {
@@ -523,7 +523,7 @@ export class VideoIngressShareCreateChannelResponse {
 }
 
 export interface IVideoIngressShareUpdateChannelRequest {
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
+  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
 }
 
 export class VideoIngressShareUpdateChannelRequest {
@@ -559,7 +559,7 @@ export class VideoIngressShareUpdateChannelRequest {
 }
 
 export interface IVideoIngressShareUpdateChannelResponse {
-  channel?: strims_video_v1_IVideoChannel;
+  channel?: strims_video_v1_IVideoChannel | undefined;
 }
 
 export class VideoIngressShareUpdateChannelResponse {

@@ -55,7 +55,7 @@ export class NetworkIcon {
 
 export interface ICreateNetworkRequest {
   name?: string;
-  icon?: INetworkIcon;
+  icon?: INetworkIcon | undefined;
 }
 
 export class CreateNetworkRequest {
@@ -97,7 +97,7 @@ export class CreateNetworkRequest {
 }
 
 export interface ICreateNetworkResponse {
-  network?: INetwork;
+  network?: INetwork | undefined;
 }
 
 export class CreateNetworkResponse {
@@ -176,7 +176,7 @@ export class UpdateNetworkRequest {
 }
 
 export interface IUpdateNetworkResponse {
-  network?: INetwork;
+  network?: INetwork | undefined;
 }
 
 export class UpdateNetworkResponse {
@@ -304,7 +304,7 @@ export class GetNetworkRequest {
 }
 
 export interface IGetNetworkResponse {
-  network?: INetwork;
+  network?: INetwork | undefined;
 }
 
 export class GetNetworkResponse {
@@ -398,9 +398,9 @@ export class ListNetworksResponse {
 export interface INetwork {
   id?: bigint;
   name?: string;
-  key?: strims_type_IKey;
-  certificate?: strims_type_ICertificate;
-  icon?: INetworkIcon;
+  key?: strims_type_IKey | undefined;
+  certificate?: strims_type_ICertificate | undefined;
+  icon?: INetworkIcon | undefined;
   altProfileName?: string;
 }
 
@@ -467,8 +467,8 @@ export class Network {
 }
 
 export interface ICreateNetworkInvitationRequest {
-  signingKey?: strims_type_IKey;
-  signingCert?: strims_type_ICertificate;
+  signingKey?: strims_type_IKey | undefined;
+  signingCert?: strims_type_ICertificate | undefined;
   networkName?: string;
 }
 
@@ -517,7 +517,7 @@ export class CreateNetworkInvitationRequest {
 }
 
 export interface ICreateNetworkInvitationResponse {
-  invitation?: IInvitation;
+  invitation?: IInvitation | undefined;
   invitationB64?: string;
   invitationBytes?: Uint8Array;
 }
@@ -610,8 +610,8 @@ export class Invitation {
 }
 
 export interface IInvitationV0 {
-  key?: strims_type_IKey;
-  certificate?: strims_type_ICertificate;
+  key?: strims_type_IKey | undefined;
+  certificate?: strims_type_ICertificate | undefined;
   networkName?: string;
 }
 
@@ -664,7 +664,7 @@ export interface ICreateNetworkFromInvitationRequest {
 }
 
 export class CreateNetworkFromInvitationRequest {
-  invitation: CreateNetworkFromInvitationRequest.InvitationOneOf;
+  invitation: CreateNetworkFromInvitationRequest.TInvitationOneOf;
 
   constructor(v?: ICreateNetworkFromInvitationRequest) {
     this.invitation = new CreateNetworkFromInvitationRequest.InvitationOneOf(v?.invitation);
@@ -673,10 +673,10 @@ export class CreateNetworkFromInvitationRequest {
   static encode(m: CreateNetworkFromInvitationRequest, w?: Writer): Writer {
     if (!w) w = new Writer(1024);
     switch (m.invitation.case) {
-      case 1:
+      case CreateNetworkFromInvitationRequest.InvitationCase.INVITATION_B64:
       w.uint32(10).string(m.invitation.invitationB64);
       break;
-      case 2:
+      case CreateNetworkFromInvitationRequest.InvitationCase.INVITATION_BYTES:
       w.uint32(18).bytes(m.invitation.invitationBytes);
       break;
     }
@@ -691,10 +691,10 @@ export class CreateNetworkFromInvitationRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.invitation.invitationB64 = r.string();
+        m.invitation = new CreateNetworkFromInvitationRequest.InvitationOneOf({ invitationB64: r.string() });
         break;
         case 2:
-        m.invitation.invitationBytes = r.bytes();
+        m.invitation = new CreateNetworkFromInvitationRequest.InvitationOneOf({ invitationBytes: r.bytes() });
         break;
         default:
         r.skipType(tag & 7);
@@ -706,62 +706,54 @@ export class CreateNetworkFromInvitationRequest {
 }
 
 export namespace CreateNetworkFromInvitationRequest {
-  export type IInvitationOneOf =
-  { invitationB64: string }
-  |{ invitationBytes: Uint8Array }
-  ;
-
-  export class InvitationOneOf {
-    private _invitationB64: string = "";
-    private _invitationBytes: Uint8Array = new Uint8Array();
-    private _case: InvitationCase = 0;
-
-    constructor(v?: IInvitationOneOf) {
-      if (v && "invitationB64" in v) this.invitationB64 = v.invitationB64;
-      if (v && "invitationBytes" in v) this.invitationBytes = v.invitationBytes;
-    }
-
-    public clear() {
-      this._invitationB64 = "";
-      this._invitationBytes = new Uint8Array();
-      this._case = InvitationCase.NOT_SET;
-    }
-
-    get case(): InvitationCase {
-      return this._case;
-    }
-
-    set invitationB64(v: string) {
-      this.clear();
-      this._invitationB64 = v;
-      this._case = InvitationCase.INVITATION_B64;
-    }
-
-    get invitationB64(): string {
-      return this._invitationB64;
-    }
-
-    set invitationBytes(v: Uint8Array) {
-      this.clear();
-      this._invitationBytes = v;
-      this._case = InvitationCase.INVITATION_BYTES;
-    }
-
-    get invitationBytes(): Uint8Array {
-      return this._invitationBytes;
-    }
-  }
-
   export enum InvitationCase {
     NOT_SET = 0,
     INVITATION_B64 = 1,
     INVITATION_BYTES = 2,
   }
 
+  export type IInvitationOneOf =
+  { case?: InvitationCase.NOT_SET }
+  |{ case?: InvitationCase.INVITATION_B64, invitationB64: string }
+  |{ case?: InvitationCase.INVITATION_BYTES, invitationBytes: Uint8Array }
+  ;
+
+  export type TInvitationOneOf = Readonly<
+  { case: InvitationCase.NOT_SET }
+  |{ case: InvitationCase.INVITATION_B64, invitationB64: string }
+  |{ case: InvitationCase.INVITATION_BYTES, invitationBytes: Uint8Array }
+  >;
+
+  class InvitationOneOfImpl {
+    invitationB64: string;
+    invitationBytes: Uint8Array;
+    case: InvitationCase = InvitationCase.NOT_SET;
+
+    constructor(v?: IInvitationOneOf) {
+      if (v && "invitationB64" in v) {
+        this.case = InvitationCase.INVITATION_B64;
+        this.invitationB64 = v.invitationB64;
+      } else
+      if (v && "invitationBytes" in v) {
+        this.case = InvitationCase.INVITATION_BYTES;
+        this.invitationBytes = v.invitationBytes;
+      }
+    }
+  }
+
+  export const InvitationOneOf = InvitationOneOfImpl as {
+    new (): Readonly<{ case: InvitationCase.NOT_SET }>;
+    new <T extends IInvitationOneOf>(v: T): Readonly<
+    T extends { invitationB64: string } ? { case: InvitationCase.INVITATION_B64, invitationB64: string } :
+    T extends { invitationBytes: Uint8Array } ? { case: InvitationCase.INVITATION_BYTES, invitationBytes: Uint8Array } :
+    never
+    >;
+  };
+
 }
 
 export interface ICreateNetworkFromInvitationResponse {
-  network?: INetwork;
+  network?: INetwork | undefined;
 }
 
 export class CreateNetworkFromInvitationResponse {

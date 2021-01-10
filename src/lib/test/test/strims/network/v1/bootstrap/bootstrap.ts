@@ -17,7 +17,7 @@ export interface IBootstrapClient {
 
 export class BootstrapClient {
   id: bigint = BigInt(0);
-  clientOptions: BootstrapClient.ClientOptionsOneOf;
+  clientOptions: BootstrapClient.TClientOptionsOneOf;
 
   constructor(v?: IBootstrapClient) {
     this.id = v?.id || BigInt(0);
@@ -28,7 +28,7 @@ export class BootstrapClient {
     if (!w) w = new Writer(1024);
     if (m.id) w.uint32(8).uint64(m.id);
     switch (m.clientOptions.case) {
-      case 2:
+      case BootstrapClient.ClientOptionsCase.WEBSOCKET_OPTIONS:
       BootstrapClientWebSocketOptions.encode(m.clientOptions.websocketOptions, w.uint32(18).fork()).ldelim();
       break;
     }
@@ -46,7 +46,7 @@ export class BootstrapClient {
         m.id = r.uint64();
         break;
         case 2:
-        m.clientOptions.websocketOptions = BootstrapClientWebSocketOptions.decode(r, r.uint32());
+        m.clientOptions = new BootstrapClient.ClientOptionsOneOf({ websocketOptions: BootstrapClientWebSocketOptions.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -58,42 +58,40 @@ export class BootstrapClient {
 }
 
 export namespace BootstrapClient {
-  export type IClientOptionsOneOf =
-  { websocketOptions: IBootstrapClientWebSocketOptions }
-  ;
-
-  export class ClientOptionsOneOf {
-    private _websocketOptions: BootstrapClientWebSocketOptions | undefined;
-    private _case: ClientOptionsCase = 0;
-
-    constructor(v?: IClientOptionsOneOf) {
-      if (v && "websocketOptions" in v) this.websocketOptions = new BootstrapClientWebSocketOptions(v.websocketOptions);
-    }
-
-    public clear() {
-      this._websocketOptions = undefined;
-      this._case = ClientOptionsCase.NOT_SET;
-    }
-
-    get case(): ClientOptionsCase {
-      return this._case;
-    }
-
-    set websocketOptions(v: BootstrapClientWebSocketOptions) {
-      this.clear();
-      this._websocketOptions = v;
-      this._case = ClientOptionsCase.WEBSOCKET_OPTIONS;
-    }
-
-    get websocketOptions(): BootstrapClientWebSocketOptions {
-      return this._websocketOptions;
-    }
-  }
-
   export enum ClientOptionsCase {
     NOT_SET = 0,
     WEBSOCKET_OPTIONS = 2,
   }
+
+  export type IClientOptionsOneOf =
+  { case?: ClientOptionsCase.NOT_SET }
+  |{ case?: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: IBootstrapClientWebSocketOptions }
+  ;
+
+  export type TClientOptionsOneOf = Readonly<
+  { case: ClientOptionsCase.NOT_SET }
+  |{ case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: BootstrapClientWebSocketOptions }
+  >;
+
+  class ClientOptionsOneOfImpl {
+    websocketOptions: BootstrapClientWebSocketOptions;
+    case: ClientOptionsCase = ClientOptionsCase.NOT_SET;
+
+    constructor(v?: IClientOptionsOneOf) {
+      if (v && "websocketOptions" in v) {
+        this.case = ClientOptionsCase.WEBSOCKET_OPTIONS;
+        this.websocketOptions = new BootstrapClientWebSocketOptions(v.websocketOptions);
+      }
+    }
+  }
+
+  export const ClientOptionsOneOf = ClientOptionsOneOfImpl as {
+    new (): Readonly<{ case: ClientOptionsCase.NOT_SET }>;
+    new <T extends IClientOptionsOneOf>(v: T): Readonly<
+    T extends { websocketOptions: IBootstrapClientWebSocketOptions } ? { case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: BootstrapClientWebSocketOptions } :
+    never
+    >;
+  };
 
 }
 
@@ -145,7 +143,7 @@ export interface ICreateBootstrapClientRequest {
 }
 
 export class CreateBootstrapClientRequest {
-  clientOptions: CreateBootstrapClientRequest.ClientOptionsOneOf;
+  clientOptions: CreateBootstrapClientRequest.TClientOptionsOneOf;
 
   constructor(v?: ICreateBootstrapClientRequest) {
     this.clientOptions = new CreateBootstrapClientRequest.ClientOptionsOneOf(v?.clientOptions);
@@ -154,7 +152,7 @@ export class CreateBootstrapClientRequest {
   static encode(m: CreateBootstrapClientRequest, w?: Writer): Writer {
     if (!w) w = new Writer(1024);
     switch (m.clientOptions.case) {
-      case 1:
+      case CreateBootstrapClientRequest.ClientOptionsCase.WEBSOCKET_OPTIONS:
       BootstrapClientWebSocketOptions.encode(m.clientOptions.websocketOptions, w.uint32(10).fork()).ldelim();
       break;
     }
@@ -169,7 +167,7 @@ export class CreateBootstrapClientRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.clientOptions.websocketOptions = BootstrapClientWebSocketOptions.decode(r, r.uint32());
+        m.clientOptions = new CreateBootstrapClientRequest.ClientOptionsOneOf({ websocketOptions: BootstrapClientWebSocketOptions.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -181,47 +179,45 @@ export class CreateBootstrapClientRequest {
 }
 
 export namespace CreateBootstrapClientRequest {
-  export type IClientOptionsOneOf =
-  { websocketOptions: IBootstrapClientWebSocketOptions }
-  ;
-
-  export class ClientOptionsOneOf {
-    private _websocketOptions: BootstrapClientWebSocketOptions | undefined;
-    private _case: ClientOptionsCase = 0;
-
-    constructor(v?: IClientOptionsOneOf) {
-      if (v && "websocketOptions" in v) this.websocketOptions = new BootstrapClientWebSocketOptions(v.websocketOptions);
-    }
-
-    public clear() {
-      this._websocketOptions = undefined;
-      this._case = ClientOptionsCase.NOT_SET;
-    }
-
-    get case(): ClientOptionsCase {
-      return this._case;
-    }
-
-    set websocketOptions(v: BootstrapClientWebSocketOptions) {
-      this.clear();
-      this._websocketOptions = v;
-      this._case = ClientOptionsCase.WEBSOCKET_OPTIONS;
-    }
-
-    get websocketOptions(): BootstrapClientWebSocketOptions {
-      return this._websocketOptions;
-    }
-  }
-
   export enum ClientOptionsCase {
     NOT_SET = 0,
     WEBSOCKET_OPTIONS = 1,
   }
 
+  export type IClientOptionsOneOf =
+  { case?: ClientOptionsCase.NOT_SET }
+  |{ case?: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: IBootstrapClientWebSocketOptions }
+  ;
+
+  export type TClientOptionsOneOf = Readonly<
+  { case: ClientOptionsCase.NOT_SET }
+  |{ case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: BootstrapClientWebSocketOptions }
+  >;
+
+  class ClientOptionsOneOfImpl {
+    websocketOptions: BootstrapClientWebSocketOptions;
+    case: ClientOptionsCase = ClientOptionsCase.NOT_SET;
+
+    constructor(v?: IClientOptionsOneOf) {
+      if (v && "websocketOptions" in v) {
+        this.case = ClientOptionsCase.WEBSOCKET_OPTIONS;
+        this.websocketOptions = new BootstrapClientWebSocketOptions(v.websocketOptions);
+      }
+    }
+  }
+
+  export const ClientOptionsOneOf = ClientOptionsOneOfImpl as {
+    new (): Readonly<{ case: ClientOptionsCase.NOT_SET }>;
+    new <T extends IClientOptionsOneOf>(v: T): Readonly<
+    T extends { websocketOptions: IBootstrapClientWebSocketOptions } ? { case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: BootstrapClientWebSocketOptions } :
+    never
+    >;
+  };
+
 }
 
 export interface ICreateBootstrapClientResponse {
-  bootstrapClient?: IBootstrapClient;
+  bootstrapClient?: IBootstrapClient | undefined;
 }
 
 export class CreateBootstrapClientResponse {
@@ -263,7 +259,7 @@ export interface IUpdateBootstrapClientRequest {
 
 export class UpdateBootstrapClientRequest {
   id: bigint = BigInt(0);
-  clientOptions: UpdateBootstrapClientRequest.ClientOptionsOneOf;
+  clientOptions: UpdateBootstrapClientRequest.TClientOptionsOneOf;
 
   constructor(v?: IUpdateBootstrapClientRequest) {
     this.id = v?.id || BigInt(0);
@@ -274,7 +270,7 @@ export class UpdateBootstrapClientRequest {
     if (!w) w = new Writer(1024);
     if (m.id) w.uint32(8).uint64(m.id);
     switch (m.clientOptions.case) {
-      case 2:
+      case UpdateBootstrapClientRequest.ClientOptionsCase.WEBSOCKET_OPTIONS:
       BootstrapClientWebSocketOptions.encode(m.clientOptions.websocketOptions, w.uint32(18).fork()).ldelim();
       break;
     }
@@ -292,7 +288,7 @@ export class UpdateBootstrapClientRequest {
         m.id = r.uint64();
         break;
         case 2:
-        m.clientOptions.websocketOptions = BootstrapClientWebSocketOptions.decode(r, r.uint32());
+        m.clientOptions = new UpdateBootstrapClientRequest.ClientOptionsOneOf({ websocketOptions: BootstrapClientWebSocketOptions.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -304,47 +300,45 @@ export class UpdateBootstrapClientRequest {
 }
 
 export namespace UpdateBootstrapClientRequest {
-  export type IClientOptionsOneOf =
-  { websocketOptions: IBootstrapClientWebSocketOptions }
-  ;
-
-  export class ClientOptionsOneOf {
-    private _websocketOptions: BootstrapClientWebSocketOptions | undefined;
-    private _case: ClientOptionsCase = 0;
-
-    constructor(v?: IClientOptionsOneOf) {
-      if (v && "websocketOptions" in v) this.websocketOptions = new BootstrapClientWebSocketOptions(v.websocketOptions);
-    }
-
-    public clear() {
-      this._websocketOptions = undefined;
-      this._case = ClientOptionsCase.NOT_SET;
-    }
-
-    get case(): ClientOptionsCase {
-      return this._case;
-    }
-
-    set websocketOptions(v: BootstrapClientWebSocketOptions) {
-      this.clear();
-      this._websocketOptions = v;
-      this._case = ClientOptionsCase.WEBSOCKET_OPTIONS;
-    }
-
-    get websocketOptions(): BootstrapClientWebSocketOptions {
-      return this._websocketOptions;
-    }
-  }
-
   export enum ClientOptionsCase {
     NOT_SET = 0,
     WEBSOCKET_OPTIONS = 2,
   }
 
+  export type IClientOptionsOneOf =
+  { case?: ClientOptionsCase.NOT_SET }
+  |{ case?: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: IBootstrapClientWebSocketOptions }
+  ;
+
+  export type TClientOptionsOneOf = Readonly<
+  { case: ClientOptionsCase.NOT_SET }
+  |{ case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: BootstrapClientWebSocketOptions }
+  >;
+
+  class ClientOptionsOneOfImpl {
+    websocketOptions: BootstrapClientWebSocketOptions;
+    case: ClientOptionsCase = ClientOptionsCase.NOT_SET;
+
+    constructor(v?: IClientOptionsOneOf) {
+      if (v && "websocketOptions" in v) {
+        this.case = ClientOptionsCase.WEBSOCKET_OPTIONS;
+        this.websocketOptions = new BootstrapClientWebSocketOptions(v.websocketOptions);
+      }
+    }
+  }
+
+  export const ClientOptionsOneOf = ClientOptionsOneOfImpl as {
+    new (): Readonly<{ case: ClientOptionsCase.NOT_SET }>;
+    new <T extends IClientOptionsOneOf>(v: T): Readonly<
+    T extends { websocketOptions: IBootstrapClientWebSocketOptions } ? { case: ClientOptionsCase.WEBSOCKET_OPTIONS, websocketOptions: BootstrapClientWebSocketOptions } :
+    never
+    >;
+  };
+
 }
 
 export interface IUpdateBootstrapClientResponse {
-  bootstrapClient?: IBootstrapClient;
+  bootstrapClient?: IBootstrapClient | undefined;
 }
 
 export class UpdateBootstrapClientResponse {
@@ -472,7 +466,7 @@ export class GetBootstrapClientRequest {
 }
 
 export interface IGetBootstrapClientResponse {
-  bootstrapClient?: IBootstrapClient;
+  bootstrapClient?: IBootstrapClient | undefined;
 }
 
 export class GetBootstrapClientResponse {
@@ -667,7 +661,7 @@ export interface IBootstrapServiceMessage {
 }
 
 export class BootstrapServiceMessage {
-  body: BootstrapServiceMessage.BodyOneOf;
+  body: BootstrapServiceMessage.TBodyOneOf;
 
   constructor(v?: IBootstrapServiceMessage) {
     this.body = new BootstrapServiceMessage.BodyOneOf(v?.body);
@@ -676,13 +670,13 @@ export class BootstrapServiceMessage {
   static encode(m: BootstrapServiceMessage, w?: Writer): Writer {
     if (!w) w = new Writer(1024);
     switch (m.body.case) {
-      case 1:
+      case BootstrapServiceMessage.BodyCase.BROKER_OFFER:
       BootstrapServiceMessage.BrokerOffer.encode(m.body.brokerOffer, w.uint32(10).fork()).ldelim();
       break;
-      case 2:
+      case BootstrapServiceMessage.BodyCase.PUBLISH_REQUEST:
       BootstrapServiceMessage.PublishRequest.encode(m.body.publishRequest, w.uint32(18).fork()).ldelim();
       break;
-      case 3:
+      case BootstrapServiceMessage.BodyCase.PUBLISH_RESPONSE:
       BootstrapServiceMessage.PublishResponse.encode(m.body.publishResponse, w.uint32(26).fork()).ldelim();
       break;
     }
@@ -697,13 +691,13 @@ export class BootstrapServiceMessage {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body.brokerOffer = BootstrapServiceMessage.BrokerOffer.decode(r, r.uint32());
+        m.body = new BootstrapServiceMessage.BodyOneOf({ brokerOffer: BootstrapServiceMessage.BrokerOffer.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body.publishRequest = BootstrapServiceMessage.PublishRequest.decode(r, r.uint32());
+        m.body = new BootstrapServiceMessage.BodyOneOf({ publishRequest: BootstrapServiceMessage.PublishRequest.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body.publishResponse = BootstrapServiceMessage.PublishResponse.decode(r, r.uint32());
+        m.body = new BootstrapServiceMessage.BodyOneOf({ publishResponse: BootstrapServiceMessage.PublishResponse.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -715,72 +709,58 @@ export class BootstrapServiceMessage {
 }
 
 export namespace BootstrapServiceMessage {
-  export type IBodyOneOf =
-  { brokerOffer: BootstrapServiceMessage.IBrokerOffer }
-  |{ publishRequest: BootstrapServiceMessage.IPublishRequest }
-  |{ publishResponse: BootstrapServiceMessage.IPublishResponse }
-  ;
-
-  export class BodyOneOf {
-    private _brokerOffer: BootstrapServiceMessage.BrokerOffer | undefined;
-    private _publishRequest: BootstrapServiceMessage.PublishRequest | undefined;
-    private _publishResponse: BootstrapServiceMessage.PublishResponse | undefined;
-    private _case: BodyCase = 0;
-
-    constructor(v?: IBodyOneOf) {
-      if (v && "brokerOffer" in v) this.brokerOffer = new BootstrapServiceMessage.BrokerOffer(v.brokerOffer);
-      if (v && "publishRequest" in v) this.publishRequest = new BootstrapServiceMessage.PublishRequest(v.publishRequest);
-      if (v && "publishResponse" in v) this.publishResponse = new BootstrapServiceMessage.PublishResponse(v.publishResponse);
-    }
-
-    public clear() {
-      this._brokerOffer = undefined;
-      this._publishRequest = undefined;
-      this._publishResponse = undefined;
-      this._case = BodyCase.NOT_SET;
-    }
-
-    get case(): BodyCase {
-      return this._case;
-    }
-
-    set brokerOffer(v: BootstrapServiceMessage.BrokerOffer) {
-      this.clear();
-      this._brokerOffer = v;
-      this._case = BodyCase.BROKER_OFFER;
-    }
-
-    get brokerOffer(): BootstrapServiceMessage.BrokerOffer {
-      return this._brokerOffer;
-    }
-
-    set publishRequest(v: BootstrapServiceMessage.PublishRequest) {
-      this.clear();
-      this._publishRequest = v;
-      this._case = BodyCase.PUBLISH_REQUEST;
-    }
-
-    get publishRequest(): BootstrapServiceMessage.PublishRequest {
-      return this._publishRequest;
-    }
-
-    set publishResponse(v: BootstrapServiceMessage.PublishResponse) {
-      this.clear();
-      this._publishResponse = v;
-      this._case = BodyCase.PUBLISH_RESPONSE;
-    }
-
-    get publishResponse(): BootstrapServiceMessage.PublishResponse {
-      return this._publishResponse;
-    }
-  }
-
   export enum BodyCase {
     NOT_SET = 0,
     BROKER_OFFER = 1,
     PUBLISH_REQUEST = 2,
     PUBLISH_RESPONSE = 3,
   }
+
+  export type IBodyOneOf =
+  { case?: BodyCase.NOT_SET }
+  |{ case?: BodyCase.BROKER_OFFER, brokerOffer: BootstrapServiceMessage.IBrokerOffer }
+  |{ case?: BodyCase.PUBLISH_REQUEST, publishRequest: BootstrapServiceMessage.IPublishRequest }
+  |{ case?: BodyCase.PUBLISH_RESPONSE, publishResponse: BootstrapServiceMessage.IPublishResponse }
+  ;
+
+  export type TBodyOneOf = Readonly<
+  { case: BodyCase.NOT_SET }
+  |{ case: BodyCase.BROKER_OFFER, brokerOffer: BootstrapServiceMessage.BrokerOffer }
+  |{ case: BodyCase.PUBLISH_REQUEST, publishRequest: BootstrapServiceMessage.PublishRequest }
+  |{ case: BodyCase.PUBLISH_RESPONSE, publishResponse: BootstrapServiceMessage.PublishResponse }
+  >;
+
+  class BodyOneOfImpl {
+    brokerOffer: BootstrapServiceMessage.BrokerOffer;
+    publishRequest: BootstrapServiceMessage.PublishRequest;
+    publishResponse: BootstrapServiceMessage.PublishResponse;
+    case: BodyCase = BodyCase.NOT_SET;
+
+    constructor(v?: IBodyOneOf) {
+      if (v && "brokerOffer" in v) {
+        this.case = BodyCase.BROKER_OFFER;
+        this.brokerOffer = new BootstrapServiceMessage.BrokerOffer(v.brokerOffer);
+      } else
+      if (v && "publishRequest" in v) {
+        this.case = BodyCase.PUBLISH_REQUEST;
+        this.publishRequest = new BootstrapServiceMessage.PublishRequest(v.publishRequest);
+      } else
+      if (v && "publishResponse" in v) {
+        this.case = BodyCase.PUBLISH_RESPONSE;
+        this.publishResponse = new BootstrapServiceMessage.PublishResponse(v.publishResponse);
+      }
+    }
+  }
+
+  export const BodyOneOf = BodyOneOfImpl as {
+    new (): Readonly<{ case: BodyCase.NOT_SET }>;
+    new <T extends IBodyOneOf>(v: T): Readonly<
+    T extends { brokerOffer: BootstrapServiceMessage.IBrokerOffer } ? { case: BodyCase.BROKER_OFFER, brokerOffer: BootstrapServiceMessage.BrokerOffer } :
+    T extends { publishRequest: BootstrapServiceMessage.IPublishRequest } ? { case: BodyCase.PUBLISH_REQUEST, publishRequest: BootstrapServiceMessage.PublishRequest } :
+    T extends { publishResponse: BootstrapServiceMessage.IPublishResponse } ? { case: BodyCase.PUBLISH_RESPONSE, publishResponse: BootstrapServiceMessage.PublishResponse } :
+    never
+    >;
+  };
 
   export interface IBrokerOffer {
   }
@@ -804,7 +784,7 @@ export namespace BootstrapServiceMessage {
 
   export interface IPublishRequest {
     name?: string;
-    certificate?: strims_type_ICertificate;
+    certificate?: strims_type_ICertificate | undefined;
   }
 
   export class PublishRequest {
@@ -850,7 +830,7 @@ export namespace BootstrapServiceMessage {
   }
 
   export class PublishResponse {
-    body: PublishResponse.BodyOneOf;
+    body: PublishResponse.TBodyOneOf;
 
     constructor(v?: IPublishResponse) {
       this.body = new PublishResponse.BodyOneOf(v?.body);
@@ -859,7 +839,7 @@ export namespace BootstrapServiceMessage {
     static encode(m: PublishResponse, w?: Writer): Writer {
       if (!w) w = new Writer(1024);
       switch (m.body.case) {
-        case 1:
+        case PublishResponse.BodyCase.ERROR:
         w.uint32(10).string(m.body.error);
         break;
       }
@@ -874,7 +854,7 @@ export namespace BootstrapServiceMessage {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.body.error = r.string();
+          m.body = new PublishResponse.BodyOneOf({ error: r.string() });
           break;
           default:
           r.skipType(tag & 7);
@@ -886,42 +866,40 @@ export namespace BootstrapServiceMessage {
   }
 
   export namespace PublishResponse {
-    export type IBodyOneOf =
-    { error: string }
-    ;
-
-    export class BodyOneOf {
-      private _error: string = "";
-      private _case: BodyCase = 0;
-
-      constructor(v?: IBodyOneOf) {
-        if (v && "error" in v) this.error = v.error;
-      }
-
-      public clear() {
-        this._error = "";
-        this._case = BodyCase.NOT_SET;
-      }
-
-      get case(): BodyCase {
-        return this._case;
-      }
-
-      set error(v: string) {
-        this.clear();
-        this._error = v;
-        this._case = BodyCase.ERROR;
-      }
-
-      get error(): string {
-        return this._error;
-      }
-    }
-
     export enum BodyCase {
       NOT_SET = 0,
       ERROR = 1,
     }
+
+    export type IBodyOneOf =
+    { case?: BodyCase.NOT_SET }
+    |{ case?: BodyCase.ERROR, error: string }
+    ;
+
+    export type TBodyOneOf = Readonly<
+    { case: BodyCase.NOT_SET }
+    |{ case: BodyCase.ERROR, error: string }
+    >;
+
+    class BodyOneOfImpl {
+      error: string;
+      case: BodyCase = BodyCase.NOT_SET;
+
+      constructor(v?: IBodyOneOf) {
+        if (v && "error" in v) {
+          this.case = BodyCase.ERROR;
+          this.error = v.error;
+        }
+      }
+    }
+
+    export const BodyOneOf = BodyOneOfImpl as {
+      new (): Readonly<{ case: BodyCase.NOT_SET }>;
+      new <T extends IBodyOneOf>(v: T): Readonly<
+      T extends { error: string } ? { case: BodyCase.ERROR, error: string } :
+      never
+      >;
+    };
 
   }
 
@@ -929,7 +907,7 @@ export namespace BootstrapServiceMessage {
 
 export interface IPublishNetworkToBootstrapPeerRequest {
   peerId?: bigint;
-  network?: strims_network_v1_INetwork;
+  network?: strims_network_v1_INetwork | undefined;
 }
 
 export class PublishNetworkToBootstrapPeerRequest {
