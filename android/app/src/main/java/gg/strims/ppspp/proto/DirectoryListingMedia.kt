@@ -44,6 +44,13 @@ class DirectoryListingMedia(
     label = WireField.Label.OMIT_IDENTITY
   )
   val bitrate: Int = 0,
+  @field:WireField(
+    tag = 4,
+    adapter = "com.squareup.wire.ProtoAdapter#STRING",
+    label = WireField.Label.OMIT_IDENTITY,
+    jsonName = "swarmUri"
+  )
+  val swarm_uri: String = "",
   unknownFields: ByteString = ByteString.EMPTY
 ) : Message<DirectoryListingMedia, Nothing>(ADAPTER, unknownFields) {
   @Deprecated(
@@ -59,6 +66,7 @@ class DirectoryListingMedia(
     if (started_at != other.started_at) return false
     if (mime_type != other.mime_type) return false
     if (bitrate != other.bitrate) return false
+    if (swarm_uri != other.swarm_uri) return false
     return true
   }
 
@@ -69,6 +77,7 @@ class DirectoryListingMedia(
       result = result * 37 + started_at.hashCode()
       result = result * 37 + mime_type.hashCode()
       result = result * 37 + bitrate.hashCode()
+      result = result * 37 + swarm_uri.hashCode()
       super.hashCode = result
     }
     return result
@@ -79,6 +88,7 @@ class DirectoryListingMedia(
     result += """started_at=$started_at"""
     result += """mime_type=${sanitize(mime_type)}"""
     result += """bitrate=$bitrate"""
+    result += """swarm_uri=${sanitize(swarm_uri)}"""
     return result.joinToString(prefix = "DirectoryListingMedia{", separator = ", ", postfix = "}")
   }
 
@@ -86,8 +96,10 @@ class DirectoryListingMedia(
     started_at: Long = this.started_at,
     mime_type: String = this.mime_type,
     bitrate: Int = this.bitrate,
+    swarm_uri: String = this.swarm_uri,
     unknownFields: ByteString = this.unknownFields
-  ): DirectoryListingMedia = DirectoryListingMedia(started_at, mime_type, bitrate, unknownFields)
+  ): DirectoryListingMedia = DirectoryListingMedia(started_at, mime_type, bitrate, swarm_uri,
+      unknownFields)
 
   companion object {
     @JvmField
@@ -105,6 +117,8 @@ class DirectoryListingMedia(
         if (value.mime_type != "") size += ProtoAdapter.STRING.encodedSizeWithTag(2,
             value.mime_type)
         if (value.bitrate != 0) size += ProtoAdapter.UINT32.encodedSizeWithTag(3, value.bitrate)
+        if (value.swarm_uri != "") size += ProtoAdapter.STRING.encodedSizeWithTag(4,
+            value.swarm_uri)
         return size
       }
 
@@ -112,6 +126,7 @@ class DirectoryListingMedia(
         if (value.started_at != 0L) ProtoAdapter.INT64.encodeWithTag(writer, 1, value.started_at)
         if (value.mime_type != "") ProtoAdapter.STRING.encodeWithTag(writer, 2, value.mime_type)
         if (value.bitrate != 0) ProtoAdapter.UINT32.encodeWithTag(writer, 3, value.bitrate)
+        if (value.swarm_uri != "") ProtoAdapter.STRING.encodeWithTag(writer, 4, value.swarm_uri)
         writer.writeBytes(value.unknownFields)
       }
 
@@ -119,11 +134,13 @@ class DirectoryListingMedia(
         var started_at: Long = 0L
         var mime_type: String = ""
         var bitrate: Int = 0
+        var swarm_uri: String = ""
         val unknownFields = reader.forEachTag { tag ->
           when (tag) {
             1 -> started_at = ProtoAdapter.INT64.decode(reader)
             2 -> mime_type = ProtoAdapter.STRING.decode(reader)
             3 -> bitrate = ProtoAdapter.UINT32.decode(reader)
+            4 -> swarm_uri = ProtoAdapter.STRING.decode(reader)
             else -> reader.readUnknownField(tag)
           }
         }
@@ -131,6 +148,7 @@ class DirectoryListingMedia(
           started_at = started_at,
           mime_type = mime_type,
           bitrate = bitrate,
+          swarm_uri = swarm_uri,
           unknownFields = unknownFields
         )
       }
