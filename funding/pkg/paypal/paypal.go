@@ -191,6 +191,10 @@ func (p *Paypal) CreateSubscriptionPlan(ctx context.Context, price string) (pp.S
 		return pp.SubscriptionPlan{}, fmt.Errorf("failed to create subplan: %w", err)
 	}
 
+	if err = p.Client.ActivatePlan(res.ID); err != nil {
+		return pp.SubscriptionPlan{}, fmt.Errorf("failed to activate subplan: %w", err)
+	}
+
 	return res.SubscriptionPlan, nil
 }
 

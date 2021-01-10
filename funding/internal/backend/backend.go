@@ -10,6 +10,8 @@ import (
 	"io/ioutil"
 	"net/http"
 	"os"
+	"strconv"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/funding/internal/models"
 	"github.com/MemeLabs/go-ppspp/funding/pkg/paypal"
@@ -53,7 +55,7 @@ func New(cfgPath string, logger *zap.Logger) (*Funding, error) {
 	}
 
 	config := new(config)
-	if err := json.Unmarshal(contents, config); err != nil {
+	if err = json.Unmarshal(contents, config); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal cfg contents: %w", err)
 	}
 
@@ -78,11 +80,11 @@ func New(cfgPath string, logger *zap.Logger) (*Funding, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	if err := f.seedDB(ctx); err != nil {
+	if err = f.seedDB(ctx); err != nil {
 		return nil, fmt.Errorf("failed to seed db: %w", err)
 	}
 
-	if err := f.LoadSummary(ctx); err != nil {
+	if err = f.LoadSummary(ctx); err != nil {
 		return nil, fmt.Errorf("getting summary failed: %w", err)
 	}
 
@@ -90,6 +92,8 @@ func New(cfgPath string, logger *zap.Logger) (*Funding, error) {
 }
 
 func (f *Funding) LoadSummary(ctx context.Context) error {
+	f.logger.Debug("loading summary")
+
 	transactionsRes, err := models.Transactions(qm.OrderBy(models.TransactionColumns.Date)).AllG(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to query transactions: %w", err)
@@ -194,24 +198,50 @@ func (f *Funding) ValidWebhook(r *http.Request, webhookID string) (bool, error) 
 }
 
 func (f *Funding) InsertTransaction(body []byte) error {
-	fmt.Println(string(body))
-
-	event := new(pp.WebhookEvent)
-	if err := json.Unmarshal(body, &event); err != nil {
-		return fmt.Errorf("failed to unmarshal hook event: %w", err)
+	et := new(eventType)
+	if err := json.Unmarshal(body, &et); err != nil {
+		return fmt.Errorf("failed to unmarshal hook event type: %w", err)
 	}
 
-	spew.Dump(event)
+	fmt.Println(et.EventType)
+	t := new(models.Transaction)
+	t.Service = "paypal"
+	// https://developer.paypal.com/docs/api-basics/notifications/webhooks/event-names/
+	switch et.EventType {
+	// case "BILLING.SUBSCRIPTION.ACTIVATED":
+	case "PAYMENT.SALE.COMPLETED":
+		// auto debit on subscription (or donation?)
+		event := new(paymentSaleCompletedEvent)
+		if err := json.Unmarshal(body, &event); err != nil {
+			return fmt.Errorf("failed to unmarshal hook event: %w", err)
+		}
 
-	// https://developer.paypal.com/docs/api-basics/notifications/webhooks/event-names/#subscriptions
-	// BILLING.SUBSCRIPTION.CREATED
-	if event.EventType != "PAYMENT.AUTHORIZATION.CREATED" {
-		return errors.New("failed to insert transaction: incorrect webhook event type")
+		t.Subject = event.Summary
+		t.Note = null.String{}
+		t.Date = int(event.CreateTime.Unix())
+		t.Currency = event.Resource.Amount.Currency
+		total, err := strconv.ParseFloat(event.Resource.Amount.Total, 32)
+		if err != nil {
+			return fmt.Errorf("failed to parse total amount: %w", err)
+		}
+		t.Amount = float32(total)
+		t.Available = t.Available + t.Amount
+	default:
+		f.logger.Debug("received unknown webhook event type", zap.String("event_type", et.EventType))
+		return errors.New("we don't handle you")
 	}
 
-	// insert into db
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	// load summary again
+	if err := t.InsertG(ctx, boil.Infer()); err != nil {
+		return fmt.Errorf("failed to insert transaction: %w", err)
+	}
+
+	if err := f.LoadSummary(ctx); err != nil {
+		f.logger.Debug("failed trying to refresh summary", zap.Error(err))
+		return fmt.Errorf("refreshing summary err: %w", err)
+	}
 	return nil
 }
 
@@ -246,7 +276,7 @@ func (f *Funding) seedDB(ctx context.Context) error {
 			Available: t.GetAvailable(),
 			Service:   "paypal",
 		}
-		if err := nt.InsertG(ctx, boil.Infer()); err != nil {
+		if err = nt.InsertG(ctx, boil.Infer()); err != nil {
 			f.logger.Error("failed to insert transactionw", zap.Error(err))
 		}
 	}
@@ -274,4 +304,32 @@ func (f *Funding) seedDB(ctx context.Context) error {
 
 	}
 	return nil
+}
+
+type eventType struct {
+	EventType string `json:"event_type"`
+}
+
+type paymentSaleCompletedEvent struct {
+	ID           string    `json:"id"`
+	EventVersion string    `json:"event_version"`
+	CreateTime   time.Time `json:"create_time"`
+	ResourceType string    `json:"resource_type"`
+	EventType    string    `json:"event_type"`
+	Summary      string    `json:"summary"`
+	Resource     struct {
+		ID         string    `json:"id"`
+		CreateTime time.Time `json:"create_time"`
+		UpdateTime time.Time `json:"update_time"`
+		Amount     struct {
+			Total    string `json:"total"`
+			Currency string `json:"currency"`
+		} `json:"amount"`
+		PaymentMode               string    `json:"payment_mode"`
+		State                     string    `json:"state"`
+		ProtectionEligibility     string    `json:"protection_eligibility"`
+		ProtectionEligibilityType string    `json:"protection_eligibility_type"`
+		ClearingTime              time.Time `json:"clearing_time"`
+		ParentPayment             string    `json:"parent_payment"`
+	} `json:"resource"`
 }

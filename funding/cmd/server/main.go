@@ -111,7 +111,7 @@ func (s *fundingService) CreateSubPlan(ctx context.Context, req *pb.FundingCreat
 }
 
 func (s *fundingService) setupWebhooks(m *http.ServeMux) error {
-	m.HandleFunc("/hooks/transaction", s.handleHook)
+	m.HandleFunc("/hooks", s.handleHook)
 	/*
 		webhooks, err := s.paypal.Client.ListWebhooks("")
 		if err != nil {

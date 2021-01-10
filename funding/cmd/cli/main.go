@@ -44,7 +44,7 @@ func main() {
 	}
 
 	config := new(cfg)
-	if err := json.Unmarshal(contents, config); err != nil {
+	if err = json.Unmarshal(contents, config); err != nil {
 		log.Fatalln("failed to unmarshal cfg contents:", err)
 	}
 
@@ -91,7 +91,6 @@ func main() {
 			}
 		default:
 			fmt.Println("list what? subplans or transactions")
-			break
 		}
 	case "deactivate":
 		deactivateCmd.Parse(os.Args[3:])
