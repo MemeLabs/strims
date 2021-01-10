@@ -50,11 +50,22 @@ class DirectoryEvent(
     jsonName = "viewerStateChange"
   )
   val viewer_state_change: ViewerStateChange? = null,
+  @field:WireField(
+    tag = 5,
+    adapter = "gg.strims.ppspp.proto.DirectoryEvent${'$'}Ping#ADAPTER"
+  )
+  val ping: Ping? = null,
+  @field:WireField(
+    tag = 6,
+    adapter = "gg.strims.ppspp.proto.DirectoryEvent${'$'}Padding#ADAPTER"
+  )
+  val padding: Padding? = null,
   unknownFields: ByteString = ByteString.EMPTY
 ) : Message<DirectoryEvent, Nothing>(ADAPTER, unknownFields) {
   init {
-    require(countNonNull(publish, unpublish, viewer_count_change, viewer_state_change) <= 1) {
-      "At most one of publish, unpublish, viewer_count_change, viewer_state_change may be non-null"
+    require(countNonNull(publish, unpublish, viewer_count_change, viewer_state_change, ping,
+        padding) <= 1) {
+      "At most one of publish, unpublish, viewer_count_change, viewer_state_change, ping, padding may be non-null"
     }
   }
 
@@ -72,6 +83,8 @@ class DirectoryEvent(
     if (unpublish != other.unpublish) return false
     if (viewer_count_change != other.viewer_count_change) return false
     if (viewer_state_change != other.viewer_state_change) return false
+    if (ping != other.ping) return false
+    if (padding != other.padding) return false
     return true
   }
 
@@ -83,6 +96,8 @@ class DirectoryEvent(
       result = result * 37 + unpublish.hashCode()
       result = result * 37 + viewer_count_change.hashCode()
       result = result * 37 + viewer_state_change.hashCode()
+      result = result * 37 + ping.hashCode()
+      result = result * 37 + padding.hashCode()
       super.hashCode = result
     }
     return result
@@ -94,6 +109,8 @@ class DirectoryEvent(
     if (unpublish != null) result += """unpublish=$unpublish"""
     if (viewer_count_change != null) result += """viewer_count_change=$viewer_count_change"""
     if (viewer_state_change != null) result += """viewer_state_change=$viewer_state_change"""
+    if (ping != null) result += """ping=$ping"""
+    if (padding != null) result += """padding=$padding"""
     return result.joinToString(prefix = "DirectoryEvent{", separator = ", ", postfix = "}")
   }
 
@@ -102,17 +119,19 @@ class DirectoryEvent(
     unpublish: Unpublish? = this.unpublish,
     viewer_count_change: ViewerCountChange? = this.viewer_count_change,
     viewer_state_change: ViewerStateChange? = this.viewer_state_change,
+    ping: Ping? = this.ping,
+    padding: Padding? = this.padding,
     unknownFields: ByteString = this.unknownFields
-  ): DirectoryEvent = DirectoryEvent(publish, unpublish, viewer_count_change,
-      viewer_state_change, unknownFields)
+  ): DirectoryEvent = DirectoryEvent(publish, unpublish, viewer_count_change, viewer_state_change,
+      ping, padding, unknownFields)
 
   companion object {
     @JvmField
     val ADAPTER: ProtoAdapter<DirectoryEvent> = object : ProtoAdapter<DirectoryEvent>(
-      FieldEncoding.LENGTH_DELIMITED,
-      DirectoryEvent::class,
-      "type.googleapis.com/DirectoryEvent",
-      PROTO_3,
+      FieldEncoding.LENGTH_DELIMITED, 
+      DirectoryEvent::class, 
+      "type.googleapis.com/DirectoryEvent", 
+      PROTO_3, 
       null
     ) {
       override fun encodedSize(value: DirectoryEvent): Int {
@@ -121,6 +140,8 @@ class DirectoryEvent(
         size += Unpublish.ADAPTER.encodedSizeWithTag(2, value.unpublish)
         size += ViewerCountChange.ADAPTER.encodedSizeWithTag(3, value.viewer_count_change)
         size += ViewerStateChange.ADAPTER.encodedSizeWithTag(4, value.viewer_state_change)
+        size += Ping.ADAPTER.encodedSizeWithTag(5, value.ping)
+        size += Padding.ADAPTER.encodedSizeWithTag(6, value.padding)
         return size
       }
 
@@ -129,6 +150,8 @@ class DirectoryEvent(
         Unpublish.ADAPTER.encodeWithTag(writer, 2, value.unpublish)
         ViewerCountChange.ADAPTER.encodeWithTag(writer, 3, value.viewer_count_change)
         ViewerStateChange.ADAPTER.encodeWithTag(writer, 4, value.viewer_state_change)
+        Ping.ADAPTER.encodeWithTag(writer, 5, value.ping)
+        Padding.ADAPTER.encodeWithTag(writer, 6, value.padding)
         writer.writeBytes(value.unknownFields)
       }
 
@@ -137,12 +160,16 @@ class DirectoryEvent(
         var unpublish: Unpublish? = null
         var viewer_count_change: ViewerCountChange? = null
         var viewer_state_change: ViewerStateChange? = null
+        var ping: Ping? = null
+        var padding: Padding? = null
         val unknownFields = reader.forEachTag { tag ->
           when (tag) {
             1 -> publish = Publish.ADAPTER.decode(reader)
             2 -> unpublish = Unpublish.ADAPTER.decode(reader)
             3 -> viewer_count_change = ViewerCountChange.ADAPTER.decode(reader)
             4 -> viewer_state_change = ViewerStateChange.ADAPTER.decode(reader)
+            5 -> ping = Ping.ADAPTER.decode(reader)
+            6 -> padding = Padding.ADAPTER.decode(reader)
             else -> reader.readUnknownField(tag)
           }
         }
@@ -151,6 +178,8 @@ class DirectoryEvent(
           unpublish = unpublish,
           viewer_count_change = viewer_count_change,
           viewer_state_change = viewer_state_change,
+          ping = ping,
+          padding = padding,
           unknownFields = unknownFields
         )
       }
@@ -160,6 +189,8 @@ class DirectoryEvent(
         unpublish = value.unpublish?.let(Unpublish.ADAPTER::redact),
         viewer_count_change = value.viewer_count_change?.let(ViewerCountChange.ADAPTER::redact),
         viewer_state_change = value.viewer_state_change?.let(ViewerStateChange.ADAPTER::redact),
+        ping = value.ping?.let(Ping.ADAPTER::redact),
+        padding = value.padding?.let(Padding.ADAPTER::redact),
         unknownFields = ByteString.EMPTY
       )
     }
@@ -212,10 +243,10 @@ class DirectoryEvent(
     companion object {
       @JvmField
       val ADAPTER: ProtoAdapter<Publish> = object : ProtoAdapter<Publish>(
-        FieldEncoding.LENGTH_DELIMITED,
-        Publish::class,
-        "type.googleapis.com/DirectoryEvent.Publish",
-        PROTO_3,
+        FieldEncoding.LENGTH_DELIMITED, 
+        Publish::class, 
+        "type.googleapis.com/DirectoryEvent.Publish", 
+        PROTO_3, 
         null
       ) {
         override fun encodedSize(value: Publish): Int {
@@ -300,10 +331,10 @@ class DirectoryEvent(
     companion object {
       @JvmField
       val ADAPTER: ProtoAdapter<Unpublish> = object : ProtoAdapter<Unpublish>(
-        FieldEncoding.LENGTH_DELIMITED,
-        Unpublish::class,
-        "type.googleapis.com/DirectoryEvent.Unpublish",
-        PROTO_3,
+        FieldEncoding.LENGTH_DELIMITED, 
+        Unpublish::class, 
+        "type.googleapis.com/DirectoryEvent.Unpublish", 
+        PROTO_3, 
         null
       ) {
         override fun encodedSize(value: Unpublish): Int {
@@ -398,10 +429,10 @@ class DirectoryEvent(
     companion object {
       @JvmField
       val ADAPTER: ProtoAdapter<ViewerCountChange> = object : ProtoAdapter<ViewerCountChange>(
-        FieldEncoding.LENGTH_DELIMITED,
-        ViewerCountChange::class,
-        "type.googleapis.com/DirectoryEvent.ViewerCountChange",
-        PROTO_3,
+        FieldEncoding.LENGTH_DELIMITED, 
+        ViewerCountChange::class, 
+        "type.googleapis.com/DirectoryEvent.ViewerCountChange", 
+        PROTO_3, 
         null
       ) {
         override fun encodedSize(value: ViewerCountChange): Int {
@@ -514,10 +545,10 @@ class DirectoryEvent(
     companion object {
       @JvmField
       val ADAPTER: ProtoAdapter<ViewerStateChange> = object : ProtoAdapter<ViewerStateChange>(
-        FieldEncoding.LENGTH_DELIMITED,
-        ViewerStateChange::class,
-        "type.googleapis.com/DirectoryEvent.ViewerStateChange",
-        PROTO_3,
+        FieldEncoding.LENGTH_DELIMITED, 
+        ViewerStateChange::class, 
+        "type.googleapis.com/DirectoryEvent.ViewerStateChange", 
+        PROTO_3, 
         null
       ) {
         override fun encodedSize(value: ViewerStateChange): Int {
@@ -556,6 +587,178 @@ class DirectoryEvent(
         }
 
         override fun redact(value: ViewerStateChange): ViewerStateChange = value.copy(
+          unknownFields = ByteString.EMPTY
+        )
+      }
+
+      private const val serialVersionUID: Long = 0L
+    }
+  }
+
+  class Ping(
+    @field:WireField(
+      tag = 1,
+      adapter = "com.squareup.wire.ProtoAdapter#INT64",
+      label = WireField.Label.OMIT_IDENTITY
+    )
+    val time: Long = 0L,
+    unknownFields: ByteString = ByteString.EMPTY
+  ) : Message<Ping, Nothing>(ADAPTER, unknownFields) {
+    @Deprecated(
+      message = "Shouldn't be used in Kotlin",
+      level = DeprecationLevel.HIDDEN
+    )
+    override fun newBuilder(): Nothing = throw AssertionError()
+
+    override fun equals(other: Any?): Boolean {
+      if (other === this) return true
+      if (other !is Ping) return false
+      if (unknownFields != other.unknownFields) return false
+      if (time != other.time) return false
+      return true
+    }
+
+    override fun hashCode(): Int {
+      var result = super.hashCode
+      if (result == 0) {
+        result = unknownFields.hashCode()
+        result = result * 37 + time.hashCode()
+        super.hashCode = result
+      }
+      return result
+    }
+
+    override fun toString(): String {
+      val result = mutableListOf<String>()
+      result += """time=$time"""
+      return result.joinToString(prefix = "Ping{", separator = ", ", postfix = "}")
+    }
+
+    fun copy(time: Long = this.time, unknownFields: ByteString = this.unknownFields): Ping =
+        Ping(time, unknownFields)
+
+    companion object {
+      @JvmField
+      val ADAPTER: ProtoAdapter<Ping> = object : ProtoAdapter<Ping>(
+        FieldEncoding.LENGTH_DELIMITED, 
+        Ping::class, 
+        "type.googleapis.com/DirectoryEvent.Ping", 
+        PROTO_3, 
+        null
+      ) {
+        override fun encodedSize(value: Ping): Int {
+          var size = value.unknownFields.size
+          if (value.time != 0L) size += ProtoAdapter.INT64.encodedSizeWithTag(1, value.time)
+          return size
+        }
+
+        override fun encode(writer: ProtoWriter, value: Ping) {
+          if (value.time != 0L) ProtoAdapter.INT64.encodeWithTag(writer, 1, value.time)
+          writer.writeBytes(value.unknownFields)
+        }
+
+        override fun decode(reader: ProtoReader): Ping {
+          var time: Long = 0L
+          val unknownFields = reader.forEachTag { tag ->
+            when (tag) {
+              1 -> time = ProtoAdapter.INT64.decode(reader)
+              else -> reader.readUnknownField(tag)
+            }
+          }
+          return Ping(
+            time = time,
+            unknownFields = unknownFields
+          )
+        }
+
+        override fun redact(value: Ping): Ping = value.copy(
+          unknownFields = ByteString.EMPTY
+        )
+      }
+
+      private const val serialVersionUID: Long = 0L
+    }
+  }
+
+  class Padding(
+    @field:WireField(
+      tag = 1,
+      adapter = "com.squareup.wire.ProtoAdapter#BYTES",
+      label = WireField.Label.OMIT_IDENTITY
+    )
+    val data: ByteString = ByteString.EMPTY,
+    unknownFields: ByteString = ByteString.EMPTY
+  ) : Message<Padding, Nothing>(ADAPTER, unknownFields) {
+    @Deprecated(
+      message = "Shouldn't be used in Kotlin",
+      level = DeprecationLevel.HIDDEN
+    )
+    override fun newBuilder(): Nothing = throw AssertionError()
+
+    override fun equals(other: Any?): Boolean {
+      if (other === this) return true
+      if (other !is Padding) return false
+      if (unknownFields != other.unknownFields) return false
+      if (data != other.data) return false
+      return true
+    }
+
+    override fun hashCode(): Int {
+      var result = super.hashCode
+      if (result == 0) {
+        result = unknownFields.hashCode()
+        result = result * 37 + data.hashCode()
+        super.hashCode = result
+      }
+      return result
+    }
+
+    override fun toString(): String {
+      val result = mutableListOf<String>()
+      result += """data=$data"""
+      return result.joinToString(prefix = "Padding{", separator = ", ", postfix = "}")
+    }
+
+    fun copy(data: ByteString = this.data, unknownFields: ByteString = this.unknownFields): Padding
+        = Padding(data, unknownFields)
+
+    companion object {
+      @JvmField
+      val ADAPTER: ProtoAdapter<Padding> = object : ProtoAdapter<Padding>(
+        FieldEncoding.LENGTH_DELIMITED, 
+        Padding::class, 
+        "type.googleapis.com/DirectoryEvent.Padding", 
+        PROTO_3, 
+        null
+      ) {
+        override fun encodedSize(value: Padding): Int {
+          var size = value.unknownFields.size
+          if (value.data != ByteString.EMPTY) size += ProtoAdapter.BYTES.encodedSizeWithTag(1,
+              value.data)
+          return size
+        }
+
+        override fun encode(writer: ProtoWriter, value: Padding) {
+          if (value.data != ByteString.EMPTY) ProtoAdapter.BYTES.encodeWithTag(writer, 1,
+              value.data)
+          writer.writeBytes(value.unknownFields)
+        }
+
+        override fun decode(reader: ProtoReader): Padding {
+          var data: ByteString = ByteString.EMPTY
+          val unknownFields = reader.forEachTag { tag ->
+            when (tag) {
+              1 -> data = ProtoAdapter.BYTES.decode(reader)
+              else -> reader.readUnknownField(tag)
+            }
+          }
+          return Padding(
+            data = data,
+            unknownFields = unknownFields
+          )
+        }
+
+        override fun redact(value: Padding): Padding = value.copy(
           unknownFields = ByteString.EMPTY
         )
       }
