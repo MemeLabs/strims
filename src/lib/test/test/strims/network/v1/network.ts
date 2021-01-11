@@ -3,11 +3,11 @@ import Writer from "../../../../pb/writer";
 
 import {
   Key as strims_type_Key,
-  IKey as strims_type_IKey
+  IKey as strims_type_IKey,
 } from "../../type/key";
 import {
   Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate
+  ICertificate as strims_type_ICertificate,
 } from "../../type/certificate";
 
 export interface INetworkIcon {

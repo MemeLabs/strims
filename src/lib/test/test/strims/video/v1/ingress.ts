@@ -3,11 +3,11 @@ import Writer from "../../../../pb/writer";
 
 import {
   VideoChannel as strims_video_v1_VideoChannel,
-  IVideoChannel as strims_video_v1_IVideoChannel
+  IVideoChannel as strims_video_v1_IVideoChannel,
 } from "./channel";
 import {
   DirectoryListingSnippet as strims_network_v1_DirectoryListingSnippet,
-  IDirectoryListingSnippet as strims_network_v1_IDirectoryListingSnippet
+  IDirectoryListingSnippet as strims_network_v1_IDirectoryListingSnippet,
 } from "../../network/v1/directory";
 
 export interface IVideoIngressConfig {

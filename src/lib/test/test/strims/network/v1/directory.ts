@@ -3,7 +3,7 @@ import Writer from "../../../../pb/writer";
 
 import {
   Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate
+  ICertificate as strims_type_ICertificate,
 } from "../../type/certificate";
 
 export interface IGetDirectoryEventsRequest {

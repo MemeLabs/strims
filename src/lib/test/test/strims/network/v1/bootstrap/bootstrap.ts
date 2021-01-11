@@ -3,11 +3,11 @@ import Writer from "../../../../../pb/writer";
 
 import {
   Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate
+  ICertificate as strims_type_ICertificate,
 } from "../../../type/certificate";
 import {
   Network as strims_network_v1_Network,
-  INetwork as strims_network_v1_INetwork
+  INetwork as strims_network_v1_INetwork,
 } from "..//network";
 
 export interface IBootstrapClient {

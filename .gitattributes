@@ -1,8 +1,10 @@
 src/lib/pb/pb.* linguist-generated
 src/lib/api/* linguist-generated
 src/lib/pb/register_types.ts  linguist-generated
+src/lib/test/test/*  linguist-generated
 pkg/pb/* linguist-generated
 pkg/api/* linguist-generated
+pkg/apis/* linguist-generated
 vendor linguist-vendored
 go.sum linguist-generated
 package-lock.json linguist-generated

@@ -3,7 +3,7 @@ import Writer from "../../../../pb/writer";
 
 import {
   Key as strims_type_Key,
-  IKey as strims_type_IKey
+  IKey as strims_type_IKey,
 } from "../../type/key";
 
 export interface ICreateChatServerRequest {

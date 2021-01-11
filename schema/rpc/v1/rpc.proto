@@ -2,7 +2,7 @@ syntax = "proto3";
 
 package strims.rpc.v1;
 
-option go_package = "github.com/MemeLabs/go-ppspp/pkg/api/rpc/v1;rpc";
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/rpc/v1;rpc";
 option java_package = "gg.strims.rpc.v1";
 option swift_prefix = "RPCV1";
 

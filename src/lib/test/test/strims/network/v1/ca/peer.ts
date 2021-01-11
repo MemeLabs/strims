@@ -3,9 +3,9 @@ import Writer from "../../../../../pb/writer";
 
 import {
   Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate
+  ICertificate as strims_type_ICertificate,
   CertificateRequest as strims_type_CertificateRequest,
-  ICertificateRequest as strims_type_ICertificateRequest
+  ICertificateRequest as strims_type_ICertificateRequest,
 } from "../../../type/certificate";
 
 export interface ICAPeerRenewRequest {
