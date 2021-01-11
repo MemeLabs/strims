@@ -1,0 +1,13 @@
+version: '3.8'
+services:
+  postgres:
+    image: postgres
+    restart: always
+    environment:
+      - POSTGRES_USER=strims
+      - POSTGRES_PASSWORD=strims
+      - POSTGRES_DB=strims
+    ports:
+      - "5432:5432"
+    volumes:
+      - ./init.sql:/docker-entrypoint-initdb.d/docker_postgres_init.sql

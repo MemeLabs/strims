@@ -1,3 +1,16 @@
+output              = "../internal/models"
+wipe                = true
+no-hooks            = true
+add-global-variants = true
+struct-tag-casing   = "camel"
+
+[psql]
+host    = "localhost"
+dbname  = "strims"
+user    = "strims"
+pass    = "strims"
+sslmode = "disable"
+
 [sqlite3]
 dbname = "./dev.sqlite"
 

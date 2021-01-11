@@ -30,7 +30,7 @@ import (
 	"golang.org/x/crypto/ssh"
 
 	// db driver
-	_ "github.com/mattn/go-sqlite3"
+	_ "github.com/lib/pq"
 	"github.com/sony/sonyflake"
 
 	"go.uber.org/zap"
@@ -384,9 +384,9 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 		ProviderID:   node.ProviderID,
 		ProviderName: node.ProviderName,
 		Name:         strings.ToLower(node.Name), // lowering here to match k8s node naming
-		Memory:       int64(node.Memory),
-		CPUs:         int64(node.CPUs),
-		Disk:         int64(node.Disk),
+		Memory:       node.Memory,
+		CPUs:         node.CPUs,
+		Disk:         node.Disk,
 		IPV4:         node.Networks.V4[0],
 		// IPV6:       node.Networks.V6[0],
 		RegionName:      node.Region.Name,
@@ -394,8 +394,8 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 		RegionLng:       float64(node.Region.LatLng.Lng),
 		WireguardIP:     node.WireguardIPv4,
 		WireguardKey:    node.WireguardPrivKey,
-		SKUPriceHourly:  node.SKU.PriceHourly.Value,
-		SKUPriceMonthly: node.SKU.PriceMonthly.Value,
+		SKUPriceHourly:  float32(node.SKU.PriceHourly.Value),
+		SKUPriceMonthly: float32(node.SKU.PriceMonthly.Value),
 	}
 
 	if err := nodeEntry.Insert(ctx, b.DB, boil.Infer()); err != nil {
@@ -437,7 +437,7 @@ func (b *Backend) initNode(ctx context.Context, node *node.Node) error {
 	fmt.Printf("attempting to ssh to the new node(%s@%s)", node.User, node.Networks.V4[0])
 	for i := 0; i < nodeSSHRetries; i++ {
 		fmt.Print(".")
-		_, err := sshToNode(node.User, node.Networks.V4[0], b.SSHIdentityFile())
+		_, err = sshToNode(node.User, node.Networks.V4[0], b.SSHIdentityFile())
 		if err == nil {
 			break
 		}
@@ -699,10 +699,10 @@ func modelToNode(n *models.Node) *node.Node {
 			NetworkCap:   int(n.SKUNetworkCap),
 			NetworkSpeed: int(n.SKUNetworkSpeed),
 			PriceMonthly: &node.Price{
-				Value: n.SKUPriceMonthly,
+				Value: float64(n.SKUPriceMonthly),
 			},
 			PriceHourly: &node.Price{
-				Value: n.SKUPriceHourly,
+				Value: float64(n.SKUPriceHourly),
 			},
 		},
 		WireguardPrivKey: n.WireguardKey,
@@ -764,4 +764,8 @@ func run(args ...string) error {
 	}
 
 	return nil
+}
+
+func computePrice(sku *node.SKU, timeOnline time.Duration) float64 {
+	return sku.PriceHourly.Value * float64(timeOnline) / float64(time.Hour)
 }

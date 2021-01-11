@@ -191,13 +191,13 @@ func heficedSKU(quote *heficedQuote) *SKU {
 
 func toHeficedOrder(spec *heficedAlacart, templateID, region string) *heficedOrder {
 	return &heficedOrder{
-		InstanceTypeId:      "linux",
-		LocationId:          region,
-		TemplateId:          templateID,
+		InstanceTypeID:      "linux",
+		LocationID:          region,
+		TemplateID:          templateID,
 		Vcpu:                spec.vcpus,
 		Memory:              spec.memory,
 		Disk:                spec.disk,
-		BillingTypeId:       1, // monthly
+		BillingTypeID:       1, // monthly
 		AdditionalBandwidth: spec.additionalBandwidth,
 		UseCredit:           true,
 	}
@@ -250,7 +250,7 @@ func (d *HeficedDriver) Create(ctx context.Context, req *CreateRequest) (*Node, 
 	}
 
 	if req.BillingType == Hourly {
-		order.BillingTypeId = -1 // hourly
+		order.BillingTypeID = -1 // hourly
 	}
 
 	if order == nil {
@@ -427,7 +427,7 @@ func (d *HeficedDriver) post(ctx context.Context, path string, input, output int
 		}
 
 		var out heficedErr
-		if err := json.Unmarshal(body, &out); err != nil {
+		if err = json.Unmarshal(body, &out); err != nil {
 			return fmt.Errorf("failed to unmarshal error body: %q %v", body, err)
 		}
 		return fmt.Errorf("request failed with: %+v", out)
@@ -475,14 +475,14 @@ type heficedTemplates struct {
 }
 
 type heficedOrder struct {
-	InstanceTypeId      string `json:"instanceTypeId"`
-	LocationId          string `json:"locationId"`
-	TemplateId          string `json:"templateId"`
+	InstanceTypeID      string `json:"instanceTypeId"`
+	LocationID          string `json:"locationId"`
+	TemplateID          string `json:"templateId"`
 	SSHKeyID            string `json:"sshKeyId"`
 	Vcpu                int    `json:"vcpu"`
 	Memory              int    `json:"memory"`
 	Disk                int    `json:"disk"`
-	BillingTypeId       int    `json:"billingTypeId"`
+	BillingTypeID       int    `json:"billingTypeId"`
 	AdditionalBandwidth int    `json:"additionalBandwidth"`
 	UseCredit           bool   `json:"useCredit"`
 }

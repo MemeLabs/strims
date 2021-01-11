@@ -3,8 +3,8 @@
 
 package models
 
-var TableNames = struct {
-	Nodes string
-}{
-	Nodes: "nodes",
+import "testing"
+
+func TestUpsert(t *testing.T) {
+	t.Run("Nodes", testNodesUpsert)
 }

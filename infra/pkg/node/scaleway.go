@@ -166,7 +166,7 @@ func (d *ScalewayDriver) findLatestImage(ctx context.Context, region, sku string
 		return nil, err
 	}
 	if len(images.Images) == 0 {
-		return nil, fmt.Errorf("Image not found for OS: %s", scalewayOS)
+		return nil, fmt.Errorf("image not found for OS: %s", scalewayOS)
 	}
 
 	latestImage := images.Images[0]
@@ -185,7 +185,7 @@ func (d *ScalewayDriver) Create(ctx context.Context, req *CreateRequest) (*Node,
 		return nil, err
 	}
 
-	if _, err := d.findOrAddKey(ctx, req.SSHKey); err != nil {
+	if _, err = d.findOrAddKey(ctx, req.SSHKey); err != nil {
 		return nil, err
 	}
 

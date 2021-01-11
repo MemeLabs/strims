@@ -4,7 +4,6 @@ go 1.13
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0 // indirect
-	github.com/MemeLabs/chat-parser v1.0.1
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/aead/ecdh v0.2.0
 	github.com/avast/retry-go v2.6.1+incompatible
@@ -33,12 +32,13 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/hashicorp/golang-lru v0.5.4
 	github.com/hetznercloud/hcloud-go v1.22.0
+	github.com/kat-co/vala v0.0.0-20170210184112-42e1d8b61f12
 	github.com/kr/text v0.2.0 // indirect
+	github.com/lib/pq v1.2.1-0.20191011153232-f91d3411e481
 	github.com/magiconair/properties v1.8.4 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
 	github.com/marten-seemann/qtls-go1-15 v0.1.1 // indirect
 	github.com/mattn/go-runewidth v0.0.9 // indirect
-	github.com/mattn/go-sqlite3 v2.0.3+incompatible
 	github.com/mitchellh/mapstructure v1.3.3
 	github.com/nareix/joy5 v0.0.0-20200712071056-a55089207c88
 	github.com/niemeyer/pretty v0.0.0-20200227124842-a10e7caefd8e // indirect
@@ -49,7 +49,6 @@ require (
 	github.com/petar/GoLLRB v0.0.0-20190514000832-33fb24c13b99
 	github.com/pion/quic v0.1.4 // indirect
 	github.com/pion/webrtc/v2 v2.2.26
-	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.7.1
 	github.com/prometheus/common v0.14.0
 	github.com/prometheus/procfs v0.2.0 // indirect
@@ -65,14 +64,12 @@ require (
 	github.com/volatiletech/null/v8 v8.1.0
 	github.com/volatiletech/randomize v0.0.1
 	github.com/volatiletech/sqlboiler v3.7.1+incompatible
-	github.com/volatiletech/sqlboiler-sqlite3 v0.0.0-20200618013359-a93887c09a14 // indirect
 	github.com/volatiletech/sqlboiler/v4 v4.3.1
 	github.com/volatiletech/strmangle v0.0.1
 	go.etcd.io/bbolt v1.3.5
 	go.uber.org/multierr v1.6.0
 	go.uber.org/zap v1.16.0
 	golang.org/x/crypto v0.0.0-20200820211705-5c72a883971a
-	golang.org/x/exp v0.0.0-20200224162631-6cc2880d07d6
 	golang.org/x/net v0.0.0-20200923182212-328152dc79b1 // indirect
 	golang.org/x/oauth2 v0.0.0-20200902213428-5d25da1a8d43
 	golang.org/x/sync v0.0.0-20200625203802-6e8e738ad208
@@ -85,5 +82,4 @@ require (
 	gopkg.in/ini.v1 v1.61.0 // indirect
 	honnef.co/go/tools v0.0.1-2020.1.5 // indirect
 	lukechampine.com/uint128 v1.0.0
-	mvdan.cc/xurls/v2 v2.2.0
 )

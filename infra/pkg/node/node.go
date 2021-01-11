@@ -55,8 +55,7 @@ type CreateRequest struct {
 }
 
 // ListRequest ...
-type ListRequest struct {
-}
+type ListRequest struct{}
 
 // DeleteRequest ...
 type DeleteRequest struct {

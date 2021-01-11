@@ -210,7 +210,7 @@ func (d *DigitalOceanDriver) Create(ctx context.Context, req *CreateRequest) (*N
 		case <-ctx.Done():
 			return nil, ctx.Err()
 		case <-checkTick.C:
-			droplet, _, err := d.client.Droplets.Get(ctx, droplet.ID)
+			droplet, _, err = d.client.Droplets.Get(ctx, droplet.ID)
 			if err != nil {
 				return nil, err
 			}

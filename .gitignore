@@ -8,3 +8,5 @@ schema/sanitized/*.proto
 *.wasm
 **/infra.yaml
 **/*.sqlite
+.gradle
+**/*key.json
