@@ -5,4 +5,4 @@ declare global {
         Go: any;
     }
 }
-export default function (getBytes: Promise<Buffer>): {};
+export default function (getBytes: (string: any) => Promise<Buffer>): (baseURI: string) => Promise<any>;

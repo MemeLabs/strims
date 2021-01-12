@@ -55,19 +55,27 @@ interface PortState {
 }
 
 export class WindowBridge extends EventEmitter {
-  private workerConstructor: () => any;
+  private workerConstructor: new () => Worker;
   private nextDataChannelPortId = 0;
   private dataChannelPorts: Map<number, PortState>;
 
-  constructor(workerConstructor: () => Worker) {
+  constructor(workerConstructor: new () => Worker) {
     super();
 
     this.workerConstructor = workerConstructor;
     this.dataChannelPorts = new Map();
 
-    const defaultWorker = workerConstructor();
-    defaultWorker.onmessage = this.handleWorkerMessage.bind(this);
-    defaultWorker.postMessage({ service: "default" });
+    this.createWorker("default");
+  }
+
+  private createWorker(service: string): Worker {
+    const worker = new this.workerConstructor();
+    worker.onmessage = this.handleWorkerMessage.bind(this);
+    worker.postMessage({
+      service,
+      baseURI: location.origin,
+    });
+    return worker;
   }
 
   private handleWorkerMessage({ data }) {
@@ -99,7 +107,7 @@ export class WindowBridge extends EventEmitter {
 
     const dataChannels: { id: number; port: MessagePort; dataChannel: RTCDataChannel }[] = [];
     const handleDataChannel = (dataChannel) => {
-      let open: () => void;
+      let open: (...arg: any[]) => void;
       const ready = new Promise((resolve) => (open = resolve));
 
       const { port1, port2 } = new MessageChannel();
@@ -283,9 +291,7 @@ export class WindowBridge extends EventEmitter {
   }
 
   private openWorker(port: MessagePort, service: string) {
-    const worker = this.workerConstructor();
-    worker.onmessage = this.handleWorkerMessage.bind(this);
-    worker.postMessage({ service });
+    const worker = this.createWorker(service);
     this.once(`busport:${service}`, (p: MessagePort) => port.postMessage({ port: p }, [p]));
 
     port.onmessage = ({ data }) => {

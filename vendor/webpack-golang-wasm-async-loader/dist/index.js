@@ -4,9 +4,6 @@ const child_process_1 = require("child_process");
 const crypto = require("crypto");
 const fs_1 = require("fs");
 const path_1 = require("path");
-const proxyBuilder = (filename) => `
-export default gobridge(fetch('${filename}').then(response => response.arrayBuffer()));
-`;
 const versionPkg = "github.com/MemeLabs/go-ppspp/pkg/version";
 const getGoBin = (root) => `${root}/bin/go`;
 function loader(contents) {
@@ -44,13 +41,9 @@ function loader(contents) {
         const emittedFilename = path_1.basename(this.resourcePath, ".go") + `.${digest}.wasm`;
         this.emitFile(emittedFilename, out, null);
         cb(null, [
-            "require('!",
-            path_1.join(__dirname, "..", "lib", "wasm_exec.js"),
-            "');",
-            "import gobridge from '",
-            path_1.join(__dirname, "..", "dist", "gobridge.js"),
-            "';",
-            proxyBuilder(emittedFilename),
+            `require("${path_1.join(__dirname, "..", "lib", "wasm_exec.js")}");`,
+            `import gobridge from "${path_1.join(__dirname, "..", "dist", "gobridge.js")}";`,
+            `export default gobridge((baseURI) => fetch(baseURI + '/${emittedFilename}').then(res => res.arrayBuffer()));`,
         ].join(""));
     });
 }

@@ -1096,23 +1096,23 @@ export class MessageEntities {
 
 export namespace MessageEntities {
   export interface IBounds {
-    start?: bigint;
-    end?: bigint;
+    start?: number;
+    end?: number;
   }
 
   export class Bounds {
-    start: bigint = BigInt(0);
-    end: bigint = BigInt(0);
+    start: number = 0;
+    end: number = 0;
 
     constructor(v?: IBounds) {
-      this.start = v?.start || BigInt(0);
-      this.end = v?.end || BigInt(0);
+      this.start = v?.start || 0;
+      this.end = v?.end || 0;
     }
 
     static encode(m: Bounds, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.start) w.uint32(8).int64(m.start);
-      if (m.end) w.uint32(16).int64(m.end);
+      if (m.start) w.uint32(8).uint32(m.start);
+      if (m.end) w.uint32(16).uint32(m.end);
       return w;
     }
 
@@ -1124,10 +1124,10 @@ export namespace MessageEntities {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.start = r.int64();
+          m.start = r.uint32();
           break;
           case 2:
-          m.end = r.int64();
+          m.end = r.uint32();
           break;
           default:
           r.skipType(tag & 7);
@@ -1185,20 +1185,20 @@ export namespace MessageEntities {
     bounds?: MessageEntities.IBounds | undefined;
     name?: string;
     modifiers?: string[];
-    combo?: bigint;
+    combo?: number;
   }
 
   export class Emote {
     bounds: MessageEntities.Bounds | undefined;
     name: string = "";
     modifiers: string[] = [];
-    combo: bigint = BigInt(0);
+    combo: number = 0;
 
     constructor(v?: IEmote) {
       this.bounds = v?.bounds && new MessageEntities.Bounds(v.bounds);
       this.name = v?.name || "";
       if (v?.modifiers) this.modifiers = v.modifiers;
-      this.combo = v?.combo || BigInt(0);
+      this.combo = v?.combo || 0;
     }
 
     static encode(m: Emote, w?: Writer): Writer {
@@ -1206,7 +1206,7 @@ export namespace MessageEntities {
       if (m.bounds) MessageEntities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
       if (m.name) w.uint32(18).string(m.name);
       for (const v of m.modifiers) w.uint32(26).string(v);
-      if (m.combo) w.uint32(32).int64(m.combo);
+      if (m.combo) w.uint32(32).uint32(m.combo);
       return w;
     }
 
@@ -1227,7 +1227,7 @@ export namespace MessageEntities {
           m.modifiers.push(r.string())
           break;
           case 4:
-          m.combo = r.int64();
+          m.combo = r.uint32();
           break;
           default:
           r.skipType(tag & 7);

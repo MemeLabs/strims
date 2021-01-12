@@ -26,10 +26,11 @@ import { Link, useHistory } from "react-router-dom";
 import { useToggle } from "react-use";
 import usePortal from "react-useportal";
 
+import { CreateNetworkResponse, Network } from "../apis/strims/network/v1/network";
+import { Certificate } from "../apis/strims/type/certificate";
 import { useCall, useClient } from "../contexts/Api";
 import { useTheme } from "../contexts/Theme";
 import useObjectURL from "../hooks/useObjectURL";
-import { CreateNetworkResponse, ICertificate, INetwork } from "../lib/pb";
 import AddNetworkModal from "./AddNetworkModal";
 
 const NetworkAddButton: React.FunctionComponent<React.ComponentProps<"button">> = ({
@@ -58,11 +59,13 @@ const NetworkAddButton: React.FunctionComponent<React.ComponentProps<"button">> 
   );
 };
 
-const rootCertificate = (cert: ICertificate): ICertificate =>
-  cert.parent ? rootCertificate(cert.parent) : cert;
+const rootCertificate = (cert: Certificate): Certificate =>
+  cert.parentOneof.case === Certificate.ParentOneofCase.PARENT
+    ? rootCertificate(cert.parentOneof.parent)
+    : cert;
 
 interface NetworkGemProps {
-  network: INetwork;
+  network: Network;
 }
 
 const NetworkGem: React.FC<NetworkGemProps> = ({ network }) => {
@@ -88,7 +91,7 @@ const NetworkGem: React.FC<NetworkGemProps> = ({ network }) => {
 
 const NetworkNav = () => {
   const [expanded, toggleExpanded] = useToggle(false);
-  const [networks, setNetworks] = React.useState<INetwork[]>([]);
+  const [networks, setNetworks] = React.useState<Network[]>([]);
   const [state, { setNavOrder }] = useTheme();
 
   const [{ error, loading }] = useCall("network", "list", {
@@ -104,7 +107,7 @@ const NetworkNav = () => {
       const next = Array.from(prev);
       const [target] = next.splice(result.source.index, 1);
       next.splice(result.destination.index, 0, target);
-      setNavOrder(next.map(({ id }) => id));
+      setNavOrder(next.map(({ id }) => Number(id)));
       return next;
     });
   }, []);
@@ -127,7 +130,11 @@ const NetworkNav = () => {
             {(provided, snapshot) => (
               <div ref={provided.innerRef} {...provided.droppableProps}>
                 {networks.map((network, i) => (
-                  <Draggable draggableId={`network-${network.id}`} index={i} key={network.id}>
+                  <Draggable
+                    draggableId={`network-${network.id.toString()}`}
+                    index={i}
+                    key={network.id.toString()}
+                  >
                     {(provided, snapshot) => (
                       <div
                         ref={provided.innerRef}

@@ -1,6 +1,6 @@
 import { PassThrough } from "stream";
 
-import { ChatClientEvent, MessageEntities } from "../../lib/pb";
+import { ChatClientEvent, MessageEntities } from "../../apis/strims/chat/v1/chat";
 import { Readable as GenericReadable } from "../../lib/rpc/stream";
 
 const history = [
@@ -258,18 +258,19 @@ const history = [
 
 export const messages = history
   .map((v) => JSON.parse(v.substr(4)))
-  .map(({ nick, timestamp, data, entities }) =>
-    ChatClientEvent.Message.create({
-      nick: nick,
-      sentTime: timestamp,
-      serverTime: timestamp,
-      body: data,
-      entities: MessageEntities.create(entities),
-    })
-  ) as ChatClientEvent.IMessage[];
+  .map(
+    ({ nick, timestamp, data, entities }) =>
+      new ChatClientEvent.Message({
+        nick: nick,
+        sentTime: timestamp,
+        serverTime: timestamp,
+        body: data,
+        entities: new MessageEntities(entities),
+      })
+  );
 
 export default (() => {
-  const events: GenericReadable<ChatClientEvent.IMessage> = new PassThrough({
+  const events: GenericReadable<ChatClientEvent.Message> = new PassThrough({
     objectMode: true,
   }) as any;
 

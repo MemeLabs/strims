@@ -56,16 +56,16 @@ module.exports = (env, argv) => {
       title: "Loading...",
       favicon: path.resolve(__dirname, "assets", "favicon.ico"),
     }),
-    new HtmlWebpackPlugin({
-      filename: "test.html",
-      chunks: ["test"],
-      title: "test",
-    }),
-    new HtmlWebpackPlugin({
-      filename: "funding.html",
-      chunks: ["funding"],
-      title: "funding",
-    }),
+    // new HtmlWebpackPlugin({
+    //   filename: "test.html",
+    //   chunks: ["test"],
+    //   title: "test",
+    // }),
+    // new HtmlWebpackPlugin({
+    //   filename: "funding.html",
+    //   chunks: ["funding"],
+    //   title: "funding",
+    // }),
     new webpack.HotModuleReplacementPlugin(),
   ];
 
@@ -122,14 +122,15 @@ module.exports = (env, argv) => {
 
   return [
     {
+      target: "web",
       entry: {
         index: path.join(__dirname, "src", "web", "index.tsx"),
-        test: path.join(__dirname, "src", "web", "test.ts"),
-        funding: path.join(__dirname, "src", "funding", "index.tsx"),
+        // test: path.join(__dirname, "src", "web", "test.ts"),
+        // funding: path.join(__dirname, "src", "funding", "index.tsx"),
       },
       devtool,
       output: {
-        filename: "[name].[hash].js",
+        filename: "[name].[contenthash].js",
         chunkFilename: "[id].[chunkhash].js",
         path: path.resolve(__dirname, "dist", "web"),
         publicPath: "/",
@@ -159,9 +160,14 @@ module.exports = (env, argv) => {
       },
       module: {
         rules: [
-          scriptModuleRule,
-          styleModuleRule,
-          staticModuleRule,
+          {
+            test: /\.worker\.ts$/,
+            loader: "worker-loader",
+            options: {
+              inline: "fallback",
+              chunkFilename: "[id].[contenthash].worker.js",
+            },
+          },
           {
             test: /\.go/,
             use: ["golang-wasm-async-loader"],
@@ -170,26 +176,18 @@ module.exports = (env, argv) => {
             test: /\.wasm$/,
             loader: "file-loader",
           },
-          {
-            test: /\.worker\.js$/,
-            loader: "worker-loader",
-            options: {
-              inline: true,
-              fallback: true,
-            },
-          },
+          scriptModuleRule,
+          styleModuleRule,
+          staticModuleRule,
         ],
-      },
-      node: {
-        fs: false,
       },
       resolve: {
         extensions: [".go", ".tsx", ".ts", ".js"],
-        // fallback: {
-        //   "fs": false,
-        //   "stream": require.resolve("stream-browserify"),
-        //   "buffer": require.resolve("buffer"),
-        // },
+        fallback: {
+          "fs": false,
+          "stream": require.resolve("stream-browserify"),
+          "buffer": require.resolve("buffer"),
+        },
       },
       optimization: {
         minimizer: [

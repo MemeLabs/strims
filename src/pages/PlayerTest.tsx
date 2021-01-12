@@ -13,26 +13,17 @@ interface PlayerTestRouteParams {
 
 const PlayerTest = () => {
   const params = useParams<PlayerTestRouteParams>();
-  const [loaded, setLoaded] = React.useState(false);
-  const client = useClient();
-
-  React.useEffect(() => {
-    client.network.startVPN();
-    setTimeout(() => setLoaded(true), 1000);
-  }, []);
 
   return (
     <MainLayout>
       <main className="home_page__main">
         <header className="home_page__subheader"></header>
         <section className="home_page__main__video">
-          {loaded && (
-            <VideoPlayer
-              networkKey={Base64.toUint8Array(params.networkKey)}
-              swarmKey={Base64.toUint8Array(params.swarmKey)}
-              mimeType="video/mp4"
-            />
-          )}
+          <VideoPlayer
+            networkKey={Base64.toUint8Array(params.networkKey)}
+            swarmKey={Base64.toUint8Array(params.swarmKey)}
+            mimeType="video/mp4"
+          />
         </section>
       </main>
       <aside className="home_page__right">

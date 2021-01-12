@@ -28,32 +28,32 @@ const useMediaSource = ({ networkKey, swarmKey, mimeType, videoRef }: MediaSourc
   return useMemo(() => {
     const Decoder = decoders[mimeType];
     const decoder = new Decoder();
-    let started = false;
+    // let started = false;
 
-    const clientEvents = client.video.openClient({
-      swarmKey,
-      emitData: true,
-    });
-    clientEvents.on("data", (e) => {
-      switch (e.body) {
-        case "open":
-          // TODO: do this in the service
-          client.video.publishSwarm({ id: e.open.id, networkKey });
-          break;
-        case "data":
-          decoder.write(e.data.data);
-          if (e.data.flush) {
-            decoder.flush();
+    // const clientEvents = client.video.openClient({
+    //   swarmKey,
+    //   emitData: true,
+    // });
+    // clientEvents.on("data", (e) => {
+    //   switch (e.body) {
+    //     case "open":
+    //       // TODO: do this in the service
+    //       client.video.publishSwarm({ id: e.open.id, networkKey });
+    //       break;
+    //     case "data":
+    //       decoder.write(e.data.data);
+    //       if (e.data.flush) {
+    //         decoder.flush();
 
-            const [start, end] = decoder.source.bounds();
-            if (!started && end - start >= 1) {
-              started = true;
-              videoRef.current.currentTime = end - 1;
-              videoRef.current.play();
-            }
-          }
-      }
-    });
+    //         const [start, end] = decoder.source.bounds();
+    //         if (!started && end - start >= 1) {
+    //           started = true;
+    //           videoRef.current.currentTime = end - 1;
+    //           videoRef.current.play();
+    //         }
+    //       }
+    //   }
+    // });
 
     return decoder.source.mediaSource;
   }, []);

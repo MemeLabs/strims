@@ -3,12 +3,12 @@ import * as React from "react";
 import { FunctionComponent } from "react";
 import { ReactNode } from "react";
 
-import { ChatClientEvent, MessageEntities } from "../../lib/pb";
+import { ChatClientEvent, MessageEntities } from "../../apis/strims/chat/v1/chat";
 import Emote from "./Emote";
 
 // TODO: in app links
 interface MessageLinkProps {
-  entity: MessageEntities.ILink;
+  entity: MessageEntities.Link;
 }
 const MessageLink: FunctionComponent<MessageLinkProps> = ({ children, entity }) => (
   <a className="chat__message__link" target="_blank" rel="nofollow" href={entity.url}>
@@ -17,7 +17,7 @@ const MessageLink: FunctionComponent<MessageLinkProps> = ({ children, entity }) 
 );
 
 interface MessageEmoteProps {
-  entity: MessageEntities.IEmote;
+  entity: MessageEntities.Emote;
 }
 const MessageEmote: FunctionComponent<MessageEmoteProps> = ({ children, entity }) => (
   <Emote name={entity.name} modifiers={entity.modifiers}>
@@ -26,14 +26,14 @@ const MessageEmote: FunctionComponent<MessageEmoteProps> = ({ children, entity }
 );
 
 interface MessageNickProps {
-  entity: MessageEntities.INick;
+  entity: MessageEntities.Nick;
 }
 const MessageNick: FunctionComponent<MessageNickProps> = ({ children }) => (
   <span className="chat__message__nick">{children}</span>
 );
 
 interface MessageTagProps {
-  entity: MessageEntities.ITag;
+  entity: MessageEntities.Tag;
 }
 const MessageTag: FunctionComponent<MessageTagProps> = ({ children }) => (
   <span className="tag">{children}</span>
@@ -47,7 +47,7 @@ const trimSpoiler = (node: React.ReactNode, rx: RegExp) =>
   typeof node === "string" ? node.replace(rx, "") : node;
 
 interface MessageSpoilerProps {
-  entity: MessageEntities.ISpoiler;
+  entity: MessageEntities.Spoiler;
 }
 const MessageSpoiler: FunctionComponent<MessageSpoilerProps> = ({ children: childrenNode }) => {
   const children = React.Children.toArray(childrenNode);
@@ -73,14 +73,14 @@ const MessageSpoiler: FunctionComponent<MessageSpoilerProps> = ({ children: chil
 };
 
 interface MessageCodeBlockProps {
-  entity: MessageEntities.ICodeBlock;
+  entity: MessageEntities.CodeBlock;
 }
 const MessageCodeBlock: FunctionComponent<MessageCodeBlockProps> = ({ children }) => (
   <span className="chat__message__code">{children}</span>
 );
 
 interface MessageGreenTextProps {
-  entity: MessageEntities.IGenericEntity;
+  entity: MessageEntities.GenericEntity;
 }
 // TODO: optionally disable
 const MessageGreenText: FunctionComponent<MessageGreenTextProps> = ({ children }) => (
@@ -153,7 +153,7 @@ class MessageFormatter {
 }
 
 interface MessageProps extends React.HTMLProps<HTMLDivElement> {
-  message: ChatClientEvent.IMessage;
+  message: ChatClientEvent.Message;
 }
 
 const Message: FunctionComponent<MessageProps> = (props) => {
@@ -209,7 +209,7 @@ const StandardMessage: FunctionComponent<MessageProps> = ({
     className,
   ]);
 
-  const time = new Date(serverTime);
+  const time = new Date(Number(serverTime));
 
   return (
     <div {...props} className={classNames}>

@@ -3,15 +3,15 @@ import clsx from "clsx";
 import * as React from "react";
 import { useEffect } from "react";
 
+import { CallChatClientRequest, ChatClientEvent } from "../apis/strims/chat/v1/chat";
 import { Emote, emotes } from "../components/Chat/test-emotes";
 import stream, { messages } from "../components/Chat/test-history";
-import { CallChatClientRequest, ChatClientEvent } from "../lib/pb";
 import { useClient } from "./Api";
 
 type Action =
   | {
       type: "MESSAGE_SCROLLBACK";
-      messages: ChatClientEvent.IMessage[];
+      messages: ChatClientEvent.Message[];
     }
   | {
       type: "LOAD_EMOTES";
@@ -19,7 +19,7 @@ type Action =
     }
   | {
       type: "MESSAGE";
-      message: ChatClientEvent.IMessage;
+      message: ChatClientEvent.Message;
     }
   | {
       type: "CLIENT_DATA";
@@ -34,11 +34,11 @@ type Action =
     };
 
 interface State {
-  messages: ChatClientEvent.IMessage[];
+  messages: ChatClientEvent.Message[];
   styles: {
     [key: string]: StyleDeclarationValue;
   };
-  clientId?: number;
+  clientId?: bigint;
   errors: Error[];
   state: "new" | "open" | "closed";
 }
@@ -88,14 +88,14 @@ const chatReducer = (state: State, action: Action): State => {
 };
 
 const chatClientDataReducer = (state: State, event: ChatClientEvent): State => {
-  switch (event.body) {
-    case "open":
+  switch (event.body.case) {
+    case ChatClientEvent.BodyCase.OPEN:
       return {
         ...state,
-        clientId: event.open.clientId,
+        clientId: event.body.open.clientId,
         state: "open",
       };
-    case "message":
+    case ChatClientEvent.BodyCase.MESSAGE:
       return state;
     default:
       return state;
@@ -128,9 +128,11 @@ export const useChat = () => {
   const sendMessage = (body: string) =>
     client.chat.callClient({
       clientId: state.clientId,
-      message: {
-        time: Date.now(),
-        body,
+      body: {
+        message: {
+          time: BigInt(Date.now()),
+          body,
+        },
       },
     });
 
@@ -162,7 +164,7 @@ export const Provider = ({ networkKey, serverKey, children }: any) => {
     chatClient.on("data", (data) => dispatch({ type: "CLIENT_DATA", data }));
     chatClient.on("error", (error) => dispatch({ type: "CLIENT_ERROR", error }));
     chatClient.on("close", () => dispatch({ type: "CLIENT_CLOSE" }));
-    return () => client.chat.callClient({ clientId: state.clientId, close: {} });
+    return () => client.chat.callClient({ clientId: state.clientId, body: { close: {} } });
   }, []);
 
   useEffect(() => {

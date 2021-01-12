@@ -104,8 +104,8 @@ message ChatServer {
 
 message MessageEntities {
   message Bounds {
-    int64 start = 1;
-    int64 end = 2;
+    uint32 start = 1;
+    uint32 end = 2;
   }
 
   message Link {
@@ -117,7 +117,7 @@ message MessageEntities {
     Bounds bounds = 1;
     string name = 2;
     repeated string modifiers = 3;
-    int64 combo = 4;
+    uint32 combo = 4;
   }
 
   message Nick {

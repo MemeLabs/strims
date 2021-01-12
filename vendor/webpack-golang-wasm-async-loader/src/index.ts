@@ -5,10 +5,6 @@ import { basename, join } from "path";
 
 import * as webpack from "webpack";
 
-const proxyBuilder = (filename: string) => `
-export default gobridge(fetch('${filename}').then(response => response.arrayBuffer()));
-`;
-
 const versionPkg = "github.com/MemeLabs/go-ppspp/pkg/version";
 
 const getGoBin = (root: string) => `${root}/bin/go`;
@@ -58,18 +54,11 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
     const emittedFilename = basename(this.resourcePath, ".go") + `.${digest}.wasm`;
     this.emitFile(emittedFilename, out, null);
 
-    cb(
-      null,
-      [
-        "require('!",
-        join(__dirname, "..", "lib", "wasm_exec.js"),
-        "');",
-        "import gobridge from '",
-        join(__dirname, "..", "dist", "gobridge.js"),
-        "';",
-        proxyBuilder(emittedFilename),
-      ].join("")
-    );
+    cb(null, [
+      `require("${join(__dirname, "..", "lib", "wasm_exec.js")}");`,
+      `import gobridge from "${join(__dirname, "..", "dist", "gobridge.js")}";`,
+      `export default gobridge((baseURI) => fetch(baseURI + '/${emittedFilename}').then(res => res.arrayBuffer()));`,
+    ].join(""));
   });
 }
 
