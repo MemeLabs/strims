@@ -8,7 +8,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/event"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/petar/GoLLRB/llrb"
@@ -86,7 +86,7 @@ func (h *Host) NotifyPeerNetwork(ch chan PeerNetwork) {
 }
 
 // AddNetwork ...
-func (h *Host) AddNetwork(cert *pb.Certificate) (*Node, error) {
+func (h *Host) AddNetwork(cert *certificate.Certificate) (*Node, error) {
 	h.clientsLock.Lock()
 	defer h.clientsLock.Unlock()
 

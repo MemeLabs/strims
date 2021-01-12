@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	vpnv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vpn/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -172,9 +172,9 @@ func (m *webRTCMediator) GetICECandidates() <-chan []byte {
 }
 
 func (m *webRTCMediator) SendOffer(offer []byte) error {
-	msg := &pb.PeerExchangeMessage{
-		Body: &pb.PeerExchangeMessage_Offer_{
-			Offer: &pb.PeerExchangeMessage_Offer{
+	msg := &vpnv1.PeerExchangeMessage{
+		Body: &vpnv1.PeerExchangeMessage_Offer_{
+			Offer: &vpnv1.PeerExchangeMessage_Offer{
 				MediationId: m.mediationID,
 				Data:        offer,
 			},
@@ -184,9 +184,9 @@ func (m *webRTCMediator) SendOffer(offer []byte) error {
 }
 
 func (m *webRTCMediator) SendAnswer(answer []byte) error {
-	msg := &pb.PeerExchangeMessage{
-		Body: &pb.PeerExchangeMessage_Answer_{
-			Answer: &pb.PeerExchangeMessage_Answer{
+	msg := &vpnv1.PeerExchangeMessage{
+		Body: &vpnv1.PeerExchangeMessage_Answer_{
+			Answer: &vpnv1.PeerExchangeMessage_Answer{
 				MediationId: m.mediationID,
 				Data:        answer,
 			},
@@ -202,9 +202,9 @@ func (m *webRTCMediator) SendICECandidate(candidate []byte) error {
 		return err
 	}
 
-	msg := &pb.PeerExchangeMessage{
-		Body: &pb.PeerExchangeMessage_IceCandidate_{
-			IceCandidate: &pb.PeerExchangeMessage_IceCandidate{
+	msg := &vpnv1.PeerExchangeMessage{
+		Body: &vpnv1.PeerExchangeMessage_IceCandidate_{
+			IceCandidate: &vpnv1.PeerExchangeMessage_IceCandidate{
 				MediationId: m.mediationID,
 				Index:       index,
 				Data:        candidate,
@@ -241,7 +241,7 @@ func (s *peerExchange) HandleMessage(msg *Message) error {
 		return nil
 	}
 
-	var m pb.PeerExchangeMessage
+	var m vpnv1.PeerExchangeMessage
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
 		return err
 	}
@@ -250,13 +250,13 @@ func (s *peerExchange) HandleMessage(msg *Message) error {
 	defer s.mediatorsLock.Unlock()
 
 	switch b := m.Body.(type) {
-	case *pb.PeerExchangeMessage_Offer_:
+	case *vpnv1.PeerExchangeMessage_Offer_:
 		return s.handleOffer(b.Offer, msg)
-	case *pb.PeerExchangeMessage_Answer_:
+	case *vpnv1.PeerExchangeMessage_Answer_:
 		return s.handleAnswer(b.Answer, msg)
-	case *pb.PeerExchangeMessage_IceCandidate_:
+	case *vpnv1.PeerExchangeMessage_IceCandidate_:
 		return s.handleICECandidate(b.IceCandidate, msg)
-	case *pb.PeerExchangeMessage_CallbackRequest_:
+	case *vpnv1.PeerExchangeMessage_CallbackRequest_:
 		return s.handleCallbackRequest(b.CallbackRequest, msg)
 	default:
 		return errors.New("unexpected message type")
@@ -297,15 +297,15 @@ func (s *peerExchange) Connect(hostID kademlia.ID) error {
 }
 
 func (s *peerExchange) sendCallbackRequest(hostID kademlia.ID) error {
-	msg := &pb.PeerExchangeMessage{
-		Body: &pb.PeerExchangeMessage_CallbackRequest_{
-			CallbackRequest: &pb.PeerExchangeMessage_CallbackRequest{},
+	msg := &vpnv1.PeerExchangeMessage{
+		Body: &vpnv1.PeerExchangeMessage_CallbackRequest_{
+			CallbackRequest: &vpnv1.PeerExchangeMessage_CallbackRequest{},
 		},
 	}
 	return s.network.SendProto(hostID, vnic.PeerExchangePort, vnic.PeerExchangePort, msg)
 }
 
-func (s *peerExchange) handleCallbackRequest(m *pb.PeerExchangeMessage_CallbackRequest, msg *Message) error {
+func (s *peerExchange) handleCallbackRequest(m *vpnv1.PeerExchangeMessage_CallbackRequest, msg *Message) error {
 	go func() {
 		if err := s.dial(newWebRTCMediator(msg.SrcHostID(), s.network)); err != nil {
 			s.logger.Debug(
@@ -317,7 +317,7 @@ func (s *peerExchange) handleCallbackRequest(m *pb.PeerExchangeMessage_CallbackR
 	return nil
 }
 
-func (s *peerExchange) handleOffer(m *pb.PeerExchangeMessage_Offer, msg *Message) error {
+func (s *peerExchange) handleOffer(m *vpnv1.PeerExchangeMessage_Offer, msg *Message) error {
 	s.logger.Debug(
 		"handling offer",
 		zap.Stringer("host", msg.SrcHostID()),
@@ -368,7 +368,7 @@ func (s *peerExchange) dial(t *webRTCMediator) error {
 	return err
 }
 
-func (s *peerExchange) handleAnswer(m *pb.PeerExchangeMessage_Answer, msg *Message) error {
+func (s *peerExchange) handleAnswer(m *vpnv1.PeerExchangeMessage_Answer, msg *Message) error {
 	t, ok := s.mediators[msg.SrcHostID()]
 	if !ok {
 		return fmt.Errorf("no mediator to handle answer from %s", msg.SrcHostID())
@@ -377,7 +377,7 @@ func (s *peerExchange) handleAnswer(m *pb.PeerExchangeMessage_Answer, msg *Messa
 	return t.SetAnswer(m.MediationId, m.Data)
 }
 
-func (s *peerExchange) handleICECandidate(m *pb.PeerExchangeMessage_IceCandidate, msg *Message) error {
+func (s *peerExchange) handleICECandidate(m *vpnv1.PeerExchangeMessage_IceCandidate, msg *Message) error {
 	t, ok := s.mediators[msg.SrcHostID()]
 	if !ok || t.remoteMediationID != m.MediationId {
 		return fmt.Errorf("no mediator to handle ice candidate from %s", msg.SrcHostID())

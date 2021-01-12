@@ -1,10 +1,10 @@
 import * as React from "react";
 import { BrowserRouter } from "react-router-dom";
 
+import { FrontendClient } from "../apis/client";
 import { Provider as ApiProvider } from "../contexts/Api";
 import { Provider as ProfileProvider } from "../contexts/Profile";
 import { Provider as ThemeProvider } from "../contexts/Theme";
-import { FrontendClient } from "../lib/api";
 
 const LoadingMessage = () => <p className="loading_message">loading</p>;
 

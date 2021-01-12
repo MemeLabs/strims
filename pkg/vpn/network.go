@@ -9,7 +9,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
@@ -20,7 +20,7 @@ import (
 )
 
 // newNetwork ...
-func newNetwork(logger *zap.Logger, host *vnic.Host, certificate *pb.Certificate, recentMessageIDs *lru.Cache) *Network {
+func newNetwork(logger *zap.Logger, host *vnic.Host, certificate *certificate.Certificate, recentMessageIDs *lru.Cache) *Network {
 	return &Network{
 		logger:           logger,
 		host:             host,
@@ -86,7 +86,7 @@ type Network struct {
 	logger           *zap.Logger
 	host             *vnic.Host
 	seq              uint64
-	certificate      *pb.Certificate
+	certificate      *certificate.Certificate
 	recentMessageIDs *lru.Cache
 	linksLock        sync.Mutex
 	links            *kademlia.KBucket

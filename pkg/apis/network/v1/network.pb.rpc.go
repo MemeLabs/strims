@@ -3,18 +3,18 @@ package network
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterNetworkServiceService ...
-func RegisterNetworkServiceService(host api.ServiceRegistry, service NetworkServiceService) {
-	host.RegisterMethod(".strims.network.v1.NetworkService.Create", service.Create)
-	host.RegisterMethod(".strims.network.v1.NetworkService.Update", service.Update)
-	host.RegisterMethod(".strims.network.v1.NetworkService.Delete", service.Delete)
-	host.RegisterMethod(".strims.network.v1.NetworkService.Get", service.Get)
-	host.RegisterMethod(".strims.network.v1.NetworkService.List", service.List)
-	host.RegisterMethod(".strims.network.v1.NetworkService.CreateInvitation", service.CreateInvitation)
-	host.RegisterMethod(".strims.network.v1.NetworkService.CreateFromInvitation", service.CreateFromInvitation)
+func RegisterNetworkServiceService(host rpc.ServiceRegistry, service NetworkServiceService) {
+	host.RegisterMethod("strims.network.v1.NetworkService.Create", service.Create)
+	host.RegisterMethod("strims.network.v1.NetworkService.Update", service.Update)
+	host.RegisterMethod("strims.network.v1.NetworkService.Delete", service.Delete)
+	host.RegisterMethod("strims.network.v1.NetworkService.Get", service.Get)
+	host.RegisterMethod("strims.network.v1.NetworkService.List", service.List)
+	host.RegisterMethod("strims.network.v1.NetworkService.CreateInvitation", service.CreateInvitation)
+	host.RegisterMethod("strims.network.v1.NetworkService.CreateFromInvitation", service.CreateFromInvitation)
 }
 
 // NetworkServiceService ...
@@ -51,11 +51,11 @@ type NetworkServiceService interface {
 
 // NetworkServiceClient ...
 type NetworkServiceClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewNetworkServiceClient ...
-func NewNetworkServiceClient(client api.Caller) *NetworkServiceClient {
+func NewNetworkServiceClient(client rpc.Caller) *NetworkServiceClient {
 	return &NetworkServiceClient{client}
 }
 
@@ -65,7 +65,7 @@ func (c *NetworkServiceClient) Create(
 	req *CreateNetworkRequest,
 	res *CreateNetworkResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.NetworkService.Create", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.Create", req, res)
 }
 
 // Update ...
@@ -74,7 +74,7 @@ func (c *NetworkServiceClient) Update(
 	req *UpdateNetworkRequest,
 	res *UpdateNetworkResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.NetworkService.Update", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.Update", req, res)
 }
 
 // Delete ...
@@ -83,7 +83,7 @@ func (c *NetworkServiceClient) Delete(
 	req *DeleteNetworkRequest,
 	res *DeleteNetworkResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.NetworkService.Delete", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.Delete", req, res)
 }
 
 // Get ...
@@ -92,7 +92,7 @@ func (c *NetworkServiceClient) Get(
 	req *GetNetworkRequest,
 	res *GetNetworkResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.NetworkService.Get", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.Get", req, res)
 }
 
 // List ...
@@ -101,7 +101,7 @@ func (c *NetworkServiceClient) List(
 	req *ListNetworksRequest,
 	res *ListNetworksResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.NetworkService.List", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.List", req, res)
 }
 
 // CreateInvitation ...
@@ -110,7 +110,7 @@ func (c *NetworkServiceClient) CreateInvitation(
 	req *CreateNetworkInvitationRequest,
 	res *CreateNetworkInvitationResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.NetworkService.CreateInvitation", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.CreateInvitation", req, res)
 }
 
 // CreateFromInvitation ...
@@ -119,5 +119,5 @@ func (c *NetworkServiceClient) CreateFromInvitation(
 	req *CreateNetworkFromInvitationRequest,
 	res *CreateNetworkFromInvitationResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.NetworkService.CreateFromInvitation", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.CreateFromInvitation", req, res)
 }

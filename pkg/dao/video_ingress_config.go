@@ -3,20 +3,20 @@ package dao
 import (
 	"errors"
 
+	video "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
 // SetVideoIngressConfig ...
-func SetVideoIngressConfig(s kv.RWStore, v *pb.VideoIngressConfig) error {
+func SetVideoIngressConfig(s kv.RWStore, v *video.VideoIngressConfig) error {
 	return s.Update(func(tx kv.RWTx) (err error) {
 		return tx.Put("videoIngressConfig", v)
 	})
 }
 
 // GetVideoIngressConfig ...
-func GetVideoIngressConfig(s kv.RWStore) (v *pb.VideoIngressConfig, err error) {
-	v = &pb.VideoIngressConfig{}
+func GetVideoIngressConfig(s kv.RWStore) (v *video.VideoIngressConfig, err error) {
+	v = &video.VideoIngressConfig{}
 	err = s.View(func(tx kv.Tx) error {
 		return tx.Get("videoIngressConfig", v)
 	})
@@ -29,8 +29,8 @@ func GetVideoIngressConfig(s kv.RWStore) (v *pb.VideoIngressConfig, err error) {
 }
 
 // NewDefaultVideoIngressConfig ...
-func NewDefaultVideoIngressConfig() *pb.VideoIngressConfig {
-	return &pb.VideoIngressConfig{
+func NewDefaultVideoIngressConfig() *video.VideoIngressConfig {
+	return &video.VideoIngressConfig{
 		ServerAddr: "127.0.0.1:1935",
 	}
 }

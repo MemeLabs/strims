@@ -1,11 +1,11 @@
 import * as React from "react";
 
-import * as pb from "../lib/pb";
+import { Profile } from "../apis/strims/profile/v1/profile";
 import { useLazyCall } from "./Api";
 
 interface State {
   loading: boolean;
-  profile: pb.IProfile | null;
+  profile: Profile | null;
   error: Error | null;
 }
 
@@ -20,7 +20,7 @@ const ProfileContext = React.createContext<[State, React.Dispatch<React.SetState
 );
 
 interface LoginResponse {
-  profile?: pb.IProfile | null;
+  profile?: Profile | null;
   sessionId?: string | null;
 }
 
@@ -74,7 +74,7 @@ export const useProfile = () => {
 export const Provider = ({ children }: any) => {
   const [state, setState] = React.useState(initialState);
 
-  const handleDone = (profile?: pb.IProfile) =>
+  const handleDone = (profile?: Profile) =>
     setState((prev) => ({
       ...prev,
       loading: false,

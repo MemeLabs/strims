@@ -1,16 +1,24 @@
+import { Base64 } from "js-base64";
 import * as React from "react";
 import ReactDOM from "react-dom";
 import { Controller, useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import Select from "react-select";
 
+import {
+  CreateNetworkFromInvitationRequest,
+  CreateNetworkFromInvitationResponse,
+  CreateNetworkRequest,
+  CreateNetworkResponse,
+  Network,
+} from "../../apis/strims/network/v1/network";
 import { InputError, InputLabel, TextInput } from "../../components/Form";
 import { MainLayout } from "../../components/MainLayout";
 import { useCall, useClient, useLazyCall } from "../../contexts/Api";
 import { useProfile } from "../../contexts/Profile";
-import * as pb from "../../lib/pb";
+import jsonutil from "../../lib/jsonutil";
 
-const NetworkForm = ({ onCreate }: { onCreate: (res: pb.CreateNetworkResponse) => void }) => {
+const NetworkForm = ({ onCreate }: { onCreate: (res: CreateNetworkResponse) => void }) => {
   const [{ value, error, loading }, createNetwork] = useLazyCall("network", "create", {
     onComplete: onCreate,
   });
@@ -18,7 +26,7 @@ const NetworkForm = ({ onCreate }: { onCreate: (res: pb.CreateNetworkResponse) =
     mode: "onBlur",
   });
 
-  const onSubmit = (data) => createNetwork(new pb.CreateNetworkRequest(data));
+  const onSubmit = (data) => createNetwork(new CreateNetworkRequest(data));
 
   return (
     <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
@@ -52,7 +60,7 @@ const NetworkForm = ({ onCreate }: { onCreate: (res: pb.CreateNetworkResponse) =
 const JoinForm = ({
   onCreate,
 }: {
-  onCreate: (res: pb.CreateNetworkFromInvitationResponse) => void;
+  onCreate: (res: CreateNetworkFromInvitationResponse) => void;
 }) => {
   const [{ value, error, loading }, create] = useLazyCall("network", "createFromInvitation", {
     onComplete: onCreate,
@@ -61,7 +69,7 @@ const JoinForm = ({
     mode: "onBlur",
   });
 
-  const onSubmit = (data) => create(new pb.CreateNetworkFromInvitationRequest(data));
+  const onSubmit = (data) => create(new CreateNetworkFromInvitationRequest(data));
 
   return (
     <form className="invite_form" onSubmit={handleSubmit(onSubmit)}>
@@ -100,13 +108,7 @@ const wrapString = (str: string, cols: number) =>
 
 const unwrapString = (str: string) => str.replace(/\n/g, "");
 
-const PublishNetworkModal = ({
-  network,
-  onClose,
-}: {
-  network: pb.INetwork;
-  onClose: () => void;
-}) => {
+const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: () => void }) => {
   const [bootstrapPeersRes] = useCall("bootstrap", "listPeers");
   const client = useClient();
   const { register, handleSubmit, errors, control } = useForm({
@@ -164,18 +166,12 @@ const PublishNetworkModal = ({
   );
 };
 
-const NetworkTable = ({
-  networks,
-  onDelete,
-}: {
-  networks: pb.INetwork[];
-  onDelete: () => void;
-}) => {
+const NetworkTable = ({ networks, onDelete }: { networks: Network[]; onDelete: () => void }) => {
   const [, deleteNetwork] = useLazyCall("network", "delete", { onComplete: onDelete });
   const client = useClient();
   const [{ profile }] = useProfile();
 
-  const [publishNetwork, setPublishNetwork] = React.useState<pb.INetwork>();
+  const [publishNetwork, setPublishNetwork] = React.useState<Network>();
   const modal = publishNetwork && (
     <PublishNetworkModal network={publishNetwork} onClose={() => setPublishNetwork(null)} />
   );
@@ -200,7 +196,7 @@ const NetworkTable = ({
     const handlePublish = () => setPublishNetwork(network);
 
     return (
-      <div className="thing_list__item" key={network.id}>
+      <div className="thing_list__item" key={network.id.toString()}>
         {i}
         <span>{network.name}</span>
         <button onClick={handleDelete} className="input input_button">
@@ -212,7 +208,7 @@ const NetworkTable = ({
         <button onClick={handlePublish} className="input input_button">
           publish
         </button>
-        <pre>{JSON.stringify(network, null, 2)}</pre>
+        <pre>{jsonutil.stringify(network)}</pre>
       </div>
     );
   });

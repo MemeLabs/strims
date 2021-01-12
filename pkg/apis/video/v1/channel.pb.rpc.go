@@ -3,15 +3,15 @@ package video
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterVideoChannelFrontendService ...
-func RegisterVideoChannelFrontendService(host api.ServiceRegistry, service VideoChannelFrontendService) {
-	host.RegisterMethod(".strims.video.v1.VideoChannelFrontend.List", service.List)
-	host.RegisterMethod(".strims.video.v1.VideoChannelFrontend.Create", service.Create)
-	host.RegisterMethod(".strims.video.v1.VideoChannelFrontend.Update", service.Update)
-	host.RegisterMethod(".strims.video.v1.VideoChannelFrontend.Delete", service.Delete)
+func RegisterVideoChannelFrontendService(host rpc.ServiceRegistry, service VideoChannelFrontendService) {
+	host.RegisterMethod("strims.video.v1.VideoChannelFrontend.List", service.List)
+	host.RegisterMethod("strims.video.v1.VideoChannelFrontend.Create", service.Create)
+	host.RegisterMethod("strims.video.v1.VideoChannelFrontend.Update", service.Update)
+	host.RegisterMethod("strims.video.v1.VideoChannelFrontend.Delete", service.Delete)
 }
 
 // VideoChannelFrontendService ...
@@ -36,11 +36,11 @@ type VideoChannelFrontendService interface {
 
 // VideoChannelFrontendClient ...
 type VideoChannelFrontendClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewVideoChannelFrontendClient ...
-func NewVideoChannelFrontendClient(client api.Caller) *VideoChannelFrontendClient {
+func NewVideoChannelFrontendClient(client rpc.Caller) *VideoChannelFrontendClient {
 	return &VideoChannelFrontendClient{client}
 }
 
@@ -50,7 +50,7 @@ func (c *VideoChannelFrontendClient) List(
 	req *VideoChannelListRequest,
 	res *VideoChannelListResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.video.v1.VideoChannelFrontend.List", req, res)
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoChannelFrontend.List", req, res)
 }
 
 // Create ...
@@ -59,7 +59,7 @@ func (c *VideoChannelFrontendClient) Create(
 	req *VideoChannelCreateRequest,
 	res *VideoChannelCreateResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.video.v1.VideoChannelFrontend.Create", req, res)
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoChannelFrontend.Create", req, res)
 }
 
 // Update ...
@@ -68,7 +68,7 @@ func (c *VideoChannelFrontendClient) Update(
 	req *VideoChannelUpdateRequest,
 	res *VideoChannelUpdateResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.video.v1.VideoChannelFrontend.Update", req, res)
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoChannelFrontend.Update", req, res)
 }
 
 // Delete ...
@@ -77,5 +77,5 @@ func (c *VideoChannelFrontendClient) Delete(
 	req *VideoChannelDeleteRequest,
 	res *VideoChannelDeleteResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.video.v1.VideoChannelFrontend.Delete", req, res)
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoChannelFrontend.Delete", req, res)
 }

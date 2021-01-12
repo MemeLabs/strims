@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 )
 
 // IDGenerator ...
@@ -26,14 +26,14 @@ func GenerateSnowflake() (uint64, error) {
 }
 
 // GenerateKey ...
-func GenerateKey() (*pb.Key, error) {
+func GenerateKey() (*key.Key, error) {
 	pub, priv, err := ed25519.GenerateKey(rand.Reader)
 	if err != nil {
 		return nil, err
 	}
 
-	k := &pb.Key{
-		Type:    pb.KeyType_KEY_TYPE_ED25519,
+	k := &key.Key{
+		Type:    key.KeyType_KEY_TYPE_ED25519,
 		Private: priv,
 		Public:  pub,
 	}

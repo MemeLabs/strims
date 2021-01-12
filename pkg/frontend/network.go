@@ -6,10 +6,10 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"google.golang.org/protobuf/proto"
 )
@@ -21,7 +21,7 @@ var (
 
 func init() {
 	RegisterService(func(server *rpc.Server, params *ServiceParams) {
-		api.RegisterNetworkService(server, &networkService{
+		networkv1.RegisterNetworkServiceService(server, &networkService{
 			profile: params.Profile,
 			store:   params.Store,
 			app:     params.App,
@@ -31,13 +31,13 @@ func init() {
 
 // networkService ...
 type networkService struct {
-	profile *pb.Profile
+	profile *profilev1.Profile
 	store   *dao.ProfileStore
 	app     control.AppControl
 }
 
 // Create ...
-func (s *networkService) Create(ctx context.Context, r *pb.CreateNetworkRequest) (*pb.CreateNetworkResponse, error) {
+func (s *networkService) Create(ctx context.Context, r *networkv1.CreateNetworkRequest) (*networkv1.CreateNetworkResponse, error) {
 	network, err := dao.NewNetwork(s.store, r.Name, r.Icon, s.profile)
 	if err != nil {
 		return nil, err
@@ -47,42 +47,42 @@ func (s *networkService) Create(ctx context.Context, r *pb.CreateNetworkRequest)
 		return nil, err
 	}
 
-	return &pb.CreateNetworkResponse{Network: network}, nil
+	return &networkv1.CreateNetworkResponse{Network: network}, nil
 }
 
 // Update ...
-func (s *networkService) Update(ctx context.Context, r *pb.UpdateNetworkRequest) (*pb.UpdateNetworkResponse, error) {
-	return nil, api.ErrNotImplemented
+func (s *networkService) Update(ctx context.Context, r *networkv1.UpdateNetworkRequest) (*networkv1.UpdateNetworkResponse, error) {
+	return nil, rpc.ErrNotImplemented
 }
 
 // Delete ...
-func (s *networkService) Delete(ctx context.Context, r *pb.DeleteNetworkRequest) (*pb.DeleteNetworkResponse, error) {
+func (s *networkService) Delete(ctx context.Context, r *networkv1.DeleteNetworkRequest) (*networkv1.DeleteNetworkResponse, error) {
 	if err := s.app.Network().Remove(r.Id); err != nil {
 		return nil, err
 	}
-	return &pb.DeleteNetworkResponse{}, nil
+	return &networkv1.DeleteNetworkResponse{}, nil
 }
 
 // Get ...
-func (s *networkService) Get(ctx context.Context, r *pb.GetNetworkRequest) (*pb.GetNetworkResponse, error) {
+func (s *networkService) Get(ctx context.Context, r *networkv1.GetNetworkRequest) (*networkv1.GetNetworkResponse, error) {
 	network, err := dao.GetNetwork(s.store, r.Id)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.GetNetworkResponse{Network: network}, nil
+	return &networkv1.GetNetworkResponse{Network: network}, nil
 }
 
 // List ...
-func (s *networkService) List(ctx context.Context, r *pb.ListNetworksRequest) (*pb.ListNetworksResponse, error) {
+func (s *networkService) List(ctx context.Context, r *networkv1.ListNetworksRequest) (*networkv1.ListNetworksResponse, error) {
 	networks, err := dao.GetNetworks(s.store)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.ListNetworksResponse{Networks: networks}, nil
+	return &networkv1.ListNetworksResponse{Networks: networks}, nil
 }
 
 // CreateInvitation ...
-func (s *networkService) CreateInvitation(ctx context.Context, r *pb.CreateNetworkInvitationRequest) (*pb.CreateNetworkInvitationResponse, error) {
+func (s *networkService) CreateInvitation(ctx context.Context, r *networkv1.CreateNetworkInvitationRequest) (*networkv1.CreateNetworkInvitationResponse, error) {
 	invitation, err := dao.NewInvitationV0(r.SigningKey, r.SigningCert)
 	if err != nil {
 		return nil, err
@@ -93,7 +93,7 @@ func (s *networkService) CreateInvitation(ctx context.Context, r *pb.CreateNetwo
 		return nil, err
 	}
 
-	b, err = proto.Marshal(&pb.Invitation{
+	b, err = proto.Marshal(&networkv1.Invitation{
 		Version: 0,
 		Data:    b,
 	})
@@ -103,24 +103,24 @@ func (s *networkService) CreateInvitation(ctx context.Context, r *pb.CreateNetwo
 
 	b64 := base64.StdEncoding.WithPadding(base64.NoPadding).EncodeToString(b)
 
-	return &pb.CreateNetworkInvitationResponse{
+	return &networkv1.CreateNetworkInvitationResponse{
 		InvitationB64:   b64,
 		InvitationBytes: b,
 	}, nil
 }
 
 // CreateFromInvitation ...
-func (s *networkService) CreateFromInvitation(ctx context.Context, r *pb.CreateNetworkFromInvitationRequest) (*pb.CreateNetworkFromInvitationResponse, error) {
+func (s *networkService) CreateFromInvitation(ctx context.Context, r *networkv1.CreateNetworkFromInvitationRequest) (*networkv1.CreateNetworkFromInvitationResponse, error) {
 	var invBytes []byte
 
 	switch x := r.Invitation.(type) {
-	case *pb.CreateNetworkFromInvitationRequest_InvitationB64:
+	case *networkv1.CreateNetworkFromInvitationRequest_InvitationB64:
 		var err error
 		invBytes, err = base64.StdEncoding.WithPadding(base64.NoPadding).DecodeString(r.GetInvitationB64())
 		if err != nil {
 			return nil, err
 		}
-	case *pb.CreateNetworkFromInvitationRequest_InvitationBytes:
+	case *networkv1.CreateNetworkFromInvitationRequest_InvitationBytes:
 		invBytes = r.GetInvitationBytes()
 	case nil:
 		return nil, errors.New("Invitation has no content")
@@ -128,13 +128,13 @@ func (s *networkService) CreateFromInvitation(ctx context.Context, r *pb.CreateN
 		return nil, fmt.Errorf("Invitation has unexpected type %T", x)
 	}
 
-	var wrapper pb.Invitation
+	var wrapper networkv1.Invitation
 	err := proto.Unmarshal(invBytes, &wrapper)
 	if err != nil {
 		return nil, err
 	}
 
-	var invitation pb.InvitationV0
+	var invitation networkv1.InvitationV0
 	err = proto.Unmarshal(wrapper.Data, &invitation)
 	if err != nil {
 		return nil, err
@@ -149,78 +149,7 @@ func (s *networkService) CreateFromInvitation(ctx context.Context, r *pb.CreateN
 		return nil, err
 	}
 
-	return &pb.CreateNetworkFromInvitationResponse{
+	return &networkv1.CreateNetworkFromInvitationResponse{
 		Network: network,
 	}, nil
-}
-
-// StartVPN ...
-func (s *networkService) StartVPN(ctx context.Context, r *pb.StartVPNRequest) (<-chan *pb.NetworkEvent, error) {
-	return nil, api.ErrNotImplemented
-}
-
-// StopVPN ...
-func (s *networkService) StopVPN(ctx context.Context, r *pb.StopVPNRequest) (*pb.StopVPNResponse, error) {
-	return nil, api.ErrNotImplemented
-}
-
-// GetDirectoryEvents ...
-func (s *networkService) GetDirectoryEvents(ctx context.Context, r *pb.GetDirectoryEventsRequest) (<-chan *pb.DirectoryEvent, error) {
-	// ctl, err := s.getNetworkController(ctx)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// // TODO: this should return an ErrNetworkNotFound...
-	// svc, ok := ctl.NetworkServices(r.NetworkKey)
-	// if !ok {
-	// 	return nil, errors.New("unknown network")
-	// }
-
-	// ch := make(chan *pb.DirectoryEvent, 16)
-	// svc.Directory.NotifyEvents(ch)
-
-	// // TDOO: automatically remove closed channels from event.Observables
-	// go func() {
-	// 	<-ctx.Done()
-	// 	s.logger.Debug("GetDirectoryEvents stream closed")
-	// 	svc.Directory.StopNotifyingEvents(ch)
-	// }()
-
-	// return ch, nil
-
-	return make(chan *pb.DirectoryEvent, 16), api.ErrNotImplemented
-}
-
-// TestDirectoryPublish ...
-func (s *networkService) TestDirectoryPublish(ctx context.Context, r *pb.TestDirectoryPublishRequest) (*pb.TestDirectoryPublishResponse, error) {
-	// ctl, err := s.getNetworkController(ctx)
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// // TODO: this should return an ErrNetworkNotFound...
-	// svc, ok := ctl.NetworkServices(r.NetworkKey)
-	// if !ok {
-	// 	return nil, errors.New("unknown network")
-	// }
-
-	// key, err := dao.GenerateKey()
-	// if err != nil {
-	// 	return nil, err
-	// }
-
-	// err = svc.Directory.Publish(ctx, &pb.DirectoryListing{
-	// 	Key:         key.Public,
-	// 	MimeType:    "text/plain",
-	// 	Title:       "test",
-	// 	Description: "test publication",
-	// 	Tags:        []string{"foo", "bar", "baz"},
-	// })
-	// if err != nil {
-	// 	s.logger.Debug("publishing listing failed", zap.Error(err))
-	// }
-
-	// return &pb.TestDirectoryPublishResponse{}, err
-	return &pb.TestDirectoryPublishResponse{}, api.ErrNotImplemented
 }

@@ -2,17 +2,17 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { Link, Redirect } from "react-router-dom";
 
+import { ICreateProfileRequest } from "../apis/strims/profile/v1/profile";
 import { InputError, TextInput } from "../components/Form";
 import LandingPageLayout from "../components/LandingPageLayout";
 import { useCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
-import * as pb from "../lib/pb";
 
 const SignUpPage = () => {
   const [getProfilesRes] = useCall("profile", "list");
   const [{ profile, error, loading }, profileActions] = useProfile();
   const isLocalAccountsEmpty = !getProfilesRes.loading && !getProfilesRes.value?.profiles.length;
-  const { register, handleSubmit, errors } = useForm({
+  const { register, handleSubmit, errors } = useForm<ICreateProfileRequest>({
     mode: "onBlur",
   });
 
@@ -22,11 +22,11 @@ const SignUpPage = () => {
     return <Redirect to="/" />;
   }
 
-  const onSubmit = (data) => profileActions.createProfile(new pb.CreateProfileRequest(data));
+  const onSubmit = handleSubmit((data) => profileActions.createProfile(data));
 
   return (
     <LandingPageLayout>
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={onSubmit}>
         {getProfilesRes.error && (
           <InputError error={getProfilesRes.error.message || "Error loading profiles"} />
         )}

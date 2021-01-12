@@ -1,11 +1,13 @@
 package videochannel
 
 import (
+	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	video "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
@@ -29,18 +31,18 @@ type Control struct {
 }
 
 // GetChannel ...
-func (c *Control) GetChannel(id uint64) (*pb.VideoChannel, error) {
+func (c *Control) GetChannel(id uint64) (*video.VideoChannel, error) {
 	return dao.GetVideoChannel(c.store, id)
 }
 
 // ListChannels ...
-func (c *Control) ListChannels() ([]*pb.VideoChannel, error) {
+func (c *Control) ListChannels() ([]*video.VideoChannel, error) {
 	// TODO: enrich channel data with liveness?
 	return dao.GetVideoChannels(c.store)
 }
 
 // CreateChannel ...
-func (c *Control) CreateChannel(opts ...control.VideoChannelOption) (*pb.VideoChannel, error) {
+func (c *Control) CreateChannel(opts ...control.VideoChannelOption) (*video.VideoChannel, error) {
 	channel, err := dao.NewVideoChannel(c.store)
 	if err != nil {
 		return nil, err
@@ -58,8 +60,8 @@ func (c *Control) CreateChannel(opts ...control.VideoChannelOption) (*pb.VideoCh
 }
 
 // UpdateChannel ...
-func (c *Control) UpdateChannel(id uint64, opts ...control.VideoChannelOption) (*pb.VideoChannel, error) {
-	var channel *pb.VideoChannel
+func (c *Control) UpdateChannel(id uint64, opts ...control.VideoChannelOption) (*video.VideoChannel, error) {
+	var channel *video.VideoChannel
 	err := c.store.Update(func(tx kv.RWTx) (err error) {
 		channel, err = dao.GetVideoChannel(tx, id)
 		if err != nil {
@@ -83,7 +85,7 @@ func (c *Control) UpdateChannel(id uint64, opts ...control.VideoChannelOption) (
 
 type channelOptionSlice []control.VideoChannelOption
 
-func (s channelOptionSlice) Apply(channel *pb.VideoChannel) error {
+func (s channelOptionSlice) Apply(channel *video.VideoChannel) error {
 	for _, o := range s {
 		if err := o(channel); err != nil {
 			return err
@@ -93,8 +95,8 @@ func (s channelOptionSlice) Apply(channel *pb.VideoChannel) error {
 }
 
 // WithDirectorySnippet ...
-func WithDirectorySnippet(snippet *pb.DirectoryListingSnippet) control.VideoChannelOption {
-	return func(channel *pb.VideoChannel) error {
+func WithDirectorySnippet(snippet *network.DirectoryListingSnippet) control.VideoChannelOption {
+	return func(channel *video.VideoChannel) error {
 		channel.DirectoryListingSnippet = snippet
 		return nil
 	}
@@ -102,9 +104,9 @@ func WithDirectorySnippet(snippet *pb.DirectoryListingSnippet) control.VideoChan
 
 // WithLocalOwner ...
 func WithLocalOwner(profileKey, networkKey []byte) control.VideoChannelOption {
-	return func(channel *pb.VideoChannel) error {
-		channel.Owner = &pb.VideoChannel_Local_{
-			Local: &pb.VideoChannel_Local{
+	return func(channel *video.VideoChannel) error {
+		channel.Owner = &video.VideoChannel_Local_{
+			Local: &video.VideoChannel_Local{
 				AuthKey:    profileKey,
 				NetworkKey: networkKey,
 			},
@@ -114,10 +116,10 @@ func WithLocalOwner(profileKey, networkKey []byte) control.VideoChannelOption {
 }
 
 // WithLocalShareOwner ...
-func WithLocalShareOwner(cert *pb.Certificate) control.VideoChannelOption {
-	return func(channel *pb.VideoChannel) error {
-		channel.Owner = &pb.VideoChannel_LocalShare_{
-			LocalShare: &pb.VideoChannel_LocalShare{
+func WithLocalShareOwner(cert *certificate.Certificate) control.VideoChannelOption {
+	return func(channel *video.VideoChannel) error {
+		channel.Owner = &video.VideoChannel_LocalShare_{
+			LocalShare: &video.VideoChannel_LocalShare{
 				Certificate: cert,
 			},
 		}
@@ -126,9 +128,9 @@ func WithLocalShareOwner(cert *pb.Certificate) control.VideoChannelOption {
 }
 
 // WithRemoteShareOwner ...
-func WithRemoteShareOwner(share *pb.VideoChannel_RemoteShare) control.VideoChannelOption {
-	return func(channel *pb.VideoChannel) error {
-		channel.Owner = &pb.VideoChannel_RemoteShare_{
+func WithRemoteShareOwner(share *video.VideoChannel_RemoteShare) control.VideoChannelOption {
+	return func(channel *video.VideoChannel) error {
+		channel.Owner = &video.VideoChannel_RemoteShare_{
 			RemoteShare: share,
 		}
 		return nil

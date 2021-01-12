@@ -6,12 +6,13 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/services/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -64,7 +65,7 @@ func (t *Control) Run(ctx context.Context) {
 	}
 }
 
-func (t *Control) handleNetworkStart(ctx context.Context, network *pb.Network) {
+func (t *Control) handleNetworkStart(ctx context.Context, network *networkv1.Network) {
 	if network.Key == nil {
 		return
 	}
@@ -84,33 +85,33 @@ func (t *Control) handleNetworkStart(ctx context.Context, network *pb.Network) {
 		return
 	}
 
-	api.RegisterCAService(server, ca.NewService(t.logger, network))
+	networkv1ca.RegisterCAService(server, ca.NewService(t.logger, network))
 	ctx, cancel := context.WithCancel(ctx)
 	go server.Listen(ctx)
 
 	t.servers[network.Id] = cancel
 }
 
-func (t *Control) handleNetworkStop(network *pb.Network) {
+func (t *Control) handleNetworkStop(network *networkv1.Network) {
 	if server, ok := t.servers[network.Id]; ok {
 		server()
 	}
 }
 
 // ForwardRenewRequest ...
-func (t *Control) ForwardRenewRequest(ctx context.Context, cert *pb.Certificate, csr *pb.CertificateRequest) (*pb.Certificate, error) {
+func (t *Control) ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
 	networkKey := networkKeyForCertificate(cert)
 	client, err := t.dialer.Client(networkKey, networkKey, ca.AddressSalt)
 	if err != nil {
 		return nil, err
 	}
-	caClient := api.NewCAClient(client)
+	caClient := networkv1ca.NewCAClient(client)
 
-	renewReq := &pb.CARenewRequest{
+	renewReq := &networkv1ca.CARenewRequest{
 		Certificate:        cert,
 		CertificateRequest: csr,
 	}
-	renewRes := &pb.CARenewResponse{}
+	renewRes := &networkv1ca.CARenewResponse{}
 	if err := caClient.Renew(ctx, renewReq, renewRes); err != nil {
 		return nil, err
 	}
@@ -118,6 +119,6 @@ func (t *Control) ForwardRenewRequest(ctx context.Context, cert *pb.Certificate,
 	return renewRes.Certificate, nil
 }
 
-func networkKeyForCertificate(cert *pb.Certificate) []byte {
+func networkKeyForCertificate(cert *certificate.Certificate) []byte {
 	return dao.GetRootCert(cert).Key
 }

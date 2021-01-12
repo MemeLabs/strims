@@ -9,11 +9,11 @@ import (
 	"os"
 	"path"
 
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/frontend"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -89,7 +89,7 @@ func main() {
 
 	server := rpc.NewServer(logger, &noopDialer{})
 
-	newVPN := func(key *pb.Key) (*vpn.Host, error) {
+	newVPN := func(key *key.Key) (*vpn.Host, error) {
 		vnicHost, err := vnic.New(
 			logger,
 			key,

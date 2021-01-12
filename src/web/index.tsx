@@ -4,7 +4,7 @@ import * as React from "react";
 import * as ReactDOM from "react-dom";
 import Worker from "worker-loader!./svc.worker";
 
-import { FrontendClient } from "../lib/api";
+import { FrontendClient } from "../apis/client";
 import { WindowBridge } from "../lib/bridge";
 import { WSReadWriter } from "../lib/ws";
 import App from "../root/App";

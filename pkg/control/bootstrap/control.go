@@ -6,10 +6,12 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -68,8 +70,8 @@ func (t *Control) handlePeerAdd(ctx context.Context, id uint64) {
 		return
 	}
 
-	var res pb.BootstrapPeerGetPublishEnabledResponse
-	if err := peer.client.Bootstrap().GetPublishEnabled(ctx, &pb.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
+	var res bootstrap.BootstrapPeerGetPublishEnabledResponse
+	if err := peer.client.Bootstrap().GetPublishEnabled(ctx, &bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
 		t.logger.Debug("bootstrap publish enabled check failed", zap.Error(err))
 	}
 
@@ -110,7 +112,7 @@ func (t *Control) startClients() {
 	}
 
 	for _, client := range clients {
-		go func(client *pb.BootstrapClient) {
+		go func(client *bootstrap.BootstrapClient) {
 			if err := t.startClient(client); err != nil {
 				t.logger.Debug("starting bootstrap client failed", zap.Error(err))
 			}
@@ -118,9 +120,9 @@ func (t *Control) startClients() {
 	}
 }
 
-func (t *Control) startClient(client *pb.BootstrapClient) error {
+func (t *Control) startClient(client *bootstrap.BootstrapClient) error {
 	switch client := client.ClientOptions.(type) {
-	case *pb.BootstrapClient_WebsocketOptions:
+	case *bootstrap.BootstrapClient_WebsocketOptions:
 		return t.vpn.VNIC().Dial(vnic.WebSocketAddr{
 			URL:                   client.WebsocketOptions.Url,
 			InsecureSkipVerifyTLS: client.WebsocketOptions.InsecureSkipVerifyTls,
@@ -135,7 +137,7 @@ func (t *Control) PublishingEnabled() bool {
 }
 
 // Publish ...
-func (t *Control) Publish(ctx context.Context, peerID uint64, network *pb.Network, validDuration time.Duration) error {
+func (t *Control) Publish(ctx context.Context, peerID uint64, network *network.Network, validDuration time.Duration) error {
 	peer, ok := t.peers[peerID]
 	if !ok {
 		return errors.New("peer id not found")
@@ -149,16 +151,16 @@ func (t *Control) Publish(ctx context.Context, peerID uint64, network *pb.Networ
 	if err != nil {
 		return err
 	}
-	csr := &pb.CertificateRequest{
+	csr := &certificate.CertificateRequest{
 		Key:      peer.vnic.Certificate.Key,
 		KeyType:  peer.vnic.Certificate.KeyType,
-		KeyUsage: uint32(pb.KeyUsage_KEY_USAGE_BROKER),
+		KeyUsage: uint32(certificate.KeyUsage_KEY_USAGE_BROKER),
 	}
 	cert, err := dao.SignCertificateRequest(csr, validDuration, network.Key)
 	if err != nil {
 		return err
 	}
-	cert.ParentOneof = &pb.Certificate_Parent{Parent: networkCert}
+	cert.ParentOneof = &certificate.Certificate_Parent{Parent: networkCert}
 
-	return peer.client.Bootstrap().Publish(ctx, &pb.BootstrapPeerPublishRequest{Certificate: cert}, &pb.BootstrapPeerPublishResponse{})
+	return peer.client.Bootstrap().Publish(ctx, &bootstrap.BootstrapPeerPublishRequest{Certificate: cert}, &bootstrap.BootstrapPeerPublishResponse{})
 }

@@ -1,0 +1,112 @@
+syntax = "proto3";
+
+package strims.profile.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1;profile";
+option java_package = "gg.strims.profile.v1";
+option swift_prefix = "SPF";
+
+import "type/key.proto";
+
+message CreateProfileRequest {
+  string name = 1;
+  string password = 2;
+}
+
+message CreateProfileResponse {
+  string session_id = 1;
+  Profile profile = 2;
+}
+
+message UpdateProfileRequest {
+  string name = 1;
+  string password = 2;
+}
+
+message UpdateProfileResponse {
+  Profile profile = 1;
+}
+
+message DeleteProfileRequest {
+  uint64 id = 1;
+}
+
+message DeleteProfileResponse {}
+
+message LoadProfileRequest {
+  uint64 id = 1;
+  string name = 2;
+  string password = 3;
+}
+
+message LoadProfileResponse {
+  string session_id = 1;
+  Profile profile = 2;
+}
+
+message GetProfileRequest {
+  string session_id = 1;
+}
+
+message GetProfileResponse {
+  Profile profile = 2;
+}
+
+message ListProfilesRequest {}
+
+message ListProfilesResponse {
+  repeated ProfileSummary profiles = 1;
+}
+
+message LoadSessionRequest {
+  string session_id = 1;
+}
+
+message LoadSessionResponse {
+  string session_id = 1;
+  Profile profile = 2;
+}
+
+message StorageKey {
+  KDFType kdf_type = 1;
+  oneof kdf_options {
+    PBKDF2Options pbkdf2_options = 2;
+  }
+
+  message PBKDF2Options {
+    uint32 iterations = 1;
+    uint32 key_size = 2;
+    bytes salt = 3;
+  }
+}
+
+message Profile {
+  uint64 id = 1;
+  string name = 2;
+  bytes secret = 3;
+  strims.type.Key key = 4;
+}
+
+message ProfileSummary {
+  uint64 id = 1;
+  string name = 2;
+}
+
+message ProfileID {
+  uint64 next_id = 1;
+}
+
+enum KDFType {
+  KDF_TYPE_UNDEFINED = 0;
+  KDF_TYPE_PBKDF2_SHA256 = 1;
+}
+
+service ProfileService {
+  rpc Create(CreateProfileRequest) returns (CreateProfileResponse);
+  rpc Load(LoadProfileRequest) returns (LoadProfileResponse);
+  rpc Get(GetProfileRequest) returns (GetProfileResponse);
+  rpc Update(UpdateProfileRequest) returns (UpdateProfileResponse);
+  rpc Delete(DeleteProfileRequest) returns (DeleteProfileResponse);
+  rpc List(ListProfilesRequest) returns (ListProfilesResponse);
+  rpc LoadSession(LoadSessionRequest) returns (LoadSessionResponse);
+}

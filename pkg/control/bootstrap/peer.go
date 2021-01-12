@@ -1,7 +1,7 @@
 package bootstrap
 
 import (
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 )
 

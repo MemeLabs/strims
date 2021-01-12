@@ -12,11 +12,12 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	vpnv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vpn/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
@@ -31,7 +32,7 @@ const hashTableMaxSize = 5120
 
 // HashTable ...
 type HashTable interface {
-	Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error)
+	Set(ctx context.Context, key *key.Key, salt, value []byte) (*HashTablePublisher, error)
 	Get(ctx context.Context, key, salt []byte, options ...HashTableOption) (<-chan []byte, error)
 }
 
@@ -57,26 +58,26 @@ func (s *hashTable) HandleMessage(msg *Message) error {
 		return nil
 	}
 
-	var m pb.HashTableMessage
+	var m vpnv1.HashTableMessage
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
 		return err
 	}
 
 	switch b := m.Body.(type) {
-	case *pb.HashTableMessage_Publish_:
+	case *vpnv1.HashTableMessage_Publish_:
 		return s.handlePublish(b.Publish.Record)
-	case *pb.HashTableMessage_Unpublish_:
+	case *vpnv1.HashTableMessage_Unpublish_:
 		return s.handleUnpublish(b.Unpublish.Record)
-	case *pb.HashTableMessage_GetRequest_:
+	case *vpnv1.HashTableMessage_GetRequest_:
 		return s.handleGetRequest(b.GetRequest, msg.SrcHostID())
-	case *pb.HashTableMessage_GetResponse_:
+	case *vpnv1.HashTableMessage_GetResponse_:
 		return s.handleGetResponse(b.GetResponse, msg.Header.DstID)
 	default:
 		return errors.New("unexpected message type")
 	}
 }
 
-func (s *hashTable) handlePublish(r *pb.HashTableMessage_Record) error {
+func (s *hashTable) handlePublish(r *vpnv1.HashTableMessage_Record) error {
 	if err := dao.VerifyMessage(r); err != nil {
 		return err
 	}
@@ -85,7 +86,7 @@ func (s *hashTable) handlePublish(r *pb.HashTableMessage_Record) error {
 	return nil
 }
 
-func (s *hashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
+func (s *hashTable) handleUnpublish(r *vpnv1.HashTableMessage_Record) error {
 	if err := dao.VerifyMessage(r); err != nil {
 		return err
 	}
@@ -93,15 +94,15 @@ func (s *hashTable) handleUnpublish(r *pb.HashTableMessage_Record) error {
 	return s.store.remove(r)
 }
 
-func (s *hashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHostID kademlia.ID) error {
+func (s *hashTable) handleGetRequest(m *vpnv1.HashTableMessage_GetRequest, originHostID kademlia.ID) error {
 	record := s.store.get(m.Hash)
 	if record == nil || record.Timestamp <= m.IfModifiedSince {
 		return nil
 	}
 
-	msg := &pb.HashTableMessage{
-		Body: &pb.HashTableMessage_GetResponse_{
-			GetResponse: &pb.HashTableMessage_GetResponse{
+	msg := &vpnv1.HashTableMessage{
+		Body: &vpnv1.HashTableMessage_GetResponse_{
+			GetResponse: &vpnv1.HashTableMessage_GetResponse{
 				RequestId: m.RequestId,
 				Record:    record,
 			},
@@ -110,7 +111,7 @@ func (s *hashTable) handleGetRequest(m *pb.HashTableMessage_GetRequest, originHo
 	return s.network.SendProto(originHostID, vnic.HashTablePort, vnic.HashTablePort, msg)
 }
 
-func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse, target kademlia.ID) error {
+func (s *hashTable) handleGetResponse(m *vpnv1.HashTableMessage_GetResponse, target kademlia.ID) error {
 	if dao.VerifyMessage(m.Record) != nil {
 		return nil
 	}
@@ -134,7 +135,7 @@ func (s *hashTable) handleGetResponse(m *pb.HashTableMessage_GetResponse, target
 }
 
 // Set ...
-func (s *hashTable) Set(ctx context.Context, key *pb.Key, salt, value []byte) (*HashTablePublisher, error) {
+func (s *hashTable) Set(ctx context.Context, key *key.Key, salt, value []byte) (*HashTablePublisher, error) {
 	return newHashTablePublisher(ctx, s.logger, s.network, s.store, key, salt, value)
 }
 
@@ -182,9 +183,9 @@ func (s *hashTable) Get(ctx context.Context, key, salt []byte, options ...HashTa
 	}
 
 	if opts.disableCache || iotime.Load().After(time.Unix(timestamp, 0).Add(hashTableSetInterval)) {
-		msg := &pb.HashTableMessage{
-			Body: &pb.HashTableMessage_GetRequest_{
-				GetRequest: &pb.HashTableMessage_GetRequest{
+		msg := &vpnv1.HashTableMessage{
+			Body: &vpnv1.HashTableMessage_GetRequest_{
+				GetRequest: &vpnv1.HashTableMessage_GetRequest{
 					RequestId:       rid,
 					Hash:            hash,
 					IfModifiedSince: timestamp,
@@ -222,7 +223,7 @@ func (k hashTableItemKey) Less(o hashTableItemKey) bool {
 	return bytes.Compare(k[:], o[:]) == -1
 }
 
-func newHashTableItem(hashTableID uint32, localHostID kademlia.ID, r *pb.HashTableMessage_Record) *hashTableItem {
+func newHashTableItem(hashTableID uint32, localHostID kademlia.ID, r *vpnv1.HashTableMessage_Record) *hashTableItem {
 	hash := hashTableRecordHash(r.Key, r.Salt)
 	return &hashTableItem{
 		key:    newHashTableItemKey(hashTableID, hash, localHostID),
@@ -235,12 +236,12 @@ type hashTableItem struct {
 	record unsafe.Pointer
 }
 
-func (p *hashTableItem) SetRecord(r *pb.HashTableMessage_Record) {
+func (p *hashTableItem) SetRecord(r *vpnv1.HashTableMessage_Record) {
 	atomic.SwapPointer(&p.record, unsafe.Pointer(r))
 }
 
-func (p *hashTableItem) Record() *pb.HashTableMessage_Record {
-	return (*pb.HashTableMessage_Record)(atomic.LoadPointer(&p.record))
+func (p *hashTableItem) Record() *vpnv1.HashTableMessage_Record {
+	return (*vpnv1.HashTableMessage_Record)(atomic.LoadPointer(&p.record))
 }
 
 // Less implements llrb.Item
@@ -304,7 +305,7 @@ func (p *HashTableStore) tick(t time.Time) {
 	}
 }
 
-func (p *HashTableStore) upsert(hashTableID uint32, r *pb.HashTableMessage_Record) bool {
+func (p *HashTableStore) upsert(hashTableID uint32, r *vpnv1.HashTableMessage_Record) bool {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -343,7 +344,7 @@ func (p *HashTableStore) upsert(hashTableID uint32, r *pb.HashTableMessage_Recor
 	return modified
 }
 
-func (p *HashTableStore) remove(hashTableID uint32, r *pb.HashTableMessage_Record) error {
+func (p *HashTableStore) remove(hashTableID uint32, r *vpnv1.HashTableMessage_Record) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -362,7 +363,7 @@ func (p *HashTableStore) remove(hashTableID uint32, r *pb.HashTableMessage_Recor
 }
 
 // Get ...
-func (p *HashTableStore) get(hashTableID uint32, hash []byte) *pb.HashTableMessage_Record {
+func (p *HashTableStore) get(hashTableID uint32, hash []byte) *vpnv1.HashTableMessage_Record {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -378,15 +379,15 @@ type hashTableStoreAccesstor struct {
 	store *HashTableStore
 }
 
-func (p *hashTableStoreAccesstor) upsert(r *pb.HashTableMessage_Record) bool {
+func (p *hashTableStoreAccesstor) upsert(r *vpnv1.HashTableMessage_Record) bool {
 	return p.store.upsert(p.id, r)
 }
 
-func (p *hashTableStoreAccesstor) remove(r *pb.HashTableMessage_Record) error {
+func (p *hashTableStoreAccesstor) remove(r *vpnv1.HashTableMessage_Record) error {
 	return p.store.remove(p.id, r)
 }
 
-func (p *hashTableStoreAccesstor) get(hash []byte) *pb.HashTableMessage_Record {
+func (p *hashTableStoreAccesstor) get(hash []byte) *vpnv1.HashTableMessage_Record {
 	return p.store.get(p.id, hash)
 }
 
@@ -426,13 +427,13 @@ func sendHashTableGetResponse(chans *sync.Map, requestID uint64, v []byte) bool 
 	}
 }
 
-func newHashTablePublisher(ctx context.Context, logger *zap.Logger, network *Network, store *hashTableStoreAccesstor, key *pb.Key, salt, value []byte) (*HashTablePublisher, error) {
+func newHashTablePublisher(ctx context.Context, logger *zap.Logger, network *Network, store *hashTableStoreAccesstor, key *key.Key, salt, value []byte) (*HashTablePublisher, error) {
 	target, err := kademlia.UnmarshalID(hashTableRecordHash(key.Public, salt))
 	if err != nil {
 		return nil, err
 	}
 
-	record := &pb.HashTableMessage_Record{
+	record := &vpnv1.HashTableMessage_Record{
 		Key:   key.Public,
 		Salt:  salt,
 		Value: value,
@@ -459,8 +460,8 @@ func newHashTablePublisher(ctx context.Context, logger *zap.Logger, network *Net
 type HashTablePublisher struct {
 	logger  *zap.Logger
 	lock    sync.Mutex
-	key     *pb.Key
-	record  *pb.HashTableMessage_Record
+	key     *key.Key
+	record  *vpnv1.HashTableMessage_Record
 	target  kademlia.ID
 	network *Network
 	store   *hashTableStoreAccesstor
@@ -495,9 +496,9 @@ func (p *HashTablePublisher) publish(t time.Time) {
 
 	p.store.upsert(p.record)
 
-	msg := &pb.HashTableMessage{
-		Body: &pb.HashTableMessage_Publish_{
-			Publish: &pb.HashTableMessage_Publish{
+	msg := &vpnv1.HashTableMessage{
+		Body: &vpnv1.HashTableMessage_Publish_{
+			Publish: &vpnv1.HashTableMessage_Publish{
 				Record: p.record,
 			},
 		},
@@ -518,9 +519,9 @@ func (p *HashTablePublisher) unpublish() {
 		return
 	}
 
-	msg := &pb.HashTableMessage{
-		Body: &pb.HashTableMessage_Unpublish_{
-			Unpublish: &pb.HashTableMessage_Unpublish{
+	msg := &vpnv1.HashTableMessage{
+		Body: &vpnv1.HashTableMessage_Unpublish_{
+			Unpublish: &vpnv1.HashTableMessage_Unpublish{
 				Record: p.record,
 			},
 		},

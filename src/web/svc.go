@@ -13,11 +13,11 @@ import (
 	"syscall/js"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/frontend"
 	"github.com/MemeLabs/go-ppspp/pkg/gobridge"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -95,7 +95,7 @@ func initDefault(bridge js.Value, bus *wasmio.Bus) {
 	srv := frontend.Server{
 		Store:  wasmio.NewKVStore(bridge),
 		Logger: logger,
-		NewVPNHost: func(key *pb.Key) (*vpn.Host, error) {
+		NewVPNHost: func(key *key.Key) (*vpn.Host, error) {
 			ws := vnic.NewWSInterface(logger, bridge)
 			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(logger, bridge))
 			vnicHost, err := vnic.New(logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))
@@ -120,7 +120,7 @@ func initBroker(bridge js.Value, bus *wasmio.Bus) {
 		ReadWriter: bus,
 	})
 
-	api.RegisterBrokerProxyService(server, network.NewBrokerProxyService(logger))
+	networkv1.RegisterBrokerProxyService(server, network.NewBrokerProxyService(logger))
 
 	if err := server.Listen(context.Background()); err != nil {
 		logger.Fatal("network broker proxy server closed with error", zap.Error(err))

@@ -3,6 +3,7 @@ package app
 import (
 	"context"
 
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/bootstrap"
 	"github.com/MemeLabs/go-ppspp/pkg/control/ca"
@@ -14,13 +15,12 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/videochannel"
 	"github.com/MemeLabs/go-ppspp/pkg/control/videoingress"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
 
 // NewControl ...
-func NewControl(logger *zap.Logger, broker network.Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile) control.AppControl {
+func NewControl(logger *zap.Logger, broker network.Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *profilev1.Profile) control.AppControl {
 	observers := &event.Observers{}
 
 	var (

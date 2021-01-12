@@ -3,15 +3,15 @@ package network
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterNetworkPeerService ...
-func RegisterNetworkPeerService(host api.ServiceRegistry, service NetworkPeerService) {
-	host.RegisterMethod(".strims.network.v1.NetworkPeer.Negotiate", service.Negotiate)
-	host.RegisterMethod(".strims.network.v1.NetworkPeer.Open", service.Open)
-	host.RegisterMethod(".strims.network.v1.NetworkPeer.Close", service.Close)
-	host.RegisterMethod(".strims.network.v1.NetworkPeer.UpdateCertificate", service.UpdateCertificate)
+func RegisterNetworkPeerService(host rpc.ServiceRegistry, service NetworkPeerService) {
+	host.RegisterMethod("strims.network.v1.NetworkPeer.Negotiate", service.Negotiate)
+	host.RegisterMethod("strims.network.v1.NetworkPeer.Open", service.Open)
+	host.RegisterMethod("strims.network.v1.NetworkPeer.Close", service.Close)
+	host.RegisterMethod("strims.network.v1.NetworkPeer.UpdateCertificate", service.UpdateCertificate)
 }
 
 // NetworkPeerService ...
@@ -36,11 +36,11 @@ type NetworkPeerService interface {
 
 // NetworkPeerClient ...
 type NetworkPeerClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewNetworkPeerClient ...
-func NewNetworkPeerClient(client api.Caller) *NetworkPeerClient {
+func NewNetworkPeerClient(client rpc.Caller) *NetworkPeerClient {
 	return &NetworkPeerClient{client}
 }
 
@@ -50,7 +50,7 @@ func (c *NetworkPeerClient) Negotiate(
 	req *NetworkPeerNegotiateRequest,
 	res *NetworkPeerNegotiateResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.NetworkPeer.Negotiate", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkPeer.Negotiate", req, res)
 }
 
 // Open ...
@@ -59,7 +59,7 @@ func (c *NetworkPeerClient) Open(
 	req *NetworkPeerOpenRequest,
 	res *NetworkPeerOpenResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.NetworkPeer.Open", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkPeer.Open", req, res)
 }
 
 // Close ...
@@ -68,7 +68,7 @@ func (c *NetworkPeerClient) Close(
 	req *NetworkPeerCloseRequest,
 	res *NetworkPeerCloseResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.NetworkPeer.Close", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkPeer.Close", req, res)
 }
 
 // UpdateCertificate ...
@@ -77,5 +77,5 @@ func (c *NetworkPeerClient) UpdateCertificate(
 	req *NetworkPeerUpdateCertificateRequest,
 	res *NetworkPeerUpdateCertificateResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.NetworkPeer.UpdateCertificate", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkPeer.UpdateCertificate", req, res)
 }

@@ -4,13 +4,13 @@ import (
 	"context"
 	"io"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/app"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/services/peer"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -21,7 +21,7 @@ import (
 const serverMaxMessageBytes = 10 * 1024 * 1024
 
 // VPNFunc ...
-type VPNFunc func(key *pb.Key) (*vpn.Host, error)
+type VPNFunc func(key *key.Key) (*vpn.Host, error)
 
 // ServiceFunc ...
 type ServiceFunc func(server *rpc.Server, params *ServiceParams)
@@ -73,13 +73,13 @@ type Instance struct {
 	newVPN VPNFunc
 	broker network.Broker
 
-	profile *pb.Profile
+	profile *profilev1.Profile
 	store   *dao.ProfileStore
 	app     control.AppControl
 }
 
 func (c *Instance) initProfileService(ctx context.Context, store kv.BlobStore, newVPN VPNFunc) error {
-	init := func(profile *pb.Profile, store *dao.ProfileStore) error {
+	init := func(profile *profilev1.Profile, store *dao.ProfileStore) error {
 		if err := c.Init(ctx, profile, store); err != nil {
 			return err
 		}
@@ -90,13 +90,13 @@ func (c *Instance) initProfileService(ctx context.Context, store kv.BlobStore, n
 	if err != nil {
 		return err
 	}
-	api.RegisterProfileService(c.server, profileService)
+	profilev1.RegisterProfileServiceService(c.server, profileService)
 
 	return nil
 }
 
 // Init ...
-func (c *Instance) Init(ctx context.Context, profile *pb.Profile, store *dao.ProfileStore) error {
+func (c *Instance) Init(ctx context.Context, profile *profilev1.Profile, store *dao.ProfileStore) error {
 	vpn, err := c.newVPN(profile.Key)
 	if err != nil {
 		return err
@@ -125,7 +125,7 @@ func (c *Instance) Init(ctx context.Context, profile *pb.Profile, store *dao.Pro
 type ServiceParams struct {
 	Context context.Context
 	Logger  *zap.Logger
-	Profile *pb.Profile
+	Profile *profilev1.Profile
 	Store   *dao.ProfileStore
 	VPN     *vpn.Host
 	App     control.AppControl

@@ -24,8 +24,9 @@ func (p *GoRPCModule) InitContext(c pgs.BuildContext) {
 	p.ctx = pgsgo.InitContext(c.Parameters())
 
 	tpl := template.New("gorpc").Funcs(map[string]interface{}{
-		"package": p.ctx.PackageName,
-		"name":    p.ctx.Name,
+		"package":  p.ctx.PackageName,
+		"name":     p.ctx.Name,
+		"fullName": p.fullName,
 	})
 
 	p.tpl = template.Must(tpl.Parse(rpcTpl))
@@ -53,19 +54,23 @@ func (p *GoRPCModule) generate(f pgs.File) {
 	p.AddGeneratorTemplateFile(name, p.tpl, f)
 }
 
+func (p *GoRPCModule) fullName(e pgs.Entity) string {
+	return strings.TrimPrefix(e.FullyQualifiedName(), ".")
+}
+
 const rpcTpl = `package {{ package . }}
 
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 {{range .Services}}
 {{$svcName := .Name.UpperCamelCase}}
 // Register{{$svcName}}Service ...
-func Register{{$svcName}}Service(host api.ServiceRegistry, service {{$svcName}}Service) {
-{{range .Methods}}  host.RegisterMethod("{{.FullyQualifiedName}}", service.{{.Name.UpperCamelCase}})
+func Register{{$svcName}}Service(host rpc.ServiceRegistry, service {{$svcName}}Service) {
+{{range .Methods}}  host.RegisterMethod("{{. | fullName}}", service.{{.Name.UpperCamelCase}})
 {{end}}}
 
 // {{$svcName}}Service ...
@@ -78,11 +83,11 @@ type {{$svcName}}Service interface {
 
 // {{$svcName}}Client ...
 type {{$svcName}}Client struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // New{{$svcName}}Client ...
-func New{{$svcName}}Client(client api.Caller) *{{$svcName}}Client {
+func New{{$svcName}}Client(client rpc.Caller) *{{$svcName}}Client {
 	return &{{$svcName}}Client{client}
 }
 {{range .Methods}}
@@ -92,7 +97,7 @@ func (c *{{$svcName}}Client) {{.Name.UpperCamelCase}} (
 	req *{{.Input.Name.UpperCamelCase}},
 	res {{if .ServerStreaming}}chan {{end}}*{{.Output.Name.UpperCamelCase}},
 ) error {
-	return c.client.{{if .ServerStreaming}}CallStreaming{{else}}CallUnary{{end}}(ctx, "{{.FullyQualifiedName}}", req, res)
+	return c.client.{{if .ServerStreaming}}CallStreaming{{else}}CallUnary{{end}}(ctx, "{{. | fullName}}", req, res)
 }
 {{end}}
 {{end}}

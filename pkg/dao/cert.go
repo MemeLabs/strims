@@ -7,7 +7,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	keyapi "github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 )
 
 const certPredateDuration = time.Hour
@@ -25,21 +26,21 @@ var (
 )
 
 // CertificateRequestOption ...
-type CertificateRequestOption func(*pb.CertificateRequest)
+type CertificateRequestOption func(*certificate.CertificateRequest)
 
 // WithSubject ...
 func WithSubject(subject string) CertificateRequestOption {
-	return func(csr *pb.CertificateRequest) {
+	return func(csr *certificate.CertificateRequest) {
 		csr.Subject = subject
 	}
 }
 
 // NewCertificateRequest ...
-func NewCertificateRequest(key *pb.Key, keyUsage pb.KeyUsage, opts ...CertificateRequestOption) (*pb.CertificateRequest, error) {
-	csr := &pb.CertificateRequest{
+func NewCertificateRequest(key *keyapi.Key, usage certificate.KeyUsage, opts ...CertificateRequestOption) (*certificate.CertificateRequest, error) {
+	csr := &certificate.CertificateRequest{
 		Key:      key.Public,
 		KeyType:  key.Type,
-		KeyUsage: uint32(keyUsage),
+		KeyUsage: uint32(usage),
 	}
 
 	for _, opt := range opts {
@@ -49,7 +50,7 @@ func NewCertificateRequest(key *pb.Key, keyUsage pb.KeyUsage, opts ...Certificat
 	reqBytes, _ := serializeCertificateRequest(csr)
 
 	switch key.Type {
-	case pb.KeyType_KEY_TYPE_ED25519:
+	case keyapi.KeyType_KEY_TYPE_ED25519:
 		if len(key.Private) != ed25519.PrivateKeySize {
 			return nil, ErrInvalidKeyLength
 		}
@@ -61,7 +62,7 @@ func NewCertificateRequest(key *pb.Key, keyUsage pb.KeyUsage, opts ...Certificat
 }
 
 // VerifyCertificateRequest ...
-func VerifyCertificateRequest(csr *pb.CertificateRequest, usage pb.KeyUsage) error {
+func VerifyCertificateRequest(csr *certificate.CertificateRequest, usage certificate.KeyUsage) error {
 	if csr.KeyUsage&^uint32(usage) != 0 {
 		return ErrUnsupportedKeyUsage
 	}
@@ -70,7 +71,7 @@ func VerifyCertificateRequest(csr *pb.CertificateRequest, usage pb.KeyUsage) err
 
 	var validSig bool
 	switch csr.KeyType {
-	case pb.KeyType_KEY_TYPE_ED25519:
+	case keyapi.KeyType_KEY_TYPE_ED25519:
 		if len(csr.Key) != ed25519.PublicKeySize {
 			return ErrInvalidKeyLength
 		}
@@ -87,12 +88,12 @@ func VerifyCertificateRequest(csr *pb.CertificateRequest, usage pb.KeyUsage) err
 
 // SignCertificateRequest ...
 func SignCertificateRequest(
-	csr *pb.CertificateRequest,
+	csr *certificate.CertificateRequest,
 	validDuration time.Duration,
-	key *pb.Key,
-) (*pb.Certificate, error) {
+	key *keyapi.Key,
+) (*certificate.Certificate, error) {
 	now := time.Now().UTC()
-	cert := &pb.Certificate{
+	cert := &certificate.Certificate{
 		Key:          csr.Key,
 		KeyType:      csr.KeyType,
 		KeyUsage:     csr.KeyUsage,
@@ -109,7 +110,7 @@ func SignCertificateRequest(
 	certBytes, _ := serializeCertificate(cert)
 
 	switch key.Type {
-	case pb.KeyType_KEY_TYPE_ED25519:
+	case keyapi.KeyType_KEY_TYPE_ED25519:
 		if len(key.Private) != ed25519.PrivateKeySize {
 			return nil, ErrInvalidKeyLength
 		}
@@ -121,7 +122,7 @@ func SignCertificateRequest(
 }
 
 // VerifyCertificate ...
-func VerifyCertificate(cert *pb.Certificate) error {
+func VerifyCertificate(cert *certificate.Certificate) error {
 	var errs Errors
 	now := time.Now()
 
@@ -132,7 +133,7 @@ func VerifyCertificate(cert *pb.Certificate) error {
 		if parent != nil {
 			signingCert = parent
 		}
-		if signingCert.KeyUsage&uint32(pb.KeyUsage_KEY_USAGE_SIGN) == 0 {
+		if signingCert.KeyUsage&uint32(certificate.KeyUsage_KEY_USAGE_SIGN) == 0 {
 			errs = append(errs, ErrUnsupportedKeyUsage)
 		}
 
@@ -140,7 +141,7 @@ func VerifyCertificate(cert *pb.Certificate) error {
 
 		var validSig bool
 		switch signingCert.KeyType {
-		case pb.KeyType_KEY_TYPE_ED25519:
+		case keyapi.KeyType_KEY_TYPE_ED25519:
 			if len(signingCert.Key) != ed25519.PublicKeySize {
 				errs = append(errs, ErrInvalidKeyLength)
 				break
@@ -169,11 +170,11 @@ func VerifyCertificate(cert *pb.Certificate) error {
 
 // NewSelfSignedCertificate ...
 func NewSelfSignedCertificate(
-	key *pb.Key,
-	usage pb.KeyUsage,
+	key *keyapi.Key,
+	usage certificate.KeyUsage,
 	validDuration time.Duration,
 	opts ...CertificateRequestOption,
-) (*pb.Certificate, error) {
+) (*certificate.Certificate, error) {
 	csr, err := NewCertificateRequest(key, usage, opts...)
 	if err != nil {
 		return nil, err
@@ -182,7 +183,7 @@ func NewSelfSignedCertificate(
 }
 
 // GetRootCert returns the root certificate for a given certificate
-func GetRootCert(cert *pb.Certificate) *pb.Certificate {
+func GetRootCert(cert *certificate.Certificate) *certificate.Certificate {
 	for cert.GetParent() != nil {
 		cert = cert.GetParent()
 	}
@@ -190,13 +191,13 @@ func GetRootCert(cert *pb.Certificate) *pb.Certificate {
 }
 
 // CertIsExpired returns true if the cert NotBefore or NotAfter dates are violated
-func CertIsExpired(cert *pb.Certificate) bool {
+func CertIsExpired(cert *certificate.Certificate) bool {
 	now := uint64(time.Now().UTC().Unix())
 	return cert.NotAfter <= now && cert.NotBefore >= now
 }
 
 // serializeCertificate returns a stable byte representation of a certificate
-func serializeCertificate(cert *pb.Certificate) ([]byte, int) {
+func serializeCertificate(cert *certificate.Certificate) ([]byte, int) {
 	b := make([]byte, 24+len(cert.Key)+len(cert.Subject)+len(cert.SerialNumber))
 
 	n := copy(b, cert.Key)
@@ -215,7 +216,7 @@ func serializeCertificate(cert *pb.Certificate) ([]byte, int) {
 }
 
 // serializeCertificateRequest returns a stable byte representation of a certificate request
-func serializeCertificateRequest(csr *pb.CertificateRequest) ([]byte, int) {
+func serializeCertificateRequest(csr *certificate.CertificateRequest) ([]byte, int) {
 	b := make([]byte, 8+len(csr.Key)+len([]byte(csr.Subject)))
 
 	n := copy(b, csr.Key)

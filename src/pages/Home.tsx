@@ -1,17 +1,17 @@
 /* eslint-disable no-console */
 
-import { Base64 } from "js-base64";
+// import { Base64 } from "js-base64";
 import * as React from "react";
-import { Link } from "react-router-dom";
 
 import { MainLayout } from "../components/MainLayout";
 import { useClient, useLazyCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
-import * as fmp4 from "../lib/media/fmp4";
-import * as mpegts from "../lib/media/mpegts";
-import * as webm from "../lib/media/webm";
-import { CallChatClientRequest, OpenChatClientRequest, OpenChatServerRequest } from "../lib/pb";
+
+// import * as fmp4 from "../lib/media/fmp4";
+// import * as mpegts from "../lib/media/mpegts";
+// import * as webm from "../lib/media/webm";
+// import { CallChatClientRequest, OpenChatClientRequest, OpenChatServerRequest } from "../lib/pb";
 
 const HomePage = () => {
   const [{ colorScheme }, { setColorScheme }] = useTheme();
@@ -38,214 +38,211 @@ const HomePage = () => {
     addDownload(`${pprofData.value.name}.profile`, pprofData.value.data);
   }, [pprofData.value]);
 
-  const handleStartVPNClick = () => client.network.startVPN();
-  const handleStopVPNClick = async () => await client.network.stopVPN();
-
   const handleColorToggle = () => setColorScheme(colorScheme === "dark" ? "light" : "dark");
   const handleLogout = () => clearProfile();
 
-  const handleStartBroadcastClick = async () => {
-    const [{ id }, mediaStream] = await Promise.all([
-      client.video.openServer(),
-      (navigator.mediaDevices as any).getDisplayMedia({
-        video: true,
-        audio: {
-          autoGainControl: false,
-          echoCancellation: false,
-          googAutoGainControl: false,
-          noiseSuppression: false,
-        },
-        frameRate: 30,
-      }) as Promise<MediaStream>,
-    ]);
+  // const handleStartBroadcastClick = async () => {
+  //   const [{ id }, mediaStream] = await Promise.all([
+  //     client.video.openServer(),
+  //     (navigator.mediaDevices as any).getDisplayMedia({
+  //       video: true,
+  //       audio: {
+  //         autoGainControl: false,
+  //         echoCancellation: false,
+  //         googAutoGainControl: false,
+  //         noiseSuppression: false,
+  //       },
+  //       frameRate: 30,
+  //     }) as Promise<MediaStream>,
+  //   ]);
 
-    const encoder = new webm.Encoder(mediaStream);
+  //   const encoder = new webm.Encoder(mediaStream);
 
-    if (true) {
-      broadcastEncoder(encoder, id, mediaStream);
-    } else {
-      debugEncoder(encoder);
-    }
-  };
+  //   if (true) {
+  //     broadcastEncoder(encoder, id, mediaStream);
+  //   } else {
+  //     debugEncoder(encoder);
+  //   }
+  // };
 
-  const debugEncoder = (encoder: webm.Encoder) => {
-    const decoder = new webm.Decoder();
+  // const debugEncoder = (encoder: webm.Encoder) => {
+  //   const decoder = new webm.Decoder();
 
-    encoder.ondata = (b) => {
-      decoder.write(b);
-      // console.log("write", b);
-    };
-    encoder.onend = (b) => {
-      decoder.write(b);
-      decoder.flush();
-      // console.log("write/flush", b);
-    };
+  //   encoder.ondata = (b) => {
+  //     decoder.write(b);
+  //     // console.log("write", b);
+  //   };
+  //   encoder.onend = (b) => {
+  //     decoder.write(b);
+  //     decoder.flush();
+  //     // console.log("write/flush", b);
+  //   };
 
-    videoRef.current.src = URL.createObjectURL(decoder.source.mediaSource);
-  };
+  //   videoRef.current.src = URL.createObjectURL(decoder.source.mediaSource);
+  // };
 
-  const broadcastEncoder = (encoder: webm.Encoder, id: number, mediaStream: MediaStream) => {
-    videoRef.current.srcObject = mediaStream;
+  // const broadcastEncoder = (encoder: webm.Encoder, id: number, mediaStream: MediaStream) => {
+  //   videoRef.current.srcObject = mediaStream;
 
-    encoder.ondata = (data) => client.video.writeToServer({ id, data });
-    encoder.onend = (data) => client.video.writeToServer({ id, data, flush: true });
+  //   encoder.ondata = (data) => client.video.writeToServer({ id, data });
+  //   encoder.onend = (data) => client.video.writeToServer({ id, data, flush: true });
 
-    publishSwarm(id);
-  };
+  //   publishSwarm(id);
+  // };
 
-  const publishSwarm = async (id: number) => {
-    const { networks } = await client.network.list();
-    networks.forEach((m) => {
-      let rootCert = m.certificate;
-      while (rootCert.parent) {
-        rootCert = rootCert.parent;
-      }
+  // const publishSwarm = async (id: number) => {
+  //   const { networks } = await client.network.list();
+  //   networks.forEach((m) => {
+  //     let rootCert = m.certificate;
+  //     while (rootCert.parent) {
+  //       rootCert = rootCert.parent;
+  //     }
 
-      client.video.publishSwarm({
-        id,
-        networkKey: rootCert.key,
-      });
-    });
-  };
+  //     client.video.publishSwarm({
+  //       id,
+  //       networkKey: rootCert.key,
+  //     });
+  //   });
+  // };
 
-  const handleViewBroadcastClick = (decoder: webm.Decoder | fmp4.Decoder) => {
-    const video = videoRef.current;
-    video.src = URL.createObjectURL(decoder.source.mediaSource);
-    video.oncanplay = () => video.play();
+  // const handleViewBroadcastClick = (decoder: webm.Decoder | fmp4.Decoder) => {
+  //   const video = videoRef.current;
+  //   video.src = URL.createObjectURL(decoder.source.mediaSource);
+  //   video.oncanplay = () => video.play();
 
-    const timeShifted = 0;
+  //   const timeShifted = 0;
 
-    const clientEvents = client.video.openClient({
-      swarmKey: Base64.toUint8Array("0uJfwk6ks1OwZaokGtXDnkEfeBWQjdESbqqGIIq1fjI="),
-      emitData: true,
-    });
-    clientEvents.on("data", (v) => {
-      switch (v.body) {
-        case "open":
-          publishSwarm(v.open.id);
-          break;
-        case "data":
-          // console.log("read", v.data.data);
+  //   const clientEvents = client.video.openClient({
+  //     swarmKey: Base64.toUint8Array("0uJfwk6ks1OwZaokGtXDnkEfeBWQjdESbqqGIIq1fjI="),
+  //     emitData: true,
+  //   });
+  //   clientEvents.on("data", (v) => {
+  //     switch (v.body) {
+  //       case "open":
+  //         publishSwarm(v.open.id);
+  //         break;
+  //       case "data":
+  //         // console.log("read", v.data.data);
 
-          decoder.write(v.data.data);
-          if (v.data.flush) {
-            decoder.flush();
+  //         decoder.write(v.data.data);
+  //         if (v.data.flush) {
+  //           decoder.flush();
 
-            // if (timeShifted < 2) {
-            //   timeShifted++;
-            //   videoRef.current.currentTime = 999999999999;
-            // }
+  //           // if (timeShifted < 2) {
+  //           //   timeShifted++;
+  //           //   videoRef.current.currentTime = 999999999999;
+  //           // }
 
-            const [, end] = decoder.source.bounds();
-            const { currentTime } = videoRef.current;
-            if (currentTime < end - 10) {
-              videoRef.current.currentTime = end - 5;
-              videoRef.current.play();
+  //           const [, end] = decoder.source.bounds();
+  //           const { currentTime } = videoRef.current;
+  //           if (currentTime < end - 10) {
+  //             videoRef.current.currentTime = end - 5;
+  //             videoRef.current.play();
 
-              console.log("skipping", videoRef.current.currentTime);
-            }
-          }
-      }
-    });
-  };
+  //             console.log("skipping", videoRef.current.currentTime);
+  //           }
+  //         }
+  //     }
+  //   });
+  // };
 
-  const handleTestClick = async () => {
-    console.log("starting vpn");
-    const networkEvents = client.network.startVPN();
+  // const handleTestClick = async () => {
+  //   console.log("starting vpn");
+  //   const networkEvents = client.network.startVPN();
 
-    networkEvents.on("data", (e) => {
-      console.log(e);
-    });
+  //   networkEvents.on("data", (e) => {
+  //     console.log(e);
+  //   });
 
-    console.log("vpn started");
+  //   console.log("vpn started");
 
-    console.log("waiting for networks...");
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+  //   console.log("waiting for networks...");
+  //   await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    // console.log("starting swarm");
-    // const swarm = await client.openVideoServer();
-    // console.log("started swarm", swarm);
+  //   // console.log("starting swarm");
+  //   // const swarm = await client.openVideoServer();
+  //   // console.log("started swarm", swarm);
 
-    // console.log("publishing swarm");
-    // await client.publishSwarm({
-    //   id: swarm.id,
-    // });
-    // console.log("swarm published");
-  };
+  //   // console.log("publishing swarm");
+  //   // await client.publishSwarm({
+  //   //   id: swarm.id,
+  //   // });
+  //   // console.log("swarm published");
+  // };
 
-  const handleChatClientClick = async () => {
-    const listServersRes = await client.chat.listServers();
-    const server = listServersRes.chatServers[0];
-    const chatEvents = client.chat.openClient(
-      new OpenChatClientRequest({
-        networkKey: server.networkKey,
-        serverKey: server.key.public,
-      })
-    );
-    chatEvents.on("data", async (v) => {
-      let n = 0;
+  // const handleChatClientClick = async () => {
+  //   const listServersRes = await client.chat.listServers();
+  //   const server = listServersRes.chatServers[0];
+  //   const chatEvents = client.chat.openClient(
+  //     new OpenChatClientRequest({
+  //       networkKey: server.networkKey,
+  //       serverKey: server.key.public,
+  //     })
+  //   );
+  //   chatEvents.on("data", async (v) => {
+  //     let n = 0;
 
-      switch (v.body) {
-        case "open":
-          console.log("chat client >>>", v.open.clientId);
+  //     switch (v.body) {
+  //       case "open":
+  //         console.log("chat client >>>", v.open.clientId);
 
-          await new Promise((resolve) => setTimeout(resolve, 2000));
+  //         await new Promise((resolve) => setTimeout(resolve, 2000));
 
-          setInterval(() => {
-            client.chat.callClient(
-              new CallChatClientRequest({
-                clientId: v.open.clientId,
-                message: new CallChatClientRequest.Message({
-                  time: Date.now(),
-                  body: `${n++}`,
-                }),
-              })
-            );
-          }, 500);
-          return;
-        case "close":
-          console.log("chat client closed");
-          return;
-        case "message":
-          console.log("chat message", v.message);
-          console.log(
-            "delay - e2e:",
-            Date.now() - v.message.sentTime,
-            "client>server:",
-            v.message.serverTime - v.message.sentTime,
-            "server>ui:",
-            Date.now() - v.message.serverTime,
-            "value:",
-            v.message.body
-          );
-          return;
-        default:
-          console.log(v);
-      }
-    });
-  };
+  //         setInterval(() => {
+  //           client.chat.callClient(
+  //             new CallChatClientRequest({
+  //               clientId: v.open.clientId,
+  //               message: new CallChatClientRequest.Message({
+  //                 time: Date.now(),
+  //                 body: `${n++}`,
+  //               }),
+  //             })
+  //           );
+  //         }, 500);
+  //         return;
+  //       case "close":
+  //         console.log("chat client closed");
+  //         return;
+  //       case "message":
+  //         console.log("chat message", v.message);
+  //         console.log(
+  //           "delay - e2e:",
+  //           Date.now() - v.message.sentTime,
+  //           "client>server:",
+  //           v.message.serverTime - v.message.sentTime,
+  //           "server>ui:",
+  //           Date.now() - v.message.serverTime,
+  //           "value:",
+  //           v.message.body
+  //         );
+  //         return;
+  //       default:
+  //         console.log(v);
+  //     }
+  //   });
+  // };
 
-  const handleChatServerClick = async () => {
-    const servers = await client.chat.listServers();
-    if (servers.chatServers.length === 0) {
-      return;
-    }
+  // const handleChatServerClick = async () => {
+  //   const servers = await client.chat.listServers();
+  //   if (servers.chatServers.length === 0) {
+  //     return;
+  //   }
 
-    const server = servers.chatServers[0];
-    const chatEvents = client.chat.openServer(new OpenChatServerRequest({ server }));
-    chatEvents.on("data", (v) => {
-      switch (v.body) {
-        case "open":
-          console.log("chat server >>>", v.open.serverId);
-          return;
-        case "close":
-          console.log("chat server closed");
-          return;
-        default:
-          console.log(v);
-      }
-    });
-  };
+  //   const server = servers.chatServers[0];
+  //   const chatEvents = client.chat.openServer(new OpenChatServerRequest({ server }));
+  //   chatEvents.on("data", (v) => {
+  //     switch (v.body) {
+  //       case "open":
+  //         console.log("chat server >>>", v.open.serverId);
+  //         return;
+  //       case "close":
+  //         console.log("chat server closed");
+  //         return;
+  //       default:
+  //         console.log(v);
+  //     }
+  //   });
+  // };
 
   const handleReadMetricsClick = async () => {
     const { data } = await client.debug.readMetrics({ format: 0 });
@@ -265,7 +262,7 @@ const HomePage = () => {
             <button className="input input_button" onClick={handleColorToggle}>
               toggle theme
             </button>
-            <button className="input input_button" onClick={handleStartBroadcastClick}>
+            {/* <button className="input input_button" onClick={handleStartBroadcastClick}>
               start broadcast
             </button>
             <button
@@ -279,7 +276,7 @@ const HomePage = () => {
               onClick={() => handleViewBroadcastClick(new fmp4.Decoder())}
             >
               view rtmp broadcast
-            </button>
+            </button> */}
             <button className="input input_button" onClick={() => pprof({ name: "allocs" })}>
               allocs profile
             </button>
@@ -292,12 +289,12 @@ const HomePage = () => {
             {/* <button className="input input_button" onClick={handleTestClick}>
               test
             </button> */}
-            <button className="input input_button" onClick={handleChatClientClick}>
+            {/* <button className="input input_button" onClick={handleChatClientClick}>
               chat client
             </button>
             <button className="input input_button" onClick={handleChatServerClick}>
               chat server
-            </button>
+            </button> */}
             <button className="input input_button" onClick={handleReadMetricsClick}>
               read metrics
             </button>

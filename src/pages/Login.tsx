@@ -4,19 +4,19 @@ import { useForm } from "react-hook-form";
 import { FiUser, FiUserPlus } from "react-icons/fi";
 import { Link, Redirect, useLocation } from "react-router-dom";
 
+import { ILoadProfileRequest, IProfileSummary } from "../apis/strims/profile/v1/profile";
 import { InputError, TextInput } from "../components/Form";
 import LandingPageLayout from "../components/LandingPageLayout";
 import { useCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
-import * as pb from "../lib/pb";
 
 const VALID_NEXT_PATH = /^\/\w[\w/_\-.?=#%]*$/;
 
 const LoginPage = () => {
   const [listProfilesRes] = useCall("profile", "list");
   const [{ profile, error, loading }, profileActions] = useProfile();
-  const [selectedProfile, setSelectedProfile] = React.useState<pb.IProfileSummary | null>(null);
-  const { register, handleSubmit, errors } = useForm({
+  const [selectedProfile, setSelectedProfile] = React.useState<IProfileSummary | null>(null);
+  const { register, handleSubmit, errors } = useForm<ILoadProfileRequest>({
     mode: "onBlur",
   });
   const location = useLocation();
@@ -38,7 +38,7 @@ const LoginPage = () => {
           {listProfilesRes.value?.profiles.map((summary) => (
             <div
               className="login_profile_list__item"
-              key={summary.id}
+              key={summary.id.toString()}
               onClick={() => setSelectedProfile(summary)}
             >
               <FiUser className="login_profile_list__icon" />
@@ -54,15 +54,16 @@ const LoginPage = () => {
     );
   }
 
-  const onSubmit = (data) =>
+  const onSubmit = handleSubmit((data) =>
     profileActions.loadProfile({
       id: selectedProfile.id,
       ...data,
-    });
+    })
+  );
 
   return (
     <LandingPageLayout>
-      <form onSubmit={handleSubmit(onSubmit)}>
+      <form onSubmit={onSubmit}>
         {listProfilesRes.error && (
           <InputError error={listProfilesRes.error.message || "Error loading profiles"} />
         )}

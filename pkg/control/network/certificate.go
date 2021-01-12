@@ -5,8 +5,9 @@ import (
 	"sync"
 	"time"
 
+	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
 )
@@ -16,7 +17,7 @@ type certificateMap struct {
 	m  llrb.LLRB
 }
 
-func (c *certificateMap) Insert(network *pb.Network) {
+func (c *certificateMap) Insert(network *network.Network) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -61,7 +62,7 @@ func (c *certificateMap) Keys() [][]byte {
 type certificateMapItem struct {
 	networkKey  []byte
 	networkID   uint64
-	certificate *pb.Certificate
+	certificate *certificate.Certificate
 	trusted     bool
 }
 
@@ -74,7 +75,7 @@ func (c *certificateMapItem) Less(o llrb.Item) bool {
 
 // isPeerCertificateOwner checks that the key in the identity certificate
 // received during the initial peer handshake matches the provided cert.
-func isPeerCertificateOwner(peer *vnic.Peer, cert *pb.Certificate) bool {
+func isPeerCertificateOwner(peer *vnic.Peer, cert *certificate.Certificate) bool {
 	return bytes.Equal(peer.Certificate.Key, cert.Key)
 }
 
@@ -85,21 +86,21 @@ func isPeerCertificateOwner(peer *vnic.Peer, cert *pb.Certificate) bool {
 // pass: network member > network ca
 // fail: provisional peer > network member > network ca
 // fail: provisional peer > invitation > network member > network ca
-func isCertificateTrusted(cert *pb.Certificate) bool {
+func isCertificateTrusted(cert *certificate.Certificate) bool {
 	return bytes.Equal(networkKeyForCertificate(cert), cert.GetParent().Key)
 }
 
-func networkKeyForCertificate(cert *pb.Certificate) []byte {
+func networkKeyForCertificate(cert *certificate.Certificate) []byte {
 	return dao.GetRootCert(cert).Key
 }
 
-func nextCertificateRenewTime(network *pb.Network) time.Time {
+func nextCertificateRenewTime(network *network.Network) time.Time {
 	if isCertificateSubjectMismatched(network) {
 		return time.Now()
 	}
 	return time.Unix(int64(network.Certificate.NotAfter), 0).Add(-certRenewScheduleAheadDuration)
 }
 
-func isCertificateSubjectMismatched(network *pb.Network) bool {
+func isCertificateSubjectMismatched(network *network.Network) bool {
 	return network.AltProfileName != "" && network.AltProfileName != network.Certificate.Subject
 }

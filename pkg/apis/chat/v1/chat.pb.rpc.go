@@ -3,19 +3,19 @@ package chat
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterChatService ...
-func RegisterChatService(host api.ServiceRegistry, service ChatService) {
-	host.RegisterMethod(".strims.chat.v1.Chat.CreateServer", service.CreateServer)
-	host.RegisterMethod(".strims.chat.v1.Chat.UpdateServer", service.UpdateServer)
-	host.RegisterMethod(".strims.chat.v1.Chat.DeleteServer", service.DeleteServer)
-	host.RegisterMethod(".strims.chat.v1.Chat.GetServer", service.GetServer)
-	host.RegisterMethod(".strims.chat.v1.Chat.ListServers", service.ListServers)
-	host.RegisterMethod(".strims.chat.v1.Chat.OpenServer", service.OpenServer)
-	host.RegisterMethod(".strims.chat.v1.Chat.OpenClient", service.OpenClient)
-	host.RegisterMethod(".strims.chat.v1.Chat.CallClient", service.CallClient)
+func RegisterChatService(host rpc.ServiceRegistry, service ChatService) {
+	host.RegisterMethod("strims.chat.v1.Chat.CreateServer", service.CreateServer)
+	host.RegisterMethod("strims.chat.v1.Chat.UpdateServer", service.UpdateServer)
+	host.RegisterMethod("strims.chat.v1.Chat.DeleteServer", service.DeleteServer)
+	host.RegisterMethod("strims.chat.v1.Chat.GetServer", service.GetServer)
+	host.RegisterMethod("strims.chat.v1.Chat.ListServers", service.ListServers)
+	host.RegisterMethod("strims.chat.v1.Chat.OpenServer", service.OpenServer)
+	host.RegisterMethod("strims.chat.v1.Chat.OpenClient", service.OpenClient)
+	host.RegisterMethod("strims.chat.v1.Chat.CallClient", service.CallClient)
 }
 
 // ChatService ...
@@ -56,11 +56,11 @@ type ChatService interface {
 
 // ChatClient ...
 type ChatClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewChatClient ...
-func NewChatClient(client api.Caller) *ChatClient {
+func NewChatClient(client rpc.Caller) *ChatClient {
 	return &ChatClient{client}
 }
 
@@ -70,7 +70,7 @@ func (c *ChatClient) CreateServer(
 	req *CreateChatServerRequest,
 	res *CreateChatServerResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.chat.v1.Chat.CreateServer", req, res)
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.CreateServer", req, res)
 }
 
 // UpdateServer ...
@@ -79,7 +79,7 @@ func (c *ChatClient) UpdateServer(
 	req *UpdateChatServerRequest,
 	res *UpdateChatServerResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.chat.v1.Chat.UpdateServer", req, res)
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.UpdateServer", req, res)
 }
 
 // DeleteServer ...
@@ -88,7 +88,7 @@ func (c *ChatClient) DeleteServer(
 	req *DeleteChatServerRequest,
 	res *DeleteChatServerResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.chat.v1.Chat.DeleteServer", req, res)
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.DeleteServer", req, res)
 }
 
 // GetServer ...
@@ -97,7 +97,7 @@ func (c *ChatClient) GetServer(
 	req *GetChatServerRequest,
 	res *GetChatServerResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.chat.v1.Chat.GetServer", req, res)
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.GetServer", req, res)
 }
 
 // ListServers ...
@@ -106,7 +106,7 @@ func (c *ChatClient) ListServers(
 	req *ListChatServersRequest,
 	res *ListChatServersResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.chat.v1.Chat.ListServers", req, res)
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.ListServers", req, res)
 }
 
 // OpenServer ...
@@ -115,7 +115,7 @@ func (c *ChatClient) OpenServer(
 	req *OpenChatServerRequest,
 	res chan *ChatServerEvent,
 ) error {
-	return c.client.CallStreaming(ctx, ".strims.chat.v1.Chat.OpenServer", req, res)
+	return c.client.CallStreaming(ctx, "strims.chat.v1.Chat.OpenServer", req, res)
 }
 
 // OpenClient ...
@@ -124,7 +124,7 @@ func (c *ChatClient) OpenClient(
 	req *OpenChatClientRequest,
 	res chan *ChatClientEvent,
 ) error {
-	return c.client.CallStreaming(ctx, ".strims.chat.v1.Chat.OpenClient", req, res)
+	return c.client.CallStreaming(ctx, "strims.chat.v1.Chat.OpenClient", req, res)
 }
 
 // CallClient ...
@@ -133,5 +133,5 @@ func (c *ChatClient) CallClient(
 	req *CallChatClientRequest,
 	res *CallChatClientResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.chat.v1.Chat.CallClient", req, res)
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.CallClient", req, res)
 }

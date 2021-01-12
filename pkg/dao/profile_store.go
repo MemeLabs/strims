@@ -4,8 +4,8 @@ import (
 	"errors"
 	"sync"
 
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -33,7 +33,7 @@ type ProfileStore struct {
 }
 
 // Init ...
-func (s *ProfileStore) Init(profile *pb.Profile) error {
+func (s *ProfileStore) Init(profile *profilev1.Profile) error {
 	if err := s.store.CreateStoreIfNotExists(s.name); err != nil {
 		return err
 	}
@@ -100,12 +100,12 @@ func (s *ProfileStore) GenerateID() (uint64, error) {
 		return id, nil
 	}
 
-	res := &pb.ProfileID{NextId: 1}
+	res := &profilev1.ProfileID{NextId: 1}
 	err := s.Update(func(tx kv.RWTx) error {
 		if err := tx.Get(profileIDKey, res); err != nil && !errors.Is(err, kv.ErrRecordNotFound) {
 			return err
 		}
-		return tx.Put(profileIDKey, &pb.ProfileID{NextId: res.NextId + profileIDReservationSize})
+		return tx.Put(profileIDKey, &profilev1.ProfileID{NextId: res.NextId + profileIDReservationSize})
 	})
 	if err != nil {
 		return 0, err

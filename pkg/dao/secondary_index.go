@@ -7,8 +7,8 @@ import (
 	"strconv"
 	"strings"
 
+	daov1 "github.com/MemeLabs/go-ppspp/pkg/apis/dao/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"golang.org/x/crypto/blake2b"
 )
 
@@ -26,7 +26,7 @@ func SetSecondaryIndex(s kv.RWStore, prefix string, key []byte, id uint64) error
 	}
 
 	return s.Update(func(tx kv.RWTx) error {
-		return tx.Put(kb.String(), &pb.SecondaryIndexKey{Key: key, Id: id})
+		return tx.Put(kb.String(), &daov1.SecondaryIndexKey{Key: key, Id: id})
 	})
 }
 
@@ -55,7 +55,7 @@ func SetUniqueSecondaryIndex(s kv.RWStore, prefix string, key []byte, id uint64)
 		if err := kb.WriteID(id); err != nil {
 			return err
 		}
-		return tx.Put(kb.String(), &pb.SecondaryIndexKey{Key: key, Id: id})
+		return tx.Put(kb.String(), &daov1.SecondaryIndexKey{Key: key, Id: id})
 	})
 }
 
@@ -103,7 +103,7 @@ func ScanSecondaryIndex(s kv.Store, prefix string, key []byte) ([]uint64, error)
 	return ids, nil
 }
 
-func scanSecondaryIndex(s kv.Store, prefix string, key []byte) ([]*pb.SecondaryIndexKey, error) {
+func scanSecondaryIndex(s kv.Store, prefix string, key []byte) ([]*daov1.SecondaryIndexKey, error) {
 	var kb secondaryIndexKeyBuilder
 	if err := kb.WritePrefix(prefix); err != nil {
 		return nil, err
@@ -115,8 +115,8 @@ func scanSecondaryIndex(s kv.Store, prefix string, key []byte) ([]*pb.SecondaryI
 	return scanSecondaryIndexWithKey(s, key, kb.String())
 }
 
-func scanSecondaryIndexWithKey(s kv.Store, key []byte, indexKeyPrefix string) ([]*pb.SecondaryIndexKey, error) {
-	candidates := []*pb.SecondaryIndexKey{}
+func scanSecondaryIndexWithKey(s kv.Store, key []byte, indexKeyPrefix string) ([]*daov1.SecondaryIndexKey, error) {
+	candidates := []*daov1.SecondaryIndexKey{}
 	err := s.View(func(tx kv.Tx) error {
 		return tx.ScanPrefix(indexKeyPrefix, &candidates)
 	})

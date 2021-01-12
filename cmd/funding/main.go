@@ -8,10 +8,9 @@ import (
 	"os"
 	"path"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	funding "github.com/MemeLabs/go-ppspp/pkg/apis/funding/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/gorilla/websocket"
@@ -79,7 +78,7 @@ func (s *fundingServer) handleAPI(w http.ResponseWriter, r *http.Request) {
 		ReadWriter: vnic.NewWSReadWriter(c),
 	})
 
-	api.RegisterFundingService(server, s.service)
+	funding.RegisterFundingService(server, s.service)
 
 	server.Listen(r.Context())
 }
@@ -88,8 +87,8 @@ type fundingService struct {
 	store kv.BlobStore
 }
 
-func (s *fundingService) Test(ctx context.Context, req *pb.FundingTestRequest) (*pb.FundingTestResponse, error) {
-	return &pb.FundingTestResponse{
+func (s *fundingService) Test(ctx context.Context, req *funding.FundingTestRequest) (*funding.FundingTestResponse, error) {
+	return &funding.FundingTestResponse{
 		Message: fmt.Sprintf("hello, %s!", req.Name),
 	}, nil
 }

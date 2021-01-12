@@ -4,8 +4,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
+	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/control/bootstrap"
 	"github.com/MemeLabs/go-ppspp/pkg/control/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"

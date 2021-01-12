@@ -10,11 +10,12 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
@@ -43,7 +44,7 @@ func NewPeer(
 		certificates: certificates,
 
 		keyCount:   make(chan uint32, 1),
-		bindings:   make(chan []*pb.NetworkPeerBinding, 1),
+		bindings:   make(chan []*networkv1.NetworkPeerBinding, 1),
 		brokerConn: peer.Channel(vnic.NetworkBrokerPort),
 	}
 }
@@ -63,7 +64,7 @@ type Peer struct {
 	links       llrb.LLRB
 	negotiating uint32
 	keyCount    chan uint32
-	bindings    chan []*pb.NetworkPeerBinding
+	bindings    chan []*networkv1.NetworkPeerBinding
 	brokerConn  *vnic.FrameReadWriter
 }
 
@@ -84,7 +85,7 @@ func (p *Peer) HandlePeerNegotiate(keyCount uint32) {
 }
 
 // HandlePeerOpen ...
-func (p *Peer) HandlePeerOpen(bindings []*pb.NetworkPeerBinding) {
+func (p *Peer) HandlePeerOpen(bindings []*networkv1.NetworkPeerBinding) {
 	select {
 	case p.bindings <- bindings:
 	default:
@@ -97,7 +98,7 @@ func (p *Peer) HandlePeerClose(networkKey []byte) {
 }
 
 // HandlePeerUpdateCertificate ...
-func (p *Peer) HandlePeerUpdateCertificate(cert *pb.Certificate) error {
+func (p *Peer) HandlePeerUpdateCertificate(cert *certificate.Certificate) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -122,7 +123,7 @@ func (p *Peer) HandlePeerUpdateCertificate(cert *pb.Certificate) error {
 	return p.openNetwork(link)
 }
 
-func (p *Peer) sendCertificateUpdate(network *pb.Network) error {
+func (p *Peer) sendCertificateUpdate(network *networkv1.Network) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -136,8 +137,8 @@ func (p *Peer) sendCertificateUpdate(network *pb.Network) error {
 
 	err := p.client.Network().UpdateCertificate(
 		context.Background(),
-		&pb.NetworkPeerUpdateCertificateRequest{Certificate: network.Certificate},
-		&pb.NetworkPeerUpdateCertificateResponse{},
+		&networkv1.NetworkPeerUpdateCertificateRequest{Certificate: network.Certificate},
+		&networkv1.NetworkPeerUpdateCertificateResponse{},
 	)
 	if err != nil {
 		return err
@@ -183,7 +184,7 @@ func (p *Peer) closeNetworkWithoutNotifyingPeer(networkKey []byte) error {
 
 func (p *Peer) closeNetwork(networkKey []byte) {
 	p.closeNetworkWithoutNotifyingPeer(networkKey)
-	p.client.Network().Close(context.Background(), &pb.NetworkPeerCloseRequest{Key: networkKey}, &pb.NetworkPeerCloseResponse{})
+	p.client.Network().Close(context.Background(), &networkv1.NetworkPeerCloseRequest{Key: networkKey}, &networkv1.NetworkPeerCloseResponse{})
 }
 
 func (p *Peer) networkKeysForLinks() [][]byte {
@@ -220,7 +221,7 @@ func (p *Peer) negotiateNetworks(ctx context.Context) error {
 	defer cancel()
 
 	keys := p.certificates.Keys()
-	err := p.client.Network().Negotiate(ctx, &pb.NetworkPeerNegotiateRequest{KeyCount: uint32(len(keys))}, &pb.NetworkPeerNegotiateResponse{})
+	err := p.client.Network().Negotiate(ctx, &networkv1.NetworkPeerNegotiateRequest{KeyCount: uint32(len(keys))}, &networkv1.NetworkPeerNegotiateResponse{})
 	if err != nil {
 		return fmt.Errorf("sending network negotiation init failed: %w", err)
 	}
@@ -297,8 +298,8 @@ func (p *Peer) exchangeBindingsAsSender(ctx context.Context, keys [][]byte) erro
 	}
 }
 
-func (p *Peer) sendNetworkBindings(ctx context.Context, keys [][]byte) ([]*pb.NetworkPeerBinding, error) {
-	var bindings []*pb.NetworkPeerBinding
+func (p *Peer) sendNetworkBindings(ctx context.Context, keys [][]byte) ([]*networkv1.NetworkPeerBinding, error) {
+	var bindings []*networkv1.NetworkPeerBinding
 
 	for _, key := range keys {
 		c, ok := p.certificates.Get(key)
@@ -317,21 +318,21 @@ func (p *Peer) sendNetworkBindings(ctx context.Context, keys [][]byte) ([]*pb.Ne
 
 		bindings = append(
 			bindings,
-			&pb.NetworkPeerBinding{
+			&networkv1.NetworkPeerBinding{
 				Port:        uint32(port),
 				Certificate: c.certificate,
 			},
 		)
 	}
 
-	err := p.client.Network().Open(ctx, &pb.NetworkPeerOpenRequest{Bindings: bindings}, &pb.NetworkPeerOpenResponse{})
+	err := p.client.Network().Open(ctx, &networkv1.NetworkPeerOpenRequest{Bindings: bindings}, &networkv1.NetworkPeerOpenResponse{})
 	if err != nil {
 		return nil, err
 	}
 	return bindings, nil
 }
 
-func (p *Peer) verifyNetworkBindings(bindings []*pb.NetworkPeerBinding) ([][]byte, error) {
+func (p *Peer) verifyNetworkBindings(bindings []*networkv1.NetworkPeerBinding) ([][]byte, error) {
 	if bindings == nil {
 		return nil, ErrNetworkBindingsEmpty
 	}
@@ -346,7 +347,7 @@ func (p *Peer) verifyNetworkBindings(bindings []*pb.NetworkPeerBinding) ([][]byt
 	return keys, nil
 }
 
-func (p *Peer) handleNetworkBindings(networkBindings, peerNetworkBindings []*pb.NetworkPeerBinding) error {
+func (p *Peer) handleNetworkBindings(networkBindings, peerNetworkBindings []*networkv1.NetworkPeerBinding) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 

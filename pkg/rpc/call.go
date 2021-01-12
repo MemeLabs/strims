@@ -3,11 +3,13 @@ package rpc
 import (
 	"context"
 	"reflect"
+	"sync/atomic"
 
-	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	rpcv1 "github.com/MemeLabs/go-ppspp/pkg/apis/rpc/v1"
 	"github.com/golang/protobuf/proto"
 )
+
+var nextID = new(uint64)
 
 // ResponseType ...
 type ResponseType int
@@ -70,7 +72,7 @@ func (c *CallBase) Cancel() {
 }
 
 // NewCallIn ...
-func NewCallIn(ctx context.Context, req *pb.Call, parentCallAcessor ParentCallAccessor, send SendFunc) *CallIn {
+func NewCallIn(ctx context.Context, req *rpcv1.Call, parentCallAcessor ParentCallAccessor, send SendFunc) *CallIn {
 	return &CallIn{
 		CallBase:           NewCallBase(ctx),
 		req:                req,
@@ -83,7 +85,7 @@ func NewCallIn(ctx context.Context, req *pb.Call, parentCallAcessor ParentCallAc
 type CallIn struct {
 	CallBase
 	ParentCallAccessor
-	req          *pb.Call
+	req          *rpcv1.Call
 	responseType ResponseType
 	send         SendFunc
 }
@@ -116,10 +118,7 @@ func (c *CallIn) Argument() (interface{}, error) {
 }
 
 func (c *CallIn) sendResponse(res proto.Message) error {
-	id, err := dao.GenerateSnowflake()
-	if err != nil {
-		return err
-	}
+	id := atomic.AddUint64(nextID, 1)
 
 	if err := send(c.ctx, id, c.req.Id, callbackMethod, res, c.send); err != nil {
 		return err
@@ -129,12 +128,12 @@ func (c *CallIn) sendResponse(res proto.Message) error {
 
 func (c *CallIn) returnUndefined() {
 	c.responseType = ResponseTypeUndefined
-	c.sendResponse(&pb.Undefined{})
+	c.sendResponse(&rpcv1.Undefined{})
 }
 
 func (c *CallIn) returnError(err error) {
 	c.responseType = ResponseTypeError
-	c.sendResponse(&pb.Error{Message: err.Error()})
+	c.sendResponse(&rpcv1.Error{Message: err.Error()})
 }
 
 func (c *CallIn) returnValue(v proto.Message) {
@@ -164,7 +163,7 @@ func (c *CallIn) returnStream(v interface{}) {
 		}
 
 		if !ok {
-			c.sendResponse(&pb.Close{})
+			c.sendResponse(&rpcv1.Close{})
 			return
 		}
 
@@ -184,14 +183,9 @@ func NewCallOut(ctx context.Context, method string, arg proto.Message) (*CallOut
 
 // NewCallOutWithParent ...
 func NewCallOutWithParent(ctx context.Context, method string, arg proto.Message, parent Call) (*CallOut, error) {
-	id, err := dao.GenerateSnowflake()
-	if err != nil {
-		return nil, err
-	}
-
 	return &CallOut{
 		CallBase: NewCallBase(ctx),
-		id:       id,
+		id:       atomic.AddUint64(nextID, 1),
 		parentID: parent.ID(),
 		method:   method,
 		arg:      arg,

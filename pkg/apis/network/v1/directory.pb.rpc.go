@@ -3,16 +3,16 @@ package network
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterDirectoryService ...
-func RegisterDirectoryService(host api.ServiceRegistry, service DirectoryService) {
-	host.RegisterMethod(".strims.network.v1.Directory.Publish", service.Publish)
-	host.RegisterMethod(".strims.network.v1.Directory.Unpublish", service.Unpublish)
-	host.RegisterMethod(".strims.network.v1.Directory.Join", service.Join)
-	host.RegisterMethod(".strims.network.v1.Directory.Part", service.Part)
-	host.RegisterMethod(".strims.network.v1.Directory.Ping", service.Ping)
+func RegisterDirectoryService(host rpc.ServiceRegistry, service DirectoryService) {
+	host.RegisterMethod("strims.network.v1.Directory.Publish", service.Publish)
+	host.RegisterMethod("strims.network.v1.Directory.Unpublish", service.Unpublish)
+	host.RegisterMethod("strims.network.v1.Directory.Join", service.Join)
+	host.RegisterMethod("strims.network.v1.Directory.Part", service.Part)
+	host.RegisterMethod("strims.network.v1.Directory.Ping", service.Ping)
 }
 
 // DirectoryService ...
@@ -41,11 +41,11 @@ type DirectoryService interface {
 
 // DirectoryClient ...
 type DirectoryClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewDirectoryClient ...
-func NewDirectoryClient(client api.Caller) *DirectoryClient {
+func NewDirectoryClient(client rpc.Caller) *DirectoryClient {
 	return &DirectoryClient{client}
 }
 
@@ -55,7 +55,7 @@ func (c *DirectoryClient) Publish(
 	req *DirectoryPublishRequest,
 	res *DirectoryPublishResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.Directory.Publish", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.Directory.Publish", req, res)
 }
 
 // Unpublish ...
@@ -64,7 +64,7 @@ func (c *DirectoryClient) Unpublish(
 	req *DirectoryUnpublishRequest,
 	res *DirectoryUnpublishResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.Directory.Unpublish", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.Directory.Unpublish", req, res)
 }
 
 // Join ...
@@ -73,7 +73,7 @@ func (c *DirectoryClient) Join(
 	req *DirectoryJoinRequest,
 	res *DirectoryJoinResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.Directory.Join", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.Directory.Join", req, res)
 }
 
 // Part ...
@@ -82,7 +82,7 @@ func (c *DirectoryClient) Part(
 	req *DirectoryPartRequest,
 	res *DirectoryPartResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.Directory.Part", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.Directory.Part", req, res)
 }
 
 // Ping ...
@@ -91,13 +91,13 @@ func (c *DirectoryClient) Ping(
 	req *DirectoryPingRequest,
 	res *DirectoryPingResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.Directory.Ping", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.Directory.Ping", req, res)
 }
 
 // RegisterDirectoryFrontendService ...
-func RegisterDirectoryFrontendService(host api.ServiceRegistry, service DirectoryFrontendService) {
-	host.RegisterMethod(".strims.network.v1.DirectoryFrontend.Open", service.Open)
-	host.RegisterMethod(".strims.network.v1.DirectoryFrontend.Test", service.Test)
+func RegisterDirectoryFrontendService(host rpc.ServiceRegistry, service DirectoryFrontendService) {
+	host.RegisterMethod("strims.network.v1.DirectoryFrontend.Open", service.Open)
+	host.RegisterMethod("strims.network.v1.DirectoryFrontend.Test", service.Test)
 }
 
 // DirectoryFrontendService ...
@@ -114,11 +114,11 @@ type DirectoryFrontendService interface {
 
 // DirectoryFrontendClient ...
 type DirectoryFrontendClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewDirectoryFrontendClient ...
-func NewDirectoryFrontendClient(client api.Caller) *DirectoryFrontendClient {
+func NewDirectoryFrontendClient(client rpc.Caller) *DirectoryFrontendClient {
 	return &DirectoryFrontendClient{client}
 }
 
@@ -128,7 +128,7 @@ func (c *DirectoryFrontendClient) Open(
 	req *DirectoryFrontendOpenRequest,
 	res chan *DirectoryFrontendOpenResponse,
 ) error {
-	return c.client.CallStreaming(ctx, ".strims.network.v1.DirectoryFrontend.Open", req, res)
+	return c.client.CallStreaming(ctx, "strims.network.v1.DirectoryFrontend.Open", req, res)
 }
 
 // Test ...
@@ -137,5 +137,5 @@ func (c *DirectoryFrontendClient) Test(
 	req *DirectoryFrontendTestRequest,
 	res *DirectoryFrontendTestResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.DirectoryFrontend.Test", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.DirectoryFrontend.Test", req, res)
 }

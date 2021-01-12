@@ -7,8 +7,7 @@ import (
 	"runtime"
 	"runtime/pprof"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	debug "github.com/MemeLabs/go-ppspp/pkg/apis/debug/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/expfmt"
@@ -16,7 +15,7 @@ import (
 
 func init() {
 	RegisterService(func(server *rpc.Server, params *ServiceParams) {
-		api.RegisterDebugService(server, &debugService{})
+		debug.RegisterDebugService(server, &debugService{})
 	})
 }
 
@@ -24,7 +23,7 @@ func init() {
 type debugService struct{}
 
 // PProf ...
-func (s *debugService) PProf(ctx context.Context, r *pb.PProfRequest) (*pb.PProfResponse, error) {
+func (s *debugService) PProf(ctx context.Context, r *debug.PProfRequest) (*debug.PProfResponse, error) {
 	p := pprof.Lookup(r.Name)
 	if p == nil {
 		return nil, errors.New("unknown profile")
@@ -35,30 +34,30 @@ func (s *debugService) PProf(ctx context.Context, r *pb.PProfRequest) (*pb.PProf
 
 	b := &bytes.Buffer{}
 
-	var debug int
+	var dbg int
 	if r.Debug {
-		debug = 1
+		dbg = 1
 	}
-	if err := p.WriteTo(b, debug); err != nil {
+	if err := p.WriteTo(b, dbg); err != nil {
 		return nil, err
 	}
 
-	return &pb.PProfResponse{Name: r.Name, Data: b.Bytes()}, nil
+	return &debug.PProfResponse{Name: r.Name, Data: b.Bytes()}, nil
 }
 
 // ReadMetrics ...
-func (s *debugService) ReadMetrics(ctx context.Context, r *pb.ReadMetricsRequest) (*pb.ReadMetricsResponse, error) {
+func (s *debugService) ReadMetrics(ctx context.Context, r *debug.ReadMetricsRequest) (*debug.ReadMetricsResponse, error) {
 	var format expfmt.Format
 	switch r.Format {
-	case pb.MetricsFormat_METRICS_FORMAT_TEXT:
+	case debug.MetricsFormat_METRICS_FORMAT_TEXT:
 		format = expfmt.FmtText
-	case pb.MetricsFormat_METRICS_FORMAT_PROTO_DELIM:
+	case debug.MetricsFormat_METRICS_FORMAT_PROTO_DELIM:
 		format = expfmt.FmtProtoDelim
-	case pb.MetricsFormat_METRICS_FORMAT_PROTO_TEXT:
+	case debug.MetricsFormat_METRICS_FORMAT_PROTO_TEXT:
 		format = expfmt.FmtProtoText
-	case pb.MetricsFormat_METRICS_FORMAT_PROTO_COMPACT:
+	case debug.MetricsFormat_METRICS_FORMAT_PROTO_COMPACT:
 		format = expfmt.FmtProtoCompact
-	case pb.MetricsFormat_METRICS_FORMAT_OPEN_METRICS:
+	case debug.MetricsFormat_METRICS_FORMAT_OPEN_METRICS:
 		format = expfmt.FmtOpenMetrics
 	default:
 		return nil, errors.New("invalid format")
@@ -77,5 +76,5 @@ func (s *debugService) ReadMetrics(ctx context.Context, r *pb.ReadMetricsRequest
 		}
 	}
 
-	return &pb.ReadMetricsResponse{Data: b.Bytes()}, nil
+	return &debug.ReadMetricsResponse{Data: b.Bytes()}, nil
 }

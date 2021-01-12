@@ -4,16 +4,16 @@ import (
 	"io"
 	"io/ioutil"
 
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/prefixstream"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
 var paddingData = make([]byte, chunkSize)
-var paddingOverhead = proto.Size(&pb.DirectoryEvent{
-	Body: &pb.DirectoryEvent_Padding_{
-		Padding: &pb.DirectoryEvent_Padding{
+var paddingOverhead = proto.Size(&network.DirectoryEvent{
+	Body: &network.DirectoryEvent_Padding_{
+		Padding: &network.DirectoryEvent_Padding{
 			Data: paddingData,
 		},
 	},
@@ -29,7 +29,7 @@ type eventReader struct {
 	r *prefixstream.Reader
 }
 
-func (r *eventReader) ReadEvent(event *pb.DirectoryEvent) error {
+func (r *eventReader) ReadEvent(event *network.DirectoryEvent) error {
 	b, err := ioutil.ReadAll(r.r)
 	if err != nil {
 		return err
@@ -55,9 +55,9 @@ func (w *eventWriter) Write(msg protoreflect.ProtoMessage) error {
 		return err
 	}
 
-	_, err = w.write(&pb.DirectoryEvent{
-		Body: &pb.DirectoryEvent_Padding_{
-			Padding: &pb.DirectoryEvent_Padding{
+	_, err = w.write(&network.DirectoryEvent{
+		Body: &network.DirectoryEvent_Padding_{
+			Padding: &network.DirectoryEvent_Padding{
 				Data: paddingData[:chunkSize-(n%chunkSize)-paddingOverhead],
 			},
 		},

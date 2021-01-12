@@ -4,73 +4,74 @@ import (
 	"crypto/ed25519"
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/stretchr/testify/assert"
 )
 
-func generateED25519Key(t *testing.T) *pb.Key {
+func generateED25519Key(t *testing.T) *key.Key {
 	t.Helper()
 	pub, priv, err := ed25519.GenerateKey(nil)
 	assert.Nil(t, err, "failed to generate ed25519 key")
 
-	return &pb.Key{
-		Type:    pb.KeyType_KEY_TYPE_ED25519,
+	return &key.Key{
+		Type:    key.KeyType_KEY_TYPE_ED25519,
 		Public:  pub,
 		Private: priv,
 	}
 }
 
 type testcase struct {
-	req  *pb.CertificateRequest
-	cert *pb.Certificate
-	key  *pb.Key
+	req  *certificate.CertificateRequest
+	cert *certificate.Certificate
+	key  *key.Key
 	err  error
 }
 
 func buildTestCases(t *testing.T) (map[string]testcase, error) {
 	t.Helper()
-	key := generateED25519Key(t)
+	k := generateED25519Key(t)
 
-	successCsr, err := NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN)
+	successCsr, err := NewCertificateRequest(k, certificate.KeyUsage_KEY_USAGE_SIGN)
 	assert.Nil(t, err, "failed to create success CSR")
 
-	invalidLenCsr, err := NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN)
+	invalidLenCsr, err := NewCertificateRequest(k, certificate.KeyUsage_KEY_USAGE_SIGN)
 	assert.Nil(t, err, "failed to create invalid CSR")
 
-	invalidLenCsr.Key = key.Public[:len(key.Public)-5]
+	invalidLenCsr.Key = k.Public[:len(k.Public)-5]
 
-	invalidTypeCsr, err := NewCertificateRequest(key, pb.KeyUsage_KEY_USAGE_SIGN)
+	invalidTypeCsr, err := NewCertificateRequest(k, certificate.KeyUsage_KEY_USAGE_SIGN)
 	assert.Nil(t, err, "failed to create invalid key type CSR")
 
-	invalidTypeCsr.KeyType = pb.KeyType_KEY_TYPE_X25519
+	invalidTypeCsr.KeyType = key.KeyType_KEY_TYPE_X25519
 
-	successCert, err := SignCertificateRequest(successCsr, defaultCertTTL, key)
+	successCert, err := SignCertificateRequest(successCsr, defaultCertTTL, k)
 	assert.Nil(t, err, "failed to sign success CSR")
 
-	invalidLenCert, err := SignCertificateRequest(successCsr, defaultCertTTL, key)
+	invalidLenCert, err := SignCertificateRequest(successCsr, defaultCertTTL, k)
 	assert.Nil(t, err, "failed to sign success CSR")
-	invalidLenCert.Key = key.Private[:len(key.Private)-5]
+	invalidLenCert.Key = k.Private[:len(k.Private)-5]
 
-	invalidTypeCert, err := SignCertificateRequest(successCsr, defaultCertTTL, key)
+	invalidTypeCert, err := SignCertificateRequest(successCsr, defaultCertTTL, k)
 	assert.Nil(t, err, "failed to sign success CSR")
-	invalidTypeCert.KeyType = pb.KeyType_KEY_TYPE_X25519
+	invalidTypeCert.KeyType = key.KeyType_KEY_TYPE_X25519
 
 	tcs := map[string]testcase{
 		"success": {
 			req:  successCsr,
-			key:  key,
+			key:  k,
 			cert: successCert,
 			err:  nil,
 		},
 		"invalid key length": {
 			req:  invalidLenCsr,
-			key:  &pb.Key{Type: key.Type, Private: key.Private[:len(key.Private)-5], Public: key.Public},
+			key:  &key.Key{Type: k.Type, Private: k.Private[:len(k.Private)-5], Public: k.Public},
 			cert: invalidLenCert,
 			err:  ErrInvalidKeyLength,
 		},
 		"invalid key type (x25519)": {
 			req:  invalidTypeCsr,
-			key:  &pb.Key{Type: pb.KeyType_KEY_TYPE_X25519, Private: key.Private, Public: key.Public},
+			key:  &key.Key{Type: key.KeyType_KEY_TYPE_X25519, Private: k.Private, Public: k.Public},
 			cert: invalidTypeCert,
 			err:  ErrUnsupportedKeyType,
 		},
@@ -108,7 +109,7 @@ func TestVerifyCertificateRequest(t *testing.T) {
 
 	for scenario, tc := range tcs {
 		t.Run(scenario, func(t *testing.T) {
-			err := VerifyCertificateRequest(tc.req, pb.KeyUsage_KEY_USAGE_SIGN)
+			err := VerifyCertificateRequest(tc.req, certificate.KeyUsage_KEY_USAGE_SIGN)
 			if tc.err != nil {
 				assert.EqualError(t, err, tc.err.Error())
 			} else {

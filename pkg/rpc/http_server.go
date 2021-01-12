@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	rpcv1 "github.com/MemeLabs/go-ppspp/pkg/apis/rpc/v1"
 	"github.com/golang/protobuf/proto"
 	"go.uber.org/zap"
 )
@@ -30,13 +30,13 @@ func (s *HTTPServer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req := &pb.Call{}
+	req := &rpcv1.Call{}
 	if err := proto.Unmarshal(b, req); err != nil {
 		httpServeError(http.StatusBadRequest, err, w)
 		return
 	}
 
-	send := func(_ context.Context, res *pb.Call) error {
+	send := func(_ context.Context, res *rpcv1.Call) error {
 		return httpServeProto(res, w)
 	}
 	call := NewCallIn(r.Context(), req, noopParentCallAccessor{}, send)

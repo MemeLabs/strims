@@ -7,29 +7,28 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/integration/driver"
-	"github.com/MemeLabs/go-ppspp/pkg/api"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestCreateProfile(t *testing.T) {
 	type expectation struct {
-		res *pb.CreateProfileResponse
+		res *profilev1.CreateProfileResponse
 		err error
 	}
 
 	tcs := map[string]struct {
-		req      *pb.CreateProfileRequest
+		req      *profilev1.CreateProfileRequest
 		expected expectation
 	}{
 		"success": {
-			req: &pb.CreateProfileRequest{
+			req: &profilev1.CreateProfileRequest{
 				Name:     "jbpratt",
 				Password: "ilovemajora",
 			},
 			expected: expectation{
-				res: &pb.CreateProfileResponse{
-					Profile: &pb.Profile{
+				res: &profilev1.CreateProfileResponse{
+					Profile: &profilev1.Profile{
 						Name: "jbpratt",
 					},
 				},
@@ -37,18 +36,18 @@ func TestCreateProfile(t *testing.T) {
 			},
 		},
 		"duplicate username": {
-			req: &pb.CreateProfileRequest{
+			req: &profilev1.CreateProfileRequest{
 				Name:     "jbpratt",
 				Password: "ilovemajora",
 			},
 			expected: expectation{
-				res: &pb.CreateProfileResponse{},
+				res: &profilev1.CreateProfileResponse{},
 				err: fmt.Errorf("profile name not available"),
 			},
 		},
 	}
 
-	client := api.NewProfileClient(td.Client(&driver.ClientOptions{}))
+	client := profilev1.NewProfileServiceClient(td.Client(&driver.ClientOptions{}))
 	for scenario, tc := range tcs {
 		t.Run(scenario, func(t *testing.T) {
 			assert := assert.New(t)
@@ -56,7 +55,7 @@ func TestCreateProfile(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 			defer cancel()
 
-			res := &pb.CreateProfileResponse{}
+			res := &profilev1.CreateProfileResponse{}
 			err := client.Create(ctx, tc.req, res)
 			if err == nil {
 				assert.Equal(tc.expected.res.GetProfile().GetName(), res.GetProfile().GetName())

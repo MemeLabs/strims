@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useTitle } from "react-use";
 
-import { FrontendClient } from "../lib/api";
+import { FrontendClient } from "../apis/client";
 import Provider from "./Provider";
 import Router from "./Router";
 

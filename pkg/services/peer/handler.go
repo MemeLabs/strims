@@ -3,7 +3,10 @@ package peer
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1bootstrap "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
+	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
+	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
@@ -26,20 +29,20 @@ func NewPeerHandler(logger *zap.Logger, app control.AppControl, store *dao.Profi
 
 		p := app.Peer().Add(peer, &client{
 			client:    c,
-			bootstrap: api.NewBootstrapPeerClient(c),
-			ca:        api.NewCAPeerClient(c),
-			transfer:  api.NewTransferPeerClient(c),
-			network:   api.NewNetworkPeerClient(c),
+			bootstrap: networkv1bootstrap.NewPeerServiceClient(c),
+			ca:        networkv1ca.NewCAPeerClient(c),
+			transfer:  transferv1.NewTransferPeerClient(c),
+			network:   networkv1.NewNetworkPeerClient(c),
 		})
 
 		s := rpc.NewServer(logger, &rpc.RWFDialer{
 			Logger:           logger,
 			ReadWriteFlusher: rw1,
 		})
-		api.RegisterBootstrapPeerService(s, &bootstrapService{p, app, store})
-		api.RegisterCAPeerService(s, &caService{p, app})
-		api.RegisterTransferPeerService(s, &transferService{p, app})
-		api.RegisterNetworkPeerService(s, &networkService{p, app})
+		networkv1bootstrap.RegisterPeerServiceService(s, &bootstrapService{p, app, store})
+		networkv1ca.RegisterCAPeerService(s, &caService{p, app})
+		transferv1.RegisterTransferPeerService(s, &transferService{p, app})
+		networkv1.RegisterNetworkPeerService(s, &networkService{p, app})
 
 		go func() {
 			err := s.Listen(context.Background())
@@ -54,13 +57,13 @@ func NewPeerHandler(logger *zap.Logger, app control.AppControl, store *dao.Profi
 
 type client struct {
 	client    *rpc.Client
-	bootstrap *api.BootstrapPeerClient
-	ca        *api.CAPeerClient
-	transfer  *api.TransferPeerClient
-	network   *api.NetworkPeerClient
+	bootstrap *networkv1bootstrap.PeerServiceClient
+	ca        *networkv1ca.CAPeerClient
+	transfer  *transferv1.TransferPeerClient
+	network   *networkv1.NetworkPeerClient
 }
 
-func (c *client) Bootstrap() *api.BootstrapPeerClient { return c.bootstrap }
-func (c *client) CA() *api.CAPeerClient               { return c.ca }
-func (c *client) Transfer() *api.TransferPeerClient   { return c.transfer }
-func (c *client) Network() *api.NetworkPeerClient     { return c.network }
+func (c *client) Bootstrap() *networkv1bootstrap.PeerServiceClient { return c.bootstrap }
+func (c *client) CA() *networkv1ca.CAPeerClient                    { return c.ca }
+func (c *client) Transfer() *transferv1.TransferPeerClient         { return c.transfer }
+func (c *client) Network() *networkv1.NetworkPeerClient            { return c.network }

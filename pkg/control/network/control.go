@@ -7,13 +7,16 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	cav1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/services/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -42,7 +45,7 @@ type Broker interface {
 }
 
 // NewControl ...
-func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile, observers *event.Observers, dialer *dialer.Control) *Control {
+func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *profilev1.Profile, observers *event.Observers, dialer *dialer.Control) *Control {
 	events := make(chan interface{}, 128)
 	observers.Notify(events)
 
@@ -56,7 +59,7 @@ func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.Pro
 		events:           events,
 		dialer:           dialer,
 		certRenewTimeout: time.NewTimer(0),
-		networks:         map[uint64]*pb.Network{},
+		networks:         map[uint64]*networkv1.Network{},
 		peers:            map[uint64]*Peer{},
 		certificates:     &certificateMap{},
 	}
@@ -68,7 +71,7 @@ type Control struct {
 	broker  Broker
 	vpn     *vpn.Host
 	store   *dao.ProfileStore
-	profile *pb.Profile
+	profile *profilev1.Profile
 
 	lock              sync.Mutex
 	observers         *event.Observers
@@ -76,7 +79,7 @@ type Control struct {
 	dialer            *dialer.Control
 	certRenewTimeout  *time.Timer
 	nextCertRenewTime time.Time
-	networks          map[uint64]*pb.Network
+	networks          map[uint64]*networkv1.Network
 	peers             map[uint64]*Peer
 	certificates      *certificateMap
 }
@@ -159,7 +162,7 @@ func (t *Control) handlePeerBinding(ctx context.Context, peerID uint64, networkK
 	}
 }
 
-func (t *Control) handleNetworkCertUpdate(network *pb.Network) {
+func (t *Control) handleNetworkCertUpdate(network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -186,10 +189,10 @@ func (t *Control) handleNetworkAdd(ctx context.Context) {
 	}
 }
 
-type certificateRenewFunc func(ctx context.Context, cert *pb.Certificate, csr *pb.CertificateRequest) (*pb.Certificate, error)
+type certificateRenewFunc func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
 
 // renewCertificateWithRenewFunc ...
-func (t *Control) renewCertificateWithRenewFunc(network *pb.Network, fn certificateRenewFunc) error {
+func (t *Control) renewCertificateWithRenewFunc(network *networkv1.Network, fn certificateRenewFunc) error {
 	subject := t.profile.Name
 	if network.AltProfileName != "" {
 		subject = network.AltProfileName
@@ -197,7 +200,7 @@ func (t *Control) renewCertificateWithRenewFunc(network *pb.Network, fn certific
 
 	csr, err := dao.NewCertificateRequest(
 		t.profile.Key,
-		pb.KeyUsage_KEY_USAGE_PEER|pb.KeyUsage_KEY_USAGE_SIGN,
+		certificate.KeyUsage_KEY_USAGE_PEER|certificate.KeyUsage_KEY_USAGE_SIGN,
 		dao.WithSubject(subject),
 	)
 	if err != nil {
@@ -219,22 +222,22 @@ func (t *Control) renewCertificateWithRenewFunc(network *pb.Network, fn certific
 }
 
 // renewCertificate ...
-func (t *Control) renewCertificate(network *pb.Network) error {
+func (t *Control) renewCertificate(network *networkv1.Network) error {
 	return t.renewCertificateWithRenewFunc(
 		network,
-		func(ctx context.Context, cert *pb.Certificate, csr *pb.CertificateRequest) (*pb.Certificate, error) {
+		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
 			networkKey := networkKeyForCertificate(network.Certificate)
 			client, err := t.dialer.Client(networkKey, networkKey, ca.AddressSalt)
 			if err != nil {
 				return nil, err
 			}
-			caClient := api.NewCAClient(client)
+			caClient := cav1.NewCAClient(client)
 
-			renewReq := &pb.CARenewRequest{
+			renewReq := &cav1.CARenewRequest{
 				Certificate:        cert,
 				CertificateRequest: csr,
 			}
-			renewRes := &pb.CARenewResponse{}
+			renewRes := &cav1.CARenewResponse{}
 			if err := caClient.Renew(ctx, renewReq, renewRes); err != nil {
 				return nil, err
 			}
@@ -244,15 +247,15 @@ func (t *Control) renewCertificate(network *pb.Network) error {
 	)
 }
 
-func (t *Control) renewCertificateWithPeer(ctx context.Context, network *pb.Network, peer *Peer) error {
+func (t *Control) renewCertificateWithPeer(ctx context.Context, network *networkv1.Network, peer *Peer) error {
 	return t.renewCertificateWithRenewFunc(
 		network,
-		func(ctx context.Context, cert *pb.Certificate, csr *pb.CertificateRequest) (*pb.Certificate, error) {
-			req := &pb.CAPeerRenewRequest{
+		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
+			req := &cav1.CAPeerRenewRequest{
 				Certificate:        cert,
 				CertificateRequest: csr,
 			}
-			res := &pb.CAPeerRenewResponse{}
+			res := &cav1.CAPeerRenewResponse{}
 			if err := peer.client.CA().Renew(ctx, req, res); err != nil {
 				return nil, err
 			}
@@ -366,7 +369,7 @@ func (t *Control) renewExpiredCerts() {
 	}
 }
 
-func (t *Control) mutateNetworkWithFinalizer(id uint64, mutate func(*pb.Network) error, finalize func(*pb.Network)) error {
+func (t *Control) mutateNetworkWithFinalizer(id uint64, mutate func(*networkv1.Network) error, finalize func(*networkv1.Network)) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -375,7 +378,7 @@ func (t *Control) mutateNetworkWithFinalizer(id uint64, mutate func(*pb.Network)
 		return ErrNetworkNotFound
 	}
 
-	clone := proto.Clone(network).(*pb.Network)
+	clone := proto.Clone(network).(*networkv1.Network)
 	if err := mutate(clone); err != nil {
 		return err
 	}
@@ -390,36 +393,36 @@ func (t *Control) mutateNetworkWithFinalizer(id uint64, mutate func(*pb.Network)
 	return nil
 }
 
-func noopMutateNetworkFinalizer(*pb.Network) {}
+func noopMutateNetworkFinalizer(*networkv1.Network) {}
 
-func (t *Control) mutateNetwork(id uint64, mutate func(*pb.Network) error) error {
+func (t *Control) mutateNetwork(id uint64, mutate func(*networkv1.Network) error) error {
 	return t.mutateNetworkWithFinalizer(id, mutate, noopMutateNetworkFinalizer)
 }
 
-func (t *Control) setCertificate(id uint64, cert *pb.Certificate) error {
+func (t *Control) setCertificate(id uint64, cert *certificate.Certificate) error {
 	return t.mutateNetworkWithFinalizer(
 		id,
-		func(network *pb.Network) error {
+		func(network *networkv1.Network) error {
 			network.Certificate = cert
 			return nil
 		},
-		func(network *pb.Network) {
+		func(network *networkv1.Network) {
 			t.certificates.Insert(network)
 			t.dialer.ReplaceOrInsertNetwork(network)
-			t.observers.EmitGlobal(event.NetworkCertUpdate{Network: proto.Clone(network).(*pb.Network)})
+			t.observers.EmitGlobal(event.NetworkCertUpdate{Network: proto.Clone(network).(*networkv1.Network)})
 		},
 	)
 }
 
 func (t *Control) setNetworkAltProfileName(id uint64, name string) error {
-	return t.mutateNetwork(id, func(network *pb.Network) error {
+	return t.mutateNetwork(id, func(network *networkv1.Network) error {
 		network.AltProfileName = name
 		return nil
 	})
 }
 
 // Certificate ...
-func (t *Control) Certificate(networkKey []byte) (*pb.Certificate, bool) {
+func (t *Control) Certificate(networkKey []byte) (*certificate.Certificate, bool) {
 	if ci, ok := t.certificates.Get(networkKey); ok {
 		return ci.certificate, true
 	}
@@ -427,7 +430,7 @@ func (t *Control) Certificate(networkKey []byte) (*pb.Certificate, bool) {
 }
 
 // Add ...
-func (t *Control) Add(network *pb.Network) error {
+func (t *Control) Add(network *networkv1.Network) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 

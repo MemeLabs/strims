@@ -3,8 +3,8 @@ package dao
 import (
 	"strconv"
 
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -15,7 +15,7 @@ func prefixProfileKey(id uint64) string {
 }
 
 // CreateProfile ...
-func CreateProfile(s kv.BlobStore, name, password string) (*pb.Profile, *ProfileStore, error) {
+func CreateProfile(s kv.BlobStore, name, password string) (*profilev1.Profile, *ProfileStore, error) {
 	profile, err := NewProfile(name)
 	if err != nil {
 		return nil, nil, err
@@ -54,15 +54,15 @@ func CreateProfile(s kv.BlobStore, name, password string) (*pb.Profile, *Profile
 }
 
 // DeleteProfile ...
-func DeleteProfile(s kv.BlobStore, profile *pb.Profile) error {
+func DeleteProfile(s kv.BlobStore, profile *profilev1.Profile) error {
 	return s.Update(metadataTable, func(tx kv.BlobTx) error {
 		return tx.Delete(prefixProfileSummaryKey(profile.Name))
 	})
 }
 
 // GetProfile ...
-func GetProfile(s kv.Store) (v *pb.Profile, err error) {
-	v = &pb.Profile{}
+func GetProfile(s kv.Store) (v *profilev1.Profile, err error) {
+	v = &profilev1.Profile{}
 	err = s.View(func(tx kv.Tx) error {
 		return tx.Get("profile", v)
 	})
@@ -70,8 +70,8 @@ func GetProfile(s kv.Store) (v *pb.Profile, err error) {
 }
 
 // LoadProfile ...
-func LoadProfile(s kv.BlobStore, id uint64, password string) (*pb.Profile, *ProfileStore, error) {
-	profile := &pb.Profile{}
+func LoadProfile(s kv.BlobStore, id uint64, password string) (*profilev1.Profile, *ProfileStore, error) {
+	profile := &profilev1.Profile{}
 	var storageKey *StorageKey
 
 	err := s.View(prefixProfileKey(id), func(tx kv.BlobTx) (err error) {
@@ -98,8 +98,8 @@ func LoadProfile(s kv.BlobStore, id uint64, password string) (*pb.Profile, *Prof
 }
 
 // LoadProfileFromSession ...
-func LoadProfileFromSession(s kv.BlobStore, id uint64, storageKey *StorageKey) (*pb.Profile, *ProfileStore, error) {
-	profile := &pb.Profile{}
+func LoadProfileFromSession(s kv.BlobStore, id uint64, storageKey *StorageKey) (*profilev1.Profile, *ProfileStore, error) {
+	profile := &profilev1.Profile{}
 	err := s.View(prefixProfileKey(id), func(tx kv.BlobTx) (err error) {
 		return get(tx, storageKey, "profile", profile)
 	})
@@ -112,8 +112,8 @@ func LoadProfileFromSession(s kv.BlobStore, id uint64, storageKey *StorageKey) (
 }
 
 // NewProfile ...
-func NewProfile(name string) (p *pb.Profile, err error) {
-	p = &pb.Profile{
+func NewProfile(name string) (p *profilev1.Profile, err error) {
+	p = &profilev1.Profile{
 		Name: name,
 	}
 

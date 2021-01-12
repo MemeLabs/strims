@@ -1,7 +1,7 @@
 import * as React from "react";
 import { BrowserRouter } from "react-router-dom";
 
-import { FundingClient } from "../../lib/api";
+import { FundingClient } from "../../apis/client";
 import { Provider as ApiProvider } from "../contexts/Api";
 
 const LoadingMessage = () => <p className="loading_message">loading</p>;

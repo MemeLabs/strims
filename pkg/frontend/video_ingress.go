@@ -7,16 +7,16 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	profile "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	video "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 func init() {
 	RegisterService(func(server *rpc.Server, params *ServiceParams) {
-		api.RegisterVideoIngressService(server, &videoIngressService{
+		video.RegisterVideoIngressService(server, &videoIngressService{
 			profile: params.Profile,
 			app:     params.App,
 		})
@@ -25,34 +25,34 @@ func init() {
 
 // videoIngressService ...
 type videoIngressService struct {
-	profile *pb.Profile
+	profile *profile.Profile
 	app     control.AppControl
 }
 
-func (s *videoIngressService) IsSupported(ctx context.Context, r *pb.VideoIngressIsSupportedRequest) (*pb.VideoIngressIsSupportedResponse, error) {
-	return &pb.VideoIngressIsSupportedResponse{Supported: true}, nil
+func (s *videoIngressService) IsSupported(ctx context.Context, r *video.VideoIngressIsSupportedRequest) (*video.VideoIngressIsSupportedResponse, error) {
+	return &video.VideoIngressIsSupportedResponse{Supported: true}, nil
 }
 
-func (s *videoIngressService) GetConfig(ctx context.Context, r *pb.VideoIngressGetConfigRequest) (*pb.VideoIngressGetConfigResponse, error) {
+func (s *videoIngressService) GetConfig(ctx context.Context, r *video.VideoIngressGetConfigRequest) (*video.VideoIngressGetConfigResponse, error) {
 	config, err := s.app.VideoIngress().GetIngressConfig()
 	if err != nil {
 		return nil, err
 	}
-	return &pb.VideoIngressGetConfigResponse{Config: config}, nil
+	return &video.VideoIngressGetConfigResponse{Config: config}, nil
 }
 
-func (s *videoIngressService) SetConfig(ctx context.Context, r *pb.VideoIngressSetConfigRequest) (*pb.VideoIngressSetConfigResponse, error) {
+func (s *videoIngressService) SetConfig(ctx context.Context, r *video.VideoIngressSetConfigRequest) (*video.VideoIngressSetConfigResponse, error) {
 	if err := s.app.VideoIngress().SetIngressConfig(r.Config); err != nil {
 		return nil, err
 	}
-	return &pb.VideoIngressSetConfigResponse{Config: r.Config}, nil
+	return &video.VideoIngressSetConfigResponse{Config: r.Config}, nil
 }
 
-func (s *videoIngressService) ListStreams(ctx context.Context, r *pb.VideoIngressListStreamsRequest) (*pb.VideoIngressListStreamsResponse, error) {
-	return nil, api.ErrNotImplemented
+func (s *videoIngressService) ListStreams(ctx context.Context, r *video.VideoIngressListStreamsRequest) (*video.VideoIngressListStreamsResponse, error) {
+	return nil, rpc.ErrNotImplemented
 }
 
-func (s *videoIngressService) GetChannelURL(ctx context.Context, r *pb.VideoIngressGetChannelURLRequest) (*pb.VideoIngressGetChannelURLResponse, error) {
+func (s *videoIngressService) GetChannelURL(ctx context.Context, r *video.VideoIngressGetChannelURLRequest) (*video.VideoIngressGetChannelURLResponse, error) {
 	channel, err := s.app.VideoChannel().GetChannel(r.Id)
 	if err != nil {
 		return nil, err
@@ -62,7 +62,7 @@ func (s *videoIngressService) GetChannelURL(ctx context.Context, r *pb.VideoIngr
 	var id uint64
 
 	switch o := channel.Owner.(type) {
-	case *pb.VideoChannel_Local_:
+	case *video.VideoChannel_Local_:
 		config, err := s.app.VideoIngress().GetIngressConfig()
 		if err != nil {
 			return nil, err
@@ -74,7 +74,7 @@ func (s *videoIngressService) GetChannelURL(ctx context.Context, r *pb.VideoIngr
 		}
 
 		id = channel.Id
-	case *pb.VideoChannel_RemoteShare_:
+	case *video.VideoChannel_RemoteShare_:
 		serverAddr = o.RemoteShare.ServerAddr
 		id = o.RemoteShare.Id
 	default:
@@ -83,7 +83,7 @@ func (s *videoIngressService) GetChannelURL(ctx context.Context, r *pb.VideoIngr
 
 	key := dao.FormatVideoChannelStreamKey(id, channel.Token, s.profile.Key)
 
-	return &pb.VideoIngressGetChannelURLResponse{
+	return &video.VideoIngressGetChannelURLResponse{
 		Url:        fmt.Sprintf("rtmp://%s/live/%s", serverAddr, key),
 		ServerAddr: serverAddr,
 		StreamKey:  key,

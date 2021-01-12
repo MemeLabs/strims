@@ -8,13 +8,12 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -73,14 +72,14 @@ func (t *Control) Run(ctx context.Context) {
 	}
 }
 
-func (t *Control) handleNetworkStart(ctx context.Context, network *pb.Network) {
+func (t *Control) handleNetworkStart(ctx context.Context, network *network.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	t.runners.ReplaceOrInsert(newRunner(ctx, t.logger, t.vpn, t.store, t.dialer, t.transfer, network))
 }
 
-func (t *Control) handleNetworkStop(network *pb.Network) {
+func (t *Control) handleNetworkStop(network *network.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -100,13 +99,13 @@ func (t *Control) runner(networkKey []byte) (*runner, bool) {
 }
 
 // ReadEvents ...
-func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *pb.DirectoryEvent {
+func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *network.DirectoryEvent {
 	r, ok := t.runner(networkKey)
 	if !ok {
 		return nil
 	}
 
-	ch := make(chan *pb.DirectoryEvent, 128)
+	ch := make(chan *network.DirectoryEvent, 128)
 
 	go func() {
 		defer close(ch)
@@ -119,7 +118,7 @@ func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *pb.
 			}
 
 			for ctx.Err() == nil {
-				event := &pb.DirectoryEvent{}
+				event := &network.DirectoryEvent{}
 				if err := er.ReadEvent(event); err != nil {
 					t.logger.Debug(
 						"error reading directory event",
@@ -141,7 +140,7 @@ func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *pb.
 
 var noopCancelFunc = func() {}
 
-func newRunner(ctx context.Context, logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, dialer *dialer.Control, transfer *transfer.Control, network *pb.Network) *runner {
+func newRunner(ctx context.Context, logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, dialer *dialer.Control, transfer *transfer.Control, network *network.Network) *runner {
 	r := &runner{
 		key:     dao.NetworkKey(network),
 		network: network,
@@ -168,7 +167,7 @@ func newRunner(ctx context.Context, logger *zap.Logger, vpn *vpn.Host, store *da
 
 type runner struct {
 	key     []byte
-	network *pb.Network
+	network *network.Network
 
 	logger   *zap.Logger
 	vpn      *vpn.Host
@@ -310,7 +309,7 @@ func (r *runner) startServer(ctx context.Context) error {
 	r.serverCancelFunc = cancel
 	r.lock.Unlock()
 
-	api.RegisterDirectoryService(server, service)
+	network.RegisterDirectoryService(server, service)
 
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error { return service.Run(ctx) })

@@ -4,10 +4,10 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { MdClose } from "react-icons/md";
 
+import { CreateNetworkResponse } from "../apis/strims/network/v1/network";
 import { AvatarInput, ImageValue, InputError, TextInput } from "../components/Form";
 import { useLazyCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
-import { CreateNetworkResponse } from "../lib/pb";
 
 interface AddNetworkModalProps {
   onCreate: (res: CreateNetworkResponse) => void;

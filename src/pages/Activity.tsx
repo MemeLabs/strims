@@ -4,11 +4,11 @@ import parsePrometheusTextFormat from "parse-prometheus-text-format";
 import * as React from "react";
 import { Sparklines, SparklinesBars } from "react-sparklines";
 
+import { ReadMetricsRequest } from "../apis/strims/debug/v1/debug";
 import { MainLayout } from "../components/MainLayout";
 import { useClient, useLazyCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
-import { ReadMetricsRequest } from "../lib/pb";
 
 type PrometheusNumericMetricValue = {
   value: string;
@@ -424,11 +424,6 @@ const Directory = () => {
   const [{ profile }, { clearProfile }] = useProfile();
 
   const client = useClient();
-
-  React.useEffect(() => {
-    const events = client.network.startVPN();
-    events.on("data", (event) => console.log("network event", event));
-  }, []);
 
   const [stats, reduceStats] = React.useReducer(statsReducer, statsDefault);
 

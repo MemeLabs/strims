@@ -10,9 +10,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/wasmio"
 	"go.uber.org/zap"
@@ -46,10 +45,10 @@ type BrokerProxyService struct {
 }
 
 // Open ...
-func (s *BrokerProxyService) Open(ctx context.Context, r *pb.BrokerProxyRequest) (<-chan *pb.BrokerProxyEvent, error) {
+func (s *BrokerProxyService) Open(ctx context.Context, r *networkv1.BrokerProxyRequest) (<-chan *networkv1.BrokerProxyEvent, error) {
 	ctx, cancel := context.WithCancel(ctx)
 
-	events := make(chan *pb.BrokerProxyEvent)
+	events := make(chan *networkv1.BrokerProxyEvent)
 	rw := &brokerProxyServiceReadWriter{
 		events:   events,
 		readable: make(chan struct{}),
@@ -65,9 +64,9 @@ func (s *BrokerProxyService) Open(ctx context.Context, r *pb.BrokerProxyRequest)
 	s.helpers.Store(pid, h)
 
 	go func() {
-		events <- &pb.BrokerProxyEvent{
-			Body: &pb.BrokerProxyEvent_Open_{
-				Open: &pb.BrokerProxyEvent_Open{
+		events <- &networkv1.BrokerProxyEvent{
+			Body: &networkv1.BrokerProxyEvent_Open_{
+				Open: &networkv1.BrokerProxyEvent_Open{
 					ProxyId: pid,
 				},
 			},
@@ -82,7 +81,7 @@ func (s *BrokerProxyService) Open(ctx context.Context, r *pb.BrokerProxyRequest)
 }
 
 // SendKeys ...
-func (s *BrokerProxyService) SendKeys(ctx context.Context, r *pb.BrokerProxySendKeysRequest) (*pb.BrokerProxySendKeysResponse, error) {
+func (s *BrokerProxyService) SendKeys(ctx context.Context, r *networkv1.BrokerProxySendKeysRequest) (*networkv1.BrokerProxySendKeysResponse, error) {
 	pi, ok := s.helpers.Load(r.ProxyId)
 	if !ok {
 		return nil, ErrProxyIDNotFound
@@ -91,11 +90,11 @@ func (s *BrokerProxyService) SendKeys(ctx context.Context, r *pb.BrokerProxySend
 	if err := pi.(*brokerProxyServiceHelper).SendKeys(r.Keys); err != nil {
 		return nil, err
 	}
-	return &pb.BrokerProxySendKeysResponse{}, nil
+	return &networkv1.BrokerProxySendKeysResponse{}, nil
 }
 
 // ReceiveKeys ...
-func (s *BrokerProxyService) ReceiveKeys(ctx context.Context, r *pb.BrokerProxyReceiveKeysRequest) (*pb.BrokerProxyReceiveKeysResponse, error) {
+func (s *BrokerProxyService) ReceiveKeys(ctx context.Context, r *networkv1.BrokerProxyReceiveKeysRequest) (*networkv1.BrokerProxyReceiveKeysResponse, error) {
 	pi, ok := s.helpers.Load(r.ProxyId)
 	if !ok {
 		return nil, ErrProxyIDNotFound
@@ -105,29 +104,29 @@ func (s *BrokerProxyService) ReceiveKeys(ctx context.Context, r *pb.BrokerProxyR
 	if err != nil {
 		return nil, err
 	}
-	return &pb.BrokerProxyReceiveKeysResponse{Keys: keys}, nil
+	return &networkv1.BrokerProxyReceiveKeysResponse{Keys: keys}, nil
 }
 
 // Data ...
-func (s *BrokerProxyService) Data(ctx context.Context, r *pb.BrokerProxyDataRequest) (*pb.BrokerProxyDataResponse, error) {
+func (s *BrokerProxyService) Data(ctx context.Context, r *networkv1.BrokerProxyDataRequest) (*networkv1.BrokerProxyDataResponse, error) {
 	pi, ok := s.helpers.Load(r.ProxyId)
 	if !ok {
 		return nil, ErrProxyIDNotFound
 	}
 
 	pi.(*brokerProxyServiceHelper).rw.Data(r.Data)
-	return &pb.BrokerProxyDataResponse{}, nil
+	return &networkv1.BrokerProxyDataResponse{}, nil
 }
 
 // Close ...
-func (s *BrokerProxyService) Close(ctx context.Context, r *pb.BrokerProxyCloseRequest) (*pb.BrokerProxyCloseResponse, error) {
+func (s *BrokerProxyService) Close(ctx context.Context, r *networkv1.BrokerProxyCloseRequest) (*networkv1.BrokerProxyCloseResponse, error) {
 	pi, ok := s.helpers.Load(r.ProxyId)
 	if !ok {
 		return nil, ErrProxyIDNotFound
 	}
 
 	pi.(*brokerProxyServiceHelper).Close()
-	return &pb.BrokerProxyCloseResponse{}, nil
+	return &networkv1.BrokerProxyCloseResponse{}, nil
 }
 
 type brokerProxyServiceHelper struct {
@@ -154,7 +153,7 @@ func (h *brokerProxyServiceHelper) Close() {
 
 type brokerProxyServiceReadWriter struct {
 	rb       bytes.Buffer
-	events   chan *pb.BrokerProxyEvent
+	events   chan *networkv1.BrokerProxyEvent
 	readable chan struct{}
 }
 
@@ -165,9 +164,9 @@ func (r *brokerProxyServiceReadWriter) Data(p []byte) {
 
 func (r *brokerProxyServiceReadWriter) Read(p []byte) (int, error) {
 	if r.rb.Len() == 0 {
-		r.events <- &pb.BrokerProxyEvent{
-			Body: &pb.BrokerProxyEvent_Read_{
-				Read: &pb.BrokerProxyEvent_Read{},
+		r.events <- &networkv1.BrokerProxyEvent{
+			Body: &networkv1.BrokerProxyEvent_Read_{
+				Read: &networkv1.BrokerProxyEvent_Read{},
 			},
 		}
 		if _, ok := <-r.readable; !ok {
@@ -178,9 +177,9 @@ func (r *brokerProxyServiceReadWriter) Read(p []byte) (int, error) {
 }
 
 func (r *brokerProxyServiceReadWriter) Write(p []byte) (int, error) {
-	r.events <- &pb.BrokerProxyEvent{
-		Body: &pb.BrokerProxyEvent_Data_{
-			Data: &pb.BrokerProxyEvent_Data{
+	r.events <- &networkv1.BrokerProxyEvent{
+		Body: &networkv1.BrokerProxyEvent_Data_{
+			Data: &networkv1.BrokerProxyEvent_Data{
 				Data: append(make([]byte, 0, len(p)), p...),
 			},
 		},
@@ -205,14 +204,14 @@ func NewBrokerProxyClient(logger *zap.Logger, bus *wasmio.Bus) (*BrokerProxyClie
 
 	return &BrokerProxyClient{
 		logger: logger,
-		client: api.NewBrokerProxyClient(client),
+		client: networkv1.NewBrokerProxyClient(client),
 	}, nil
 }
 
 // BrokerProxyClient ...
 type BrokerProxyClient struct {
 	logger *zap.Logger
-	client *api.BrokerProxyClient
+	client *networkv1.BrokerProxyClient
 }
 
 // SendKeys ...
@@ -238,8 +237,8 @@ func (h *BrokerProxyClient) ReceiveKeys(c ioutil.ReadWriteFlusher, keys [][]byte
 func (h *BrokerProxyClient) proxy(conn ioutil.ReadWriteFlusher) (*brokerProxyClientHelper, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
-	req := &pb.BrokerProxyRequest{ConnMtu: int32(connMTU(conn))}
-	events := make(chan *pb.BrokerProxyEvent, 1)
+	req := &networkv1.BrokerProxyRequest{ConnMtu: int32(connMTU(conn))}
+	events := make(chan *networkv1.BrokerProxyEvent, 1)
 	go func() {
 		if err := h.client.Open(ctx, req, events); err != nil {
 			h.logger.Debug("bootstrap proxy client closed", zap.Error(err))
@@ -253,7 +252,7 @@ func (h *BrokerProxyClient) proxy(conn ioutil.ReadWriteFlusher) (*brokerProxyCli
 		cancel()
 		return nil, ErrResponseClosed
 	}
-	o, ok := e.Body.(*pb.BrokerProxyEvent_Open_)
+	o, ok := e.Body.(*networkv1.BrokerProxyEvent_Open_)
 	if !ok {
 		cancel()
 		return nil, ErrUnexpectedEvent
@@ -278,12 +277,12 @@ type brokerProxyClientHelper struct {
 	ctx    context.Context
 	cancel context.CancelFunc
 	id     uint64
-	client *api.BrokerProxyClient
+	client *networkv1.BrokerProxyClient
 	conn   ioutil.ReadWriteFlusher
 	read   chan struct{}
 }
 
-func (p *brokerProxyClientHelper) doEventPump(events chan *pb.BrokerProxyEvent) {
+func (p *brokerProxyClientHelper) doEventPump(events chan *networkv1.BrokerProxyEvent) {
 	defer p.cancel()
 
 	for {
@@ -295,14 +294,14 @@ func (p *brokerProxyClientHelper) doEventPump(events chan *pb.BrokerProxyEvent) 
 				return
 			}
 			switch body := e.Body.(type) {
-			case *pb.BrokerProxyEvent_Data_:
+			case *networkv1.BrokerProxyEvent_Data_:
 				if _, err := p.conn.Write(body.Data.Data); err != nil {
 					return
 				}
 				if err := p.conn.Flush(); err != nil {
 					return
 				}
-			case *pb.BrokerProxyEvent_Read_:
+			case *networkv1.BrokerProxyEvent_Read_:
 				select {
 				case p.read <- struct{}{}:
 				case <-p.ctx.Done():
@@ -326,11 +325,11 @@ func (p *brokerProxyClientHelper) doReadPump() {
 				return
 			}
 
-			req := &pb.BrokerProxyDataRequest{
+			req := &networkv1.BrokerProxyDataRequest{
 				ProxyId: p.id,
 				Data:    b[:n],
 			}
-			if err := p.client.Data(p.ctx, req, &pb.BrokerProxyDataResponse{}); err != nil {
+			if err := p.client.Data(p.ctx, req, &networkv1.BrokerProxyDataResponse{}); err != nil {
 				return
 			}
 		}
@@ -339,20 +338,20 @@ func (p *brokerProxyClientHelper) doReadPump() {
 
 // SendKeys ...
 func (p *brokerProxyClientHelper) SendKeys(keys [][]byte) error {
-	req := &pb.BrokerProxySendKeysRequest{
+	req := &networkv1.BrokerProxySendKeysRequest{
 		ProxyId: p.id,
 		Keys:    keys,
 	}
-	return p.client.SendKeys(p.ctx, req, &pb.BrokerProxySendKeysResponse{})
+	return p.client.SendKeys(p.ctx, req, &networkv1.BrokerProxySendKeysResponse{})
 }
 
 // ReceiveKeys ...
 func (p *brokerProxyClientHelper) ReceiveKeys(keys [][]byte) ([][]byte, error) {
-	req := &pb.BrokerProxyReceiveKeysRequest{
+	req := &networkv1.BrokerProxyReceiveKeysRequest{
 		ProxyId: p.id,
 		Keys:    keys,
 	}
-	res := &pb.BrokerProxyReceiveKeysResponse{}
+	res := &networkv1.BrokerProxyReceiveKeysResponse{}
 	if err := p.client.ReceiveKeys(p.ctx, req, res); err != nil {
 		return nil, err
 	}
@@ -362,8 +361,8 @@ func (p *brokerProxyClientHelper) ReceiveKeys(keys [][]byte) ([][]byte, error) {
 // Close gracefully shuts down the bootstrap service helper allowing any queued
 // events to drain.
 func (p *brokerProxyClientHelper) Close() error {
-	req := &pb.BrokerProxyCloseRequest{ProxyId: p.id}
-	return p.client.Close(p.ctx, req, &pb.BrokerProxyCloseResponse{})
+	req := &networkv1.BrokerProxyCloseRequest{ProxyId: p.id}
+	return p.client.Close(p.ctx, req, &networkv1.BrokerProxyCloseResponse{})
 }
 
 const defaultMTU = 16 * 1024

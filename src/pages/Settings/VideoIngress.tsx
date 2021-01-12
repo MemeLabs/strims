@@ -7,6 +7,9 @@ import Select from "react-select";
 import CreatableSelect from "react-select/creatable";
 import { useAsync } from "react-use";
 
+import { Certificate } from "../../apis/strims/type/certificate";
+import { VideoChannel } from "../../apis/strims/video/v1/channel";
+import { VideoIngressConfig } from "../../apis/strims/video/v1/ingress";
 import {
   InputError,
   InputLabel,
@@ -17,10 +20,12 @@ import {
 import { PrivateRoute } from "../../components/PrivateRoute";
 import { useCall, useClient, useLazyCall } from "../../contexts/Api";
 import hostRegex from "../../lib/hostRegex";
-import { ICertificate, IVideoChannel, IVideoIngressConfig } from "../../lib/pb";
+import jsonutil from "../../lib/jsonutil";
 
-const rootCertificate = (cert: ICertificate): ICertificate =>
-  cert.parent ? rootCertificate(cert.parent) : cert;
+const rootCertificate = (cert: Certificate): Certificate =>
+  cert.parentOneof.case === Certificate.ParentOneofCase.PARENT
+    ? rootCertificate(cert.parentOneof.parent)
+    : cert;
 
 interface SelectOption {
   value: string;
@@ -64,7 +69,7 @@ const VideoIngressConfigForm = () => {
     }));
   });
 
-  const setValues = ({ config }: { config?: IVideoIngressConfig }) => {
+  const setValues = ({ config }: { config?: VideoIngressConfig }) => {
     const configKeys = Object.fromEntries(
       config.serviceNetworkKeys.map((key) => [Base64.fromUint8Array(key), true])
     );
@@ -355,7 +360,7 @@ const VideoChannels = () => {
   const rows = channelsRes.value?.channels?.map((channel) => {
     return (
       <VideoChannelTableItem
-        key={channel.id}
+        key={channel.id.toString()}
         channel={channel}
         onDelete={() => deleteChannel({ id: channel.id })}
       />
@@ -374,7 +379,7 @@ const VideoChannels = () => {
 };
 
 interface VideoChannelTableItemProps {
-  channel: IVideoChannel;
+  channel: VideoChannel;
   onDelete: () => void;
 }
 
@@ -396,7 +401,7 @@ const VideoChannelTableItem = ({ channel, onDelete }: VideoChannelTableItemProps
       <button className="input input_button" onClick={onDelete}>
         delete
       </button>
-      <pre>{JSON.stringify(channel, null, 2)}</pre>
+      <pre>{jsonutil.stringify(channel)}</pre>
     </div>
   );
 };

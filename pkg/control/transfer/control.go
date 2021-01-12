@@ -6,11 +6,11 @@ import (
 	"crypto/sha256"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -198,13 +198,13 @@ func (c *Control) Remove(id []byte) {
 }
 
 // List ...
-func (c *Control) List() []*pb.Transfer {
+func (c *Control) List() []*transferv1.Transfer {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	ts := make([]*pb.Transfer, c.transfers.Len(), 0)
+	ts := make([]*transferv1.Transfer, c.transfers.Len(), 0)
 	c.transfers.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
-		ts = append(ts, &pb.Transfer{
+		ts = append(ts, &transferv1.Transfer{
 			Id: i.(*transfer).swarm.ID(),
 		})
 		return true

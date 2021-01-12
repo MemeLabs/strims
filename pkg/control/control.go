@@ -4,8 +4,12 @@ import (
 	"context"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	transfer "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	video "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
@@ -14,31 +18,31 @@ import (
 // BootstrapControl ...
 type BootstrapControl interface {
 	PublishingEnabled() bool
-	Publish(ctx context.Context, peerID uint64, network *pb.Network, validDuration time.Duration) error
+	Publish(ctx context.Context, peerID uint64, network *network.Network, validDuration time.Duration) error
 }
 
 // CAControl ...
 type CAControl interface {
-	ForwardRenewRequest(ctx context.Context, cert *pb.Certificate, csr *pb.CertificateRequest) (*pb.Certificate, error)
+	ForwardRenewRequest(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
 }
 
 // DialerControl ...
 type DialerControl interface {
-	ServerDialer(networkKey []byte, key *pb.Key, salt []byte) (rpc.Dialer, error)
-	Server(networkKey []byte, key *pb.Key, salt []byte) (*rpc.Server, error)
+	ServerDialer(networkKey []byte, key *key.Key, salt []byte) (rpc.Dialer, error)
+	Server(networkKey []byte, key *key.Key, salt []byte) (*rpc.Server, error)
 	ClientDialer(networkKey, key, salt []byte) (rpc.Dialer, error)
 	Client(networkKey, key, salt []byte) (*rpc.Client, error)
 }
 
 // DirectoryControl ...
 type DirectoryControl interface {
-	ReadEvents(ctx context.Context, networkKey []byte) <-chan *pb.DirectoryEvent
+	ReadEvents(ctx context.Context, networkKey []byte) <-chan *network.DirectoryEvent
 }
 
 // NetworkControl ...
 type NetworkControl interface {
-	Certificate(networkKey []byte) (*pb.Certificate, bool)
-	Add(network *pb.Network) error
+	Certificate(networkKey []byte) (*certificate.Certificate, bool)
+	Add(network *network.Network) error
 	Remove(id uint64) error
 }
 
@@ -46,34 +50,34 @@ type NetworkControl interface {
 type TransferControl interface {
 	Add(swarm *ppspp.Swarm, salt []byte) []byte
 	Remove(id []byte)
-	List() []*pb.Transfer
+	List() []*transfer.Transfer
 	Publish(id []byte, networkKey []byte)
 }
 
 // VideoChannelOption ...
-type VideoChannelOption func(channel *pb.VideoChannel) error
+type VideoChannelOption func(channel *video.VideoChannel) error
 
 // VideoChannelControl ...
 type VideoChannelControl interface {
-	GetChannel(id uint64) (*pb.VideoChannel, error)
-	ListChannels() ([]*pb.VideoChannel, error)
-	CreateChannel(opts ...VideoChannelOption) (*pb.VideoChannel, error)
-	UpdateChannel(id uint64, opts ...VideoChannelOption) (*pb.VideoChannel, error)
+	GetChannel(id uint64) (*video.VideoChannel, error)
+	ListChannels() ([]*video.VideoChannel, error)
+	CreateChannel(opts ...VideoChannelOption) (*video.VideoChannel, error)
+	UpdateChannel(id uint64, opts ...VideoChannelOption) (*video.VideoChannel, error)
 	DeleteChannel(id uint64) error
 }
 
 // VideoIngressControl ...
 type VideoIngressControl interface {
-	GetIngressConfig() (*pb.VideoIngressConfig, error)
-	SetIngressConfig(config *pb.VideoIngressConfig) error
+	GetIngressConfig() (*video.VideoIngressConfig, error)
+	SetIngressConfig(config *video.VideoIngressConfig) error
 }
 
 // NetworkPeerControl ...
 type NetworkPeerControl interface {
 	HandlePeerNegotiate(keyCount uint32)
-	HandlePeerOpen(bindings []*pb.NetworkPeerBinding)
+	HandlePeerOpen(bindings []*network.NetworkPeerBinding)
 	HandlePeerClose(networkKey []byte)
-	HandlePeerUpdateCertificate(cert *pb.Certificate) error
+	HandlePeerUpdateCertificate(cert *certificate.Certificate) error
 }
 
 // TransferPeerControl ...

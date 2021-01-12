@@ -3,12 +3,12 @@ package ca
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterCAPeerService ...
-func RegisterCAPeerService(host api.ServiceRegistry, service CAPeerService) {
-	host.RegisterMethod(".strims.network.v1.ca.CAPeer.Renew", service.Renew)
+func RegisterCAPeerService(host rpc.ServiceRegistry, service CAPeerService) {
+	host.RegisterMethod("strims.network.v1.ca.CAPeer.Renew", service.Renew)
 }
 
 // CAPeerService ...
@@ -21,11 +21,11 @@ type CAPeerService interface {
 
 // CAPeerClient ...
 type CAPeerClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewCAPeerClient ...
-func NewCAPeerClient(client api.Caller) *CAPeerClient {
+func NewCAPeerClient(client rpc.Caller) *CAPeerClient {
 	return &CAPeerClient{client}
 }
 
@@ -35,5 +35,5 @@ func (c *CAPeerClient) Renew(
 	req *CAPeerRenewRequest,
 	res *CAPeerRenewResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.ca.CAPeer.Renew", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.ca.CAPeer.Renew", req, res)
 }

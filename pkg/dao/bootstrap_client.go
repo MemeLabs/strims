@@ -3,8 +3,8 @@ package dao
 import (
 	"strconv"
 
+	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
 const bootstrapClientPrefix = "bootstrapClient:"
@@ -14,7 +14,7 @@ func prefixBootstrapClientKey(id uint64) string {
 }
 
 // InsertBootstrapClient ...
-func InsertBootstrapClient(s kv.RWStore, v *pb.BootstrapClient) error {
+func InsertBootstrapClient(s kv.RWStore, v *bootstrap.BootstrapClient) error {
 	return s.Update(func(tx kv.RWTx) (err error) {
 		return tx.Put(prefixBootstrapClientKey(v.Id), v)
 	})
@@ -28,8 +28,8 @@ func DeleteBootstrapClient(s kv.RWStore, id uint64) error {
 }
 
 // GetBootstrapClient ...
-func GetBootstrapClient(s kv.Store, id uint64) (v *pb.BootstrapClient, err error) {
-	v = &pb.BootstrapClient{}
+func GetBootstrapClient(s kv.Store, id uint64) (v *bootstrap.BootstrapClient, err error) {
+	v = &bootstrap.BootstrapClient{}
 	err = s.View(func(tx kv.Tx) error {
 		return tx.Get(prefixBootstrapClientKey(id), v)
 	})
@@ -37,8 +37,8 @@ func GetBootstrapClient(s kv.Store, id uint64) (v *pb.BootstrapClient, err error
 }
 
 // GetBootstrapClients ...
-func GetBootstrapClients(s kv.Store) (v []*pb.BootstrapClient, err error) {
-	v = []*pb.BootstrapClient{}
+func GetBootstrapClients(s kv.Store) (v []*bootstrap.BootstrapClient, err error) {
+	v = []*bootstrap.BootstrapClient{}
 	err = s.View(func(tx kv.Tx) error {
 		return tx.ScanPrefix(bootstrapClientPrefix, &v)
 	})
@@ -46,16 +46,16 @@ func GetBootstrapClients(s kv.Store) (v []*pb.BootstrapClient, err error) {
 }
 
 // NewWebSocketBootstrapClient ...
-func NewWebSocketBootstrapClient(g IDGenerator, url string, insecureSkipVerifyTLS bool) (*pb.BootstrapClient, error) {
+func NewWebSocketBootstrapClient(g IDGenerator, url string, insecureSkipVerifyTLS bool) (*bootstrap.BootstrapClient, error) {
 	id, err := g.GenerateID()
 	if err != nil {
 		return nil, err
 	}
 
-	return &pb.BootstrapClient{
+	return &bootstrap.BootstrapClient{
 		Id: id,
-		ClientOptions: &pb.BootstrapClient_WebsocketOptions{
-			WebsocketOptions: &pb.BootstrapClientWebSocketOptions{
+		ClientOptions: &bootstrap.BootstrapClient_WebsocketOptions{
+			WebsocketOptions: &bootstrap.BootstrapClientWebSocketOptions{
 				Url:                   url,
 				InsecureSkipVerifyTls: insecureSkipVerifyTLS,
 			},

@@ -3,7 +3,7 @@ import "./styles/main.scss";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 
-import { FundingClient } from "../lib/api";
+import { FundingClient } from "../apis/client";
 import { WSReadWriter } from "../lib/ws";
 import App from "./root/App";
 

@@ -6,11 +6,14 @@ import (
 	"sync"
 	"time"
 
+	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/dao/daotest"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/memkv"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -65,12 +68,12 @@ func NewHost(logger *zap.Logger, i int) (*Host, error) {
 // Host ...
 type Host struct {
 	Store    *dao.ProfileStore
-	Profile  *pb.Profile
+	Profile  *profile.Profile
 	VNIC     *vnic.Host
 	VPN      *vpn.Host
 	Node     *vpn.Node
-	HostCert *pb.Certificate
-	Network  *pb.Network
+	HostCert *certificate.Certificate
+	Network  *network.Network
 
 	profileID kademlia.ID
 	peers     map[string]struct{}
@@ -203,10 +206,10 @@ func (c *Cluster) Run() error {
 	return nil
 }
 
-func createCert(key *pb.Key, subject string, signingKey *pb.Key, signingCert *pb.Certificate) (*pb.Certificate, error) {
+func createCert(key *key.Key, subject string, signingKey *key.Key, signingCert *certificate.Certificate) (*certificate.Certificate, error) {
 	csr, err := dao.NewCertificateRequest(
 		key,
-		pb.KeyUsage_KEY_USAGE_PEER|pb.KeyUsage_KEY_USAGE_SIGN,
+		certificate.KeyUsage_KEY_USAGE_PEER|certificate.KeyUsage_KEY_USAGE_SIGN,
 		dao.WithSubject(subject),
 	)
 	if err != nil {
@@ -217,7 +220,7 @@ func createCert(key *pb.Key, subject string, signingKey *pb.Key, signingCert *pb
 	if err != nil {
 		return nil, err
 	}
-	cert.ParentOneof = &pb.Certificate_Parent{Parent: signingCert}
+	cert.ParentOneof = &certificate.Certificate_Parent{Parent: signingCert}
 
 	return cert, nil
 }

@@ -7,7 +7,7 @@ import (
 	"crypto/sha256"
 	"errors"
 
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"golang.org/x/crypto/pbkdf2"
 	"google.golang.org/protobuf/proto"
 )
@@ -21,7 +21,7 @@ const keySize = 32
 
 // NewStorageKey ...
 func NewStorageKey(password string) (*StorageKey, error) {
-	options := &pb.StorageKey_PBKDF2Options{
+	options := &profilev1.StorageKey_PBKDF2Options{
 		Iterations: pbkdf2Iterations,
 		KeySize:    keySize,
 		Salt:       make([]byte, saltSize),
@@ -31,9 +31,9 @@ func NewStorageKey(password string) (*StorageKey, error) {
 	}
 
 	k := &StorageKey{
-		record: pb.StorageKey{
-			KdfType:    pb.KDFType_KDF_TYPE_PBKDF2_SHA256,
-			KdfOptions: &pb.StorageKey_Pbkdf2Options{Pbkdf2Options: options},
+		record: profilev1.StorageKey{
+			KdfType:    profilev1.KDFType_KDF_TYPE_PBKDF2_SHA256,
+			KdfOptions: &profilev1.StorageKey_Pbkdf2Options{Pbkdf2Options: options},
 		},
 		key: pbkdf2.Key([]byte(password),
 			options.Salt,
@@ -58,7 +58,7 @@ func UnmarshalStorageKey(b []byte, password string) (*StorageKey, error) {
 	}
 
 	switch k.record.KdfType {
-	case pb.KDFType_KDF_TYPE_PBKDF2_SHA256:
+	case profilev1.KDFType_KDF_TYPE_PBKDF2_SHA256:
 		options := k.record.GetPbkdf2Options()
 		k.key = pbkdf2.Key([]byte(password),
 			options.Salt,
@@ -80,7 +80,7 @@ func MarshalStorageKey(k *StorageKey) ([]byte, error) {
 
 // StorageKey ...
 type StorageKey struct {
-	record pb.StorageKey
+	record profilev1.StorageKey
 	key    []byte
 }
 

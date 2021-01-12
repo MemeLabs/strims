@@ -2,7 +2,7 @@ package dao
 
 import (
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 )
 
 const profileSummaryKeyPrefix = "profileSummary:"
@@ -12,7 +12,7 @@ func prefixProfileSummaryKey(name string) string {
 }
 
 // GetProfileSummaries ...
-func GetProfileSummaries(s kv.BlobStore) ([]*pb.ProfileSummary, error) {
+func GetProfileSummaries(s kv.BlobStore) ([]*profilev1.ProfileSummary, error) {
 	var profileBufs [][]byte
 	err := s.View(metadataTable, func(tx kv.BlobTx) (err error) {
 		profileBufs, err = tx.ScanPrefix(profileSummaryKeyPrefix)
@@ -22,17 +22,17 @@ func GetProfileSummaries(s kv.BlobStore) ([]*pb.ProfileSummary, error) {
 		return nil, err
 	}
 
-	profiles, err := appendUnmarshalled([]*pb.ProfileSummary{}, profileBufs...)
+	profiles, err := appendUnmarshalled([]*profilev1.ProfileSummary{}, profileBufs...)
 	if err != nil {
 		return nil, err
 	}
 
-	return profiles.([]*pb.ProfileSummary), nil
+	return profiles.([]*profilev1.ProfileSummary), nil
 }
 
 // NewProfileSummary ...
-func NewProfileSummary(p *pb.Profile) *pb.ProfileSummary {
-	return &pb.ProfileSummary{
+func NewProfileSummary(p *profilev1.Profile) *profilev1.ProfileSummary {
+	return &profilev1.ProfileSummary{
 		Id:   p.Id,
 		Name: p.Name,
 	}

@@ -4,10 +4,10 @@ import (
 	"context"
 	"errors"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
 )
 
 type bootstrapService struct {
@@ -16,15 +16,15 @@ type bootstrapService struct {
 	Store *dao.ProfileStore
 }
 
-func (s *bootstrapService) GetPublishEnabled(ctx context.Context, req *pb.BootstrapPeerGetPublishEnabledRequest) (*pb.BootstrapPeerGetPublishEnabledResponse, error) {
-	return &pb.BootstrapPeerGetPublishEnabledResponse{Enabled: s.App.Bootstrap().PublishingEnabled()}, nil
+func (s *bootstrapService) GetPublishEnabled(ctx context.Context, req *bootstrap.BootstrapPeerGetPublishEnabledRequest) (*bootstrap.BootstrapPeerGetPublishEnabledResponse, error) {
+	return &bootstrap.BootstrapPeerGetPublishEnabledResponse{Enabled: s.App.Bootstrap().PublishingEnabled()}, nil
 }
 
-func (s *bootstrapService) ListNetworks(ctx context.Context, req *pb.BootstrapPeerListNetworksRequest) (*pb.BootstrapPeerListNetworksResponse, error) {
-	return nil, api.ErrNotImplemented
+func (s *bootstrapService) ListNetworks(ctx context.Context, req *bootstrap.BootstrapPeerListNetworksRequest) (*bootstrap.BootstrapPeerListNetworksResponse, error) {
+	return nil, rpc.ErrNotImplemented
 }
 
-func (s *bootstrapService) Publish(ctx context.Context, req *pb.BootstrapPeerPublishRequest) (*pb.BootstrapPeerPublishResponse, error) {
+func (s *bootstrapService) Publish(ctx context.Context, req *bootstrap.BootstrapPeerPublishRequest) (*bootstrap.BootstrapPeerPublishResponse, error) {
 	if !s.App.Bootstrap().PublishingEnabled() {
 		return nil, errors.New("not supported")
 	}

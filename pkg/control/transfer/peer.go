@@ -6,8 +6,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
@@ -47,11 +47,11 @@ func (p *Peer) AnnounceSwarm(swarm *ppspp.Swarm) {
 	ctx, cancel := context.WithTimeout(p.vnicPeer.Context(), time.Second)
 	defer cancel()
 
-	req := &pb.TransferPeerAnnounceSwarmRequest{
+	req := &transferv1.TransferPeerAnnounceSwarmRequest{
 		SwarmId: swarm.ID(),
 		Port:    uint32(s.port),
 	}
-	res := &pb.TransferPeerAnnounceSwarmResponse{}
+	res := &transferv1.TransferPeerAnnounceSwarmResponse{}
 	err = p.client.Transfer().AnnounceSwarm(ctx, req, res)
 	if err != nil {
 		p.logger.Debug("failed", zap.Error(err))

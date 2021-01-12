@@ -10,8 +10,8 @@ import (
 	"math/rand"
 	"time"
 
+	daov1 "github.com/MemeLabs/go-ppspp/pkg/apis/dao/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"go.uber.org/zap"
 )
 
@@ -100,7 +100,7 @@ func (m *Mutex) try(t time.Time) error {
 	err := m.store.Update(func(tx kv.RWTx) error {
 		now := t.UnixNano()
 
-		mu := &pb.Mutex{}
+		mu := &daov1.Mutex{}
 		err := tx.Get(m.key, mu)
 		if err != nil && err != kv.ErrRecordNotFound {
 			return err
@@ -110,7 +110,7 @@ func (m *Mutex) try(t time.Time) error {
 			return ErrLockBusy
 		}
 
-		return tx.Put(m.key, &pb.Mutex{
+		return tx.Put(m.key, &daov1.Mutex{
 			Eol:   now + int64(mutexTTL),
 			Token: m.token,
 		})
@@ -129,7 +129,7 @@ func (m *Mutex) try(t time.Time) error {
 // Release ...
 func (m *Mutex) Release() error {
 	return m.store.Update(func(tx kv.RWTx) error {
-		mu := &pb.Mutex{}
+		mu := &daov1.Mutex{}
 		err := tx.Get(m.key, mu)
 		if err != nil {
 			return err

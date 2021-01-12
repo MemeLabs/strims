@@ -8,10 +8,10 @@ import (
 	"path"
 	"runtime"
 
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/frontend"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -62,7 +62,7 @@ func NewGoSide(s AndroidSide, appFileLocation string) (*GoSide, error) {
 	srv := frontend.Server{
 		Store:  kv,
 		Logger: logger,
-		NewVPNHost: func(key *pb.Key) (*vpn.Host, error) {
+		NewVPNHost: func(key *key.Key) (*vpn.Host, error) {
 			vnicHost, err := vnic.New(
 				logger,
 				key,

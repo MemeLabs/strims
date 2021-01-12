@@ -8,14 +8,15 @@ import (
 	"errors"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
 	"github.com/MemeLabs/go-ppspp/pkg/sortutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -25,7 +26,7 @@ import (
 )
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, profile *pb.Profile, observers *event.Observers, transfer *transfer.Control, dialer *dialer.Control, network *network.Control) *Control {
+func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, profile *profilev1.Profile, observers *event.Observers, transfer *transfer.Control, dialer *dialer.Control, network *network.Control) *Control {
 	events := make(chan interface{}, 128)
 	observers.Notify(events)
 
@@ -36,7 +37,7 @@ func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, prof
 		profile:        profile,
 		observers:      observers,
 		events:         events,
-		ingressConfig:  &pb.VideoIngressConfig{},
+		ingressConfig:  &videov1.VideoIngressConfig{},
 		dialer:         dialer,
 		ingressService: newIngressService(logger, store, transfer, dialer, network),
 	}
@@ -47,14 +48,14 @@ type Control struct {
 	logger    *zap.Logger
 	vpn       *vpn.Host
 	store     *dao.ProfileStore
-	profile   *pb.Profile
+	profile   *profilev1.Profile
 	observers *event.Observers
 	events    chan interface{}
 	dialer    *dialer.Control
 
 	ingressService *ingressService
 	lock           sync.Mutex
-	ingressConfig  *pb.VideoIngressConfig
+	ingressConfig  *videov1.VideoIngressConfig
 	shareServers   llrb.LLRB
 	ingressServer  *rtmpingress.Server
 }
@@ -83,7 +84,7 @@ func (c *Control) Run(ctx context.Context) {
 	}
 }
 
-func (c *Control) handleNetworkStart(ctx context.Context, network *pb.Network) {
+func (c *Control) handleNetworkStart(ctx context.Context, network *networkv1.Network) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -93,14 +94,14 @@ func (c *Control) handleNetworkStart(ctx context.Context, network *pb.Network) {
 	}
 }
 
-func (c *Control) handleNetworkStop(network *pb.Network) {
+func (c *Control) handleNetworkStop(network *networkv1.Network) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
 	c.tryStopIngressShareServer(dao.NetworkKey(network))
 }
 
-func (c *Control) handleChannelUpdate(channel *pb.VideoChannel) {
+func (c *Control) handleChannelUpdate(channel *videov1.VideoChannel) {
 	c.ingressService.UpdateChannel(channel)
 }
 
@@ -116,7 +117,7 @@ func (c *Control) loadIngressConfig() {
 	c.reinitIngress(config)
 }
 
-func (c *Control) reinitIngress(next *pb.VideoIngressConfig) {
+func (c *Control) reinitIngress(next *videov1.VideoIngressConfig) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -194,7 +195,7 @@ func (c *Control) startIngressShareServer(ctx context.Context, networkKey []byte
 		return err
 	}
 
-	api.RegisterVideoIngressShareService(server, service)
+	videov1.RegisterVideoIngressShareService(server, service)
 
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error { return service.Run(ctx) })
@@ -228,12 +229,12 @@ func (c *Control) startIngressServer() {
 }
 
 // GetIngressConfig ...
-func (c *Control) GetIngressConfig() (*pb.VideoIngressConfig, error) {
+func (c *Control) GetIngressConfig() (*videov1.VideoIngressConfig, error) {
 	return dao.GetVideoIngressConfig(c.store)
 }
 
 // SetIngressConfig ...
-func (c *Control) SetIngressConfig(config *pb.VideoIngressConfig) error {
+func (c *Control) SetIngressConfig(config *videov1.VideoIngressConfig) error {
 	// TODO: change stuff...
 	if err := dao.SetVideoIngressConfig(c.store, config); err != nil {
 		return err

@@ -2,15 +2,20 @@ import * as React from "react";
 import { useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 
+import {
+  BootstrapClient,
+  CreateBootstrapClientRequest,
+  CreateBootstrapClientResponse,
+} from "../../apis/strims/network/v1/bootstrap/bootstrap";
 import { InputError, TextInput } from "../../components/Form";
 import { MainLayout } from "../../components/MainLayout";
 import { useCall, useLazyCall } from "../../contexts/Api";
-import * as pb from "../../lib/pb";
+import jsonutil from "../../lib/jsonutil";
 
 const BootstrapClientForm = ({
   onCreate,
 }: {
-  onCreate: (res: pb.CreateBootstrapClientResponse) => void;
+  onCreate: (res: CreateBootstrapClientResponse) => void;
 }) => {
   const [{ error, loading }, createBootstrapClient] = useLazyCall("bootstrap", "createClient", {
     onComplete: onCreate,
@@ -21,9 +26,11 @@ const BootstrapClientForm = ({
 
   const onSubmit = (data) =>
     createBootstrapClient(
-      new pb.CreateBootstrapClientRequest({
-        websocketOptions: {
-          url: data.url,
+      new CreateBootstrapClientRequest({
+        clientOptions: {
+          websocketOptions: {
+            url: data.url,
+          },
         },
       })
     );
@@ -55,7 +62,7 @@ const BootstrapClientTable = ({
   bootstrapClients,
   onDelete,
 }: {
-  bootstrapClients: pb.IBootstrapClient[];
+  bootstrapClients: BootstrapClient[];
   onDelete: () => void;
 }) => {
   const [, deleteBootstrapClient] = useLazyCall("bootstrap", "deleteClient", {
@@ -69,14 +76,23 @@ const BootstrapClientTable = ({
   const rows = bootstrapClients.map((bootstrapClient, i) => {
     const handleDelete = () => deleteBootstrapClient({ id: bootstrapClient.id });
 
-    return (
-      <div className="thing_list__item" key={bootstrapClient.id}>
-        {i}
-        <span>{bootstrapClient.websocketOptions.url}</span>
-        <button onClick={handleDelete}>delete</button>
-        <pre>{JSON.stringify(bootstrapClient, null, 2)}</pre>
-      </div>
-    );
+    switch (bootstrapClient.clientOptions.case) {
+      case BootstrapClient.ClientOptionsCase.WEBSOCKET_OPTIONS:
+        return (
+          <div className="thing_list__item" key={bootstrapClient.id.toString()}>
+            {i}
+            <span>{bootstrapClient.clientOptions.websocketOptions.url}</span>
+            <button onClick={handleDelete}>delete</button>
+            <pre>{jsonutil.stringify(bootstrapClient)}</pre>
+          </div>
+        );
+      default:
+        return (
+          <div className="thing_list__item" key={bootstrapClient.id.toString()}>
+            unknown bootstrap client type
+          </div>
+        );
+    }
   });
   return <div className="thing_list">{rows}</div>;
 };

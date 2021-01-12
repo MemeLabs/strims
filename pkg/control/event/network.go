@@ -1,40 +1,40 @@
 package event
 
-import "github.com/MemeLabs/go-ppspp/pkg/pb"
+import "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 
 // NetworkLoad ...
 type NetworkLoad struct {
-	Network *pb.Network
+	Network *network.Network
 }
 
 // NetworkAdd ...
 type NetworkAdd struct {
-	Network *pb.Network
+	Network *network.Network
 }
 
 // NetworkRemove ...
 type NetworkRemove struct {
-	Network *pb.Network
+	Network *network.Network
 }
 
 // NetworkStart ...
 type NetworkStart struct {
-	Network *pb.Network
+	Network *network.Network
 }
 
 // NetworkStop ...
 type NetworkStop struct {
-	Network *pb.Network
+	Network *network.Network
 }
 
 // NetworkCertUpdate ...
 type NetworkCertUpdate struct {
-	Network *pb.Network
+	Network *network.Network
 }
 
 // NetworkCertUpdateError ...
 type NetworkCertUpdateError struct {
-	Network *pb.Network
+	Network *network.Network
 	Error   error
 }
 

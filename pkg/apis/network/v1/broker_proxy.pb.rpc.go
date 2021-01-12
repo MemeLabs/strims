@@ -3,16 +3,16 @@ package network
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterBrokerProxyService ...
-func RegisterBrokerProxyService(host api.ServiceRegistry, service BrokerProxyService) {
-	host.RegisterMethod(".strims.network.v1.BrokerProxy.Open", service.Open)
-	host.RegisterMethod(".strims.network.v1.BrokerProxy.SendKeys", service.SendKeys)
-	host.RegisterMethod(".strims.network.v1.BrokerProxy.ReceiveKeys", service.ReceiveKeys)
-	host.RegisterMethod(".strims.network.v1.BrokerProxy.Data", service.Data)
-	host.RegisterMethod(".strims.network.v1.BrokerProxy.Close", service.Close)
+func RegisterBrokerProxyService(host rpc.ServiceRegistry, service BrokerProxyService) {
+	host.RegisterMethod("strims.network.v1.BrokerProxy.Open", service.Open)
+	host.RegisterMethod("strims.network.v1.BrokerProxy.SendKeys", service.SendKeys)
+	host.RegisterMethod("strims.network.v1.BrokerProxy.ReceiveKeys", service.ReceiveKeys)
+	host.RegisterMethod("strims.network.v1.BrokerProxy.Data", service.Data)
+	host.RegisterMethod("strims.network.v1.BrokerProxy.Close", service.Close)
 }
 
 // BrokerProxyService ...
@@ -41,11 +41,11 @@ type BrokerProxyService interface {
 
 // BrokerProxyClient ...
 type BrokerProxyClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewBrokerProxyClient ...
-func NewBrokerProxyClient(client api.Caller) *BrokerProxyClient {
+func NewBrokerProxyClient(client rpc.Caller) *BrokerProxyClient {
 	return &BrokerProxyClient{client}
 }
 
@@ -55,7 +55,7 @@ func (c *BrokerProxyClient) Open(
 	req *BrokerProxyRequest,
 	res chan *BrokerProxyEvent,
 ) error {
-	return c.client.CallStreaming(ctx, ".strims.network.v1.BrokerProxy.Open", req, res)
+	return c.client.CallStreaming(ctx, "strims.network.v1.BrokerProxy.Open", req, res)
 }
 
 // SendKeys ...
@@ -64,7 +64,7 @@ func (c *BrokerProxyClient) SendKeys(
 	req *BrokerProxySendKeysRequest,
 	res *BrokerProxySendKeysResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.BrokerProxy.SendKeys", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.BrokerProxy.SendKeys", req, res)
 }
 
 // ReceiveKeys ...
@@ -73,7 +73,7 @@ func (c *BrokerProxyClient) ReceiveKeys(
 	req *BrokerProxyReceiveKeysRequest,
 	res *BrokerProxyReceiveKeysResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.BrokerProxy.ReceiveKeys", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.BrokerProxy.ReceiveKeys", req, res)
 }
 
 // Data ...
@@ -82,7 +82,7 @@ func (c *BrokerProxyClient) Data(
 	req *BrokerProxyDataRequest,
 	res *BrokerProxyDataResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.BrokerProxy.Data", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.BrokerProxy.Data", req, res)
 }
 
 // Close ...
@@ -91,5 +91,5 @@ func (c *BrokerProxyClient) Close(
 	req *BrokerProxyCloseRequest,
 	res *BrokerProxyCloseResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.BrokerProxy.Close", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.BrokerProxy.Close", req, res)
 }

@@ -6,8 +6,11 @@ import (
 	"sync"
 	"time"
 
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
@@ -15,7 +18,7 @@ import (
 )
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, profile *pb.Profile) *Control {
+func NewControl(logger *zap.Logger, vpn *vpn.Host, profile *profilev1.Profile) *Control {
 	return &Control{
 		logger:  logger,
 		vpn:     vpn,
@@ -27,14 +30,14 @@ func NewControl(logger *zap.Logger, vpn *vpn.Host, profile *pb.Profile) *Control
 type Control struct {
 	logger  *zap.Logger
 	vpn     *vpn.Host
-	profile *pb.Profile
+	profile *profilev1.Profile
 	lock    sync.Mutex
 	certs   llrb.LLRB
 }
 
 // ReplaceOrInsertNetwork ...
-func (t *Control) ReplaceOrInsertNetwork(network *pb.Network) {
-	csr, err := dao.NewCertificateRequest(t.vpn.VNIC().Key(), pb.KeyUsage_KEY_USAGE_SIGN)
+func (t *Control) ReplaceOrInsertNetwork(network *networkv1.Network) {
+	csr, err := dao.NewCertificateRequest(t.vpn.VNIC().Key(), certificate.KeyUsage_KEY_USAGE_SIGN)
 	if err != nil {
 		return
 	}
@@ -49,7 +52,7 @@ func (t *Control) ReplaceOrInsertNetwork(network *pb.Network) {
 	if err != nil {
 		return
 	}
-	cert.ParentOneof = &pb.Certificate_Parent{Parent: network.Certificate}
+	cert.ParentOneof = &certificate.Certificate_Parent{Parent: network.Certificate}
 
 	t.lock.Lock()
 	defer t.lock.Unlock()
@@ -63,7 +66,7 @@ func (t *Control) ReplaceOrInsertNetwork(network *pb.Network) {
 }
 
 // RemoveNetwork ...
-func (t *Control) RemoveNetwork(network *pb.Network) {
+func (t *Control) RemoveNetwork(network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -86,13 +89,13 @@ func (t *Control) hostCertAndVPNNode(networkKey []byte) (*hostCert, *vpn.Node, e
 }
 
 // ServerDialer ...
-func (t *Control) ServerDialer(networkKey []byte, key *pb.Key, salt []byte) (rpc.Dialer, error) {
+func (t *Control) ServerDialer(networkKey []byte, key *key.Key, salt []byte) (rpc.Dialer, error) {
 	cert, node, err := t.hostCertAndVPNNode(networkKey)
 	if err != nil {
 		return nil, err
 	}
 
-	return &rpc.VPNServerDialer{
+	return &VPNServerDialer{
 		Logger:   t.logger,
 		Node:     node,
 		Key:      key,
@@ -102,7 +105,7 @@ func (t *Control) ServerDialer(networkKey []byte, key *pb.Key, salt []byte) (rpc
 }
 
 // Server ...
-func (t *Control) Server(networkKey []byte, key *pb.Key, salt []byte) (*rpc.Server, error) {
+func (t *Control) Server(networkKey []byte, key *key.Key, salt []byte) (*rpc.Server, error) {
 	dialer, err := t.ServerDialer(networkKey, key, salt)
 	if err != nil {
 		return nil, err
@@ -117,7 +120,7 @@ func (t *Control) ClientDialer(networkKey, key, salt []byte) (rpc.Dialer, error)
 		return nil, err
 	}
 
-	return &rpc.VPNDialer{
+	return &VPNDialer{
 		Logger:   t.logger,
 		Node:     node,
 		Key:      key,
@@ -149,16 +152,16 @@ func (h *hostCertKey) Less(o llrb.Item) bool {
 
 type hostCert struct {
 	lock sync.Mutex
-	cert *pb.Certificate
+	cert *certificate.Certificate
 }
 
-func (h *hostCert) Store(cert *pb.Certificate) {
+func (h *hostCert) Store(cert *certificate.Certificate) {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 	h.cert = cert
 }
 
-func (h *hostCert) Load() *pb.Certificate {
+func (h *hostCert) Load() *certificate.Certificate {
 	h.lock.Lock()
 	defer h.lock.Unlock()
 	return h.cert

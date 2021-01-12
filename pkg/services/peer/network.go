@@ -3,8 +3,8 @@ package peer
 import (
 	"context"
 
+	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
 type networkService struct {
@@ -12,24 +12,24 @@ type networkService struct {
 	App  control.AppControl
 }
 
-func (s *networkService) Negotiate(ctx context.Context, req *pb.NetworkPeerNegotiateRequest) (*pb.NetworkPeerNegotiateResponse, error) {
+func (s *networkService) Negotiate(ctx context.Context, req *network.NetworkPeerNegotiateRequest) (*network.NetworkPeerNegotiateResponse, error) {
 	s.Peer.Network().HandlePeerNegotiate(req.KeyCount)
-	return &pb.NetworkPeerNegotiateResponse{}, nil
+	return &network.NetworkPeerNegotiateResponse{}, nil
 }
 
-func (s *networkService) Open(ctx context.Context, req *pb.NetworkPeerOpenRequest) (*pb.NetworkPeerOpenResponse, error) {
+func (s *networkService) Open(ctx context.Context, req *network.NetworkPeerOpenRequest) (*network.NetworkPeerOpenResponse, error) {
 	s.Peer.Network().HandlePeerOpen(req.Bindings)
-	return &pb.NetworkPeerOpenResponse{}, nil
+	return &network.NetworkPeerOpenResponse{}, nil
 }
 
-func (s *networkService) Close(ctx context.Context, req *pb.NetworkPeerCloseRequest) (*pb.NetworkPeerCloseResponse, error) {
+func (s *networkService) Close(ctx context.Context, req *network.NetworkPeerCloseRequest) (*network.NetworkPeerCloseResponse, error) {
 	s.Peer.Network().HandlePeerClose(req.Key)
-	return &pb.NetworkPeerCloseResponse{}, nil
+	return &network.NetworkPeerCloseResponse{}, nil
 }
 
-func (s *networkService) UpdateCertificate(ctx context.Context, req *pb.NetworkPeerUpdateCertificateRequest) (*pb.NetworkPeerUpdateCertificateResponse, error) {
+func (s *networkService) UpdateCertificate(ctx context.Context, req *network.NetworkPeerUpdateCertificateRequest) (*network.NetworkPeerUpdateCertificateResponse, error) {
 	if err := s.Peer.Network().HandlePeerUpdateCertificate(req.Certificate); err != nil {
 		return nil, err
 	}
-	return &pb.NetworkPeerUpdateCertificateResponse{}, nil
+	return &network.NetworkPeerUpdateCertificateResponse{}, nil
 }

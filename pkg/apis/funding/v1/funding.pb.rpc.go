@@ -3,12 +3,12 @@ package funding
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterFundingService ...
-func RegisterFundingService(host api.ServiceRegistry, service FundingService) {
-	host.RegisterMethod(".strims.funding.v1.Funding.Test", service.Test)
+func RegisterFundingService(host rpc.ServiceRegistry, service FundingService) {
+	host.RegisterMethod("strims.funding.v1.Funding.Test", service.Test)
 }
 
 // FundingService ...
@@ -21,11 +21,11 @@ type FundingService interface {
 
 // FundingClient ...
 type FundingClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewFundingClient ...
-func NewFundingClient(client api.Caller) *FundingClient {
+func NewFundingClient(client rpc.Caller) *FundingClient {
 	return &FundingClient{client}
 }
 
@@ -35,5 +35,5 @@ func (c *FundingClient) Test(
 	req *FundingTestRequest,
 	res *FundingTestResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.funding.v1.Funding.Test", req, res)
+	return c.client.CallUnary(ctx, "strims.funding.v1.Funding.Test", req, res)
 }

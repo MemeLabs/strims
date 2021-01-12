@@ -6,8 +6,8 @@ import (
 	"strconv"
 	"strings"
 
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
 var errMalformedSessionID = errors.New("malformed session id")
@@ -32,7 +32,7 @@ func unmarshalSessionID(id string) (uint64, *dao.StorageKey, error) {
 	return profileID, storageKey, nil
 }
 
-func marshalSessionID(profile *pb.Profile, store *dao.ProfileStore) string {
+func marshalSessionID(profile *profilev1.Profile, store *dao.ProfileStore) string {
 	id := strconv.FormatUint(profile.Id, 36)
 	storageKey := base64.RawURLEncoding.EncodeToString(store.Key().Key())
 	return id + "." + storageKey

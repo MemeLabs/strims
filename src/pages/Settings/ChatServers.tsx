@@ -3,15 +3,16 @@ import { Controller, useForm } from "react-hook-form";
 import { Link } from "react-router-dom";
 import Select, { OptionTypeBase } from "react-select";
 
+import {
+  ChatServer,
+  CreateChatServerRequest,
+  CreateChatServerResponse,
+} from "../../apis/strims/chat/v1/chat";
+import { Certificate } from "../../apis/strims/type/certificate";
 import { InputError, InputLabel, TextInput } from "../../components/Form";
 import { MainLayout } from "../../components/MainLayout";
 import { useCall, useLazyCall } from "../../contexts/Api";
-import {
-  CreateChatServerRequest,
-  CreateChatServerResponse,
-  ICertificate,
-  IChatServer,
-} from "../../lib/pb";
+import jsonutil from "../../lib/jsonutil";
 
 interface ChatServerFormData {
   name: string;
@@ -21,8 +22,10 @@ interface ChatServerFormData {
   };
 }
 
-const rootCertificate = (cert: ICertificate): ICertificate =>
-  cert.parent ? rootCertificate(cert.parent) : cert;
+const rootCertificate = (cert: Certificate): Certificate =>
+  cert.parentOneof.case === Certificate.ParentOneofCase.PARENT
+    ? rootCertificate(cert.parentOneof.parent)
+    : cert;
 
 const ChatServerForm = ({ onCreate }: { onCreate: (res: CreateChatServerResponse) => void }) => {
   const [{ error, loading }, createChatServer] = useLazyCall("chat", "createServer", {
@@ -94,7 +97,7 @@ const ChatServerTable = ({
   servers,
   onDelete,
 }: {
-  servers: IChatServer[];
+  servers: ChatServer[];
   onDelete: () => void;
 }) => {
   const [, deleteChatServer] = useLazyCall("chat", "deleteServer", { onComplete: onDelete });
@@ -107,12 +110,12 @@ const ChatServerTable = ({
     const handleDelete = () => deleteChatServer({ id: server.id });
 
     return (
-      <div className="thing_list__item" key={server.id}>
+      <div className="thing_list__item" key={server.id.toString()}>
         <span>{server.chatRoom.name}</span>
         <button className="input input_button" onClick={handleDelete}>
           delete
         </button>
-        <pre>{JSON.stringify(server, null, 2)}</pre>
+        <pre>{jsonutil.stringify(server)}</pre>
       </div>
     );
   });

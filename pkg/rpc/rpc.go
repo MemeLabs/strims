@@ -7,7 +7,7 @@ import (
 	"reflect"
 	"sync"
 
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	rpcv1 "github.com/MemeLabs/go-ppspp/pkg/apis/rpc/v1"
 	"github.com/golang/protobuf/proto"
 	"github.com/golang/protobuf/ptypes"
 	"github.com/golang/protobuf/ptypes/any"
@@ -33,8 +33,8 @@ func recoverError(v interface{}) error {
 	}
 }
 
-var typeOfError = reflect.TypeOf(&pb.Error{})
-var typeOfClose = reflect.TypeOf(&pb.Close{})
+var typeOfError = reflect.TypeOf(&rpcv1.Error{})
+var typeOfClose = reflect.TypeOf(&rpcv1.Close{})
 
 // ErrClose returned when the the server closes a streaming response
 var ErrClose = errors.New("response closed")
@@ -69,7 +69,7 @@ func unmarshalAny(a *any.Any, v proto.Message) error {
 	case typeOfClose:
 		return ErrClose
 	case typeOfError:
-		ev := &pb.Error{}
+		ev := &rpcv1.Error{}
 		if err := ptypes.UnmarshalAny(a, ev); err != nil {
 			return err
 		}
@@ -80,7 +80,7 @@ func unmarshalAny(a *any.Any, v proto.Message) error {
 }
 
 // SendFunc ...
-type SendFunc func(context.Context, *pb.Call) error
+type SendFunc func(context.Context, *rpcv1.Call) error
 
 var callBuffers = sync.Pool{
 	New: func() interface{} {
@@ -97,7 +97,7 @@ func send(ctx context.Context, id, parentID uint64, method string, arg proto.Mes
 		return err
 	}
 
-	rc := &pb.Call{
+	rc := &rpcv1.Call{
 		Id:       id,
 		ParentId: parentID,
 		Method:   method,

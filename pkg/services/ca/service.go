@@ -5,8 +5,10 @@ import (
 	"sync"
 	"time"
 
+	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"go.uber.org/zap"
 )
 
@@ -17,7 +19,7 @@ const clientTimeout = time.Second * 5
 const certificateValidDuration = time.Hour * 24 * 14
 
 // NewService ...
-func NewService(logger *zap.Logger, network *pb.Network) *Service {
+func NewService(logger *zap.Logger, network *network.Network) *Service {
 	return &Service{
 		logger:  logger,
 		network: network,
@@ -28,7 +30,7 @@ func NewService(logger *zap.Logger, network *pb.Network) *Service {
 type Service struct {
 	logger  *zap.Logger
 	lock    sync.Mutex
-	network *pb.Network
+	network *network.Network
 	cancel  context.CancelFunc
 
 	// invite policy
@@ -37,25 +39,25 @@ type Service struct {
 }
 
 // UpdateNetwork ...
-func (s *Service) UpdateNetwork(network *pb.Network) {
+func (s *Service) UpdateNetwork(network *network.Network) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	s.network = network
 }
 
 // Renew ...
-func (s *Service) Renew(ctxt context.Context, req *pb.CARenewRequest) (*pb.CARenewResponse, error) {
+func (s *Service) Renew(ctxt context.Context, req *ca.CARenewRequest) (*ca.CARenewResponse, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	err := dao.VerifyCertificateRequest(req.CertificateRequest, pb.KeyUsage_KEY_USAGE_PEER|pb.KeyUsage_KEY_USAGE_SIGN)
+	err := dao.VerifyCertificateRequest(req.CertificateRequest, certificate.KeyUsage_KEY_USAGE_PEER|certificate.KeyUsage_KEY_USAGE_SIGN)
 	if err != nil {
 		return nil, err
 	}
 
 	// TODO: check subject (nick) availability
 	// TODO: verify invitation policy
-	networkCert, err := dao.NewSelfSignedCertificate(s.network.Key, pb.KeyUsage_KEY_USAGE_SIGN, certificateValidDuration, dao.WithSubject(s.network.Name))
+	networkCert, err := dao.NewSelfSignedCertificate(s.network.Key, certificate.KeyUsage_KEY_USAGE_SIGN, certificateValidDuration, dao.WithSubject(s.network.Name))
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +66,7 @@ func (s *Service) Renew(ctxt context.Context, req *pb.CARenewRequest) (*pb.CARen
 	if err != nil {
 		return nil, err
 	}
-	cert.ParentOneof = &pb.Certificate_Parent{Parent: networkCert}
+	cert.ParentOneof = &certificate.Certificate_Parent{Parent: networkCert}
 
-	return &pb.CARenewResponse{Certificate: cert}, nil
+	return &ca.CARenewResponse{Certificate: cert}, nil
 }

@@ -8,9 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/petar/GoLLRB/llrb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -76,7 +77,7 @@ func WithLabel(label string) HostOption {
 }
 
 // New ...
-func New(logger *zap.Logger, profileKey *pb.Key, options ...HostOption) (*Host, error) {
+func New(logger *zap.Logger, profileKey *key.Key, options ...HostOption) (*Host, error) {
 	hostKey, err := dao.GenerateKey()
 	if err != nil {
 		return nil, err
@@ -110,8 +111,8 @@ func New(logger *zap.Logger, profileKey *pb.Key, options ...HostOption) (*Host, 
 // Host ...
 type Host struct {
 	logger           *zap.Logger
-	profileKey       *pb.Key
-	key              *pb.Key
+	profileKey       *key.Key
+	key              *key.Key
 	label            string
 	interfaces       []Interface
 	peerHandlersLock sync.Mutex
@@ -142,18 +143,18 @@ func (h *Host) ID() kademlia.ID {
 }
 
 // Key ...
-func (h *Host) Key() *pb.Key {
+func (h *Host) Key() *key.Key {
 	return h.key
 }
 
 // Cert ...
-func (h *Host) Cert() (*pb.Certificate, error) {
-	profileCert, err := dao.NewSelfSignedCertificate(h.profileKey, pb.KeyUsage_KEY_USAGE_SIGN, hostCertValidDuration)
+func (h *Host) Cert() (*certificate.Certificate, error) {
+	profileCert, err := dao.NewSelfSignedCertificate(h.profileKey, certificate.KeyUsage_KEY_USAGE_SIGN, hostCertValidDuration)
 	if err != nil {
 		return nil, fmt.Errorf("generating init cert failed: %w", err)
 	}
 
-	csr, err := dao.NewCertificateRequest(h.key, pb.KeyUsage_KEY_USAGE_SIGN, dao.WithSubject(h.label))
+	csr, err := dao.NewCertificateRequest(h.key, certificate.KeyUsage_KEY_USAGE_SIGN, dao.WithSubject(h.label))
 	if err != nil {
 		return nil, err
 	}
@@ -161,7 +162,7 @@ func (h *Host) Cert() (*pb.Certificate, error) {
 	if err != nil {
 		return nil, err
 	}
-	cert.ParentOneof = &pb.Certificate_Parent{Parent: profileCert}
+	cert.ParentOneof = &certificate.Certificate_Parent{Parent: profileCert}
 
 	return cert, nil
 }

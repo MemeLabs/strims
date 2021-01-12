@@ -3,16 +3,16 @@ package video
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterVideoIngressService ...
-func RegisterVideoIngressService(host api.ServiceRegistry, service VideoIngressService) {
-	host.RegisterMethod(".strims.video.v1.VideoIngress.IsSupported", service.IsSupported)
-	host.RegisterMethod(".strims.video.v1.VideoIngress.GetConfig", service.GetConfig)
-	host.RegisterMethod(".strims.video.v1.VideoIngress.SetConfig", service.SetConfig)
-	host.RegisterMethod(".strims.video.v1.VideoIngress.ListStreams", service.ListStreams)
-	host.RegisterMethod(".strims.video.v1.VideoIngress.GetChannelURL", service.GetChannelURL)
+func RegisterVideoIngressService(host rpc.ServiceRegistry, service VideoIngressService) {
+	host.RegisterMethod("strims.video.v1.VideoIngress.IsSupported", service.IsSupported)
+	host.RegisterMethod("strims.video.v1.VideoIngress.GetConfig", service.GetConfig)
+	host.RegisterMethod("strims.video.v1.VideoIngress.SetConfig", service.SetConfig)
+	host.RegisterMethod("strims.video.v1.VideoIngress.ListStreams", service.ListStreams)
+	host.RegisterMethod("strims.video.v1.VideoIngress.GetChannelURL", service.GetChannelURL)
 }
 
 // VideoIngressService ...
@@ -41,11 +41,11 @@ type VideoIngressService interface {
 
 // VideoIngressClient ...
 type VideoIngressClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewVideoIngressClient ...
-func NewVideoIngressClient(client api.Caller) *VideoIngressClient {
+func NewVideoIngressClient(client rpc.Caller) *VideoIngressClient {
 	return &VideoIngressClient{client}
 }
 
@@ -55,7 +55,7 @@ func (c *VideoIngressClient) IsSupported(
 	req *VideoIngressIsSupportedRequest,
 	res *VideoIngressIsSupportedResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.video.v1.VideoIngress.IsSupported", req, res)
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoIngress.IsSupported", req, res)
 }
 
 // GetConfig ...
@@ -64,7 +64,7 @@ func (c *VideoIngressClient) GetConfig(
 	req *VideoIngressGetConfigRequest,
 	res *VideoIngressGetConfigResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.video.v1.VideoIngress.GetConfig", req, res)
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoIngress.GetConfig", req, res)
 }
 
 // SetConfig ...
@@ -73,7 +73,7 @@ func (c *VideoIngressClient) SetConfig(
 	req *VideoIngressSetConfigRequest,
 	res *VideoIngressSetConfigResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.video.v1.VideoIngress.SetConfig", req, res)
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoIngress.SetConfig", req, res)
 }
 
 // ListStreams ...
@@ -82,7 +82,7 @@ func (c *VideoIngressClient) ListStreams(
 	req *VideoIngressListStreamsRequest,
 	res *VideoIngressListStreamsResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.video.v1.VideoIngress.ListStreams", req, res)
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoIngress.ListStreams", req, res)
 }
 
 // GetChannelURL ...
@@ -91,14 +91,14 @@ func (c *VideoIngressClient) GetChannelURL(
 	req *VideoIngressGetChannelURLRequest,
 	res *VideoIngressGetChannelURLResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.video.v1.VideoIngress.GetChannelURL", req, res)
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoIngress.GetChannelURL", req, res)
 }
 
 // RegisterVideoIngressShareService ...
-func RegisterVideoIngressShareService(host api.ServiceRegistry, service VideoIngressShareService) {
-	host.RegisterMethod(".strims.video.v1.VideoIngressShare.CreateChannel", service.CreateChannel)
-	host.RegisterMethod(".strims.video.v1.VideoIngressShare.UpdateChannel", service.UpdateChannel)
-	host.RegisterMethod(".strims.video.v1.VideoIngressShare.DeleteChannel", service.DeleteChannel)
+func RegisterVideoIngressShareService(host rpc.ServiceRegistry, service VideoIngressShareService) {
+	host.RegisterMethod("strims.video.v1.VideoIngressShare.CreateChannel", service.CreateChannel)
+	host.RegisterMethod("strims.video.v1.VideoIngressShare.UpdateChannel", service.UpdateChannel)
+	host.RegisterMethod("strims.video.v1.VideoIngressShare.DeleteChannel", service.DeleteChannel)
 }
 
 // VideoIngressShareService ...
@@ -119,11 +119,11 @@ type VideoIngressShareService interface {
 
 // VideoIngressShareClient ...
 type VideoIngressShareClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewVideoIngressShareClient ...
-func NewVideoIngressShareClient(client api.Caller) *VideoIngressShareClient {
+func NewVideoIngressShareClient(client rpc.Caller) *VideoIngressShareClient {
 	return &VideoIngressShareClient{client}
 }
 
@@ -133,7 +133,7 @@ func (c *VideoIngressShareClient) CreateChannel(
 	req *VideoIngressShareCreateChannelRequest,
 	res *VideoIngressShareCreateChannelResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.video.v1.VideoIngressShare.CreateChannel", req, res)
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoIngressShare.CreateChannel", req, res)
 }
 
 // UpdateChannel ...
@@ -142,7 +142,7 @@ func (c *VideoIngressShareClient) UpdateChannel(
 	req *VideoIngressShareUpdateChannelRequest,
 	res *VideoIngressShareUpdateChannelResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.video.v1.VideoIngressShare.UpdateChannel", req, res)
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoIngressShare.UpdateChannel", req, res)
 }
 
 // DeleteChannel ...
@@ -151,5 +151,5 @@ func (c *VideoIngressShareClient) DeleteChannel(
 	req *VideoIngressShareDeleteChannelRequest,
 	res *VideoIngressShareDeleteChannelResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.video.v1.VideoIngressShare.DeleteChannel", req, res)
+	return c.client.CallUnary(ctx, "strims.video.v1.VideoIngressShare.DeleteChannel", req, res)
 }

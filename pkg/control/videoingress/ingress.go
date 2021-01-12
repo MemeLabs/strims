@@ -11,7 +11,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/directory"
@@ -19,7 +22,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
@@ -53,7 +55,7 @@ type ingressService struct {
 	streams map[uint64]*ingressStream
 }
 
-func (s *ingressService) UpdateChannel(channel *pb.VideoChannel) {
+func (s *ingressService) UpdateChannel(channel *videov1.VideoChannel) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -176,7 +178,7 @@ type ingressStream struct {
 	closeOnce sync.Once
 
 	startTime time.Time
-	channel   *pb.VideoChannel
+	channel   *videov1.VideoChannel
 	conn      io.Closer
 
 	swarm      *ppspp.Swarm
@@ -194,7 +196,7 @@ func (s *ingressStream) Close() {
 	})
 }
 
-func (s *ingressStream) openWriter(key *pb.Key) (*ppspp.Swarm, ioutil.WriteFlusher, error) {
+func (s *ingressStream) openWriter(key *key.Key) (*ppspp.Swarm, ioutil.WriteFlusher, error) {
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
 		SwarmOptions: ppspp.SwarmOptions{
 			ChunkSize:          1024,
@@ -220,33 +222,33 @@ func (s *ingressStream) openWriter(key *pb.Key) (*ppspp.Swarm, ioutil.WriteFlush
 	return w.Swarm(), cw, nil
 }
 
-func (s *ingressStream) channelNetworkKey(channel *pb.VideoChannel) []byte {
+func (s *ingressStream) channelNetworkKey(channel *videov1.VideoChannel) []byte {
 	switch o := channel.Owner.(type) {
-	case *pb.VideoChannel_Local_:
+	case *videov1.VideoChannel_Local_:
 		return o.Local.NetworkKey
-	case *pb.VideoChannel_LocalShare_:
+	case *videov1.VideoChannel_LocalShare_:
 		return dao.GetRootCert(o.LocalShare.Certificate).Key
 	default:
 		panic("unsupported channel")
 	}
 }
 
-func (s *ingressStream) channelCreatorCert(channel *pb.VideoChannel) (*pb.Certificate, error) {
+func (s *ingressStream) channelCreatorCert(channel *videov1.VideoChannel) (*certificate.Certificate, error) {
 	switch o := channel.Owner.(type) {
-	case *pb.VideoChannel_Local_:
+	case *videov1.VideoChannel_Local_:
 		cert, ok := s.network.Certificate(o.Local.NetworkKey)
 		if !ok {
 			return nil, errors.New("network certificate not found")
 		}
 		return cert, nil
-	case *pb.VideoChannel_LocalShare_:
+	case *videov1.VideoChannel_LocalShare_:
 		return o.LocalShare.Certificate, nil
 	default:
 		return nil, errors.New("unsupported channel")
 	}
 }
 
-func (s *ingressStream) publishDirectoryListing(channel *pb.VideoChannel) error {
+func (s *ingressStream) publishDirectoryListing(channel *videov1.VideoChannel) error {
 	networkKey := s.channelNetworkKey(channel)
 	creator, err := s.channelCreatorCert(channel)
 	if err != nil {
@@ -258,12 +260,12 @@ func (s *ingressStream) publishDirectoryListing(channel *pb.VideoChannel) error 
 		return err
 	}
 
-	listing := &pb.DirectoryListing{
+	listing := &networkv1.DirectoryListing{
 		Creator:   creator,
 		Timestamp: time.Now().Unix(),
 		Snippet:   channel.DirectoryListingSnippet,
-		Content: &pb.DirectoryListing_Media{
-			Media: &pb.DirectoryListingMedia{
+		Content: &networkv1.DirectoryListing_Media{
+			Media: &networkv1.DirectoryListingMedia{
 				StartedAt: s.startTime.Unix(),
 				MimeType:  rtmpingress.TranscoderMimeType,
 				SwarmUri:  s.swarm.URI().String(),
@@ -275,10 +277,10 @@ func (s *ingressStream) publishDirectoryListing(channel *pb.VideoChannel) error 
 	}
 
 	// TODO: move this to directory controller using reference counted clients to ping
-	return api.NewDirectoryClient(client).Publish(
+	return networkv1.NewDirectoryClient(client).Publish(
 		context.Background(),
-		&pb.DirectoryPublishRequest{Listing: listing},
-		&pb.DirectoryPublishResponse{},
+		&networkv1.DirectoryPublishRequest{Listing: listing},
+		&networkv1.DirectoryPublishResponse{},
 	)
 }
 
@@ -289,9 +291,9 @@ func (s *ingressStream) unpublishDirectoryListing() error {
 		return err
 	}
 
-	return api.NewDirectoryClient(client).Unpublish(
+	return networkv1.NewDirectoryClient(client).Unpublish(
 		context.Background(),
-		&pb.DirectoryUnpublishRequest{Key: s.channel.Key.Public},
-		&pb.DirectoryUnpublishResponse{},
+		&networkv1.DirectoryUnpublishRequest{Key: s.channel.Key.Public},
+		&networkv1.DirectoryUnpublishResponse{},
 	)
 }

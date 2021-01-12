@@ -1,7 +1,7 @@
 import * as React from "react";
 import { useTitle } from "react-use";
 
-import { FundingClient } from "../../lib/api";
+import { FundingClient } from "../../apis/client";
 import Provider from "./Provider";
 import Router from "./Router";
 

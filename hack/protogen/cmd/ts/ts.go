@@ -67,8 +67,8 @@ func (g *generator) generateFile(f pgs.File) {
 func (g *generator) generateImports(f pgs.File) {
 	root := strings.Repeat("../", strings.Count(f.File().FullyQualifiedName(), "."))
 
-	g.Linef(`import Reader from "%s../pb/reader";`, root)
-	g.Linef(`import Writer from "%s../pb/writer";`, root)
+	g.Linef(`import Reader from "%s../lib/pb/reader";`, root)
+	g.Linef(`import Writer from "%s../lib/pb/writer";`, root)
 	g.LineBreak()
 
 	imports := map[string]map[string]pgs.Entity{}
@@ -225,7 +225,7 @@ func (g *generator) generateMessage(m pgs.Message) {
 
 	// encoder
 	g.Linef(`static encode(m: %s, w?: Writer): Writer {`, className)
-	g.Line(`if (!w) w = new Writer(1024);`)
+	g.Line(`if (!w) w = new Writer();`)
 	for _, f := range m.NonOneOfFields() {
 		name := g.fieldName(f)
 		fi := g.fieldInfo(f)

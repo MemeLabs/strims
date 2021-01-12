@@ -3,13 +3,13 @@ package debug
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterDebugService ...
-func RegisterDebugService(host api.ServiceRegistry, service DebugService) {
-	host.RegisterMethod(".strims.debug.v1.Debug.PProf", service.PProf)
-	host.RegisterMethod(".strims.debug.v1.Debug.ReadMetrics", service.ReadMetrics)
+func RegisterDebugService(host rpc.ServiceRegistry, service DebugService) {
+	host.RegisterMethod("strims.debug.v1.Debug.PProf", service.PProf)
+	host.RegisterMethod("strims.debug.v1.Debug.ReadMetrics", service.ReadMetrics)
 }
 
 // DebugService ...
@@ -26,11 +26,11 @@ type DebugService interface {
 
 // DebugClient ...
 type DebugClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewDebugClient ...
-func NewDebugClient(client api.Caller) *DebugClient {
+func NewDebugClient(client rpc.Caller) *DebugClient {
 	return &DebugClient{client}
 }
 
@@ -40,7 +40,7 @@ func (c *DebugClient) PProf(
 	req *PProfRequest,
 	res *PProfResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.debug.v1.Debug.PProf", req, res)
+	return c.client.CallUnary(ctx, "strims.debug.v1.Debug.PProf", req, res)
 }
 
 // ReadMetrics ...
@@ -49,5 +49,5 @@ func (c *DebugClient) ReadMetrics(
 	req *ReadMetricsRequest,
 	res *ReadMetricsResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.debug.v1.Debug.ReadMetrics", req, res)
+	return c.client.CallUnary(ctx, "strims.debug.v1.Debug.ReadMetrics", req, res)
 }

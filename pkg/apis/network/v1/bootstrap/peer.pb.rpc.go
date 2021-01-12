@@ -3,14 +3,14 @@ package bootstrap
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterPeerServiceService ...
-func RegisterPeerServiceService(host api.ServiceRegistry, service PeerServiceService) {
-	host.RegisterMethod(".strims.network.v1.bootstrap.PeerService.GetPublishEnabled", service.GetPublishEnabled)
-	host.RegisterMethod(".strims.network.v1.bootstrap.PeerService.ListNetworks", service.ListNetworks)
-	host.RegisterMethod(".strims.network.v1.bootstrap.PeerService.Publish", service.Publish)
+func RegisterPeerServiceService(host rpc.ServiceRegistry, service PeerServiceService) {
+	host.RegisterMethod("strims.network.v1.bootstrap.PeerService.GetPublishEnabled", service.GetPublishEnabled)
+	host.RegisterMethod("strims.network.v1.bootstrap.PeerService.ListNetworks", service.ListNetworks)
+	host.RegisterMethod("strims.network.v1.bootstrap.PeerService.Publish", service.Publish)
 }
 
 // PeerServiceService ...
@@ -31,11 +31,11 @@ type PeerServiceService interface {
 
 // PeerServiceClient ...
 type PeerServiceClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewPeerServiceClient ...
-func NewPeerServiceClient(client api.Caller) *PeerServiceClient {
+func NewPeerServiceClient(client rpc.Caller) *PeerServiceClient {
 	return &PeerServiceClient{client}
 }
 
@@ -45,7 +45,7 @@ func (c *PeerServiceClient) GetPublishEnabled(
 	req *BootstrapPeerGetPublishEnabledRequest,
 	res *BootstrapPeerGetPublishEnabledResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.bootstrap.PeerService.GetPublishEnabled", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.bootstrap.PeerService.GetPublishEnabled", req, res)
 }
 
 // ListNetworks ...
@@ -54,7 +54,7 @@ func (c *PeerServiceClient) ListNetworks(
 	req *BootstrapPeerListNetworksRequest,
 	res *BootstrapPeerListNetworksResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.bootstrap.PeerService.ListNetworks", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.bootstrap.PeerService.ListNetworks", req, res)
 }
 
 // Publish ...
@@ -63,5 +63,5 @@ func (c *PeerServiceClient) Publish(
 	req *BootstrapPeerPublishRequest,
 	res *BootstrapPeerPublishResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.bootstrap.PeerService.Publish", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.bootstrap.PeerService.Publish", req, res)
 }

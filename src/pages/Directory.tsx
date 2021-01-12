@@ -4,27 +4,27 @@ import { Base64 } from "js-base64";
 import * as React from "react";
 import { Link, useParams } from "react-router-dom";
 
+import { DirectoryEvent, DirectoryListing } from "../apis/strims/network/v1/directory";
 import { MainLayout } from "../components/MainLayout";
 import { useClient, useLazyCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
-import { DirectoryEvent, IDirectoryListing } from "../lib/pb";
 
 interface Listing {
   key: string;
-  listing: IDirectoryListing;
+  listing: DirectoryListing;
 }
 
-const directoryReducer = (listings: Listing[], action: DirectoryEvent): Listing[] => {
-  switch (action.body) {
-    case "publish": {
+const directoryReducer = (listings: Listing[], { body: action }: DirectoryEvent): Listing[] => {
+  switch (action.case) {
+    case DirectoryEvent.BodyCase.PUBLISH: {
       const listing: Listing = {
         key: Base64.fromUint8Array(action.publish.listing.key),
         listing: action.publish.listing,
       };
       return [listing, ...listings.filter((l) => l.key !== listing.key)];
     }
-    case "unpublish": {
+    case DirectoryEvent.BodyCase.UNPUBLISH: {
       const key = Base64.fromUint8Array(action.unpublish.key);
       return listings.filter((l) => l.key !== key);
     }
@@ -70,9 +70,9 @@ const Directory = () => {
             {listings.map(({ key, listing }) => (
               <div key={key}>
                 <Link to={`/player/${params.networkKey}/${key}`}>
-                  <span>{listing.title}</span>
+                  <span>{listing.snippet.title}</span>
                 </Link>
-                <span>{listing.tags}</span>
+                <span>{listing.snippet.tags}</span>
               </div>
             ))}
           </div>

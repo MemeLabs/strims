@@ -7,13 +7,15 @@ import (
 	"sync"
 	"time"
 
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
@@ -42,7 +44,7 @@ var swarmOptions = ppspp.SwarmOptions{
 	},
 }
 
-func newDirectoryService(logger *zap.Logger, key *pb.Key, transfer *transfer.Control) (*directoryService, error) {
+func newDirectoryService(logger *zap.Logger, key *key.Key, transfer *transfer.Control) (*directoryService, error) {
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
 		SwarmOptions: swarmOptions,
 		Key:          key,
@@ -80,7 +82,7 @@ type directoryService struct {
 	listings          lru
 	sessions          lru
 	users             lru
-	certificate       *pb.Certificate
+	certificate       *certificate.Certificate
 	*eventReader
 }
 
@@ -117,28 +119,28 @@ func (d *directoryService) broadcast(now time.Time) error {
 		log.Println("recently added listing")
 		l := it.Value().(*listing)
 
-		var event *pb.DirectoryEvent
+		var event *networkv1.DirectoryEvent
 		if l.publishers.Len() == 0 && l.viewers.Len() == 0 {
 			d.listings.Delete(l)
-			event = &pb.DirectoryEvent{
-				Body: &pb.DirectoryEvent_Unpublish_{
-					Unpublish: &pb.DirectoryEvent_Unpublish{
+			event = &networkv1.DirectoryEvent{
+				Body: &networkv1.DirectoryEvent_Unpublish_{
+					Unpublish: &networkv1.DirectoryEvent_Unpublish{
 						Key: l.listing.Key,
 					},
 				},
 			}
 		} else if l.modifiedTime.After(d.lastBroadcastTime) {
-			event = &pb.DirectoryEvent{
-				Body: &pb.DirectoryEvent_Publish_{
-					Publish: &pb.DirectoryEvent_Publish{
+			event = &networkv1.DirectoryEvent{
+				Body: &networkv1.DirectoryEvent_Publish_{
+					Publish: &networkv1.DirectoryEvent_Publish{
 						Listing: l.listing,
 					},
 				},
 			}
 		} else {
-			event = &pb.DirectoryEvent{
-				Body: &pb.DirectoryEvent_ViewerCountChange_{
-					ViewerCountChange: &pb.DirectoryEvent_ViewerCountChange{
+			event = &networkv1.DirectoryEvent{
+				Body: &networkv1.DirectoryEvent_ViewerCountChange_{
+					ViewerCountChange: &networkv1.DirectoryEvent_ViewerCountChange{
 						Key:   l.listing.Key,
 						Count: uint32(l.viewers.Len()),
 					},
@@ -163,9 +165,9 @@ func (d *directoryService) broadcast(now time.Time) error {
 			return true
 		})
 
-		event := &pb.DirectoryEvent{
-			Body: &pb.DirectoryEvent_ViewerStateChange_{
-				ViewerStateChange: &pb.DirectoryEvent_ViewerStateChange{
+		event := &networkv1.DirectoryEvent{
+			Body: &networkv1.DirectoryEvent_ViewerStateChange_{
+				ViewerStateChange: &networkv1.DirectoryEvent_ViewerStateChange{
 					Subject:     u.certificate.Subject,
 					Online:      true,
 					ViewingKeys: keys,
@@ -188,9 +190,9 @@ func (d *directoryService) broadcast(now time.Time) error {
 
 		d.users.Delete(u)
 
-		event := &pb.DirectoryEvent{
-			Body: &pb.DirectoryEvent_ViewerStateChange_{
-				ViewerStateChange: &pb.DirectoryEvent_ViewerStateChange{
+		event := &networkv1.DirectoryEvent{
+			Body: &networkv1.DirectoryEvent_ViewerStateChange_{
+				ViewerStateChange: &networkv1.DirectoryEvent_ViewerStateChange{
 					Subject: u.certificate.Subject,
 					Online:  false,
 				},
@@ -202,9 +204,9 @@ func (d *directoryService) broadcast(now time.Time) error {
 	}
 
 	for l, ok := d.listings.Pop(eol).(*listing); ok; l, ok = d.listings.Pop(eol).(*listing) {
-		event := &pb.DirectoryEvent{
-			Body: &pb.DirectoryEvent_Unpublish_{
-				Unpublish: &pb.DirectoryEvent_Unpublish{
+		event := &networkv1.DirectoryEvent{
+			Body: &networkv1.DirectoryEvent_Unpublish_{
+				Unpublish: &networkv1.DirectoryEvent_Unpublish{
 					Key: l.listing.Key,
 				},
 			},
@@ -214,9 +216,9 @@ func (d *directoryService) broadcast(now time.Time) error {
 		}
 	}
 
-	event := &pb.DirectoryEvent{
-		Body: &pb.DirectoryEvent_Ping_{
-			Ping: &pb.DirectoryEvent_Ping{
+	event := &networkv1.DirectoryEvent{
+		Body: &networkv1.DirectoryEvent_Ping_{
+			Ping: &networkv1.DirectoryEvent_Ping{
 				Time: now.Unix(),
 			},
 		},
@@ -229,7 +231,7 @@ func (d *directoryService) broadcast(now time.Time) error {
 	return nil
 }
 
-func (d *directoryService) Publish(ctx context.Context, req *pb.DirectoryPublishRequest) (*pb.DirectoryPublishResponse, error) {
+func (d *directoryService) Publish(ctx context.Context, req *networkv1.DirectoryPublishRequest) (*networkv1.DirectoryPublishResponse, error) {
 	if err := dao.VerifyMessage(req.Listing); err != nil {
 		return nil, err
 	}
@@ -241,8 +243,8 @@ func (d *directoryService) Publish(ctx context.Context, req *pb.DirectoryPublish
 		listing:      req.Listing,
 		modifiedTime: iotime.Load(),
 	}).(*listing)
-	s := d.sessions.GetOrInsert(&session{certificate: rpc.VPNCertificate(ctx)}).(*session)
-	u := d.users.GetOrInsert(&user{certificate: rpc.VPNCertificate(ctx).GetParent()}).(*user)
+	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
+	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()}).(*user)
 
 	if req.Listing.Timestamp > l.listing.Timestamp {
 		l.listing = req.Listing
@@ -253,10 +255,10 @@ func (d *directoryService) Publish(ctx context.Context, req *pb.DirectoryPublish
 	s.publishedListings.InsertNoReplace(l)
 	u.sessions.InsertNoReplace(s)
 
-	return &pb.DirectoryPublishResponse{}, nil
+	return &networkv1.DirectoryPublishResponse{}, nil
 }
 
-func (d *directoryService) Unpublish(ctx context.Context, req *pb.DirectoryUnpublishRequest) (*pb.DirectoryUnpublishResponse, error) {
+func (d *directoryService) Unpublish(ctx context.Context, req *networkv1.DirectoryUnpublishRequest) (*networkv1.DirectoryUnpublishResponse, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -264,7 +266,7 @@ func (d *directoryService) Unpublish(ctx context.Context, req *pb.DirectoryUnpub
 	if !ok {
 		return nil, ErrListingNotFound
 	}
-	s, ok := d.sessions.Get(&session{certificate: rpc.VPNCertificate(ctx)}).(*session)
+	s, ok := d.sessions.Get(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
 	if !ok {
 		return nil, ErrSessionNotFound
 	}
@@ -274,10 +276,10 @@ func (d *directoryService) Unpublish(ctx context.Context, req *pb.DirectoryUnpub
 	}
 	s.publishedListings.Delete(l)
 
-	return &pb.DirectoryUnpublishResponse{}, nil
+	return &networkv1.DirectoryUnpublishResponse{}, nil
 }
 
-func (d *directoryService) Join(ctx context.Context, req *pb.DirectoryJoinRequest) (*pb.DirectoryJoinResponse, error) {
+func (d *directoryService) Join(ctx context.Context, req *networkv1.DirectoryJoinRequest) (*networkv1.DirectoryJoinResponse, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -285,17 +287,17 @@ func (d *directoryService) Join(ctx context.Context, req *pb.DirectoryJoinReques
 	if !ok {
 		return nil, ErrListingNotFound
 	}
-	s := d.sessions.GetOrInsert(&session{certificate: rpc.VPNCertificate(ctx)}).(*session)
-	u := d.users.GetOrInsert(&user{certificate: rpc.VPNCertificate(ctx).GetParent()}).(*user)
+	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
+	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()}).(*user)
 
 	l.viewers.InsertNoReplace(s)
 	s.viewedListings.InsertNoReplace(l)
 	u.sessions.InsertNoReplace(s)
 
-	return &pb.DirectoryJoinResponse{}, nil
+	return &networkv1.DirectoryJoinResponse{}, nil
 }
 
-func (d *directoryService) Part(ctx context.Context, req *pb.DirectoryPartRequest) (*pb.DirectoryPartResponse, error) {
+func (d *directoryService) Part(ctx context.Context, req *networkv1.DirectoryPartRequest) (*networkv1.DirectoryPartResponse, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -303,25 +305,25 @@ func (d *directoryService) Part(ctx context.Context, req *pb.DirectoryPartReques
 	if !ok {
 		return nil, ErrListingNotFound
 	}
-	s, ok := d.sessions.Get(&session{certificate: rpc.VPNCertificate(ctx)}).(*session)
+	s, ok := d.sessions.Get(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
 	if !ok {
 		return nil, ErrSessionNotFound
 	}
-	d.users.Touch(&user{certificate: rpc.VPNCertificate(ctx).GetParent()})
+	d.users.Touch(&user{certificate: dialer.VPNCertificate(ctx).GetParent()})
 
 	if l.viewers.Delete(s) == nil {
 		return nil, errors.New("not viewing this listing")
 	}
 	s.viewedListings.Delete(l)
 
-	return &pb.DirectoryPartResponse{}, nil
+	return &networkv1.DirectoryPartResponse{}, nil
 }
 
-func (d *directoryService) Ping(ctx context.Context, req *pb.DirectoryPingRequest) (*pb.DirectoryPingResponse, error) {
+func (d *directoryService) Ping(ctx context.Context, req *networkv1.DirectoryPingRequest) (*networkv1.DirectoryPingResponse, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	s, ok := d.sessions.Get(&session{certificate: rpc.VPNCertificate(ctx)}).(*session)
+	s, ok := d.sessions.Get(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
 	if ok {
 		return nil, ErrSessionNotFound
 	}
@@ -335,11 +337,11 @@ func (d *directoryService) Ping(ctx context.Context, req *pb.DirectoryPingReques
 		return true
 	})
 
-	return &pb.DirectoryPingResponse{}, nil
+	return &networkv1.DirectoryPingResponse{}, nil
 }
 
 type listing struct {
-	listing      *pb.DirectoryListing
+	listing      *networkv1.DirectoryListing
 	modifiedTime time.Time
 	publishers   llrb.LLRB
 	viewers      llrb.LLRB
@@ -354,7 +356,7 @@ func (l *listing) Less(o llrb.Item) bool {
 }
 
 type session struct {
-	certificate       *pb.Certificate
+	certificate       *certificate.Certificate
 	publishedListings llrb.LLRB
 	viewedListings    llrb.LLRB
 }
@@ -368,7 +370,7 @@ func (u *session) Less(o llrb.Item) bool {
 }
 
 type user struct {
-	certificate *pb.Certificate
+	certificate *certificate.Certificate
 	sessions    llrb.LLRB
 }
 

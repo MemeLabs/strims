@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -16,7 +15,7 @@ import (
 
 func init() {
 	RegisterService(func(server *rpc.Server, params *ServiceParams) {
-		api.RegisterBootstrapService(server, &bootstrapService{
+		bootstrap.RegisterBootstrapFrontendService(server, &bootstrapService{
 			logger: params.Logger,
 			store:  params.Store,
 			vpn:    params.VPN,
@@ -34,11 +33,11 @@ type bootstrapService struct {
 }
 
 // CreateClient ...
-func (s *bootstrapService) CreateClient(ctx context.Context, r *pb.CreateBootstrapClientRequest) (*pb.CreateBootstrapClientResponse, error) {
-	var client *pb.BootstrapClient
+func (s *bootstrapService) CreateClient(ctx context.Context, r *bootstrap.CreateBootstrapClientRequest) (*bootstrap.CreateBootstrapClientResponse, error) {
+	var client *bootstrap.BootstrapClient
 	var err error
 	switch v := r.GetClientOptions().(type) {
-	case *pb.CreateBootstrapClientRequest_WebsocketOptions:
+	case *bootstrap.CreateBootstrapClientRequest_WebsocketOptions:
 		client, err = dao.NewWebSocketBootstrapClient(s.store, v.WebsocketOptions.Url, v.WebsocketOptions.InsecureSkipVerifyTls)
 	}
 	if err != nil {
@@ -49,58 +48,58 @@ func (s *bootstrapService) CreateClient(ctx context.Context, r *pb.CreateBootstr
 		return nil, err
 	}
 
-	return &pb.CreateBootstrapClientResponse{BootstrapClient: client}, nil
+	return &bootstrap.CreateBootstrapClientResponse{BootstrapClient: client}, nil
 }
 
 // UpdateClient ...
-func (s *bootstrapService) UpdateClient(ctx context.Context, r *pb.UpdateBootstrapClientRequest) (*pb.UpdateBootstrapClientResponse, error) {
+func (s *bootstrapService) UpdateClient(ctx context.Context, r *bootstrap.UpdateBootstrapClientRequest) (*bootstrap.UpdateBootstrapClientResponse, error) {
 
-	return &pb.UpdateBootstrapClientResponse{BootstrapClient: nil}, nil
+	return &bootstrap.UpdateBootstrapClientResponse{BootstrapClient: nil}, nil
 }
 
 // DeleteClient ...
-func (s *bootstrapService) DeleteClient(ctx context.Context, r *pb.DeleteBootstrapClientRequest) (*pb.DeleteBootstrapClientResponse, error) {
+func (s *bootstrapService) DeleteClient(ctx context.Context, r *bootstrap.DeleteBootstrapClientRequest) (*bootstrap.DeleteBootstrapClientResponse, error) {
 	if err := dao.DeleteBootstrapClient(s.store, r.Id); err != nil {
 		return nil, err
 	}
 
-	return &pb.DeleteBootstrapClientResponse{}, nil
+	return &bootstrap.DeleteBootstrapClientResponse{}, nil
 }
 
 // GetClient ...
-func (s *bootstrapService) GetClient(ctx context.Context, r *pb.GetBootstrapClientRequest) (*pb.GetBootstrapClientResponse, error) {
-	return &pb.GetBootstrapClientResponse{BootstrapClient: nil}, nil
+func (s *bootstrapService) GetClient(ctx context.Context, r *bootstrap.GetBootstrapClientRequest) (*bootstrap.GetBootstrapClientResponse, error) {
+	return &bootstrap.GetBootstrapClientResponse{BootstrapClient: nil}, nil
 }
 
 // ListClients ...
-func (s *bootstrapService) ListClients(ctx context.Context, r *pb.ListBootstrapClientsRequest) (*pb.ListBootstrapClientsResponse, error) {
+func (s *bootstrapService) ListClients(ctx context.Context, r *bootstrap.ListBootstrapClientsRequest) (*bootstrap.ListBootstrapClientsResponse, error) {
 	clients, err := dao.GetBootstrapClients(s.store)
 	if err != nil {
 		return nil, err
 	}
 
-	return &pb.ListBootstrapClientsResponse{BootstrapClients: clients}, nil
+	return &bootstrap.ListBootstrapClientsResponse{BootstrapClients: clients}, nil
 }
 
 // ListPeers ...
-func (s *bootstrapService) ListPeers(ctx context.Context, r *pb.ListBootstrapPeersRequest) (*pb.ListBootstrapPeersResponse, error) {
-	peers := []*pb.BootstrapPeer{}
+func (s *bootstrapService) ListPeers(ctx context.Context, r *bootstrap.ListBootstrapPeersRequest) (*bootstrap.ListBootstrapPeersResponse, error) {
+	peers := []*bootstrap.BootstrapPeer{}
 	for _, p := range s.app.Peer().List() {
 		cert := p.VNIC().Certificate
-		peers = append(peers, &pb.BootstrapPeer{
+		peers = append(peers, &bootstrap.BootstrapPeer{
 			PeerId: p.ID(),
 			Label:  fmt.Sprintf("%s (%x)", cert.Subject, cert.Key),
 		})
 	}
 
-	return &pb.ListBootstrapPeersResponse{Peers: peers}, nil
+	return &bootstrap.ListBootstrapPeersResponse{Peers: peers}, nil
 }
 
 // PublishNetworkToPeer ...
-func (s *bootstrapService) PublishNetworkToPeer(ctx context.Context, r *pb.PublishNetworkToBootstrapPeerRequest) (*pb.PublishNetworkToBootstrapPeerResponse, error) {
+func (s *bootstrapService) PublishNetworkToPeer(ctx context.Context, r *bootstrap.PublishNetworkToBootstrapPeerRequest) (*bootstrap.PublishNetworkToBootstrapPeerResponse, error) {
 	if err := s.app.Bootstrap().Publish(ctx, r.PeerId, r.Network, time.Hour*24*365*2); err != nil {
 		return nil, err
 	}
 
-	return &pb.PublishNetworkToBootstrapPeerResponse{}, nil
+	return &bootstrap.PublishNetworkToBootstrapPeerResponse{}, nil
 }

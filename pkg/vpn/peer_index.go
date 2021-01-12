@@ -12,10 +12,10 @@ import (
 	"time"
 	"unsafe"
 
+	vpnv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vpn/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
@@ -62,26 +62,26 @@ type peerIndex struct {
 
 // HandleMessage ...
 func (s *peerIndex) HandleMessage(msg *Message) error {
-	var m pb.PeerIndexMessage
+	var m vpnv1.PeerIndexMessage
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
 		return err
 	}
 
 	switch b := m.Body.(type) {
-	case *pb.PeerIndexMessage_Publish_:
+	case *vpnv1.PeerIndexMessage_Publish_:
 		return s.handlePublish(b.Publish.Record)
-	case *pb.PeerIndexMessage_Unpublish_:
+	case *vpnv1.PeerIndexMessage_Unpublish_:
 		return s.handleUnpublish(b.Unpublish.Record)
-	case *pb.PeerIndexMessage_SearchRequest_:
+	case *vpnv1.PeerIndexMessage_SearchRequest_:
 		return s.handleSearchRequest(b.SearchRequest, msg.SrcHostID())
-	case *pb.PeerIndexMessage_SearchResponse_:
+	case *vpnv1.PeerIndexMessage_SearchResponse_:
 		return s.handleSearchResponse(b.SearchResponse)
 	default:
 		return errors.New("unexpected message type")
 	}
 }
 
-func (s *peerIndex) handlePublish(r *pb.PeerIndexMessage_Record) error {
+func (s *peerIndex) handlePublish(r *vpnv1.PeerIndexMessage_Record) error {
 	if err := dao.VerifyMessage(r); err != nil {
 		return err
 	}
@@ -89,7 +89,7 @@ func (s *peerIndex) handlePublish(r *pb.PeerIndexMessage_Record) error {
 	return s.store.Insert(s.id, r)
 }
 
-func (s *peerIndex) handleUnpublish(r *pb.PeerIndexMessage_Record) error {
+func (s *peerIndex) handleUnpublish(r *vpnv1.PeerIndexMessage_Record) error {
 	if err := dao.VerifyMessage(r); err != nil {
 		return err
 	}
@@ -97,15 +97,15 @@ func (s *peerIndex) handleUnpublish(r *pb.PeerIndexMessage_Record) error {
 	return s.store.Remove(s.id, r)
 }
 
-func (s *peerIndex) handleSearchRequest(m *pb.PeerIndexMessage_SearchRequest, originHostID kademlia.ID) error {
+func (s *peerIndex) handleSearchRequest(m *vpnv1.PeerIndexMessage_SearchRequest, originHostID kademlia.ID) error {
 	records := s.store.Closest(s.id, originHostID, m.Hash)
 	if len(records) == 0 {
 		return nil
 	}
 
-	msg := &pb.PeerIndexMessage{
-		Body: &pb.PeerIndexMessage_SearchResponse_{
-			SearchResponse: &pb.PeerIndexMessage_SearchResponse{
+	msg := &vpnv1.PeerIndexMessage{
+		Body: &vpnv1.PeerIndexMessage_SearchResponse_{
+			SearchResponse: &vpnv1.PeerIndexMessage_SearchResponse{
 				RequestId: m.RequestId,
 				Records:   records,
 			},
@@ -114,7 +114,7 @@ func (s *peerIndex) handleSearchRequest(m *pb.PeerIndexMessage_SearchRequest, or
 	return s.network.SendProto(originHostID, vnic.PeerIndexPort, vnic.PeerIndexPort, msg)
 }
 
-func (s *peerIndex) handleSearchResponse(m *pb.PeerIndexMessage_SearchResponse) error {
+func (s *peerIndex) handleSearchResponse(m *vpnv1.PeerIndexMessage_SearchResponse) error {
 	for _, r := range m.Records {
 		if dao.VerifyMessage(r) != nil {
 			continue
@@ -150,9 +150,9 @@ func (s *peerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerI
 		return nil, err
 	}
 
-	msg := &pb.PeerIndexMessage{
-		Body: &pb.PeerIndexMessage_SearchRequest_{
-			SearchRequest: &pb.PeerIndexMessage_SearchRequest{
+	msg := &vpnv1.PeerIndexMessage{
+		Body: &vpnv1.PeerIndexMessage_SearchRequest_{
+			SearchRequest: &vpnv1.PeerIndexMessage_SearchRequest{
 				RequestId: rid,
 				Hash:      hash,
 			},
@@ -201,7 +201,7 @@ func newPeerIndexItemRecordRange(peerIndexID uint32, hash []byte, localHostID ka
 	return &peerIndexItem{key: min}, &peerIndexItem{key: max}
 }
 
-func newPeerIndexItem(peerIndexID uint32, localHostID kademlia.ID, r *pb.PeerIndexMessage_Record) (*peerIndexItem, error) {
+func newPeerIndexItem(peerIndexID uint32, localHostID kademlia.ID, r *vpnv1.PeerIndexMessage_Record) (*peerIndexItem, error) {
 	hostID, err := kademlia.UnmarshalID(r.HostId)
 	if err != nil {
 		return nil, err
@@ -224,12 +224,12 @@ func (p *peerIndexItem) HostID() kademlia.ID {
 	return p.hostID
 }
 
-func (p *peerIndexItem) SetRecord(r *pb.PeerIndexMessage_Record) {
+func (p *peerIndexItem) SetRecord(r *vpnv1.PeerIndexMessage_Record) {
 	atomic.SwapPointer(&p.record, unsafe.Pointer(r))
 }
 
-func (p *peerIndexItem) Record() *pb.PeerIndexMessage_Record {
-	return (*pb.PeerIndexMessage_Record)(atomic.LoadPointer(&p.record))
+func (p *peerIndexItem) Record() *vpnv1.PeerIndexMessage_Record {
+	return (*vpnv1.PeerIndexMessage_Record)(atomic.LoadPointer(&p.record))
 }
 
 // Less implements llrb.Item
@@ -286,7 +286,7 @@ func (p *PeerIndexStore) tick(t time.Time) {
 }
 
 // Insert ...
-func (p *PeerIndexStore) Insert(peerIndexID uint32, r *pb.PeerIndexMessage_Record) error {
+func (p *PeerIndexStore) Insert(peerIndexID uint32, r *vpnv1.PeerIndexMessage_Record) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -320,7 +320,7 @@ func (p *PeerIndexStore) Insert(peerIndexID uint32, r *pb.PeerIndexMessage_Recor
 }
 
 // Remove ...
-func (p *PeerIndexStore) Remove(peerIndexID uint32, r *pb.PeerIndexMessage_Record) error {
+func (p *PeerIndexStore) Remove(peerIndexID uint32, r *vpnv1.PeerIndexMessage_Record) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -344,7 +344,7 @@ func (p *PeerIndexStore) Remove(peerIndexID uint32, r *pb.PeerIndexMessage_Recor
 }
 
 // Closest ...
-func (p *PeerIndexStore) Closest(peerIndexID uint32, hostID kademlia.ID, hash []byte) (records []*pb.PeerIndexMessage_Record) {
+func (p *PeerIndexStore) Closest(peerIndexID uint32, hostID kademlia.ID, hash []byte) (records []*vpnv1.PeerIndexMessage_Record) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -386,7 +386,7 @@ type PeerIndexHost struct {
 	Port      uint16
 }
 
-func sendPeerIndexSearchResponse(chans *sync.Map, requestID uint64, r *pb.PeerIndexMessage_Record) bool {
+func sendPeerIndexSearchResponse(chans *sync.Map, requestID uint64, r *vpnv1.PeerIndexMessage_Record) bool {
 	ch, ok := chans.Load(requestID)
 	if !ok {
 		return false
@@ -417,7 +417,7 @@ func newPeerIndexPublisher(ctx context.Context, logger *zap.Logger, network *Net
 		return nil, err
 	}
 
-	record := &pb.PeerIndexMessage_Record{
+	record := &vpnv1.PeerIndexMessage_Record{
 		Hash:   hash,
 		HostId: network.host.ID().Bytes(nil),
 		Port:   uint32(port),
@@ -437,7 +437,7 @@ func newPeerIndexPublisher(ctx context.Context, logger *zap.Logger, network *Net
 
 type peerIndexPublisher struct {
 	logger  *zap.Logger
-	record  *pb.PeerIndexMessage_Record
+	record  *vpnv1.PeerIndexMessage_Record
 	target  kademlia.ID
 	network *Network
 	ticker  *Ticker
@@ -456,9 +456,9 @@ func (p *peerIndexPublisher) publish(t time.Time) {
 		return
 	}
 
-	msg := &pb.PeerIndexMessage{
-		Body: &pb.PeerIndexMessage_Publish_{
-			Publish: &pb.PeerIndexMessage_Publish{
+	msg := &vpnv1.PeerIndexMessage{
+		Body: &vpnv1.PeerIndexMessage_Publish_{
+			Publish: &vpnv1.PeerIndexMessage_Publish{
 				Record: p.record,
 			},
 		},
@@ -476,9 +476,9 @@ func (p *peerIndexPublisher) unpublish() {
 		return
 	}
 
-	msg := &pb.PeerIndexMessage{
-		Body: &pb.PeerIndexMessage_Unpublish_{
-			Unpublish: &pb.PeerIndexMessage_Unpublish{
+	msg := &vpnv1.PeerIndexMessage{
+		Body: &vpnv1.PeerIndexMessage_Unpublish_{
+			Unpublish: &vpnv1.PeerIndexMessage_Unpublish{
 				Record: p.record,
 			},
 		},

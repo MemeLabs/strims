@@ -3,12 +3,12 @@ package transfer
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterTransferPeerService ...
-func RegisterTransferPeerService(host api.ServiceRegistry, service TransferPeerService) {
-	host.RegisterMethod(".strims.transfer.v1.TransferPeer.AnnounceSwarm", service.AnnounceSwarm)
+func RegisterTransferPeerService(host rpc.ServiceRegistry, service TransferPeerService) {
+	host.RegisterMethod("strims.transfer.v1.TransferPeer.AnnounceSwarm", service.AnnounceSwarm)
 }
 
 // TransferPeerService ...
@@ -21,11 +21,11 @@ type TransferPeerService interface {
 
 // TransferPeerClient ...
 type TransferPeerClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewTransferPeerClient ...
-func NewTransferPeerClient(client api.Caller) *TransferPeerClient {
+func NewTransferPeerClient(client rpc.Caller) *TransferPeerClient {
 	return &TransferPeerClient{client}
 }
 
@@ -35,5 +35,5 @@ func (c *TransferPeerClient) AnnounceSwarm(
 	req *TransferPeerAnnounceSwarmRequest,
 	res *TransferPeerAnnounceSwarmResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.transfer.v1.TransferPeer.AnnounceSwarm", req, res)
+	return c.client.CallUnary(ctx, "strims.transfer.v1.TransferPeer.AnnounceSwarm", req, res)
 }

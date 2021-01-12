@@ -7,7 +7,7 @@ import (
 	"math"
 	"reflect"
 
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"google.golang.org/protobuf/proto"
 )
@@ -20,19 +20,19 @@ type SignableMessage interface {
 }
 
 // SignMessage ...
-func SignMessage(m SignableMessage, key *pb.Key) error {
+func SignMessage(m SignableMessage, k *key.Key) error {
 	mv := reflect.ValueOf(m).Elem()
-	mv.FieldByName("Key").SetBytes(key.Public)
+	mv.FieldByName("Key").SetBytes(k.Public)
 
 	b := marshalSignableMessage(m)
 	defer pool.Put(b)
 
-	switch key.Type {
-	case pb.KeyType_KEY_TYPE_ED25519:
-		if len(key.Private) != ed25519.PrivateKeySize {
+	switch k.Type {
+	case key.KeyType_KEY_TYPE_ED25519:
+		if len(k.Private) != ed25519.PrivateKeySize {
 			return ErrInvalidKeyLength
 		}
-		mv.FieldByName("Signature").SetBytes(ed25519.Sign(key.Private, *b))
+		mv.FieldByName("Signature").SetBytes(ed25519.Sign(k.Private, *b))
 	default:
 		return ErrUnsupportedKeyType
 	}

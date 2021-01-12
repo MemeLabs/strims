@@ -3,8 +3,8 @@ package peer
 import (
 	"context"
 
+	transfer "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
 )
 
 type transferService struct {
@@ -12,14 +12,14 @@ type transferService struct {
 	App  control.AppControl
 }
 
-func (s *transferService) AnnounceSwarm(ctx context.Context, req *pb.TransferPeerAnnounceSwarmRequest) (*pb.TransferPeerAnnounceSwarmResponse, error) {
+func (s *transferService) AnnounceSwarm(ctx context.Context, req *transfer.TransferPeerAnnounceSwarmRequest) (*transfer.TransferPeerAnnounceSwarmResponse, error) {
 	port, ok := s.Peer.Transfer().AssignPort(req.SwarmId, uint16(req.Port))
 	if ok {
-		return &pb.TransferPeerAnnounceSwarmResponse{
-			Body: &pb.TransferPeerAnnounceSwarmResponse_Port{
+		return &transfer.TransferPeerAnnounceSwarmResponse{
+			Body: &transfer.TransferPeerAnnounceSwarmResponse_Port{
 				Port: uint32(port),
 			},
 		}, nil
 	}
-	return &pb.TransferPeerAnnounceSwarmResponse{}, nil
+	return &transfer.TransferPeerAnnounceSwarmResponse{}, nil
 }

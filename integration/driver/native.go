@@ -11,7 +11,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/frontend"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -49,7 +49,7 @@ func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 	srv := &frontend.Server{
 		Store:  store,
 		Logger: d.logger,
-		NewVPNHost: func(key *pb.Key) (*vpn.Host, error) {
+		NewVPNHost: func(key *key.Key) (*vpn.Host, error) {
 			ws := vnic.NewWSInterface(d.logger, o.VPNServerAddr)
 			wrtc := vnic.NewWebRTCInterface(vnic.NewWebRTCDialer(d.logger, nil))
 			vnicHost, err := vnic.New(d.logger, key, vnic.WithInterface(ws), vnic.WithInterface(wrtc))

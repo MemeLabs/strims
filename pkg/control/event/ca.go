@@ -1,15 +1,18 @@
 package event
 
-import "github.com/MemeLabs/go-ppspp/pkg/pb"
+import (
+	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
+)
 
 // CARenewNetworkCertError ...
 type CARenewNetworkCertError struct {
-	Network *pb.Network
+	Network *network.Network
 	Error   error
 }
 
 // CARenewNetworkCert ...
 type CARenewNetworkCert struct {
-	Network     *pb.Network
-	Certificate *pb.Certificate
+	Network     *network.Network
+	Certificate *certificate.Certificate
 }

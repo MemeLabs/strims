@@ -1,10 +1,10 @@
 package event
 
-import "github.com/MemeLabs/go-ppspp/pkg/pb"
+import "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 
 // VideoChannelUpdate ...
 type VideoChannelUpdate struct {
-	Channel *pb.VideoChannel
+	Channel *video.VideoChannel
 }
 
 // VideoChannelRemove ...

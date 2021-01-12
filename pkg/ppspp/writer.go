@@ -2,7 +2,7 @@ package ppspp
 
 import (
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 )
@@ -10,7 +10,7 @@ import (
 // WriterOptions ...
 type WriterOptions struct {
 	SwarmOptions SwarmOptions
-	Key          *pb.Key
+	Key          *key.Key
 }
 
 // NewWriter ...

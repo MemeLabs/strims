@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	rpcv1 "github.com/MemeLabs/go-ppspp/pkg/apis/rpc/v1"
 	"github.com/golang/protobuf/proto"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -76,7 +76,7 @@ func (c *Client) Close() {
 }
 
 func (c *Client) forwardCancel(call *CallOut) error {
-	call, err := NewCallOutWithParent(context.Background(), cancelMethod, &pb.Cancel{}, call)
+	call, err := NewCallOutWithParent(context.Background(), cancelMethod, &rpcv1.Cancel{}, call)
 	if err != nil {
 		return err
 	}

@@ -62,17 +62,21 @@ func (g *generator) generateFile(f pgs.File) {
 	}
 }
 
+func (g *generator) fullName(e pgs.Entity) string {
+	return strings.TrimPrefix(e.FullyQualifiedName(), ".")
+}
+
 func (g *generator) generateImports(f pgs.File) {
 	root := strings.Repeat("../", strings.Count(f.File().FullyQualifiedName(), "."))
 
-	g.Linef(`import { RPCHost } from "%s../../rpc/host";`, root)
-	g.Linef(`import { registerType } from "%s../../pb/registry";`, root)
+	g.Linef(`import { RPCHost } from "%s../lib/rpc/host";`, root)
+	g.Linef(`import { registerType } from "%s../lib/rpc/registry";`, root)
 
 EachService:
 	for _, s := range f.Services() {
 		for _, m := range s.Methods() {
 			if m.ServerStreaming() {
-				g.Linef(`import { Readable as GenericReadable } from "%s../../rpc/stream";`, root)
+				g.Linef(`import { Readable as GenericReadable } from "%s../lib/rpc/stream";`, root)
 				break EachService
 			}
 		}
@@ -95,8 +99,8 @@ EachService:
 func (g *generator) generateTypeRegistration(f pgs.File) {
 	for _, s := range f.Services() {
 		for _, m := range s.Methods() {
-			g.Linef(`registerType("%s", %s);`, m.Input().FullyQualifiedName(), m.Input().Name())
-			g.Linef(`registerType("%s", %s);`, m.Output().FullyQualifiedName(), m.Output().Name())
+			g.Linef(`registerType("%s", %s);`, g.fullName(m.Input()), m.Input().Name())
+			g.Linef(`registerType("%s", %s);`, g.fullName(m.Output()), m.Output().Name())
 		}
 	}
 	g.LineBreak()
@@ -119,7 +123,7 @@ func (g *generator) generateService(s pgs.Service) {
 
 		g.LineBreak()
 		g.Linef(`public %s(arg: I%s = new %s()): %s {`, m.Name().LowerCamelCase(), input, input, output)
-		g.Linef(`return this.host.%s(this.host.call("%s", new %s(arg)));`, outputMethod, m.FullyQualifiedName(), input)
+		g.Linef(`return this.host.%s(this.host.call("%s", new %s(arg)));`, outputMethod, g.fullName(m), input)
 		g.Line(`}`)
 	}
 	g.Line(`}`)

@@ -3,12 +3,12 @@ package ca
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
 // RegisterCAService ...
-func RegisterCAService(host api.ServiceRegistry, service CAService) {
-	host.RegisterMethod(".strims.network.v1.ca.CA.Renew", service.Renew)
+func RegisterCAService(host rpc.ServiceRegistry, service CAService) {
+	host.RegisterMethod("strims.network.v1.ca.CA.Renew", service.Renew)
 }
 
 // CAService ...
@@ -21,11 +21,11 @@ type CAService interface {
 
 // CAClient ...
 type CAClient struct {
-	client api.Caller
+	client rpc.Caller
 }
 
 // NewCAClient ...
-func NewCAClient(client api.Caller) *CAClient {
+func NewCAClient(client rpc.Caller) *CAClient {
 	return &CAClient{client}
 }
 
@@ -35,5 +35,5 @@ func (c *CAClient) Renew(
 	req *CARenewRequest,
 	res *CARenewResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.ca.CA.Renew", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.ca.CA.Renew", req, res)
 }

@@ -4,7 +4,7 @@ import (
 	"context"
 
 	"github.com/MemeLabs/go-ppspp/pkg/control"
-	"github.com/MemeLabs/go-ppspp/pkg/pb"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 )
 
 type caService struct {
@@ -12,10 +12,10 @@ type caService struct {
 	App  control.AppControl
 }
 
-func (s *caService) Renew(ctx context.Context, req *pb.CAPeerRenewRequest) (*pb.CAPeerRenewResponse, error) {
+func (s *caService) Renew(ctx context.Context, req *ca.CAPeerRenewRequest) (*ca.CAPeerRenewResponse, error) {
 	cert, err := s.App.CA().ForwardRenewRequest(ctx, req.Certificate, req.CertificateRequest)
 	if err != nil {
 		return nil, err
 	}
-	return &pb.CAPeerRenewResponse{Certificate: cert}, nil
+	return &ca.CAPeerRenewResponse{Certificate: cert}, nil
 }

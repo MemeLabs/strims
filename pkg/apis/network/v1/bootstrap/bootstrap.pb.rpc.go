@@ -3,22 +3,22 @@ package bootstrap
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/api"
+	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 )
 
-// RegisterBootstrapService ...
-func RegisterBootstrapService(host api.ServiceRegistry, service BootstrapService) {
-	host.RegisterMethod(".strims.network.v1.bootstrap.Bootstrap.CreateClient", service.CreateClient)
-	host.RegisterMethod(".strims.network.v1.bootstrap.Bootstrap.UpdateClient", service.UpdateClient)
-	host.RegisterMethod(".strims.network.v1.bootstrap.Bootstrap.DeleteClient", service.DeleteClient)
-	host.RegisterMethod(".strims.network.v1.bootstrap.Bootstrap.GetClient", service.GetClient)
-	host.RegisterMethod(".strims.network.v1.bootstrap.Bootstrap.ListClients", service.ListClients)
-	host.RegisterMethod(".strims.network.v1.bootstrap.Bootstrap.ListPeers", service.ListPeers)
-	host.RegisterMethod(".strims.network.v1.bootstrap.Bootstrap.PublishNetworkToPeer", service.PublishNetworkToPeer)
+// RegisterBootstrapFrontendService ...
+func RegisterBootstrapFrontendService(host rpc.ServiceRegistry, service BootstrapFrontendService) {
+	host.RegisterMethod("strims.network.v1.bootstrap.BootstrapFrontend.CreateClient", service.CreateClient)
+	host.RegisterMethod("strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient", service.UpdateClient)
+	host.RegisterMethod("strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient", service.DeleteClient)
+	host.RegisterMethod("strims.network.v1.bootstrap.BootstrapFrontend.GetClient", service.GetClient)
+	host.RegisterMethod("strims.network.v1.bootstrap.BootstrapFrontend.ListClients", service.ListClients)
+	host.RegisterMethod("strims.network.v1.bootstrap.BootstrapFrontend.ListPeers", service.ListPeers)
+	host.RegisterMethod("strims.network.v1.bootstrap.BootstrapFrontend.PublishNetworkToPeer", service.PublishNetworkToPeer)
 }
 
-// BootstrapService ...
-type BootstrapService interface {
+// BootstrapFrontendService ...
+type BootstrapFrontendService interface {
 	CreateClient(
 		ctx context.Context,
 		req *CreateBootstrapClientRequest,
@@ -49,75 +49,75 @@ type BootstrapService interface {
 	) (*PublishNetworkToBootstrapPeerResponse, error)
 }
 
-// BootstrapClient ...
-type BootstrapClient struct {
-	client api.Caller
+// BootstrapFrontendClient ...
+type BootstrapFrontendClient struct {
+	client rpc.Caller
 }
 
-// NewBootstrapClient ...
-func NewBootstrapClient(client api.Caller) *BootstrapClient {
-	return &BootstrapClient{client}
+// NewBootstrapFrontendClient ...
+func NewBootstrapFrontendClient(client rpc.Caller) *BootstrapFrontendClient {
+	return &BootstrapFrontendClient{client}
 }
 
 // CreateClient ...
-func (c *BootstrapClient) CreateClient(
+func (c *BootstrapFrontendClient) CreateClient(
 	ctx context.Context,
 	req *CreateBootstrapClientRequest,
 	res *CreateBootstrapClientResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.bootstrap.Bootstrap.CreateClient", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.bootstrap.BootstrapFrontend.CreateClient", req, res)
 }
 
 // UpdateClient ...
-func (c *BootstrapClient) UpdateClient(
+func (c *BootstrapFrontendClient) UpdateClient(
 	ctx context.Context,
 	req *UpdateBootstrapClientRequest,
 	res *UpdateBootstrapClientResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.bootstrap.Bootstrap.UpdateClient", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient", req, res)
 }
 
 // DeleteClient ...
-func (c *BootstrapClient) DeleteClient(
+func (c *BootstrapFrontendClient) DeleteClient(
 	ctx context.Context,
 	req *DeleteBootstrapClientRequest,
 	res *DeleteBootstrapClientResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.bootstrap.Bootstrap.DeleteClient", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient", req, res)
 }
 
 // GetClient ...
-func (c *BootstrapClient) GetClient(
+func (c *BootstrapFrontendClient) GetClient(
 	ctx context.Context,
 	req *GetBootstrapClientRequest,
 	res *GetBootstrapClientResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.bootstrap.Bootstrap.GetClient", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.bootstrap.BootstrapFrontend.GetClient", req, res)
 }
 
 // ListClients ...
-func (c *BootstrapClient) ListClients(
+func (c *BootstrapFrontendClient) ListClients(
 	ctx context.Context,
 	req *ListBootstrapClientsRequest,
 	res *ListBootstrapClientsResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.bootstrap.Bootstrap.ListClients", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.bootstrap.BootstrapFrontend.ListClients", req, res)
 }
 
 // ListPeers ...
-func (c *BootstrapClient) ListPeers(
+func (c *BootstrapFrontendClient) ListPeers(
 	ctx context.Context,
 	req *ListBootstrapPeersRequest,
 	res *ListBootstrapPeersResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.bootstrap.Bootstrap.ListPeers", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.bootstrap.BootstrapFrontend.ListPeers", req, res)
 }
 
 // PublishNetworkToPeer ...
-func (c *BootstrapClient) PublishNetworkToPeer(
+func (c *BootstrapFrontendClient) PublishNetworkToPeer(
 	ctx context.Context,
 	req *PublishNetworkToBootstrapPeerRequest,
 	res *PublishNetworkToBootstrapPeerResponse,
 ) error {
-	return c.client.CallUnary(ctx, ".strims.network.v1.bootstrap.Bootstrap.PublishNetworkToPeer", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.bootstrap.BootstrapFrontend.PublishNetworkToPeer", req, res)
 }

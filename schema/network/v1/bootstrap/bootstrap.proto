@@ -101,7 +101,7 @@ message PublishNetworkToBootstrapPeerRequest {
 
 message PublishNetworkToBootstrapPeerResponse {}
 
-service Bootstrap {
+service BootstrapFrontend {
   rpc CreateClient(CreateBootstrapClientRequest) returns (CreateBootstrapClientResponse);
   rpc UpdateClient(UpdateBootstrapClientRequest) returns (UpdateBootstrapClientResponse);
   rpc DeleteClient(DeleteBootstrapClientRequest) returns (DeleteBootstrapClientResponse);

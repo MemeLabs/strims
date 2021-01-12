@@ -1,6 +1,6 @@
 import * as React from "react";
 
-import { FundingClient } from "../../lib/api";
+import { FundingClient } from "../../apis/client";
 
 export const ClientContext = React.createContext<FundingClient>(null);
 
