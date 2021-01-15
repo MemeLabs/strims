@@ -46,14 +46,14 @@ export class TransferPeerAnnounceSwarmRequest {
 }
 
 export interface ITransferPeerAnnounceSwarmResponse {
-  body?: TransferPeerAnnounceSwarmResponse.IBodyOneOf
+  body?: TransferPeerAnnounceSwarmResponse.IBody
 }
 
 export class TransferPeerAnnounceSwarmResponse {
-  body: TransferPeerAnnounceSwarmResponse.TBodyOneOf;
+  body: TransferPeerAnnounceSwarmResponse.TBody;
 
   constructor(v?: ITransferPeerAnnounceSwarmResponse) {
-    this.body = new TransferPeerAnnounceSwarmResponse.BodyOneOf(v?.body);
+    this.body = new TransferPeerAnnounceSwarmResponse.Body(v?.body);
   }
 
   static encode(m: TransferPeerAnnounceSwarmResponse, w?: Writer): Writer {
@@ -74,7 +74,7 @@ export class TransferPeerAnnounceSwarmResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new TransferPeerAnnounceSwarmResponse.BodyOneOf({ port: r.uint32() });
+        m.body = new TransferPeerAnnounceSwarmResponse.Body({ port: r.uint32() });
         break;
         default:
         r.skipType(tag & 7);
@@ -91,21 +91,21 @@ export namespace TransferPeerAnnounceSwarmResponse {
     PORT = 1,
   }
 
-  export type IBodyOneOf =
+  export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.PORT, port: number }
   ;
 
-  export type TBodyOneOf = Readonly<
+  export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.PORT, port: number }
   >;
 
-  class BodyOneOfImpl {
+  class BodyImpl {
     port: number;
     case: BodyCase = BodyCase.NOT_SET;
 
-    constructor(v?: IBodyOneOf) {
+    constructor(v?: IBody) {
       if (v && "port" in v) {
         this.case = BodyCase.PORT;
         this.port = v.port;
@@ -113,9 +113,9 @@ export namespace TransferPeerAnnounceSwarmResponse {
     }
   }
 
-  export const BodyOneOf = BodyOneOfImpl as {
+  export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBodyOneOf>(v: T): Readonly<
+    new <T extends IBody>(v: T): Readonly<
     T extends { port: number } ? { case: BodyCase.PORT, port: number } :
     never
     >;

@@ -49,7 +49,7 @@ func (s *Server) Listen(ctx context.Context, rw io.ReadWriter) error {
 		MaxMessageBytes: serverMaxMessageBytes,
 	})
 	c := New(s.Logger, server, s.NewVPNHost, s.Broker)
-	if err := c.initProfileService(ctx, s.Store, s.NewVPNHost); err != nil {
+	if err := c.initProfileService(ctx, s.Store); err != nil {
 		return err
 	}
 
@@ -72,13 +72,9 @@ type Instance struct {
 	server *rpc.Server
 	newVPN VPNFunc
 	broker network.Broker
-
-	profile *profilev1.Profile
-	store   *dao.ProfileStore
-	app     control.AppControl
 }
 
-func (c *Instance) initProfileService(ctx context.Context, store kv.BlobStore, newVPN VPNFunc) error {
+func (c *Instance) initProfileService(ctx context.Context, store kv.BlobStore) error {
 	init := func(profile *profilev1.Profile, store *dao.ProfileStore) error {
 		if err := c.Init(ctx, profile, store); err != nil {
 			return err
@@ -102,10 +98,10 @@ func (c *Instance) Init(ctx context.Context, profile *profilev1.Profile, store *
 		return err
 	}
 
-	c.app = app.NewControl(c.logger, c.broker, vpn, store, profile)
-	go c.app.Run(ctx)
+	app := app.NewControl(c.logger, c.broker, vpn, store, profile)
+	go app.Run(ctx)
 
-	vpn.VNIC().AddPeerHandler(peer.NewPeerHandler(c.logger, c.app, store))
+	vpn.VNIC().AddPeerHandler(peer.NewPeerHandler(c.logger, app, store))
 
 	for _, fn := range services {
 		fn(c.server, &ServiceParams{
@@ -114,7 +110,7 @@ func (c *Instance) Init(ctx context.Context, profile *profilev1.Profile, store *
 			Profile: profile,
 			Store:   store,
 			VPN:     vpn,
-			App:     c.app,
+			App:     app,
 		})
 	}
 

@@ -12,7 +12,9 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
+	"github.com/MemeLabs/go-ppspp/pkg/control/videocapture"
 	"github.com/MemeLabs/go-ppspp/pkg/control/videochannel"
+	"github.com/MemeLabs/go-ppspp/pkg/control/videoegress"
 	"github.com/MemeLabs/go-ppspp/pkg/control/videoingress"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -30,8 +32,10 @@ func NewControl(logger *zap.Logger, broker network.Broker, vpn *vpn.Host, store 
 		directoryControl    = directory.NewControl(logger, vpn, store, observers, dialerControl, transferControl)
 		networkControl      = network.NewControl(logger, broker, vpn, store, profile, observers, dialerControl)
 		bootstrapControl    = bootstrap.NewControl(logger, vpn, store, observers)
-		videoingressControl = videoingress.NewControl(logger, vpn, store, profile, observers, transferControl, dialerControl, networkControl)
+		videocaptureControl = videocapture.NewControl(logger, transferControl, directoryControl, networkControl)
+		videoingressControl = videoingress.NewControl(logger, vpn, store, profile, observers, transferControl, dialerControl, networkControl, directoryControl)
 		videochannelControl = videochannel.NewControl(logger, vpn, store, observers)
+		videoegressControl  = videoegress.NewControl(logger, vpn, observers, transferControl)
 		peerControl         = NewPeerControl(logger, observers, caControl, networkControl, transferControl, bootstrapControl)
 	)
 
@@ -44,8 +48,10 @@ func NewControl(logger *zap.Logger, broker network.Broker, vpn *vpn.Host, store 
 		network:      networkControl,
 		transfer:     transferControl,
 		bootstrap:    bootstrapControl,
+		videocapture: videocaptureControl,
 		videoingress: videoingressControl,
 		videochannel: videochannelControl,
+		videoegress:  videoegressControl,
 	}
 }
 
@@ -59,8 +65,10 @@ type Control struct {
 	network      *network.Control
 	transfer     *transfer.Control
 	bootstrap    *bootstrap.Control
+	videocapture *videocapture.Control
 	videoingress *videoingress.Control
 	videochannel *videochannel.Control
+	videoegress  *videoegress.Control
 }
 
 // Run ...
@@ -94,8 +102,14 @@ func (c *Control) Transfer() control.TransferControl { return c.transfer }
 // Bootstrap ...
 func (c *Control) Bootstrap() control.BootstrapControl { return c.bootstrap }
 
+// VideoCapture ...
+func (c *Control) VideoCapture() control.VideoCaptureControl { return c.videocapture }
+
 // VideoIngress ...
 func (c *Control) VideoIngress() control.VideoIngressControl { return c.videoingress }
 
 // VideoChannel ...
 func (c *Control) VideoChannel() control.VideoChannelControl { return c.videochannel }
+
+// VideoEgress ...
+func (c *Control) VideoEgress() control.VideoEgressControl { return c.videoegress }

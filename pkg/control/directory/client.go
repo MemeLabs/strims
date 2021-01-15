@@ -10,7 +10,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func newDirectoryClient(logger *zap.Logger, key []byte, transfer *transfer.Control) (*directoryClient, error) {
+func newDirectoryReader(logger *zap.Logger, key []byte, transfer *transfer.Control) (*directoryReader, error) {
 	s, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), swarmOptions)
 	if err != nil {
 		return nil, err
@@ -19,7 +19,7 @@ func newDirectoryClient(logger *zap.Logger, key []byte, transfer *transfer.Contr
 	transferID := transfer.Add(s, AddressSalt)
 	transfer.Publish(transferID, key)
 
-	return &directoryClient{
+	return &directoryReader{
 		logger:      logger,
 		transfer:    transfer,
 		done:        make(chan struct{}),
@@ -29,7 +29,7 @@ func newDirectoryClient(logger *zap.Logger, key []byte, transfer *transfer.Contr
 	}, nil
 }
 
-type directoryClient struct {
+type directoryReader struct {
 	logger     *zap.Logger
 	transfer   *transfer.Control
 	closeOnce  sync.Once
@@ -39,7 +39,7 @@ type directoryClient struct {
 	*eventReader
 }
 
-func (d *directoryClient) Run(ctx context.Context) error {
+func (d *directoryReader) Run(ctx context.Context) error {
 	defer d.Close()
 
 	select {
@@ -50,13 +50,13 @@ func (d *directoryClient) Run(ctx context.Context) error {
 	}
 }
 
-func (d *directoryClient) Close() {
+func (d *directoryReader) Close() {
 	d.closeOnce.Do(func() {
 		d.transfer.Remove(d.transferID)
 		close(d.done)
 	})
 }
 
-func (d *directoryClient) ping() error {
+func (d *directoryReader) ping() error {
 	return nil
 }

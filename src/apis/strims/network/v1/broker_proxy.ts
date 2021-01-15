@@ -39,14 +39,14 @@ export class BrokerProxyRequest {
 }
 
 export interface IBrokerProxyEvent {
-  body?: BrokerProxyEvent.IBodyOneOf
+  body?: BrokerProxyEvent.IBody
 }
 
 export class BrokerProxyEvent {
-  body: BrokerProxyEvent.TBodyOneOf;
+  body: BrokerProxyEvent.TBody;
 
   constructor(v?: IBrokerProxyEvent) {
-    this.body = new BrokerProxyEvent.BodyOneOf(v?.body);
+    this.body = new BrokerProxyEvent.Body(v?.body);
   }
 
   static encode(m: BrokerProxyEvent, w?: Writer): Writer {
@@ -73,13 +73,13 @@ export class BrokerProxyEvent {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new BrokerProxyEvent.BodyOneOf({ open: BrokerProxyEvent.Open.decode(r, r.uint32()) });
+        m.body = new BrokerProxyEvent.Body({ open: BrokerProxyEvent.Open.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new BrokerProxyEvent.BodyOneOf({ data: BrokerProxyEvent.Data.decode(r, r.uint32()) });
+        m.body = new BrokerProxyEvent.Body({ data: BrokerProxyEvent.Data.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new BrokerProxyEvent.BodyOneOf({ read: BrokerProxyEvent.Read.decode(r, r.uint32()) });
+        m.body = new BrokerProxyEvent.Body({ read: BrokerProxyEvent.Read.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -98,27 +98,27 @@ export namespace BrokerProxyEvent {
     READ = 3,
   }
 
-  export type IBodyOneOf =
+  export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.OPEN, open: BrokerProxyEvent.IOpen }
   |{ case?: BodyCase.DATA, data: BrokerProxyEvent.IData }
   |{ case?: BodyCase.READ, read: BrokerProxyEvent.IRead }
   ;
 
-  export type TBodyOneOf = Readonly<
+  export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.OPEN, open: BrokerProxyEvent.Open }
   |{ case: BodyCase.DATA, data: BrokerProxyEvent.Data }
   |{ case: BodyCase.READ, read: BrokerProxyEvent.Read }
   >;
 
-  class BodyOneOfImpl {
+  class BodyImpl {
     open: BrokerProxyEvent.Open;
     data: BrokerProxyEvent.Data;
     read: BrokerProxyEvent.Read;
     case: BodyCase = BodyCase.NOT_SET;
 
-    constructor(v?: IBodyOneOf) {
+    constructor(v?: IBody) {
       if (v && "open" in v) {
         this.case = BodyCase.OPEN;
         this.open = new BrokerProxyEvent.Open(v.open);
@@ -134,9 +134,9 @@ export namespace BrokerProxyEvent {
     }
   }
 
-  export const BodyOneOf = BodyOneOfImpl as {
+  export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBodyOneOf>(v: T): Readonly<
+    new <T extends IBody>(v: T): Readonly<
     T extends { open: BrokerProxyEvent.IOpen } ? { case: BodyCase.OPEN, open: BrokerProxyEvent.Open } :
     T extends { data: BrokerProxyEvent.IData } ? { case: BodyCase.DATA, data: BrokerProxyEvent.Data } :
     T extends { read: BrokerProxyEvent.IRead } ? { case: BodyCase.READ, read: BrokerProxyEvent.Read } :

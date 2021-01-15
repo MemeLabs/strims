@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"log"
+	"math/rand"
 	"strconv"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
@@ -57,6 +60,9 @@ type Control struct {
 
 // Run ...
 func (t *Control) Run(ctx context.Context) {
+	pingTimer := time.NewTimer(pingStartupDelay)
+	defer pingTimer.Stop()
+
 	for {
 		select {
 		case e := <-t.events:
@@ -66,6 +72,11 @@ func (t *Control) Run(ctx context.Context) {
 			case event.NetworkStop:
 				t.handleNetworkStop(e.Network)
 			}
+		case <-pingTimer.C:
+			fuzz := rand.Int63n(int64((maxPingInterval - minPingInterval)))
+			log.Println(minPingInterval + time.Duration(fuzz))
+			pingTimer.Reset(minPingInterval + time.Duration(fuzz))
+			t.ping(ctx)
 		case <-ctx.Done():
 			return
 		}
@@ -138,6 +149,75 @@ func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *net
 	return ch
 }
 
+func (t *Control) ping(ctx context.Context) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	t.runners.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
+		client, err := t.client(i.(*runner).key)
+		if err != nil {
+			t.logger.Debug(
+				"pinging directory failed",
+				logutil.ByteHex("network", i.(*runner).key),
+				zap.Error(err),
+			)
+			return true
+		}
+
+		go client.Ping(ctx, &network.DirectoryPingRequest{}, &network.DirectoryPingResponse{})
+		return true
+	})
+}
+
+func (t *Control) client(networkKey []byte) (*network.DirectoryClient, error) {
+	client, err := t.dialer.Client(networkKey, networkKey, AddressSalt)
+	if err != nil {
+		return nil, err
+	}
+
+	return network.NewDirectoryClient(client), nil
+}
+
+// Publish ...
+func (t *Control) Publish(ctx context.Context, listing *network.DirectoryListing, networkKey []byte) error {
+	client, err := t.client(networkKey)
+	if err != nil {
+		return err
+	}
+
+	return client.Publish(ctx, &network.DirectoryPublishRequest{Listing: listing}, &network.DirectoryPublishResponse{})
+}
+
+// Unpublish ...
+func (t *Control) Unpublish(ctx context.Context, key, networkKey []byte) error {
+	client, err := t.client(networkKey)
+	if err != nil {
+		return err
+	}
+
+	return client.Unpublish(ctx, &network.DirectoryUnpublishRequest{Key: key}, &network.DirectoryUnpublishResponse{})
+}
+
+// Join ...
+func (t *Control) Join(ctx context.Context, key, networkKey []byte) error {
+	client, err := t.client(networkKey)
+	if err != nil {
+		return err
+	}
+
+	return client.Join(ctx, &network.DirectoryJoinRequest{Key: key}, &network.DirectoryJoinResponse{})
+}
+
+// Part ...
+func (t *Control) Part(ctx context.Context, key, networkKey []byte) error {
+	client, err := t.client(networkKey)
+	if err != nil {
+		return err
+	}
+
+	return client.Part(ctx, &network.DirectoryPartRequest{Key: key}, &network.DirectoryPartResponse{})
+}
+
 var noopCancelFunc = func() {}
 
 func newRunner(ctx context.Context, logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, dialer *dialer.Control, transfer *transfer.Control, network *network.Network) *runner {
@@ -177,7 +257,7 @@ type runner struct {
 
 	lock             sync.Mutex
 	closed           bool
-	client           *directoryClient
+	client           *directoryReader
 	service          *directoryService
 	runnable         chan bool
 	clientCancelFunc context.CancelFunc
@@ -224,7 +304,7 @@ func (r *runner) EventReader(ctx context.Context) (*eventReader, error) {
 
 	<-r.runnable
 
-	client, err := newDirectoryClient(r.logger, r.key, r.transfer)
+	client, err := newDirectoryReader(r.logger, r.key, r.transfer)
 	if err != nil {
 		r.runnable <- true
 		return nil, err

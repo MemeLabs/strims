@@ -12,6 +12,7 @@ import { Certificate } from "../../apis/strims/type/certificate";
 import { InputError, InputLabel, TextInput } from "../../components/Form";
 import { MainLayout } from "../../components/MainLayout";
 import { useCall, useLazyCall } from "../../contexts/Api";
+import { rootCertificate } from "../../lib/certificate";
 import jsonutil from "../../lib/jsonutil";
 
 interface ChatServerFormData {
@@ -21,11 +22,6 @@ interface ChatServerFormData {
     label: string;
   };
 }
-
-const rootCertificate = (cert: Certificate): Certificate =>
-  cert.parentOneof.case === Certificate.ParentOneofCase.PARENT
-    ? rootCertificate(cert.parentOneof.parent)
-    : cert;
 
 const ChatServerForm = ({ onCreate }: { onCreate: (res: CreateChatServerResponse) => void }) => {
   const [{ error, loading }, createChatServer] = useLazyCall("chat", "createServer", {

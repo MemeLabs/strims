@@ -153,7 +153,7 @@ func (g *generator) oneOfName(o pgs.OneOf) string {
 }
 
 func (g *generator) oneOfNameWithPrefix(o pgs.OneOf, prefix string) string {
-	return fmt.Sprintf(`%s.%s%sOneOf`, o.Message().Name().UpperCamelCase(), prefix, o.Name().UpperCamelCase())
+	return fmt.Sprintf(`%s.%s%s`, o.Message().Name().UpperCamelCase(), prefix, o.Name().UpperCamelCase())
 }
 
 func (g *generator) generateMessage(m pgs.Message) {
@@ -372,7 +372,7 @@ func (g *generator) oneOfCaseName(f pgs.Field) string {
 }
 
 func (g *generator) generateOneOf(o pgs.OneOf) {
-	className := fmt.Sprintf("%sOneOf", o.Name().UpperCamelCase())
+	className := fmt.Sprintf("%s", o.Name().UpperCamelCase())
 	caseName := fmt.Sprintf("%sCase", o.Name().UpperCamelCase())
 
 	g.Linef(`export enum %s {`, caseName)

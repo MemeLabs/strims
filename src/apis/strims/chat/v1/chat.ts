@@ -392,14 +392,14 @@ export class OpenChatServerRequest {
 }
 
 export interface IChatServerEvent {
-  body?: ChatServerEvent.IBodyOneOf
+  body?: ChatServerEvent.IBody
 }
 
 export class ChatServerEvent {
-  body: ChatServerEvent.TBodyOneOf;
+  body: ChatServerEvent.TBody;
 
   constructor(v?: IChatServerEvent) {
-    this.body = new ChatServerEvent.BodyOneOf(v?.body);
+    this.body = new ChatServerEvent.Body(v?.body);
   }
 
   static encode(m: ChatServerEvent, w?: Writer): Writer {
@@ -423,10 +423,10 @@ export class ChatServerEvent {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new ChatServerEvent.BodyOneOf({ open: ChatServerEvent.Open.decode(r, r.uint32()) });
+        m.body = new ChatServerEvent.Body({ open: ChatServerEvent.Open.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new ChatServerEvent.BodyOneOf({ close: ChatServerEvent.Close.decode(r, r.uint32()) });
+        m.body = new ChatServerEvent.Body({ close: ChatServerEvent.Close.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -444,24 +444,24 @@ export namespace ChatServerEvent {
     CLOSE = 2,
   }
 
-  export type IBodyOneOf =
+  export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.OPEN, open: ChatServerEvent.IOpen }
   |{ case?: BodyCase.CLOSE, close: ChatServerEvent.IClose }
   ;
 
-  export type TBodyOneOf = Readonly<
+  export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.OPEN, open: ChatServerEvent.Open }
   |{ case: BodyCase.CLOSE, close: ChatServerEvent.Close }
   >;
 
-  class BodyOneOfImpl {
+  class BodyImpl {
     open: ChatServerEvent.Open;
     close: ChatServerEvent.Close;
     case: BodyCase = BodyCase.NOT_SET;
 
-    constructor(v?: IBodyOneOf) {
+    constructor(v?: IBody) {
       if (v && "open" in v) {
         this.case = BodyCase.OPEN;
         this.open = new ChatServerEvent.Open(v.open);
@@ -473,9 +473,9 @@ export namespace ChatServerEvent {
     }
   }
 
-  export const BodyOneOf = BodyOneOfImpl as {
+  export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBodyOneOf>(v: T): Readonly<
+    new <T extends IBody>(v: T): Readonly<
     T extends { open: ChatServerEvent.IOpen } ? { case: BodyCase.OPEN, open: ChatServerEvent.Open } :
     T extends { close: ChatServerEvent.IClose } ? { case: BodyCase.CLOSE, close: ChatServerEvent.Close } :
     never
@@ -542,16 +542,16 @@ export namespace ChatServerEvent {
 
 export interface ICallChatServerRequest {
   serverId?: bigint;
-  body?: CallChatServerRequest.IBodyOneOf
+  body?: CallChatServerRequest.IBody
 }
 
 export class CallChatServerRequest {
   serverId: bigint = BigInt(0);
-  body: CallChatServerRequest.TBodyOneOf;
+  body: CallChatServerRequest.TBody;
 
   constructor(v?: ICallChatServerRequest) {
     this.serverId = v?.serverId || BigInt(0);
-    this.body = new CallChatServerRequest.BodyOneOf(v?.body);
+    this.body = new CallChatServerRequest.Body(v?.body);
   }
 
   static encode(m: CallChatServerRequest, w?: Writer): Writer {
@@ -576,7 +576,7 @@ export class CallChatServerRequest {
         m.serverId = r.uint64();
         break;
         case 2:
-        m.body = new CallChatServerRequest.BodyOneOf({ close: CallChatServerRequest.Close.decode(r, r.uint32()) });
+        m.body = new CallChatServerRequest.Body({ close: CallChatServerRequest.Close.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -593,21 +593,21 @@ export namespace CallChatServerRequest {
     CLOSE = 2,
   }
 
-  export type IBodyOneOf =
+  export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.CLOSE, close: CallChatServerRequest.IClose }
   ;
 
-  export type TBodyOneOf = Readonly<
+  export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.CLOSE, close: CallChatServerRequest.Close }
   >;
 
-  class BodyOneOfImpl {
+  class BodyImpl {
     close: CallChatServerRequest.Close;
     case: BodyCase = BodyCase.NOT_SET;
 
-    constructor(v?: IBodyOneOf) {
+    constructor(v?: IBody) {
       if (v && "close" in v) {
         this.case = BodyCase.CLOSE;
         this.close = new CallChatServerRequest.Close(v.close);
@@ -615,9 +615,9 @@ export namespace CallChatServerRequest {
     }
   }
 
-  export const BodyOneOf = BodyOneOfImpl as {
+  export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBodyOneOf>(v: T): Readonly<
+    new <T extends IBody>(v: T): Readonly<
     T extends { close: CallChatServerRequest.IClose } ? { case: BodyCase.CLOSE, close: CallChatServerRequest.Close } :
     never
     >;
@@ -689,14 +689,14 @@ export class OpenChatClientRequest {
 }
 
 export interface IChatClientEvent {
-  body?: ChatClientEvent.IBodyOneOf
+  body?: ChatClientEvent.IBody
 }
 
 export class ChatClientEvent {
-  body: ChatClientEvent.TBodyOneOf;
+  body: ChatClientEvent.TBody;
 
   constructor(v?: IChatClientEvent) {
-    this.body = new ChatClientEvent.BodyOneOf(v?.body);
+    this.body = new ChatClientEvent.Body(v?.body);
   }
 
   static encode(m: ChatClientEvent, w?: Writer): Writer {
@@ -723,13 +723,13 @@ export class ChatClientEvent {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new ChatClientEvent.BodyOneOf({ open: ChatClientEvent.Open.decode(r, r.uint32()) });
+        m.body = new ChatClientEvent.Body({ open: ChatClientEvent.Open.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new ChatClientEvent.BodyOneOf({ message: ChatClientEvent.Message.decode(r, r.uint32()) });
+        m.body = new ChatClientEvent.Body({ message: ChatClientEvent.Message.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new ChatClientEvent.BodyOneOf({ close: ChatClientEvent.Close.decode(r, r.uint32()) });
+        m.body = new ChatClientEvent.Body({ close: ChatClientEvent.Close.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -748,27 +748,27 @@ export namespace ChatClientEvent {
     CLOSE = 3,
   }
 
-  export type IBodyOneOf =
+  export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.OPEN, open: ChatClientEvent.IOpen }
   |{ case?: BodyCase.MESSAGE, message: ChatClientEvent.IMessage }
   |{ case?: BodyCase.CLOSE, close: ChatClientEvent.IClose }
   ;
 
-  export type TBodyOneOf = Readonly<
+  export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.OPEN, open: ChatClientEvent.Open }
   |{ case: BodyCase.MESSAGE, message: ChatClientEvent.Message }
   |{ case: BodyCase.CLOSE, close: ChatClientEvent.Close }
   >;
 
-  class BodyOneOfImpl {
+  class BodyImpl {
     open: ChatClientEvent.Open;
     message: ChatClientEvent.Message;
     close: ChatClientEvent.Close;
     case: BodyCase = BodyCase.NOT_SET;
 
-    constructor(v?: IBodyOneOf) {
+    constructor(v?: IBody) {
       if (v && "open" in v) {
         this.case = BodyCase.OPEN;
         this.open = new ChatClientEvent.Open(v.open);
@@ -784,9 +784,9 @@ export namespace ChatClientEvent {
     }
   }
 
-  export const BodyOneOf = BodyOneOfImpl as {
+  export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBodyOneOf>(v: T): Readonly<
+    new <T extends IBody>(v: T): Readonly<
     T extends { open: ChatClientEvent.IOpen } ? { case: BodyCase.OPEN, open: ChatClientEvent.Open } :
     T extends { message: ChatClientEvent.IMessage } ? { case: BodyCase.MESSAGE, message: ChatClientEvent.Message } :
     T extends { close: ChatClientEvent.IClose } ? { case: BodyCase.CLOSE, close: ChatClientEvent.Close } :
@@ -1436,16 +1436,16 @@ export namespace MessageEntities {
 
 export interface ICallChatClientRequest {
   clientId?: bigint;
-  body?: CallChatClientRequest.IBodyOneOf
+  body?: CallChatClientRequest.IBody
 }
 
 export class CallChatClientRequest {
   clientId: bigint = BigInt(0);
-  body: CallChatClientRequest.TBodyOneOf;
+  body: CallChatClientRequest.TBody;
 
   constructor(v?: ICallChatClientRequest) {
     this.clientId = v?.clientId || BigInt(0);
-    this.body = new CallChatClientRequest.BodyOneOf(v?.body);
+    this.body = new CallChatClientRequest.Body(v?.body);
   }
 
   static encode(m: CallChatClientRequest, w?: Writer): Writer {
@@ -1473,10 +1473,10 @@ export class CallChatClientRequest {
         m.clientId = r.uint64();
         break;
         case 2:
-        m.body = new CallChatClientRequest.BodyOneOf({ message: CallChatClientRequest.Message.decode(r, r.uint32()) });
+        m.body = new CallChatClientRequest.Body({ message: CallChatClientRequest.Message.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new CallChatClientRequest.BodyOneOf({ close: CallChatClientRequest.Close.decode(r, r.uint32()) });
+        m.body = new CallChatClientRequest.Body({ close: CallChatClientRequest.Close.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -1494,24 +1494,24 @@ export namespace CallChatClientRequest {
     CLOSE = 3,
   }
 
-  export type IBodyOneOf =
+  export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.MESSAGE, message: CallChatClientRequest.IMessage }
   |{ case?: BodyCase.CLOSE, close: CallChatClientRequest.IClose }
   ;
 
-  export type TBodyOneOf = Readonly<
+  export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.MESSAGE, message: CallChatClientRequest.Message }
   |{ case: BodyCase.CLOSE, close: CallChatClientRequest.Close }
   >;
 
-  class BodyOneOfImpl {
+  class BodyImpl {
     message: CallChatClientRequest.Message;
     close: CallChatClientRequest.Close;
     case: BodyCase = BodyCase.NOT_SET;
 
-    constructor(v?: IBodyOneOf) {
+    constructor(v?: IBody) {
       if (v && "message" in v) {
         this.case = BodyCase.MESSAGE;
         this.message = new CallChatClientRequest.Message(v.message);
@@ -1523,9 +1523,9 @@ export namespace CallChatClientRequest {
     }
   }
 
-  export const BodyOneOf = BodyOneOfImpl as {
+  export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBodyOneOf>(v: T): Readonly<
+    new <T extends IBody>(v: T): Readonly<
     T extends { message: CallChatClientRequest.IMessage } ? { case: BodyCase.MESSAGE, message: CallChatClientRequest.Message } :
     T extends { close: CallChatClientRequest.IClose } ? { case: BodyCase.CLOSE, close: CallChatClientRequest.Close } :
     never

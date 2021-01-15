@@ -19,13 +19,9 @@ import {
 } from "../../components/Form";
 import { PrivateRoute } from "../../components/PrivateRoute";
 import { useCall, useClient, useLazyCall } from "../../contexts/Api";
+import { rootCertificate } from "../../lib/certificate";
 import hostRegex from "../../lib/hostRegex";
 import jsonutil from "../../lib/jsonutil";
-
-const rootCertificate = (cert: Certificate): Certificate =>
-  cert.parentOneof.case === Certificate.ParentOneofCase.PARENT
-    ? rootCertificate(cert.parentOneof.parent)
-    : cert;
 
 interface SelectOption {
   value: string;

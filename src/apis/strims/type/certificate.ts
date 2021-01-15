@@ -78,7 +78,7 @@ export interface ICertificate {
   notAfter?: bigint;
   serialNumber?: Uint8Array;
   signature?: Uint8Array;
-  parentOneof?: Certificate.IParentOneofOneOf
+  parentOneof?: Certificate.IParentOneof
 }
 
 export class Certificate {
@@ -90,7 +90,7 @@ export class Certificate {
   notAfter: bigint = BigInt(0);
   serialNumber: Uint8Array = new Uint8Array();
   signature: Uint8Array = new Uint8Array();
-  parentOneof: Certificate.TParentOneofOneOf;
+  parentOneof: Certificate.TParentOneof;
 
   constructor(v?: ICertificate) {
     this.key = v?.key || new Uint8Array();
@@ -101,7 +101,7 @@ export class Certificate {
     this.notAfter = v?.notAfter || BigInt(0);
     this.serialNumber = v?.serialNumber || new Uint8Array();
     this.signature = v?.signature || new Uint8Array();
-    this.parentOneof = new Certificate.ParentOneofOneOf(v?.parentOneof);
+    this.parentOneof = new Certificate.ParentOneof(v?.parentOneof);
   }
 
   static encode(m: Certificate, w?: Writer): Writer {
@@ -154,7 +154,7 @@ export class Certificate {
         m.signature = r.bytes();
         break;
         case 9:
-        m.parentOneof = new Certificate.ParentOneofOneOf({ parent: Certificate.decode(r, r.uint32()) });
+        m.parentOneof = new Certificate.ParentOneof({ parent: Certificate.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -171,21 +171,21 @@ export namespace Certificate {
     PARENT = 9,
   }
 
-  export type IParentOneofOneOf =
+  export type IParentOneof =
   { case?: ParentOneofCase.NOT_SET }
   |{ case?: ParentOneofCase.PARENT, parent: ICertificate }
   ;
 
-  export type TParentOneofOneOf = Readonly<
+  export type TParentOneof = Readonly<
   { case: ParentOneofCase.NOT_SET }
   |{ case: ParentOneofCase.PARENT, parent: Certificate }
   >;
 
-  class ParentOneofOneOfImpl {
+  class ParentOneofImpl {
     parent: Certificate;
     case: ParentOneofCase = ParentOneofCase.NOT_SET;
 
-    constructor(v?: IParentOneofOneOf) {
+    constructor(v?: IParentOneof) {
       if (v && "parent" in v) {
         this.case = ParentOneofCase.PARENT;
         this.parent = new Certificate(v.parent);
@@ -193,9 +193,9 @@ export namespace Certificate {
     }
   }
 
-  export const ParentOneofOneOf = ParentOneofOneOfImpl as {
+  export const ParentOneof = ParentOneofImpl as {
     new (): Readonly<{ case: ParentOneofCase.NOT_SET }>;
-    new <T extends IParentOneofOneOf>(v: T): Readonly<
+    new <T extends IParentOneof>(v: T): Readonly<
     T extends { parent: ICertificate } ? { case: ParentOneofCase.PARENT, parent: Certificate } :
     never
     >;

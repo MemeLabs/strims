@@ -529,16 +529,16 @@ export class LoadSessionResponse {
 
 export interface IStorageKey {
   kdfType?: KDFType;
-  kdfOptions?: StorageKey.IKdfOptionsOneOf
+  kdfOptions?: StorageKey.IKdfOptions
 }
 
 export class StorageKey {
   kdfType: KDFType = 0;
-  kdfOptions: StorageKey.TKdfOptionsOneOf;
+  kdfOptions: StorageKey.TKdfOptions;
 
   constructor(v?: IStorageKey) {
     this.kdfType = v?.kdfType || 0;
-    this.kdfOptions = new StorageKey.KdfOptionsOneOf(v?.kdfOptions);
+    this.kdfOptions = new StorageKey.KdfOptions(v?.kdfOptions);
   }
 
   static encode(m: StorageKey, w?: Writer): Writer {
@@ -563,7 +563,7 @@ export class StorageKey {
         m.kdfType = r.uint32();
         break;
         case 2:
-        m.kdfOptions = new StorageKey.KdfOptionsOneOf({ pbkdf2Options: StorageKey.PBKDF2Options.decode(r, r.uint32()) });
+        m.kdfOptions = new StorageKey.KdfOptions({ pbkdf2Options: StorageKey.PBKDF2Options.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -580,21 +580,21 @@ export namespace StorageKey {
     PBKDF2_OPTIONS = 2,
   }
 
-  export type IKdfOptionsOneOf =
+  export type IKdfOptions =
   { case?: KdfOptionsCase.NOT_SET }
   |{ case?: KdfOptionsCase.PBKDF2_OPTIONS, pbkdf2Options: StorageKey.IPBKDF2Options }
   ;
 
-  export type TKdfOptionsOneOf = Readonly<
+  export type TKdfOptions = Readonly<
   { case: KdfOptionsCase.NOT_SET }
   |{ case: KdfOptionsCase.PBKDF2_OPTIONS, pbkdf2Options: StorageKey.PBKDF2Options }
   >;
 
-  class KdfOptionsOneOfImpl {
+  class KdfOptionsImpl {
     pbkdf2Options: StorageKey.PBKDF2Options;
     case: KdfOptionsCase = KdfOptionsCase.NOT_SET;
 
-    constructor(v?: IKdfOptionsOneOf) {
+    constructor(v?: IKdfOptions) {
       if (v && "pbkdf2Options" in v) {
         this.case = KdfOptionsCase.PBKDF2_OPTIONS;
         this.pbkdf2Options = new StorageKey.PBKDF2Options(v.pbkdf2Options);
@@ -602,9 +602,9 @@ export namespace StorageKey {
     }
   }
 
-  export const KdfOptionsOneOf = KdfOptionsOneOfImpl as {
+  export const KdfOptions = KdfOptionsImpl as {
     new (): Readonly<{ case: KdfOptionsCase.NOT_SET }>;
-    new <T extends IKdfOptionsOneOf>(v: T): Readonly<
+    new <T extends IKdfOptions>(v: T): Readonly<
     T extends { pbkdf2Options: StorageKey.IPBKDF2Options } ? { case: KdfOptionsCase.PBKDF2_OPTIONS, pbkdf2Options: StorageKey.PBKDF2Options } :
     never
     >;

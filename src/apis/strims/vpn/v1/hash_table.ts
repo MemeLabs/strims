@@ -3,14 +3,14 @@ import Writer from "../../../../lib/pb/writer";
 
 
 export interface IHashTableMessage {
-  body?: HashTableMessage.IBodyOneOf
+  body?: HashTableMessage.IBody
 }
 
 export class HashTableMessage {
-  body: HashTableMessage.TBodyOneOf;
+  body: HashTableMessage.TBody;
 
   constructor(v?: IHashTableMessage) {
-    this.body = new HashTableMessage.BodyOneOf(v?.body);
+    this.body = new HashTableMessage.Body(v?.body);
   }
 
   static encode(m: HashTableMessage, w?: Writer): Writer {
@@ -40,16 +40,16 @@ export class HashTableMessage {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new HashTableMessage.BodyOneOf({ publish: HashTableMessage.Publish.decode(r, r.uint32()) });
+        m.body = new HashTableMessage.Body({ publish: HashTableMessage.Publish.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new HashTableMessage.BodyOneOf({ unpublish: HashTableMessage.Unpublish.decode(r, r.uint32()) });
+        m.body = new HashTableMessage.Body({ unpublish: HashTableMessage.Unpublish.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new HashTableMessage.BodyOneOf({ getRequest: HashTableMessage.GetRequest.decode(r, r.uint32()) });
+        m.body = new HashTableMessage.Body({ getRequest: HashTableMessage.GetRequest.decode(r, r.uint32()) });
         break;
         case 4:
-        m.body = new HashTableMessage.BodyOneOf({ getResponse: HashTableMessage.GetResponse.decode(r, r.uint32()) });
+        m.body = new HashTableMessage.Body({ getResponse: HashTableMessage.GetResponse.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -69,7 +69,7 @@ export namespace HashTableMessage {
     GET_RESPONSE = 4,
   }
 
-  export type IBodyOneOf =
+  export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.PUBLISH, publish: HashTableMessage.IPublish }
   |{ case?: BodyCase.UNPUBLISH, unpublish: HashTableMessage.IUnpublish }
@@ -77,7 +77,7 @@ export namespace HashTableMessage {
   |{ case?: BodyCase.GET_RESPONSE, getResponse: HashTableMessage.IGetResponse }
   ;
 
-  export type TBodyOneOf = Readonly<
+  export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.PUBLISH, publish: HashTableMessage.Publish }
   |{ case: BodyCase.UNPUBLISH, unpublish: HashTableMessage.Unpublish }
@@ -85,14 +85,14 @@ export namespace HashTableMessage {
   |{ case: BodyCase.GET_RESPONSE, getResponse: HashTableMessage.GetResponse }
   >;
 
-  class BodyOneOfImpl {
+  class BodyImpl {
     publish: HashTableMessage.Publish;
     unpublish: HashTableMessage.Unpublish;
     getRequest: HashTableMessage.GetRequest;
     getResponse: HashTableMessage.GetResponse;
     case: BodyCase = BodyCase.NOT_SET;
 
-    constructor(v?: IBodyOneOf) {
+    constructor(v?: IBody) {
       if (v && "publish" in v) {
         this.case = BodyCase.PUBLISH;
         this.publish = new HashTableMessage.Publish(v.publish);
@@ -112,9 +112,9 @@ export namespace HashTableMessage {
     }
   }
 
-  export const BodyOneOf = BodyOneOfImpl as {
+  export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBodyOneOf>(v: T): Readonly<
+    new <T extends IBody>(v: T): Readonly<
     T extends { publish: HashTableMessage.IPublish } ? { case: BodyCase.PUBLISH, publish: HashTableMessage.Publish } :
     T extends { unpublish: HashTableMessage.IUnpublish } ? { case: BodyCase.UNPUBLISH, unpublish: HashTableMessage.Unpublish } :
     T extends { getRequest: HashTableMessage.IGetRequest } ? { case: BodyCase.GET_REQUEST, getRequest: HashTableMessage.GetRequest } :

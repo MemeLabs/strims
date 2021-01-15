@@ -9,7 +9,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	vpnv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vpn/v1"
+	vnicv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
@@ -40,7 +40,7 @@ var (
 )
 
 func newPeer(logger *zap.Logger, link Link, hostKey *key.Key, hostCert *certificate.Certificate) (*Peer, error) {
-	err := protoutil.WriteStream(link, &vpnv1.PeerInit{
+	err := protoutil.WriteStream(link, &vnicv1.PeerInit{
 		ProtocolVersion: 1,
 		Certificate:     hostCert,
 		NodePlatform:    version.Platform,
@@ -50,7 +50,7 @@ func newPeer(logger *zap.Logger, link Link, hostKey *key.Key, hostCert *certific
 		return nil, fmt.Errorf("writing peer init failed: %w", err)
 	}
 
-	var init vpnv1.PeerInit
+	var init vnicv1.PeerInit
 	if err = protoutil.ReadStream(link, &init); err != nil {
 		return nil, fmt.Errorf("reading peer init failed: %w", err)
 	}

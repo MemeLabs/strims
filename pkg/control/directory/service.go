@@ -20,9 +20,13 @@ import (
 	"go.uber.org/zap"
 )
 
-const broadcastInterval = time.Second
-const sessionTimeout = time.Minute * 15
-const pingInterval = time.Minute * 15
+const (
+	broadcastInterval = time.Second
+	sessionTimeout    = time.Minute * 15
+	pingStartupDelay  = time.Second * 30
+	minPingInterval   = time.Minute * 10
+	maxPingInterval   = time.Minute * 14
+)
 
 // AddressSalt ...
 var AddressSalt = []byte("directory")
@@ -324,7 +328,7 @@ func (d *directoryService) Ping(ctx context.Context, req *networkv1.DirectoryPin
 	defer d.lock.Unlock()
 
 	s, ok := d.sessions.Get(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
-	if ok {
+	if !ok {
 		return nil, ErrSessionNotFound
 	}
 

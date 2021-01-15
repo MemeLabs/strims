@@ -68,12 +68,13 @@ export class WindowBridge extends EventEmitter {
     this.createWorker("default");
   }
 
-  private createWorker(service: string): Worker {
+  private createWorker(service: string, ...args: any[]): Worker {
     const worker = new this.workerConstructor();
     worker.onmessage = this.handleWorkerMessage.bind(this);
     worker.postMessage({
       service,
       baseURI: location.origin,
+      args,
     });
     return worker;
   }

@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package strims.video.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1;video";
+option java_package = "gg.strims.video.v1";
+option swift_prefix = "SVO";
+
+message HLSEgressIsSupportedRequest {}
+
+message HLSEgressIsSupportedResponse {
+  bool supported = 1;
+}
+
+message HLSEgressOpenStreamRequest {
+  string swarm_uri = 1;
+}
+
+message HLSEgressOpenStreamResponse {
+  string playlist_url = 1;
+}
+
+message HLSEgressCloseStreamRequest {
+  bytes transfer_id = 1;
+}
+
+message HLSEgressCloseStreamResponse {}
+
+service HLSEgress {
+  rpc IsSupported(HLSEgressIsSupportedRequest) returns (HLSEgressIsSupportedResponse);
+  rpc OpenStream(HLSEgressOpenStreamRequest) returns (HLSEgressOpenStreamResponse);
+  rpc CloseStream(HLSEgressCloseStreamRequest) returns (HLSEgressCloseStreamResponse);
+}

@@ -660,14 +660,14 @@ export class InvitationV0 {
 }
 
 export interface ICreateNetworkFromInvitationRequest {
-  invitation?: CreateNetworkFromInvitationRequest.IInvitationOneOf
+  invitation?: CreateNetworkFromInvitationRequest.IInvitation
 }
 
 export class CreateNetworkFromInvitationRequest {
-  invitation: CreateNetworkFromInvitationRequest.TInvitationOneOf;
+  invitation: CreateNetworkFromInvitationRequest.TInvitation;
 
   constructor(v?: ICreateNetworkFromInvitationRequest) {
-    this.invitation = new CreateNetworkFromInvitationRequest.InvitationOneOf(v?.invitation);
+    this.invitation = new CreateNetworkFromInvitationRequest.Invitation(v?.invitation);
   }
 
   static encode(m: CreateNetworkFromInvitationRequest, w?: Writer): Writer {
@@ -691,10 +691,10 @@ export class CreateNetworkFromInvitationRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.invitation = new CreateNetworkFromInvitationRequest.InvitationOneOf({ invitationB64: r.string() });
+        m.invitation = new CreateNetworkFromInvitationRequest.Invitation({ invitationB64: r.string() });
         break;
         case 2:
-        m.invitation = new CreateNetworkFromInvitationRequest.InvitationOneOf({ invitationBytes: r.bytes() });
+        m.invitation = new CreateNetworkFromInvitationRequest.Invitation({ invitationBytes: r.bytes() });
         break;
         default:
         r.skipType(tag & 7);
@@ -712,24 +712,24 @@ export namespace CreateNetworkFromInvitationRequest {
     INVITATION_BYTES = 2,
   }
 
-  export type IInvitationOneOf =
+  export type IInvitation =
   { case?: InvitationCase.NOT_SET }
   |{ case?: InvitationCase.INVITATION_B64, invitationB64: string }
   |{ case?: InvitationCase.INVITATION_BYTES, invitationBytes: Uint8Array }
   ;
 
-  export type TInvitationOneOf = Readonly<
+  export type TInvitation = Readonly<
   { case: InvitationCase.NOT_SET }
   |{ case: InvitationCase.INVITATION_B64, invitationB64: string }
   |{ case: InvitationCase.INVITATION_BYTES, invitationBytes: Uint8Array }
   >;
 
-  class InvitationOneOfImpl {
+  class InvitationImpl {
     invitationB64: string;
     invitationBytes: Uint8Array;
     case: InvitationCase = InvitationCase.NOT_SET;
 
-    constructor(v?: IInvitationOneOf) {
+    constructor(v?: IInvitation) {
       if (v && "invitationB64" in v) {
         this.case = InvitationCase.INVITATION_B64;
         this.invitationB64 = v.invitationB64;
@@ -741,9 +741,9 @@ export namespace CreateNetworkFromInvitationRequest {
     }
   }
 
-  export const InvitationOneOf = InvitationOneOfImpl as {
+  export const Invitation = InvitationImpl as {
     new (): Readonly<{ case: InvitationCase.NOT_SET }>;
-    new <T extends IInvitationOneOf>(v: T): Readonly<
+    new <T extends IInvitation>(v: T): Readonly<
     T extends { invitationB64: string } ? { case: InvitationCase.INVITATION_B64, invitationB64: string } :
     T extends { invitationBytes: Uint8Array } ? { case: InvitationCase.INVITATION_BYTES, invitationBytes: Uint8Array } :
     never

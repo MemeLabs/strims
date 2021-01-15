@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package strims.video.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1;video";
+option java_package = "gg.strims.video.v1";
+option swift_prefix = "SVO";
+
+message EgressOpenStreamRequest {
+  string swarm_uri = 1;
+}
+
+message EgressOpenStreamResponse {
+  message Open {
+    bytes transfer_id = 1;
+  }
+
+  message Data {
+    bytes data = 1;
+    bool segment_end = 2;
+    bool buffer_underrun = 3;
+  }
+
+  message Error {
+    string message = 1;
+  }
+
+  oneof body {
+    Open open = 1;
+    Data data = 2;
+    Error error = 3;
+  }
+}
+
+service Egress {
+  rpc OpenStream(EgressOpenStreamRequest) returns (stream EgressOpenStreamResponse);
+}

@@ -27,10 +27,10 @@ import { useToggle } from "react-use";
 import usePortal from "react-useportal";
 
 import { CreateNetworkResponse, Network } from "../apis/strims/network/v1/network";
-import { Certificate } from "../apis/strims/type/certificate";
 import { useCall, useClient } from "../contexts/Api";
 import { useTheme } from "../contexts/Theme";
 import useObjectURL from "../hooks/useObjectURL";
+import { rootCertificate } from "../lib/certificate";
 import AddNetworkModal from "./AddNetworkModal";
 
 const NetworkAddButton: React.FunctionComponent<React.ComponentProps<"button">> = ({
@@ -58,11 +58,6 @@ const NetworkAddButton: React.FunctionComponent<React.ComponentProps<"button">> 
     </>
   );
 };
-
-const rootCertificate = (cert: Certificate): Certificate =>
-  cert.parentOneof.case === Certificate.ParentOneofCase.PARENT
-    ? rootCertificate(cert.parentOneof.parent)
-    : cert;
 
 interface NetworkGemProps {
   network: Network;

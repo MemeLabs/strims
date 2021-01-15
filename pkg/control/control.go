@@ -2,6 +2,7 @@ package control
 
 import (
 	"context"
+	"io"
 	"time"
 
 	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
@@ -54,6 +55,14 @@ type TransferControl interface {
 	Publish(id []byte, networkKey []byte)
 }
 
+// VideoCaptureControl ...
+type VideoCaptureControl interface {
+	Open(mimeType string, directorySnippet *network.DirectoryListingSnippet, networkKeys [][]byte) ([]byte, error)
+	Update(id []byte, directorySnippet *network.DirectoryListingSnippet) error
+	Append(id []byte, b []byte, segmentEnd bool) error
+	Close(id []byte) error
+}
+
 // VideoChannelOption ...
 type VideoChannelOption func(channel *video.VideoChannel) error
 
@@ -70,6 +79,17 @@ type VideoChannelControl interface {
 type VideoIngressControl interface {
 	GetIngressConfig() (*video.VideoIngressConfig, error)
 	SetIngressConfig(config *video.VideoIngressConfig) error
+}
+
+// VideoEgressControlBase ...
+type VideoEgressControlBase interface {
+	OpenStream(swarmURI string) ([]byte, io.ReadCloser, error)
+}
+
+// VideoHLSEgressControl ...
+type VideoHLSEgressControl interface {
+	OpenHLSStream(swarmURI string) (string, error)
+	CloseHLSStream(swarmURI string) error
 }
 
 // NetworkPeerControl ...
@@ -116,6 +136,8 @@ type AppControl interface {
 	Directory() DirectoryControl
 	Network() NetworkControl
 	Transfer() TransferControl
+	VideoCapture() VideoCaptureControl
 	VideoChannel() VideoChannelControl
 	VideoIngress() VideoIngressControl
+	VideoEgress() VideoEgressControl
 }

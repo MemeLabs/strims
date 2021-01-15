@@ -1,0 +1,47 @@
+syntax = "proto3";
+
+package strims.video.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1;video";
+option java_package = "gg.strims.video.v1";
+option swift_prefix = "SVO";
+
+import "network/v1/directory.proto";
+
+message CaptureOpenRequest {
+  strims.network.v1.DirectoryListingSnippet directory_snippet = 1;
+  string mime_type = 2;
+  repeated bytes network_keys = 3;
+}
+
+message CaptureOpenResponse {
+  bytes id = 1;
+}
+
+message CaptureUpdateRequest {
+  bytes id = 1;
+  strims.network.v1.DirectoryListingSnippet directory_snippet = 2;
+}
+
+message CaptureUpdateResponse {}
+
+message CaptureAppendRequest {
+  bytes id = 1;
+  bytes data = 2;
+  bool segment_end = 3;
+}
+
+message CaptureAppendResponse {}
+
+message CaptureCloseRequest {
+  bytes id = 1;
+}
+
+message CaptureCloseResponse {}
+
+service Capture {
+  rpc Open(CaptureOpenRequest) returns (CaptureOpenResponse);
+  rpc Update(CaptureUpdateRequest) returns (CaptureUpdateResponse);
+  rpc Append(CaptureAppendRequest) returns (CaptureAppendResponse);
+  rpc Close(CaptureCloseRequest) returns (CaptureCloseResponse);
+}

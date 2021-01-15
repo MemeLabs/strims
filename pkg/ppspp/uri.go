@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 )
 
 // TODO: implement this with content integrity...
@@ -47,6 +48,19 @@ var urnPrefix = "urn:ppspp:"
 
 // URIOptions ...
 type URIOptions map[codec.ProtocolOptionType]int
+
+// SwarmOptions ...
+func (o URIOptions) SwarmOptions() SwarmOptions {
+	return SwarmOptions{
+		ChunkSize:          o[codec.ChunkSizeOption],
+		ChunksPerSignature: o[codec.ChunksPerSignatureOption],
+		Integrity: integrity.VerifierOptions{
+			ProtectionMethod:       integrity.ProtectionMethod(o[codec.ContentIntegrityProtectionMethodOption]),
+			MerkleHashTreeFunction: integrity.MerkleHashTreeFunction(o[codec.MerkleHashTreeFunctionOption]),
+			LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithm(o[codec.LiveSignatureAlgorithmOption]),
+		},
+	}
+}
 
 // NewURI ...
 func NewURI(id SwarmID, options URIOptions) *URI {

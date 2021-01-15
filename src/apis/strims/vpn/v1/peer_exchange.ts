@@ -3,14 +3,14 @@ import Writer from "../../../../lib/pb/writer";
 
 
 export interface IPeerExchangeMessage {
-  body?: PeerExchangeMessage.IBodyOneOf
+  body?: PeerExchangeMessage.IBody
 }
 
 export class PeerExchangeMessage {
-  body: PeerExchangeMessage.TBodyOneOf;
+  body: PeerExchangeMessage.TBody;
 
   constructor(v?: IPeerExchangeMessage) {
-    this.body = new PeerExchangeMessage.BodyOneOf(v?.body);
+    this.body = new PeerExchangeMessage.Body(v?.body);
   }
 
   static encode(m: PeerExchangeMessage, w?: Writer): Writer {
@@ -46,22 +46,22 @@ export class PeerExchangeMessage {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new PeerExchangeMessage.BodyOneOf({ request: PeerExchangeMessage.Request.decode(r, r.uint32()) });
+        m.body = new PeerExchangeMessage.Body({ request: PeerExchangeMessage.Request.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new PeerExchangeMessage.BodyOneOf({ response: PeerExchangeMessage.Response.decode(r, r.uint32()) });
+        m.body = new PeerExchangeMessage.Body({ response: PeerExchangeMessage.Response.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new PeerExchangeMessage.BodyOneOf({ offer: PeerExchangeMessage.Offer.decode(r, r.uint32()) });
+        m.body = new PeerExchangeMessage.Body({ offer: PeerExchangeMessage.Offer.decode(r, r.uint32()) });
         break;
         case 4:
-        m.body = new PeerExchangeMessage.BodyOneOf({ answer: PeerExchangeMessage.Answer.decode(r, r.uint32()) });
+        m.body = new PeerExchangeMessage.Body({ answer: PeerExchangeMessage.Answer.decode(r, r.uint32()) });
         break;
         case 5:
-        m.body = new PeerExchangeMessage.BodyOneOf({ iceCandidate: PeerExchangeMessage.IceCandidate.decode(r, r.uint32()) });
+        m.body = new PeerExchangeMessage.Body({ iceCandidate: PeerExchangeMessage.IceCandidate.decode(r, r.uint32()) });
         break;
         case 6:
-        m.body = new PeerExchangeMessage.BodyOneOf({ callbackRequest: PeerExchangeMessage.CallbackRequest.decode(r, r.uint32()) });
+        m.body = new PeerExchangeMessage.Body({ callbackRequest: PeerExchangeMessage.CallbackRequest.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -83,7 +83,7 @@ export namespace PeerExchangeMessage {
     CALLBACK_REQUEST = 6,
   }
 
-  export type IBodyOneOf =
+  export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.REQUEST, request: PeerExchangeMessage.IRequest }
   |{ case?: BodyCase.RESPONSE, response: PeerExchangeMessage.IResponse }
@@ -93,7 +93,7 @@ export namespace PeerExchangeMessage {
   |{ case?: BodyCase.CALLBACK_REQUEST, callbackRequest: PeerExchangeMessage.ICallbackRequest }
   ;
 
-  export type TBodyOneOf = Readonly<
+  export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.REQUEST, request: PeerExchangeMessage.Request }
   |{ case: BodyCase.RESPONSE, response: PeerExchangeMessage.Response }
@@ -103,7 +103,7 @@ export namespace PeerExchangeMessage {
   |{ case: BodyCase.CALLBACK_REQUEST, callbackRequest: PeerExchangeMessage.CallbackRequest }
   >;
 
-  class BodyOneOfImpl {
+  class BodyImpl {
     request: PeerExchangeMessage.Request;
     response: PeerExchangeMessage.Response;
     offer: PeerExchangeMessage.Offer;
@@ -112,7 +112,7 @@ export namespace PeerExchangeMessage {
     callbackRequest: PeerExchangeMessage.CallbackRequest;
     case: BodyCase = BodyCase.NOT_SET;
 
-    constructor(v?: IBodyOneOf) {
+    constructor(v?: IBody) {
       if (v && "request" in v) {
         this.case = BodyCase.REQUEST;
         this.request = new PeerExchangeMessage.Request(v.request);
@@ -140,9 +140,9 @@ export namespace PeerExchangeMessage {
     }
   }
 
-  export const BodyOneOf = BodyOneOfImpl as {
+  export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBodyOneOf>(v: T): Readonly<
+    new <T extends IBody>(v: T): Readonly<
     T extends { request: PeerExchangeMessage.IRequest } ? { case: BodyCase.REQUEST, request: PeerExchangeMessage.Request } :
     T extends { response: PeerExchangeMessage.IResponse } ? { case: BodyCase.RESPONSE, response: PeerExchangeMessage.Response } :
     T extends { offer: PeerExchangeMessage.IOffer } ? { case: BodyCase.OFFER, offer: PeerExchangeMessage.Offer } :

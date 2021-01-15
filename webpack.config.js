@@ -56,17 +56,20 @@ module.exports = (env, argv) => {
       title: "Loading...",
       favicon: path.resolve(__dirname, "assets", "favicon.ico"),
     }),
-    // new HtmlWebpackPlugin({
-    //   filename: "test.html",
-    //   chunks: ["test"],
-    //   title: "test",
-    // }),
+    new HtmlWebpackPlugin({
+      filename: "test.html",
+      chunks: ["test"],
+      title: "test",
+    }),
     // new HtmlWebpackPlugin({
     //   filename: "funding.html",
     //   chunks: ["funding"],
     //   title: "funding",
     // }),
     new webpack.HotModuleReplacementPlugin(),
+    new webpack.ProvidePlugin({
+      process: "process/browser",
+    }),
   ];
 
   let devtool;
@@ -125,7 +128,7 @@ module.exports = (env, argv) => {
       target: "web",
       entry: {
         index: path.join(__dirname, "src", "web", "index.tsx"),
-        // test: path.join(__dirname, "src", "web", "test.ts"),
+        test: path.join(__dirname, "src", "web", "test.ts"),
         // funding: path.join(__dirname, "src", "funding", "index.tsx"),
       },
       devtool,
@@ -187,12 +190,19 @@ module.exports = (env, argv) => {
           "fs": false,
           "stream": require.resolve("stream-browserify"),
           "buffer": require.resolve("buffer"),
+          "process": require.resolve("process"),
         },
       },
       optimization: {
         minimizer: [
           new TerserPlugin({
             parallel: true,
+            terserOptions: {
+              mangle: {
+                module: true,
+                properties: true,
+              },
+            },
           }),
         ],
       },

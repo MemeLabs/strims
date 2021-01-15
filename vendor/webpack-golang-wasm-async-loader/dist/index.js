@@ -44,7 +44,7 @@ function loader(contents) {
             `require("${path_1.join(__dirname, "..", "lib", "wasm_exec.js")}");`,
             `import gobridge from "${path_1.join(__dirname, "..", "dist", "gobridge.js")}";`,
             `export default gobridge((baseURI) => fetch(baseURI + '/${emittedFilename}').then(res => res.arrayBuffer()));`,
-        ].join(""));
+        ].join("\n"));
     });
 }
 exports.default = loader;

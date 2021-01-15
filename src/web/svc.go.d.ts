@@ -1,9 +1,9 @@
-import { WorkerAPI } from "../apis/client";
+import { WorkerBridge } from "../lib/bridge";
 
 declare const init: (
   baseURI: string
 ) => Promise<{
-  init(service: "default" | "broker", api: WorkerAPI, ...any): Promise<any>;
+  init(service: "default" | "broker", api: WorkerBridge, ...args: any[]): Promise<any>;
 }>;
 
 export default init;

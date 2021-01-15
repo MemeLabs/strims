@@ -3,14 +3,14 @@ import Writer from "../../../../lib/pb/writer";
 
 
 export interface IPeerIndexMessage {
-  body?: PeerIndexMessage.IBodyOneOf
+  body?: PeerIndexMessage.IBody
 }
 
 export class PeerIndexMessage {
-  body: PeerIndexMessage.TBodyOneOf;
+  body: PeerIndexMessage.TBody;
 
   constructor(v?: IPeerIndexMessage) {
-    this.body = new PeerIndexMessage.BodyOneOf(v?.body);
+    this.body = new PeerIndexMessage.Body(v?.body);
   }
 
   static encode(m: PeerIndexMessage, w?: Writer): Writer {
@@ -40,16 +40,16 @@ export class PeerIndexMessage {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new PeerIndexMessage.BodyOneOf({ publish: PeerIndexMessage.Publish.decode(r, r.uint32()) });
+        m.body = new PeerIndexMessage.Body({ publish: PeerIndexMessage.Publish.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new PeerIndexMessage.BodyOneOf({ unpublish: PeerIndexMessage.Unpublish.decode(r, r.uint32()) });
+        m.body = new PeerIndexMessage.Body({ unpublish: PeerIndexMessage.Unpublish.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new PeerIndexMessage.BodyOneOf({ searchRequest: PeerIndexMessage.SearchRequest.decode(r, r.uint32()) });
+        m.body = new PeerIndexMessage.Body({ searchRequest: PeerIndexMessage.SearchRequest.decode(r, r.uint32()) });
         break;
         case 4:
-        m.body = new PeerIndexMessage.BodyOneOf({ searchResponse: PeerIndexMessage.SearchResponse.decode(r, r.uint32()) });
+        m.body = new PeerIndexMessage.Body({ searchResponse: PeerIndexMessage.SearchResponse.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -69,7 +69,7 @@ export namespace PeerIndexMessage {
     SEARCH_RESPONSE = 4,
   }
 
-  export type IBodyOneOf =
+  export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.PUBLISH, publish: PeerIndexMessage.IPublish }
   |{ case?: BodyCase.UNPUBLISH, unpublish: PeerIndexMessage.IUnpublish }
@@ -77,7 +77,7 @@ export namespace PeerIndexMessage {
   |{ case?: BodyCase.SEARCH_RESPONSE, searchResponse: PeerIndexMessage.ISearchResponse }
   ;
 
-  export type TBodyOneOf = Readonly<
+  export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.PUBLISH, publish: PeerIndexMessage.Publish }
   |{ case: BodyCase.UNPUBLISH, unpublish: PeerIndexMessage.Unpublish }
@@ -85,14 +85,14 @@ export namespace PeerIndexMessage {
   |{ case: BodyCase.SEARCH_RESPONSE, searchResponse: PeerIndexMessage.SearchResponse }
   >;
 
-  class BodyOneOfImpl {
+  class BodyImpl {
     publish: PeerIndexMessage.Publish;
     unpublish: PeerIndexMessage.Unpublish;
     searchRequest: PeerIndexMessage.SearchRequest;
     searchResponse: PeerIndexMessage.SearchResponse;
     case: BodyCase = BodyCase.NOT_SET;
 
-    constructor(v?: IBodyOneOf) {
+    constructor(v?: IBody) {
       if (v && "publish" in v) {
         this.case = BodyCase.PUBLISH;
         this.publish = new PeerIndexMessage.Publish(v.publish);
@@ -112,9 +112,9 @@ export namespace PeerIndexMessage {
     }
   }
 
-  export const BodyOneOf = BodyOneOfImpl as {
+  export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBodyOneOf>(v: T): Readonly<
+    new <T extends IBody>(v: T): Readonly<
     T extends { publish: PeerIndexMessage.IPublish } ? { case: BodyCase.PUBLISH, publish: PeerIndexMessage.Publish } :
     T extends { unpublish: PeerIndexMessage.IUnpublish } ? { case: BodyCase.UNPUBLISH, unpublish: PeerIndexMessage.Unpublish } :
     T extends { searchRequest: PeerIndexMessage.ISearchRequest } ? { case: BodyCase.SEARCH_REQUEST, searchRequest: PeerIndexMessage.SearchRequest } :

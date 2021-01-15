@@ -68,6 +68,7 @@
     "prettier": "^2.2.1",
     "prettier-plugin-import-sort": "0.0.6",
     "prismjs": "^1.23.0",
+    "process": "^0.11.10",
     "protobufjs": "^6.10.2",
     "protoc-gen-ts": "^0.3.4",
     "rc-tooltip": "^5.0.1",

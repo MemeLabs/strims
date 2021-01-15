@@ -13,10 +13,8 @@ import (
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
-	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
@@ -31,13 +29,19 @@ import (
 const streamLockTimeout = time.Minute * 2
 const streamUpdateInterval = time.Minute
 
-func newIngressService(logger *zap.Logger, store *dao.ProfileStore, transfer *transfer.Control, dialer *dialer.Control, network *network.Control) *ingressService {
+func newIngressService(
+	logger *zap.Logger,
+	store *dao.ProfileStore,
+	transfer *transfer.Control,
+	network *network.Control,
+	directory *directory.Control,
+) *ingressService {
 	return &ingressService{
 		logger:     logger,
 		store:      store,
 		transfer:   transfer,
-		dialer:     dialer,
 		network:    network,
+		directory:  directory,
 		transcoder: rtmpingress.NewTranscoder(logger),
 		streams:    map[uint64]*ingressStream{},
 	}
@@ -47,8 +51,8 @@ type ingressService struct {
 	logger     *zap.Logger
 	store      *dao.ProfileStore
 	transfer   *transfer.Control
-	dialer     *dialer.Control
 	network    *network.Control
+	directory  *directory.Control
 	transcoder *rtmpingress.Transcoder
 
 	lock    sync.Mutex
@@ -60,7 +64,7 @@ func (s *ingressService) UpdateChannel(channel *videov1.VideoChannel) {
 	defer s.lock.Unlock()
 
 	if stream, ok := s.streams[channel.Id]; ok {
-		stream.publishDirectoryListing(channel)
+		stream.UpdateChannel(channel)
 	}
 }
 
@@ -76,7 +80,16 @@ func (s *ingressService) RemoveChannel(id uint64) {
 func (s *ingressService) HandleStream(a *rtmpingress.StreamAddr, c *rtmpingress.Conn) {
 	defer c.Close()
 
-	stream, err := newIngressStream(s.logger, s.store, s.transfer, s.dialer, s.network, s.transcoder, a, c)
+	stream, err := newIngressStream(
+		s.logger,
+		s.store,
+		s.transfer,
+		s.network,
+		s.directory,
+		s.transcoder,
+		a,
+		c,
+	)
 	if err != nil {
 		s.logger.Info(
 			"setting up stream failed",
@@ -115,8 +128,8 @@ func newIngressStream(
 	logger *zap.Logger,
 	store *dao.ProfileStore,
 	transfer *transfer.Control,
-	dialer *dialer.Control,
 	network *network.Control,
+	directory *directory.Control,
 	transcoder *rtmpingress.Transcoder,
 	addr *rtmpingress.StreamAddr,
 	conn io.Closer,
@@ -127,8 +140,8 @@ func newIngressStream(
 		logger:     logger,
 		store:      store,
 		transfer:   transfer,
-		dialer:     dialer,
 		network:    network,
+		directory:  directory,
 		transcoder: transcoder,
 
 		ctx:       ctx,
@@ -148,16 +161,16 @@ func newIngressStream(
 		return nil, fmt.Errorf("acquiring stream lock: %w", err)
 	}
 
-	s.swarm, s.w, err = s.openWriter(s.channel.Key)
+	s.swarm, s.w, err = s.openWriter()
 	if err != nil {
 		s.Close()
 		return nil, fmt.Errorf("opening output stream: %w", err)
 	}
 
 	s.transferID = s.transfer.Add(s.swarm, []byte{})
-	s.transfer.Publish(s.transferID, s.channelNetworkKey(s.channel))
+	s.transfer.Publish(s.transferID, s.channelNetworkKey())
 
-	if err := s.publishDirectoryListing(s.channel); err != nil {
+	if err := s.publishDirectoryListing(); err != nil {
 		s.Close()
 		return nil, fmt.Errorf("publishing stream to directory: %w", err)
 	}
@@ -169,8 +182,8 @@ type ingressStream struct {
 	logger     *zap.Logger
 	store      *dao.ProfileStore
 	transfer   *transfer.Control
-	dialer     *dialer.Control
 	network    *network.Control
+	directory  *directory.Control
 	transcoder *rtmpingress.Transcoder
 
 	ctx       context.Context
@@ -196,7 +209,12 @@ func (s *ingressStream) Close() {
 	})
 }
 
-func (s *ingressStream) openWriter(key *key.Key) (*ppspp.Swarm, ioutil.WriteFlusher, error) {
+func (s *ingressStream) UpdateChannel(channel *videov1.VideoChannel) {
+	s.channel = channel
+	s.publishDirectoryListing()
+}
+
+func (s *ingressStream) openWriter() (*ppspp.Swarm, ioutil.WriteFlusher, error) {
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
 		SwarmOptions: ppspp.SwarmOptions{
 			ChunkSize:          1024,
@@ -208,7 +226,7 @@ func (s *ingressStream) openWriter(key *key.Key) (*ppspp.Swarm, ioutil.WriteFlus
 				LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithmED25519,
 			},
 		},
-		Key: key,
+		Key: s.channel.Key,
 	})
 	if err != nil {
 		return nil, nil, err
@@ -222,8 +240,8 @@ func (s *ingressStream) openWriter(key *key.Key) (*ppspp.Swarm, ioutil.WriteFlus
 	return w.Swarm(), cw, nil
 }
 
-func (s *ingressStream) channelNetworkKey(channel *videov1.VideoChannel) []byte {
-	switch o := channel.Owner.(type) {
+func (s *ingressStream) channelNetworkKey() []byte {
+	switch o := s.channel.Owner.(type) {
 	case *videov1.VideoChannel_Local_:
 		return o.Local.NetworkKey
 	case *videov1.VideoChannel_LocalShare_:
@@ -233,8 +251,8 @@ func (s *ingressStream) channelNetworkKey(channel *videov1.VideoChannel) []byte 
 	}
 }
 
-func (s *ingressStream) channelCreatorCert(channel *videov1.VideoChannel) (*certificate.Certificate, error) {
-	switch o := channel.Owner.(type) {
+func (s *ingressStream) channelCreatorCert() (*certificate.Certificate, error) {
+	switch o := s.channel.Owner.(type) {
 	case *videov1.VideoChannel_Local_:
 		cert, ok := s.network.Certificate(o.Local.NetworkKey)
 		if !ok {
@@ -248,14 +266,8 @@ func (s *ingressStream) channelCreatorCert(channel *videov1.VideoChannel) (*cert
 	}
 }
 
-func (s *ingressStream) publishDirectoryListing(channel *videov1.VideoChannel) error {
-	networkKey := s.channelNetworkKey(channel)
-	creator, err := s.channelCreatorCert(channel)
-	if err != nil {
-		return err
-	}
-
-	client, err := s.dialer.Client(networkKey, networkKey, directory.AddressSalt)
+func (s *ingressStream) publishDirectoryListing() error {
+	creator, err := s.channelCreatorCert()
 	if err != nil {
 		return err
 	}
@@ -263,7 +275,7 @@ func (s *ingressStream) publishDirectoryListing(channel *videov1.VideoChannel) e
 	listing := &networkv1.DirectoryListing{
 		Creator:   creator,
 		Timestamp: time.Now().Unix(),
-		Snippet:   channel.DirectoryListingSnippet,
+		Snippet:   s.channel.DirectoryListingSnippet,
 		Content: &networkv1.DirectoryListing_Media{
 			Media: &networkv1.DirectoryListingMedia{
 				StartedAt: s.startTime.Unix(),
@@ -272,28 +284,13 @@ func (s *ingressStream) publishDirectoryListing(channel *videov1.VideoChannel) e
 			},
 		},
 	}
-	if err := dao.SignMessage(listing, channel.Key); err != nil {
+	if err := dao.SignMessage(listing, s.channel.Key); err != nil {
 		return err
 	}
 
-	// TODO: move this to directory controller using reference counted clients to ping
-	return networkv1.NewDirectoryClient(client).Publish(
-		context.Background(),
-		&networkv1.DirectoryPublishRequest{Listing: listing},
-		&networkv1.DirectoryPublishResponse{},
-	)
+	return s.directory.Publish(context.Background(), listing, s.channelNetworkKey())
 }
 
 func (s *ingressStream) unpublishDirectoryListing() error {
-	networkKey := s.channelNetworkKey(s.channel)
-	client, err := s.dialer.Client(networkKey, networkKey, directory.AddressSalt)
-	if err != nil {
-		return err
-	}
-
-	return networkv1.NewDirectoryClient(client).Unpublish(
-		context.Background(),
-		&networkv1.DirectoryUnpublishRequest{Key: s.channel.Key.Public},
-		&networkv1.DirectoryUnpublishResponse{},
-	)
+	return s.directory.Unpublish(context.Background(), s.channel.Key.Public, s.channelNetworkKey())
 }
