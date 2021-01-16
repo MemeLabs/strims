@@ -8,7 +8,7 @@ import {
 export interface ICertificateRequest {
   key?: Uint8Array;
   keyType?: strims_type_KeyType;
-  keyUsage?: number;
+  keyUsage?: KeyUsage;
   subject?: string;
   signature?: Uint8Array;
 }
@@ -16,7 +16,7 @@ export interface ICertificateRequest {
 export class CertificateRequest {
   key: Uint8Array = new Uint8Array();
   keyType: strims_type_KeyType = 0;
-  keyUsage: number = 0;
+  keyUsage: KeyUsage = 0;
   subject: string = "";
   signature: Uint8Array = new Uint8Array();
 
@@ -72,7 +72,7 @@ export class CertificateRequest {
 export interface ICertificate {
   key?: Uint8Array;
   keyType?: strims_type_KeyType;
-  keyUsage?: number;
+  keyUsage?: KeyUsage;
   subject?: string;
   notBefore?: bigint;
   notAfter?: bigint;
@@ -84,7 +84,7 @@ export interface ICertificate {
 export class Certificate {
   key: Uint8Array = new Uint8Array();
   keyType: strims_type_KeyType = 0;
-  keyUsage: number = 0;
+  keyUsage: KeyUsage = 0;
   subject: string = "";
   notBefore: bigint = BigInt(0);
   notAfter: bigint = BigInt(0);

@@ -83,12 +83,12 @@ type VideoIngressControl interface {
 
 // VideoEgressControlBase ...
 type VideoEgressControlBase interface {
-	OpenStream(swarmURI string) ([]byte, io.ReadCloser, error)
+	OpenStream(swarmURI string, networkKeys [][]byte) ([]byte, io.ReadCloser, error)
 }
 
 // VideoHLSEgressControl ...
 type VideoHLSEgressControl interface {
-	OpenHLSStream(swarmURI string) (string, error)
+	OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, error)
 	CloseHLSStream(swarmURI string) error
 }
 

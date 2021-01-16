@@ -4,12 +4,14 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	rpcv1 "github.com/MemeLabs/go-ppspp/pkg/apis/rpc/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/golang/protobuf/proto"
@@ -121,15 +123,18 @@ func (t *VPNTransport) Listen() error {
 func (t *VPNTransport) HandleMessage(msg *vpn.Message) error {
 	req := &rpcv1.Call{}
 	if err := proto.Unmarshal(msg.Body, req); err != nil {
-		return err
+		return fmt.Errorf("unmarshaling rpc: %w", err)
 	}
 
 	cert := &certificate.Certificate{}
 	if err := proto.Unmarshal(req.Headers[vpnCertificateHeader], cert); err != nil {
-		return err
+		return fmt.Errorf("unmarshaling rpc: %w", err)
 	}
 	if err := t.verifyMessage(msg, req, cert); err != nil {
-		return err
+		logutil.PrintJSON(msg)
+		logutil.PrintJSON(req)
+		logutil.PrintJSON(cert)
+		return fmt.Errorf("verifying rpc: %w", err)
 	}
 
 	addr := &HostAddr{

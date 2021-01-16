@@ -3,7 +3,6 @@ package directory
 import (
 	"context"
 	"errors"
-	"log"
 	"sync"
 	"time"
 
@@ -120,7 +119,6 @@ func (d *directoryService) broadcast(now time.Time) error {
 	defer d.lock.Unlock()
 
 	for it := d.listings.PeekRecentlyTouched(d.lastBroadcastTime); it.Next(); {
-		log.Println("recently added listing")
 		l := it.Value().(*listing)
 
 		var event *networkv1.DirectoryEvent
@@ -157,7 +155,6 @@ func (d *directoryService) broadcast(now time.Time) error {
 	}
 
 	for it := d.users.PeekRecentlyTouched(d.lastBroadcastTime); it.Next(); {
-		log.Println("recently added user")
 		u := it.Value().(*user)
 
 		var keys [][]byte

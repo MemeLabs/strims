@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"log"
 	"math/rand"
 	"strconv"
 	"sync"
@@ -74,7 +73,6 @@ func (t *Control) Run(ctx context.Context) {
 			}
 		case <-pingTimer.C:
 			fuzz := rand.Int63n(int64((maxPingInterval - minPingInterval)))
-			log.Println(minPingInterval + time.Duration(fuzz))
 			pingTimer.Reset(minPingInterval + time.Duration(fuzz))
 			t.ping(ctx)
 		case <-ctx.Done():

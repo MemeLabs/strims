@@ -9,6 +9,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -50,7 +51,7 @@ func (t *Control) close() {
 
 }
 
-func (t *Control) open(swarmURI string) ([]byte, *ppspp.Swarm, error) {
+func (t *Control) open(swarmURI string, networkKeys [][]byte) ([]byte, *ppspp.Swarm, error) {
 	uri, err := ppspp.ParseURI(swarmURI)
 	if err != nil {
 		return nil, nil, err
@@ -65,18 +66,24 @@ func (t *Control) open(swarmURI string) ([]byte, *ppspp.Swarm, error) {
 	}
 
 	transferID := t.transfer.Add(swarm, []byte{})
+	for _, k := range networkKeys {
+		t.logger.Debug(
+			"publishing transfer",
+			logutil.ByteHex("transfer", transferID),
+			logutil.ByteHex("network", k),
+		)
+		t.transfer.Publish(transferID, k)
+	}
 
 	return transferID, swarm, nil
 }
 
 // OpenStream ...
-func (t *Control) OpenStream(swarmURI string) ([]byte, io.ReadCloser, error) {
-	transferID, swarm, err := t.open(swarmURI)
+func (t *Control) OpenStream(swarmURI string, networkKeys [][]byte) ([]byte, io.ReadCloser, error) {
+	transferID, swarm, err := t.open(swarmURI, networkKeys)
 	if err != nil {
 		return nil, nil, err
 	}
-
-	t.logger.Debug("finished discarding chunk fragment")
 
 	r := &VideoReader{
 		logger:     t.logger,
@@ -84,7 +91,10 @@ func (t *Control) OpenStream(swarmURI string) ([]byte, io.ReadCloser, error) {
 		transferID: transferID,
 		swarm:      swarm,
 	}
-	r.initReader()
+	// TODO: close swarm if init doesn't succeed within deadline (ctx?)
+	if err := r.initReader(); err != nil {
+		return nil, nil, err
+	}
 
 	return transferID, r, nil
 }
@@ -112,6 +122,8 @@ func (r *VideoReader) reinitReader() error {
 }
 
 func (r *VideoReader) initReader() error {
+	r.logger.Debug("waiting for reader")
+
 	sr := r.swarm.Reader()
 	r.logger.Debug("got swarm reader", zap.Uint64("offset", sr.Offset()))
 	cr, err := chunkstream.NewReaderSize(sr, int64(sr.Offset()), chunkstream.MaxSize)
@@ -120,11 +132,13 @@ func (r *VideoReader) initReader() error {
 	}
 	r.logger.Debug("opened chunkstream reader")
 
-	// discard first fragment
+	// disard the first incomplete fragment
 	var b bytes.Buffer
 	if _, err := io.Copy(&b, cr); err != nil {
 		return err
 	}
+
+	r.logger.Debug("finished discarding chunk fragment")
 
 	r.r = cr
 	return nil
@@ -134,7 +148,9 @@ func (r *VideoReader) initReader() error {
 func (r *VideoReader) Read(b []byte) (int, error) {
 	n, err := r.r.Read(b)
 	if err == store.ErrBufferUnderrun {
-		r.reinitReader()
+		if err := r.reinitReader(); err != nil {
+			return 0, err
+		}
 	}
 
 	return n, err

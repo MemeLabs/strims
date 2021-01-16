@@ -40,7 +40,7 @@ func NewCertificateRequest(key *keyapi.Key, usage certificate.KeyUsage, opts ...
 	csr := &certificate.CertificateRequest{
 		Key:      key.Public,
 		KeyType:  key.Type,
-		KeyUsage: uint32(usage),
+		KeyUsage: usage,
 	}
 
 	for _, opt := range opts {
@@ -63,7 +63,7 @@ func NewCertificateRequest(key *keyapi.Key, usage certificate.KeyUsage, opts ...
 
 // VerifyCertificateRequest ...
 func VerifyCertificateRequest(csr *certificate.CertificateRequest, usage certificate.KeyUsage) error {
-	if csr.KeyUsage&^uint32(usage) != 0 {
+	if csr.KeyUsage&^usage != 0 {
 		return ErrUnsupportedKeyUsage
 	}
 
@@ -133,7 +133,7 @@ func VerifyCertificate(cert *certificate.Certificate) error {
 		if parent != nil {
 			signingCert = parent
 		}
-		if signingCert.KeyUsage&uint32(certificate.KeyUsage_KEY_USAGE_SIGN) == 0 {
+		if signingCert.KeyUsage&(certificate.KeyUsage_KEY_USAGE_SIGN) == 0 {
 			errs = append(errs, ErrUnsupportedKeyUsage)
 		}
 
@@ -203,7 +203,7 @@ func serializeCertificate(cert *certificate.Certificate) ([]byte, int) {
 	n := copy(b, cert.Key)
 	binary.BigEndian.PutUint32(b[n:], uint32(cert.KeyType))
 	n += 4
-	binary.BigEndian.PutUint32(b[n:], cert.KeyUsage)
+	binary.BigEndian.PutUint32(b[n:], uint32(cert.KeyUsage))
 	n += 4
 	n += copy(b[n:], []byte(cert.Subject))
 	binary.BigEndian.PutUint64(b[n:], cert.NotBefore)
@@ -222,7 +222,7 @@ func serializeCertificateRequest(csr *certificate.CertificateRequest) ([]byte, i
 	n := copy(b, csr.Key)
 	binary.BigEndian.PutUint32(b[n:], uint32(csr.KeyType))
 	n += 4
-	binary.BigEndian.PutUint32(b[n:], csr.KeyUsage)
+	binary.BigEndian.PutUint32(b[n:], uint32(csr.KeyUsage))
 	n += 4
 	n += copy(b[n:], []byte(csr.Subject))
 

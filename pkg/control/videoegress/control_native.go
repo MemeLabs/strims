@@ -3,7 +3,7 @@
 package videoegress
 
 // OpenHLSStream ...
-func (t *Control) OpenHLSStream(swarmURI string) (string, error) {
+func (t *Control) OpenHLSStream(swarmURI string, networkKeys [][]byte) (string, error) {
 	return "", nil
 }
 

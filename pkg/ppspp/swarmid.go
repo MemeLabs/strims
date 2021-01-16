@@ -8,9 +8,11 @@ import (
 // SwarmID ...
 type SwarmID []byte
 
+var idEncoding = base32.StdEncoding.WithPadding(base32.NoPadding)
+
 // DecodeSwarmID ...
 func DecodeSwarmID(key string) (SwarmID, error) {
-	s, err := base32.StdEncoding.DecodeString(key)
+	s, err := idEncoding.DecodeString(key)
 	return SwarmID(s), err
 }
 
@@ -23,7 +25,7 @@ func NewSwarmID(key []byte) SwarmID {
 
 // String ...
 func (s SwarmID) String() string {
-	return base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(s)
+	return idEncoding.EncodeToString(s)
 }
 
 // Binary ...

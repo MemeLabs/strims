@@ -15,6 +15,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/petar/GoLLRB/llrb"
@@ -80,12 +81,14 @@ func (c *Control) Open(mimeType string, directorySnippet *networkv1.DirectoryLis
 	transferID := c.transfer.Add(w.Swarm(), []byte{})
 	for _, k := range networkKeys {
 		c.transfer.Publish(transferID, k)
+		c.logger.Debug(
+			"publishing transfer",
+			logutil.ByteHex("transfer", transferID),
+			logutil.ByteHex("network", k),
+		)
 	}
 
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	c.streams.InsertNoReplace(&stream{
+	s := &stream{
 		transferID:       transferID,
 		startTime:        time.Now(),
 		mimeType:         mimeType,
@@ -94,7 +97,13 @@ func (c *Control) Open(mimeType string, directorySnippet *networkv1.DirectoryLis
 		key:              key,
 		swarm:            w.Swarm(),
 		w:                cw,
-	})
+	}
+
+	c.publishStream(s)
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
+	c.streams.InsertNoReplace(s)
 
 	return transferID, nil
 }
@@ -110,6 +119,7 @@ func (c *Control) Update(id []byte, directorySnippet *networkv1.DirectoryListing
 	}
 
 	s.directorySnippet = directorySnippet
+	c.publishStream(s)
 
 	return nil
 }
@@ -148,6 +158,20 @@ func (c *Control) Close(id []byte) error {
 	c.transfer.Remove(s.transferID)
 
 	return nil
+}
+
+func (c *Control) publishStream(s *stream) {
+	for _, k := range s.networkKeys {
+		go func(k []byte) {
+			if err := c.publishDirectoryListing(k, s); err != nil {
+				c.logger.Debug(
+					"publishing video capture failed",
+					logutil.ByteHex("network", k),
+					zap.Error(err),
+				)
+			}
+		}(k)
+	}
 }
 
 func (c *Control) publishDirectoryListing(networkKey []byte, s *stream) error {

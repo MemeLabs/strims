@@ -11,7 +11,7 @@ import "type/key.proto";
 message CertificateRequest {
   bytes key = 1;
   strims.type.KeyType key_type = 2;
-  uint32 key_usage = 3;
+  KeyUsage key_usage = 3;
   string subject = 5;
   bytes signature = 4;
 }
@@ -19,7 +19,7 @@ message CertificateRequest {
 message Certificate {
   bytes key = 1;
   strims.type.KeyType key_type = 2;
-  uint32 key_usage = 3;
+  KeyUsage key_usage = 3;
   string subject = 4;
   uint64 not_before = 5;
   uint64 not_after = 6;

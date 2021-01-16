@@ -59,21 +59,18 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 			var n int
 			var segmentEnd, bufferUnderrun bool
 		ReadLoop:
-			for {
-				segmentEnd = false
-				bufferUnderrun = false
-
+			for n < len(b) {
 				nn, err := r.Read(b[n:])
 				n += nn
 
 				switch err {
 				case nil:
-					break
 				case io.EOF:
 					segmentEnd = true
 					break ReadLoop
 				case store.ErrBufferUnderrun:
 					bufferUnderrun = true
+					n = 0
 					break ReadLoop
 				default:
 					ch <- &videov1.EgressOpenStreamResponse{
@@ -84,10 +81,6 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 						},
 					}
 					return
-				}
-
-				if n == len(b) {
-					break
 				}
 			}
 

@@ -154,7 +154,7 @@ func (t *Control) Publish(ctx context.Context, peerID uint64, network *network.N
 	csr := &certificate.CertificateRequest{
 		Key:      peer.vnic.Certificate.Key,
 		KeyType:  peer.vnic.Certificate.KeyType,
-		KeyUsage: uint32(certificate.KeyUsage_KEY_USAGE_BROKER),
+		KeyUsage: certificate.KeyUsage_KEY_USAGE_BROKER | certificate.KeyUsage_KEY_USAGE_SIGN,
 	}
 	cert, err := dao.SignCertificateRequest(csr, validDuration, network.Key)
 	if err != nil {

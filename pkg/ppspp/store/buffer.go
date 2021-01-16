@@ -66,7 +66,14 @@ func (s *Buffer) Consume(c Chunk) bool {
 
 // Close ...
 func (s *Buffer) Close() {
-	s.readable <- ErrClosed
+	for {
+		select {
+		case s.readable <- ErrClosed:
+			return
+		default:
+			<-s.readable
+		}
+	}
 }
 
 // Set ...
