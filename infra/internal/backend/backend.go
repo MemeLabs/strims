@@ -9,6 +9,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"path"
@@ -99,7 +100,11 @@ func (c *HeficedConfig) isDriverConfig() {}
 type Config struct {
 	LogLevel int
 	DB       struct {
-		Path string
+		Name string
+		User string
+		Pass string
+		Host string
+		Port int
 	}
 	FlakeStartTime time.Time
 	Providers      map[string]DriverConfig
@@ -168,7 +173,13 @@ func New(cfg Config) (*Backend, error) {
 		zapcore.LevelEnabler(zapcore.Level(cfg.LogLevel)),
 	))
 
-	db, err := sql.Open("sqlite3", cfg.DB.Path)
+	ip, port, err := net.SplitHostPort(cfg.PublicControllerAddress)
+	if ip == "" || port == "" || err != nil {
+		return nil, errors.New("invalid ip address (ip and port required)")
+	}
+
+	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Pass, cfg.DB.Name)
+	db, err := sql.Open("postgres", connStr)
 	if err != nil {
 		return nil, err
 	}
@@ -656,7 +667,7 @@ func (b *Backend) configForNode(n *node.Node) (*wgutil.InterfaceConfig, error) {
 	peers = append(peers, wgutil.InterfacePeerConfig{
 		AllowedIPs:          "10.0.0.1/32",
 		PublicKey:           wgPub,
-		Endpoint:            fmt.Sprintf("%s:%d", b.ControllerAddress, wgport),
+		Endpoint:            b.ControllerAddress,
 		PersistentKeepalive: 25,
 	})
 

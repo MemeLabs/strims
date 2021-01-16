@@ -1,7 +1,11 @@
 `infra.yaml`
 ```yaml
 DB:
-  Path: ./hack/dev.sqlite
+  Name: ""
+  User: ""
+  Pass: ""
+  Host: ""
+  Port: 5432
 FlakeStartTime: 2019-09-14T00:00:00Z
 Providers:
   digitalocean:
@@ -36,15 +40,19 @@ Providers:
 SSH:
   IdentityFile: /root/.ssh/id_ecdsa_example
 ScriptDirectory: /mnt/
-ControllerUser: "root"
-PublicControllerAddress: "51.51.51.2"
+PublicControllerAddress: "51.51.51.2:51820"
 InterfaceConfig:
   PrivateKey: "XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX="
   Address: "10.0.0.1/24"
   ListenPort: 51820
-ScriptDirectory: /
 ```
 
+### Push scripts into desired location
 ```
 lxc file push scripts/* strims-k8s/mnt/
+```
+
+### Port forwarding WireGuard to LXC
+```
+lxc config device add strims-k8s proxy listen=udp:0.0.0.0:51820 connect=udp:127.0.0.1:51820
 ```

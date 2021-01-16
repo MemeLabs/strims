@@ -1,0 +1,36 @@
+persistence:
+  enabled: true
+  storageClass: local-path
+  size: 10Gi
+postgresqlDatabase: strims
+postgresqlUsername: strims
+postgresqlPassword: strims
+initdbScripts:
+  db-init.sql: |
+                CREATE TABLE IF NOT EXISTS "nodes" (
+                  "id"                BIGSERIAL PRIMARY KEY,
+                  "active"            INTEGER NOT NULL,
+                  "started_at"        BIGINT NOT NULL,
+                  "stopped_at"        BIGINT,
+                  "provider_name"     TEXT NOT NULL,
+                  "provider_id"       TEXT NOT NULL,
+                  "name"              TEXT NOT NULL,
+                  "memory"            INTEGER NOT NULL,
+                  "cpus"              INTEGER NOT NULL,
+                  "disk"              INTEGER NOT NULL,
+                  "ip_v4"             TEXT NOT NULL,
+                  "ip_v6"             TEXT NOT NULL,
+                  "region_name"       TEXT NOT NULL,
+                  "region_lat"        DOUBLE PRECISION NOT NULL,
+                  "region_lng"        DOUBLE PRECISION NOT NULL,
+                  "sku_name"          TEXT NOT NULL,
+                  "sku_network_cap"   INTEGER NOT NULL,
+                  "sku_network_speed" INTEGER NOT NULL,
+                  "sku_price_monthly" REAL NOT NULL,
+                  "sku_price_hourly"  REAL NOT NULL,
+                  "wireguard_key"     TEXT NOT NULL,
+                  "wireguard_ip"      TEXT NOT NULL,
+                  "user"              TEXT NOT NULL,
+                  UNIQUE ("provider_name", "provider_id"),
+                  UNIQUE ("name")
+                );
