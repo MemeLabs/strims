@@ -34,7 +34,8 @@ jobs:
       - name: set up Go
         uses: actions/setup-go@v2
         with:
-          go-version: '^1.14'
+          stable: false
+          go-version: '1.16.0-beta1'
       - name: Build Go bridge
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
