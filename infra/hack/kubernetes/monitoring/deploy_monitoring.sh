@@ -4,7 +4,7 @@ set -e
 kubectl create namespace monitoring
 
 #add repos
-sudo helm repo add stable https://kubernetes-charts.storage.googleapis.com
+sudo helm repo add stable https://charts.helm.sh/stable 
 sudo helm repo add prometheus-community https://prometheus-community.github.io/helm-charts
 
 sudo helm repo add loki https://grafana.github.io/loki/charts
