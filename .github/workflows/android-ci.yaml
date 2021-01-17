@@ -2,6 +2,7 @@ name: lint and build android app
 on:
   pull_request:
     paths:
+      - '.github/workflows/android-ci.yaml'
       - 'android/**'
   push:
     branches:
@@ -18,6 +19,11 @@ jobs:
         uses: actions/setup-ruby@v1
         with:
           ruby-version: 2.6.x
+      - uses: actions/cache@v2
+        id: cache
+        with:
+          path: android/app/libs/bridge.aar
+          key: ${{ runner.os }}-${{ hashFiles('android/bridge/*') }}
       - name: Install Dependencies
         working-directory: ./android
         run: gem install bundler && bundle install
@@ -30,6 +36,7 @@ jobs:
         with:
           go-version: '^1.14'
       - name: Build Go bridge
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           go get golang.org/x/mobile/cmd/gomobile
           go mod download
