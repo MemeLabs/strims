@@ -1,3 +1,4 @@
+// Package backend ...
 package backend
 
 import (
@@ -9,6 +10,7 @@ import (
 	"io"
 	"io/ioutil"
 	"log"
+	"math/rand"
 	"net"
 	"os"
 	"os/exec"
@@ -21,7 +23,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/infra/internal/models"
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/MemeLabs/go-ppspp/infra/pkg/wgutil"
-	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/golang/geo/s2"
 	"github.com/google/go-cmp/cmp"
 	"github.com/mitchellh/mapstructure"
@@ -173,6 +174,8 @@ func New(cfg Config) (*Backend, error) {
 		zapcore.LevelEnabler(zapcore.Level(cfg.LogLevel)),
 	))
 
+	rand.Seed(time.Now().UnixNano())
+
 	ip, port, err := net.SplitHostPort(cfg.PublicControllerAddress)
 	if ip == "" || port == "" || err != nil {
 		return nil, errors.New("invalid ip address (ip and port required)")
@@ -197,7 +200,10 @@ func New(cfg Config) (*Backend, error) {
 		StartTime: cfg.FlakeStartTime,
 	})
 
-	drivers := map[string]node.Driver{"custom": node.NewCustomDriver()}
+	drivers := map[string]node.Driver{
+		"custom": node.NewCustomDriver(),
+		"noop":   node.NewNoopDriver(),
+	}
 	for name, dci := range cfg.Providers {
 		switch dc := dci.(type) {
 		case *DigitalOceanConfig:
@@ -313,8 +319,18 @@ func (b *Backend) CreateNode(
 		return fmt.Errorf("failed to create node(%v): %w", req, err)
 	}
 
+	n.StartedAt = time.Now().UnixNano()
 	n.ProviderName = driver.Provider()
 	n.User = user
+
+	if driver.Provider() == "noop" {
+		var id uint64
+		id, err = b.flake.NextID()
+		if err != nil {
+			return err
+		}
+		n.ProviderID = fmt.Sprint(id)
+	}
 
 	b.Log.Info("node has been created",
 		zap.String("ipv4", n.Networks.V4[0]),
@@ -340,6 +356,16 @@ func (b *Backend) CreateNode(
 	}
 
 	n.WireguardPrivKey = wgpriv
+	if err := b.insertNode(ctx, n); err != nil {
+		return fmt.Errorf("failed to insert node(%v): %w", n, err)
+	}
+
+	b.Log.Info("node has been inserted into the database")
+
+	if driver.Provider() == "noop" {
+		// return before we modify any peers or the controller
+		return nil
+	}
 
 	// append new peer
 	b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
@@ -348,12 +374,6 @@ func (b *Backend) CreateNode(
 		Endpoint:            fmt.Sprintf("%s:%d", n.Networks.V4[0], 51820),
 		PersistentKeepalive: 25,
 	})
-
-	if err := b.insertNode(ctx, n); err != nil {
-		return fmt.Errorf("failed to insert node(%v): %w", n, err)
-	}
-
-	b.Log.Info("node has been inserted into the database")
 
 	if err := b.updateController(); err != nil {
 		return fmt.Errorf("failed to update controller config(%v): %w", b.Conf, err)
@@ -376,7 +396,7 @@ func (b *Backend) CreateNode(
 
 func (b *Backend) ActiveNodes(ctx context.Context) ([]*node.Node, error) {
 	var nodes []*node.Node
-	slice, err := models.Nodes(qm.Where("active=?", 1)).All(ctx, b.DB)
+	slice, err := models.Nodes(qm.Where("active=?", 1)).AllG(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -389,19 +409,13 @@ func (b *Backend) ActiveNodes(ctx context.Context) ([]*node.Node, error) {
 }
 
 func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
-	id, err := dao.GenerateSnowflake()
-	if err != nil {
-		return err
-	}
-
 	nodeEntry := &models.Node{
 		User:         node.User,
-		ID:           int64(id),
 		Active:       1,
-		StartedAt:    time.Now().UnixNano(),
+		StartedAt:    node.StartedAt,
 		ProviderID:   node.ProviderID,
 		ProviderName: node.ProviderName,
-		Name:         strings.ToLower(node.Name), // lowering here to match k8s node naming
+		Name:         strings.ToLower(node.Name), // lowering to match k8s node naming
 		Memory:       node.Memory,
 		CPUs:         node.CPUs,
 		Disk:         node.Disk,
@@ -416,7 +430,7 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 		SKUPriceMonthly: float32(node.SKU.PriceMonthly.Value),
 	}
 
-	if err := nodeEntry.Insert(ctx, b.DB, boil.Infer()); err != nil {
+	if err := nodeEntry.InsertG(ctx, boil.Infer()); err != nil {
 		return fmt.Errorf("failed to insert node: %w", err)
 	}
 
@@ -424,7 +438,6 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 }
 
 func (b *Backend) updateController() error {
-	// write the wg stripped cfg to a temp file
 	tmp, err := ioutil.TempFile("", "goppspp")
 	if err != nil {
 		return fmt.Errorf("failed to create tmp file: %w", err)
@@ -451,12 +464,30 @@ func (b *Backend) updateController() error {
 func (b *Backend) initNode(ctx context.Context, node *node.Node) error {
 	// Continuously retry ssh'ing into the new node. This is to ensure that it is
 	// connectable by the time the master node begins initilization.
-	var err error
-	fmt.Printf("attempting to ssh to the new node(%s@%s)", node.User, node.Networks.V4[0])
+	privKey, err := ioutil.ReadFile(b.SSHIdentityFile())
+	if err != nil {
+		return err
+	}
+	signer, err := ssh.ParsePrivateKey(privKey)
+	if err != nil {
+		return fmt.Errorf("failed to parse private key: %w", err)
+	}
+
+	sshConf := &ssh.ClientConfig{
+		User:            node.User,
+		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
+		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
+		Timeout:         time.Duration(10 * time.Second),
+	}
+
+	ipv4 := node.Networks.V4[0]
+	fmt.Printf("attempting to ssh to the new node(%s@%s)", node.User, ipv4)
 	for i := 0; i < nodeSSHRetries; i++ {
 		fmt.Print(".")
-		_, err = sshToNode(node.User, node.Networks.V4[0], b.SSHIdentityFile())
+
+		_, err = ssh.Dial("tcp", fmt.Sprintf("%s:22", ipv4), sshConf)
 		if err == nil {
+			fmt.Println()
 			break
 		}
 		time.Sleep(time.Second)
@@ -464,7 +495,6 @@ func (b *Backend) initNode(ctx context.Context, node *node.Node) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to node: %w", err)
 	}
-	fmt.Println()
 
 	conf, err := b.configForNode(node)
 	if err != nil {
@@ -508,33 +538,29 @@ func (b *Backend) syncNodes(ctx context.Context, nodes []*node.Node) {
 }
 
 func (b *Backend) DestroyNode(ctx context.Context, name string) error {
-	n, err := models.Nodes(qm.Where("name=?", name)).One(ctx, b.DB)
+	n, err := models.Nodes(qm.Where("name=?", name)).OneG(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to find node(%s) in database: %w", name, err)
 	}
 
-	if err := run(
-		"kubectl", "drain", name, "--ignore-daemonsets", "--delete-emptydir-data", "--force", "--timeout=30s",
-	); err != nil {
-		b.Log.Error("failed to drain node", zap.Error(err))
-	}
-
-	if err := run("kubectl", "delete", "node", name); err != nil {
-		b.Log.Error("failed to delete node", zap.Error(err))
-		return err
-	}
-
-	b.Log.Info("node has been deleted from kube")
-
 	n.Active = 0
-	n.StoppedAt = null.Int64From(time.Now().Unix())
+	n.StoppedAt = null.Int64From(time.Now().UnixNano())
 
-	count, err := n.Update(ctx, b.DB, boil.Infer())
+	count, err := n.UpdateG(ctx, boil.Infer())
 	if count != 1 || err != nil {
 		return fmt.Errorf("failed to update node: %w", err)
 	}
 
 	b.Log.Info("node has been updated in db to inactive")
+
+	if n.ProviderName == "noop" {
+		// simulate a random stop time a day within the future
+		stoppedAt := time.Now().Add(time.Hour*time.Duration(rand.Intn(23)) +
+			time.Minute*time.Duration(rand.Intn(59)) +
+			time.Second*time.Duration(rand.Intn(59)))
+		n.StoppedAt = null.Int64From(stoppedAt.UnixNano())
+		return nil
+	}
 
 	for i, p := range b.Conf.Peers {
 		if p.Endpoint == fmt.Sprintf("%s:%d", n.IPV4, 51820) {
@@ -543,6 +569,19 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 			break
 		}
 	}
+
+	if err = run(
+		"kubectl", "drain", name, "--ignore-daemonsets", "--delete-emptydir-data", "--force", "--timeout=30s",
+	); err != nil {
+		b.Log.Error("failed to drain node", zap.Error(err))
+	}
+
+	if err = run("kubectl", "delete", "node", name); err != nil {
+		b.Log.Error("failed to delete node", zap.Error(err))
+		return err
+	}
+
+	b.Log.Info("node has been deleted from kube")
 
 	nodes, err := b.ActiveNodes(ctx)
 	if err != nil {
@@ -600,7 +639,21 @@ func (b *Backend) DiffNodes(ctx context.Context) (string, error) {
 		return diff, nil
 	}
 
-	return "", errors.New("failed to compare")
+	return "", nil
+}
+
+func (b *Backend) InactiveNodes(ctx context.Context) ([]*node.Node, error) {
+	var nodes []*node.Node
+	slice, err := models.Nodes(qm.Where("active=?", 0)).AllG(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	for _, n := range slice {
+		nodes = append(nodes, modelToNode(n))
+	}
+
+	return nodes, nil
 }
 
 func (b *Backend) nextWGIPv4(ctx context.Context, activeNodes []*node.Node) (string, error) {
@@ -684,6 +737,10 @@ func (b *Backend) configForNode(n *node.Node) (*wgutil.InterfaceConfig, error) {
 	}, nil
 }
 
+func ComputeCost(sku *node.SKU, timeOnline time.Duration) float64 {
+	return sku.PriceHourly.Value * float64(timeOnline) / float64(time.Hour)
+}
+
 func modelToNode(n *models.Node) *node.Node {
 	var status string
 	if n.Active == 1 {
@@ -722,33 +779,9 @@ func modelToNode(n *models.Node) *node.Node {
 		},
 		WireguardPrivKey: n.WireguardKey,
 		WireguardIPv4:    n.WireguardIP,
+		StartedAt:        n.StartedAt,
+		StoppedAt:        n.StoppedAt.Int64,
 	}
-}
-
-// sshToNode allows connection to an instance via SSH. A user, address and
-// private key are required, the same as using `ssh -i key.txt user@address`.
-// The caller is responsible for closing the client connection.
-func sshToNode(user, addr, privKeyPath string) (*ssh.Client, error) {
-	key, err := ioutil.ReadFile(privKeyPath)
-	if err != nil {
-		return nil, err
-	}
-	signer, err := ssh.ParsePrivateKey(key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse private key: %w", err)
-	}
-
-	conf := &ssh.ClientConfig{
-		User:            user,
-		Auth:            []ssh.AuthMethod{ssh.PublicKeys(signer)},
-		HostKeyCallback: ssh.InsecureIgnoreHostKey(),
-		Timeout:         time.Duration(10 * time.Second),
-	}
-	conn, err := ssh.Dial("tcp", fmt.Sprintf("%s:22", addr), conf)
-	if err != nil {
-		return nil, fmt.Errorf("failed to dial node(%v): %w", conf, err)
-	}
-	return conn, nil
 }
 
 // executes a shell command
@@ -779,8 +812,4 @@ func run(args ...string) error {
 	}
 
 	return nil
-}
-
-func computePrice(sku *node.SKU, timeOnline time.Duration) float64 {
-	return sku.PriceHourly.Value * float64(timeOnline) / float64(time.Hour)
 }

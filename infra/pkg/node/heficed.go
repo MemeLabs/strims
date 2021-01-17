@@ -374,9 +374,9 @@ func (d *HeficedDriver) findTemplateID(ctx context.Context, path, region string)
 		return "", err
 	}
 
-	if templates.Links.Paging.Next != "" {
-		// TODO: check paging
-	}
+	// TODO: check paging
+	//if templates.Links.Paging.Next != "" {
+	//}
 
 	for _, template := range templates.Data {
 		if template.Name == heficedOS {
@@ -421,7 +421,8 @@ func (d *HeficedDriver) post(ctx context.Context, path string, input, output int
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, err := ioutil.ReadAll(resp.Body)
+		var body []byte
+		body, err = ioutil.ReadAll(resp.Body)
 		if err != nil {
 			return fmt.Errorf("failed to read error body: %s %v", resp.Body, err)
 		}

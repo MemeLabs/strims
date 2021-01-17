@@ -2,6 +2,7 @@ package cmd
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"strconv"
@@ -18,9 +19,9 @@ func init() {
 }
 
 var skusCmd = &cobra.Command{
-	Use:               "skus [provider] [region]",
+	Use:               "skus [provider]",
 	Short:             "List provider SKUs",
-	Args:              cobra.MaximumNArgs(2),
+	Args:              cobra.MinimumNArgs(1),
 	ValidArgsFunction: providerValidArgsFunc,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		header := []string{
@@ -44,6 +45,10 @@ var skusCmd = &cobra.Command{
 		var data [][]string
 
 		region, _ := cmd.PersistentFlags().GetString("region")
+		if region == "" {
+			return errors.New("must provide a region")
+		}
+
 		req := &node.SKUsRequest{
 			Region: region,
 		}
@@ -52,7 +57,7 @@ var skusCmd = &cobra.Command{
 			provider := args[0]
 			driver, ok := backend.NodeDrivers[provider]
 			if !ok {
-				return fmt.Errorf("Unsupported provider: %s", provider)
+				return fmt.Errorf("unsupported provider: %s", provider)
 			}
 
 			rows, err := formatProviderSKUs(cmd.Context(), driver, req)
@@ -94,7 +99,7 @@ var skusCmd = &cobra.Command{
 func formatProviderSKUs(ctx context.Context, driver node.Driver, req *node.SKUsRequest) ([][]string, error) {
 	skus, err := driver.SKUs(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("Loading SKUs failed: %w", err)
+		return nil, fmt.Errorf("oading SKUs failed: %w", err)
 	}
 
 	rows := [][]string{}

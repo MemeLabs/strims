@@ -38,7 +38,7 @@ var nodesCmd = &cobra.Command{
 			provider := args[0]
 			driver, ok := backend.NodeDrivers[provider]
 			if !ok {
-				return fmt.Errorf("Unsupported provider: %s", provider)
+				return fmt.Errorf("unsupported provider: %s", provider)
 			}
 
 			rows, err := formatProviderNodes(cmd.Context(), driver)
@@ -69,7 +69,7 @@ var nodesCmd = &cobra.Command{
 func formatProviderNodes(ctx context.Context, driver node.Driver) ([][]string, error) {
 	nodes, err := driver.List(ctx, &node.ListRequest{})
 	if err != nil {
-		return nil, fmt.Errorf("Loading nodes failed: %w", err)
+		return nil, fmt.Errorf("loading nodes failed: %w", err)
 	}
 
 	rows := [][]string{}

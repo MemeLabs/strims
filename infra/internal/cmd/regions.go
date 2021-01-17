@@ -31,7 +31,7 @@ var regionsCmd = &cobra.Command{
 			provider := args[0]
 			driver, ok := backend.NodeDrivers[provider]
 			if !ok {
-				return fmt.Errorf("Unsupported provider: %s", provider)
+				return fmt.Errorf("unsupported provider: %s", provider)
 			}
 
 			rows, err := formatProviderRegions(cmd.Context(), driver)
@@ -62,7 +62,7 @@ var regionsCmd = &cobra.Command{
 func formatProviderRegions(ctx context.Context, driver node.Driver) ([][]string, error) {
 	regions, err := driver.Regions(ctx, &node.RegionsRequest{})
 	if err != nil {
-		return nil, fmt.Errorf("Loading regions failed: %w", err)
+		return nil, fmt.Errorf("loading regions failed: %w", err)
 	}
 
 	rows := [][]string{}

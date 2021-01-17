@@ -1,3 +1,4 @@
+// Package node ...
 package node
 
 import (
@@ -107,6 +108,8 @@ type Node struct {
 	SKU              *SKU      `json:"sku,omitempty"`
 	WireguardPrivKey string    `json:"wireguard_priv_key,omitempty"`
 	WireguardIPv4    string    `json:"wireguard_ipv4,omitempty"`
+	StartedAt        int64     `json:"started_at,omitempty"`
+	StoppedAt        int64     `json:"stopped_at,omitempty"`
 }
 
 // Networks represents the Node's networks.

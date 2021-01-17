@@ -77,7 +77,7 @@ var ovhRegions = []*Region{
 
 // NewOVHDriver ...
 func NewOVHDriver(region, appKey, appSecret, consumerKey, projectID string) (*OVHDriver, error) {
-	client, err := ovh.NewClient(subToFullname(region), appKey, appSecret, consumerKey)
+	client, err := ovh.NewClient(subsidiaryToFullname(region), appKey, appSecret, consumerKey)
 	if err != nil {
 		return nil, err
 	}
@@ -420,7 +420,7 @@ func (d *OVHDriver) ovhNode(instance *ovhInstance, priceMap ovhPriceMap) *Node {
 	}
 }
 
-func subToFullname(sub string) string {
+func subsidiaryToFullname(sub string) string {
 	switch sub {
 	case "CA":
 		return "ovh-ca"
