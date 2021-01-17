@@ -20,6 +20,8 @@ set -ex
 
 sudo -s
 
+DEBIAN_FRONTEND=noninteractive
+
 ufw default allow outgoing
 ufw default deny incoming
 ufw allow ssh

@@ -17,6 +17,8 @@ var createCmd = &cobra.Command{
 	Use:   "create [provider] [sku] [region] | create custom [user] [hostname] [ipv4]",
 	Short: "Create node",
 	Args: func(cmd *cobra.Command, args []string) error {
+		cobra.ExactArgs(3)
+
 		provider := args[0]
 		if provider == "custom" {
 			user := args[1]

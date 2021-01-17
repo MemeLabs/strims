@@ -178,10 +178,17 @@ func New(cfg Config) (*Backend, error) {
 		return nil, errors.New("invalid ip address (ip and port required)")
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
 	connStr := fmt.Sprintf("host=%s port=%d user=%s password=%s dbname=%s sslmode=disable", cfg.DB.Host, cfg.DB.Port, cfg.DB.User, cfg.DB.Pass, cfg.DB.Name)
 	db, err := sql.Open("postgres", connStr)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to open db conn: %w", err)
+	}
+
+	if err := db.PingContext(ctx); err != nil {
+		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
 	boil.SetDB(db)
@@ -457,9 +464,8 @@ func (b *Backend) initNode(ctx context.Context, node *node.Node) error {
 	if err != nil {
 		return fmt.Errorf("failed to connect to node: %w", err)
 	}
-	fmt.Print("\n")
+	fmt.Println()
 
-	// construct new node's WG config
 	conf, err := b.configForNode(node)
 	if err != nil {
 		return err
@@ -502,10 +508,13 @@ func (b *Backend) syncNodes(ctx context.Context, nodes []*node.Node) {
 }
 
 func (b *Backend) DestroyNode(ctx context.Context, name string) error {
-	// TODO: validate node exists, don't depend on kubectl to fail
+	n, err := models.Nodes(qm.Where("name=?", name)).One(ctx, b.DB)
+	if err != nil {
+		return fmt.Errorf("failed to find node(%s) in database: %w", name, err)
+	}
 
 	if err := run(
-		"kubectl", "drain", name, "--ignore-daemonsets", "--delete-local-data", "--force", "--timeout=30s",
+		"kubectl", "drain", name, "--ignore-daemonsets", "--delete-emptydir-data", "--force", "--timeout=30s",
 	); err != nil {
 		b.Log.Error("failed to drain node", zap.Error(err))
 	}
@@ -516,11 +525,6 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 	}
 
 	b.Log.Info("node has been deleted from kube")
-
-	n, err := models.Nodes(qm.Where("name=?", name)).One(ctx, b.DB)
-	if err != nil {
-		return fmt.Errorf("failed to find node(%s) in database: %w", name, err)
-	}
 
 	n.Active = 0
 	n.StoppedAt = null.Int64From(time.Now().Unix())

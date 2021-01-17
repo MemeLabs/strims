@@ -1,5 +1,6 @@
 `infra.yaml`
 ```yaml
+LogLevel: 1
 DB:
   Name: ""
   User: ""
@@ -55,4 +56,10 @@ lxc file push scripts/* strims-k8s/mnt/
 ### Port forwarding WireGuard to LXC
 ```
 lxc config device add strims-k8s proxy listen=udp:0.0.0.0:51820 connect=udp:127.0.0.1:51820
+```
+
+### Create a new node
+```
+go build ./cmd/cli/main.go
+./main create ovh s1-2 UK1
 ```
