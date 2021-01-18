@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/merkle"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
@@ -370,7 +371,7 @@ func (w *merkleWriter) Write(p []byte) (int, error) {
 	b := binmap.NewBin(w.munroLayer, w.n)
 	w.n++
 
-	ts := time.Now()
+	ts := iotime.Load()
 	tree := w.swarmVerifier.tree(b)
 	tree.Fill(b, p)
 	sig := w.signatureSigner.Sign(ts, tree.Get(b))

@@ -8,13 +8,13 @@ import useVideo from "../../hooks/useVideo";
 import LogoButton from "./LogoButton";
 import VideoControls from "./VideoControls";
 
-type SwarmPlayerProps = Pick<MediaSourceProps, "networkKey" | "swarmKey" | "mimeType"> & {
+type SwarmPlayerProps = Pick<MediaSourceProps, "networkKey" | "swarmUri" | "mimeType"> & {
   volumeStepSize?: number;
 };
 
 const SwarmPlayer: FunctionComponent<SwarmPlayerProps> = ({
   networkKey,
-  swarmKey,
+  swarmUri,
   mimeType,
   volumeStepSize = 0.1,
 }) => {
@@ -22,7 +22,11 @@ const SwarmPlayer: FunctionComponent<SwarmPlayerProps> = ({
   const [controlsHidden, renewControlsTimeout, clearControlsTimeout] = useIdleTimeout();
   const [isFullscreen, toggleFullscreen] = useFullscreen();
   const [videoState, videoProps, videoControls] = useVideo();
-  const mediaSource = useMediaSource({ networkKey, swarmKey, mimeType, videoRef: videoProps.ref });
+  const mediaSource = useMediaSource({ networkKey, swarmUri, mimeType, videoRef: videoProps.ref });
+
+  useEffect(() => {
+    console.log(">>>", videoState.error);
+  }, [videoState.error]);
 
   useEffect(() => {
     videoControls.setSrc(URL.createObjectURL(mediaSource));

@@ -1,18 +1,24 @@
 import { Base64 } from "js-base64";
 import * as React from "react";
-import { useParams } from "react-router-dom";
+import { useLocation, useParams } from "react-router-dom";
 
 import { MainLayout } from "../components/MainLayout";
 import VideoPlayer from "../components/VideoPlayer";
 import { useClient } from "../contexts/Api";
+import useQuery from "../hooks/useQuery";
 
 interface PlayerTestRouteParams {
   networkKey: string;
-  swarmKey: string;
+}
+
+interface PlayerTestQueryParams {
+  swarmUri: string;
+  mimeType: string;
 }
 
 const PlayerTest = () => {
   const params = useParams<PlayerTestRouteParams>();
+  const query = useQuery<PlayerTestQueryParams>(useLocation().search);
 
   return (
     <MainLayout>
@@ -21,8 +27,8 @@ const PlayerTest = () => {
         <section className="home_page__main__video">
           <VideoPlayer
             networkKey={Base64.toUint8Array(params.networkKey)}
-            swarmKey={Base64.toUint8Array(params.swarmKey)}
-            mimeType="video/mp4"
+            swarmUri={query.swarmUri}
+            mimeType={query.mimeType}
           />
         </section>
       </main>

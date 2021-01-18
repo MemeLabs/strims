@@ -8,6 +8,7 @@ option swift_prefix = "SVO";
 
 message EgressOpenStreamRequest {
   string swarm_uri = 1;
+  repeated bytes NetworkKeys = 2;
 }
 
 message EgressOpenStreamResponse {

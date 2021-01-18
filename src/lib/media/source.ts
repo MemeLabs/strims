@@ -14,8 +14,8 @@ export class Source {
     this.mediaSource.onsourceopen = () => {
       this.sourceBuffer = this.mediaSource.addSourceBuffer(type);
       this.sourceBuffer.onupdateend = this.sourceBufferTasks.runNext.bind(this.sourceBufferTasks);
-      // this.sourceBuffer.onerror = (e) => console.log("onerror", e);
-      // this.sourceBuffer.onabort = (e) => console.log("onabort", e);
+      this.sourceBuffer.onerror = (e) => console.log("onerror", e);
+      this.sourceBuffer.onabort = (e) => console.log("onabort", e);
 
       this.sourceBufferTasks.runNext();
     };

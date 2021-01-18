@@ -3,7 +3,7 @@ import * as ebml from "ts-ebml";
 import { Source } from "./source";
 import WorkQueue from "./workqueue";
 
-const MIME_TYPE = "video/webm;codecs=vp9,opus";
+export const MIME_TYPE = "video/webm;codecs=vp9,opus";
 
 export class Encoder {
   public ondata: (b: Uint8Array) => void;

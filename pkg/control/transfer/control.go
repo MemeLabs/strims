@@ -5,11 +5,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"sync"
+	"time"
 
 	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
@@ -44,10 +46,15 @@ type Control struct {
 	peers     map[uint64]*Peer
 	networks  llrb.LLRB
 	scheduler *ppspp.Scheduler
+
+	contactedHosts llrb.LLRB
 }
 
 // Run ...
 func (c *Control) Run(ctx context.Context) {
+	loadPeersTicker := time.NewTicker(10 * time.Second)
+	defer loadPeersTicker.Stop()
+
 	for {
 		select {
 		case e := <-c.events:
@@ -65,6 +72,8 @@ func (c *Control) Run(ctx context.Context) {
 			case event.NetworkPeerClose:
 				c.handleNetworkPeerClose(e.PeerID, e.NetworkKey)
 			}
+		case <-loadPeersTicker.C:
+			c.loadPeers(ctx)
 		case <-ctx.Done():
 			return
 		}
@@ -114,6 +123,81 @@ func (c *Control) handleNetworkPeerClose(peerID uint64, networkKey []byte) {
 	}
 
 	delete(n.peers, peerID)
+}
+
+func (c *Control) loadPeers(ctx context.Context) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.networks.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
+		c.loadNetworkPeers(ctx, i.(*network))
+		return true
+	})
+}
+
+func (c *Control) loadNetworkPeers(ctx context.Context, n *network) {
+	node, ok := c.vpn.Node(n.key)
+	if !ok {
+		return
+	}
+
+	_ = node
+
+	n.transfers.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
+		t := i.(*transfer)
+
+		c.logger.Debug(
+			"searching for peers for",
+			logutil.ByteHex("swarm", t.swarm.ID()),
+			logutil.ByteHex("salt", t.salt),
+		)
+
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		s, err := node.PeerIndex.Search(ctx, t.swarm.ID(), t.salt)
+		if err != nil {
+			cancel()
+			return true
+		}
+
+		go func() {
+			for p := range s {
+				// logutil.PrintJSON(p)
+
+				// TODO: store, sort, swap low perf hosts experimentally
+				c.connectFoundHost(n, p)
+			}
+			cancel()
+		}()
+		return true
+	})
+}
+
+func (c *Control) connectFoundHost(n *network, p *vpn.PeerIndexHost) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	if c.contactedHosts.Has(&contactedHost{p.HostID}) {
+		return
+	}
+	c.contactedHosts.InsertNoReplace(&contactedHost{p.HostID})
+
+	node, ok := c.vpn.Node(n.key)
+	if !ok {
+		return
+	}
+
+	node.PeerExchange.Connect(p.HostID)
+}
+
+type contactedHost struct {
+	id kademlia.ID
+}
+
+func (f *contactedHost) Less(o llrb.Item) bool {
+	if o, ok := o.(*contactedHost); ok {
+		return f.id.Less(o.id)
+	}
+	return !o.Less(f)
 }
 
 // AddPeer ...
@@ -236,7 +320,7 @@ func (c *Control) Publish(id []byte, networkKey []byte) {
 		return
 	}
 
-	err := node.PeerIndex.Publish(t.ctx, t.id, t.salt, 0)
+	err := node.PeerIndex.Publish(t.ctx, t.swarm.ID(), t.salt, 0)
 	if err != nil {
 		return
 	}

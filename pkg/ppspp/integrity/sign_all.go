@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 )
@@ -226,7 +227,7 @@ func (w *signAllWriter) Write(p []byte) (int, error) {
 		p = p[:w.chunkSize]
 	}
 
-	ts := time.Now()
+	ts := iotime.Load()
 	sig := w.signatureSigner.Sign(ts, p)
 	w.swarmVerifier.storeSignature(w.b, ts, sig)
 

@@ -29,7 +29,7 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 	go func() {
 		defer close(ch)
 
-		transferID, r, err := s.app.VideoEgress().OpenStream(r.SwarmUri)
+		transferID, r, err := s.app.VideoEgress().OpenStream(r.SwarmUri, r.NetworkKeys)
 		if err != nil {
 			ch <- &videov1.EgressOpenStreamResponse{
 				Body: &videov1.EgressOpenStreamResponse_Error_{
@@ -94,7 +94,6 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 				},
 			}
 		}
-
 	}()
-	return nil, rpc.ErrNotImplemented
+	return ch, nil
 }

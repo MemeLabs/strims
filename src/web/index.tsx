@@ -6,7 +6,6 @@ import * as ReactDOM from "react-dom";
 import { FrontendClient } from "../apis/client";
 import { WindowBridge } from "../lib/bridge";
 import { WSReadWriter } from "../lib/ws";
-import App from "../root/App";
 import Worker from "./svc.worker";
 
 (async () => {
@@ -22,5 +21,6 @@ import Worker from "./svc.worker";
   root.setAttribute("id", "root");
   document.body.appendChild(root);
 
+  const { default: App } = await import(/* webpackPreload: true */ "../root/App");
   ReactDOM.render(<App client={client} />, root);
 })();

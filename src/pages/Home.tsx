@@ -3,14 +3,15 @@
 // import { Base64 } from "js-base64";
 import * as React from "react";
 
+import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
 import { MainLayout } from "../components/MainLayout";
 import { useClient, useLazyCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
+import * as fmp4 from "../lib/media/fmp4";
+import * as mpegts from "../lib/media/mpegts";
+import * as webm from "../lib/media/webm";
 
-// import * as fmp4 from "../lib/media/fmp4";
-// import * as mpegts from "../lib/media/mpegts";
-// import * as webm from "../lib/media/webm";
 // import { CallChatClientRequest, OpenChatClientRequest, OpenChatServerRequest } from "../lib/pb";
 
 const HomePage = () => {
@@ -39,31 +40,35 @@ const HomePage = () => {
   }, [pprofData.value]);
 
   const handleColorToggle = () => setColorScheme(colorScheme === "dark" ? "light" : "dark");
-  const handleLogout = () => clearProfile();
 
-  // const handleStartBroadcastClick = async () => {
-  //   const [{ id }, mediaStream] = await Promise.all([
-  //     client.video.openServer(),
-  //     (navigator.mediaDevices as any).getDisplayMedia({
-  //       video: true,
-  //       audio: {
-  //         autoGainControl: false,
-  //         echoCancellation: false,
-  //         googAutoGainControl: false,
-  //         noiseSuppression: false,
-  //       },
-  //       frameRate: 30,
-  //     }) as Promise<MediaStream>,
-  //   ]);
+  const handleStartBroadcastClick = async () => {
+    const { networks } = await client.network.list();
+    const [{ id }, mediaStream] = await Promise.all([
+      client.videoCapture.open({
+        mimeType: webm.MIME_TYPE,
+        networkKeys: networks.map((n) => n.key.public),
+        directorySnippet: {
+          title: "test broadcast",
+          description: "broadcast from getDisplayMedia",
+        },
+      }),
+      (navigator.mediaDevices as any).getDisplayMedia({
+        video: true,
+        audio: {
+          autoGainControl: false,
+          echoCancellation: false,
+          googAutoGainControl: false,
+          noiseSuppression: false,
+        },
+        frameRate: 30,
+      }) as Promise<MediaStream>,
+    ]);
 
-  //   const encoder = new webm.Encoder(mediaStream);
+    const encoder = new webm.Encoder(mediaStream);
 
-  //   if (true) {
-  //     broadcastEncoder(encoder, id, mediaStream);
-  //   } else {
-  //     debugEncoder(encoder);
-  //   }
-  // };
+    broadcastEncoder(encoder, id, mediaStream);
+    // debugEncoder(encoder);
+  };
 
   // const debugEncoder = (encoder: webm.Encoder) => {
   //   const decoder = new webm.Decoder();
@@ -81,51 +86,35 @@ const HomePage = () => {
   //   videoRef.current.src = URL.createObjectURL(decoder.source.mediaSource);
   // };
 
-  // const broadcastEncoder = (encoder: webm.Encoder, id: number, mediaStream: MediaStream) => {
-  //   videoRef.current.srcObject = mediaStream;
+  const broadcastEncoder = (encoder: webm.Encoder, id: Uint8Array, mediaStream: MediaStream) => {
+    videoRef.current.srcObject = mediaStream;
 
-  //   encoder.ondata = (data) => client.video.writeToServer({ id, data });
-  //   encoder.onend = (data) => client.video.writeToServer({ id, data, flush: true });
+    encoder.ondata = (data) => client.videoCapture.append({ id, data });
+    encoder.onend = (data) => client.videoCapture.append({ id, data, segmentEnd: true });
+  };
 
-  //   publishSwarm(id);
-  // };
-
-  // const publishSwarm = async (id: number) => {
-  //   const { networks } = await client.network.list();
-  //   networks.forEach((m) => {
-  //     let rootCert = m.certificate;
-  //     while (rootCert.parent) {
-  //       rootCert = rootCert.parent;
-  //     }
-
-  //     client.video.publishSwarm({
-  //       id,
-  //       networkKey: rootCert.key,
-  //     });
-  //   });
-  // };
-
-  // const handleViewBroadcastClick = (decoder: webm.Decoder | fmp4.Decoder) => {
+  // const handleViewBroadcastClick = async (decoder: webm.Decoder | fmp4.Decoder) => {
   //   const video = videoRef.current;
   //   video.src = URL.createObjectURL(decoder.source.mediaSource);
   //   video.oncanplay = () => video.play();
 
   //   const timeShifted = 0;
 
-  //   const clientEvents = client.video.openClient({
-  //     swarmKey: Base64.toUint8Array("0uJfwk6ks1OwZaokGtXDnkEfeBWQjdESbqqGIIq1fjI="),
-  //     emitData: true,
+  //   const { networks } = await client.network.list();
+  //   const clientEvents = client.videoEgress.openStream({
+  //     swarmUri: "",
+  //     networkKeys: networks.map((n) => n.key.public),
   //   });
-  //   clientEvents.on("data", (v) => {
-  //     switch (v.body) {
-  //       case "open":
-  //         publishSwarm(v.open.id);
+  //   clientEvents.on("data", ({ body }) => {
+  //     switch (body.case) {
+  //       case EgressOpenStreamResponse.BodyCase.OPEN:
+  //         // publishSwarm(v.open.id);
   //         break;
-  //       case "data":
+  //       case EgressOpenStreamResponse.BodyCase.DATA:
   //         // console.log("read", v.data.data);
 
-  //         decoder.write(v.data.data);
-  //         if (v.data.flush) {
+  //         decoder.write(body.data.data);
+  //         if (body.data.segmentEnd) {
   //           decoder.flush();
 
   //           // if (timeShifted < 2) {
@@ -262,16 +251,16 @@ const HomePage = () => {
             <button className="input input_button" onClick={handleColorToggle}>
               toggle theme
             </button>
-            {/* <button className="input input_button" onClick={handleStartBroadcastClick}>
+            <button className="input input_button" onClick={handleStartBroadcastClick}>
               start broadcast
             </button>
-            <button
+            {/* <button
               className="input input_button"
               onClick={() => handleViewBroadcastClick(new webm.Decoder())}
             >
               view broadcast
-            </button>
-            <button
+            </button> */}
+            {/* <button
               className="input input_button"
               onClick={() => handleViewBroadcastClick(new fmp4.Decoder())}
             >

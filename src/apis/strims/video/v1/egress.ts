@@ -4,18 +4,22 @@ import Writer from "../../../../lib/pb/writer";
 
 export interface IEgressOpenStreamRequest {
   swarmUri?: string;
+  networkKeys?: Uint8Array[];
 }
 
 export class EgressOpenStreamRequest {
   swarmUri: string = "";
+  networkKeys: Uint8Array[] = [];
 
   constructor(v?: IEgressOpenStreamRequest) {
     this.swarmUri = v?.swarmUri || "";
+    if (v?.networkKeys) this.networkKeys = v.networkKeys;
   }
 
   static encode(m: EgressOpenStreamRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.swarmUri) w.uint32(10).string(m.swarmUri);
+    for (const v of m.networkKeys) w.uint32(18).bytes(v);
     return w;
   }
 
@@ -28,6 +32,9 @@ export class EgressOpenStreamRequest {
       switch (tag >> 3) {
         case 1:
         m.swarmUri = r.string();
+        break;
+        case 2:
+        m.networkKeys.push(r.bytes())
         break;
         default:
         r.skipType(tag & 7);

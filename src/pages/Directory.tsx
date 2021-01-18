@@ -37,6 +37,18 @@ interface DirectoryParams {
   networkKey: string;
 }
 
+const formatUri = (networkKey: string, { content }: DirectoryListing): string => {
+  switch (content.case) {
+    case DirectoryListing.ContentCase.MEDIA: {
+      const mimeType = encodeURIComponent(content.media.mimeType);
+      const swarmUri = encodeURIComponent(content.media.swarmUri);
+      return `/player/${networkKey}?mimeType=${mimeType}&swarmUri=${swarmUri}`;
+    }
+    default:
+      return "";
+  }
+};
+
 const Directory = () => {
   const params = useParams<DirectoryParams>();
   const [{ colorScheme }, { setColorScheme }] = useTheme();
@@ -48,7 +60,7 @@ const Directory = () => {
 
   React.useEffect(() => {
     const events = client.directory.open({ networkKey });
-    events.on("data", (e) => console.log(e));
+    events.on("data", ({ event }) => dispatch(event));
     events.on("close", () => console.log("directory event stream closed"));
     return () => events.destroy();
   }, []);
@@ -69,7 +81,7 @@ const Directory = () => {
             </button>
             {listings.map(({ key, listing }) => (
               <div key={key}>
-                <Link to={`/player/${params.networkKey}/${key}`}>
+                <Link to={formatUri(params.networkKey, listing)}>
                   <span>{listing.snippet.title}</span>
                 </Link>
                 <span>{listing.snippet.tags}</span>

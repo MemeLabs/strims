@@ -65,14 +65,22 @@ const JoinForm = ({
   const [{ value, error, loading }, create] = useLazyCall("network", "createFromInvitation", {
     onComplete: onCreate,
   });
-  const { register, handleSubmit, errors } = useForm({
+  const { register, handleSubmit, errors } = useForm<{
+    invitationB64: string;
+  }>({
     mode: "onBlur",
   });
 
-  const onSubmit = (data) => create(new CreateNetworkFromInvitationRequest(data));
+  const onSubmit = handleSubmit(({ invitationB64 }) =>
+    create(
+      new CreateNetworkFromInvitationRequest({
+        invitation: { invitationB64 },
+      })
+    )
+  );
 
   return (
-    <form className="invite_form" onSubmit={handleSubmit(onSubmit)}>
+    <form className="invite_form" onSubmit={onSubmit}>
       {error && <InputError error={error.message || "Error creating membership"} />}
       <TextInput
         error={errors.invitationB64}

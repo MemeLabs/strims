@@ -123,3 +123,59 @@ export namespace TransferPeerAnnounceSwarmResponse {
 
 }
 
+export interface ITransferPeerCloseSwarmRequest {
+  swarmId?: Uint8Array;
+}
+
+export class TransferPeerCloseSwarmRequest {
+  swarmId: Uint8Array = new Uint8Array();
+
+  constructor(v?: ITransferPeerCloseSwarmRequest) {
+    this.swarmId = v?.swarmId || new Uint8Array();
+  }
+
+  static encode(m: TransferPeerCloseSwarmRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.swarmId) w.uint32(10).bytes(m.swarmId);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): TransferPeerCloseSwarmRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new TransferPeerCloseSwarmRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.swarmId = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export interface ITransferPeerCloseSwarmResponse {
+}
+
+export class TransferPeerCloseSwarmResponse {
+
+  constructor(v?: ITransferPeerCloseSwarmResponse) {
+    // noop
+  }
+
+  static encode(m: TransferPeerCloseSwarmResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): TransferPeerCloseSwarmResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new TransferPeerCloseSwarmResponse();
+  }
+}
+

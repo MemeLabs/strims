@@ -1,6 +1,7 @@
 import { MutableRefObject, useEffect, useMemo } from "react";
 import { useGetSet } from "react-use";
 
+import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
 import { useClient } from "../contexts/Api";
 import * as fmp4 from "../lib/media/fmp4";
 import * as mpegts from "../lib/media/mpegts";
@@ -16,47 +17,59 @@ export type MimeType = keyof typeof decoders;
 
 export interface MediaSourceProps {
   networkKey: Uint8Array;
-  swarmKey: Uint8Array;
-  mimeType: MimeType;
+  swarmUri: string;
+  mimeType: string;
   videoRef: MutableRefObject<HTMLVideoElement>;
   // TODO: the rest of the swarm uri params
 }
 
-const useMediaSource = ({ networkKey, swarmKey, mimeType, videoRef }: MediaSourceProps) => {
+const useMediaSource = ({ networkKey, swarmUri, mimeType, videoRef }: MediaSourceProps) => {
   const client = useClient();
 
-  return useMemo(() => {
-    const Decoder = decoders[mimeType];
+  const [mediaSource, clientEvents] = useMemo(() => {
+    const [fileFormat] = mimeType.split(";", 1);
+    const Decoder = decoders[fileFormat];
     const decoder = new Decoder();
-    // let started = false;
+    let started = false;
 
-    // const clientEvents = client.video.openClient({
-    //   swarmKey,
-    //   emitData: true,
-    // });
-    // clientEvents.on("data", (e) => {
-    //   switch (e.body) {
-    //     case "open":
-    //       // TODO: do this in the service
-    //       client.video.publishSwarm({ id: e.open.id, networkKey });
-    //       break;
-    //     case "data":
-    //       decoder.write(e.data.data);
-    //       if (e.data.flush) {
-    //         decoder.flush();
+    console.log({
+      swarmUri,
+      mimeType,
+      networkKeys: [networkKey],
+    });
 
-    //         const [start, end] = decoder.source.bounds();
-    //         if (!started && end - start >= 1) {
-    //           started = true;
-    //           videoRef.current.currentTime = end - 1;
-    //           videoRef.current.play();
-    //         }
-    //       }
-    //   }
-    // });
+    const clientEvents = client.videoEgress.openStream({
+      swarmUri,
+      networkKeys: [networkKey],
+    });
+    clientEvents.on("data", ({ body }) => {
+      switch (body.case) {
+        case EgressOpenStreamResponse.BodyCase.DATA:
+          decoder.write(body.data.data);
+          if (body.data.bufferUnderrun) {
+            // TODO: reset decoder
+          }
 
-    return decoder.source.mediaSource;
+          if (body.data.segmentEnd) {
+            decoder.flush();
+
+            const [start, end] = decoder.source.bounds();
+            if (!started && end - start >= 1) {
+              started = true;
+              videoRef.current.currentTime = end - 1;
+              videoRef.current.play();
+            }
+          }
+      }
+    });
+    clientEvents.on("error", (e) => console.log(e));
+
+    return [decoder.source.mediaSource, clientEvents];
   }, []);
+
+  useEffect(() => () => clientEvents.destroy(), []);
+
+  return mediaSource;
 };
 
 export default useMediaSource;

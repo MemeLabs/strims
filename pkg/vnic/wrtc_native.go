@@ -9,7 +9,7 @@ import (
 	"io"
 	"time"
 
-	"github.com/pion/webrtc/v2"
+	"github.com/pion/webrtc/v3"
 	"go.uber.org/zap"
 )
 

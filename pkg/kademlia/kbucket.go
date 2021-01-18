@@ -212,7 +212,7 @@ func (s *Filter) Pop() (Interface, bool) {
 	}
 	out := (*s.items)[n-1]
 	(*s.items) = (*s.items)[:n-1]
-	return out, true
+	return out.Interface, true
 }
 
 // Copy ...

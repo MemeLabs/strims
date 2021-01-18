@@ -34,6 +34,7 @@ func init() {
 func runGC() {
 	for range time.NewTicker(10 * time.Second).C {
 		runtime.GC()
+		// debug.FreeOSMemory()
 	}
 }
 

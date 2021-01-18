@@ -9,6 +9,7 @@ import (
 // RegisterTransferPeerService ...
 func RegisterTransferPeerService(host rpc.ServiceRegistry, service TransferPeerService) {
 	host.RegisterMethod("strims.transfer.v1.TransferPeer.AnnounceSwarm", service.AnnounceSwarm)
+	host.RegisterMethod("strims.transfer.v1.TransferPeer.CloseSwarm", service.CloseSwarm)
 }
 
 // TransferPeerService ...
@@ -17,6 +18,10 @@ type TransferPeerService interface {
 		ctx context.Context,
 		req *TransferPeerAnnounceSwarmRequest,
 	) (*TransferPeerAnnounceSwarmResponse, error)
+	CloseSwarm(
+		ctx context.Context,
+		req *TransferPeerCloseSwarmRequest,
+	) (*TransferPeerCloseSwarmResponse, error)
 }
 
 // TransferPeerClient ...
@@ -36,4 +41,13 @@ func (c *TransferPeerClient) AnnounceSwarm(
 	res *TransferPeerAnnounceSwarmResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.transfer.v1.TransferPeer.AnnounceSwarm", req, res)
+}
+
+// CloseSwarm ...
+func (c *TransferPeerClient) CloseSwarm(
+	ctx context.Context,
+	req *TransferPeerCloseSwarmRequest,
+	res *TransferPeerCloseSwarmResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.transfer.v1.TransferPeer.CloseSwarm", req, res)
 }

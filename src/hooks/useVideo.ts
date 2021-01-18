@@ -50,11 +50,13 @@ export interface VideoState {
   supportPiP: boolean;
   pip: boolean;
   src: string;
+  error: Error | null;
 }
 
 export interface VideoProps {
   ref: React.MutableRefObject<HTMLVideoElement>;
   onEnded: () => void;
+  onError: () => void;
   onPause: () => void;
   onPlaying: () => void;
   onCanPlay: () => void;
@@ -95,6 +97,7 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
   const [currentTime, unsafelySetCurrentTime] = useState(0);
   const [seekableStart, setSeekableStart] = useState(0);
   const [seekableEnd, setSeekableEnd] = useState(0);
+  const [error, setError] = useState(null);
 
   useReady(() => {
     setMuted(ref.current.muted);
@@ -107,6 +110,13 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
     setPlaying(false);
     setEnded(false);
     setWaiting(false);
+  };
+
+  const onError = () => {
+    setPlaying(false);
+    setEnded(true);
+    setWaiting(false);
+    setError(ref.current.error);
   };
 
   const onPause = () => {
@@ -249,10 +259,12 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
       supportPiP,
       pip,
       src,
+      error,
     },
     {
       ref,
       onEnded,
+      onError,
       onPause,
       onPlaying,
       onCanPlay,

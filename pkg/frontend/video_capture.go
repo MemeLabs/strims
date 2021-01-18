@@ -1,5 +1,3 @@
-// +build !js
-
 package frontend
 
 import (
@@ -29,7 +27,7 @@ func (s *videoCaptureService) Open(ctx context.Context, r *videov1.CaptureOpenRe
 	if err != nil {
 		return nil, err
 	}
-	return &videov1.CaptureOpenResponse{Id: id}, rpc.ErrNotImplemented
+	return &videov1.CaptureOpenResponse{Id: id}, nil
 }
 
 // Update ...

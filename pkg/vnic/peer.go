@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"math"
 	"sync"
+	"sync/atomic"
 
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
@@ -98,6 +99,7 @@ type Peer struct {
 	ctx              context.Context
 	close            context.CancelFunc
 	closeOnce        sync.Once
+	closed           uint32
 }
 
 func (p *Peer) run() {
@@ -130,6 +132,7 @@ func (p *Peer) run() {
 // Close ...
 func (p *Peer) Close() {
 	p.closeOnce.Do(func() {
+		atomic.StoreUint32(&p.closed, 1)
 		p.close()
 		p.Link.Close()
 
@@ -150,6 +153,11 @@ func (p *Peer) Context() context.Context {
 // Done ...
 func (p *Peer) Done() <-chan struct{} {
 	return p.ctx.Done()
+}
+
+// Closed ...
+func (p *Peer) Closed() bool {
+	return atomic.LoadUint32(&p.closed) == 1
 }
 
 // HostID ...

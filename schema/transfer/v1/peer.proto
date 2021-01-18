@@ -17,6 +17,13 @@ message TransferPeerAnnounceSwarmResponse {
   }
 }
 
+message TransferPeerCloseSwarmRequest {
+  bytes swarm_id = 1;
+}
+
+message TransferPeerCloseSwarmResponse {}
+
 service TransferPeer {
   rpc AnnounceSwarm(TransferPeerAnnounceSwarmRequest) returns (TransferPeerAnnounceSwarmResponse);
+  rpc CloseSwarm(TransferPeerCloseSwarmRequest) returns (TransferPeerCloseSwarmResponse);
 }

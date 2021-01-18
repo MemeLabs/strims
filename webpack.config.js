@@ -69,6 +69,7 @@ module.exports = (env, argv) => {
     new webpack.HotModuleReplacementPlugin(),
     new webpack.ProvidePlugin({
       process: "process/browser",
+      Buffer: ["buffer", "Buffer"],
     }),
   ];
 

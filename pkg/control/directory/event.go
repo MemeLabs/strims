@@ -10,7 +10,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-var paddingData = make([]byte, chunkSize)
+var paddingData = make([]byte, chunkSize+1)
 var paddingOverhead = proto.Size(&network.DirectoryEvent{
 	Body: &network.DirectoryEvent_Padding_{
 		Padding: &network.DirectoryEvent_Padding{
@@ -47,18 +47,25 @@ func newEventWriter(w io.Writer) *eventWriter {
 type eventWriter struct {
 	w   io.Writer
 	buf []byte
+	n   int
 }
 
 func (w *eventWriter) Write(msg protoreflect.ProtoMessage) error {
 	n, err := w.write(msg)
-	if err != nil {
-		return err
-	}
+	w.n += n
+	return err
+}
 
-	_, err = w.write(&network.DirectoryEvent{
+func (w *eventWriter) Flush() error {
+	if w.n == 0 {
+		return nil
+	}
+	w.n = 0
+
+	_, err := w.write(&network.DirectoryEvent{
 		Body: &network.DirectoryEvent_Padding_{
 			Padding: &network.DirectoryEvent_Padding{
-				Data: paddingData[:chunkSize-(n%chunkSize)-paddingOverhead],
+				Data: paddingData,
 			},
 		},
 	})

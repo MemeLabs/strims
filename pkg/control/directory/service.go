@@ -217,14 +217,7 @@ func (d *directoryService) broadcast(now time.Time) error {
 		}
 	}
 
-	event := &networkv1.DirectoryEvent{
-		Body: &networkv1.DirectoryEvent_Ping_{
-			Ping: &networkv1.DirectoryEvent_Ping{
-				Time: now.Unix(),
-			},
-		},
-	}
-	if err := d.eventWriter.Write(event); err != nil {
+	if err := d.eventWriter.Flush(); err != nil {
 		return err
 	}
 

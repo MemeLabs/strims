@@ -20,7 +20,7 @@ const Router = () => {
       <PrivateRoute path="/" exact component={HomePage} />
       <PrivateRoute path="/settings" component={SettingsPage} />
       <PrivateRoute path="/directory/:networkKey" exact component={Directory} />
-      <PrivateRoute path="/player/:networkKey/:swarmKey" exact component={PlayerTest} />
+      <PrivateRoute path="/player/:networkKey" exact component={PlayerTest} />
       <PrivateRoute path="/activity" exact component={Activity} />
       <PrivateRoute path="/chat-test" exact component={ChatTest} />
       <Route component={NotFoundPage} />
