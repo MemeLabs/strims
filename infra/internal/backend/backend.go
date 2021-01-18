@@ -336,7 +336,7 @@ func (b *Backend) CreateNode(
 		zap.String("ipv4", n.Networks.V4[0]),
 		zap.String("name", n.Name))
 
-	nodes, err := b.ActiveNodes(ctx)
+	nodes, err := b.ActiveNodes(ctx, true)
 	if err != nil {
 		return err
 	}
@@ -394,9 +394,16 @@ func (b *Backend) CreateNode(
 	return nil
 }
 
-func (b *Backend) ActiveNodes(ctx context.Context) ([]*node.Node, error) {
+func (b *Backend) ActiveNodes(ctx context.Context, active bool) ([]*node.Node, error) {
+	var query int
+	if active {
+		query = 1
+	} else {
+		query = 0
+	}
+
 	var nodes []*node.Node
-	slice, err := models.Nodes(qm.Where("active=?", 1)).AllG(ctx)
+	slice, err := models.Nodes(qm.Where("active=?", query)).AllG(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -583,7 +590,7 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 
 	b.Log.Info("node has been deleted from kube")
 
-	nodes, err := b.ActiveNodes(ctx)
+	nodes, err := b.ActiveNodes(ctx, true)
 	if err != nil {
 		return fmt.Errorf("failed to get active nodes: %w", err)
 	}
@@ -630,7 +637,7 @@ func (b *Backend) DiffNodes(ctx context.Context) (string, error) {
 		liveNodes = append(liveNodes, res...)
 	}
 
-	dbNodes, err := b.ActiveNodes(ctx)
+	dbNodes, err := b.ActiveNodes(ctx, true)
 	if err != nil {
 		return "", fmt.Errorf("failed to get active nodes: %w", err)
 	}
@@ -640,20 +647,6 @@ func (b *Backend) DiffNodes(ctx context.Context) (string, error) {
 	}
 
 	return "", nil
-}
-
-func (b *Backend) InactiveNodes(ctx context.Context) ([]*node.Node, error) {
-	var nodes []*node.Node
-	slice, err := models.Nodes(qm.Where("active=?", 0)).AllG(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, n := range slice {
-		nodes = append(nodes, modelToNode(n))
-	}
-
-	return nodes, nil
 }
 
 func (b *Backend) nextWGIPv4(ctx context.Context, activeNodes []*node.Node) (string, error) {
@@ -754,9 +747,9 @@ func modelToNode(n *models.Node) *node.Node {
 		ProviderName: n.ProviderName,
 		ProviderID:   n.ProviderID,
 		Name:         n.Name,
-		Memory:       int(n.Memory),
-		CPUs:         int(n.CPUs),
-		Disk:         int(n.Disk),
+		Memory:       n.Memory,
+		CPUs:         n.CPUs,
+		Disk:         n.Disk,
 		Networks: &node.Networks{
 			V4: []string{n.IPV4},
 			V6: []string{n.IPV6},
@@ -768,8 +761,8 @@ func modelToNode(n *models.Node) *node.Node {
 		},
 		SKU: &node.SKU{
 			Name:         n.SKUName,
-			NetworkCap:   int(n.SKUNetworkCap),
-			NetworkSpeed: int(n.SKUNetworkSpeed),
+			NetworkCap:   n.SKUNetworkCap,
+			NetworkSpeed: n.SKUNetworkSpeed,
 			PriceMonthly: &node.Price{
 				Value: float64(n.SKUPriceMonthly),
 			},

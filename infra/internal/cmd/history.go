@@ -39,7 +39,7 @@ var historyCmd = &cobra.Command{
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 
-		nodes, err := backend.InactiveNodes(ctx)
+		nodes, err := backend.ActiveNodes(ctx, false)
 		if err != nil {
 			return err
 		}
