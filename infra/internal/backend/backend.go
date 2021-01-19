@@ -23,7 +23,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/infra/internal/models"
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/MemeLabs/go-ppspp/infra/pkg/wgutil"
-	infrav1 "github.com/MemeLabs/go-ppspp/pkg/apis/infra/v1"
 	"github.com/google/go-cmp/cmp"
 	"github.com/mitchellh/mapstructure"
 	"github.com/volatiletech/null/v8"
@@ -747,17 +746,17 @@ func modelToNode(n *models.Node) *node.Node {
 		ProviderName: n.ProviderName,
 		ProviderId:   n.ProviderID,
 		Name:         n.Name,
-		Networks: &infrav1.Node_Networks{
+		Networks: &node.Networks{
 			V4: []string{n.IPV4},
 			V6: []string{n.IPV6},
 		},
 		Status: status,
-		Region: &infrav1.Node_Region{
+		Region: &node.Region{
 			Name:         n.RegionName,
 			LatitudeDeg:  n.RegionLat,
 			LongitudeDeg: n.RegionLng,
 		},
-		Sku: &infrav1.Node_SKU{
+		Sku: &node.SKU{
 			Memory:       int32(n.Memory),
 			Cpus:         int32(n.CPUs),
 			Disk:         int32(n.Disk),
