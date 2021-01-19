@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 	"time"
 
 	be "github.com/MemeLabs/go-ppspp/infra/internal/backend"
@@ -55,14 +54,14 @@ var historyCmd = &cobra.Command{
 				n.ProviderName,
 				n.Name,
 				n.Region.Name,
-				strconv.Itoa(n.Memory),
-				strconv.Itoa(n.CPUs),
-				strconv.Itoa(n.Disk),
+				fmt.Sprint(n.Sku.Memory),
+				fmt.Sprint(n.Sku.Cpus),
+				fmt.Sprint(n.Sku.Disk),
 				fmt.Sprintf("%s", networks),
-				n.SKU.Name,
-				fmt.Sprint(n.SKU.PriceHourly.Value),
-				fmt.Sprint(n.SKU.PriceMonthly.Value),
-				fmt.Sprint(be.ComputeCost(n.SKU, duration)),
+				n.Sku.Name,
+				fmt.Sprint(n.Sku.PriceHourly.Value),
+				fmt.Sprint(n.Sku.PriceMonthly.Value),
+				fmt.Sprint(be.ComputeCost(n.Sku, duration)),
 			})
 		}
 

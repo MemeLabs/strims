@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"github.com/golang/geo/s2"
 	"github.com/gophercloud/gophercloud"
 	"github.com/gophercloud/gophercloud/openstack"
 	"github.com/gophercloud/gophercloud/openstack/compute/v2/extensions/keypairs"
@@ -24,9 +23,10 @@ const dreamHostHourlyBillingRate = 6.0 / 5 / 30 / 24
 const dreamHostOS = "Ubuntu-20.04"
 
 var dreamHostRegion = Region{
-	Name:   "RegionOne",
-	City:   "Ashburn, Virginia",
-	LatLng: s2.LatLngFromDegrees(39.0300, -77.4711),
+	Name:         "RegionOne",
+	City:         "Ashburn, Virginia",
+	LatitudeDeg:  39.0300,
+	LongitudeDeg: -77.4711,
 }
 
 // NewDreamHostDriver ...
@@ -337,15 +337,12 @@ func dreamHostNode(server *servers.Server, sku *SKU) (*Node, error) {
 	}
 
 	return &Node{
-		ProviderID: server.ID,
+		ProviderId: server.ID,
 		Name:       server.Name,
-		Memory:     sku.Memory,
-		CPUs:       sku.CPUs,
-		Disk:       sku.Disk,
 		Networks:   networks,
 		Status:     server.Status,
 		Region:     &dreamHostRegion,
-		SKU:        sku,
+		Sku:        sku,
 	}, nil
 }
 
@@ -357,9 +354,9 @@ func dreamHostSKU(flavor *flavors.Flavor, extraSpecs map[string]string) (*SKU, e
 
 	return &SKU{
 		Name:         flavor.ID,
-		CPUs:         flavor.VCPUs,
-		Memory:       flavor.RAM,
-		Disk:         flavor.Disk,
+		Cpus:         int32(flavor.VCPUs),
+		Memory:       int32(flavor.RAM),
+		Disk:         int32(flavor.Disk),
 		NetworkCap:   0,
 		NetworkSpeed: 0,
 		PriceMonthly: &Price{

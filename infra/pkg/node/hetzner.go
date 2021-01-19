@@ -6,7 +6,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/golang/geo/s2"
 	"github.com/hetznercloud/hcloud-go/hcloud"
 )
 
@@ -48,9 +47,10 @@ func (d *HetznerDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Re
 
 func hetznerRegion(location *hcloud.Location) *Region {
 	return &Region{
-		Name:   location.Name,
-		City:   fmt.Sprintf("%s, %s", location.City, location.Country),
-		LatLng: s2.LatLngFromDegrees(location.Latitude, location.Longitude),
+		Name:         location.Name,
+		City:         fmt.Sprintf("%s, %s", location.City, location.Country),
+		LatitudeDeg:  location.Latitude,
+		LongitudeDeg: location.Longitude,
 	}
 }
 
@@ -98,9 +98,9 @@ func hetznerSKU(serverType *hcloud.ServerType, pricing hcloud.ServerTypeLocation
 
 	return &SKU{
 		Name:         serverType.Name,
-		CPUs:         serverType.Cores,
-		Memory:       int(serverType.Memory * 1024),
-		Disk:         serverType.Disk,
+		Cpus:         int32(serverType.Cores),
+		Memory:       int32(serverType.Memory * 1024),
+		Disk:         int32(serverType.Disk),
 		NetworkCap:   20 * 1024,
 		NetworkSpeed: 1000,
 		PriceHourly: &Price{
@@ -208,11 +208,8 @@ func (d *HetznerDriver) Delete(ctx context.Context, req *DeleteRequest) error {
 
 func hetznerNode(server *hcloud.Server) (*Node, error) {
 	node := &Node{
-		ProviderID: strconv.Itoa(server.ID),
+		ProviderId: strconv.Itoa(server.ID),
 		Name:       server.Name,
-		Memory:     int(server.ServerType.Memory * 1024),
-		CPUs:       server.ServerType.Cores,
-		Disk:       server.ServerType.Disk,
 		Networks: &Networks{
 			V4: []string{server.PublicNet.IPv4.IP.String()},
 			V6: []string{server.PublicNet.IPv6.IP.String()},
@@ -227,7 +224,7 @@ func hetznerNode(server *hcloud.Server) (*Node, error) {
 			if err != nil {
 				return nil, err
 			}
-			node.SKU = sku
+			node.Sku = sku
 		}
 	}
 

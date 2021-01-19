@@ -10,7 +10,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/golang/geo/s2"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/clientcredentials"
@@ -23,34 +22,40 @@ const (
 
 var heficedRegions = []*Region{
 	{
-		Name:   "br-sao1",
-		City:   "São Paulo, Brazil",
-		LatLng: s2.LatLngFromDegrees(-23.5505, -46.6333),
+		Name:         "br-sao1",
+		City:         "São Paulo, Brazil",
+		LatitudeDeg:  23.5505,
+		LongitudeDeg: -46.6333,
 	},
 	{
-		Name:   "de-fra1",
-		City:   "Frankfurt, Germany",
-		LatLng: s2.LatLngFromDegrees(50.1109, 8.6821),
+		Name:         "de-fra1",
+		City:         "Frankfurt, Germany",
+		LatitudeDeg:  50.1109,
+		LongitudeDeg: 8.6821,
 	},
 	{
-		Name:   "uk-lon1",
-		City:   "London, United Kingdom",
-		LatLng: s2.LatLngFromDegrees(51.5074, -0.1278),
+		Name:         "uk-lon1",
+		City:         "London, United Kingdom",
+		LatitudeDeg:  51.5074,
+		LongitudeDeg: -0.1278,
 	},
 	{
-		Name:   "us-chi1",
-		City:   "Chicago, IL, US",
-		LatLng: s2.LatLngFromDegrees(41.8781, -87.6298),
+		Name:         "us-chi1",
+		City:         "Chicago, IL, US",
+		LatitudeDeg:  41.8781,
+		LongitudeDeg: -87.6298,
 	},
 	{
-		Name:   "us-lax1",
-		City:   "Los Angeles, CA, US",
-		LatLng: s2.LatLngFromDegrees(34.0522, -118.2437),
+		Name:         "us-lax1",
+		City:         "Los Angeles, CA, US",
+		LatitudeDeg:  34.0522,
+		LongitudeDeg: -118.2437,
 	},
 	{
-		Name:   "za-jhb1",
-		City:   "Johannesburg, South Africa",
-		LatLng: s2.LatLngFromDegrees(-26.2041, 28.0473),
+		Name:         "za-jhb1",
+		City:         "Johannesburg, South Africa",
+		LatitudeDeg:  26.2041,
+		LongitudeDeg: 28.0473,
 	},
 }
 
@@ -172,10 +177,10 @@ func (d *HeficedDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, err
 func heficedSKU(quote *heficedQuote) *SKU {
 	return &SKU{
 		Name:         quote.Items[0].name,
-		CPUs:         quote.Items[0].Configuration.Raw.Vcpu,
-		Memory:       quote.Items[0].Configuration.Raw.Memory,
-		Disk:         quote.Items[0].Configuration.Raw.Disk,
-		NetworkCap:   int(1000 * (quote.Items[1].Total / 0.6)),
+		Cpus:         int32(quote.Items[0].Configuration.Raw.Vcpu),
+		Memory:       int32(quote.Items[0].Configuration.Raw.Memory),
+		Disk:         int32(quote.Items[0].Configuration.Raw.Disk),
+		NetworkCap:   int32(1000 * (quote.Items[1].Total / 0.6)),
 		NetworkSpeed: 10000,
 		PriceHourly: &Price{
 			Value:    quote.UsageBasedRate,
@@ -216,16 +221,17 @@ func heficedNode(instance *heficedInstance) *Node {
 	v6 := []string{instance.Network.V6.Ipaddress}
 	v6 = append(v6, instance.Network.V6.AdditionalIps...)
 	return &Node{
-		ProviderID: strconv.Itoa(instance.ID),
+		ProviderId: strconv.Itoa(instance.ID),
 		Name:       instance.Hostname,
-		Memory:     instance.Memory,
-		CPUs:       instance.Vcpu,
 		Networks: &Networks{
 			V4: v4,
 			V6: v6,
 		},
 		Status: instance.Status,
-		SKU:    nil,
+		Sku: &SKU{
+			Memory: int32(instance.Memory),
+			Cpus:   int32(instance.Vcpu),
+		},
 		Region: region,
 	}
 }

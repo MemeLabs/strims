@@ -9,61 +9,70 @@ import (
 	"time"
 
 	"github.com/digitalocean/godo"
-	"github.com/golang/geo/s2"
 )
 
 const digitalOceanOS = "ubuntu-20-04-x64"
 
 var digitalOceanRegions = []*Region{
 	{
-		Name:   "nyc1",
-		City:   "New York City, United States",
-		LatLng: s2.LatLngFromDegrees(40.6943, -73.9249),
+		Name:         "nyc1",
+		City:         "New York City, United States",
+		LatitudeDeg:  40.6943,
+		LongitudeDeg: -73.9249,
 	},
 	{
-		Name:   "nyc3",
-		City:   "New Jersey, United States",
-		LatLng: s2.LatLngFromDegrees(40.6943, -73.9249),
+		Name:         "nyc3",
+		City:         "New Jersey, United States",
+		LatitudeDeg:  40.6943,
+		LongitudeDeg: -73.9249,
 	},
 	{
-		Name:   "ams3",
-		City:   "Amsterdam, The Netherlands",
-		LatLng: s2.LatLngFromDegrees(52.3500, 4.9166),
+		Name:         "ams3",
+		City:         "Amsterdam, The Netherlands",
+		LatitudeDeg:  52.3500,
+		LongitudeDeg: 4.9166,
 	},
 	{
-		Name:   "sfo2",
-		City:   "San Francisco, United States",
-		LatLng: s2.LatLngFromDegrees(37.7562, -122.4430),
+		Name:         "sfo2",
+		City:         "San Francisco, United States",
+		LatitudeDeg:  37.7562,
+		LongitudeDeg: -122.4430,
 	},
 	{
-		Name:   "sfo3",
-		City:   "San Francisco, United States",
-		LatLng: s2.LatLngFromDegrees(37.7562, -122.4430),
+		Name:         "sfo3",
+		City:         "San Francisco, United States",
+		LatitudeDeg:  37.7562,
+		LongitudeDeg: -122.4430,
 	},
 	{
-		Name:   "sgp1",
-		City:   "Loyang, Singapore",
-		LatLng: s2.LatLngFromDegrees(1.2930, 103.8558),
+		Name:         "sgp1",
+		City:         "Loyang, Singapore",
+		LatitudeDeg:  1.2930,
+		LongitudeDeg: 103.8558,
 	},
 	{
-		Name:   "lon1",
-		City:   "London, United Kingdom",
-		LatLng: s2.LatLngFromDegrees(51.5000, -0.1167),
+		Name:         "lon1",
+		City:         "London, United Kingdom",
+		LatitudeDeg:  51.5000,
+		LongitudeDeg: -0.1167,
 	},
 	{
-		Name:   "fra1",
-		City:   "Frankfurt, Germany",
-		LatLng: s2.LatLngFromDegrees(50.1000, 8.6750),
+		Name:         "fra1",
+		City:         "Frankfurt, Germany",
+		LatitudeDeg:  50.1000,
+		LongitudeDeg: 8.6750,
 	},
 	{
-		Name:   "tor1",
-		City:   "Toronto, Canada",
-		LatLng: s2.LatLngFromDegrees(43.7000, -79.4200),
+		Name:         "tor1",
+		City:         "Toronto, Canada",
+		LatitudeDeg:  43.7000,
+		LongitudeDeg: -79.4200,
 	},
 	{
-		Name:   "blr1",
-		City:   "Bengaluru, India",
-		LatLng: s2.LatLngFromDegrees(12.9700, 77.5600),
+		Name:         "blr1",
+		City:         "Bengaluru, India",
+		LatitudeDeg:  12.9700,
+		LongitudeDeg: 77.5600,
 	},
 }
 
@@ -132,10 +141,10 @@ func (d *DigitalOceanDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU
 func digitalOceanSKU(size *godo.Size) *SKU {
 	return &SKU{
 		Name:         size.Slug,
-		CPUs:         size.Vcpus,
-		Memory:       size.Memory,
-		Disk:         size.Disk,
-		NetworkCap:   int(size.Transfer * 1024),
+		Cpus:         int32(size.Vcpus),
+		Memory:       int32(size.Memory),
+		Disk:         int32(size.Disk),
+		NetworkCap:   int32(size.Transfer * 1024),
 		NetworkSpeed: 1000,
 		PriceHourly: &Price{
 			Value:    size.PriceHourly,
@@ -263,14 +272,11 @@ func (d *DigitalOceanDriver) Delete(ctx context.Context, req *DeleteRequest) err
 
 func digitalOceanNode(droplet *godo.Droplet) *Node {
 	node := &Node{
-		ProviderID: strconv.Itoa(droplet.ID),
+		ProviderId: strconv.Itoa(droplet.ID),
 		Name:       droplet.Name,
-		Memory:     droplet.Memory,
-		CPUs:       droplet.Vcpus,
-		Disk:       droplet.Disk,
 		Networks:   &Networks{},
 		Status:     droplet.Status,
-		SKU:        digitalOceanSKU(droplet.Size),
+		Sku:        digitalOceanSKU(droplet.Size),
 	}
 
 	for _, ipv4 := range droplet.Networks.V4 {

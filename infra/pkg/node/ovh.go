@@ -7,7 +7,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/golang/geo/s2"
 	"github.com/ovh/go-ovh/ovh"
 	"golang.org/x/sync/errgroup"
 )
@@ -24,54 +23,64 @@ const ovhMonthlyBillingRate = 30 * 24 * 0.5
 
 var ovhRegions = []*Region{
 	{
-		Name:   "VIN1",
-		City:   "Virginia, United States",
-		LatLng: s2.LatLngFromDegrees(38.7465, 77.6738),
+		Name:         "VIN1",
+		City:         "Virginia, United States",
+		LatitudeDeg:  38.7465,
+		LongitudeDeg: 77.6738,
 	},
 	{
-		Name:   "HIL1",
-		City:   "Oregon, United States",
-		LatLng: s2.LatLngFromDegrees(45.5272, 122.9361),
+		Name:         "HIL1",
+		City:         "Oregon, United States",
+		LatitudeDeg:  45.5272,
+		LongitudeDeg: 122.9361,
 	},
 	{
-		Name:   "UK1",
-		City:   "London, United Kingdom",
-		LatLng: s2.LatLngFromDegrees(51.5074, 0.1278),
+		Name:         "UK1",
+		City:         "London, United Kingdom",
+		LatitudeDeg:  51.5074,
+		LongitudeDeg: 0.1278,
 	},
 	{
-		Name:   "GRA7",
-		City:   "Gravelines, France",
-		LatLng: s2.LatLngFromDegrees(50.9871, 2.1255),
+		Name:         "GRA7",
+		City:         "Gravelines, France",
+		LatitudeDeg:  50.9871,
+		LongitudeDeg: 2.1255,
 	},
 	{
-		Name:   "SBG5",
-		City:   "Strasbourg, France",
-		LatLng: s2.LatLngFromDegrees(48.5734, 7.7521),
+		Name:         "SBG5",
+		City:         "Strasbourg, France",
+		LatitudeDeg:  48.5734,
+		LongitudeDeg: 7.7521,
 	},
 	{
-		Name:   "DE1",
-		City:   "Frankfurt, Germany",
-		LatLng: s2.LatLngFromDegrees(50.1109, 8.6821),
+		Name:         "DE1",
+		City:         "Frankfurt, Germany",
+		LatitudeDeg:  50.1109,
+		LongitudeDeg: 8.6821,
 	},
 	{
-		Name:   "BHS5",
-		City:   "Beauharnois, Quebec, Canada",
-		LatLng: s2.LatLngFromDegrees(45.3151, -73.8779),
+		Name:         "BHS5",
+		City:         "Beauharnois, Quebec, Canada",
+		LatitudeDeg:  45.3151,
+		LongitudeDeg: -73.8779,
 	},
 	{
-		Name:   "WAW1",
-		City:   "Warsaw, Poland",
-		LatLng: s2.LatLngFromDegrees(52.2297, 21.0122),
+		Name:         "WAW1",
+		City:         "Warsaw, Poland",
+		LatitudeDeg:  52.2297,
+		LongitudeDeg: 21.0122,
 	},
 	{
-		Name:   "SYD1",
-		City:   "Sydney, Australia",
-		LatLng: s2.LatLngFromDegrees(-33.8688, 151.2093),
+		Name:         "SYD1",
+		City:         "Sydney, Australia",
+		LatitudeDeg:  33.8688,
+		LongitudeDeg: 151.2093,
 	},
 	{
-		Name:   "SGP1",
-		City:   "Singapore",
-		LatLng: s2.LatLngFromDegrees(1.3521, 103.8198),
+		Name:         "SGP1",
+		City:         "Singapore",
+		LatitudeDeg:  1.3521,
+		LongitudeDeg: 103.8198,
 	},
 }
 
@@ -374,11 +383,11 @@ func (d *OVHDriver) loadPricesForSKUs(ctx context.Context) (ovhPriceMap, error) 
 func (d *OVHDriver) ovhSKU(flavor *ovhSKU, priceMap ovhPriceMap) *SKU {
 	return &SKU{
 		Name:         flavor.Name,
-		CPUs:         flavor.Vcpus,
-		Memory:       flavor.RAM,
-		Disk:         flavor.Disk,
+		Cpus:         int32(flavor.Vcpus),
+		Memory:       int32(flavor.RAM),
+		Disk:         int32(flavor.Disk),
 		NetworkCap:   0,
-		NetworkSpeed: flavor.OutboundBandwidth,
+		NetworkSpeed: int32(flavor.OutboundBandwidth),
 		PriceHourly: &Price{
 			Value:    priceMap.FindByCode(flavor.PlanCodes.Hourly),
 			Currency: ovhCurrency[d.subsidiary],
@@ -408,14 +417,11 @@ func (d *OVHDriver) ovhNode(instance *ovhInstance, priceMap ovhPriceMap) *Node {
 	}
 
 	return &Node{
-		ProviderID: instance.ID,
+		ProviderId: instance.ID,
 		Name:       instance.Name,
-		Memory:     instance.Flavor.RAM,
-		CPUs:       instance.Flavor.Vcpus,
-		Disk:       instance.Flavor.Disk,
 		Networks:   &networks,
 		Status:     instance.Status,
-		SKU:        d.ovhSKU(&instance.Flavor, priceMap),
+		Sku:        d.ovhSKU(&instance.Flavor, priceMap),
 		Region:     region,
 	}
 }

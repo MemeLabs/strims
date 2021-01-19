@@ -2,8 +2,6 @@ package node
 
 import (
 	"context"
-
-	"github.com/golang/geo/s2"
 )
 
 type CustomDriver struct{}
@@ -38,37 +36,32 @@ func (d *CustomDriver) Create(ctx context.Context, req *CreateRequest) (*Node, e
 		User:         req.User,
 		Driver:       "custom",
 		ProviderName: "custom",
-		ProviderID:   "",
+		ProviderId:   "",
 		Name:         req.Name,
-		Memory:       0,
-		CPUs:         0,
-		Disk:         0,
 		Networks: &Networks{
 			V4: []string{req.IPV4},
 		},
 		Status: "active",
 		Region: &Region{
-			Name: req.Name,
-			City: "",
-			LatLng: s2.LatLng{
-				Lat: 0,
-				Lng: 0,
-			},
-		},
-		SKU: &SKU{
 			Name:         req.Name,
-			CPUs:         0,
+			City:         "",
+			LatitudeDeg:  0,
+			LongitudeDeg: 0,
+		},
+		Sku: &SKU{
+			Name:         req.Name,
+			Cpus:         0,
 			Memory:       0,
 			Disk:         0,
 			NetworkCap:   0,
 			NetworkSpeed: 0,
 			PriceMonthly: &Price{
 				Value:    0,
-				Currency: "",
+				Currency: "USD",
 			},
 			PriceHourly: &Price{
 				Value:    0,
-				Currency: "",
+				Currency: "USD",
 			},
 		},
 	}, nil

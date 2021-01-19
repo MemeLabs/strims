@@ -6,7 +6,6 @@ import (
 	"fmt"
 
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/golang/geo/s2"
 )
 
 var _ Driver = (*NoopDriver)(nil)
@@ -29,14 +28,16 @@ func (d *NoopDriver) DefaultUser() string {
 func (d *NoopDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region, error) {
 	return []*Region{
 		{
-			Name:   "NY",
-			City:   "New York City, United States",
-			LatLng: s2.LatLngFromDegrees(40.6943, -73.9249),
+			Name:         "NY",
+			City:         "New York City, United States",
+			LatitudeDeg:  40.6943,
+			LongitudeDeg: -73.9249,
 		},
 		{
-			Name:   "AM",
-			City:   "Amsterdam, The Netherlands",
-			LatLng: s2.LatLngFromDegrees(52.3500, 4.9166),
+			Name:         "AM",
+			City:         "Amsterdam, The Netherlands",
+			LatitudeDeg:  52.3500,
+			LongitudeDeg: 4.9166,
 		},
 	}, nil
 }
@@ -45,7 +46,7 @@ func (d *NoopDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error)
 	return []*SKU{
 		{
 			Name:         "one",
-			CPUs:         1,
+			Cpus:         1,
 			Memory:       2000,
 			Disk:         0,
 			NetworkCap:   0,
@@ -61,7 +62,7 @@ func (d *NoopDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error)
 		},
 		{
 			Name:         "two",
-			CPUs:         2,
+			Cpus:         2,
 			Memory:       7000,
 			Disk:         0,
 			NetworkCap:   0,
@@ -77,7 +78,7 @@ func (d *NoopDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, error)
 		},
 		{
 			Name:         "three",
-			CPUs:         4,
+			Cpus:         4,
 			Memory:       15000,
 			Disk:         0,
 			NetworkCap:   0,
@@ -130,17 +131,14 @@ func (d *NoopDriver) Create(ctx context.Context, req *CreateRequest) (*Node, err
 		User:         d.DefaultUser(),
 		Driver:       "noop",
 		ProviderName: d.Provider(),
-		ProviderID:   fmt.Sprint(id),
+		ProviderId:   fmt.Sprint(id),
 		Name:         req.Name,
-		Memory:       sku.Memory,
-		CPUs:         sku.CPUs,
-		Disk:         sku.Disk,
 		Networks: &Networks{
 			V4: []string{req.IPV4},
 		},
 		Status: "ACTIVE",
 		Region: region,
-		SKU:    sku,
+		Sku:    sku,
 	}, nil
 }
 

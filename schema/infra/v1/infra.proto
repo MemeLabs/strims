@@ -1,0 +1,77 @@
+syntax = "proto3";
+
+package strims.infra.v1;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/infra/v1;infra";
+// option java_package
+// option swift_prefix
+
+message Node {
+  message Networks {
+    repeated string v4 = 1;
+    repeated string v6 = 2;
+  }
+
+  message Region {
+    string name = 1;
+    string city = 2;
+    double latitude_deg = 3;
+    double longitude_deg = 4;
+  }
+
+  message Price {
+    double value = 1;
+    string currency = 2;
+  }
+
+  message SKU {
+    string name = 1;
+    int32 memory = 2;
+    int32 cpus = 3;
+    int32 disk = 4;
+    int32 network_cap = 5;
+    int32 network_speed = 6;
+    Price price_monthly = 7;
+    Price price_hourly = 8;
+  }
+
+  message Usage {
+    int32 network_in = 1;
+    int32 network_out = 2;
+    int32 cpu_us = 3;
+    int32 mem_used = 4;
+    int32 uptime = 5; // delete?
+    Price cost = 6;
+  }
+
+  string user = 1;
+  string driver = 2;
+  string provider_name = 3;
+  string provider_id = 4;
+  string name = 5;
+  string wireguard_priv_key = 6;
+  string wireguard_ipv4 = 7;
+  string status = 8;
+  int64 started_at = 12;
+  int64 stopped_at = 13;
+  Networks networks = 14;
+  Region region = 15;
+  SKU sku = 16;
+  Usage usage = 17;
+}
+
+message History {
+  repeated Node nodes = 1;
+}
+
+message GetHistoryRequest {
+  // filter
+}
+
+message GetHistoryResponse {
+  History history = 1;
+}
+
+service Infra {
+  rpc GetHistory(GetHistoryRequest) returns (GetHistoryResponse);
+}

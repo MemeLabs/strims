@@ -42,8 +42,8 @@ type Node struct {
 	SKUName         string     `boil:"sku_name" json:"skuName" toml:"skuName" yaml:"skuName"`
 	SKUNetworkCap   int        `boil:"sku_network_cap" json:"skuNetworkCap" toml:"skuNetworkCap" yaml:"skuNetworkCap"`
 	SKUNetworkSpeed int        `boil:"sku_network_speed" json:"skuNetworkSpeed" toml:"skuNetworkSpeed" yaml:"skuNetworkSpeed"`
-	SKUPriceMonthly float32    `boil:"sku_price_monthly" json:"skuPriceMonthly" toml:"skuPriceMonthly" yaml:"skuPriceMonthly"`
-	SKUPriceHourly  float32    `boil:"sku_price_hourly" json:"skuPriceHourly" toml:"skuPriceHourly" yaml:"skuPriceHourly"`
+	SKUPriceMonthly float64    `boil:"sku_price_monthly" json:"skuPriceMonthly" toml:"skuPriceMonthly" yaml:"skuPriceMonthly"`
+	SKUPriceHourly  float64    `boil:"sku_price_hourly" json:"skuPriceHourly" toml:"skuPriceHourly" yaml:"skuPriceHourly"`
 	WireguardKey    string     `boil:"wireguard_key" json:"wireguardKey" toml:"wireguardKey" yaml:"wireguardKey"`
 	WireguardIP     string     `boil:"wireguard_ip" json:"wireguardIP" toml:"wireguardIP" yaml:"wireguardIP"`
 	User            string     `boil:"user" json:"user" toml:"user" yaml:"user"`
@@ -225,35 +225,6 @@ func (w whereHelperfloat64) NIN(slice []float64) qm.QueryMod {
 	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
 }
 
-type whereHelperfloat32 struct{ field string }
-
-func (w whereHelperfloat32) EQ(x float32) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.EQ, x) }
-func (w whereHelperfloat32) NEQ(x float32) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.NEQ, x)
-}
-func (w whereHelperfloat32) LT(x float32) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LT, x) }
-func (w whereHelperfloat32) LTE(x float32) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LTE, x)
-}
-func (w whereHelperfloat32) GT(x float32) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GT, x) }
-func (w whereHelperfloat32) GTE(x float32) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GTE, x)
-}
-func (w whereHelperfloat32) IN(slice []float32) qm.QueryMod {
-	values := make([]interface{}, 0, len(slice))
-	for _, value := range slice {
-		values = append(values, value)
-	}
-	return qm.WhereIn(fmt.Sprintf("%s IN ?", w.field), values...)
-}
-func (w whereHelperfloat32) NIN(slice []float32) qm.QueryMod {
-	values := make([]interface{}, 0, len(slice))
-	for _, value := range slice {
-		values = append(values, value)
-	}
-	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
-}
-
 var NodeWhere = struct {
 	ID              whereHelperint64
 	Active          whereHelperint
@@ -273,8 +244,8 @@ var NodeWhere = struct {
 	SKUName         whereHelperstring
 	SKUNetworkCap   whereHelperint
 	SKUNetworkSpeed whereHelperint
-	SKUPriceMonthly whereHelperfloat32
-	SKUPriceHourly  whereHelperfloat32
+	SKUPriceMonthly whereHelperfloat64
+	SKUPriceHourly  whereHelperfloat64
 	WireguardKey    whereHelperstring
 	WireguardIP     whereHelperstring
 	User            whereHelperstring
@@ -297,8 +268,8 @@ var NodeWhere = struct {
 	SKUName:         whereHelperstring{field: "\"nodes\".\"sku_name\""},
 	SKUNetworkCap:   whereHelperint{field: "\"nodes\".\"sku_network_cap\""},
 	SKUNetworkSpeed: whereHelperint{field: "\"nodes\".\"sku_network_speed\""},
-	SKUPriceMonthly: whereHelperfloat32{field: "\"nodes\".\"sku_price_monthly\""},
-	SKUPriceHourly:  whereHelperfloat32{field: "\"nodes\".\"sku_price_hourly\""},
+	SKUPriceMonthly: whereHelperfloat64{field: "\"nodes\".\"sku_price_monthly\""},
+	SKUPriceHourly:  whereHelperfloat64{field: "\"nodes\".\"sku_price_hourly\""},
 	WireguardKey:    whereHelperstring{field: "\"nodes\".\"wireguard_key\""},
 	WireguardIP:     whereHelperstring{field: "\"nodes\".\"wireguard_ip\""},
 	User:            whereHelperstring{field: "\"nodes\".\"user\""},

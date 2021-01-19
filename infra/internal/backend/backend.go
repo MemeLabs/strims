@@ -23,7 +23,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/infra/internal/models"
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/MemeLabs/go-ppspp/infra/pkg/wgutil"
-	"github.com/golang/geo/s2"
+	infrav1 "github.com/MemeLabs/go-ppspp/pkg/apis/infra/v1"
 	"github.com/google/go-cmp/cmp"
 	"github.com/mitchellh/mapstructure"
 	"github.com/volatiletech/null/v8"
@@ -329,7 +329,7 @@ func (b *Backend) CreateNode(
 		if err != nil {
 			return err
 		}
-		n.ProviderID = fmt.Sprint(id)
+		n.ProviderId = fmt.Sprint(id)
 	}
 
 	b.Log.Info("node has been created",
@@ -343,12 +343,12 @@ func (b *Backend) CreateNode(
 
 	b.buildControllerConf(nodes)
 
-	n.WireguardIPv4, err = b.nextWGIPv4(ctx, nodes)
-	if n.WireguardIPv4 == "" || err != nil {
+	n.WireguardIpv4, err = b.nextWGIPv4(ctx, nodes)
+	if n.WireguardIpv4 == "" || err != nil {
 		return fmt.Errorf("failed to get next wg ipv4: %w", err)
 	}
 
-	b.Log.Info("next wireguard address", zap.String("wg_ipv4", n.WireguardIPv4))
+	b.Log.Info("next wireguard address", zap.String("wg_ipv4", n.WireguardIpv4))
 
 	wgpriv, wgpub, err := wgutil.GenerateKey()
 	if wgpriv == "" || wgpub == "" || err != nil {
@@ -370,7 +370,7 @@ func (b *Backend) CreateNode(
 	// append new peer
 	b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
 		PublicKey:           wgpub,
-		AllowedIPs:          fmt.Sprintf("%s/%d", n.WireguardIPv4, 32),
+		AllowedIPs:          fmt.Sprintf("%s/%d", n.WireguardIpv4, 32),
 		Endpoint:            fmt.Sprintf("%s:%d", n.Networks.V4[0], 51820),
 		PersistentKeepalive: 25,
 	})
@@ -420,21 +420,21 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 		User:         node.User,
 		Active:       1,
 		StartedAt:    node.StartedAt,
-		ProviderID:   node.ProviderID,
+		ProviderID:   node.ProviderId,
 		ProviderName: node.ProviderName,
 		Name:         strings.ToLower(node.Name), // lowering to match k8s node naming
-		Memory:       node.Memory,
-		CPUs:         node.CPUs,
-		Disk:         node.Disk,
+		Memory:       int(node.Sku.Memory),
+		CPUs:         int(node.Sku.Cpus),
+		Disk:         int(node.Sku.Disk),
 		IPV4:         node.Networks.V4[0],
 		// IPV6:       node.Networks.V6[0],
 		RegionName:      node.Region.Name,
-		RegionLat:       float64(node.Region.LatLng.Lat),
-		RegionLng:       float64(node.Region.LatLng.Lng),
-		WireguardIP:     node.WireguardIPv4,
+		RegionLat:       node.Region.LatitudeDeg,
+		RegionLng:       node.Region.LongitudeDeg,
+		WireguardIP:     node.WireguardIpv4,
 		WireguardKey:    node.WireguardPrivKey,
-		SKUPriceHourly:  float32(node.SKU.PriceHourly.Value),
-		SKUPriceMonthly: float32(node.SKU.PriceMonthly.Value),
+		SKUPriceHourly:  node.Sku.PriceHourly.Value,
+		SKUPriceMonthly: node.Sku.PriceMonthly.Value,
 	}
 
 	if err := nodeEntry.InsertG(ctx, boil.Infer()); err != nil {
@@ -513,7 +513,7 @@ func (b *Backend) initNode(ctx context.Context, node *node.Node) error {
 		node.User,
 		node.Networks.V4[0],
 		b.SSHIdentityFile(),
-		node.WireguardIPv4,
+		node.WireguardIpv4,
 		conf.String(),
 		node.Name,
 	); err != nil {
@@ -653,7 +653,7 @@ func (b *Backend) nextWGIPv4(ctx context.Context, activeNodes []*node.Node) (str
 OUTER:
 	for i := 2; i < 255; i++ {
 		for _, node := range activeNodes {
-			addr := strings.Split(node.WireguardIPv4, ".")
+			addr := strings.Split(node.WireguardIpv4, ".")
 			if len(addr) == 4 {
 				host, err := strconv.Atoi(addr[3])
 				if err != nil {
@@ -690,7 +690,7 @@ func (b *Backend) buildControllerConf(nodes []*node.Node) {
 
 		b.Conf.Peers = append(b.Conf.Peers, wgutil.InterfacePeerConfig{
 			PublicKey:           pub,
-			AllowedIPs:          fmt.Sprintf("%s/%d", node.WireguardIPv4, 32),
+			AllowedIPs:          fmt.Sprintf("%s/%d", node.WireguardIpv4, 32),
 			Endpoint:            fmt.Sprintf("%s:%d", node.Networks.V4[0], 51820),
 			PersistentKeepalive: 25,
 		})
@@ -724,7 +724,7 @@ func (b *Backend) configForNode(n *node.Node) (*wgutil.InterfaceConfig, error) {
 	// set main interface
 	return &wgutil.InterfaceConfig{
 		PrivateKey: n.WireguardPrivKey,
-		Address:    fmt.Sprintf("%s/%d", n.WireguardIPv4, 24),
+		Address:    fmt.Sprintf("%s/%d", n.WireguardIpv4, 24),
 		ListenPort: wgport,
 		Peers:      peers,
 	}, nil
@@ -745,35 +745,38 @@ func modelToNode(n *models.Node) *node.Node {
 	return &node.Node{
 		User:         n.User,
 		ProviderName: n.ProviderName,
-		ProviderID:   n.ProviderID,
+		ProviderId:   n.ProviderID,
 		Name:         n.Name,
-		Memory:       n.Memory,
-		CPUs:         n.CPUs,
-		Disk:         n.Disk,
-		Networks: &node.Networks{
+		Networks: &infrav1.Node_Networks{
 			V4: []string{n.IPV4},
 			V6: []string{n.IPV6},
 		},
 		Status: status,
-		Region: &node.Region{
-			Name:   n.RegionName,
-			LatLng: s2.LatLngFromDegrees(n.RegionLat, n.RegionLng),
+		Region: &infrav1.Node_Region{
+			Name:         n.RegionName,
+			LatitudeDeg:  n.RegionLat,
+			LongitudeDeg: n.RegionLng,
 		},
-		SKU: &node.SKU{
+		Sku: &infrav1.Node_SKU{
+			Memory:       int32(n.Memory),
+			Cpus:         int32(n.CPUs),
+			Disk:         int32(n.Disk),
 			Name:         n.SKUName,
-			NetworkCap:   n.SKUNetworkCap,
-			NetworkSpeed: n.SKUNetworkSpeed,
+			NetworkCap:   int32(n.SKUNetworkCap),
+			NetworkSpeed: int32(n.SKUNetworkSpeed),
 			PriceMonthly: &node.Price{
-				Value: float64(n.SKUPriceMonthly),
+				Value:    n.SKUPriceMonthly,
+				Currency: "",
 			},
 			PriceHourly: &node.Price{
-				Value: float64(n.SKUPriceHourly),
+				Value:    n.SKUPriceHourly,
+				Currency: "",
 			},
 		},
 		WireguardPrivKey: n.WireguardKey,
-		WireguardIPv4:    n.WireguardIP,
+		WireguardIpv4:    n.WireguardIP,
 		StartedAt:        n.StartedAt,
-		StoppedAt:        n.StoppedAt.Int64,
+		StoppedAt:        n.StoppedAt.Int64, // TODO(jbpratt): this may not be safe
 	}
 }
 
@@ -804,5 +807,12 @@ func run(args ...string) error {
 		return fmt.Errorf("failed to exec cmd: %w", err)
 	}
 
+	return nil
+}
+
+func (b *Backend) syncNodeStats(ctx context.Context) error {
+	// query node stats, group by name
+	// for each group, update .Usage field
+	// save to db
 	return nil
 }

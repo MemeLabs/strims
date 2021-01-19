@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"os"
-	"strconv"
 
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/olekukonko/tablewriter"
@@ -79,15 +78,15 @@ func formatProviderNodes(ctx context.Context, driver node.Driver) ([][]string, e
 		networks = append(networks, r.Networks.V6...)
 
 		rows = append(rows, []string{
-			r.ProviderID,
+			r.ProviderId,
 			r.Name,
-			strconv.Itoa(r.Memory),
-			strconv.Itoa(r.CPUs),
-			strconv.Itoa(r.Disk),
+			fmt.Sprint(r.Sku.Memory),
+			fmt.Sprint(r.Sku.Cpus),
+			fmt.Sprint(r.Sku.Disk),
 			fmt.Sprintf("%s", networks),
 			r.Status,
 			r.Region.Name,
-			r.SKU.Name,
+			r.Sku.Name,
 		})
 	}
 	return rows, nil

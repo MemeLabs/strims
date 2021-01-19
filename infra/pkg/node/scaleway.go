@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/golang/geo/s2"
 	account "github.com/scaleway/scaleway-sdk-go/api/account/v2alpha1"
 	"github.com/scaleway/scaleway-sdk-go/api/instance/v1"
 	"github.com/scaleway/scaleway-sdk-go/scw"
@@ -16,14 +15,16 @@ const scalewayOS = "Ubuntu 20.04 Focal Fossa"
 
 var scalewayRegions = []*Region{
 	{
-		Name:   "fr-par-1",
-		City:   "Paris, France",
-		LatLng: s2.LatLngFromDegrees(48.8667, 2.3333),
+		Name:         "fr-par-1",
+		City:         "Paris, France",
+		LatitudeDeg:  48.8667,
+		LongitudeDeg: 2.3333,
 	},
 	{
-		Name:   "nl-ams-1",
-		City:   "Amsterdam, The Netherlands",
-		LatLng: s2.LatLngFromDegrees(52.3500, 4.9166),
+		Name:         "nl-ams-1",
+		City:         "Amsterdam, The Netherlands",
+		LatitudeDeg:  52.3500,
+		LongitudeDeg: 4.9166,
 	},
 }
 
@@ -100,11 +101,11 @@ func (d *ScalewayDriver) SKUs(ctx context.Context, req *SKUsRequest) ([]*SKU, er
 func scalewaySKU(name string, serverType *instance.ServerType) *SKU {
 	return &SKU{
 		Name:         name,
-		CPUs:         int(serverType.Ncpus),
-		Memory:       int(serverType.RAM / (1 << 20)),
-		Disk:         int(serverType.VolumesConstraint.MinSize / scw.GB),
+		Cpus:         int32(serverType.Ncpus),
+		Memory:       int32(serverType.RAM / (1 << 20)),
+		Disk:         int32(serverType.VolumesConstraint.MinSize / scw.GB),
 		NetworkCap:   0,
-		NetworkSpeed: int(*serverType.Network.SumInternetBandwidth / (1 << 20)),
+		NetworkSpeed: int32(*serverType.Network.SumInternetBandwidth / (1 << 20)),
 		PriceHourly: &Price{
 			Value:    float64(serverType.HourlyPrice),
 			Currency: "EUR",
@@ -305,13 +306,10 @@ func (d *ScalewayDriver) scalewayNode(ctx context.Context, server *instance.Serv
 	}
 
 	node := &Node{
-		ProviderID: server.ID,
+		ProviderId: server.ID,
 		Name:       server.Name,
-		CPUs:       int(serverType.Ncpus),
-		Memory:     int(serverType.RAM / (1 << 20)),
-		Disk:       int(serverType.VolumesConstraint.MinSize / scw.GB),
 		Status:     server.State.String(),
-		SKU:        scalewaySKU(server.CommercialType, serverType),
+		Sku:        scalewaySKU(server.CommercialType, serverType),
 		Networks: &Networks{
 			V4: []string{server.PublicIP.Address.String()},
 			V6: []string{server.IPv6.Address.String()},

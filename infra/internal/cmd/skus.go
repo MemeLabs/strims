@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"strconv"
 
 	"github.com/MemeLabs/go-ppspp/infra/pkg/node"
 	"github.com/olekukonko/tablewriter"
@@ -106,21 +105,17 @@ func formatProviderSKUs(ctx context.Context, driver node.Driver, req *node.SKUsR
 	for _, r := range skus {
 		var networkCap, priceHourly, priceMonthly string
 		if r.NetworkCap != 0 {
-			networkCap = strconv.Itoa(r.NetworkCap)
+			networkCap = fmt.Sprint(r.NetworkCap)
 		}
-		if r.PriceHourly != nil {
-			priceHourly = fmt.Sprintf("%.4f %s", r.PriceHourly.Value, r.PriceHourly.Currency)
-		}
-		if r.PriceMonthly != nil {
-			priceMonthly = fmt.Sprintf("%.4f %s", r.PriceMonthly.Value, r.PriceMonthly.Currency)
-		}
+		priceHourly = fmt.Sprintf("$ %.4f", r.PriceHourly.Value)
+		priceMonthly = fmt.Sprintf("$ %.4f", r.PriceMonthly.Value)
 
 		rows = append(rows, []string{
 			r.Name,
-			strconv.Itoa(r.CPUs),
-			strconv.Itoa(r.Memory),
+			fmt.Sprint(r.Cpus),
+			fmt.Sprint(r.Memory),
 			networkCap,
-			strconv.Itoa(r.NetworkSpeed),
+			fmt.Sprint(r.NetworkSpeed),
 			priceMonthly,
 			priceHourly,
 		})
