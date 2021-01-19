@@ -56,7 +56,7 @@ func (c *Control) Open(mimeType string, directorySnippet *networkv1.DirectoryLis
 		return nil, err
 	}
 
-	w, err := ppspp.NewWriter(ppspp.WriterOptions{
+	options := ppspp.WriterOptions{
 		SwarmOptions: ppspp.SwarmOptions{
 			ChunkSize:          1024,
 			ChunksPerSignature: 32,
@@ -68,7 +68,14 @@ func (c *Control) Open(mimeType string, directorySnippet *networkv1.DirectoryLis
 			},
 		},
 		Key: key,
-	})
+	}
+
+	return c.OpenWithSwarmWriterOptions(mimeType, directorySnippet, networkKeys, options)
+}
+
+// OpenWithSwarmWriterOptions ...
+func (c *Control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1.DirectoryListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error) {
+	w, err := ppspp.NewWriter(options)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +101,7 @@ func (c *Control) Open(mimeType string, directorySnippet *networkv1.DirectoryLis
 		mimeType:         mimeType,
 		directorySnippet: directorySnippet,
 		networkKeys:      networkKeys,
-		key:              key,
+		key:              options.Key,
 		swarm:            w.Swarm(),
 		w:                cw,
 	}

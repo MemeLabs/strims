@@ -35,6 +35,17 @@ func (o *SwarmOptions) Assign(u SwarmOptions) {
 	o.Integrity.Assign(u.Integrity)
 }
 
+// URIOptions ...
+func (o SwarmOptions) URIOptions() URIOptions {
+	return URIOptions{
+		codec.ChunkSizeOption:                        o.ChunkSize,
+		codec.ChunksPerSignatureOption:               o.ChunksPerSignature,
+		codec.ContentIntegrityProtectionMethodOption: int(o.Integrity.ProtectionMethod),
+		codec.MerkleHashTreeFunctionOption:           int(o.Integrity.MerkleHashTreeFunction),
+		codec.LiveSignatureAlgorithmOption:           int(o.Integrity.LiveSignatureAlgorithm),
+	}
+}
+
 // NewDefaultSwarmOptions ...
 func NewDefaultSwarmOptions() SwarmOptions {
 	return SwarmOptions{
@@ -172,14 +183,8 @@ func (s *Swarm) ID() SwarmID {
 // URI ...
 func (s *Swarm) URI() *URI {
 	return &URI{
-		ID: s.ID(),
-		Options: URIOptions{
-			codec.ChunkSizeOption:                        s.chunkSize(),
-			codec.ChunksPerSignatureOption:               s.chunksPerSignature(),
-			codec.ContentIntegrityProtectionMethodOption: int(s.contentIntegrityProtectionMethod()),
-			codec.MerkleHashTreeFunctionOption:           int(s.merkleHashTreeFunction()),
-			codec.LiveSignatureAlgorithmOption:           int(s.liveSignatureAlgorithm()),
-		},
+		ID:      s.ID(),
+		Options: s.options.URIOptions(),
 	}
 }
 

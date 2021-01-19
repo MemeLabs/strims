@@ -58,6 +58,7 @@ type TransferControl interface {
 // VideoCaptureControl ...
 type VideoCaptureControl interface {
 	Open(mimeType string, directorySnippet *network.DirectoryListingSnippet, networkKeys [][]byte) ([]byte, error)
+	OpenWithSwarmWriterOptions(mimeType string, directorySnippet *network.DirectoryListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error)
 	Update(id []byte, directorySnippet *network.DirectoryListingSnippet) error
 	Append(id []byte, b []byte, segmentEnd bool) error
 	Close(id []byte) error

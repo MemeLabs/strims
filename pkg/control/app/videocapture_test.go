@@ -1,7 +1,6 @@
 package app
 
 import (
-	"context"
 	"crypto/rand"
 	"io"
 	"io/ioutil"
@@ -9,6 +8,8 @@ import (
 	"time"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/stretchr/testify/assert"
 
 	"go.uber.org/zap"
@@ -23,18 +24,17 @@ func TestVideoCapture(t *testing.T) {
 
 	done := make(chan struct{})
 
+	key, err := dao.GenerateKey()
+	assert.Nil(t, err)
+
+	options := ppspp.WriterOptions{
+		Key:          key,
+		SwarmOptions: ppspp.NewDefaultSwarmOptions(),
+	}
+
 	go func() {
-		events := ctrl[0].Directory().ReadEvents(context.Background(), networkKey)
-		var m *networkv1.DirectoryListingMedia
-		for e := range events {
-			if m = e.GetPublish().GetListing().GetMedia(); m != nil {
-				break
-			}
-		}
-
-		logger.Debug("received swarm uri", zap.String("uri", m.SwarmUri))
-
-		_, r, err := ctrl[0].VideoEgress().OpenStream(m.SwarmUri, [][]byte{networkKey})
+		swarmURI := ppspp.NewURI(key.Public, options.SwarmOptions.URIOptions()).String()
+		_, r, err := ctrl[0].VideoEgress().OpenStream(swarmURI, [][]byte{networkKey})
 		assert.Nil(t, err)
 
 		var n int64
@@ -50,12 +50,11 @@ func TestVideoCapture(t *testing.T) {
 		close(done)
 	}()
 
-	time.Sleep(time.Second)
-
-	id, err := ctrl[1].VideoCapture().Open(
+	id, err := ctrl[1].VideoCapture().OpenWithSwarmWriterOptions(
 		"application/binary+noise",
 		&networkv1.DirectoryListingSnippet{},
 		[][]byte{networkKey},
+		options,
 	)
 	assert.Nil(t, err)
 
