@@ -79,6 +79,7 @@ func (t *Tree) Merge(o *Tree) {
 	}
 }
 
+// SetParent ...
 func (t *Tree) SetParent(parent *Tree) {
 	t.parent = parent
 }
@@ -89,14 +90,17 @@ func (t *Tree) SetRoot(digest []byte) {
 	t.setVerified(t.rootBin)
 }
 
+// RootBin ...
 func (t *Tree) RootBin() binmap.Bin {
 	return t.rootBin
 }
 
+// BaseLeft ...
 func (t *Tree) BaseLeft() binmap.Bin {
 	return t.baseLeft
 }
 
+// Verified ...
 func (t *Tree) Verified() []binmap.Bin {
 	v := []binmap.Bin{}
 	for i := t.rootBin.BaseLeft(); i < t.rootBin.BaseRight(); i++ {

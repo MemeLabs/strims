@@ -27,7 +27,7 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
 
   const args = ["build", "-mod", "readonly"];
   if (this.mode === "production") {
-    const rev = execFileSync("git", ["rev-parse", "HEAD"]).toString().substr(0, 8);
+    const rev = process.env.VERSION || execFileSync("git", ["rev-parse", "HEAD"]).toString().substr(0, 8);
     args.push(
       "-trimpath",
       "-ldflags",

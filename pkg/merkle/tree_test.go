@@ -2,6 +2,7 @@ package merkle
 
 import (
 	"crypto/sha256"
+	"fmt"
 	"io"
 	"testing"
 
@@ -15,25 +16,44 @@ func rng() io.Reader {
 }
 
 func TestVerify(t *testing.T) {
-	const chunkSize = 1024
-	bin := binmap.NewBin(5, 0)
-	data := make([]byte, bin.BaseLength()*chunkSize)
-	if _, err := io.ReadFull(rng(), data); err != nil {
-		t.Fatal(err)
+	cases := []struct {
+		chunkSize int
+		bin       binmap.Bin
+	}{
+		{
+			chunkSize: 1024,
+			bin:       binmap.NewBin(5, 0),
+		},
+		{
+			chunkSize: 4096,
+			bin:       binmap.NewBin(6, 0),
+		},
 	}
 
-	r := NewTree(bin, chunkSize, sha256.New())
-	r.Fill(bin, data)
+	for _, c := range cases {
+		c := c
+		t.Run(fmt.Sprintf("chunkSize: %d, rootBin: %d", c.chunkSize, c.bin), func(t *testing.T) {
+			data := make([]byte, c.bin.BaseLength()*uint64(c.chunkSize))
+			if _, err := io.ReadFull(rng(), data); err != nil {
+				t.Fatal(err)
+			}
 
-	r0 := NewTree(bin, chunkSize, sha256.New())
-	r0.SetRoot(r.Get(bin))
+			r := NewTree(c.bin, c.chunkSize, sha256.New())
+			r.Fill(c.bin, data)
 
-	r1 := NewProvisionalTree(r0)
-	verified, err := r1.Verify(bin, data)
-	assert.Nil(t, err, "unexpected error")
-	assert.True(t, verified, "expected successful validation")
+			// spew.Dump(r)
 
-	r0.Merge(r1)
+			r0 := NewTree(c.bin, c.chunkSize, sha256.New())
+			r0.SetRoot(r.Get(c.bin))
+
+			r1 := NewProvisionalTree(r0)
+			verified, err := r1.Verify(c.bin, data)
+			assert.Nil(t, err, "unexpected error")
+			assert.True(t, verified, "expected successful validation")
+
+			r0.Merge(r1)
+		})
+	}
 }
 
 func TestVerifyMerge(t *testing.T) {

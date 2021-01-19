@@ -9,8 +9,13 @@ import { InputError, TextInput } from "../components/Form";
 import LandingPageLayout from "../components/LandingPageLayout";
 import { useCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
+import useQuery from "../hooks/useQuery";
 
 const VALID_NEXT_PATH = /^\/\w[\w/_\-.?=#%]*$/;
+
+interface LoginQueryParams {
+  next: string;
+}
 
 const LoginPage = () => {
   const [listProfilesRes] = useCall("profile", "list");
@@ -19,7 +24,7 @@ const LoginPage = () => {
   const { register, handleSubmit, errors } = useForm<ILoadProfileRequest>({
     mode: "onBlur",
   });
-  const location = useLocation();
+  const { next } = useQuery<LoginQueryParams>(useLocation().search);
 
   React.useEffect(profileActions.clearError, []);
 
@@ -27,7 +32,6 @@ const LoginPage = () => {
     return <Redirect to="/signup" />;
   }
   if (profile) {
-    const { next } = qs.parse(location.search, { ignoreQueryPrefix: true });
     return <Redirect to={VALID_NEXT_PATH.test(next) ? next : "/"} />;
   }
 

@@ -21,7 +21,7 @@ function loader(contents) {
     const outFile = `${this.resourcePath}.wasm`;
     const args = ["build", "-mod", "readonly"];
     if (this.mode === "production") {
-        const rev = child_process_1.execFileSync("git", ["rev-parse", "HEAD"]).toString().substr(0, 8);
+        const rev = process.env.VERSION || child_process_1.execFileSync("git", ["rev-parse", "HEAD"]).toString().substr(0, 8);
         args.push("-trimpath", "-ldflags", `-s -w -X ${versionPkg}.Platform=web -X ${versionPkg}.Version=${rev}`);
     }
     else {

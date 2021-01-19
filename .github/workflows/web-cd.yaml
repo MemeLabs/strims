@@ -1,0 +1,23 @@
+name: web-cd
+
+on:
+  push:
+    branches:
+      - 'master'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - name: Docker login
+      env:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      run: docker login https://docker.pkg.github.com -u ${username} -p ${password}
+    - name: Build image
+      run: docker build -f src/web/Dockerfile . -t docker.pkg.github.com/slugalisk/go-ppspp/web:latest
+    - name: Publish image
+      run: docker push docker.pkg.github.com/slugalisk/go-ppspp/web:latest

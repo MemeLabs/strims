@@ -211,6 +211,7 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 
 		maxChunksPerData := 8
 		b := pool.Get(uint16(maxChunksPerData * s.chunkSize()))
+		// b := pool.Get(uint16(c.Cap()))
 
 		var nw, no int
 		// TODO: rlock s.chunks here
@@ -221,7 +222,10 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 				break
 			}
 			// TODO: limit with CWND/MTU/free bytes in frame
-			for int(rb.BaseLength()) > maxChunksPerData {
+			if s.chunkSize() > c.Cap()-c.Len() {
+				break
+			}
+			for int(rb.BaseLength()) > maxChunksPerData || int(rb.BaseLength())*s.chunkSize() > c.Cap()-c.Len() {
 				rb = rb.Left()
 			}
 			// rb = rb.BaseLeft()

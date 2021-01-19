@@ -244,76 +244,72 @@ type channelWriter struct {
 	*channel
 	w       codec.Writer
 	metrics channelWriterMetrics
-	dirty   bool
 }
 
 func (c *channelWriter) Flush() error {
-	c.dirty = false
 	return c.w.Flush()
 }
 
+func (c *channelWriter) Cap() int {
+	return c.w.Cap()
+}
+
+func (c *channelWriter) Len() int {
+	return c.w.Len()
+}
+
 func (c *channelWriter) Dirty() bool {
-	return c.dirty
+	return c.w.Dirty()
 }
 
 func (c *channelWriter) WriteHandshake(m codec.Handshake) (int, error) {
 	c.metrics.HandshakeCount.Inc()
-	c.dirty = true
 	return c.w.WriteHandshake(m)
 }
 
 func (c *channelWriter) WriteAck(m codec.Ack) (int, error) {
 	c.metrics.AckCount.Inc()
-	c.dirty = true
 	return c.w.WriteAck(m)
 }
 
 func (c *channelWriter) WriteHave(m codec.Have) (int, error) {
 	c.metrics.HaveCount.Inc()
-	c.dirty = true
 	return c.w.WriteHave(m)
 }
 
 func (c *channelWriter) WriteData(m codec.Data) (int, error) {
 	c.metrics.DataCount.Inc()
 	c.metrics.ChunkCount.Add(float64(m.Address.Bin().BaseLength()))
-	c.dirty = true
 	return c.w.WriteData(m)
 }
 
 func (c *channelWriter) WriteIntegrity(m codec.Integrity) (int, error) {
 	c.metrics.IntegrityCount.Inc()
-	c.dirty = true
 	return c.w.WriteIntegrity(m)
 }
 
 func (c *channelWriter) WriteSignedIntegrity(m codec.SignedIntegrity) (int, error) {
 	c.metrics.SignedIntegrityCount.Inc()
-	c.dirty = true
 	return c.w.WriteSignedIntegrity(m)
 }
 
 func (c *channelWriter) WriteRequest(m codec.Request) (int, error) {
 	c.metrics.RequestCount.Inc()
-	c.dirty = true
 	return c.w.WriteRequest(m)
 }
 
 func (c *channelWriter) WritePing(m codec.Ping) (int, error) {
 	c.metrics.PingCount.Inc()
-	c.dirty = true
 	return c.w.WritePing(m)
 }
 
 func (c *channelWriter) WritePong(m codec.Pong) (int, error) {
 	c.metrics.PongCount.Inc()
-	c.dirty = true
 	return c.w.WritePong(m)
 }
 
 func (c *channelWriter) WriteCancel(m codec.Cancel) (int, error) {
 	c.metrics.CancelCount.Inc()
-	c.dirty = true
 	return c.w.WriteCancel(m)
 }
 

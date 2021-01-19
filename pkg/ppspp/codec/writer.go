@@ -25,6 +25,21 @@ type flusher interface {
 	Flush() error
 }
 
+// Dirty ...
+func (w *Writer) Dirty() bool {
+	return w.off != 0
+}
+
+// Cap ...
+func (w *Writer) Cap() int {
+	return w.size
+}
+
+// Len ...
+func (w *Writer) Len() int {
+	return w.off
+}
+
 // Flush ...
 func (w *Writer) Flush() error {
 	if w.off == 0 {

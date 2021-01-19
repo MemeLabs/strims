@@ -67,24 +67,7 @@ const HomePage = () => {
     const encoder = new webm.Encoder(mediaStream);
 
     broadcastEncoder(encoder, id, mediaStream);
-    // debugEncoder(encoder);
   };
-
-  // const debugEncoder = (encoder: webm.Encoder) => {
-  //   const decoder = new webm.Decoder();
-
-  //   encoder.ondata = (b) => {
-  //     decoder.write(b);
-  //     // console.log("write", b);
-  //   };
-  //   encoder.onend = (b) => {
-  //     decoder.write(b);
-  //     decoder.flush();
-  //     // console.log("write/flush", b);
-  //   };
-
-  //   videoRef.current.src = URL.createObjectURL(decoder.source.mediaSource);
-  // };
 
   const broadcastEncoder = (encoder: webm.Encoder, id: Uint8Array, mediaStream: MediaStream) => {
     videoRef.current.srcObject = mediaStream;
@@ -92,48 +75,6 @@ const HomePage = () => {
     encoder.ondata = (data) => client.videoCapture.append({ id, data });
     encoder.onend = (data) => client.videoCapture.append({ id, data, segmentEnd: true });
   };
-
-  // const handleViewBroadcastClick = async (decoder: webm.Decoder | fmp4.Decoder) => {
-  //   const video = videoRef.current;
-  //   video.src = URL.createObjectURL(decoder.source.mediaSource);
-  //   video.oncanplay = () => video.play();
-
-  //   const timeShifted = 0;
-
-  //   const { networks } = await client.network.list();
-  //   const clientEvents = client.videoEgress.openStream({
-  //     swarmUri: "",
-  //     networkKeys: networks.map((n) => n.key.public),
-  //   });
-  //   clientEvents.on("data", ({ body }) => {
-  //     switch (body.case) {
-  //       case EgressOpenStreamResponse.BodyCase.OPEN:
-  //         // publishSwarm(v.open.id);
-  //         break;
-  //       case EgressOpenStreamResponse.BodyCase.DATA:
-  //         // console.log("read", v.data.data);
-
-  //         decoder.write(body.data.data);
-  //         if (body.data.segmentEnd) {
-  //           decoder.flush();
-
-  //           // if (timeShifted < 2) {
-  //           //   timeShifted++;
-  //           //   videoRef.current.currentTime = 999999999999;
-  //           // }
-
-  //           const [, end] = decoder.source.bounds();
-  //           const { currentTime } = videoRef.current;
-  //           if (currentTime < end - 10) {
-  //             videoRef.current.currentTime = end - 5;
-  //             videoRef.current.play();
-
-  //             console.log("skipping", videoRef.current.currentTime);
-  //           }
-  //         }
-  //     }
-  //   });
-  // };
 
   // const handleTestClick = async () => {
   //   console.log("starting vpn");
