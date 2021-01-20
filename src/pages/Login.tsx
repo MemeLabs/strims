@@ -11,7 +11,7 @@ import { useCall } from "../contexts/Api";
 import { useProfile } from "../contexts/Profile";
 import useQuery from "../hooks/useQuery";
 
-const VALID_NEXT_PATH = /^\/\w[\w/_\-.?=#%]*$/;
+const VALID_NEXT_PATH = /^\/\w[\w/_\-.?=#%&]*$/;
 
 interface LoginQueryParams {
   next: string;

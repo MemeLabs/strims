@@ -8,6 +8,11 @@ export default class WorkQueue {
     this.tasks = [];
   }
 
+  public reset() {
+    this.tasks = [];
+    this.busy = false;
+  }
+
   public insert(task: Task) {
     if (this.busy) {
       this.tasks.push(task);

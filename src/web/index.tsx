@@ -21,6 +21,6 @@ import Worker from "./svc.worker";
   root.setAttribute("id", "root");
   document.body.appendChild(root);
 
-  const { default: App } = await import(/* webpackPreload: true */ "../root/App");
+  const { default: App } = await import(/* webpackPreload: true */ "./App");
   ReactDOM.render(<App client={client} />, root);
 })();

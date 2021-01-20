@@ -50,7 +50,6 @@ module.exports = (env, argv) => {
   };
 
   const plugins = [
-    new CleanWebpackPlugin(),
     new HtmlWebpackPlugin({
       chunks: ["index"],
       title: "Loading...",
@@ -76,6 +75,8 @@ module.exports = (env, argv) => {
   let devtool;
 
   if (argv.mode === "production") {
+    plugins.unshift(new CleanWebpackPlugin());
+
     scriptModuleRule.use = ["ts-loader"];
 
     styleModuleRule.use.unshift(MiniCssExtractPlugin.loader);
@@ -124,102 +125,100 @@ module.exports = (env, argv) => {
     },
   });
 
-  return [
-    {
-      target: "web",
-      entry: {
-        index: path.join(__dirname, "src", "web", "index.tsx"),
-        test: path.join(__dirname, "src", "web", "test.ts"),
-        // funding: path.join(__dirname, "src", "funding", "index.tsx"),
-      },
-      devtool,
-      output: {
-        filename: "[name].[contenthash].js",
-        chunkFilename: "[id].[chunkhash].js",
-        path: path.resolve(__dirname, "dist", "web"),
-        publicPath: "/",
-      },
-      devServer: {
-        https: true,
-        hot: true,
-        historyApiFallback: {
-          index: "/",
-        },
-        host: "0.0.0.0",
-        proxy: {
-          "/test-bootstrap": {
-            target: "ws://localhost:8082",
-            ws: true,
+  switch (env.TARGET) {
+    case "app":
+      return [
+        Object.assign(createElectronBuild("renderer", "renderer.tsx"), {
+          plugins: [
+            new HtmlWebpackPlugin({
+              title: "Loading...",
+            }),
+          ],
+        }),
+        createElectronBuild("main"),
+        createElectronBuild("preload"),
+      ];
+    case "web":
+    default:
+      return [
+        {
+          target: "web",
+          entry: {
+            index: path.join(__dirname, "src", "web", "index.tsx"),
+            test: path.join(__dirname, "src", "web", "test.ts"),
+            // funding: path.join(__dirname, "src", "funding", "index.tsx"),
           },
-          "/manage": {
-            target: "ws://localhost:8083",
-            ws: true,
+          devtool,
+          output: {
+            filename: "[name].[contenthash].js",
+            chunkFilename: "[id].[chunkhash].js",
+            path: path.resolve(__dirname, "dist", "web"),
+            publicPath: "/",
           },
-          "/api": {
-            target: "ws://localhost:8084",
-            ws: true,
-          },
-        },
-        contentBase: [path.join(__dirname, "pkg"), path.join(__dirname, "assets")],
-      },
-      module: {
-        rules: [
-          {
-            test: /\.worker\.ts$/,
-            loader: "worker-loader",
-            options: {
-              inline: "fallback",
-              chunkFilename: "[id].[contenthash].worker.js",
+          devServer: {
+            https: true,
+            hot: true,
+            historyApiFallback: {
+              index: "/",
             },
-          },
-          {
-            test: /\.go/,
-            use: ["golang-wasm-async-loader"],
-          },
-          {
-            test: /\.wasm$/,
-            loader: "file-loader",
-          },
-          scriptModuleRule,
-          styleModuleRule,
-          staticModuleRule,
-        ],
-      },
-      resolve: {
-        extensions: [".go", ".tsx", ".ts", ".js"],
-        fallback: {
-          "fs": false,
-          "stream": require.resolve("stream-browserify"),
-          "buffer": require.resolve("buffer"),
-          "process": require.resolve("process"),
-        },
-      },
-      optimization: {
-        minimizer: [
-          new TerserPlugin({
-            parallel: true,
-            terserOptions: {
-              mangle: {
-                module: true,
-                properties: true,
+            host: "0.0.0.0",
+            proxy: {
+              "/test-bootstrap": {
+                target: "ws://localhost:8082",
+                ws: true,
+              },
+              "/manage": {
+                target: "ws://localhost:8083",
+                ws: true,
+              },
+              "/api": {
+                target: "ws://localhost:8084",
+                ws: true,
               },
             },
-          }),
-        ],
-      },
-      plugins,
-    },
-    // Object.assign(
-    //   createElectronBuild("renderer", "renderer.tsx"),
-    //   {
-    //     plugins: [
-    //       new HtmlWebpackPlugin({
-    //         title: "Loading...",
-    //       }),
-    //     ],
-    //   },
-    // ),
-    // createElectronBuild("main"),
-    // createElectronBuild("preload"),
-  ];
+            contentBase: [path.join(__dirname, "pkg"), path.join(__dirname, "assets")],
+          },
+          module: {
+            rules: [
+              {
+                test: /\.worker\.ts$/,
+                loader: "worker-loader",
+                options: {
+                  inline: "fallback",
+                  chunkFilename: "[id].[contenthash].worker.js",
+                },
+              },
+              {
+                test: /\.go/,
+                use: ["golang-wasm-async-loader"],
+              },
+              {
+                test: /\.wasm$/,
+                loader: "file-loader",
+              },
+              scriptModuleRule,
+              styleModuleRule,
+              staticModuleRule,
+            ],
+          },
+          resolve: {
+            extensions: [".go", ".tsx", ".ts", ".js"],
+            fallback: {
+              "fs": false,
+              "stream": require.resolve("stream-browserify"),
+              "buffer": require.resolve("buffer"),
+              "process": require.resolve("process"),
+            },
+          },
+          optimization: {
+            minimizer: [
+              new TerserPlugin({
+                parallel: true,
+              }),
+            ],
+          },
+          plugins,
+        },
+      ];
+  }
 };

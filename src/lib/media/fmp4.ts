@@ -10,6 +10,11 @@ export class Decoder {
     this.source = new Source(MIME_TYPE);
   }
 
+  public reset() {
+    this.headerRead = false;
+    this.source.reset();
+  }
+
   public write(b: Uint8Array): void {
     if (!this.headerRead) {
       b = b.slice(2);

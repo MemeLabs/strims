@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"fmt"
 	"io"
+	"math/rand"
 	"testing"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
@@ -93,25 +94,62 @@ func TestVerifyMerge(t *testing.T) {
 	assert.True(t, copyAndVerify(r11, r00), "expected successful validation")
 }
 
+func BenchmarkMerge(b *testing.B) {
+	const chunkSize = 1024
+	root := binmap.NewBin(6, 0)
+
+	newTestTree := func(b binmap.Bin) *Tree {
+		t := NewTree(root, chunkSize, sha256.New())
+
+		for i := b.BaseLeft(); i < b.BaseRight(); i++ {
+			t.setVerified(i)
+		}
+
+		for b = b.Parent(); b != root; b = b.Parent() {
+			t.setVerified(b)
+			t.setVerified(b.Sibling())
+		}
+
+		return t
+	}
+
+	var trees []*Tree
+	for l := uint64(0); l <= 6; l++ {
+		for o := uint64(0); binmap.NewBin(l, o).BaseRight() < root.BaseRight(); o++ {
+			trees = append(trees, newTestTree(binmap.NewBin(l, o)))
+		}
+	}
+
+	rand.Seed(1234)
+
+	b.ResetTimer()
+
+	t := NewTree(root, chunkSize, sha256.New())
+	for i := 0; i < b.N; i++ {
+		t.verified = trees[rand.Intn(len(trees))].verified
+		t.Merge(trees[rand.Intn(len(trees))])
+	}
+}
+
 func TestVerifyForward(t *testing.T) {
 	const chunkSize = 1024
-	bin := binmap.NewBin(5, 0)
+	root := binmap.NewBin(5, 0)
 	fillBin := binmap.NewBin(1, 4)
-	data := make([]byte, bin.BaseLength()*chunkSize)
+	data := make([]byte, root.BaseLength()*chunkSize)
 	if _, err := io.ReadFull(rng(), data); err != nil {
 		t.Fatal(err)
 	}
 
-	r := NewTree(bin, chunkSize, sha256.New())
-	r.Fill(bin, data)
+	r := NewTree(root, chunkSize, sha256.New())
+	r.Fill(root, data)
 
 	// create reference node with the root hash set
-	r0 := NewTree(bin, chunkSize, sha256.New())
-	r0.SetRoot(r.Get(bin))
+	r0 := NewTree(root, chunkSize, sha256.New())
+	r0.SetRoot(r.Get(root))
 
 	r1 := NewProvisionalTree(r0)
 	// set hashes required to verify node on r1
-	for b := fillBin; b != bin; b = b.Parent() {
+	for b := fillBin; b != root; b = b.Parent() {
 		r1.Set(b.Sibling(), r.Get(b.Sibling()))
 	}
 

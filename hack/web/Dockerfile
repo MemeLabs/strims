@@ -51,4 +51,5 @@ RUN \
 
 FROM docker.pkg.github.com/slugalisk/go-ppspp/nginx:latest
 
+COPY hack/web/nginx.conf /etc/nginx/nginx.conf
 COPY --from=build /ui/dist/web /usr/share/nginx/html/

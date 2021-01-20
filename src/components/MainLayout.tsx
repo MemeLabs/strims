@@ -26,6 +26,7 @@ import { Link, useHistory } from "react-router-dom";
 import { useToggle } from "react-use";
 import usePortal from "react-useportal";
 
+import { MetricsFormat } from "../apis/strims/debug/v1/debug";
 import { CreateNetworkResponse, Network } from "../apis/strims/network/v1/network";
 import { useCall, useClient } from "../contexts/Api";
 import { useTheme } from "../contexts/Theme";
@@ -201,9 +202,17 @@ const NetworkNav = () => {
 
 export const MainLayout = ({ children }: { children: any }) => {
   const [theme, { setColorScheme }] = useTheme();
+  const client = useClient();
 
   const toggleTheme = () =>
     theme.colorScheme === "dark" ? setColorScheme("light") : setColorScheme("dark");
+
+  const handleAlertsClick = async () => {
+    const { data } = await client.debug.readMetrics({
+      format: MetricsFormat.METRICS_FORMAT_TEXT,
+    });
+    console.log(new TextDecoder().decode(data));
+  };
 
   return (
     <div className="main_layout">
@@ -232,9 +241,9 @@ export const MainLayout = ({ children }: { children: any }) => {
           <Link to="/activity" className="main_layout__user_nav__link">
             <FiActivity />
           </Link>
-          <Link to="/alerts" className="main_layout__user_nav__link">
+          <button onClick={handleAlertsClick} className="main_layout__user_nav__link">
             <FiBell />
-          </Link>
+          </button>
           <Link to="/" className="main_layout__user_nav__link">
             <FiCloud />
           </Link>

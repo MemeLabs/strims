@@ -18,6 +18,6 @@ jobs:
         password: ${{ secrets.GITHUB_TOKEN }}
       run: docker login https://docker.pkg.github.com -u ${username} -p ${password}
     - name: Build image
-      run: docker build -f src/web/Dockerfile . -t docker.pkg.github.com/slugalisk/go-ppspp/web:latest
+      run: docker build -f hack/web/Dockerfile . -t docker.pkg.github.com/slugalisk/go-ppspp/web:latest
     - name: Publish image
       run: docker push docker.pkg.github.com/slugalisk/go-ppspp/web:latest

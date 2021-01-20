@@ -1,17 +1,18 @@
+import "../styles/main.scss";
+
 import { spawn } from "child_process";
 
-import storage from "electron-json-storage";
 import * as React from "react";
 import * as ReactDOM from "react-dom";
 
 import { FrontendClient } from "../apis/client";
-import App from "../root/App";
+import App from "./App";
 
-const p2p = spawn("./dist/desktop/p2p");
-window.addEventListener("beforeunload", () => p2p.kill());
-p2p.stderr.on("data", (d: Buffer) => console.log(d.toString()));
+const svc = spawn("./dist/desktop/svc");
+window.addEventListener("beforeunload", () => svc.kill());
+svc.stderr.on("data", (d: Buffer) => console.log(d.toString()));
 
-const client = new FrontendClient(p2p.stdin, p2p.stdout);
+const client = new FrontendClient(svc.stdin, svc.stdout);
 
 window.addEventListener("DOMContentLoaded", () => {
   const root = document.createElement("div");

@@ -11,9 +11,17 @@ export class Decoder {
 
   public constructor() {
     this.source = new Source(MIME_TYPE);
+    this.initTransmuxer();
+  }
 
+  private initTransmuxer() {
     this.transmuxer = new muxjs.mp4.Transmuxer();
     this.transmuxer.on("data", this.handleData.bind(this));
+  }
+
+  public reset() {
+    this.initTransmuxer();
+    this.source.reset();
   }
 
   public write(b: Uint8Array): void {

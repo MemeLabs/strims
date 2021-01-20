@@ -69,13 +69,15 @@ func (t *Tree) Reset(rootBin binmap.Bin, parent *Tree) {
 // Merge copies the verified hashes from o to the corresponding bin in t if the
 // bin in t is not verified
 func (t *Tree) Merge(o *Tree) {
-	bl := int(t.rootBin.BaseLength())
-	for i := 0; i < bl*2; i++ {
-		if o.verified&(1<<i) != 0 && t.verified&(1<<i) == 0 {
-			t.verified |= 1 << i
-			s := t.hash.Size()
+	added := o.verified & ^t.verified
+	t.verified |= o.verified
+
+	s := t.hash.Size()
+	for i := 0; added != 0; i++ {
+		if added&1 != 0 {
 			copy(t.digests[i*s:], o.digests[i*s:(i+1)*s])
 		}
+		added >>= 1
 	}
 }
 

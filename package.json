@@ -5,9 +5,9 @@
   "main": "index.js",
   "scripts": {
     "preinstall": "npx npm-force-resolutions",
-    "app:electron": "electron ./dist/app/main.js",
-    "app:webpack": "webpack --mode development --watch",
-    "app:go": "nodemon --watch ./pkg --watch ./cmd/app -e go --delay 0.1 --signal SIGINT --exec 'go build -o ./dist/app/p2p ./cmd/app || exit 1'",
+    "app:electron": "electron ./dist/desktop/main.js",
+    "app:webpack": "webpack --mode development --watch --env TARGET=app",
+    "app:go": "nodemon --watch ./pkg --watch ./cmd/app -e go --delay 0.1 --signal SIGINT --exec 'go build -o ./dist/desktop/svc ./cmd/app || exit 1'",
     "dev:app": "run-p app:webpack app:go app:electron",
     "web:webpack": "webpack serve --mode development --watch",
     "web:go": "nodemon --watch ./pkg -e go --exec 'touch src/web/svc.go'",

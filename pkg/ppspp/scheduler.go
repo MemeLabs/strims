@@ -200,6 +200,8 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 		requestBins, n := r.requestBins(requesteCapacity, s, c.channel)
 		requesteCapacity -= n
 
+		maxOverhead := 512
+
 		for _, b := range requestBins {
 			if _, err := c.WriteRequest(codec.Request{Address: codec.Address(b)}); err != nil {
 				r.logger.Debug("write failed", zap.Error(err))
@@ -222,10 +224,10 @@ func (r *Scheduler) sendPeerData(p *Peer, t time.Time) {
 				break
 			}
 			// TODO: limit with CWND/MTU/free bytes in frame
-			if s.chunkSize() > c.Cap()-c.Len() {
-				break
+			if s.chunkSize() > c.Cap()-c.Len()-maxOverhead {
+				c.Flush()
 			}
-			for int(rb.BaseLength()) > maxChunksPerData || int(rb.BaseLength())*s.chunkSize() > c.Cap()-c.Len() {
+			for int(rb.BaseLength()) > maxChunksPerData || int(rb.BaseLength())*s.chunkSize() > c.Cap()-c.Len()-maxOverhead {
 				rb = rb.Left()
 			}
 			// rb = rb.BaseLeft()

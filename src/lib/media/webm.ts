@@ -103,6 +103,12 @@ export class Decoder {
     this.source = new Source(MIME_TYPE);
   }
 
+  public reset() {
+    this.headerRead = false;
+    this.clusterRead = false;
+    this.source.reset();
+  }
+
   public write(b: Uint8Array): void {
     if (!this.headerRead) {
       const headerBytes = (b[1] << 8) + b[0];

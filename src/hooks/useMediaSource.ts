@@ -27,7 +27,7 @@ const useMediaSource = ({ networkKey, swarmUri, mimeType, videoRef }: MediaSourc
   const client = useClient();
 
   const [mediaSource, clientEvents] = useMemo(() => {
-    const [fileFormat] = mimeType.split(";", 1);
+    const [fileFormat] = mimeType.split(";", 1) as [MimeType];
     const Decoder = decoders[fileFormat];
     const decoder = new Decoder();
     let started = false;
@@ -47,7 +47,7 @@ const useMediaSource = ({ networkKey, swarmUri, mimeType, videoRef }: MediaSourc
         case EgressOpenStreamResponse.BodyCase.DATA:
           decoder.write(body.data.data);
           if (body.data.bufferUnderrun) {
-            // TODO: reset decoder
+            decoder.reset();
           }
 
           if (body.data.segmentEnd) {
