@@ -22,40 +22,34 @@ const (
 
 var heficedRegions = []*Region{
 	{
-		Name:         "br-sao1",
-		City:         "São Paulo, Brazil",
-		LatitudeDeg:  23.5505,
-		LongitudeDeg: -46.6333,
+		Name:   "br-sao1",
+		City:   "São Paulo, Brazil",
+		LatLng: LatLngFromDegrees(23.5505, -46.6333),
 	},
 	{
-		Name:         "de-fra1",
-		City:         "Frankfurt, Germany",
-		LatitudeDeg:  50.1109,
-		LongitudeDeg: 8.6821,
+		Name:   "de-fra1",
+		City:   "Frankfurt, Germany",
+		LatLng: LatLngFromDegrees(50.1109, 8.6821),
 	},
 	{
-		Name:         "uk-lon1",
-		City:         "London, United Kingdom",
-		LatitudeDeg:  51.5074,
-		LongitudeDeg: -0.1278,
+		Name:   "uk-lon1",
+		City:   "London, United Kingdom",
+		LatLng: LatLngFromDegrees(51.5074, -0.1278),
 	},
 	{
-		Name:         "us-chi1",
-		City:         "Chicago, IL, US",
-		LatitudeDeg:  41.8781,
-		LongitudeDeg: -87.6298,
+		Name:   "us-chi1",
+		City:   "Chicago, IL, US",
+		LatLng: LatLngFromDegrees(41.8781, -87.6298),
 	},
 	{
-		Name:         "us-lax1",
-		City:         "Los Angeles, CA, US",
-		LatitudeDeg:  34.0522,
-		LongitudeDeg: -118.2437,
+		Name:   "us-lax1",
+		City:   "Los Angeles, CA, US",
+		LatLng: LatLngFromDegrees(34.0522, -118.2437),
 	},
 	{
-		Name:         "za-jhb1",
-		City:         "Johannesburg, South Africa",
-		LatitudeDeg:  26.2041,
-		LongitudeDeg: 28.0473,
+		Name:   "za-jhb1",
+		City:   "Johannesburg, South Africa",
+		LatLng: LatLngFromDegrees(26.2041, 28.0473),
 	},
 }
 

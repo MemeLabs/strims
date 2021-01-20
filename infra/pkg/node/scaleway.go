@@ -15,16 +15,14 @@ const scalewayOS = "Ubuntu 20.04 Focal Fossa"
 
 var scalewayRegions = []*Region{
 	{
-		Name:         "fr-par-1",
-		City:         "Paris, France",
-		LatitudeDeg:  48.8667,
-		LongitudeDeg: 2.3333,
+		Name:   "fr-par-1",
+		City:   "Paris, France",
+		LatLng: LatLngFromDegrees(48.8667, 2.3333),
 	},
 	{
-		Name:         "nl-ams-1",
-		City:         "Amsterdam, The Netherlands",
-		LatitudeDeg:  52.3500,
-		LongitudeDeg: 4.9166,
+		Name:   "nl-ams-1",
+		City:   "Amsterdam, The Netherlands",
+		LatLng: LatLngFromDegrees(52.3500, 4.9166),
 	},
 }
 

@@ -23,10 +23,9 @@ const dreamHostHourlyBillingRate = 6.0 / 5 / 30 / 24
 const dreamHostOS = "Ubuntu-20.04"
 
 var dreamHostRegion = Region{
-	Name:         "RegionOne",
-	City:         "Ashburn, Virginia",
-	LatitudeDeg:  39.0300,
-	LongitudeDeg: -77.4711,
+	Name:   "RegionOne",
+	City:   "Ashburn, Virginia",
+	LatLng: LatLngFromDegrees(39.0300, -77.4711),
 }
 
 // NewDreamHostDriver ...

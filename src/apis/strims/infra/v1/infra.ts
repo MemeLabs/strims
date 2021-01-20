@@ -1,6 +1,10 @@
 import Reader from "../../../../lib/pb/reader";
 import Writer from "../../../../lib/pb/writer";
 
+import {
+  LatLng as strims_type_LatLng,
+  ILatLng as strims_type_ILatLng,
+} from "../../type/latlng";
 
 export interface INode {
   user?: string;
@@ -176,29 +180,25 @@ export namespace Node {
   export interface IRegion {
     name?: string;
     city?: string;
-    latitudeDeg?: number;
-    longitudeDeg?: number;
+    latLng?: strims_type_ILatLng | undefined;
   }
 
   export class Region {
     name: string = "";
     city: string = "";
-    latitudeDeg: number = 0;
-    longitudeDeg: number = 0;
+    latLng: strims_type_LatLng | undefined;
 
     constructor(v?: IRegion) {
       this.name = v?.name || "";
       this.city = v?.city || "";
-      this.latitudeDeg = v?.latitudeDeg || 0;
-      this.longitudeDeg = v?.longitudeDeg || 0;
+      this.latLng = v?.latLng && new strims_type_LatLng(v.latLng);
     }
 
     static encode(m: Region, w?: Writer): Writer {
       if (!w) w = new Writer();
       if (m.name) w.uint32(10).string(m.name);
       if (m.city) w.uint32(18).string(m.city);
-      if (m.latitudeDeg) w.uint32(25).double(m.latitudeDeg);
-      if (m.longitudeDeg) w.uint32(33).double(m.longitudeDeg);
+      if (m.latLng) strims_type_LatLng.encode(m.latLng, w.uint32(26).fork()).ldelim();
       return w;
     }
 
@@ -216,10 +216,7 @@ export namespace Node {
           m.city = r.string();
           break;
           case 3:
-          m.latitudeDeg = r.double();
-          break;
-          case 4:
-          m.longitudeDeg = r.double();
+          m.latLng = strims_type_LatLng.decode(r, r.uint32());
           break;
           default:
           r.skipType(tag & 7);

@@ -28,16 +28,14 @@ func (d *NoopDriver) DefaultUser() string {
 func (d *NoopDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Region, error) {
 	return []*Region{
 		{
-			Name:         "NY",
-			City:         "New York City, United States",
-			LatitudeDeg:  40.6943,
-			LongitudeDeg: -73.9249,
+			Name:   "NY",
+			City:   "New York City, United States",
+			LatLng: LatLngFromDegrees(40.6943, -73.9249),
 		},
 		{
-			Name:         "AM",
-			City:         "Amsterdam, The Netherlands",
-			LatitudeDeg:  52.3500,
-			LongitudeDeg: 4.9166,
+			Name:   "AM",
+			City:   "Amsterdam, The Netherlands",
+			LatLng: LatLngFromDegrees(52.3500, 4.9166),
 		},
 	}, nil
 }

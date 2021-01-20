@@ -25,6 +25,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/infra/pkg/wgutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/mitchellh/mapstructure"
+	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
@@ -251,6 +252,12 @@ func New(cfg Config) (*Backend, error) {
 		return nil, fmt.Errorf("could not locate script: %s %w", nodeSyncScript, err)
 	}
 
+	v1api := v1.NewAPI(nil)
+	result, warnings, err := v1api.Query(ctx, "up", time.Now())
+	if err != nil {
+		log.Debug("error checking Prometheus", zap.Error(err))
+	}
+
 	return &Backend{
 		Log:               log,
 		DB:                db,
@@ -271,6 +278,7 @@ type Backend struct {
 	flake             *sonyflake.Sonyflake
 	sshIdentityFile   string
 	ControllerAddress string
+	v1api             *v1.API
 }
 
 // NextID ...
@@ -428,8 +436,8 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 		IPV4:         node.Networks.V4[0],
 		// IPV6:       node.Networks.V6[0],
 		RegionName:      node.Region.Name,
-		RegionLat:       node.Region.LatitudeDeg,
-		RegionLng:       node.Region.LongitudeDeg,
+		RegionLat:       node.Region.LatLng.Latitude,
+		RegionLng:       node.Region.LatLng.Longitude,
 		WireguardIP:     node.WireguardIpv4,
 		WireguardKey:    node.WireguardPrivKey,
 		SKUPriceHourly:  node.Sku.PriceHourly.Value,
@@ -752,9 +760,8 @@ func modelToNode(n *models.Node) *node.Node {
 		},
 		Status: status,
 		Region: &node.Region{
-			Name:         n.RegionName,
-			LatitudeDeg:  n.RegionLat,
-			LongitudeDeg: n.RegionLng,
+			Name:   n.RegionName,
+			LatLng: node.LatLngFromDegrees(n.RegionLat, n.RegionLng),
 		},
 		Sku: &node.SKU{
 			Memory:       int32(n.Memory),

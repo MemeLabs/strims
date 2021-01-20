@@ -5,6 +5,7 @@ import (
 	"context"
 
 	infrav1 "github.com/MemeLabs/go-ppspp/pkg/apis/infra/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/latlng"
 )
 
 type BillingType string
@@ -70,6 +71,10 @@ type Region = infrav1.Node_Region
 // Regions ...
 type Regions []*Region
 
+// LatLng contains the latitude and longitude in degrees of the region it is
+// contained in.
+type LatLng = latlng.LatLng
+
 // SKU ...
 type SKU = infrav1.Node_SKU
 
@@ -107,4 +112,11 @@ func ValidSKU(skuName string, skus []*SKU) bool {
 		}
 	}
 	return false
+}
+
+func LatLngFromDegrees(latd, lngd float64) *LatLng {
+	return &LatLng{
+		Latitude:  latd,
+		Longitude: lngd,
+	}
 }

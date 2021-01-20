@@ -6,6 +6,8 @@ option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/infra/v1;infra";
 // option java_package
 // option swift_prefix
 
+import "type/latlng.proto";
+
 message Node {
   message Networks {
     repeated string v4 = 1;
@@ -15,8 +17,7 @@ message Node {
   message Region {
     string name = 1;
     string city = 2;
-    double latitude_deg = 3;
-    double longitude_deg = 4;
+    strims.type.LatLng lat_lng = 3;
   }
 
   message Price {

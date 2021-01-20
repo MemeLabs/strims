@@ -43,10 +43,9 @@ func (d *CustomDriver) Create(ctx context.Context, req *CreateRequest) (*Node, e
 		},
 		Status: "active",
 		Region: &Region{
-			Name:         req.Name,
-			City:         "",
-			LatitudeDeg:  0,
-			LongitudeDeg: 0,
+			Name:   req.Name,
+			City:   "",
+			LatLng: LatLngFromDegrees(0, 0),
 		},
 		Sku: &SKU{
 			Name:         req.Name,

@@ -70,8 +70,8 @@ func formatProviderRegions(ctx context.Context, driver node.Driver) ([][]string,
 		rows = append(rows, []string{
 			r.Name,
 			r.City,
-			fmt.Sprint(r.LatitudeDeg),
-			fmt.Sprint(r.LongitudeDeg),
+			fmt.Sprint(r.LatLng.Latitude),
+			fmt.Sprint(r.LatLng.Longitude),
 		})
 	}
 	return rows, nil

@@ -47,10 +47,9 @@ func (d *HetznerDriver) Regions(ctx context.Context, req *RegionsRequest) ([]*Re
 
 func hetznerRegion(location *hcloud.Location) *Region {
 	return &Region{
-		Name:         location.Name,
-		City:         fmt.Sprintf("%s, %s", location.City, location.Country),
-		LatitudeDeg:  location.Latitude,
-		LongitudeDeg: location.Longitude,
+		Name:   location.Name,
+		City:   fmt.Sprintf("%s, %s", location.City, location.Country),
+		LatLng: LatLngFromDegrees(location.Latitude, location.Longitude),
 	}
 }
 
