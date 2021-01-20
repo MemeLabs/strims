@@ -1,0 +1,26 @@
+name: nginx
+
+on:
+  push:
+    branches: [ 'master' ]
+    paths:
+      - '.github/workflows/nginx.yaml'
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v2
+      with:
+        repository: nginxinc/docker-nginx
+        # TODO: use latest stable version once module spport is released
+        ref: master
+    - name: Docker login
+      env:
+        username: ${{ github.actor }}
+        password: ${{ secrets.GITHUB_TOKEN }}
+      run: docker login https://docker.pkg.github.com -u ${username} -p ${password}
+    - name: Build image
+      run: docker build -f modules/Dockerfile.alpine --build-arg ENABLED_MODULES="brotli" -t docker.pkg.github.com/slugalisk/go-ppspp/nginx:latest .
+    - name: Publish image
+      run: docker push docker.pkg.github.com/slugalisk/go-ppspp/nginx:latest

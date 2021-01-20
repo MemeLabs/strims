@@ -30,7 +30,7 @@ ENV PATH="${GOPATH}/bin:${GOROOT}/bin:${PATH}"
 RUN \
   # Install deps
   apt-get update \
-  && apt-get install -y build-essential curl \
+  && apt-get install -y build-essential curl brotli \
   # Install go
   && curl -LO "https://golang.org/dl/go${GO_VERSION}.linux-amd64.tar.gz" \
   && tar -C /usr/local -xzf "go${GO_VERSION}.linux-amd64.tar.gz" \
@@ -45,8 +45,10 @@ RUN \
   # Build ui
   && go get ./... \
   && npm install --unsafe-perm \
-  && npm run build
+  && npm run build \
+  && find dist/web -type f | xargs gzip -k9 \
+  && find dist/web -not -name "*.gz" -type f | xargs brotli
 
-FROM nginx:stable-alpine
+FROM docker.pkg.github.com/slugalisk/go-ppspp/nginx:latest
 
 COPY --from=build /ui/dist/web /usr/share/nginx/html/
