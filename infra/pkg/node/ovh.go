@@ -65,7 +65,7 @@ var ovhRegions = []*Region{
 	{
 		Name:   "SYD1",
 		City:   "Sydney, Australia",
-		LatLng: LatLngFromDegrees(33.8688, 151.2093),
+		LatLng: LatLngFromDegrees(-33.8688, 151.2093),
 	},
 	{
 		Name:   "SGP1",

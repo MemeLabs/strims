@@ -24,7 +24,7 @@ var heficedRegions = []*Region{
 	{
 		Name:   "br-sao1",
 		City:   "São Paulo, Brazil",
-		LatLng: LatLngFromDegrees(23.5505, -46.6333),
+		LatLng: LatLngFromDegrees(-23.5505, -46.6333),
 	},
 	{
 		Name:   "de-fra1",
@@ -49,7 +49,7 @@ var heficedRegions = []*Region{
 	{
 		Name:   "za-jhb1",
 		City:   "Johannesburg, South Africa",
-		LatLng: LatLngFromDegrees(26.2041, 28.0473),
+		LatLng: LatLngFromDegrees(-26.2041, 28.0473),
 	},
 }
 
