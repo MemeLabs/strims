@@ -25,7 +25,9 @@ import (
 	"github.com/MemeLabs/go-ppspp/infra/pkg/wgutil"
 	"github.com/google/go-cmp/cmp"
 	"github.com/mitchellh/mapstructure"
+	"github.com/prometheus/client_golang/api"
 	v1 "github.com/prometheus/client_golang/api/prometheus/v1"
+	"github.com/prometheus/common/model"
 	"github.com/volatiletech/null/v8"
 	"github.com/volatiletech/sqlboiler/v4/boil"
 	"github.com/volatiletech/sqlboiler/v4/queries/qm"
@@ -115,6 +117,7 @@ type Config struct {
 	InterfaceConfig         wgutil.InterfaceConfig
 	PublicControllerAddress string
 	ScriptDirectory         string
+	PrometheusEndpoint      string
 }
 
 var (
@@ -178,7 +181,7 @@ func New(cfg Config) (*Backend, error) {
 
 	ip, port, err := net.SplitHostPort(cfg.PublicControllerAddress)
 	if ip == "" || port == "" || err != nil {
-		return nil, errors.New("invalid ip address (ip and port required)")
+		return nil, errors.New("invalid ip address for PublicControllerAddress (ip and port required)")
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
@@ -190,7 +193,7 @@ func New(cfg Config) (*Backend, error) {
 		return nil, fmt.Errorf("failed to open db conn: %w", err)
 	}
 
-	if err := db.PingContext(ctx); err != nil {
+	if err = db.PingContext(ctx); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
@@ -205,11 +208,12 @@ func New(cfg Config) (*Backend, error) {
 		"noop":   node.NewNoopDriver(),
 	}
 	for name, dci := range cfg.Providers {
+		var driver node.Driver
 		switch dc := dci.(type) {
 		case *DigitalOceanConfig:
 			drivers[name] = node.NewDigitalOceanDriver(dc.Token)
 		case *ScalewayConfig:
-			driver, err := node.NewScalewayDriver(dc.OrganizationID, dc.AccessKey, dc.SecretKey)
+			driver, err = node.NewScalewayDriver(dc.OrganizationID, dc.AccessKey, dc.SecretKey)
 			if err != nil {
 				return nil, err
 			}
@@ -217,19 +221,19 @@ func New(cfg Config) (*Backend, error) {
 		case *HetznerConfig:
 			drivers[name] = node.NewHetznerDriver(dc.Token)
 		case *OVHConfig:
-			driver, err := node.NewOVHDriver(dc.Subsidiary, dc.AppKey, dc.AppSecret, dc.ConsumerKey, dc.ProjectID)
+			driver, err = node.NewOVHDriver(dc.Subsidiary, dc.AppKey, dc.AppSecret, dc.ConsumerKey, dc.ProjectID)
 			if err != nil {
 				return nil, err
 			}
 			drivers[name] = driver
 		case *DreamHostConfig:
-			driver, err := node.NewDreamHostDriver(dc.TenantID, dc.TenantName, dc.Username, dc.Password)
+			driver, err = node.NewDreamHostDriver(dc.TenantID, dc.TenantName, dc.Username, dc.Password)
 			if err != nil {
 				return nil, err
 			}
 			drivers[name] = driver
 		case *HeficedConfig:
-			driver, err := node.NewHeficedDriver(dc.ClientID, dc.ClientSecret, dc.TenantID)
+			driver, err = node.NewHeficedDriver(dc.ClientID, dc.ClientSecret, dc.TenantID)
 			if err != nil {
 				return nil, err
 			}
@@ -244,28 +248,40 @@ func New(cfg Config) (*Backend, error) {
 	nodeStartScript = path.Join(cfg.ScriptDirectory, "node-start.sh")
 	nodeSyncScript = path.Join(cfg.ScriptDirectory, "node-sync-wg.sh")
 
-	if _, err := os.Stat(nodeStartScript); os.IsNotExist(err) {
+	if _, err = os.Stat(nodeStartScript); os.IsNotExist(err) {
 		return nil, fmt.Errorf("could not locate script: %s %w", nodeStartScript, err)
 	}
 
-	if _, err := os.Stat(nodeSyncScript); os.IsNotExist(err) {
+	if _, err = os.Stat(nodeSyncScript); os.IsNotExist(err) {
 		return nil, fmt.Errorf("could not locate script: %s %w", nodeSyncScript, err)
 	}
 
-	v1api := v1.NewAPI(nil)
-	result, warnings, err := v1api.Query(ctx, "up", time.Now())
+	client, err := api.NewClient(api.Config{
+		Address: cfg.PrometheusEndpoint,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("error creating client: %v", err)
+	}
+
+	v1api := v1.NewAPI(client)
+	_, warnings, err := v1api.Query(ctx, "up", time.Now())
 	if err != nil {
 		log.Debug("error checking Prometheus", zap.Error(err))
 	}
 
+	if len(warnings) > 0 {
+		log.Debug("prometheus 'up'", zap.Strings("warnings", warnings))
+	}
+
 	return &Backend{
-		Log:               log,
 		DB:                db,
+		Log:               log,
 		NodeDrivers:       drivers,
+		Conf:              cfg.InterfaceConfig,
 		flake:             flake,
 		sshIdentityFile:   cfg.SSH.IdentityFile,
-		Conf:              cfg.InterfaceConfig,
 		ControllerAddress: cfg.PublicControllerAddress,
+		v1api:             v1api,
 	}, nil
 }
 
@@ -278,7 +294,7 @@ type Backend struct {
 	flake             *sonyflake.Sonyflake
 	sshIdentityFile   string
 	ControllerAddress string
-	v1api             *v1.API
+	v1api             v1.API
 }
 
 // NextID ...
@@ -402,15 +418,15 @@ func (b *Backend) CreateNode(
 }
 
 func (b *Backend) ActiveNodes(ctx context.Context, active bool) ([]*node.Node, error) {
-	var query int
+	var query string
 	if active {
-		query = 1
+		query = "NOT NULL"
 	} else {
-		query = 0
+		query = "NULL"
 	}
 
 	var nodes []*node.Node
-	slice, err := models.Nodes(qm.Where("active=?", query)).AllG(ctx)
+	slice, err := models.Nodes(qm.Where("stopped_at is ", query)).AllG(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -743,7 +759,7 @@ func ComputeCost(sku *node.SKU, timeOnline time.Duration) float64 {
 
 func modelToNode(n *models.Node) *node.Node {
 	var status string
-	if n.Active == 1 {
+	if n.StoppedAt.IsZero() {
 		status = "active"
 	} else {
 		status = "inactive"
@@ -816,8 +832,71 @@ func run(args ...string) error {
 	return nil
 }
 
-func (b *Backend) syncNodeStats(ctx context.Context) error {
+func (b *Backend) SyncNodeStats(ctx context.Context) error {
+	b.Log.Debug("syncing node stats")
+
+	slice, err := models.Nodes(qm.Where("active=?", 1)).AllG(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to query nodes: %w", err)
+	}
+
+	const memoryQuery = "100 * (1 - ((avg_over_time(node_memory_MemFree_bytes[15m]) + avg_over_time(node_memory_Cached_bytes[15m]) + avg_over_time(node_memory_Buffers_bytes[15m])) / avg_over_time(node_memory_MemTotal_bytes[15m])))"
 	// query node stats, group by name
+	res, warnings, err := b.v1api.Query(ctx, memoryQuery, time.Now())
+	if err != nil {
+		b.Log.Debug("error checking Prometheus", zap.Error(err))
+		return fmt.Errorf("memory query failed: %w", err)
+	}
+
+	if len(warnings) > 0 {
+		b.Log.Debug("prometheus mem query", zap.Strings("warnings", warnings))
+	}
+
+	switch {
+	case res.Type() == model.ValVector:
+		vec := res.(model.Vector)
+		for _, v := range vec {
+			for _, n := range slice {
+				ipv4 := strings.Split(string(v.Metric["instance"]), ":")[0]
+				if ipv4 == n.IPV4 {
+					//					n.U = float64(v.Value)
+				}
+			}
+		}
+	default:
+		break
+	}
+
+	const cpuQuery = `100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[15m])) * 100)`
+	res, warnings, err = b.v1api.Query(ctx, cpuQuery, time.Now())
+	if err != nil {
+		b.Log.Debug("error checking Prometheus", zap.Error(err))
+		return fmt.Errorf("cpu query failed: %w", err)
+	}
+
+	if len(warnings) > 0 {
+		b.Log.Debug("prometheus mem query", zap.Strings("warnings", warnings))
+	}
+
+	switch {
+	case res.Type() == model.ValVector:
+		vec := res.(model.Vector)
+		for _, v := range vec {
+			for _, n := range slice {
+				ipv4 := strings.Split(string(v.Metric["instance"]), ":")[0]
+				if ipv4 == n.IPV4 {
+					//					n.Usage.CpuUsage = float64(v.Value)
+				}
+			}
+		}
+	default:
+		break
+	}
+
+	//	for _, n := range slice {
+	//	}
+
+	//	spew.Dump(res)
 	// for each group, update .Usage field
 	// save to db
 	return nil

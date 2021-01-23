@@ -358,36 +358,36 @@ export namespace Node {
   export interface IUsage {
     networkIn?: number;
     networkOut?: number;
-    cpuUs?: number;
-    memUsed?: number;
-    uptime?: number;
+    cpuUsage?: number;
+    memUsage?: number;
+    uptime?: bigint;
     cost?: Node.IPrice | undefined;
   }
 
   export class Usage {
     networkIn: number = 0;
     networkOut: number = 0;
-    cpuUs: number = 0;
-    memUsed: number = 0;
-    uptime: number = 0;
+    cpuUsage: number = 0;
+    memUsage: number = 0;
+    uptime: bigint = BigInt(0);
     cost: Node.Price | undefined;
 
     constructor(v?: IUsage) {
       this.networkIn = v?.networkIn || 0;
       this.networkOut = v?.networkOut || 0;
-      this.cpuUs = v?.cpuUs || 0;
-      this.memUsed = v?.memUsed || 0;
-      this.uptime = v?.uptime || 0;
+      this.cpuUsage = v?.cpuUsage || 0;
+      this.memUsage = v?.memUsage || 0;
+      this.uptime = v?.uptime || BigInt(0);
       this.cost = v?.cost && new Node.Price(v.cost);
     }
 
     static encode(m: Usage, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.networkIn) w.uint32(8).int32(m.networkIn);
-      if (m.networkOut) w.uint32(16).int32(m.networkOut);
-      if (m.cpuUs) w.uint32(24).int32(m.cpuUs);
-      if (m.memUsed) w.uint32(32).int32(m.memUsed);
-      if (m.uptime) w.uint32(40).int32(m.uptime);
+      if (m.networkIn) w.uint32(9).double(m.networkIn);
+      if (m.networkOut) w.uint32(17).double(m.networkOut);
+      if (m.cpuUsage) w.uint32(25).double(m.cpuUsage);
+      if (m.memUsage) w.uint32(33).double(m.memUsage);
+      if (m.uptime) w.uint32(40).int64(m.uptime);
       if (m.cost) Node.Price.encode(m.cost, w.uint32(50).fork()).ldelim();
       return w;
     }
@@ -400,19 +400,19 @@ export namespace Node {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.networkIn = r.int32();
+          m.networkIn = r.double();
           break;
           case 2:
-          m.networkOut = r.int32();
+          m.networkOut = r.double();
           break;
           case 3:
-          m.cpuUs = r.int32();
+          m.cpuUsage = r.double();
           break;
           case 4:
-          m.memUsed = r.int32();
+          m.memUsage = r.double();
           break;
           case 5:
-          m.uptime = r.int32();
+          m.uptime = r.int64();
           break;
           case 6:
           m.cost = Node.Price.decode(r, r.uint32());

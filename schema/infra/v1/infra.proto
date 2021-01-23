@@ -37,11 +37,11 @@ message Node {
   }
 
   message Usage {
-    int32 network_in = 1;
-    int32 network_out = 2;
-    int32 cpu_us = 3;
-    int32 mem_used = 4;
-    int32 uptime = 5; // delete?
+    double network_in = 1;
+    double network_out = 2;
+    double cpu_usage = 3;
+    double mem_usage = 4;
+    int64 uptime = 5; // delete?
     Price cost = 6;
   }
 

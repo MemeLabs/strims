@@ -9,15 +9,11 @@ initdbScripts:
   db-init.sql: |
     CREATE TABLE IF NOT EXISTS "nodes" (
       "id"                BIGSERIAL PRIMARY KEY,
-      "active"            INTEGER NOT NULL,
       "started_at"        BIGINT NOT NULL,
       "stopped_at"        BIGINT,
       "provider_name"     TEXT NOT NULL,
       "provider_id"       TEXT NOT NULL,
       "name"              TEXT NOT NULL,
-      "memory"            INTEGER NOT NULL,
-      "cpus"              INTEGER NOT NULL,
-      "disk"              INTEGER NOT NULL,
       "ip_v4"             TEXT NOT NULL,
       "ip_v6"             TEXT NOT NULL,
       "region_name"       TEXT NOT NULL,
@@ -33,4 +29,13 @@ initdbScripts:
       "user"              TEXT NOT NULL,
       UNIQUE ("provider_name", "provider_id"),
       UNIQUE ("name")
+    );
+
+    CREATE TABLE IF NOT EXISTS "usage" (
+      "id"                BIGSERIAL PRIMARY KEY,
+      "time"              BIGINT NOT NULL,
+      "usage"             DOUBLE PRECISION NOT NULL,
+      "cpu_usage"         DOUBLE PRECISION NOT NULL,
+      "network_in"        DOUBLE PRECISION NOT NULL,
+      "network_out"       DOUBLE PRECISION NOT NULL
     );

@@ -61,5 +61,5 @@ lxc config device add strims-k8s proxy listen=udp:0.0.0.0:51820 connect=udp:127.
 ### Create a new node
 ```
 go build ./cmd/cli/main.go
-./main create ovh s1-2 UK1
+./main create ovh s1-2 -r UK1
 ```
