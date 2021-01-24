@@ -24,6 +24,9 @@ initdbScripts:
       "sku_network_speed" INTEGER NOT NULL,
       "sku_price_monthly" REAL NOT NULL,
       "sku_price_hourly"  REAL NOT NULL,
+      "sku_memory"        INTEGER NOT NULL,
+      "sku_cpus"          INTEGER NOT NULL,
+      "sku_disk"          INTEGER NOT NULL,
       "wireguard_key"     TEXT NOT NULL,
       "wireguard_ip"      TEXT NOT NULL,
       "user"              TEXT NOT NULL,
@@ -31,11 +34,36 @@ initdbScripts:
       UNIQUE ("name")
     );
 
+    INSERT INTO nodes
+    VALUES (
+      to_char(CURRENT_TIMESTAMP, 'yyyymmddhh24miss')::bigint,
+      'custom',
+      'custom',
+      'controller',
+      '0.0.0.0',
+      '::/0',
+      'n/a',
+      0.0,
+      0.0,
+      'custom',
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      0,
+      'key',
+      '10.0.0.1',
+      'root');
+
+
     CREATE TABLE IF NOT EXISTS "usage" (
       "id"                BIGSERIAL PRIMARY KEY,
+      "node_id"           BIGINT NOT NULL,
       "time"              BIGINT NOT NULL,
-      "usage"             DOUBLE PRECISION NOT NULL,
-      "cpu_usage"         DOUBLE PRECISION NOT NULL,
+      "mem"               DOUBLE PRECISION NOT NULL,
+      "cpu"               DOUBLE PRECISION NOT NULL,
       "network_in"        DOUBLE PRECISION NOT NULL,
       "network_out"       DOUBLE PRECISION NOT NULL
     );

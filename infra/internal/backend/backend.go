@@ -441,7 +441,6 @@ func (b *Backend) ActiveNodes(ctx context.Context, active bool) ([]*node.Node, e
 func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 	nodeEntry := &models.Node{
 		User:         node.User,
-		Active:       1,
 		StartedAt:    node.StartedAt,
 		ProviderID:   node.ProviderId,
 		ProviderName: node.ProviderName,
@@ -456,8 +455,8 @@ func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 		RegionLng:       node.Region.LatLng.Longitude,
 		WireguardIP:     node.WireguardIpv4,
 		WireguardKey:    node.WireguardPrivKey,
-		SKUPriceHourly:  node.Sku.PriceHourly.Value,
-		SKUPriceMonthly: node.Sku.PriceMonthly.Value,
+		SKUPriceHourly:  float32(node.Sku.PriceHourly.Value),
+		SKUPriceMonthly: float32(node.Sku.PriceMonthly.Value),
 	}
 
 	if err := nodeEntry.InsertG(ctx, boil.Infer()); err != nil {
@@ -787,11 +786,11 @@ func modelToNode(n *models.Node) *node.Node {
 			NetworkCap:   int32(n.SKUNetworkCap),
 			NetworkSpeed: int32(n.SKUNetworkSpeed),
 			PriceMonthly: &node.Price{
-				Value:    n.SKUPriceMonthly,
+				Value:    float64(n.SKUPriceMonthly),
 				Currency: "",
 			},
 			PriceHourly: &node.Price{
-				Value:    n.SKUPriceHourly,
+				Value:    float64(n.SKUPriceHourly),
 				Currency: "",
 			},
 		},
@@ -840,6 +839,12 @@ func (b *Backend) SyncNodeStats(ctx context.Context) error {
 		return fmt.Errorf("failed to query nodes: %w", err)
 	}
 
+	var usages map[string]*models.Usage
+
+	for _, n := range slice {
+		usages[n.IPV4] = &models.Usage{}
+	}
+
 	const memoryQuery = "100 * (1 - ((avg_over_time(node_memory_MemFree_bytes[15m]) + avg_over_time(node_memory_Cached_bytes[15m]) + avg_over_time(node_memory_Buffers_bytes[15m])) / avg_over_time(node_memory_MemTotal_bytes[15m])))"
 	// query node stats, group by name
 	res, warnings, err := b.v1api.Query(ctx, memoryQuery, time.Now())
@@ -856,12 +861,13 @@ func (b *Backend) SyncNodeStats(ctx context.Context) error {
 	case res.Type() == model.ValVector:
 		vec := res.(model.Vector)
 		for _, v := range vec {
-			for _, n := range slice {
-				ipv4 := strings.Split(string(v.Metric["instance"]), ":")[0]
-				if ipv4 == n.IPV4 {
-					//					n.U = float64(v.Value)
-				}
+			ipv4 := strings.Split(string(v.Metric["instance"]), ":")[0]
+			u, ok := usages[ipv4]
+			if !ok {
+				// TODO: handle this
+				continue
 			}
+			_ = u
 		}
 	default:
 		break

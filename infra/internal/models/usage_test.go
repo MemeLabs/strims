@@ -21,24 +21,24 @@ var (
 	_ = queries.Equal
 )
 
-func testNodes(t *testing.T) {
+func testUsages(t *testing.T) {
 	t.Parallel()
 
-	query := Nodes()
+	query := Usages()
 
 	if query.Query == nil {
 		t.Error("expected a query, got nothing")
 	}
 }
 
-func testNodesDelete(t *testing.T) {
+func testUsagesDelete(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -54,7 +54,7 @@ func testNodesDelete(t *testing.T) {
 		t.Error("should only have deleted one row, but affected:", rowsAff)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := Usages().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -64,14 +64,14 @@ func testNodesDelete(t *testing.T) {
 	}
 }
 
-func testNodesQueryDeleteAll(t *testing.T) {
+func testUsagesQueryDeleteAll(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -81,13 +81,13 @@ func testNodesQueryDeleteAll(t *testing.T) {
 		t.Error(err)
 	}
 
-	if rowsAff, err := Nodes().DeleteAll(ctx, tx); err != nil {
+	if rowsAff, err := Usages().DeleteAll(ctx, tx); err != nil {
 		t.Error(err)
 	} else if rowsAff != 1 {
 		t.Error("should only have deleted one row, but affected:", rowsAff)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := Usages().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -97,14 +97,14 @@ func testNodesQueryDeleteAll(t *testing.T) {
 	}
 }
 
-func testNodesSliceDeleteAll(t *testing.T) {
+func testUsagesSliceDeleteAll(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -114,7 +114,7 @@ func testNodesSliceDeleteAll(t *testing.T) {
 		t.Error(err)
 	}
 
-	slice := NodeSlice{o}
+	slice := UsageSlice{o}
 
 	if rowsAff, err := slice.DeleteAll(ctx, tx); err != nil {
 		t.Error(err)
@@ -122,7 +122,7 @@ func testNodesSliceDeleteAll(t *testing.T) {
 		t.Error("should only have deleted one row, but affected:", rowsAff)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := Usages().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -132,14 +132,14 @@ func testNodesSliceDeleteAll(t *testing.T) {
 	}
 }
 
-func testNodesExists(t *testing.T) {
+func testUsagesExists(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -149,23 +149,23 @@ func testNodesExists(t *testing.T) {
 		t.Error(err)
 	}
 
-	e, err := NodeExists(ctx, tx, o.ID)
+	e, err := UsageExists(ctx, tx, o.ID)
 	if err != nil {
-		t.Errorf("Unable to check if Node exists: %s", err)
+		t.Errorf("Unable to check if Usage exists: %s", err)
 	}
 	if !e {
-		t.Errorf("Expected NodeExists to return true, but got false.")
+		t.Errorf("Expected UsageExists to return true, but got false.")
 	}
 }
 
-func testNodesFind(t *testing.T) {
+func testUsagesFind(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -175,24 +175,24 @@ func testNodesFind(t *testing.T) {
 		t.Error(err)
 	}
 
-	nodeFound, err := FindNode(ctx, tx, o.ID)
+	usageFound, err := FindUsage(ctx, tx, o.ID)
 	if err != nil {
 		t.Error(err)
 	}
 
-	if nodeFound == nil {
+	if usageFound == nil {
 		t.Error("want a record, got nil")
 	}
 }
 
-func testNodesBind(t *testing.T) {
+func testUsagesBind(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -202,19 +202,19 @@ func testNodesBind(t *testing.T) {
 		t.Error(err)
 	}
 
-	if err = Nodes().Bind(ctx, tx, o); err != nil {
+	if err = Usages().Bind(ctx, tx, o); err != nil {
 		t.Error(err)
 	}
 }
 
-func testNodesOne(t *testing.T) {
+func testUsagesOne(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -224,38 +224,38 @@ func testNodesOne(t *testing.T) {
 		t.Error(err)
 	}
 
-	if x, err := Nodes().One(ctx, tx); err != nil {
+	if x, err := Usages().One(ctx, tx); err != nil {
 		t.Error(err)
 	} else if x == nil {
 		t.Error("expected to get a non nil record")
 	}
 }
 
-func testNodesAll(t *testing.T) {
+func testUsagesAll(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	nodeOne := &Node{}
-	nodeTwo := &Node{}
-	if err = randomize.Struct(seed, nodeOne, nodeDBTypes, false, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	usageOne := &Usage{}
+	usageTwo := &Usage{}
+	if err = randomize.Struct(seed, usageOne, usageDBTypes, false, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
-	if err = randomize.Struct(seed, nodeTwo, nodeDBTypes, false, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	if err = randomize.Struct(seed, usageTwo, usageDBTypes, false, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
 	tx := MustTx(boil.BeginTx(ctx, nil))
 	defer func() { _ = tx.Rollback() }()
-	if err = nodeOne.Insert(ctx, tx, boil.Infer()); err != nil {
+	if err = usageOne.Insert(ctx, tx, boil.Infer()); err != nil {
 		t.Error(err)
 	}
-	if err = nodeTwo.Insert(ctx, tx, boil.Infer()); err != nil {
+	if err = usageTwo.Insert(ctx, tx, boil.Infer()); err != nil {
 		t.Error(err)
 	}
 
-	slice, err := Nodes().All(ctx, tx)
+	slice, err := Usages().All(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -265,31 +265,31 @@ func testNodesAll(t *testing.T) {
 	}
 }
 
-func testNodesCount(t *testing.T) {
+func testUsagesCount(t *testing.T) {
 	t.Parallel()
 
 	var err error
 	seed := randomize.NewSeed()
-	nodeOne := &Node{}
-	nodeTwo := &Node{}
-	if err = randomize.Struct(seed, nodeOne, nodeDBTypes, false, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	usageOne := &Usage{}
+	usageTwo := &Usage{}
+	if err = randomize.Struct(seed, usageOne, usageDBTypes, false, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
-	if err = randomize.Struct(seed, nodeTwo, nodeDBTypes, false, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	if err = randomize.Struct(seed, usageTwo, usageDBTypes, false, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
 	tx := MustTx(boil.BeginTx(ctx, nil))
 	defer func() { _ = tx.Rollback() }()
-	if err = nodeOne.Insert(ctx, tx, boil.Infer()); err != nil {
+	if err = usageOne.Insert(ctx, tx, boil.Infer()); err != nil {
 		t.Error(err)
 	}
-	if err = nodeTwo.Insert(ctx, tx, boil.Infer()); err != nil {
+	if err = usageTwo.Insert(ctx, tx, boil.Infer()); err != nil {
 		t.Error(err)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := Usages().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -299,14 +299,14 @@ func testNodesCount(t *testing.T) {
 	}
 }
 
-func testNodesInsert(t *testing.T) {
+func testUsagesInsert(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -316,7 +316,7 @@ func testNodesInsert(t *testing.T) {
 		t.Error(err)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := Usages().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -326,24 +326,24 @@ func testNodesInsert(t *testing.T) {
 	}
 }
 
-func testNodesInsertWhitelist(t *testing.T) {
+func testUsagesInsertWhitelist(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
 	tx := MustTx(boil.BeginTx(ctx, nil))
 	defer func() { _ = tx.Rollback() }()
-	if err = o.Insert(ctx, tx, boil.Whitelist(nodeColumnsWithoutDefault...)); err != nil {
+	if err = o.Insert(ctx, tx, boil.Whitelist(usageColumnsWithoutDefault...)); err != nil {
 		t.Error(err)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := Usages().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -353,14 +353,14 @@ func testNodesInsertWhitelist(t *testing.T) {
 	}
 }
 
-func testNodesReload(t *testing.T) {
+func testUsagesReload(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -375,14 +375,14 @@ func testNodesReload(t *testing.T) {
 	}
 }
 
-func testNodesReloadAll(t *testing.T) {
+func testUsagesReloadAll(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -392,21 +392,21 @@ func testNodesReloadAll(t *testing.T) {
 		t.Error(err)
 	}
 
-	slice := NodeSlice{o}
+	slice := UsageSlice{o}
 
 	if err = slice.ReloadAll(ctx, tx); err != nil {
 		t.Error(err)
 	}
 }
 
-func testNodesSelect(t *testing.T) {
+func testUsagesSelect(t *testing.T) {
 	t.Parallel()
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -416,7 +416,7 @@ func testNodesSelect(t *testing.T) {
 		t.Error(err)
 	}
 
-	slice, err := Nodes().All(ctx, tx)
+	slice, err := Usages().All(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -427,25 +427,25 @@ func testNodesSelect(t *testing.T) {
 }
 
 var (
-	nodeDBTypes = map[string]string{`ID`: `bigint`, `StartedAt`: `bigint`, `StoppedAt`: `bigint`, `ProviderName`: `text`, `ProviderID`: `text`, `Name`: `text`, `IPV4`: `text`, `IPV6`: `text`, `RegionName`: `text`, `RegionLat`: `double precision`, `RegionLng`: `double precision`, `SKUName`: `text`, `SKUNetworkCap`: `integer`, `SKUNetworkSpeed`: `integer`, `SKUPriceMonthly`: `real`, `SKUPriceHourly`: `real`, `WireguardKey`: `text`, `WireguardIP`: `text`, `User`: `text`}
-	_           = bytes.MinRead
+	usageDBTypes = map[string]string{`ID`: `bigint`, `NodeID`: `bigint`, `Time`: `bigint`, `Mem`: `double precision`, `CPU`: `double precision`, `NetworkIn`: `double precision`, `NetworkOut`: `double precision`}
+	_            = bytes.MinRead
 )
 
-func testNodesUpdate(t *testing.T) {
+func testUsagesUpdate(t *testing.T) {
 	t.Parallel()
 
-	if 0 == len(nodePrimaryKeyColumns) {
+	if 0 == len(usagePrimaryKeyColumns) {
 		t.Skip("Skipping table with no primary key columns")
 	}
-	if len(nodeAllColumns) == len(nodePrimaryKeyColumns) {
+	if len(usageAllColumns) == len(usagePrimaryKeyColumns) {
 		t.Skip("Skipping table with only primary key columns")
 	}
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -455,7 +455,7 @@ func testNodesUpdate(t *testing.T) {
 		t.Error(err)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := Usages().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -464,8 +464,8 @@ func testNodesUpdate(t *testing.T) {
 		t.Error("want one record, got:", count)
 	}
 
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodePrimaryKeyColumns...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usagePrimaryKeyColumns...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	if rowsAff, err := o.Update(ctx, tx, boil.Infer()); err != nil {
@@ -475,18 +475,18 @@ func testNodesUpdate(t *testing.T) {
 	}
 }
 
-func testNodesSliceUpdateAll(t *testing.T) {
+func testUsagesSliceUpdateAll(t *testing.T) {
 	t.Parallel()
 
-	if len(nodeAllColumns) == len(nodePrimaryKeyColumns) {
+	if len(usageAllColumns) == len(usagePrimaryKeyColumns) {
 		t.Skip("Skipping table with only primary key columns")
 	}
 
 	seed := randomize.NewSeed()
 	var err error
-	o := &Node{}
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodeColumnsWithDefault...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := &Usage{}
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usageColumnsWithDefault...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
@@ -496,7 +496,7 @@ func testNodesSliceUpdateAll(t *testing.T) {
 		t.Error(err)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := Usages().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -505,18 +505,18 @@ func testNodesSliceUpdateAll(t *testing.T) {
 		t.Error("want one record, got:", count)
 	}
 
-	if err = randomize.Struct(seed, o, nodeDBTypes, true, nodePrimaryKeyColumns...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	if err = randomize.Struct(seed, o, usageDBTypes, true, usagePrimaryKeyColumns...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	// Remove Primary keys and unique columns from what we plan to update
 	var fields []string
-	if strmangle.StringSliceMatch(nodeAllColumns, nodePrimaryKeyColumns) {
-		fields = nodeAllColumns
+	if strmangle.StringSliceMatch(usageAllColumns, usagePrimaryKeyColumns) {
+		fields = usageAllColumns
 	} else {
 		fields = strmangle.SetComplement(
-			nodeAllColumns,
-			nodePrimaryKeyColumns,
+			usageAllColumns,
+			usagePrimaryKeyColumns,
 		)
 	}
 
@@ -534,7 +534,7 @@ func testNodesSliceUpdateAll(t *testing.T) {
 		}
 	}
 
-	slice := NodeSlice{o}
+	slice := UsageSlice{o}
 	if rowsAff, err := slice.UpdateAll(ctx, tx, updateMap); err != nil {
 		t.Error(err)
 	} else if rowsAff != 1 {
@@ -542,29 +542,29 @@ func testNodesSliceUpdateAll(t *testing.T) {
 	}
 }
 
-func testNodesUpsert(t *testing.T) {
+func testUsagesUpsert(t *testing.T) {
 	t.Parallel()
 
-	if len(nodeAllColumns) == len(nodePrimaryKeyColumns) {
+	if len(usageAllColumns) == len(usagePrimaryKeyColumns) {
 		t.Skip("Skipping table with only primary key columns")
 	}
 
 	seed := randomize.NewSeed()
 	var err error
 	// Attempt the INSERT side of an UPSERT
-	o := Node{}
-	if err = randomize.Struct(seed, &o, nodeDBTypes, true); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	o := Usage{}
+	if err = randomize.Struct(seed, &o, usageDBTypes, true); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	ctx := context.Background()
 	tx := MustTx(boil.BeginTx(ctx, nil))
 	defer func() { _ = tx.Rollback() }()
 	if err = o.Upsert(ctx, tx, false, nil, boil.Infer(), boil.Infer()); err != nil {
-		t.Errorf("Unable to upsert Node: %s", err)
+		t.Errorf("Unable to upsert Usage: %s", err)
 	}
 
-	count, err := Nodes().Count(ctx, tx)
+	count, err := Usages().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}
@@ -573,15 +573,15 @@ func testNodesUpsert(t *testing.T) {
 	}
 
 	// Attempt the UPDATE side of an UPSERT
-	if err = randomize.Struct(seed, &o, nodeDBTypes, false, nodePrimaryKeyColumns...); err != nil {
-		t.Errorf("Unable to randomize Node struct: %s", err)
+	if err = randomize.Struct(seed, &o, usageDBTypes, false, usagePrimaryKeyColumns...); err != nil {
+		t.Errorf("Unable to randomize Usage struct: %s", err)
 	}
 
 	if err = o.Upsert(ctx, tx, true, nil, boil.Infer(), boil.Infer()); err != nil {
-		t.Errorf("Unable to upsert Node: %s", err)
+		t.Errorf("Unable to upsert Usage: %s", err)
 	}
 
-	count, err = Nodes().Count(ctx, tx)
+	count, err = Usages().Count(ctx, tx)
 	if err != nil {
 		t.Error(err)
 	}

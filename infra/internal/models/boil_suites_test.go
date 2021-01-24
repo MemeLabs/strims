@@ -13,47 +13,59 @@ import "testing"
 // Separating the tests thusly grants avoidance of Postgres deadlocks.
 func TestParent(t *testing.T) {
 	t.Run("Nodes", testNodes)
+	t.Run("Usages", testUsages)
 }
 
 func TestDelete(t *testing.T) {
 	t.Run("Nodes", testNodesDelete)
+	t.Run("Usages", testUsagesDelete)
 }
 
 func TestQueryDeleteAll(t *testing.T) {
 	t.Run("Nodes", testNodesQueryDeleteAll)
+	t.Run("Usages", testUsagesQueryDeleteAll)
 }
 
 func TestSliceDeleteAll(t *testing.T) {
 	t.Run("Nodes", testNodesSliceDeleteAll)
+	t.Run("Usages", testUsagesSliceDeleteAll)
 }
 
 func TestExists(t *testing.T) {
 	t.Run("Nodes", testNodesExists)
+	t.Run("Usages", testUsagesExists)
 }
 
 func TestFind(t *testing.T) {
 	t.Run("Nodes", testNodesFind)
+	t.Run("Usages", testUsagesFind)
 }
 
 func TestBind(t *testing.T) {
 	t.Run("Nodes", testNodesBind)
+	t.Run("Usages", testUsagesBind)
 }
 
 func TestOne(t *testing.T) {
 	t.Run("Nodes", testNodesOne)
+	t.Run("Usages", testUsagesOne)
 }
 
 func TestAll(t *testing.T) {
 	t.Run("Nodes", testNodesAll)
+	t.Run("Usages", testUsagesAll)
 }
 
 func TestCount(t *testing.T) {
 	t.Run("Nodes", testNodesCount)
+	t.Run("Usages", testUsagesCount)
 }
 
 func TestInsert(t *testing.T) {
 	t.Run("Nodes", testNodesInsert)
 	t.Run("Nodes", testNodesInsertWhitelist)
+	t.Run("Usages", testUsagesInsert)
+	t.Run("Usages", testUsagesInsertWhitelist)
 }
 
 // TestToOne tests cannot be run in parallel
@@ -98,20 +110,25 @@ func TestToManyRemove(t *testing.T) {}
 
 func TestReload(t *testing.T) {
 	t.Run("Nodes", testNodesReload)
+	t.Run("Usages", testUsagesReload)
 }
 
 func TestReloadAll(t *testing.T) {
 	t.Run("Nodes", testNodesReloadAll)
+	t.Run("Usages", testUsagesReloadAll)
 }
 
 func TestSelect(t *testing.T) {
 	t.Run("Nodes", testNodesSelect)
+	t.Run("Usages", testUsagesSelect)
 }
 
 func TestUpdate(t *testing.T) {
 	t.Run("Nodes", testNodesUpdate)
+	t.Run("Usages", testUsagesUpdate)
 }
 
 func TestSliceUpdateAll(t *testing.T) {
 	t.Run("Nodes", testNodesSliceUpdateAll)
+	t.Run("Usages", testUsagesSliceUpdateAll)
 }
