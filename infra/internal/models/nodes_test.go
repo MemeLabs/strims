@@ -427,7 +427,7 @@ func testNodesSelect(t *testing.T) {
 }
 
 var (
-	nodeDBTypes = map[string]string{`ID`: `bigint`, `StartedAt`: `bigint`, `StoppedAt`: `bigint`, `ProviderName`: `text`, `ProviderID`: `text`, `Name`: `text`, `IPV4`: `text`, `IPV6`: `text`, `RegionName`: `text`, `RegionLat`: `double precision`, `RegionLng`: `double precision`, `SKUName`: `text`, `SKUNetworkCap`: `integer`, `SKUNetworkSpeed`: `integer`, `SKUPriceMonthly`: `real`, `SKUPriceHourly`: `real`, `WireguardKey`: `text`, `WireguardIP`: `text`, `User`: `text`}
+	nodeDBTypes = map[string]string{`ID`: `bigint`, `StartedAt`: `bigint`, `StoppedAt`: `bigint`, `ProviderName`: `text`, `ProviderID`: `text`, `Name`: `text`, `IPV4`: `text`, `IPV6`: `text`, `RegionName`: `text`, `RegionLat`: `double precision`, `RegionLng`: `double precision`, `SKUName`: `text`, `SKUNetworkCap`: `integer`, `SKUNetworkSpeed`: `integer`, `SKUPriceMonthly`: `real`, `SKUPriceHourly`: `real`, `SkuMemory`: `integer`, `SkuCpus`: `integer`, `SkuDisk`: `integer`, `WireguardKey`: `text`, `WireguardIP`: `text`, `User`: `text`}
 	_           = bytes.MinRead
 )
 

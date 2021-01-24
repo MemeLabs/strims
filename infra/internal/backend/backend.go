@@ -418,15 +418,15 @@ func (b *Backend) CreateNode(
 }
 
 func (b *Backend) ActiveNodes(ctx context.Context, active bool) ([]*node.Node, error) {
-	var query string
+	var query qm.QueryMod
 	if active {
-		query = "NOT NULL"
+		query = models.NodeWhere.StoppedAt.IsNull()
 	} else {
-		query = "NULL"
+		query = models.NodeWhere.StoppedAt.IsNotNull()
 	}
 
 	var nodes []*node.Node
-	slice, err := models.Nodes(qm.Where("stopped_at is ", query)).AllG(ctx)
+	slice, err := models.Nodes(query).AllG(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -440,23 +440,27 @@ func (b *Backend) ActiveNodes(ctx context.Context, active bool) ([]*node.Node, e
 
 func (b *Backend) insertNode(ctx context.Context, node *node.Node) error {
 	nodeEntry := &models.Node{
-		User:         node.User,
-		StartedAt:    node.StartedAt,
-		ProviderID:   node.ProviderId,
-		ProviderName: node.ProviderName,
-		Name:         strings.ToLower(node.Name), // lowering to match k8s node naming
-		Memory:       int(node.Sku.Memory),
-		CPUs:         int(node.Sku.Cpus),
-		Disk:         int(node.Sku.Disk),
-		IPV4:         node.Networks.V4[0],
-		// IPV6:       node.Networks.V6[0],
+		StartedAt:       node.StartedAt,
+		StoppedAt:       null.Int64{},
+		ProviderName:    node.ProviderName,
+		ProviderID:      node.ProviderId,
+		Name:            strings.ToLower(node.Name),
+		IPV4:            node.Networks.V4[0],
+		IPV6:            "",
 		RegionName:      node.Region.Name,
 		RegionLat:       node.Region.LatLng.Latitude,
 		RegionLng:       node.Region.LatLng.Longitude,
-		WireguardIP:     node.WireguardIpv4,
-		WireguardKey:    node.WireguardPrivKey,
-		SKUPriceHourly:  float32(node.Sku.PriceHourly.Value),
+		SKUName:         node.Sku.Name,
+		SKUNetworkCap:   int(node.Sku.NetworkCap),
+		SKUNetworkSpeed: int(node.Sku.NetworkSpeed),
 		SKUPriceMonthly: float32(node.Sku.PriceMonthly.Value),
+		SKUPriceHourly:  float32(node.Sku.PriceHourly.Value),
+		SkuMemory:       int(node.Sku.Memory),
+		SkuCpus:         int(node.Sku.Cpus),
+		SkuDisk:         int(node.Sku.Disk),
+		WireguardKey:    node.WireguardPrivKey,
+		WireguardIP:     node.WireguardIpv4,
+		User:            node.User,
 	}
 
 	if err := nodeEntry.InsertG(ctx, boil.Infer()); err != nil {
@@ -572,7 +576,6 @@ func (b *Backend) DestroyNode(ctx context.Context, name string) error {
 		return fmt.Errorf("failed to find node(%s) in database: %w", name, err)
 	}
 
-	n.Active = 0
 	n.StoppedAt = null.Int64From(time.Now().UnixNano())
 
 	count, err := n.UpdateG(ctx, boil.Infer())
@@ -779,9 +782,9 @@ func modelToNode(n *models.Node) *node.Node {
 			LatLng: node.LatLngFromDegrees(n.RegionLat, n.RegionLng),
 		},
 		Sku: &node.SKU{
-			Memory:       int32(n.Memory),
-			Cpus:         int32(n.CPUs),
-			Disk:         int32(n.Disk),
+			Memory:       int32(n.SkuMemory),
+			Cpus:         int32(n.SkuCpus),
+			Disk:         int32(n.SkuDisk),
 			Name:         n.SKUName,
 			NetworkCap:   int32(n.SKUNetworkCap),
 			NetworkSpeed: int32(n.SKUNetworkSpeed),
@@ -834,15 +837,17 @@ func run(args ...string) error {
 func (b *Backend) SyncNodeStats(ctx context.Context) error {
 	b.Log.Debug("syncing node stats")
 
-	slice, err := models.Nodes(qm.Where("active=?", 1)).AllG(ctx)
+	slice, err := models.Nodes(models.NodeWhere.StoppedAt.IsNull()).AllG(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to query nodes: %w", err)
 	}
 
-	var usages map[string]*models.Usage
-
+	usages := make(map[string]*models.Usage, len(slice))
 	for _, n := range slice {
-		usages[n.IPV4] = &models.Usage{}
+		usages[n.WireguardIP] = &models.Usage{
+			NodeID: n.ID,
+			Time:   time.Now().UnixNano(),
+		}
 	}
 
 	const memoryQuery = "100 * (1 - ((avg_over_time(node_memory_MemFree_bytes[15m]) + avg_over_time(node_memory_Cached_bytes[15m]) + avg_over_time(node_memory_Buffers_bytes[15m])) / avg_over_time(node_memory_MemTotal_bytes[15m])))"
@@ -857,23 +862,23 @@ func (b *Backend) SyncNodeStats(ctx context.Context) error {
 		b.Log.Debug("prometheus mem query", zap.Strings("warnings", warnings))
 	}
 
-	switch {
-	case res.Type() == model.ValVector:
-		vec := res.(model.Vector)
-		for _, v := range vec {
-			ipv4 := strings.Split(string(v.Metric["instance"]), ":")[0]
-			u, ok := usages[ipv4]
-			if !ok {
-				// TODO: handle this
-				continue
-			}
-			_ = u
-		}
-	default:
-		break
+	vec, ok := res.(model.Vector)
+	if !ok {
+		return errors.New("wrong response type")
 	}
 
-	const cpuQuery = `100 - (avg by (instance) (irate(node_cpu_seconds_total{mode="idle"}[15m])) * 100)`
+	for _, v := range vec {
+		wgIPv4 := strings.Split(string(v.Metric["instance"]), ":")[0]
+		var u *models.Usage
+		u, ok = usages[wgIPv4]
+		if !ok {
+			// TODO: handle this
+			continue
+		}
+		u.Mem = float64(v.Value)
+	}
+
+	const cpuQuery = `100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[15m])) * 100)`
 	res, warnings, err = b.v1api.Query(ctx, cpuQuery, time.Now())
 	if err != nil {
 		b.Log.Debug("error checking Prometheus", zap.Error(err))
@@ -884,26 +889,33 @@ func (b *Backend) SyncNodeStats(ctx context.Context) error {
 		b.Log.Debug("prometheus mem query", zap.Strings("warnings", warnings))
 	}
 
-	switch {
-	case res.Type() == model.ValVector:
-		vec := res.(model.Vector)
-		for _, v := range vec {
-			for _, n := range slice {
-				ipv4 := strings.Split(string(v.Metric["instance"]), ":")[0]
-				if ipv4 == n.IPV4 {
-					//					n.Usage.CpuUsage = float64(v.Value)
-				}
-			}
-		}
-	default:
-		break
+	vec, ok = res.(model.Vector)
+	if !ok {
+		return errors.New("wrong response type")
 	}
 
-	//	for _, n := range slice {
-	//	}
+	for _, v := range vec {
+		wgIPv4 := strings.Split(string(v.Metric["instance"]), ":")[0]
+		var u *models.Usage
+		u, ok = usages[wgIPv4]
+		if !ok {
+			// TODO: handle this
+			continue
+		}
+		u.CPU = float64(v.Value)
+	}
 
-	//	spew.Dump(res)
-	// for each group, update .Usage field
-	// save to db
+	const networkBytesInQuery = "sum by (instance) (node_network_receive_bytes_total)"
+	const networkBytesOutQuery = "sum by (instance) (node_network_receive_bytes_total)"
+
+	// improve this
+	for _, u := range usages {
+		if err = u.InsertG(ctx, boil.Infer()); err != nil {
+			b.Log.Error("failed to insert usage entry", zap.Error(err))
+		}
+	}
+
+	b.Log.Info("inserted latest usage stats")
+
 	return nil
 }

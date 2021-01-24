@@ -24,25 +24,28 @@ import (
 
 // Node is an object representing the database table.
 type Node struct {
-	ID              int64        `boil:"id" json:"id" toml:"id" yaml:"id"`
-	StartedAt       int64        `boil:"started_at" json:"startedAt" toml:"startedAt" yaml:"startedAt"`
-	StoppedAt       null.Int64   `boil:"stopped_at" json:"stoppedAt,omitempty" toml:"stoppedAt" yaml:"stoppedAt,omitempty"`
-	ProviderName    string       `boil:"provider_name" json:"providerName" toml:"providerName" yaml:"providerName"`
-	ProviderID      string       `boil:"provider_id" json:"providerID" toml:"providerID" yaml:"providerID"`
-	Name            string       `boil:"name" json:"name" toml:"name" yaml:"name"`
-	IPV4            string       `boil:"ip_v4" json:"ipV4" toml:"ipV4" yaml:"ipV4"`
-	IPV6            null.String  `boil:"ip_v6" json:"ipV6,omitempty" toml:"ipV6" yaml:"ipV6,omitempty"`
-	RegionName      null.String  `boil:"region_name" json:"regionName,omitempty" toml:"regionName" yaml:"regionName,omitempty"`
-	RegionLat       null.Float64 `boil:"region_lat" json:"regionLat,omitempty" toml:"regionLat" yaml:"regionLat,omitempty"`
-	RegionLng       null.Float64 `boil:"region_lng" json:"regionLNG,omitempty" toml:"regionLNG" yaml:"regionLNG,omitempty"`
-	SKUName         null.String  `boil:"sku_name" json:"skuName,omitempty" toml:"skuName" yaml:"skuName,omitempty"`
-	SKUNetworkCap   null.Int     `boil:"sku_network_cap" json:"skuNetworkCap,omitempty" toml:"skuNetworkCap" yaml:"skuNetworkCap,omitempty"`
-	SKUNetworkSpeed null.Int     `boil:"sku_network_speed" json:"skuNetworkSpeed,omitempty" toml:"skuNetworkSpeed" yaml:"skuNetworkSpeed,omitempty"`
-	SKUPriceMonthly null.Float32 `boil:"sku_price_monthly" json:"skuPriceMonthly,omitempty" toml:"skuPriceMonthly" yaml:"skuPriceMonthly,omitempty"`
-	SKUPriceHourly  null.Float32 `boil:"sku_price_hourly" json:"skuPriceHourly,omitempty" toml:"skuPriceHourly" yaml:"skuPriceHourly,omitempty"`
-	WireguardKey    string       `boil:"wireguard_key" json:"wireguardKey" toml:"wireguardKey" yaml:"wireguardKey"`
-	WireguardIP     string       `boil:"wireguard_ip" json:"wireguardIP" toml:"wireguardIP" yaml:"wireguardIP"`
-	User            null.String  `boil:"user" json:"user,omitempty" toml:"user" yaml:"user,omitempty"`
+	ID              int64      `boil:"id" json:"id" toml:"id" yaml:"id"`
+	StartedAt       int64      `boil:"started_at" json:"startedAt" toml:"startedAt" yaml:"startedAt"`
+	StoppedAt       null.Int64 `boil:"stopped_at" json:"stoppedAt,omitempty" toml:"stoppedAt" yaml:"stoppedAt,omitempty"`
+	ProviderName    string     `boil:"provider_name" json:"providerName" toml:"providerName" yaml:"providerName"`
+	ProviderID      string     `boil:"provider_id" json:"providerID" toml:"providerID" yaml:"providerID"`
+	Name            string     `boil:"name" json:"name" toml:"name" yaml:"name"`
+	IPV4            string     `boil:"ip_v4" json:"ipV4" toml:"ipV4" yaml:"ipV4"`
+	IPV6            string     `boil:"ip_v6" json:"ipV6" toml:"ipV6" yaml:"ipV6"`
+	RegionName      string     `boil:"region_name" json:"regionName" toml:"regionName" yaml:"regionName"`
+	RegionLat       float64    `boil:"region_lat" json:"regionLat" toml:"regionLat" yaml:"regionLat"`
+	RegionLng       float64    `boil:"region_lng" json:"regionLNG" toml:"regionLNG" yaml:"regionLNG"`
+	SKUName         string     `boil:"sku_name" json:"skuName" toml:"skuName" yaml:"skuName"`
+	SKUNetworkCap   int        `boil:"sku_network_cap" json:"skuNetworkCap" toml:"skuNetworkCap" yaml:"skuNetworkCap"`
+	SKUNetworkSpeed int        `boil:"sku_network_speed" json:"skuNetworkSpeed" toml:"skuNetworkSpeed" yaml:"skuNetworkSpeed"`
+	SKUPriceMonthly float32    `boil:"sku_price_monthly" json:"skuPriceMonthly" toml:"skuPriceMonthly" yaml:"skuPriceMonthly"`
+	SKUPriceHourly  float32    `boil:"sku_price_hourly" json:"skuPriceHourly" toml:"skuPriceHourly" yaml:"skuPriceHourly"`
+	SkuMemory       int        `boil:"sku_memory" json:"skuMemory" toml:"skuMemory" yaml:"skuMemory"`
+	SkuCpus         int        `boil:"sku_cpus" json:"skuCpus" toml:"skuCpus" yaml:"skuCpus"`
+	SkuDisk         int        `boil:"sku_disk" json:"skuDisk" toml:"skuDisk" yaml:"skuDisk"`
+	WireguardKey    string     `boil:"wireguard_key" json:"wireguardKey" toml:"wireguardKey" yaml:"wireguardKey"`
+	WireguardIP     string     `boil:"wireguard_ip" json:"wireguardIP" toml:"wireguardIP" yaml:"wireguardIP"`
+	User            string     `boil:"user" json:"user" toml:"user" yaml:"user"`
 
 	R *nodeR `boil:"-" json:"-" toml:"-" yaml:"-"`
 	L nodeL  `boil:"-" json:"-" toml:"-" yaml:"-"`
@@ -65,6 +68,9 @@ var NodeColumns = struct {
 	SKUNetworkSpeed string
 	SKUPriceMonthly string
 	SKUPriceHourly  string
+	SkuMemory       string
+	SkuCpus         string
+	SkuDisk         string
 	WireguardKey    string
 	WireguardIP     string
 	User            string
@@ -85,6 +91,9 @@ var NodeColumns = struct {
 	SKUNetworkSpeed: "sku_network_speed",
 	SKUPriceMonthly: "sku_price_monthly",
 	SKUPriceHourly:  "sku_price_hourly",
+	SkuMemory:       "sku_memory",
+	SkuCpus:         "sku_cpus",
+	SkuDisk:         "sku_disk",
 	WireguardKey:    "wireguard_key",
 	WireguardIP:     "wireguard_ip",
 	User:            "user",
@@ -161,96 +170,85 @@ func (w whereHelperstring) NIN(slice []string) qm.QueryMod {
 	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
 }
 
-type whereHelpernull_String struct{ field string }
+type whereHelperfloat64 struct{ field string }
 
-func (w whereHelpernull_String) EQ(x null.String) qm.QueryMod {
-	return qmhelper.WhereNullEQ(w.field, false, x)
+func (w whereHelperfloat64) EQ(x float64) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.EQ, x) }
+func (w whereHelperfloat64) NEQ(x float64) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.NEQ, x)
 }
-func (w whereHelpernull_String) NEQ(x null.String) qm.QueryMod {
-	return qmhelper.WhereNullEQ(w.field, true, x)
-}
-func (w whereHelpernull_String) IsNull() qm.QueryMod    { return qmhelper.WhereIsNull(w.field) }
-func (w whereHelpernull_String) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
-func (w whereHelpernull_String) LT(x null.String) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LT, x)
-}
-func (w whereHelpernull_String) LTE(x null.String) qm.QueryMod {
+func (w whereHelperfloat64) LT(x float64) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LT, x) }
+func (w whereHelperfloat64) LTE(x float64) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.LTE, x)
 }
-func (w whereHelpernull_String) GT(x null.String) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GT, x)
-}
-func (w whereHelpernull_String) GTE(x null.String) qm.QueryMod {
+func (w whereHelperfloat64) GT(x float64) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GT, x) }
+func (w whereHelperfloat64) GTE(x float64) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.GTE, x)
 }
+func (w whereHelperfloat64) IN(slice []float64) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereIn(fmt.Sprintf("%s IN ?", w.field), values...)
+}
+func (w whereHelperfloat64) NIN(slice []float64) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
+}
 
-type whereHelpernull_Float64 struct{ field string }
+type whereHelperint struct{ field string }
 
-func (w whereHelpernull_Float64) EQ(x null.Float64) qm.QueryMod {
-	return qmhelper.WhereNullEQ(w.field, false, x)
+func (w whereHelperint) EQ(x int) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.EQ, x) }
+func (w whereHelperint) NEQ(x int) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.NEQ, x) }
+func (w whereHelperint) LT(x int) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.LT, x) }
+func (w whereHelperint) LTE(x int) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LTE, x) }
+func (w whereHelperint) GT(x int) qm.QueryMod  { return qmhelper.Where(w.field, qmhelper.GT, x) }
+func (w whereHelperint) GTE(x int) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GTE, x) }
+func (w whereHelperint) IN(slice []int) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereIn(fmt.Sprintf("%s IN ?", w.field), values...)
 }
-func (w whereHelpernull_Float64) NEQ(x null.Float64) qm.QueryMod {
-	return qmhelper.WhereNullEQ(w.field, true, x)
+func (w whereHelperint) NIN(slice []int) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
 }
-func (w whereHelpernull_Float64) IsNull() qm.QueryMod    { return qmhelper.WhereIsNull(w.field) }
-func (w whereHelpernull_Float64) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
-func (w whereHelpernull_Float64) LT(x null.Float64) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LT, x)
+
+type whereHelperfloat32 struct{ field string }
+
+func (w whereHelperfloat32) EQ(x float32) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.EQ, x) }
+func (w whereHelperfloat32) NEQ(x float32) qm.QueryMod {
+	return qmhelper.Where(w.field, qmhelper.NEQ, x)
 }
-func (w whereHelpernull_Float64) LTE(x null.Float64) qm.QueryMod {
+func (w whereHelperfloat32) LT(x float32) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.LT, x) }
+func (w whereHelperfloat32) LTE(x float32) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.LTE, x)
 }
-func (w whereHelpernull_Float64) GT(x null.Float64) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GT, x)
-}
-func (w whereHelpernull_Float64) GTE(x null.Float64) qm.QueryMod {
+func (w whereHelperfloat32) GT(x float32) qm.QueryMod { return qmhelper.Where(w.field, qmhelper.GT, x) }
+func (w whereHelperfloat32) GTE(x float32) qm.QueryMod {
 	return qmhelper.Where(w.field, qmhelper.GTE, x)
 }
-
-type whereHelpernull_Int struct{ field string }
-
-func (w whereHelpernull_Int) EQ(x null.Int) qm.QueryMod {
-	return qmhelper.WhereNullEQ(w.field, false, x)
+func (w whereHelperfloat32) IN(slice []float32) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereIn(fmt.Sprintf("%s IN ?", w.field), values...)
 }
-func (w whereHelpernull_Int) NEQ(x null.Int) qm.QueryMod {
-	return qmhelper.WhereNullEQ(w.field, true, x)
-}
-func (w whereHelpernull_Int) IsNull() qm.QueryMod    { return qmhelper.WhereIsNull(w.field) }
-func (w whereHelpernull_Int) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
-func (w whereHelpernull_Int) LT(x null.Int) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LT, x)
-}
-func (w whereHelpernull_Int) LTE(x null.Int) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LTE, x)
-}
-func (w whereHelpernull_Int) GT(x null.Int) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GT, x)
-}
-func (w whereHelpernull_Int) GTE(x null.Int) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GTE, x)
-}
-
-type whereHelpernull_Float32 struct{ field string }
-
-func (w whereHelpernull_Float32) EQ(x null.Float32) qm.QueryMod {
-	return qmhelper.WhereNullEQ(w.field, false, x)
-}
-func (w whereHelpernull_Float32) NEQ(x null.Float32) qm.QueryMod {
-	return qmhelper.WhereNullEQ(w.field, true, x)
-}
-func (w whereHelpernull_Float32) IsNull() qm.QueryMod    { return qmhelper.WhereIsNull(w.field) }
-func (w whereHelpernull_Float32) IsNotNull() qm.QueryMod { return qmhelper.WhereIsNotNull(w.field) }
-func (w whereHelpernull_Float32) LT(x null.Float32) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LT, x)
-}
-func (w whereHelpernull_Float32) LTE(x null.Float32) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.LTE, x)
-}
-func (w whereHelpernull_Float32) GT(x null.Float32) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GT, x)
-}
-func (w whereHelpernull_Float32) GTE(x null.Float32) qm.QueryMod {
-	return qmhelper.Where(w.field, qmhelper.GTE, x)
+func (w whereHelperfloat32) NIN(slice []float32) qm.QueryMod {
+	values := make([]interface{}, 0, len(slice))
+	for _, value := range slice {
+		values = append(values, value)
+	}
+	return qm.WhereNotIn(fmt.Sprintf("%s NOT IN ?", w.field), values...)
 }
 
 var NodeWhere = struct {
@@ -261,18 +259,21 @@ var NodeWhere = struct {
 	ProviderID      whereHelperstring
 	Name            whereHelperstring
 	IPV4            whereHelperstring
-	IPV6            whereHelpernull_String
-	RegionName      whereHelpernull_String
-	RegionLat       whereHelpernull_Float64
-	RegionLng       whereHelpernull_Float64
-	SKUName         whereHelpernull_String
-	SKUNetworkCap   whereHelpernull_Int
-	SKUNetworkSpeed whereHelpernull_Int
-	SKUPriceMonthly whereHelpernull_Float32
-	SKUPriceHourly  whereHelpernull_Float32
+	IPV6            whereHelperstring
+	RegionName      whereHelperstring
+	RegionLat       whereHelperfloat64
+	RegionLng       whereHelperfloat64
+	SKUName         whereHelperstring
+	SKUNetworkCap   whereHelperint
+	SKUNetworkSpeed whereHelperint
+	SKUPriceMonthly whereHelperfloat32
+	SKUPriceHourly  whereHelperfloat32
+	SkuMemory       whereHelperint
+	SkuCpus         whereHelperint
+	SkuDisk         whereHelperint
 	WireguardKey    whereHelperstring
 	WireguardIP     whereHelperstring
-	User            whereHelpernull_String
+	User            whereHelperstring
 }{
 	ID:              whereHelperint64{field: "\"nodes\".\"id\""},
 	StartedAt:       whereHelperint64{field: "\"nodes\".\"started_at\""},
@@ -281,18 +282,21 @@ var NodeWhere = struct {
 	ProviderID:      whereHelperstring{field: "\"nodes\".\"provider_id\""},
 	Name:            whereHelperstring{field: "\"nodes\".\"name\""},
 	IPV4:            whereHelperstring{field: "\"nodes\".\"ip_v4\""},
-	IPV6:            whereHelpernull_String{field: "\"nodes\".\"ip_v6\""},
-	RegionName:      whereHelpernull_String{field: "\"nodes\".\"region_name\""},
-	RegionLat:       whereHelpernull_Float64{field: "\"nodes\".\"region_lat\""},
-	RegionLng:       whereHelpernull_Float64{field: "\"nodes\".\"region_lng\""},
-	SKUName:         whereHelpernull_String{field: "\"nodes\".\"sku_name\""},
-	SKUNetworkCap:   whereHelpernull_Int{field: "\"nodes\".\"sku_network_cap\""},
-	SKUNetworkSpeed: whereHelpernull_Int{field: "\"nodes\".\"sku_network_speed\""},
-	SKUPriceMonthly: whereHelpernull_Float32{field: "\"nodes\".\"sku_price_monthly\""},
-	SKUPriceHourly:  whereHelpernull_Float32{field: "\"nodes\".\"sku_price_hourly\""},
+	IPV6:            whereHelperstring{field: "\"nodes\".\"ip_v6\""},
+	RegionName:      whereHelperstring{field: "\"nodes\".\"region_name\""},
+	RegionLat:       whereHelperfloat64{field: "\"nodes\".\"region_lat\""},
+	RegionLng:       whereHelperfloat64{field: "\"nodes\".\"region_lng\""},
+	SKUName:         whereHelperstring{field: "\"nodes\".\"sku_name\""},
+	SKUNetworkCap:   whereHelperint{field: "\"nodes\".\"sku_network_cap\""},
+	SKUNetworkSpeed: whereHelperint{field: "\"nodes\".\"sku_network_speed\""},
+	SKUPriceMonthly: whereHelperfloat32{field: "\"nodes\".\"sku_price_monthly\""},
+	SKUPriceHourly:  whereHelperfloat32{field: "\"nodes\".\"sku_price_hourly\""},
+	SkuMemory:       whereHelperint{field: "\"nodes\".\"sku_memory\""},
+	SkuCpus:         whereHelperint{field: "\"nodes\".\"sku_cpus\""},
+	SkuDisk:         whereHelperint{field: "\"nodes\".\"sku_disk\""},
 	WireguardKey:    whereHelperstring{field: "\"nodes\".\"wireguard_key\""},
 	WireguardIP:     whereHelperstring{field: "\"nodes\".\"wireguard_ip\""},
-	User:            whereHelpernull_String{field: "\"nodes\".\"user\""},
+	User:            whereHelperstring{field: "\"nodes\".\"user\""},
 }
 
 // NodeRels is where relationship names are stored.
@@ -312,8 +316,8 @@ func (*nodeR) NewStruct() *nodeR {
 type nodeL struct{}
 
 var (
-	nodeAllColumns            = []string{"id", "started_at", "stopped_at", "provider_name", "provider_id", "name", "ip_v4", "ip_v6", "region_name", "region_lat", "region_lng", "sku_name", "sku_network_cap", "sku_network_speed", "sku_price_monthly", "sku_price_hourly", "wireguard_key", "wireguard_ip", "user"}
-	nodeColumnsWithoutDefault = []string{"started_at", "stopped_at", "provider_name", "provider_id", "name", "ip_v4", "ip_v6", "region_name", "region_lat", "region_lng", "sku_name", "sku_network_cap", "sku_network_speed", "sku_price_monthly", "sku_price_hourly", "wireguard_key", "wireguard_ip", "user"}
+	nodeAllColumns            = []string{"id", "started_at", "stopped_at", "provider_name", "provider_id", "name", "ip_v4", "ip_v6", "region_name", "region_lat", "region_lng", "sku_name", "sku_network_cap", "sku_network_speed", "sku_price_monthly", "sku_price_hourly", "sku_memory", "sku_cpus", "sku_disk", "wireguard_key", "wireguard_ip", "user"}
+	nodeColumnsWithoutDefault = []string{"started_at", "stopped_at", "provider_name", "provider_id", "name", "ip_v4", "ip_v6", "region_name", "region_lat", "region_lng", "sku_name", "sku_network_cap", "sku_network_speed", "sku_price_monthly", "sku_price_hourly", "sku_memory", "sku_cpus", "sku_disk", "wireguard_key", "wireguard_ip", "user"}
 	nodeColumnsWithDefault    = []string{"id"}
 	nodePrimaryKeyColumns     = []string{"id"}
 )

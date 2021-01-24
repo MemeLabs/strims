@@ -34,9 +34,30 @@ initdbScripts:
       UNIQUE ("name")
     );
 
-    INSERT INTO nodes
+    INSERT INTO nodes (
+      started_at,
+      provider_name,
+      provider_id,
+      name,
+      ip_v4,
+      ip_v6,
+      region_name,
+      region_lat,
+      region_lng,
+      sku_name,
+      sku_network_cap,
+      sku_network_speed,
+      sku_price_monthly,
+      sku_price_hourly,
+      sku_memory,
+      sku_cpus,
+      sku_disk,
+      wireguard_key,
+      wireguard_ip,
+      "user")
     VALUES (
-      to_char(CURRENT_TIMESTAMP, 'yyyymmddhh24miss')::bigint,
+      to_char(
+        CURRENT_TIMESTAMP, 'yyyymmddhh24miss') ::bigint,
       'custom',
       'custom',
       'controller',
@@ -57,13 +78,12 @@ initdbScripts:
       '10.0.0.1',
       'root');
 
-
     CREATE TABLE IF NOT EXISTS "usage" (
       "id"                BIGSERIAL PRIMARY KEY,
       "node_id"           BIGINT NOT NULL,
       "time"              BIGINT NOT NULL,
       "mem"               DOUBLE PRECISION NOT NULL,
       "cpu"               DOUBLE PRECISION NOT NULL,
-      "network_in"        DOUBLE PRECISION NOT NULL,
-      "network_out"       DOUBLE PRECISION NOT NULL
+      "network_bytes_in"  DOUBLE PRECISION NOT NULL,
+      "network_bytes_out" DOUBLE PRECISION NOT NULL
     );
