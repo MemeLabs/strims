@@ -199,7 +199,7 @@ func (m *Map) reserveCells(n int) {
 	}
 
 	if m.cellCount > 2048 {
-		panic("we tried to allocate an suspiciously large map")
+		panic(fmt.Sprintf("we tried to allocate an suspiciously large map (%d)", m.cellCount))
 	}
 }
 

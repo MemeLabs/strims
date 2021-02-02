@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 
 import useReady from "./useReady";
 
@@ -204,6 +204,10 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
     ref.current.volume = savedVolume || 0.5;
   };
 
+  const pause = () => {
+    ref.current?.pause();
+  };
+
   const setVolume = (volume) => {
     if (ref.current) {
       const clampedVolume = Math.max(0, Math.min(1, volume));
@@ -279,7 +283,7 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
     {
       mute,
       unmute,
-      pause: () => ref.current?.pause(),
+      pause,
       play,
       setCurrentTime,
       setVolume,

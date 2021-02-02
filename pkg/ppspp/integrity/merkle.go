@@ -69,21 +69,16 @@ func (v *MerkleSwarmVerifier) tree(b binmap.Bin) *merkle.Tree {
 	return merkle.NewTree(b, v.chunkSize, v.hash())
 }
 
-func (v *MerkleSwarmVerifier) segment(b binmap.Bin) (*merkleTreeSegment, uint64) {
+func (v *MerkleSwarmVerifier) segment(b binmap.Bin) *merkleTreeSegment {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
 	i := uint64(b >> v.treeHeight)
 	if i >= v.head || i < v.tail {
-		return nil, 0
+		return nil
 	}
 
-	s := v.segments[i&v.mask]
-	if s == nil {
-		return nil, 0
-	}
-
-	return s, s.Semaphore()
+	return v.segments[i&v.mask]
 }
 
 func (v *MerkleSwarmVerifier) storeSegment(ts time.Time, tree *merkle.Tree, sig []byte) {
@@ -103,8 +98,7 @@ func (v *MerkleSwarmVerifier) storeSegment(ts time.Time, tree *merkle.Tree, sig 
 					continue
 				}
 
-				s.Touch()
-				v.treePool.Put(s.Tree)
+				v.treePool.Put(s.Free())
 				segmentPool.Put(s)
 				v.segments[i&v.mask] = nil
 			}
@@ -127,12 +121,8 @@ func (v *MerkleSwarmVerifier) storeSegment(ts time.Time, tree *merkle.Tree, sig 
 
 // WriteIntegrity ...
 func (v *MerkleSwarmVerifier) WriteIntegrity(b binmap.Bin, m *binmap.Map, w Writer) (int, error) {
-	s, sem := v.segment(b)
-	if s == nil {
-		return 0, ErrMissingHashSubtree
-	}
-
-	if !s.LockIf(sem) {
+	s := v.segment(b)
+	if s == nil || !s.LockIf(b) {
 		return 0, ErrMissingHashSubtree
 	}
 	defer s.Unlock()
@@ -186,33 +176,32 @@ var segmentPool = sync.Pool{
 
 type merkleTreeSegment struct {
 	sync.Mutex
-	semaphor  uint64
 	Timestamp time.Time
 	Signature []byte
 	Tree      *merkle.Tree
 }
 
 func (s *merkleTreeSegment) Reset(ts time.Time, tree *merkle.Tree, sig []byte) {
+	s.Lock()
+	defer s.Unlock()
+
 	s.Timestamp = ts
 	s.Signature = append(s.Signature[:0], sig...)
 	s.Tree = tree
 }
 
-func (s *merkleTreeSegment) Touch() {
+func (s *merkleTreeSegment) Free() *merkle.Tree {
 	s.Lock()
 	defer s.Unlock()
-	s.semaphor++
+
+	t := s.Tree
+	s.Tree = nil
+	return t
 }
 
-func (s *merkleTreeSegment) Semaphore() uint64 {
+func (s *merkleTreeSegment) LockIf(b binmap.Bin) bool {
 	s.Lock()
-	defer s.Unlock()
-	return s.semaphor
-}
-
-func (s *merkleTreeSegment) LockIf(sem uint64) bool {
-	s.Lock()
-	if s.semaphor != sem {
+	if s.Tree == nil || !s.Tree.RootBin().Contains(b) {
 		s.Unlock()
 		return false
 	}
@@ -250,8 +239,6 @@ func (v *MerkleChannelVerifier) ChunkVerifier(b binmap.Bin) ChunkVerifier {
 type MerkleChunkVerifier struct {
 	bin           binmap.Bin
 	swarmVerifier *MerkleSwarmVerifier
-	segment       *merkleTreeSegment
-	segmentSem    uint64
 	timestamp     time.Time
 	signature     []byte
 	tree          *merkle.Tree
@@ -260,13 +247,8 @@ type MerkleChunkVerifier struct {
 // Reset ...
 func (v *MerkleChunkVerifier) Reset(b binmap.Bin) {
 	v.tree = v.swarmVerifier.tree(b)
-	v.segment, v.segmentSem = v.swarmVerifier.segment(b)
-	if v.segment != nil {
-		v.tree.SetParent(v.segment.Tree)
-	}
-
 	v.bin = v.tree.RootBin()
-	v.signature = nil
+	v.signature = v.signature[:0]
 }
 
 // SetSignedIntegrity ...
@@ -281,14 +263,16 @@ func (v *MerkleChunkVerifier) SetIntegrity(b binmap.Bin, hash []byte) {
 }
 
 func (v *MerkleChunkVerifier) verify(b binmap.Bin, d []byte) (bool, error) {
-	if v.segment != nil {
-		if !v.segment.LockIf(v.segmentSem) {
+	var t *merkle.Tree
+	if s := v.swarmVerifier.segment(b); s != nil {
+		if !s.LockIf(b) {
 			return false, ErrMissingHashSubtree
 		}
-		defer v.segment.Unlock()
+		defer s.Unlock()
+		t = s.Tree
 	}
 
-	if verified, err := v.tree.Verify(b, d); err != nil {
+	if verified, err := v.tree.VerifyWithParent(b, d, t); err != nil {
 		return false, err
 	} else if verified {
 		return true, nil

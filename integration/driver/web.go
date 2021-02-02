@@ -14,8 +14,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/avast/retry-go"
 	"github.com/chromedp/cdproto/network"
 	"github.com/chromedp/cdproto/runtime"

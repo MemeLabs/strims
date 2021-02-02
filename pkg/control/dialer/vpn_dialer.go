@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"sync"
 
-	rpcv1 "github.com/MemeLabs/go-ppspp/pkg/apis/rpc/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	rpcapi "github.com/MemeLabs/protobuf/pkg/apis/rpc"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/golang/protobuf/proto"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -121,7 +121,7 @@ func (t *VPNTransport) Listen() error {
 
 // HandleMessage ...
 func (t *VPNTransport) HandleMessage(msg *vpn.Message) error {
-	req := &rpcv1.Call{}
+	req := &rpcapi.Call{}
 	if err := proto.Unmarshal(msg.Body, req); err != nil {
 		return fmt.Errorf("unmarshaling rpc: %w", err)
 	}
@@ -149,7 +149,7 @@ func (t *VPNTransport) HandleMessage(msg *vpn.Message) error {
 		callsIn:  &t.callsIn,
 		callsOut: &t.callsOut,
 	}
-	send := func(ctx context.Context, res *rpcv1.Call) error {
+	send := func(ctx context.Context, res *rpcapi.Call) error {
 		return t.send(ctx, res, addr)
 	}
 	call := rpc.NewCallIn(ctx, req, parentCallAccessor, send)
@@ -163,7 +163,7 @@ func (t *VPNTransport) HandleMessage(msg *vpn.Message) error {
 	return nil
 }
 
-func (t *VPNTransport) send(ctx context.Context, call *rpcv1.Call, addr *HostAddr) error {
+func (t *VPNTransport) send(ctx context.Context, call *rpcapi.Call, addr *HostAddr) error {
 	b := callBuffers.Get().(*proto.Buffer)
 	defer callBuffers.Put(b)
 
@@ -186,7 +186,7 @@ func (t *VPNTransport) Call(call *rpc.CallOut, fn rpc.ResponseFunc) error {
 	t.callsOut.Insert(addr, call)
 	defer t.callsOut.Delete(addr, call.ID())
 
-	err = call.SendRequest(func(ctx context.Context, res *rpcv1.Call) error {
+	err = call.SendRequest(func(ctx context.Context, res *rpcapi.Call) error {
 		return t.send(ctx, res, addr)
 	})
 	if err != nil {
@@ -198,7 +198,7 @@ func (t *VPNTransport) Call(call *rpc.CallOut, fn rpc.ResponseFunc) error {
 
 const vpnCertificateHeader = "certificate"
 
-func (t *VPNTransport) verifyMessage(msg *vpn.Message, req *rpcv1.Call, cert *certificate.Certificate) error {
+func (t *VPNTransport) verifyMessage(msg *vpn.Message, req *rpcapi.Call, cert *certificate.Certificate) error {
 	if !bytes.Equal(cert.GetKey(), msg.Trailer.Entries[0].HostID.Bytes(nil)) {
 		return errors.New("certificate host id mismatch")
 	}

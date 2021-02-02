@@ -1,5 +1,5 @@
-import Reader from "../../../../lib/pb/reader";
-import Writer from "../../../../lib/pb/writer";
+import Reader from "@memelabs/protobuf/lib/pb/reader";
+import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
   DirectoryListingSnippet as strims_network_v1_DirectoryListingSnippet,

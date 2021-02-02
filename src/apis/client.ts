@@ -1,6 +1,7 @@
 import { Readable, Writable } from "stream";
 
-import { RPCHost } from "../lib/rpc/host";
+import { RPCHost } from "@memelabs/protobuf/lib/rpc/host";
+
 import { ChatClient } from "./strims/chat/v1/chat_rpc";
 import { DebugClient } from "./strims/debug/v1/debug_rpc";
 import { FundingClient as FundingServiceClient } from "./strims/funding/v1/funding_rpc";

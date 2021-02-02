@@ -8,8 +8,8 @@ import (
 	video "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"go.uber.org/zap"
 )
 

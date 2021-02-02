@@ -1,5 +1,5 @@
-import { RPCHost } from "../../../../lib/rpc/host";
-import { registerType } from "../../../../lib/rpc/registry";
+import { RPCHost } from "@memelabs/protobuf/lib/rpc/host";
+import { registerType } from "@memelabs/protobuf/lib/rpc/registry";
 
 import {
   IFundingTestRequest,

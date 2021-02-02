@@ -11,7 +11,7 @@ import (
 	video "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
 
 func init() {

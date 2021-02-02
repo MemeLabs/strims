@@ -1,6 +1,6 @@
 package driver
 
-import "github.com/MemeLabs/go-ppspp/pkg/rpc"
+import "github.com/MemeLabs/protobuf/pkg/rpc"
 
 type ClientOptions struct {
 	VPNServerAddr string

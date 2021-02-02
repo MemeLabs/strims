@@ -8,8 +8,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/bootstrap"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"go.uber.org/zap"
 )
 

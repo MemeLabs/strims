@@ -170,10 +170,12 @@ func newIngressStream(
 	s.transferID = s.transfer.Add(s.swarm, []byte{})
 	s.transfer.Publish(s.transferID, s.channelNetworkKey())
 
-	if err := s.publishDirectoryListing(); err != nil {
-		s.Close()
-		return nil, fmt.Errorf("publishing stream to directory: %w", err)
-	}
+	go func() {
+		// TODO: retry/refresh periodically
+		if err := s.publishDirectoryListing(); err != nil {
+			s.logger.Debug("publishing stream to directory failed", zap.Error(err))
+		}
+	}()
 
 	return s, nil
 }

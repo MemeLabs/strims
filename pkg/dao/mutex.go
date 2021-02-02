@@ -23,6 +23,8 @@ const mutexRefreshInterval = 20 * time.Second
 const mutexRecheckMinInterval = 20 * time.Second
 const mutexRecheckMaxInterval = 40 * time.Second
 
+const mutexPrefix = "mutex:"
+
 // NewMutex ...
 func NewMutex(logger *zap.Logger, store *ProfileStore, key []byte) *Mutex {
 	token := make([]byte, 8)
@@ -31,7 +33,7 @@ func NewMutex(logger *zap.Logger, store *ProfileStore, key []byte) *Mutex {
 	return &Mutex{
 		logger: logger,
 		store:  store,
-		key:    fmt.Sprintf("mutex:%x", key),
+		key:    fmt.Sprintf("%s%x", mutexPrefix, key),
 		token:  token,
 	}
 }

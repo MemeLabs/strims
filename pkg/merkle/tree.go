@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"hash"
+	"math/bits"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
@@ -73,17 +74,16 @@ func (t *Tree) Merge(o *Tree) {
 	t.verified |= o.verified
 
 	s := t.hash.Size()
-	for i := 0; added != 0; i++ {
-		if added&1 != 0 {
-			copy(t.digests[i*s:], o.digests[i*s:(i+1)*s])
-		}
-		added >>= 1
-	}
-}
+	for i := 0; added != 0; {
+		n := bits.TrailingZeros64(added)
+		added >>= n
+		i += n
 
-// SetParent ...
-func (t *Tree) SetParent(parent *Tree) {
-	t.parent = parent
+		n = bits.TrailingZeros64(added + 1)
+		copy(t.digests[i*s:], o.digests[i*s:(i+n)*s])
+		added >>= n
+		i += n
+	}
 }
 
 // SetRoot set the root hash to the given data
@@ -207,8 +207,7 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (bool, error) {
 	return false, nil
 }
 
-// Verify that the hashes of the target tree and it's parent  match if we assign
-// the specified data to the specified bin
+// Verify checks the integrity of the data d at bin b.
 func (t *Tree) Verify(b binmap.Bin, d []byte) (bool, error) {
 	if verified, err := t.Fill(b, d); err != nil {
 		return false, err
@@ -243,4 +242,14 @@ func (t *Tree) Verify(b binmap.Bin, d []byte) (bool, error) {
 	}
 
 	return false, nil
+}
+
+// VerifyWithParent checks the integrity of the data d at bin b using the new
+// hashes in t and the previously verified hashes in p. Passing nil to p is the
+// same as calling `Verify(b, d)`.
+func (t *Tree) VerifyWithParent(b binmap.Bin, d []byte, p *Tree) (bool, error) {
+	t.parent = p
+	verified, err := t.Verify(b, d)
+	t.parent = nil
+	return verified, err
 }

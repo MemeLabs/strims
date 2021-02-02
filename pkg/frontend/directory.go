@@ -9,8 +9,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
 
 func init() {

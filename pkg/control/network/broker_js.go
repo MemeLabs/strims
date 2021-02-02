@@ -12,8 +12,8 @@ import (
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/wasmio"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"go.uber.org/zap"
 )
 

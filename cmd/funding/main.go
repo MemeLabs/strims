@@ -11,8 +11,8 @@ import (
 	funding "github.com/MemeLabs/go-ppspp/pkg/apis/funding/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/gorilla/websocket"
 	"go.uber.org/zap"
 )

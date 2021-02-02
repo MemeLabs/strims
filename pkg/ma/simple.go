@@ -94,6 +94,21 @@ func (s *Simple) SampleIntervalWithTime(t time.Time) time.Duration {
 	return time.Duration(s.wl) * s.d / time.Duration(s.n)
 }
 
+// Rate ...
+func (s *Simple) Rate(d time.Duration) uint64 {
+	return s.RateWithTime(d, time.Now())
+}
+
+// RateWithTime ...
+func (s *Simple) RateWithTime(d time.Duration, t time.Time) uint64 {
+	s.advance(t)
+
+	if s.v == 0 {
+		return 0
+	}
+	return s.v / uint64(time.Duration(s.wl)*s.d/d)
+}
+
 type simpleMeanSample struct {
 	v uint64
 	n uint64

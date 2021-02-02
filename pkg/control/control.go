@@ -12,8 +12,8 @@ import (
 	video "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
 
 // BootstrapControl ...

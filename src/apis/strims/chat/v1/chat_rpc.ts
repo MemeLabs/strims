@@ -1,6 +1,6 @@
-import { RPCHost } from "../../../../lib/rpc/host";
-import { registerType } from "../../../../lib/rpc/registry";
-import { Readable as GenericReadable } from "../../../../lib/rpc/stream";
+import { RPCHost } from "@memelabs/protobuf/lib/rpc/host";
+import { registerType } from "@memelabs/protobuf/lib/rpc/registry";
+import { Readable as GenericReadable } from "@memelabs/protobuf/lib/rpc/stream";
 
 import {
   ICreateChatServerRequest,

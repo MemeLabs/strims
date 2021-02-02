@@ -11,8 +11,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )

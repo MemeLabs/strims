@@ -3,9 +3,11 @@ package chunkstream
 import (
 	"bytes"
 	"io"
+	"log"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestWriter(t *testing.T) {
@@ -118,5 +120,29 @@ func TestOffsetReader(t *testing.T) {
 
 	if !bytes.Equal(o[off:n], b) {
 		t.Errorf("expected \n%s\nread \n%s", spew.Sdump(b), spew.Sdump(o[off:n]))
+	}
+}
+
+func TestLengthAlignedWrite(t *testing.T) {
+	var buf bytes.Buffer
+	w, err := NewWriterSize(&buf, MaxSize)
+	assert.Nil(t, err)
+
+	for i := 0; i < 3; i++ {
+		w.Write(make([]byte, MaxSize-3))
+		w.Flush()
+	}
+
+	log.Println(buf.Bytes()[0:2])
+
+	r, err := NewReaderSize(&buf, 0, MaxSize)
+	assert.Nil(t, err)
+
+	b := make([]byte, 8*1024)
+	for i := 0; i < 12; i++ {
+		_, err := r.Read(b)
+		if err != nil {
+			assert.ErrorIs(t, err, io.EOF)
+		}
 	}
 }

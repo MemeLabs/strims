@@ -8,7 +8,7 @@ import (
 	"runtime/pprof"
 
 	debug "github.com/MemeLabs/go-ppspp/pkg/apis/debug/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/expfmt"
 )

@@ -7,7 +7,7 @@ import (
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"go.uber.org/zap"
 )
 

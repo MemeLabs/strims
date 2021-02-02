@@ -1,5 +1,5 @@
-import Reader from "../../../lib/pb/reader";
-import Writer from "../../../lib/pb/writer";
+import Reader from "@memelabs/protobuf/lib/pb/reader";
+import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
   KeyType as strims_type_KeyType,

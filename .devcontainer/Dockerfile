@@ -72,6 +72,10 @@ RUN \
   # Build gocode-gomod
   && GOPATH=/tmp/gotools go get -x -d github.com/stamblerre/gocode 2>&1 \
   && GOPATH=/tmp/gotools go build -o gocode-gomod github.com/stamblerre/gocode \
+  # Build protoc plugins
+  && GOPATH=/tmp/gotools go build -o protoc-gen-gorpc github.com/MemeLabs/protobuf/cmd/gorpc \
+  && GOPATH=/tmp/gotools go build -o protoc-gen-tsrpc github.com/MemeLabs/protobuf/cmd/tsrpc \
+  && GOPATH=/tmp/gotools go build -o protoc-gen-ts github.com/MemeLabs/protobuf/cmd/ts \
   # Install go tools
   && mv /tmp/gotools/bin/* /usr/local/bin/ \
   && mv /tmp/gotools/gocode-gomod /usr/local/bin/ \

@@ -3,7 +3,7 @@ package video
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
 
 // RegisterEgressService ...

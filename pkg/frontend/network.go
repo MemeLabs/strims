@@ -10,7 +10,7 @@ import (
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/rpc"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"google.golang.org/protobuf/proto"
 )
 
