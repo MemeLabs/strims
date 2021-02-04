@@ -837,6 +837,8 @@ func run(args ...string) error {
 func (b *Backend) SyncNodeStats(ctx context.Context) error {
 	b.Log.Debug("syncing node stats")
 
+	errWrongResponseType := errors.New("wrong response type")
+
 	slice, err := models.Nodes(models.NodeWhere.StoppedAt.IsNull()).AllG(ctx)
 	if err != nil {
 		return fmt.Errorf("failed to query nodes: %w", err)
@@ -850,27 +852,15 @@ func (b *Backend) SyncNodeStats(ctx context.Context) error {
 		}
 	}
 
-	const memoryQuery = "100 * (1 - ((avg_over_time(node_memory_MemFree_bytes[15m]) + avg_over_time(node_memory_Cached_bytes[15m]) + avg_over_time(node_memory_Buffers_bytes[15m])) / avg_over_time(node_memory_MemTotal_bytes[15m])))"
-	// query node stats, group by name
-	res, warnings, err := b.v1api.Query(ctx, memoryQuery, time.Now())
+	const memoryQuery = "(node_memory_MemTotal_bytes - node_memory_MemFree_bytes) - node_memory_Cached_bytes"
+	vec, err := b.promQuery(ctx, memoryQuery)
 	if err != nil {
-		b.Log.Debug("error checking Prometheus", zap.Error(err))
-		return fmt.Errorf("memory query failed: %w", err)
-	}
-
-	if len(warnings) > 0 {
-		b.Log.Debug("prometheus mem query", zap.Strings("warnings", warnings))
-	}
-
-	vec, ok := res.(model.Vector)
-	if !ok {
-		return errors.New("wrong response type")
+		return errWrongResponseType
 	}
 
 	for _, v := range vec {
 		wgIPv4 := strings.Split(string(v.Metric["instance"]), ":")[0]
-		var u *models.Usage
-		u, ok = usages[wgIPv4]
+		u, ok := usages[wgIPv4]
 		if !ok {
 			// TODO: handle this
 			continue
@@ -878,26 +868,16 @@ func (b *Backend) SyncNodeStats(ctx context.Context) error {
 		u.Mem = float64(v.Value)
 	}
 
-	const cpuQuery = `100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[15m])) * 100)`
-	res, warnings, err = b.v1api.Query(ctx, cpuQuery, time.Now())
+	// % utilisation
+	const cpuQuery = `1 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[15m])))`
+	vec, err = b.promQuery(ctx, cpuQuery)
 	if err != nil {
-		b.Log.Debug("error checking Prometheus", zap.Error(err))
-		return fmt.Errorf("cpu query failed: %w", err)
-	}
-
-	if len(warnings) > 0 {
-		b.Log.Debug("prometheus mem query", zap.Strings("warnings", warnings))
-	}
-
-	vec, ok = res.(model.Vector)
-	if !ok {
-		return errors.New("wrong response type")
+		return errWrongResponseType
 	}
 
 	for _, v := range vec {
 		wgIPv4 := strings.Split(string(v.Metric["instance"]), ":")[0]
-		var u *models.Usage
-		u, ok = usages[wgIPv4]
+		u, ok := usages[wgIPv4]
 		if !ok {
 			// TODO: handle this
 			continue
@@ -906,16 +886,72 @@ func (b *Backend) SyncNodeStats(ctx context.Context) error {
 	}
 
 	const networkBytesInQuery = "sum by (instance) (node_network_receive_bytes_total)"
-	const networkBytesOutQuery = "sum by (instance) (node_network_receive_bytes_total)"
+	vec, err = b.promQuery(ctx, networkBytesInQuery)
+	if err != nil {
+		return errWrongResponseType
+	}
 
-	// improve this
-	for _, u := range usages {
-		if err = u.InsertG(ctx, boil.Infer()); err != nil {
-			b.Log.Error("failed to insert usage entry", zap.Error(err))
+	for _, v := range vec {
+		wgIPv4 := strings.Split(string(v.Metric["instance"]), ":")[0]
+		u, ok := usages[wgIPv4]
+		if !ok {
+			// TODO: handle this
+			continue
 		}
+		u.NetworkIn = float64(v.Value)
+	}
+
+	const networkBytesOutQuery = "sum by (instance) (node_network_transmit_bytes_total)"
+	vec, err = b.promQuery(ctx, networkBytesOutQuery)
+	if err != nil {
+		return errWrongResponseType
+	}
+
+	for _, v := range vec {
+		wgIPv4 := strings.Split(string(v.Metric["instance"]), ":")[0]
+		u, ok := usages[wgIPv4]
+		if !ok {
+			// TODO: handle this
+			continue
+		}
+		u.NetworkIn = float64(v.Value)
+	}
+
+	tx, err := boil.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to start transaction: %v", err)
+	}
+
+	for _, u := range usages {
+		if err = u.Insert(ctx, tx, boil.Infer()); err != nil {
+			b.Log.Error("failed to insert usage entry", zap.Error(err))
+			// rollback?
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %v", err)
 	}
 
 	b.Log.Info("inserted latest usage stats")
 
 	return nil
+}
+
+func (b *Backend) promQuery(ctx context.Context, query string) (model.Vector, error) {
+	res, warnings, err := b.v1api.Query(ctx, query, time.Now())
+	if err != nil {
+		b.Log.Debug("error checking Prometheus", zap.Error(err))
+		return nil, fmt.Errorf("memory query failed: %w", err)
+	}
+
+	if len(warnings) > 0 {
+		b.Log.Debug("prometheus mem query", zap.Strings("warnings", warnings))
+	}
+
+	vec, ok := res.(model.Vector)
+	if !ok {
+		return nil, fmt.Errorf("expected a vector but received %s", res.Type().String())
+	}
+	return vec, nil
 }
