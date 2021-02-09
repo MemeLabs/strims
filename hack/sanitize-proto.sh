@@ -1,8 +1,5 @@
 #!/bin/bash
 
-SCHEMA_DIR="schema"
-INPUT_DIR="$SCHEMA_DIR/sanitized"
-rm -rf $INPUT_DIR
-mkdir -p $INPUT_DIR
-rm $INPUT_DIR/*.proto || echo "nothing to clean"
-hack/remove-services.sh $INPUT_DIR "$(find $SCHEMA_DIR -type f)"
+#find android/app/src/main/java -type f -name '*Client.kt' | xargs grep 'Service' | xargs rm
+grep -lr --include="*.kt" ": Service" | xargs rm
+find android/app/src/main/java -type f -name 'Grpc*' | xargs rm
