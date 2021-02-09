@@ -6,22 +6,31 @@ plugins {
     id 'com.squareup.wire'
 }
 
-task sanitizeProto(type: Exec) {
-    workingDir "../../"
-    commandLine "hack/sanitize-proto.sh"
-}
-
-preBuild.dependsOn sanitizeProto
-
 wire {
     sourcePath {
-        srcDir '../../schema/sanitized'
+        srcDir '../../schema'
     }
 
     kotlin {
         out = 'src/main/java'
     }
 }
+
+//task deleteServices(type: Delete) {
+//    doLast {
+//        delete 'app/src/main/java/gg/strims/video/v1/VideoIngressShareClient.kt'
+//        delete fileTree('app/src/main/java/gg/strims/') {
+//          include '**/*Client.kt'
+//        }
+//    }
+//}
+
+task deleteServices(type: Exec) {
+    workingDir "../../"
+    commandLine "hack/sanitize-proto.sh"
+}
+
+generateProtos.finalizedBy deleteServices
 
 android {
     compileSdkVersion 30
