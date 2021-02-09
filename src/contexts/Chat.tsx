@@ -6,7 +6,7 @@ import { useEffect } from "react";
 import { CallChatClientRequest, ChatClientEvent } from "../apis/strims/chat/v1/chat";
 import { Emote, emotes } from "../components/Chat/test-emotes";
 import stream, { messages } from "../components/Chat/test-history";
-import { useClient } from "./Api";
+import { useClient } from "./FrontendApi";
 
 type Action =
   | {

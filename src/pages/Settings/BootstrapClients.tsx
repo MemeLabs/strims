@@ -9,7 +9,7 @@ import {
 } from "../../apis/strims/network/v1/bootstrap/bootstrap";
 import { InputError, TextInput } from "../../components/Form";
 import { MainLayout } from "../../components/MainLayout";
-import { useCall, useLazyCall } from "../../contexts/Api";
+import { useCall, useLazyCall } from "../../contexts/FrontendApi";
 import jsonutil from "../../lib/jsonutil";
 
 const BootstrapClientForm = ({

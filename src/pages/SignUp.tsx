@@ -5,7 +5,7 @@ import { Link, Redirect } from "react-router-dom";
 import { ICreateProfileRequest } from "../apis/strims/profile/v1/profile";
 import { InputError, TextInput } from "../components/Form";
 import LandingPageLayout from "../components/LandingPageLayout";
-import { useCall } from "../contexts/Api";
+import { useCall } from "../contexts/FrontendApi";
 import { useProfile } from "../contexts/Profile";
 
 const SignUpPage = () => {

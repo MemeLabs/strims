@@ -5,7 +5,7 @@ import * as React from "react";
 
 import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
 import { MainLayout } from "../components/MainLayout";
-import { useClient, useLazyCall } from "../contexts/Api";
+import { useClient, useLazyCall } from "../contexts/FrontendApi";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
 import * as fmp4 from "../lib/media/fmp4";

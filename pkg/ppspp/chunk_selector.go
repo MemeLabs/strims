@@ -39,7 +39,7 @@ func (r *TestChunkSelector) SelectBins(count int, seen, requested, available *bi
 
 	var rc = uint64(count)
 
-	pmax := 1.5
+	pmax := 1.0
 	var d float64
 	bn := float64(end-start) / 2
 	if bn > 8 {
@@ -74,6 +74,9 @@ func (r *TestChunkSelector) SelectBins(count int, seen, requested, available *bi
 	n = count - int(rc)
 	return
 }
+
+// LiveChunkSelector ...
+type LiveChunkSelector = Test2ChunkSelector
 
 // Test2ChunkSelector ...
 type Test2ChunkSelector struct{}
@@ -118,6 +121,88 @@ func (r *Test2ChunkSelector) SelectBins(count int, seen, requested, available *b
 		requested.Set(ab)
 
 		ab = ab.BaseRight() + binmap.Bin((rand.Intn(16)+1)*2)
+	}
+
+	n = count - int(rc)
+	return
+}
+
+// Test3ChunkSelector ...
+type Test3ChunkSelector struct {
+	seed uint64
+}
+
+// SelectBins ...
+func (r *Test3ChunkSelector) SelectBins(count int, have, seen, requested, available *binmap.Map) (bins []binmap.Bin, n int) {
+	first := have.FindEmpty()
+	if have.Filled() {
+		first = have.RootBin().BaseRight() + 2
+	}
+	last := seen.FindLastFilled()
+
+	if last < first {
+		return
+	}
+
+	d := last - first
+	_ = d
+
+	// mid := (first + d/4) &^ 1
+	mid := first + 8
+
+	var rc = uint64(count)
+	var ab, bb binmap.Bin
+
+	// var k int
+	// print := func(fmt string, v ...interface{}) {
+	// 	if k++; k > 5000 {
+	// 		log.Printf(fmt, v...)
+	// 	}
+	// }
+
+	for rc > 0 {
+		if requested.Filled() {
+			ab = requested.RootBin().BaseRight() + 2
+		} else {
+			ab = requested.FindEmptyAfter(ab)
+		}
+
+		bb = available.FindFilledAfter(ab)
+		if bb.IsNone() {
+			break
+		}
+
+		ab = requested.Cover(ab)
+		bb = available.Cover(bb)
+
+		if ab.Contains(bb) {
+			ab = bb
+		} else if !bb.Contains(ab) {
+			ab = bb.BaseLeft()
+			continue
+		}
+
+		min := ab.BaseLeft()
+		if min < mid {
+			for ab.BaseRight() > mid || ab.BaseLength() > rc {
+				ab = ab.Left()
+			}
+
+			rc -= ab.BaseLength()
+			bins = append(bins, ab)
+			requested.Set(ab)
+		} else {
+			max := ab.BaseRight()
+			for b := min; b <= max && rc > 0; b += 2 {
+				if r.seed&(1<<((b>>1)&63)) == 0 {
+					rc--
+					bins = append(bins, b)
+					requested.Set(b)
+				}
+			}
+		}
+
+		ab = ab.BaseRight() + 2
 	}
 
 	n = count - int(rc)
@@ -195,5 +280,8 @@ func (r *FirstChunkSelector) SelectBins(count int, seen, requested, available *b
 		requested.Set(end)
 		end = end.BaseLeft()
 	}
+
+	// log.Println(">>>>>>>>", requested.FindLastFilled(), bins[0])
+
 	return
 }

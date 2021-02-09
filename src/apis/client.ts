@@ -4,6 +4,8 @@ import { RPCHost } from "@memelabs/protobuf/lib/rpc/host";
 
 import { ChatClient } from "./strims/chat/v1/chat_rpc";
 import { DebugClient } from "./strims/debug/v1/debug_rpc";
+import { DevToolsClient as DevToolsServiceClient } from "./strims/devtools/v1/devtools_rpc";
+import { CapConnClient } from "./strims/devtools/v1/ppspp/capconn_rpc";
 import { FundingClient as FundingServiceClient } from "./strims/funding/v1/funding_rpc";
 import { BootstrapFrontendClient } from "./strims/network/v1/bootstrap/bootstrap_rpc";
 import { DirectoryFrontendClient } from "./strims/network/v1/directory_rpc";
@@ -49,3 +51,16 @@ export class FundingClient {
     this.funding = new FundingServiceClient(host);
   }
 }
+
+export class DevToolsClient {
+  public devTools: DevToolsServiceClient;
+  public ppsppCapConn: CapConnClient;
+
+  constructor(w: Writable, r: Readable) {
+    const host = new RPCHost(w, r);
+    this.devTools = new DevToolsServiceClient(host);
+    this.ppsppCapConn = new CapConnClient(host);
+  }
+}
+
+export type Client = FrontendClient | FundingClient | DevToolsClient;

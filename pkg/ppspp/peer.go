@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/etcp"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
-	"github.com/MemeLabs/go-ppspp/pkg/ledbat"
 	"github.com/MemeLabs/go-ppspp/pkg/ma"
 )
 
@@ -26,8 +26,8 @@ const minPingInterval = time.Second * 10
 // Peer ...
 type Peer struct {
 	sync.Mutex
-	id                  []byte
-	ledbat              *ledbat.Controller
+	id []byte
+	// ledbat              *ledbat.Controller
 	chunkRate           ma.Simple
 	lastChunkTime       time.Time
 	requestedChunkCount uint64
@@ -36,17 +36,22 @@ type Peer struct {
 	rttSampleChannel    uint64
 	rttSampleBin        binmap.Bin
 	rttSampleTime       time.Time
+	rtt                 ma.Welford
 	channels            map[*Swarm]*channelWriter
+
+	cwnd *etcp.Control
 }
 
 // NewPeer ...
 func NewPeer(id []byte) *Peer {
 	return &Peer{
-		id:           id,
-		ledbat:       ledbat.New(),
+		id: id,
+		// ledbat:       ledbat.New(),
 		chunkRate:    ma.NewSimple(500, 10*time.Millisecond),
 		rttSampleBin: binmap.None,
 		channels:     map[*Swarm]*channelWriter{},
+
+		cwnd: etcp.NewControl(),
 	}
 }
 
@@ -68,10 +73,10 @@ func (p *Peer) removeChannel(s *Swarm) *channelWriter {
 }
 
 func (p *Peer) addDelaySample(sample time.Duration, chunkSize int) {
-	p.Lock()
-	defer p.Unlock()
+	// p.Lock()
+	// defer p.Unlock()
 
-	p.ledbat.AddDelaySample(sample, chunkSize)
+	// p.ledbat.AddDelaySample(sample, chunkSize)
 }
 
 // outstandingChunks ...
@@ -87,14 +92,15 @@ func (p *Peer) addRequestedChunks(n uint64) {
 // addCancelledChunk ...
 func (p *Peer) addCancelledChunk() {
 	p.cancelledChunkCount++
+	p.cwnd.OnDataLoss()
 }
 
-func (p *Peer) addReceivedChunk() {
+func (p *Peer) addReceivedChunk(n uint64) {
 	p.Lock()
 	defer p.Unlock()
 
-	p.receivedChunkCount++
-	p.chunkRate.AddWithTime(1, iotime.Load())
+	p.receivedChunkCount += n
+	p.chunkRate.AddWithTime(n, iotime.Load())
 }
 
 // chunkInterval ...
@@ -141,7 +147,9 @@ func (p *Peer) addRTTSample(cid uint64, b binmap.Bin, delay time.Duration) {
 	if rtt > delay {
 		rtt -= delay
 	}
-	p.ledbat.AddRTTSample(rtt)
+	// p.ledbat.AddRTTSample(rtt)
+	p.cwnd.OnAck(rtt)
+	p.rtt.Update(float64(rtt))
 	p.rttSampleBin = binmap.None
 }
 

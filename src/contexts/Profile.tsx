@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { Profile } from "../apis/strims/profile/v1/profile";
-import { useLazyCall } from "./Api";
+import { useLazyCall } from "./FrontendApi";
 
 interface State {
   loading: boolean;

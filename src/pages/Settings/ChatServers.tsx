@@ -11,7 +11,7 @@ import {
 import { Certificate } from "../../apis/strims/type/certificate";
 import { InputError, InputLabel, TextInput } from "../../components/Form";
 import { MainLayout } from "../../components/MainLayout";
-import { useCall, useLazyCall } from "../../contexts/Api";
+import { useCall, useLazyCall } from "../../contexts/FrontendApi";
 import { rootCertificate } from "../../lib/certificate";
 import jsonutil from "../../lib/jsonutil";
 

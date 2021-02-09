@@ -1,6 +1,7 @@
 package ppspp
 
 import (
+	"log"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
@@ -47,6 +48,9 @@ func (s *binTimeoutQueue) resize(size uint64) {
 func (s *binTimeoutQueue) Push(b binmap.Bin, t time.Time) {
 	i, ok := s.ring.Push()
 	if !ok {
+		h, _ := s.ring.Head()
+		t, _ := s.ring.Tail()
+		log.Printf("grow called %p head: %d tail: %d, size: %d, len(values): %d, bin: %d", s, h, t, s.ring.Size(), len(s.values), b)
 		s.grow()
 		i, _ = s.ring.Push()
 	}

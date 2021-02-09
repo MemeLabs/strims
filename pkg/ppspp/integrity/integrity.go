@@ -59,6 +59,34 @@ func (f MerkleHashTreeFunction) HashSize() int {
 	}
 }
 
+// HashFunc ...
+func (f MerkleHashTreeFunction) HashFunc() HashFunc {
+	switch f {
+	case MerkleHashTreeFunctionSHA1:
+		return sha1.New
+	case MerkleHashTreeFunctionSHA256:
+		return sha256.New
+	case MerkleHashTreeFunctionSHA512:
+		return sha512.New
+	case MerkleHashTreeFunctionBLAKE2B256:
+		return blake2bFunc(blake2b.New256)
+	case MerkleHashTreeFunctionBLAKE2B512:
+		return blake2bFunc(blake2b.New512)
+	default:
+		panic("unsupported hash tree function")
+	}
+}
+
+// HashFunc ...
+type HashFunc func() hash.Hash
+
+func blake2bFunc(fn func([]byte) (hash.Hash, error)) HashFunc {
+	return func() hash.Hash {
+		h, _ := fn(nil)
+		return h
+	}
+}
+
 // LiveSignatureAlgorithm ...
 type LiveSignatureAlgorithm uint8
 
@@ -73,6 +101,16 @@ func (a LiveSignatureAlgorithm) SignatureSize() int {
 	switch a {
 	case LiveSignatureAlgorithmED25519:
 		return ed25519.SignatureSize
+	default:
+		panic("unsupported live signature algorithm")
+	}
+}
+
+// Verifier ...
+func (a LiveSignatureAlgorithm) Verifier(key []byte) SignatureVerifier {
+	switch a {
+	case LiveSignatureAlgorithmED25519:
+		return NewED25519Verifier(key)
 	default:
 		panic("unsupported live signature algorithm")
 	}
@@ -123,25 +161,7 @@ type Writer interface {
 
 // NewVerifier ...
 func NewVerifier(key []byte, opt SwarmVerifierOptions) (SwarmVerifier, error) {
-	var signatureVerifier SignatureVerifier
-	switch opt.LiveSignatureAlgorithm {
-	case LiveSignatureAlgorithmED25519:
-		signatureVerifier = NewED25519Verifier(key)
-	}
-
-	var hash hashFunc
-	switch opt.MerkleHashTreeFunction {
-	case MerkleHashTreeFunctionSHA1:
-		hash = sha1.New
-	case MerkleHashTreeFunctionSHA256:
-		hash = sha256.New
-	case MerkleHashTreeFunctionSHA512:
-		hash = sha512.New
-	case MerkleHashTreeFunctionBLAKE2B256:
-		hash = blake2bFunc(blake2b.New256)
-	case MerkleHashTreeFunctionBLAKE2B512:
-		hash = blake2bFunc(blake2b.New512)
-	}
+	signatureVerifier := opt.LiveSignatureAlgorithm.Verifier(key)
 
 	switch opt.ProtectionMethod {
 	case ProtectionMethodNone:
@@ -152,7 +172,7 @@ func NewVerifier(key []byte, opt SwarmVerifierOptions) (SwarmVerifier, error) {
 			ChunkSize:          opt.ChunkSize,
 			ChunksPerSignature: opt.ChunksPerSignature,
 			Verifier:           signatureVerifier,
-			Hash:               hash,
+			Hash:               opt.MerkleHashTreeFunction.HashFunc(),
 		}), nil
 	case ProtectionMethodSignAll:
 		return NewSignAllSwarmVerifier(&SignAllOptions{
@@ -162,15 +182,6 @@ func NewVerifier(key []byte, opt SwarmVerifierOptions) (SwarmVerifier, error) {
 		}), nil
 	default:
 		return nil, errors.New("unsupported protection method")
-	}
-}
-
-type hashFunc func() hash.Hash
-
-func blake2bFunc(fn func([]byte) (hash.Hash, error)) hashFunc {
-	return func() hash.Hash {
-		h, _ := fn(nil)
-		return h
 	}
 }
 

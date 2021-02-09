@@ -4,7 +4,7 @@ import { useLocation, useParams } from "react-router-dom";
 
 import { MainLayout } from "../components/MainLayout";
 import VideoPlayer from "../components/VideoPlayer";
-import { useClient } from "../contexts/Api";
+import { useClient } from "../contexts/FrontendApi";
 import useQuery from "../hooks/useQuery";
 
 interface PlayerTestRouteParams {

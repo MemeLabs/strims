@@ -18,7 +18,7 @@ import {
   ToggleInput,
 } from "../../components/Form";
 import { PrivateRoute } from "../../components/PrivateRoute";
-import { useCall, useClient, useLazyCall } from "../../contexts/Api";
+import { useCall, useClient, useLazyCall } from "../../contexts/FrontendApi";
 import { rootCertificate } from "../../lib/certificate";
 import hostRegex from "../../lib/hostRegex";
 import jsonutil from "../../lib/jsonutil";

@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { Base64 } from "js-base64";
-import Tooltip from "rc-tooltip";
+// import Tooltip from "rc-tooltip";
 import * as React from "react";
 import { ReactElement } from "react";
 import {
@@ -28,11 +28,13 @@ import usePortal from "react-useportal";
 
 import { MetricsFormat } from "../apis/strims/debug/v1/debug";
 import { CreateNetworkResponse, Network } from "../apis/strims/network/v1/network";
-import { useCall, useClient } from "../contexts/Api";
+import { useCall, useClient } from "../contexts/FrontendApi";
 import { useTheme } from "../contexts/Theme";
 import useObjectURL from "../hooks/useObjectURL";
 import { rootCertificate } from "../lib/certificate";
 import AddNetworkModal from "./AddNetworkModal";
+
+const Tooltip = ({ children }: any) => children;
 
 const NetworkAddButton: React.FunctionComponent<React.ComponentProps<"button">> = ({
   children,

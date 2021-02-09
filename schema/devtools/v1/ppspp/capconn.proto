@@ -1,0 +1,58 @@
+syntax = "proto3";
+
+package strims.devtools.v1.ppspp;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/devtools/v1/ppspp;ppspp";
+option java_package = "gg.strims.devtools.v1.ppspp";
+option swift_prefix = "SDT";
+
+message CapConnLog {
+  message PeerLog {
+    message Event {
+      enum Code {
+        EVENT_CODE_INIT = 0;
+        EVENT_CODE_WRITE = 1;
+        EVENT_CODE_WRITE_ERR = 2;
+        EVENT_CODE_FLUSH = 3;
+        EVENT_CODE_FLUSH_ERR = 4;
+        EVENT_CODE_READ = 5;
+        EVENT_CODE_READ_ERR = 6;
+      }
+
+      Code code = 1;
+      int64 timestamp = 2;
+      repeated uint32 message_types = 3;
+      repeated uint64 message_addresses = 4;
+    }
+
+    string label = 1;
+    repeated Event events = 2;
+  }
+
+  repeated PeerLog peer_logs = 1;
+}
+
+message CapConnWatchLogsRequest {}
+
+message CapConnWatchLogsResponse {
+  enum Op {
+    CREATE = 0;
+    REMOVE = 1;
+  }
+
+  Op op = 1;
+  string name = 2;
+}
+
+message CapConnLoadLogRequest {
+  string name = 1;
+}
+
+message CapConnLoadLogResponse {
+  CapConnLog log = 1;
+}
+
+service CapConn {
+  rpc WatchLogs(CapConnWatchLogsRequest) returns (stream CapConnWatchLogsResponse);
+  rpc LoadLog(CapConnLoadLogRequest) returns (CapConnLoadLogResponse);
+}

@@ -1,7 +1,7 @@
 import * as React from "react";
 
 import { FrontendClient } from "../apis/client";
-import { Provider as ApiProvider } from "../contexts/Api";
+import { Provider as ApiProvider } from "../contexts/FrontendApi";
 import { Provider as ProfileProvider } from "../contexts/Profile";
 import { Provider as ThemeProvider } from "../contexts/Theme";
 

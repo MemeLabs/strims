@@ -28,7 +28,7 @@ type MerkleOptions struct {
 	ChunkSize          int
 	ChunksPerSignature int
 	Verifier           SignatureVerifier
-	Hash               hashFunc
+	Hash               HashFunc
 }
 
 // NewMerkleSwarmVerifier ...
@@ -55,7 +55,7 @@ type MerkleSwarmVerifier struct {
 	segments          []*merkleTreeSegment
 	chunkSize         int
 	signatureVerifier SignatureVerifier
-	hash              hashFunc
+	hash              HashFunc
 	treePool          sync.Pool
 }
 

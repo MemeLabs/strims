@@ -14,7 +14,7 @@ import {
 } from "../../apis/strims/network/v1/network";
 import { InputError, InputLabel, TextInput } from "../../components/Form";
 import { MainLayout } from "../../components/MainLayout";
-import { useCall, useClient, useLazyCall } from "../../contexts/Api";
+import { useCall, useClient, useLazyCall } from "../../contexts/FrontendApi";
 import { useProfile } from "../../contexts/Profile";
 import jsonutil from "../../lib/jsonutil";
 

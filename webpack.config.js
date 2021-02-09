@@ -4,7 +4,6 @@ const { CleanWebpackPlugin } = require("clean-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
 const webpack = require("webpack");
-const bundleAnalyzer = require("webpack-bundle-analyzer");
 
 module.exports = (env, argv) => {
   const scriptModuleRule = {
@@ -59,6 +58,11 @@ module.exports = (env, argv) => {
       filename: "test.html",
       chunks: ["test"],
       title: "test",
+    }),
+    new HtmlWebpackPlugin({
+      filename: "devtools.html",
+      chunks: ["devtools"],
+      title: "devtools",
     }),
     // new HtmlWebpackPlugin({
     //   filename: "funding.html",
@@ -146,6 +150,7 @@ module.exports = (env, argv) => {
           entry: {
             index: path.join(__dirname, "src", "web", "index.tsx"),
             test: path.join(__dirname, "src", "web", "test.ts"),
+            devtools: path.join(__dirname, "src", "devtools", "index.tsx"),
             // funding: path.join(__dirname, "src", "funding", "index.tsx"),
           },
           devtool,

@@ -479,7 +479,7 @@ func (c *channelMessageHandler) HandleData(m codec.Data) {
 	})
 
 	if ok {
-		c.peer.addReceivedChunk()
+		c.peer.addReceivedChunk(m.Address.Bin().BaseLength())
 	}
 	c.peer.addRTTSample(c.channel.id, m.Address.Bin(), 0)
 }
@@ -544,7 +544,7 @@ func (c *channelMessageHandler) HandlePing(m codec.Ping) {
 
 func (c *channelMessageHandler) HandlePong(m codec.Pong) {
 	c.metrics.PongCount.Inc()
-	// c.peer.addRTTSample(c.channel.id, binmap.Bin(v.Nonce.Value), time.Duration(v.Delay))
+	// c.peer.addRTTSample(c.channel.id, binmap.Bin(m.Nonce.Value), time.Duration(m.Delay))
 	c.peer.addRTTSample(c.channel.id, binmap.Bin(m.Nonce.Value), 0)
 }
 

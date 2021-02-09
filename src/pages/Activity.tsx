@@ -6,7 +6,7 @@ import { Sparklines, SparklinesBars } from "react-sparklines";
 
 import { ReadMetricsRequest } from "../apis/strims/debug/v1/debug";
 import { MainLayout } from "../components/MainLayout";
-import { useClient, useLazyCall } from "../contexts/Api";
+import { useClient, useLazyCall } from "../contexts/FrontendApi";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
 

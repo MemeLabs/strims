@@ -24,7 +24,7 @@ type SignAllOptions struct {
 	LiveDiscardWindow int
 	ChunkSize         int
 	Verifier          SignatureVerifier
-	Hash              hashFunc
+	Hash              HashFunc
 }
 
 // NewSignAllSwarmVerifier ...

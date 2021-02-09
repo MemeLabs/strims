@@ -2,7 +2,7 @@ import { MutableRefObject, useEffect, useMemo } from "react";
 import { useGetSet } from "react-use";
 
 import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
-import { useClient } from "../contexts/Api";
+import { useClient } from "../contexts/FrontendApi";
 import * as fmp4 from "../lib/media/fmp4";
 import * as mpegts from "../lib/media/mpegts";
 import * as webm from "../lib/media/webm";

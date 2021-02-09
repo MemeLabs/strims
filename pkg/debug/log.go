@@ -2,8 +2,11 @@ package debug
 
 import (
 	"fmt"
+	"log"
 	"path"
 	"runtime"
+	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -58,4 +61,24 @@ func Magenta(v ...interface{}) {
 // Cyan ...
 func Cyan(v ...interface{}) {
 	printLog("\u001b[46m", v)
+}
+
+var logEveryNCallers = sync.Map{}
+
+func logEveryN(n int, msg ...interface{}) {
+	pc, _, _, _ := runtime.Caller(1)
+	v, _ := logEveryNCallers.LoadOrStore(pc, new(uint64))
+	if atomic.AddUint64(v.(*uint64), 1)%uint64(n) == 0 {
+		log.Println(msg...)
+	}
+}
+
+// LogEveryN ...
+func LogEveryN(n int, msg ...interface{}) {
+	logEveryN(n, msg...)
+}
+
+// LogfEveryN ...
+func LogfEveryN(n int, format string, a ...interface{}) {
+	logEveryN(n, fmt.Sprintf(format, a...))
 }

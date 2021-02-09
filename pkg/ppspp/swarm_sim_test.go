@@ -25,12 +25,15 @@ type testPeer struct {
 }
 
 func TestSwarmSim(t *testing.T) {
-	t.SkipNow()
+	byteRate := 8000 * ppspptest.Kbps
+	writesPerSecond := 10
+
+	bytesReadGoal := byteRate * 20
 
 	peers := []testPeer{
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   10 * ppspptest.Mbps,
 			city:         ppspptest.NewYork,
 		},
 		{
@@ -48,31 +51,31 @@ func TestSwarmSim(t *testing.T) {
 			uploadRate:   15 * ppspptest.Mbps,
 			city:         ppspptest.SanFrancisco,
 		},
-		{
-			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
-			city:         ppspptest.LosAngeles,
-		},
-		{
-			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
-			city:         ppspptest.London,
-		},
-		{
-			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
-			city:         ppspptest.Berlin,
-		},
-		{
-			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
-			city:         ppspptest.Paris,
-		},
-		{
-			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
-			city:         ppspptest.Rome,
-		},
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.LosAngeles,
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.London,
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Berlin,
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Paris,
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Rome,
+		// },
 	}
 
 	key := ppspptest.Key()
@@ -126,7 +129,12 @@ func TestSwarmSim(t *testing.T) {
 
 	for _, c := range clients {
 		c.scheduler = NewScheduler(ctx, logger)
+		c.scheduler.label = c.city.Name
 	}
+
+	f, _ := os.OpenFile(fmt.Sprintf("/tmp/capconn/log-%d.bin", time.Now().Unix()), os.O_CREATE|os.O_WRONLY, 0644)
+	capLog := ppspptest.NewCapLogWriter(f)
+	defer f.Close()
 
 	for i := 0; i < len(clients); i++ {
 		for j := i + 1; j < len(clients); j++ {
@@ -143,6 +151,11 @@ func TestSwarmSim(t *testing.T) {
 
 			latency := ppspptest.ComputeLatency(clients[i].city.LatLng, clients[j].city.LatLng)
 			iConn, jConn = ppspptest.NewLagConnPair(iConn, jConn, latency)
+
+			iConn, err = ppspptest.NewCapConn(iConn, capLog.Writer(), fmt.Sprintf("%s : %s", clients[i].city.Name, clients[j].city.Name))
+			assert.NoError(t, err, "cap conn open failed")
+			jConn, err = ppspptest.NewCapConn(jConn, capLog.Writer(), fmt.Sprintf("%s : %s", clients[j].city.Name, clients[i].city.Name))
+			assert.NoError(t, err, "cap conn open failed")
 
 			imConn := ppspptest.NewMeterConn(iConn)
 			jmConn := ppspptest.NewMeterConn(jConn)
@@ -161,22 +174,21 @@ func TestSwarmSim(t *testing.T) {
 	}
 
 	go func() {
-		t := time.NewTicker(100 * time.Millisecond)
-		// b := make([]byte, 75000)
-		b := make([]byte, 43750)
+		b := make([]byte, byteRate/writesPerSecond)
+		t := time.NewTicker(time.Second / time.Duration(writesPerSecond))
 		var nn int
 		for range t.C {
 			n, _ := src.Write(b)
-			if nn += n; nn >= 10000000 {
+			if nn += n; nn >= bytesReadGoal*2 {
 				break
 			}
 		}
 	}()
 
 	go func() {
-		f, err := os.OpenFile(fmt.Sprintf("./samples-%d.csv", time.Now().Unix()), os.O_CREATE|os.O_WRONLY, 0644)
-		assert.Nil(t, err, "log open failed")
-		defer f.Close()
+		// f, err := os.OpenFile(fmt.Sprintf("./samples-%d.csv", time.Now().Unix()), os.O_CREATE|os.O_WRONLY, 0644)
+		// assert.Nil(t, err, "log open failed")
+		// defer f.Close()
 
 		var prev []int64
 
@@ -193,46 +205,60 @@ func TestSwarmSim(t *testing.T) {
 			}
 		}
 		labels.WriteRune('\n')
-		_, err = f.WriteString(labels.String())
+		// _, err = f.WriteString(labels.String())
 		assert.Nil(t, err, "writing string failed")
 
 		// t := time.NewTicker(time.Second)
 		ticker := time.NewTicker(time.Second)
 		var tick int
 		for range ticker.C {
-			// log.Println("==================================================")
+			log.Println("=====================================================")
 
 			var row strings.Builder
 			row.WriteString(strconv.FormatInt(int64(tick), 10))
 			var k int
-			for _, c := range clients {
-				var rn, wn int64
+			for i, c := range clients {
+				c.swarm.bins.Lock()
+				nextEmpty := c.swarm.bins.Requested.FindEmpty()
+				lastFilled := c.swarm.bins.Requested.FindLastFilled()
+				log.Printf("next empty bin: %s, lastFilled: %s", nextEmpty, lastFilled)
+				c.swarm.bins.Unlock()
+
+				log.Printf("%-16s%-20s %-12s %-7s %-12s %-12s %-7s %s", "from", "to", "bytes", "Bps", "%", "bytes", "Bps", "%")
+
+				var rn, wn, rr, wr int64
 				for j, conn := range c.conns {
 					if conn != nil {
 						rn += conn.ReadBytes()
+						rr += conn.ReadByteRate()
 						wn += conn.WrittenBytes()
+						wr += conn.WriteByteRate()
 
 						row.WriteString(fmt.Sprintf(",%d", conn.ReadBytes()-prev[k]))
 						prev[k] = conn.ReadBytes()
 						k++
 
 						log.Printf(
-							"%-16s%-16s in: %-12d out: %d",
+							"%-16s%-16s in: %-12d %-7d %-7.2f out: %-12d %-7d %.2f",
 							c.city.Name,
 							clients[j].city.Name,
 							conn.ReadBytes(),
+							conn.ReadByteRate(),
+							float64(conn.ReadByteRate())/float64(peers[i].downloadRate)*100,
 							conn.WrittenBytes(),
+							conn.WriteByteRate(),
+							float64(conn.WriteByteRate())/float64(peers[i].uploadRate)*100,
 						)
 					}
 				}
-				log.Printf("%-32s in: %-12d out: %d", c.city.Name, rn, wn)
-				log.Println("____")
+				log.Printf("%-32s in: %-12d %-15d out: %-12d %-7d", c.city.Name, rn, rr, wn, wr)
+				log.Println("")
 
 				// row.WriteString(fmt.Sprintf(",%d", wn-prev[i]))
 				// prev[i] = wn
 			}
 			row.WriteRune('\n')
-			_, err = f.WriteString(row.String())
+			// _, err = f.WriteString(row.String())
 			assert.Nil(t, err, "writing string failed")
 
 			// log.Println("---")
@@ -259,8 +285,8 @@ func TestSwarmSim(t *testing.T) {
 			// 	}
 			// }()
 
-			if _, err := io.CopyN(&w, clients[i].swarm.Reader(), 5000000); err != nil {
-				log.Println(err)
+			if _, err := io.CopyN(&w, clients[i].swarm.Reader(), int64(bytesReadGoal)); err != nil {
+				log.Panicln(err)
 			}
 		}(i)
 	}

@@ -9,7 +9,7 @@ ARG USER_UID=1000
 ARG USER_GID=$USER_UID
 
 ARG NODE_VERSION=14.x
-ARG GO_VERSION=1.15.6
+ARG GO_VERSION=1.15.7
 ARG PROTOC_VERSION=3.14.0
 
 # Avoid warnings by switching to noninteractive
@@ -73,12 +73,18 @@ RUN \
   && GOPATH=/tmp/gotools go get -x -d github.com/stamblerre/gocode 2>&1 \
   && GOPATH=/tmp/gotools go build -o gocode-gomod github.com/stamblerre/gocode \
   # Build protoc plugins
+  && GOPATH=/tmp/gotools go get -x -d \
+    github.com/MemeLabs/protobuf/cmd/gorpc \
+    github.com/MemeLabs/protobuf/cmd/tsrpc \
+    github.com/MemeLabs/protobuf/cmd/ts 2>&1 \
   && GOPATH=/tmp/gotools go build -o protoc-gen-gorpc github.com/MemeLabs/protobuf/cmd/gorpc \
   && GOPATH=/tmp/gotools go build -o protoc-gen-tsrpc github.com/MemeLabs/protobuf/cmd/tsrpc \
   && GOPATH=/tmp/gotools go build -o protoc-gen-ts github.com/MemeLabs/protobuf/cmd/ts \
   # Install go tools
   && mv /tmp/gotools/bin/* /usr/local/bin/ \
   && mv /tmp/gotools/gocode-gomod /usr/local/bin/ \
+  && mv /tmp/gotools/protoc-gen-* /usr/local/bin/ \
+  # Clean up go path
   && cd ~ \
   && rm -rf /tmp/gotools \
   # Install golangci-lint

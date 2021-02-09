@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0 // indirect
-	github.com/MemeLabs/protobuf v0.0.0-20210202160921-744257ca750e
+	github.com/MemeLabs/protobuf v0.1.3
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/aead/ecdh v0.2.0
 	github.com/avast/retry-go v3.0.0+incompatible
@@ -20,6 +20,7 @@ require (
 	github.com/emicklei/proto v1.9.0
 	github.com/emirpasic/gods v1.12.0
 	github.com/friendsofgo/errors v0.9.2
+	github.com/fsnotify/fsnotify v1.4.9
 	github.com/gobwas/httphead v0.0.0-20200921212729-da3d93bc3c58 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.0.4 // indirect
