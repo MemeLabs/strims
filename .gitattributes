@@ -10,5 +10,5 @@ ios/App/App.xcodeproj/** linguist-generated
 ios/App/App/Info.plist linguist-generated
 ios/App/App/API/* linguist-generated
 ios/App/Bridge.framework linguist-generated
-android/app/src/main/java/gg/strims/ppspp/proto/* linguist-generated
+android/app/src/main/java/gg/strims/api/* linguist-generated
 android/.idea/** linguist-generated

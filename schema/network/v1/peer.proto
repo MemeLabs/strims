@@ -3,7 +3,7 @@ syntax = "proto3";
 package strims.network.v1;
 
 option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1;network";
-option java_package = "gg.strims.network.v1";
+option java_package = "gg.strims.api.network.v1";
 option swift_prefix = "SNT";
 
 import "type/certificate.proto";

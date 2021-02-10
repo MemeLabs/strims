@@ -3,7 +3,7 @@ syntax = "proto3";
 package strims.dao.v1;
 
 option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/dao/v1;dao";
-option java_package = "gg.strims.dao.v1";
+option java_package = "gg.strims.api.dao.v1";
 option swift_prefix = "SDA";
 
 message SecondaryIndexKey {

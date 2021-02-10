@@ -3,7 +3,7 @@ syntax = "proto3";
 package strims.profile.v1;
 
 option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1;profile";
-option java_package = "gg.strims.profile.v1";
+option java_package = "gg.strims.api.profile.v1";
 option swift_prefix = "SPF";
 
 import "type/key.proto";

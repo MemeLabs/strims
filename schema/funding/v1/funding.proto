@@ -3,7 +3,7 @@ syntax = "proto3";
 package strims.funding.v1;
 
 option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/funding/v1;funding";
-option java_package = "gg.strims.funding.v1";
+option java_package = "gg.strims.api.funding.v1";
 option swift_prefix = "SFG";
 
 message FundingTestRequest {
