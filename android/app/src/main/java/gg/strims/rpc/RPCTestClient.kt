@@ -1,4 +1,4 @@
-import gg.strims.ppspp.proto.*
+import gg.strims.proto.*
 
 
 class RPCTestClient(filepath: String) : RPCClient(filepath) {

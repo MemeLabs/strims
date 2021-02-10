@@ -2,10 +2,10 @@ package gg.strims.rpc
 
 import android.util.Log
 import com.squareup.wire.*
-import gg.strims.ppspp.proto.Call
-import gg.strims.ppspp.proto.Cancel
-import gg.strims.ppspp.proto.Close
-import gg.strims.ppspp.proto.Error
+import org.memelabs.proto.Call
+import org.memelabs.proto.Cancel
+import org.memelabs.proto.Close
+import org.memelabs.proto.Error
 import kotlinx.coroutines.GlobalScope
 import kotlinx.coroutines.launch
 import okio.buffer

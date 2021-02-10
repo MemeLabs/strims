@@ -76,6 +76,12 @@ android {
 }
 
 dependencies {
+    implementation('org.memelabs.protobuf:test3:1.0') {
+        version {
+            branch = 'android'
+        }
+    }
+
     implementation name: 'bridge', ext: 'aar'
 
     implementation Libs.Proto.wire

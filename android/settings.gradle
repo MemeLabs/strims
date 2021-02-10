@@ -1,3 +1,8 @@
 include ':app'
 rootProject.name = "ppspp"
 
+sourceControl {
+    gitRepository("https://github.com/MemeLabs/protobuf.git") {
+        producesModule("org.memelabs.protobuf:test3")
+    }
+}
