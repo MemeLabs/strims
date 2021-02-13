@@ -6,12 +6,12 @@ import {
   ICertificate as strims_type_ICertificate,
 } from "../../type/certificate";
 
-export interface INetworkPeerNegotiateRequest {
+export type INetworkPeerNegotiateRequest = {
   keyCount?: number;
 }
 
 export class NetworkPeerNegotiateRequest {
-  keyCount: number = 0;
+  keyCount: number;
 
   constructor(v?: INetworkPeerNegotiateRequest) {
     this.keyCount = v?.keyCount || 0;
@@ -42,12 +42,12 @@ export class NetworkPeerNegotiateRequest {
   }
 }
 
-export interface INetworkPeerNegotiateResponse {
+export type INetworkPeerNegotiateResponse = {
   keyCount?: number;
 }
 
 export class NetworkPeerNegotiateResponse {
-  keyCount: number = 0;
+  keyCount: number;
 
   constructor(v?: INetworkPeerNegotiateResponse) {
     this.keyCount = v?.keyCount || 0;
@@ -78,13 +78,13 @@ export class NetworkPeerNegotiateResponse {
   }
 }
 
-export interface INetworkPeerBinding {
+export type INetworkPeerBinding = {
   port?: number;
   certificate?: strims_type_ICertificate | undefined;
 }
 
 export class NetworkPeerBinding {
-  port: number = 0;
+  port: number;
   certificate: strims_type_Certificate | undefined;
 
   constructor(v?: INetworkPeerBinding) {
@@ -121,15 +121,15 @@ export class NetworkPeerBinding {
   }
 }
 
-export interface INetworkPeerOpenRequest {
+export type INetworkPeerOpenRequest = {
   bindings?: INetworkPeerBinding[];
 }
 
 export class NetworkPeerOpenRequest {
-  bindings: NetworkPeerBinding[] = [];
+  bindings: NetworkPeerBinding[];
 
   constructor(v?: INetworkPeerOpenRequest) {
-    if (v?.bindings) this.bindings = v.bindings.map(v => new NetworkPeerBinding(v));
+    this.bindings = v?.bindings ? v.bindings.map(v => new NetworkPeerBinding(v)) : [];
   }
 
   static encode(m: NetworkPeerOpenRequest, w?: Writer): Writer {
@@ -157,15 +157,15 @@ export class NetworkPeerOpenRequest {
   }
 }
 
-export interface INetworkPeerOpenResponse {
+export type INetworkPeerOpenResponse = {
   bindings?: INetworkPeerBinding[];
 }
 
 export class NetworkPeerOpenResponse {
-  bindings: NetworkPeerBinding[] = [];
+  bindings: NetworkPeerBinding[];
 
   constructor(v?: INetworkPeerOpenResponse) {
-    if (v?.bindings) this.bindings = v.bindings.map(v => new NetworkPeerBinding(v));
+    this.bindings = v?.bindings ? v.bindings.map(v => new NetworkPeerBinding(v)) : [];
   }
 
   static encode(m: NetworkPeerOpenResponse, w?: Writer): Writer {
@@ -193,12 +193,12 @@ export class NetworkPeerOpenResponse {
   }
 }
 
-export interface INetworkPeerCloseRequest {
+export type INetworkPeerCloseRequest = {
   key?: Uint8Array;
 }
 
 export class NetworkPeerCloseRequest {
-  key: Uint8Array = new Uint8Array();
+  key: Uint8Array;
 
   constructor(v?: INetworkPeerCloseRequest) {
     this.key = v?.key || new Uint8Array();
@@ -229,13 +229,13 @@ export class NetworkPeerCloseRequest {
   }
 }
 
-export interface INetworkPeerCloseResponse {
+export type INetworkPeerCloseResponse = {
 }
 
 export class NetworkPeerCloseResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: INetworkPeerCloseResponse) {
-    // noop
   }
 
   static encode(m: NetworkPeerCloseResponse, w?: Writer): Writer {
@@ -249,7 +249,7 @@ export class NetworkPeerCloseResponse {
   }
 }
 
-export interface INetworkPeerUpdateCertificateRequest {
+export type INetworkPeerUpdateCertificateRequest = {
   certificate?: strims_type_ICertificate | undefined;
 }
 
@@ -285,13 +285,13 @@ export class NetworkPeerUpdateCertificateRequest {
   }
 }
 
-export interface INetworkPeerUpdateCertificateResponse {
+export type INetworkPeerUpdateCertificateResponse = {
 }
 
 export class NetworkPeerUpdateCertificateResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: INetworkPeerUpdateCertificateResponse) {
-    // noop
   }
 
   static encode(m: NetworkPeerUpdateCertificateResponse, w?: Writer): Writer {

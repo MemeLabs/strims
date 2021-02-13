@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import { Link, Switch } from "react-router-dom";
 
 import { MainLayout } from "../../components/MainLayout";

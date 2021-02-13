@@ -6,13 +6,13 @@ import {
   ICertificate as strims_type_ICertificate,
 } from "../../../type/certificate";
 
-export interface IBootstrapPeerGetPublishEnabledRequest {
+export type IBootstrapPeerGetPublishEnabledRequest = {
 }
 
 export class BootstrapPeerGetPublishEnabledRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IBootstrapPeerGetPublishEnabledRequest) {
-    // noop
   }
 
   static encode(m: BootstrapPeerGetPublishEnabledRequest, w?: Writer): Writer {
@@ -26,12 +26,12 @@ export class BootstrapPeerGetPublishEnabledRequest {
   }
 }
 
-export interface IBootstrapPeerGetPublishEnabledResponse {
+export type IBootstrapPeerGetPublishEnabledResponse = {
   enabled?: boolean;
 }
 
 export class BootstrapPeerGetPublishEnabledResponse {
-  enabled: boolean = false;
+  enabled: boolean;
 
   constructor(v?: IBootstrapPeerGetPublishEnabledResponse) {
     this.enabled = v?.enabled || false;
@@ -62,13 +62,13 @@ export class BootstrapPeerGetPublishEnabledResponse {
   }
 }
 
-export interface IBootstrapPeerListNetworksRequest {
+export type IBootstrapPeerListNetworksRequest = {
 }
 
 export class BootstrapPeerListNetworksRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IBootstrapPeerListNetworksRequest) {
-    // noop
   }
 
   static encode(m: BootstrapPeerListNetworksRequest, w?: Writer): Writer {
@@ -82,13 +82,13 @@ export class BootstrapPeerListNetworksRequest {
   }
 }
 
-export interface IBootstrapPeerListNetworksResponse {
+export type IBootstrapPeerListNetworksResponse = {
 }
 
 export class BootstrapPeerListNetworksResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IBootstrapPeerListNetworksResponse) {
-    // noop
   }
 
   static encode(m: BootstrapPeerListNetworksResponse, w?: Writer): Writer {
@@ -102,7 +102,7 @@ export class BootstrapPeerListNetworksResponse {
   }
 }
 
-export interface IBootstrapPeerPublishRequest {
+export type IBootstrapPeerPublishRequest = {
   certificate?: strims_type_ICertificate | undefined;
 }
 
@@ -138,13 +138,13 @@ export class BootstrapPeerPublishRequest {
   }
 }
 
-export interface IBootstrapPeerPublishResponse {
+export type IBootstrapPeerPublishResponse = {
 }
 
 export class BootstrapPeerPublishResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IBootstrapPeerPublishResponse) {
-    // noop
   }
 
   static encode(m: BootstrapPeerPublishResponse, w?: Writer): Writer {

@@ -224,7 +224,7 @@ type capLogHandler struct {
 	events []*ppsppv1.CapConnLog_PeerLog_Event
 }
 
-func (h *capLogHandler) appendEvent(code ppsppv1.CapConnLog_PeerLog_Event_Code, t time.Time, messageTypes []uint32, messageAddresses []uint64) {
+func (h *capLogHandler) appendEvent(code ppsppv1.CapConnLog_PeerLog_Event_Code, t time.Time, messageTypes []ppsppv1.CapConnLog_PeerLog_Event_MessageType, messageAddresses []uint64) {
 	h.events = append(h.events, &ppsppv1.CapConnLog_PeerLog_Event{
 		Code:             code,
 		Timestamp:        t.UnixNano(),
@@ -272,7 +272,7 @@ func (h *capLogHandler) HandleReadErr(t time.Time, err error) {
 
 type codecHandler struct {
 	cr               *codec.Reader
-	messageTypes     []uint32
+	messageTypes     []ppsppv1.CapConnLog_PeerLog_Event_MessageType
 	messageAddresses []uint64
 }
 
@@ -290,14 +290,14 @@ func (h *codecHandler) HandleHandshake(v codec.Handshake) error {
 }
 
 func (h *codecHandler) appendMessage(t codec.MessageType, a codec.Address) {
-	h.messageTypes = append(h.messageTypes, uint32(t))
+	h.messageTypes = append(h.messageTypes, ppsppv1.CapConnLog_PeerLog_Event_MessageType(t))
 	h.messageAddresses = append(h.messageAddresses, uint64(a))
 }
 
-func (h *codecHandler) ReadMessages() ([]uint32, []uint64) {
+func (h *codecHandler) ReadMessages() ([]ppsppv1.CapConnLog_PeerLog_Event_MessageType, []uint64) {
 	t := h.messageTypes
 	a := h.messageAddresses
-	h.messageTypes = []uint32{}
+	h.messageTypes = []ppsppv1.CapConnLog_PeerLog_Event_MessageType{}
 	h.messageAddresses = []uint64{}
 	return t, a
 }

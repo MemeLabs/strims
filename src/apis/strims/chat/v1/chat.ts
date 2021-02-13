@@ -6,13 +6,13 @@ import {
   IKey as strims_type_IKey,
 } from "../../type/key";
 
-export interface ICreateChatServerRequest {
+export type ICreateChatServerRequest = {
   networkKey?: Uint8Array;
   chatRoom?: IChatRoom | undefined;
 }
 
 export class CreateChatServerRequest {
-  networkKey: Uint8Array = new Uint8Array();
+  networkKey: Uint8Array;
   chatRoom: ChatRoom | undefined;
 
   constructor(v?: ICreateChatServerRequest) {
@@ -49,7 +49,7 @@ export class CreateChatServerRequest {
   }
 }
 
-export interface ICreateChatServerResponse {
+export type ICreateChatServerResponse = {
   chatServer?: IChatServer | undefined;
 }
 
@@ -85,15 +85,15 @@ export class CreateChatServerResponse {
   }
 }
 
-export interface IUpdateChatServerRequest {
+export type IUpdateChatServerRequest = {
   id?: bigint;
   networkKey?: Uint8Array;
   serverKey?: IChatRoom | undefined;
 }
 
 export class UpdateChatServerRequest {
-  id: bigint = BigInt(0);
-  networkKey: Uint8Array = new Uint8Array();
+  id: bigint;
+  networkKey: Uint8Array;
   serverKey: ChatRoom | undefined;
 
   constructor(v?: IUpdateChatServerRequest) {
@@ -135,7 +135,7 @@ export class UpdateChatServerRequest {
   }
 }
 
-export interface IUpdateChatServerResponse {
+export type IUpdateChatServerResponse = {
   chatServer?: IChatServer | undefined;
 }
 
@@ -171,12 +171,12 @@ export class UpdateChatServerResponse {
   }
 }
 
-export interface IDeleteChatServerRequest {
+export type IDeleteChatServerRequest = {
   id?: bigint;
 }
 
 export class DeleteChatServerRequest {
-  id: bigint = BigInt(0);
+  id: bigint;
 
   constructor(v?: IDeleteChatServerRequest) {
     this.id = v?.id || BigInt(0);
@@ -207,13 +207,13 @@ export class DeleteChatServerRequest {
   }
 }
 
-export interface IDeleteChatServerResponse {
+export type IDeleteChatServerResponse = {
 }
 
 export class DeleteChatServerResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IDeleteChatServerResponse) {
-    // noop
   }
 
   static encode(m: DeleteChatServerResponse, w?: Writer): Writer {
@@ -227,12 +227,12 @@ export class DeleteChatServerResponse {
   }
 }
 
-export interface IGetChatServerRequest {
+export type IGetChatServerRequest = {
   id?: bigint;
 }
 
 export class GetChatServerRequest {
-  id: bigint = BigInt(0);
+  id: bigint;
 
   constructor(v?: IGetChatServerRequest) {
     this.id = v?.id || BigInt(0);
@@ -263,7 +263,7 @@ export class GetChatServerRequest {
   }
 }
 
-export interface IGetChatServerResponse {
+export type IGetChatServerResponse = {
   chatServer?: IChatServer | undefined;
 }
 
@@ -299,13 +299,13 @@ export class GetChatServerResponse {
   }
 }
 
-export interface IListChatServersRequest {
+export type IListChatServersRequest = {
 }
 
 export class ListChatServersRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IListChatServersRequest) {
-    // noop
   }
 
   static encode(m: ListChatServersRequest, w?: Writer): Writer {
@@ -319,15 +319,15 @@ export class ListChatServersRequest {
   }
 }
 
-export interface IListChatServersResponse {
+export type IListChatServersResponse = {
   chatServers?: IChatServer[];
 }
 
 export class ListChatServersResponse {
-  chatServers: ChatServer[] = [];
+  chatServers: ChatServer[];
 
   constructor(v?: IListChatServersResponse) {
-    if (v?.chatServers) this.chatServers = v.chatServers.map(v => new ChatServer(v));
+    this.chatServers = v?.chatServers ? v.chatServers.map(v => new ChatServer(v)) : [];
   }
 
   static encode(m: ListChatServersResponse, w?: Writer): Writer {
@@ -355,7 +355,7 @@ export class ListChatServersResponse {
   }
 }
 
-export interface IOpenChatServerRequest {
+export type IOpenChatServerRequest = {
   server?: IChatServer | undefined;
 }
 
@@ -391,7 +391,7 @@ export class OpenChatServerRequest {
   }
 }
 
-export interface IChatServerEvent {
+export type IChatServerEvent = {
   body?: ChatServerEvent.IBody
 }
 
@@ -482,12 +482,12 @@ export namespace ChatServerEvent {
     >;
   };
 
-  export interface IOpen {
+  export type IOpen = {
     serverId?: bigint;
   }
 
   export class Open {
-    serverId: bigint = BigInt(0);
+    serverId: bigint;
 
     constructor(v?: IOpen) {
       this.serverId = v?.serverId || BigInt(0);
@@ -518,13 +518,13 @@ export namespace ChatServerEvent {
     }
   }
 
-  export interface IClose {
+  export type IClose = {
   }
 
   export class Close {
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     constructor(v?: IClose) {
-      // noop
     }
 
     static encode(m: Close, w?: Writer): Writer {
@@ -540,13 +540,13 @@ export namespace ChatServerEvent {
 
 }
 
-export interface ICallChatServerRequest {
+export type ICallChatServerRequest = {
   serverId?: bigint;
   body?: CallChatServerRequest.IBody
 }
 
 export class CallChatServerRequest {
-  serverId: bigint = BigInt(0);
+  serverId: bigint;
   body: CallChatServerRequest.TBody;
 
   constructor(v?: ICallChatServerRequest) {
@@ -623,13 +623,13 @@ export namespace CallChatServerRequest {
     >;
   };
 
-  export interface IClose {
+  export type IClose = {
   }
 
   export class Close {
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     constructor(v?: IClose) {
-      // noop
     }
 
     static encode(m: Close, w?: Writer): Writer {
@@ -645,14 +645,14 @@ export namespace CallChatServerRequest {
 
 }
 
-export interface IOpenChatClientRequest {
+export type IOpenChatClientRequest = {
   networkKey?: Uint8Array;
   serverKey?: Uint8Array;
 }
 
 export class OpenChatClientRequest {
-  networkKey: Uint8Array = new Uint8Array();
-  serverKey: Uint8Array = new Uint8Array();
+  networkKey: Uint8Array;
+  serverKey: Uint8Array;
 
   constructor(v?: IOpenChatClientRequest) {
     this.networkKey = v?.networkKey || new Uint8Array();
@@ -688,7 +688,7 @@ export class OpenChatClientRequest {
   }
 }
 
-export interface IChatClientEvent {
+export type IChatClientEvent = {
   body?: ChatClientEvent.IBody
 }
 
@@ -794,12 +794,12 @@ export namespace ChatClientEvent {
     >;
   };
 
-  export interface IOpen {
+  export type IOpen = {
     clientId?: bigint;
   }
 
   export class Open {
-    clientId: bigint = BigInt(0);
+    clientId: bigint;
 
     constructor(v?: IOpen) {
       this.clientId = v?.clientId || BigInt(0);
@@ -830,7 +830,7 @@ export namespace ChatClientEvent {
     }
   }
 
-  export interface IMessage {
+  export type IMessage = {
     sentTime?: bigint;
     serverTime?: bigint;
     nick?: string;
@@ -839,10 +839,10 @@ export namespace ChatClientEvent {
   }
 
   export class Message {
-    sentTime: bigint = BigInt(0);
-    serverTime: bigint = BigInt(0);
-    nick: string = "";
-    body: string = "";
+    sentTime: bigint;
+    serverTime: bigint;
+    nick: string;
+    body: string;
     entities: MessageEntities | undefined;
 
     constructor(v?: IMessage) {
@@ -894,13 +894,13 @@ export namespace ChatClientEvent {
     }
   }
 
-  export interface IClose {
+  export type IClose = {
   }
 
   export class Close {
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     constructor(v?: IClose) {
-      // noop
     }
 
     static encode(m: Close, w?: Writer): Writer {
@@ -916,12 +916,12 @@ export namespace ChatClientEvent {
 
 }
 
-export interface IChatRoom {
+export type IChatRoom = {
   name?: string;
 }
 
 export class ChatRoom {
-  name: string = "";
+  name: string;
 
   constructor(v?: IChatRoom) {
     this.name = v?.name || "";
@@ -952,7 +952,7 @@ export class ChatRoom {
   }
 }
 
-export interface IChatServer {
+export type IChatServer = {
   id?: bigint;
   networkKey?: Uint8Array;
   key?: strims_type_IKey | undefined;
@@ -960,8 +960,8 @@ export interface IChatServer {
 }
 
 export class ChatServer {
-  id: bigint = BigInt(0);
-  networkKey: Uint8Array = new Uint8Array();
+  id: bigint;
+  networkKey: Uint8Array;
   key: strims_type_Key | undefined;
   chatRoom: ChatRoom | undefined;
 
@@ -1009,7 +1009,7 @@ export class ChatServer {
   }
 }
 
-export interface IMessageEntities {
+export type IMessageEntities = {
   links?: MessageEntities.ILink[];
   emotes?: MessageEntities.IEmote[];
   nicks?: MessageEntities.INick[];
@@ -1021,22 +1021,22 @@ export interface IMessageEntities {
 }
 
 export class MessageEntities {
-  links: MessageEntities.Link[] = [];
-  emotes: MessageEntities.Emote[] = [];
-  nicks: MessageEntities.Nick[] = [];
-  tags: MessageEntities.Tag[] = [];
-  codeBlocks: MessageEntities.CodeBlock[] = [];
-  spoilers: MessageEntities.Spoiler[] = [];
+  links: MessageEntities.Link[];
+  emotes: MessageEntities.Emote[];
+  nicks: MessageEntities.Nick[];
+  tags: MessageEntities.Tag[];
+  codeBlocks: MessageEntities.CodeBlock[];
+  spoilers: MessageEntities.Spoiler[];
   greenText: MessageEntities.GenericEntity | undefined;
   selfMessage: MessageEntities.GenericEntity | undefined;
 
   constructor(v?: IMessageEntities) {
-    if (v?.links) this.links = v.links.map(v => new MessageEntities.Link(v));
-    if (v?.emotes) this.emotes = v.emotes.map(v => new MessageEntities.Emote(v));
-    if (v?.nicks) this.nicks = v.nicks.map(v => new MessageEntities.Nick(v));
-    if (v?.tags) this.tags = v.tags.map(v => new MessageEntities.Tag(v));
-    if (v?.codeBlocks) this.codeBlocks = v.codeBlocks.map(v => new MessageEntities.CodeBlock(v));
-    if (v?.spoilers) this.spoilers = v.spoilers.map(v => new MessageEntities.Spoiler(v));
+    this.links = v?.links ? v.links.map(v => new MessageEntities.Link(v)) : [];
+    this.emotes = v?.emotes ? v.emotes.map(v => new MessageEntities.Emote(v)) : [];
+    this.nicks = v?.nicks ? v.nicks.map(v => new MessageEntities.Nick(v)) : [];
+    this.tags = v?.tags ? v.tags.map(v => new MessageEntities.Tag(v)) : [];
+    this.codeBlocks = v?.codeBlocks ? v.codeBlocks.map(v => new MessageEntities.CodeBlock(v)) : [];
+    this.spoilers = v?.spoilers ? v.spoilers.map(v => new MessageEntities.Spoiler(v)) : [];
     this.greenText = v?.greenText && new MessageEntities.GenericEntity(v.greenText);
     this.selfMessage = v?.selfMessage && new MessageEntities.GenericEntity(v.selfMessage);
   }
@@ -1095,14 +1095,14 @@ export class MessageEntities {
 }
 
 export namespace MessageEntities {
-  export interface IBounds {
+  export type IBounds = {
     start?: number;
     end?: number;
   }
 
   export class Bounds {
-    start: number = 0;
-    end: number = 0;
+    start: number;
+    end: number;
 
     constructor(v?: IBounds) {
       this.start = v?.start || 0;
@@ -1138,14 +1138,14 @@ export namespace MessageEntities {
     }
   }
 
-  export interface ILink {
+  export type ILink = {
     bounds?: MessageEntities.IBounds | undefined;
     url?: string;
   }
 
   export class Link {
     bounds: MessageEntities.Bounds | undefined;
-    url: string = "";
+    url: string;
 
     constructor(v?: ILink) {
       this.bounds = v?.bounds && new MessageEntities.Bounds(v.bounds);
@@ -1181,7 +1181,7 @@ export namespace MessageEntities {
     }
   }
 
-  export interface IEmote {
+  export type IEmote = {
     bounds?: MessageEntities.IBounds | undefined;
     name?: string;
     modifiers?: string[];
@@ -1190,14 +1190,14 @@ export namespace MessageEntities {
 
   export class Emote {
     bounds: MessageEntities.Bounds | undefined;
-    name: string = "";
-    modifiers: string[] = [];
-    combo: number = 0;
+    name: string;
+    modifiers: string[];
+    combo: number;
 
     constructor(v?: IEmote) {
       this.bounds = v?.bounds && new MessageEntities.Bounds(v.bounds);
       this.name = v?.name || "";
-      if (v?.modifiers) this.modifiers = v.modifiers;
+      this.modifiers = v?.modifiers ? v.modifiers : [];
       this.combo = v?.combo || 0;
     }
 
@@ -1238,14 +1238,14 @@ export namespace MessageEntities {
     }
   }
 
-  export interface INick {
+  export type INick = {
     bounds?: MessageEntities.IBounds | undefined;
     nick?: string;
   }
 
   export class Nick {
     bounds: MessageEntities.Bounds | undefined;
-    nick: string = "";
+    nick: string;
 
     constructor(v?: INick) {
       this.bounds = v?.bounds && new MessageEntities.Bounds(v.bounds);
@@ -1281,14 +1281,14 @@ export namespace MessageEntities {
     }
   }
 
-  export interface ITag {
+  export type ITag = {
     bounds?: MessageEntities.IBounds | undefined;
     name?: string;
   }
 
   export class Tag {
     bounds: MessageEntities.Bounds | undefined;
-    name: string = "";
+    name: string;
 
     constructor(v?: ITag) {
       this.bounds = v?.bounds && new MessageEntities.Bounds(v.bounds);
@@ -1324,7 +1324,7 @@ export namespace MessageEntities {
     }
   }
 
-  export interface ICodeBlock {
+  export type ICodeBlock = {
     bounds?: MessageEntities.IBounds | undefined;
   }
 
@@ -1360,7 +1360,7 @@ export namespace MessageEntities {
     }
   }
 
-  export interface ISpoiler {
+  export type ISpoiler = {
     bounds?: MessageEntities.IBounds | undefined;
   }
 
@@ -1396,7 +1396,7 @@ export namespace MessageEntities {
     }
   }
 
-  export interface IGenericEntity {
+  export type IGenericEntity = {
     bounds?: MessageEntities.IBounds | undefined;
   }
 
@@ -1434,13 +1434,13 @@ export namespace MessageEntities {
 
 }
 
-export interface ICallChatClientRequest {
+export type ICallChatClientRequest = {
   clientId?: bigint;
   body?: CallChatClientRequest.IBody
 }
 
 export class CallChatClientRequest {
-  clientId: bigint = BigInt(0);
+  clientId: bigint;
   body: CallChatClientRequest.TBody;
 
   constructor(v?: ICallChatClientRequest) {
@@ -1532,14 +1532,14 @@ export namespace CallChatClientRequest {
     >;
   };
 
-  export interface IMessage {
+  export type IMessage = {
     time?: bigint;
     body?: string;
   }
 
   export class Message {
-    time: bigint = BigInt(0);
-    body: string = "";
+    time: bigint;
+    body: string;
 
     constructor(v?: IMessage) {
       this.time = v?.time || BigInt(0);
@@ -1575,13 +1575,13 @@ export namespace CallChatClientRequest {
     }
   }
 
-  export interface IClose {
+  export type IClose = {
   }
 
   export class Close {
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     constructor(v?: IClose) {
-      // noop
     }
 
     static encode(m: Close, w?: Writer): Writer {
@@ -1597,13 +1597,13 @@ export namespace CallChatClientRequest {
 
 }
 
-export interface ICallChatClientResponse {
+export type ICallChatClientResponse = {
 }
 
 export class CallChatClientResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: ICallChatClientResponse) {
-    // noop
   }
 
   static encode(m: CallChatClientResponse, w?: Writer): Writer {

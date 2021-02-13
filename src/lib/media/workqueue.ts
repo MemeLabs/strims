@@ -8,12 +8,12 @@ export default class WorkQueue {
     this.tasks = [];
   }
 
-  public reset() {
+  public reset(): void {
     this.tasks = [];
     this.busy = false;
   }
 
-  public insert(task: Task) {
+  public insert(task: Task): void {
     if (this.busy) {
       this.tasks.push(task);
     } else {
@@ -22,14 +22,14 @@ export default class WorkQueue {
     }
   }
 
-  public runNext() {
+  public runNext(): void {
     this.busy = this.tasks.length !== 0;
     if (this.busy) {
       this.tasks.shift()();
     }
   }
 
-  public pause() {
+  public pause(): void {
     this.busy = true;
   }
 }

@@ -23,7 +23,12 @@ export interface MediaSourceProps {
   // TODO: the rest of the swarm uri params
 }
 
-const useMediaSource = ({ networkKey, swarmUri, mimeType, videoRef }: MediaSourceProps) => {
+const useMediaSource = ({
+  networkKey,
+  swarmUri,
+  mimeType,
+  videoRef,
+}: MediaSourceProps): MediaSource => {
   const client = useClient();
 
   const [mediaSource, clientEvents] = useMemo(() => {
@@ -57,7 +62,7 @@ const useMediaSource = ({ networkKey, swarmUri, mimeType, videoRef }: MediaSourc
             if (!started && end - start >= 1) {
               started = true;
               videoRef.current.currentTime = end - 1;
-              videoRef.current.play();
+              void videoRef.current.play();
             }
           }
       }

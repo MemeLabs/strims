@@ -1,3 +1,4 @@
+/* eslint-disable */
 import muxjs from "mux.js";
 
 import { Source } from "./source";

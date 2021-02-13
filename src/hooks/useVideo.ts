@@ -50,7 +50,7 @@ export interface VideoState {
   supportPiP: boolean;
   pip: boolean;
   src: string;
-  error: Error | null;
+  error: MediaError | null;
 }
 
 export interface VideoProps {
@@ -87,9 +87,9 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
   const [paused, setPaused] = useState(false);
   const [ended, setEnded] = useState(true);
   const [waiting, setWaiting] = useState(true);
-  const [muted, setMuted] = useState(null);
-  const [volume, unsafelySetVolume] = useState(null);
-  const [savedVolume, setSavedVolume] = useState(null);
+  const [muted, setMuted] = useState(true);
+  const [volume, unsafelySetVolume] = useState(0);
+  const [savedVolume, setSavedVolume] = useState(0);
   const [readyState, setReadyState] = useState(0);
   const [bufferStart, setBufferStart] = useState(0);
   const [bufferEnd, setBufferEnd] = useState(1);
@@ -97,7 +97,7 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
   const [currentTime, unsafelySetCurrentTime] = useState(0);
   const [seekableStart, setSeekableStart] = useState(0);
   const [seekableEnd, setSeekableEnd] = useState(0);
-  const [error, setError] = useState(null);
+  const [error, setError] = useState<MediaError>(null);
 
   useReady(() => {
     setMuted(ref.current.muted);
@@ -216,7 +216,7 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
     }
   };
 
-  const setCurrentTime = (time) => {
+  const setCurrentTime = (time: number) => {
     if (!ref.current) {
       return;
     }

@@ -1,7 +1,6 @@
 import { css } from "aphrodite/no-important";
 import clsx from "clsx";
-import * as React from "react";
-import { FunctionComponent } from "react";
+import React from "react";
 
 import { useChat } from "../../contexts/Chat";
 
@@ -10,7 +9,8 @@ type EmoteProps = {
   modifiers?: string[];
   [key: string]: any;
 };
-const Emote: FunctionComponent<EmoteProps> = ({ children, name, modifiers, ...props }) => {
+
+const Emote: React.FC<EmoteProps> = ({ children, name, modifiers, ...props }) => {
   const [{ styles }] = useChat();
 
   // TODO: optionally disable emotes/modifiers

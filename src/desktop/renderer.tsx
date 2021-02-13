@@ -2,8 +2,8 @@ import "../styles/main.scss";
 
 import { spawn } from "child_process";
 
-import * as React from "react";
-import * as ReactDOM from "react-dom";
+import React from "react";
+import ReactDOM from "react-dom";
 
 import { FrontendClient } from "../apis/client";
 import App from "./App";

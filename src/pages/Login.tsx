@@ -1,5 +1,4 @@
-import qs from "qs";
-import * as React from "react";
+import React from "react";
 import { useForm } from "react-hook-form";
 import { FiUser, FiUserPlus } from "react-icons/fi";
 import { Link, Redirect, useLocation } from "react-router-dom";
@@ -17,7 +16,7 @@ interface LoginQueryParams {
   next: string;
 }
 
-const LoginPage = () => {
+const LoginPage: React.FC = () => {
   const [listProfilesRes] = useCall("profile", "list");
   const [{ profile, error, loading }, profileActions] = useProfile();
   const [selectedProfile, setSelectedProfile] = React.useState<IProfileSummary | null>(null);

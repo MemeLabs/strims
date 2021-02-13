@@ -134,17 +134,7 @@ func (s *Buffer) SetOffset(b binmap.Bin) {
 	s.prev = s.next
 	s.off = binByte(s.next, s.chunkSize)
 
-	// fill from 0 to b so the first empty bin is b
-	b = b.BaseLeft()
-	if b > 0 {
-		b -= 2
-		s.bins.Set(b)
-		for b > 0 {
-			b = s.bins.Cover(b - 2)
-			s.bins.Set(b)
-			b = b.BaseLeft()
-		}
-	}
+	s.bins.FillBefore(b)
 
 	s.readyOnce.Do(func() { close(s.ready) })
 }

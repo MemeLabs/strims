@@ -4,7 +4,7 @@ import Worker from "./svc.worker";
 
 class Success {}
 
-(async () => {
+void (async () => {
   const bridge = new WindowBridge(Worker);
   const bus = await new Promise<Bus>((resolve) => {
     bridge.once("busopen:default", (b: any) => resolve(b));

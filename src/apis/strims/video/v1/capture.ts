@@ -6,7 +6,7 @@ import {
   IDirectoryListingSnippet as strims_network_v1_IDirectoryListingSnippet,
 } from "../../network/v1/directory";
 
-export interface ICaptureOpenRequest {
+export type ICaptureOpenRequest = {
   directorySnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
   mimeType?: string;
   networkKeys?: Uint8Array[];
@@ -14,13 +14,13 @@ export interface ICaptureOpenRequest {
 
 export class CaptureOpenRequest {
   directorySnippet: strims_network_v1_DirectoryListingSnippet | undefined;
-  mimeType: string = "";
-  networkKeys: Uint8Array[] = [];
+  mimeType: string;
+  networkKeys: Uint8Array[];
 
   constructor(v?: ICaptureOpenRequest) {
     this.directorySnippet = v?.directorySnippet && new strims_network_v1_DirectoryListingSnippet(v.directorySnippet);
     this.mimeType = v?.mimeType || "";
-    if (v?.networkKeys) this.networkKeys = v.networkKeys;
+    this.networkKeys = v?.networkKeys ? v.networkKeys : [];
   }
 
   static encode(m: CaptureOpenRequest, w?: Writer): Writer {
@@ -56,12 +56,12 @@ export class CaptureOpenRequest {
   }
 }
 
-export interface ICaptureOpenResponse {
+export type ICaptureOpenResponse = {
   id?: Uint8Array;
 }
 
 export class CaptureOpenResponse {
-  id: Uint8Array = new Uint8Array();
+  id: Uint8Array;
 
   constructor(v?: ICaptureOpenResponse) {
     this.id = v?.id || new Uint8Array();
@@ -92,13 +92,13 @@ export class CaptureOpenResponse {
   }
 }
 
-export interface ICaptureUpdateRequest {
+export type ICaptureUpdateRequest = {
   id?: Uint8Array;
   directorySnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
 }
 
 export class CaptureUpdateRequest {
-  id: Uint8Array = new Uint8Array();
+  id: Uint8Array;
   directorySnippet: strims_network_v1_DirectoryListingSnippet | undefined;
 
   constructor(v?: ICaptureUpdateRequest) {
@@ -135,13 +135,13 @@ export class CaptureUpdateRequest {
   }
 }
 
-export interface ICaptureUpdateResponse {
+export type ICaptureUpdateResponse = {
 }
 
 export class CaptureUpdateResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: ICaptureUpdateResponse) {
-    // noop
   }
 
   static encode(m: CaptureUpdateResponse, w?: Writer): Writer {
@@ -155,16 +155,16 @@ export class CaptureUpdateResponse {
   }
 }
 
-export interface ICaptureAppendRequest {
+export type ICaptureAppendRequest = {
   id?: Uint8Array;
   data?: Uint8Array;
   segmentEnd?: boolean;
 }
 
 export class CaptureAppendRequest {
-  id: Uint8Array = new Uint8Array();
-  data: Uint8Array = new Uint8Array();
-  segmentEnd: boolean = false;
+  id: Uint8Array;
+  data: Uint8Array;
+  segmentEnd: boolean;
 
   constructor(v?: ICaptureAppendRequest) {
     this.id = v?.id || new Uint8Array();
@@ -205,13 +205,13 @@ export class CaptureAppendRequest {
   }
 }
 
-export interface ICaptureAppendResponse {
+export type ICaptureAppendResponse = {
 }
 
 export class CaptureAppendResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: ICaptureAppendResponse) {
-    // noop
   }
 
   static encode(m: CaptureAppendResponse, w?: Writer): Writer {
@@ -225,12 +225,12 @@ export class CaptureAppendResponse {
   }
 }
 
-export interface ICaptureCloseRequest {
+export type ICaptureCloseRequest = {
   id?: Uint8Array;
 }
 
 export class CaptureCloseRequest {
-  id: Uint8Array = new Uint8Array();
+  id: Uint8Array;
 
   constructor(v?: ICaptureCloseRequest) {
     this.id = v?.id || new Uint8Array();
@@ -261,13 +261,13 @@ export class CaptureCloseRequest {
   }
 }
 
-export interface ICaptureCloseResponse {
+export type ICaptureCloseResponse = {
 }
 
 export class CaptureCloseResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: ICaptureCloseResponse) {
-    // noop
   }
 
   static encode(m: CaptureCloseResponse, w?: Writer): Writer {

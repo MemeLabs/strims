@@ -19,20 +19,21 @@ export class Source {
     };
   }
 
-  private initSourceBuffer() {
+  private initSourceBuffer(): void {
     this.sourceBuffer = this.mediaSource.addSourceBuffer(this.type);
+    // eslint-disable-next-line
     this.sourceBuffer.onupdateend = this.sourceBufferTasks.runNext.bind(this.sourceBufferTasks);
     this.sourceBuffer.onerror = (e) => console.log("onerror", e);
     this.sourceBuffer.onabort = (e) => console.log("onabort", e);
   }
 
-  public reset() {
+  public reset(): void {
     this.sourceBufferTasks.reset();
     this.mediaSource.removeSourceBuffer(this.sourceBuffer);
     this.initSourceBuffer();
   }
 
-  public appendBuffer(b: ArrayBufferView | ArrayBuffer) {
+  public appendBuffer(b: ArrayBufferView | ArrayBuffer): void {
     this.sourceBufferTasks.insert(() => this.sourceBuffer.appendBuffer(b));
     this.sourceBufferTasks.insert(() => this.prune());
   }
@@ -42,7 +43,7 @@ export class Source {
     return buffered.length === 0 ? [0, 0] : [buffered.start(0), buffered.end(buffered.length - 1)];
   }
 
-  private prune() {
+  private prune(): void {
     const [start, end] = this.bounds();
 
     if (end - start <= 10) {

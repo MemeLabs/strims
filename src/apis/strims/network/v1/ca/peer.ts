@@ -2,13 +2,13 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  Certificate as strims_type_Certificate,
-  ICertificate as strims_type_ICertificate,
   CertificateRequest as strims_type_CertificateRequest,
   ICertificateRequest as strims_type_ICertificateRequest,
+  Certificate as strims_type_Certificate,
+  ICertificate as strims_type_ICertificate,
 } from "../../../type/certificate";
 
-export interface ICAPeerRenewRequest {
+export type ICAPeerRenewRequest = {
   certificate?: strims_type_ICertificate | undefined;
   certificateRequest?: strims_type_ICertificateRequest | undefined;
 }
@@ -51,7 +51,7 @@ export class CAPeerRenewRequest {
   }
 }
 
-export interface ICAPeerRenewResponse {
+export type ICAPeerRenewResponse = {
   certificate?: strims_type_ICertificate | undefined;
 }
 

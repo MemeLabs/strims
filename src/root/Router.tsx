@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import { Route, Switch } from "react-router-dom";
 
 import { PrivateRoute } from "../components/PrivateRoute";
@@ -12,7 +12,7 @@ import PlayerTest from "../pages/PlayerTest";
 import SettingsPage from "../pages/Settings";
 import SignUpPage from "../pages/SignUp";
 
-const Router = () => {
+const Router: React.FC = () => {
   return (
     <Switch>
       <Route path="/login" exact component={LoginPage} />

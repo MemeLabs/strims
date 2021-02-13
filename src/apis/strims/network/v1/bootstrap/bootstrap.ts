@@ -10,13 +10,13 @@ import {
   INetwork as strims_network_v1_INetwork,
 } from "..//network";
 
-export interface IBootstrapClient {
+export type IBootstrapClient = {
   id?: bigint;
   clientOptions?: BootstrapClient.IClientOptions
 }
 
 export class BootstrapClient {
-  id: bigint = BigInt(0);
+  id: bigint;
   clientOptions: BootstrapClient.TClientOptions;
 
   constructor(v?: IBootstrapClient) {
@@ -95,14 +95,14 @@ export namespace BootstrapClient {
 
 }
 
-export interface IBootstrapClientWebSocketOptions {
+export type IBootstrapClientWebSocketOptions = {
   url?: string;
   insecureSkipVerifyTls?: boolean;
 }
 
 export class BootstrapClientWebSocketOptions {
-  url: string = "";
-  insecureSkipVerifyTls: boolean = false;
+  url: string;
+  insecureSkipVerifyTls: boolean;
 
   constructor(v?: IBootstrapClientWebSocketOptions) {
     this.url = v?.url || "";
@@ -138,7 +138,7 @@ export class BootstrapClientWebSocketOptions {
   }
 }
 
-export interface ICreateBootstrapClientRequest {
+export type ICreateBootstrapClientRequest = {
   clientOptions?: CreateBootstrapClientRequest.IClientOptions
 }
 
@@ -216,7 +216,7 @@ export namespace CreateBootstrapClientRequest {
 
 }
 
-export interface ICreateBootstrapClientResponse {
+export type ICreateBootstrapClientResponse = {
   bootstrapClient?: IBootstrapClient | undefined;
 }
 
@@ -252,13 +252,13 @@ export class CreateBootstrapClientResponse {
   }
 }
 
-export interface IUpdateBootstrapClientRequest {
+export type IUpdateBootstrapClientRequest = {
   id?: bigint;
   clientOptions?: UpdateBootstrapClientRequest.IClientOptions
 }
 
 export class UpdateBootstrapClientRequest {
-  id: bigint = BigInt(0);
+  id: bigint;
   clientOptions: UpdateBootstrapClientRequest.TClientOptions;
 
   constructor(v?: IUpdateBootstrapClientRequest) {
@@ -337,7 +337,7 @@ export namespace UpdateBootstrapClientRequest {
 
 }
 
-export interface IUpdateBootstrapClientResponse {
+export type IUpdateBootstrapClientResponse = {
   bootstrapClient?: IBootstrapClient | undefined;
 }
 
@@ -373,12 +373,12 @@ export class UpdateBootstrapClientResponse {
   }
 }
 
-export interface IDeleteBootstrapClientRequest {
+export type IDeleteBootstrapClientRequest = {
   id?: bigint;
 }
 
 export class DeleteBootstrapClientRequest {
-  id: bigint = BigInt(0);
+  id: bigint;
 
   constructor(v?: IDeleteBootstrapClientRequest) {
     this.id = v?.id || BigInt(0);
@@ -409,13 +409,13 @@ export class DeleteBootstrapClientRequest {
   }
 }
 
-export interface IDeleteBootstrapClientResponse {
+export type IDeleteBootstrapClientResponse = {
 }
 
 export class DeleteBootstrapClientResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IDeleteBootstrapClientResponse) {
-    // noop
   }
 
   static encode(m: DeleteBootstrapClientResponse, w?: Writer): Writer {
@@ -429,12 +429,12 @@ export class DeleteBootstrapClientResponse {
   }
 }
 
-export interface IGetBootstrapClientRequest {
+export type IGetBootstrapClientRequest = {
   id?: bigint;
 }
 
 export class GetBootstrapClientRequest {
-  id: bigint = BigInt(0);
+  id: bigint;
 
   constructor(v?: IGetBootstrapClientRequest) {
     this.id = v?.id || BigInt(0);
@@ -465,7 +465,7 @@ export class GetBootstrapClientRequest {
   }
 }
 
-export interface IGetBootstrapClientResponse {
+export type IGetBootstrapClientResponse = {
   bootstrapClient?: IBootstrapClient | undefined;
 }
 
@@ -501,13 +501,13 @@ export class GetBootstrapClientResponse {
   }
 }
 
-export interface IListBootstrapClientsRequest {
+export type IListBootstrapClientsRequest = {
 }
 
 export class ListBootstrapClientsRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IListBootstrapClientsRequest) {
-    // noop
   }
 
   static encode(m: ListBootstrapClientsRequest, w?: Writer): Writer {
@@ -521,15 +521,15 @@ export class ListBootstrapClientsRequest {
   }
 }
 
-export interface IListBootstrapClientsResponse {
+export type IListBootstrapClientsResponse = {
   bootstrapClients?: IBootstrapClient[];
 }
 
 export class ListBootstrapClientsResponse {
-  bootstrapClients: BootstrapClient[] = [];
+  bootstrapClients: BootstrapClient[];
 
   constructor(v?: IListBootstrapClientsResponse) {
-    if (v?.bootstrapClients) this.bootstrapClients = v.bootstrapClients.map(v => new BootstrapClient(v));
+    this.bootstrapClients = v?.bootstrapClients ? v.bootstrapClients.map(v => new BootstrapClient(v)) : [];
   }
 
   static encode(m: ListBootstrapClientsResponse, w?: Writer): Writer {
@@ -557,13 +557,13 @@ export class ListBootstrapClientsResponse {
   }
 }
 
-export interface IListBootstrapPeersRequest {
+export type IListBootstrapPeersRequest = {
 }
 
 export class ListBootstrapPeersRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IListBootstrapPeersRequest) {
-    // noop
   }
 
   static encode(m: ListBootstrapPeersRequest, w?: Writer): Writer {
@@ -577,15 +577,15 @@ export class ListBootstrapPeersRequest {
   }
 }
 
-export interface IListBootstrapPeersResponse {
+export type IListBootstrapPeersResponse = {
   peers?: IBootstrapPeer[];
 }
 
 export class ListBootstrapPeersResponse {
-  peers: BootstrapPeer[] = [];
+  peers: BootstrapPeer[];
 
   constructor(v?: IListBootstrapPeersResponse) {
-    if (v?.peers) this.peers = v.peers.map(v => new BootstrapPeer(v));
+    this.peers = v?.peers ? v.peers.map(v => new BootstrapPeer(v)) : [];
   }
 
   static encode(m: ListBootstrapPeersResponse, w?: Writer): Writer {
@@ -613,14 +613,14 @@ export class ListBootstrapPeersResponse {
   }
 }
 
-export interface IBootstrapPeer {
+export type IBootstrapPeer = {
   peerId?: bigint;
   label?: string;
 }
 
 export class BootstrapPeer {
-  peerId: bigint = BigInt(0);
-  label: string = "";
+  peerId: bigint;
+  label: string;
 
   constructor(v?: IBootstrapPeer) {
     this.peerId = v?.peerId || BigInt(0);
@@ -656,7 +656,7 @@ export class BootstrapPeer {
   }
 }
 
-export interface IBootstrapServiceMessage {
+export type IBootstrapServiceMessage = {
   body?: BootstrapServiceMessage.IBody
 }
 
@@ -762,13 +762,13 @@ export namespace BootstrapServiceMessage {
     >;
   };
 
-  export interface IBrokerOffer {
+  export type IBrokerOffer = {
   }
 
   export class BrokerOffer {
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     constructor(v?: IBrokerOffer) {
-      // noop
     }
 
     static encode(m: BrokerOffer, w?: Writer): Writer {
@@ -782,13 +782,13 @@ export namespace BootstrapServiceMessage {
     }
   }
 
-  export interface IPublishRequest {
+  export type IPublishRequest = {
     name?: string;
     certificate?: strims_type_ICertificate | undefined;
   }
 
   export class PublishRequest {
-    name: string = "";
+    name: string;
     certificate: strims_type_Certificate | undefined;
 
     constructor(v?: IPublishRequest) {
@@ -825,7 +825,7 @@ export namespace BootstrapServiceMessage {
     }
   }
 
-  export interface IPublishResponse {
+  export type IPublishResponse = {
     body?: PublishResponse.IBody
   }
 
@@ -905,13 +905,13 @@ export namespace BootstrapServiceMessage {
 
 }
 
-export interface IPublishNetworkToBootstrapPeerRequest {
+export type IPublishNetworkToBootstrapPeerRequest = {
   peerId?: bigint;
   network?: strims_network_v1_INetwork | undefined;
 }
 
 export class PublishNetworkToBootstrapPeerRequest {
-  peerId: bigint = BigInt(0);
+  peerId: bigint;
   network: strims_network_v1_Network | undefined;
 
   constructor(v?: IPublishNetworkToBootstrapPeerRequest) {
@@ -948,13 +948,13 @@ export class PublishNetworkToBootstrapPeerRequest {
   }
 }
 
-export interface IPublishNetworkToBootstrapPeerResponse {
+export type IPublishNetworkToBootstrapPeerResponse = {
 }
 
 export class PublishNetworkToBootstrapPeerResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IPublishNetworkToBootstrapPeerResponse) {
-    // noop
   }
 
   static encode(m: PublishNetworkToBootstrapPeerResponse, w?: Writer): Writer {

@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 
 // import { Base64 } from "js-base64";
-import * as React from "react";
+import React from "react";
 
 import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
 import { MainLayout } from "../components/MainLayout";
@@ -14,14 +14,19 @@ import * as webm from "../lib/media/webm";
 
 // import { CallChatClientRequest, OpenChatClientRequest, OpenChatServerRequest } from "../lib/pb";
 
-const HomePage = () => {
+interface PProfDownload {
+  name: string;
+  url: string;
+}
+
+const HomePage: React.FC = () => {
   const [{ colorScheme }, { setColorScheme }] = useTheme();
   const [{ profile }, { clearProfile }] = useProfile();
 
   const client = useClient();
 
   const [pprofData, pprof] = useLazyCall("debug", "pProf");
-  const [pprofDownloads, setPProfDownloads] = React.useState([]);
+  const [pprofDownloads, setPProfDownloads] = React.useState([] as PProfDownload[]);
 
   const videoRef = React.useRef<HTMLVideoElement>();
 
@@ -52,6 +57,8 @@ const HomePage = () => {
           description: "broadcast from getDisplayMedia",
         },
       }),
+      // https://github.com/microsoft/TypeScript/issues/33232
+      // eslint-disable-next-line
       (navigator.mediaDevices as any).getDisplayMedia({
         video: true,
         audio: {

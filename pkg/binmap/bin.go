@@ -120,12 +120,32 @@ func (b Bin) BaseRight() Bin {
 	return (b | (b + 1)) - 1
 }
 
+// LayerLeft bin at layer offset - 1 or None
+func (b Bin) LayerLeft() Bin {
+	if b == None {
+		return None
+	}
+	t := b.LayerBits() + 1
+	if b < t {
+		return None
+	}
+	return b - t
+}
+
+// LayerRight bin at layer offset + 1
+func (b Bin) LayerRight() Bin {
+	if b == None {
+		return None
+	}
+	return b + b.LayerBits() + 1
+}
+
 // Base true if b is in the base
 func (b Bin) Base() bool {
 	return b&1 == 0
 }
 
-// LayerOffset leftmost bin in layer
+// LayerOffset index in layer
 func (b Bin) LayerOffset() uint64 {
 	return uint64(b >> (b.Layer() + 1))
 }
@@ -143,7 +163,7 @@ func (b Bin) Layer() uint64 {
 	return uint64(bits.TrailingZeros64(uint64(b + 1)))
 }
 
-// BaseOffset index of leftmost bin in layer 1
+// BaseOffset index of leftmost bin in layer 0
 func (b Bin) BaseOffset() uint64 {
 	return uint64(b&(b+1)) >> 1
 }

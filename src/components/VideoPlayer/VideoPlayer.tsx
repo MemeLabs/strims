@@ -1,4 +1,4 @@
-import React, { FunctionComponent, useEffect, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import { MdLoop } from "react-icons/md";
 import useFullscreen from "use-fullscreen";
 
@@ -12,7 +12,7 @@ type SwarmPlayerProps = Pick<MediaSourceProps, "networkKey" | "swarmUri" | "mime
   volumeStepSize?: number;
 };
 
-const SwarmPlayer: FunctionComponent<SwarmPlayerProps> = ({
+const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   networkKey,
   swarmUri,
   mimeType,
@@ -50,7 +50,7 @@ const SwarmPlayer: FunctionComponent<SwarmPlayerProps> = ({
 
   const handleToggleFullscreen = () => toggleFullscreen(rootRef.current);
 
-  const handleWheel = React.useCallback(
+  const handleWheel = React.useCallback<React.EventHandler<React.WheelEvent<HTMLDivElement>>>(
     (e) => {
       const direction = e.deltaY < 0 ? 1 : -1;
       videoControls.setVolume(videoState.volume + direction * volumeStepSize);

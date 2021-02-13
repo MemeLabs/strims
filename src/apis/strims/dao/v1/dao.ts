@@ -2,14 +2,14 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface ISecondaryIndexKey {
+export type ISecondaryIndexKey = {
   key?: Uint8Array;
   id?: bigint;
 }
 
 export class SecondaryIndexKey {
-  key: Uint8Array = new Uint8Array();
-  id: bigint = BigInt(0);
+  key: Uint8Array;
+  id: bigint;
 
   constructor(v?: ISecondaryIndexKey) {
     this.key = v?.key || new Uint8Array();
@@ -45,14 +45,14 @@ export class SecondaryIndexKey {
   }
 }
 
-export interface IMutex {
+export type IMutex = {
   eol?: bigint;
   token?: Uint8Array;
 }
 
 export class Mutex {
-  eol: bigint = BigInt(0);
-  token: Uint8Array = new Uint8Array();
+  eol: bigint;
+  token: Uint8Array;
 
   constructor(v?: IMutex) {
     this.eol = v?.eol || BigInt(0);

@@ -1,14 +1,14 @@
 import "../styles/main.scss";
 
-import * as React from "react";
-import * as ReactDOM from "react-dom";
+import React from "react";
+import ReactDOM from "react-dom";
 
 import { FrontendClient } from "../apis/client";
 import { WindowBridge } from "../lib/bridge";
 import { WSReadWriter } from "../lib/ws";
 import Worker from "./svc.worker";
 
-(async () => {
+void (async () => {
   const bridge = new WindowBridge(Worker);
   const client = await new Promise<FrontendClient>((resolve) => {
     bridge.once("busopen:default", (b: any) => resolve(new FrontendClient(b, b)));

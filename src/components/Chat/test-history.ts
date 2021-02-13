@@ -2,7 +2,7 @@ import { PassThrough } from "stream";
 
 import { Readable as GenericReadable } from "@memelabs/protobuf/lib/rpc/stream";
 
-import { ChatClientEvent, MessageEntities } from "../../apis/strims/chat/v1/chat";
+import { ChatClientEvent, IMessageEntities, MessageEntities } from "../../apis/strims/chat/v1/chat";
 
 const history = [
   'MSG {"nick":"guwapguwapguwap","features":[],"timestamp":1599345629214,"data":"Ph4t3 I sentence you to 10 years in body shaming jail PepoBan","entities":{"emotes":[{"name":"PepoBan","bounds":{"start":54,"end":61}}],"nicks":[{"nick":"Ph4t3","bounds":{"start":0,"end":5}}]}}',
@@ -257,23 +257,30 @@ const history = [
   'MSG {"nick":"trekxx","features":[],"timestamp":1599349465397,"data":"raptors playing like dogshit","entities":{}}',
 ];
 
+type LegacyMessage = {
+  nick: string;
+  timestamp: number;
+  data: string;
+  entities: IMessageEntities;
+};
+
 export const messages = history
-  .map((v) => JSON.parse(v.substr(4)))
+  .map((v) => (JSON.parse(v.substr(4)) as unknown) as LegacyMessage)
   .map(
     ({ nick, timestamp, data, entities }) =>
       new ChatClientEvent.Message({
         nick: nick,
-        sentTime: timestamp,
-        serverTime: timestamp,
+        sentTime: BigInt(timestamp),
+        serverTime: BigInt(timestamp),
         body: data,
         entities: new MessageEntities(entities),
       })
   );
 
 export default (() => {
-  const events: GenericReadable<ChatClientEvent.Message> = new PassThrough({
+  const events = new PassThrough({
     objectMode: true,
-  }) as any;
+  }) as GenericReadable<ChatClientEvent.Message>;
 
   let i = 0;
   setInterval(() => events.push(messages[i++ % history.length]), 10000);

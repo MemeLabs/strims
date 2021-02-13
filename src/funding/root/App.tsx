@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import { useTitle } from "react-use";
 
 import { FundingClient } from "../../apis/client";

@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react";
 
-const useUpdates = (effect: () => void, deps: [any]) => {
+const useUpdates = (effect: () => void, deps: [any]): void => {
   const init = useRef(false);
 
   useEffect(() => {

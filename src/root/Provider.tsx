@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 
 import { FrontendClient } from "../apis/client";
 import { Provider as ApiProvider } from "../contexts/FrontendApi";
@@ -7,7 +7,11 @@ import { Provider as ThemeProvider } from "../contexts/Theme";
 
 const LoadingMessage = () => <p className="loading_message">loading</p>;
 
-const Provider = ({ client, children }: { client: FrontendClient; children: any }) => (
+export interface ProviderProps {
+  client: FrontendClient;
+}
+
+const Provider: React.FC<ProviderProps> = ({ client, children }) => (
   <React.Suspense fallback={<LoadingMessage />}>
     <ApiProvider value={client}>
       <ThemeProvider>

@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { Base64 } from "js-base64";
 // import Tooltip from "rc-tooltip";
-import * as React from "react";
+import React from "react";
 import { ReactElement } from "react";
 import {
   DragDropContext,
@@ -34,13 +34,15 @@ import useObjectURL from "../hooks/useObjectURL";
 import { rootCertificate } from "../lib/certificate";
 import AddNetworkModal from "./AddNetworkModal";
 
-const Tooltip = ({ children }: any) => children;
+const Tooltip: React.FC<any> = ({ children }) => <>{children}</>;
 
-const NetworkAddButton: React.FunctionComponent<React.ComponentProps<"button">> = ({
-  children,
-  ...props
-}) => {
-  const { isOpen, openPortal, closePortal, Portal } = usePortal();
+const NetworkAddButton: React.FC<React.ComponentProps<"button">> = ({ children, ...props }) => {
+  const { isOpen, openPortal, closePortal, Portal } = usePortal() as {
+    isOpen: () => void;
+    openPortal: () => void;
+    closePortal: () => void;
+    Portal: React.ElementType;
+  };
   const history = useHistory();
 
   const handleCreate = (res: CreateNetworkResponse) => {
@@ -87,7 +89,7 @@ const NetworkGem: React.FC<NetworkGemProps> = ({ network }) => {
   );
 };
 
-const NetworkNav = () => {
+const NetworkNav: React.FC = () => {
   const [expanded, toggleExpanded] = useToggle(false);
   const [networks, setNetworks] = React.useState<Network[]>([]);
   const [state, { setNavOrder }] = useTheme();
@@ -202,7 +204,7 @@ const NetworkNav = () => {
   );
 };
 
-export const MainLayout = ({ children }: { children: any }) => {
+export const MainLayout: React.FC = ({ children }) => {
   const [theme, { setColorScheme }] = useTheme();
   const client = useClient();
 

@@ -2,12 +2,12 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface IDevToolsTestRequest {
+export type IDevToolsTestRequest = {
   name?: string;
 }
 
 export class DevToolsTestRequest {
-  name: string = "";
+  name: string;
 
   constructor(v?: IDevToolsTestRequest) {
     this.name = v?.name || "";
@@ -38,12 +38,12 @@ export class DevToolsTestRequest {
   }
 }
 
-export interface IDevToolsTestResponse {
+export type IDevToolsTestResponse = {
   message?: string;
 }
 
 export class DevToolsTestResponse {
-  message: string = "";
+  message: string;
 
   constructor(v?: IDevToolsTestResponse) {
     this.message = v?.message || "";

@@ -1,11 +1,15 @@
-import * as React from "react";
+import React from "react";
 import { BrowserRouter } from "react-router-dom";
 
 import { FrontendClient } from "../apis/client";
 import Provider from "../root/Provider";
 import Router from "../root/Router";
 
-const App = ({ client }: { client: FrontendClient }) => (
+interface AppProps {
+  client: FrontendClient;
+}
+
+const App: React.FC<AppProps> = ({ client }) => (
   <BrowserRouter>
     <Provider client={client}>
       <Router />

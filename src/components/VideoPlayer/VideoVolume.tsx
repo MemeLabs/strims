@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import React, { FunctionComponent, useState } from "react";
+import React, { useState } from "react";
 import {
   GetHandleProps,
   GetTrackProps,
@@ -19,7 +19,7 @@ interface HandleProps {
   getHandleProps: GetHandleProps;
 }
 
-export const Handle: FunctionComponent<HandleProps> = ({
+export const Handle: React.FC<HandleProps> = ({
   domain: [min, max],
   handle: { id, value, percent },
   getHandleProps,
@@ -41,7 +41,7 @@ interface TrackProps {
   getTrackProps: GetTrackProps;
 }
 
-export const Track: FunctionComponent<TrackProps> = ({ source, target, getTrackProps }) => (
+export const Track: React.FC<TrackProps> = ({ source, target, getTrackProps }) => (
   <div
     className="video_volume__track"
     style={{
@@ -59,12 +59,7 @@ interface VolumeProps {
   onSlideEnd: () => void;
 }
 
-const VideoVolume: FunctionComponent<VolumeProps> = ({
-  value,
-  onUpdate,
-  onSlideStart,
-  onSlideEnd,
-}) => {
+const VideoVolume: React.FC<VolumeProps> = ({ value, onUpdate, onSlideStart, onSlideEnd }) => {
   const [dragging, setDragging] = useState(false);
   const [idle, renewIdleTimeout] = useIdleTimeout();
 

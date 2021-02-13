@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import { useAsync } from "react-use";
 
 import { useCall, useClient } from "../contexts/Api";

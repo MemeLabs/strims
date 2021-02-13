@@ -2,7 +2,6 @@ import clsx from "clsx";
 import filterObj from "filter-obj";
 import Prism from "prismjs";
 import React, { KeyboardEvent, useCallback, useMemo, useState } from "react";
-import { FunctionComponent } from "react";
 import {
   Editor,
   Element,
@@ -50,7 +49,7 @@ interface ComposerProps {
   onMessage: (message: string) => void;
 }
 
-const Composer: FunctionComponent<ComposerProps> = ({ onMessage }) => {
+const Composer: React.FC<ComposerProps> = ({ onMessage }) => {
   const [index, setIndex] = useState(0);
   const [currentSearch, setSearch] = useState<SearchState | null>(null);
   const [lastSearch, setLastSearch] = useState<SearchState | null>(null);
@@ -200,7 +199,7 @@ const Composer: FunctionComponent<ComposerProps> = ({ onMessage }) => {
   );
 };
 
-const Leaf = ({ attributes, children, leaf }: RenderLeafProps) => {
+const Leaf: React.FC<RenderLeafProps> = ({ attributes, children, leaf }) => {
   if (leaf.emote) {
     const [name, ...modifiers] = leaf.text.split(":");
 

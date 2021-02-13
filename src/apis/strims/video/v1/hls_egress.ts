@@ -2,13 +2,13 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface IHLSEgressIsSupportedRequest {
+export type IHLSEgressIsSupportedRequest = {
 }
 
 export class HLSEgressIsSupportedRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IHLSEgressIsSupportedRequest) {
-    // noop
   }
 
   static encode(m: HLSEgressIsSupportedRequest, w?: Writer): Writer {
@@ -22,12 +22,12 @@ export class HLSEgressIsSupportedRequest {
   }
 }
 
-export interface IHLSEgressIsSupportedResponse {
+export type IHLSEgressIsSupportedResponse = {
   supported?: boolean;
 }
 
 export class HLSEgressIsSupportedResponse {
-  supported: boolean = false;
+  supported: boolean;
 
   constructor(v?: IHLSEgressIsSupportedResponse) {
     this.supported = v?.supported || false;
@@ -58,12 +58,12 @@ export class HLSEgressIsSupportedResponse {
   }
 }
 
-export interface IHLSEgressOpenStreamRequest {
+export type IHLSEgressOpenStreamRequest = {
   swarmUri?: string;
 }
 
 export class HLSEgressOpenStreamRequest {
-  swarmUri: string = "";
+  swarmUri: string;
 
   constructor(v?: IHLSEgressOpenStreamRequest) {
     this.swarmUri = v?.swarmUri || "";
@@ -94,12 +94,12 @@ export class HLSEgressOpenStreamRequest {
   }
 }
 
-export interface IHLSEgressOpenStreamResponse {
+export type IHLSEgressOpenStreamResponse = {
   playlistUrl?: string;
 }
 
 export class HLSEgressOpenStreamResponse {
-  playlistUrl: string = "";
+  playlistUrl: string;
 
   constructor(v?: IHLSEgressOpenStreamResponse) {
     this.playlistUrl = v?.playlistUrl || "";
@@ -130,12 +130,12 @@ export class HLSEgressOpenStreamResponse {
   }
 }
 
-export interface IHLSEgressCloseStreamRequest {
+export type IHLSEgressCloseStreamRequest = {
   transferId?: Uint8Array;
 }
 
 export class HLSEgressCloseStreamRequest {
-  transferId: Uint8Array = new Uint8Array();
+  transferId: Uint8Array;
 
   constructor(v?: IHLSEgressCloseStreamRequest) {
     this.transferId = v?.transferId || new Uint8Array();
@@ -166,13 +166,13 @@ export class HLSEgressCloseStreamRequest {
   }
 }
 
-export interface IHLSEgressCloseStreamResponse {
+export type IHLSEgressCloseStreamResponse = {
 }
 
 export class HLSEgressCloseStreamResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IHLSEgressCloseStreamResponse) {
-    // noop
   }
 
   static encode(m: HLSEgressCloseStreamResponse, w?: Writer): Writer {

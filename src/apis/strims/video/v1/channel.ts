@@ -14,7 +14,7 @@ import {
   IDirectoryListingSnippet as strims_network_v1_IDirectoryListingSnippet,
 } from "../../network/v1/directory";
 
-export interface IVideoChannel {
+export type IVideoChannel = {
   id?: bigint;
   key?: strims_type_IKey | undefined;
   token?: Uint8Array;
@@ -23,9 +23,9 @@ export interface IVideoChannel {
 }
 
 export class VideoChannel {
-  id: bigint = BigInt(0);
+  id: bigint;
   key: strims_type_Key | undefined;
-  token: Uint8Array = new Uint8Array();
+  token: Uint8Array;
   directoryListingSnippet: strims_network_v1_DirectoryListingSnippet | undefined;
   owner: VideoChannel.TOwner;
 
@@ -148,14 +148,14 @@ export namespace VideoChannel {
     >;
   };
 
-  export interface ILocal {
+  export type ILocal = {
     authKey?: Uint8Array;
     networkKey?: Uint8Array;
   }
 
   export class Local {
-    authKey: Uint8Array = new Uint8Array();
-    networkKey: Uint8Array = new Uint8Array();
+    authKey: Uint8Array;
+    networkKey: Uint8Array;
 
     constructor(v?: ILocal) {
       this.authKey = v?.authKey || new Uint8Array();
@@ -191,7 +191,7 @@ export namespace VideoChannel {
     }
   }
 
-  export interface ILocalShare {
+  export type ILocalShare = {
     certificate?: strims_type_ICertificate | undefined;
   }
 
@@ -227,7 +227,7 @@ export namespace VideoChannel {
     }
   }
 
-  export interface IRemoteShare {
+  export type IRemoteShare = {
     id?: bigint;
     networkKey?: Uint8Array;
     serviceKey?: Uint8Array;
@@ -236,11 +236,11 @@ export namespace VideoChannel {
   }
 
   export class RemoteShare {
-    id: bigint = BigInt(0);
-    networkKey: Uint8Array = new Uint8Array();
-    serviceKey: Uint8Array = new Uint8Array();
-    serviceSalt: Uint8Array = new Uint8Array();
-    serverAddr: string = "";
+    id: bigint;
+    networkKey: Uint8Array;
+    serviceKey: Uint8Array;
+    serviceSalt: Uint8Array;
+    serverAddr: string;
 
     constructor(v?: IRemoteShare) {
       this.id = v?.id || BigInt(0);
@@ -293,13 +293,13 @@ export namespace VideoChannel {
 
 }
 
-export interface IVideoChannelListRequest {
+export type IVideoChannelListRequest = {
 }
 
 export class VideoChannelListRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IVideoChannelListRequest) {
-    // noop
   }
 
   static encode(m: VideoChannelListRequest, w?: Writer): Writer {
@@ -313,15 +313,15 @@ export class VideoChannelListRequest {
   }
 }
 
-export interface IVideoChannelListResponse {
+export type IVideoChannelListResponse = {
   channels?: IVideoChannel[];
 }
 
 export class VideoChannelListResponse {
-  channels: VideoChannel[] = [];
+  channels: VideoChannel[];
 
   constructor(v?: IVideoChannelListResponse) {
-    if (v?.channels) this.channels = v.channels.map(v => new VideoChannel(v));
+    this.channels = v?.channels ? v.channels.map(v => new VideoChannel(v)) : [];
   }
 
   static encode(m: VideoChannelListResponse, w?: Writer): Writer {
@@ -349,14 +349,14 @@ export class VideoChannelListResponse {
   }
 }
 
-export interface IVideoChannelCreateRequest {
+export type IVideoChannelCreateRequest = {
   directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
   networkKey?: Uint8Array;
 }
 
 export class VideoChannelCreateRequest {
   directoryListingSnippet: strims_network_v1_DirectoryListingSnippet | undefined;
-  networkKey: Uint8Array = new Uint8Array();
+  networkKey: Uint8Array;
 
   constructor(v?: IVideoChannelCreateRequest) {
     this.directoryListingSnippet = v?.directoryListingSnippet && new strims_network_v1_DirectoryListingSnippet(v.directoryListingSnippet);
@@ -392,7 +392,7 @@ export class VideoChannelCreateRequest {
   }
 }
 
-export interface IVideoChannelCreateResponse {
+export type IVideoChannelCreateResponse = {
   channel?: IVideoChannel | undefined;
 }
 
@@ -428,16 +428,16 @@ export class VideoChannelCreateResponse {
   }
 }
 
-export interface IVideoChannelUpdateRequest {
+export type IVideoChannelUpdateRequest = {
   id?: bigint;
   directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
   networkKey?: Uint8Array;
 }
 
 export class VideoChannelUpdateRequest {
-  id: bigint = BigInt(0);
+  id: bigint;
   directoryListingSnippet: strims_network_v1_DirectoryListingSnippet | undefined;
-  networkKey: Uint8Array = new Uint8Array();
+  networkKey: Uint8Array;
 
   constructor(v?: IVideoChannelUpdateRequest) {
     this.id = v?.id || BigInt(0);
@@ -478,7 +478,7 @@ export class VideoChannelUpdateRequest {
   }
 }
 
-export interface IVideoChannelUpdateResponse {
+export type IVideoChannelUpdateResponse = {
   channel?: IVideoChannel | undefined;
 }
 
@@ -514,12 +514,12 @@ export class VideoChannelUpdateResponse {
   }
 }
 
-export interface IVideoChannelDeleteRequest {
+export type IVideoChannelDeleteRequest = {
   id?: bigint;
 }
 
 export class VideoChannelDeleteRequest {
-  id: bigint = BigInt(0);
+  id: bigint;
 
   constructor(v?: IVideoChannelDeleteRequest) {
     this.id = v?.id || BigInt(0);
@@ -550,13 +550,13 @@ export class VideoChannelDeleteRequest {
   }
 }
 
-export interface IVideoChannelDeleteResponse {
+export type IVideoChannelDeleteResponse = {
 }
 
 export class VideoChannelDeleteResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IVideoChannelDeleteResponse) {
-    // noop
   }
 
   static encode(m: VideoChannelDeleteResponse, w?: Writer): Writer {

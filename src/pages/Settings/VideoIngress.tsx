@@ -1,5 +1,5 @@
 import { Base64 } from "js-base64";
-import * as React from "react";
+import React from "react";
 import { Controller, SubmitHandler, useForm } from "react-hook-form";
 import { MdChevronLeft, MdChevronRight } from "react-icons/md";
 import { Link, Switch } from "react-router-dom";

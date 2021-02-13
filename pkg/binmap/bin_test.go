@@ -1,7 +1,6 @@
 package binmap
 
 import (
-	"log"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -56,6 +55,15 @@ func TestBinToString(t *testing.T) {
 	assert.Equal(NewBin(0, 1).String(), "2")
 }
 
-func TestMeme(t *testing.T) {
-	log.Println(NewBin(2, 1).LayerBits())
+func TestLayerLeftRight(t *testing.T) {
+	for l := uint64(0); l < 10; l++ {
+		for o := uint64(0); l < 10; l++ {
+			left := NewBin(l, o)
+			right := NewBin(l, o+1)
+			assert.Equal(t, right, left.LayerRight())
+			assert.Equal(t, left, right.LayerLeft())
+		}
+
+		assert.Equal(t, NewBin(l, 0).LayerLeft(), None)
+	}
 }

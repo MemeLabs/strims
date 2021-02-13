@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 
 import { Base64 } from "js-base64";
-import * as React from "react";
+import React from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { DirectoryEvent, DirectoryListing } from "../apis/strims/network/v1/directory";

@@ -344,6 +344,19 @@ func (m *Map) Reset(b Bin) {
 	}
 }
 
+// FillBefore ...
+func (m *Map) FillBefore(b Bin) {
+	b = b.LayerLeft()
+	for !b.IsNone() {
+		if b.IsLeft() {
+			m.Set(b)
+			b = b.Parent().LayerLeft()
+		} else {
+			b = b.Parent()
+		}
+	}
+}
+
 func (m *Map) setLowLayerBitmap(target Bin, _bitmap bitmap) {
 	binBitmap := binBitmaps[target&bitmapLayerBits]
 	bitmap := _bitmap & binBitmap

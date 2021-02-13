@@ -1,7 +1,7 @@
 /* eslint-disable no-console */
 
 import parsePrometheusTextFormat from "parse-prometheus-text-format";
-import * as React from "react";
+import React from "react";
 import { Sparklines, SparklinesBars } from "react-sparklines";
 
 import { ReadMetricsRequest } from "../apis/strims/debug/v1/debug";

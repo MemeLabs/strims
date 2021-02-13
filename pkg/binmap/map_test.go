@@ -204,3 +204,14 @@ func TestFindFilledAfter(t *testing.T) {
 	m.Set(9)
 	assert.Equal(t, Bin(8), m.FindFilledAfter(6))
 }
+
+func TestFillBefore(t *testing.T) {
+	for i := Bin(2); i < 32; i += 2 {
+		m := New()
+		m.FillBefore(i)
+		for b := Bin(0); b < i; b += 2 {
+			assert.True(t, m.FilledAt(b))
+		}
+		assert.False(t, m.FilledAt(Bin(i)))
+	}
+}

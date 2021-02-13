@@ -1,22 +1,22 @@
 /* eslint-disable no-console */
 
 import { Base64 } from "js-base64";
-import * as React from "react";
+import React from "react";
 
 import Composer from "../components/Chat/Composer";
 import Message from "../components/Chat/Message";
-import Scroller from "../components/Chat/Scroller";
+import Scroller, { MessageProps } from "../components/Chat/Scroller";
 import { MainLayout } from "../components/MainLayout";
 import { Provider, useChat } from "../contexts/Chat";
 
-const ChatThing = () => {
+const ChatThing: React.FC = () => {
   const [state, { sendMessage }] = useChat();
 
   return (
     <>
       <div className="chat__messages">
         <Scroller
-          renderMessage={({ index, style }) => (
+          renderMessage={({ index, style }: MessageProps) => (
             <Message message={state.messages[index]} style={style} />
           )}
           messageCount={state.messages.length}
@@ -29,7 +29,7 @@ const ChatThing = () => {
   );
 };
 
-const ChatTest = () => {
+const ChatTest: React.FC = () => {
   return (
     <MainLayout>
       <main className="home_page__main">

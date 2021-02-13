@@ -2,7 +2,7 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface IHashTableMessage {
+export type IHashTableMessage = {
   body?: HashTableMessage.IBody
 }
 
@@ -123,7 +123,7 @@ export namespace HashTableMessage {
     >;
   };
 
-  export interface IRecord {
+  export type IRecord = {
     key?: Uint8Array;
     salt?: Uint8Array;
     value?: Uint8Array;
@@ -132,11 +132,11 @@ export namespace HashTableMessage {
   }
 
   export class Record {
-    key: Uint8Array = new Uint8Array();
-    salt: Uint8Array = new Uint8Array();
-    value: Uint8Array = new Uint8Array();
-    timestamp: bigint = BigInt(0);
-    signature: Uint8Array = new Uint8Array();
+    key: Uint8Array;
+    salt: Uint8Array;
+    value: Uint8Array;
+    timestamp: bigint;
+    signature: Uint8Array;
 
     constructor(v?: IRecord) {
       this.key = v?.key || new Uint8Array();
@@ -187,7 +187,7 @@ export namespace HashTableMessage {
     }
   }
 
-  export interface IPublish {
+  export type IPublish = {
     record?: HashTableMessage.IRecord | undefined;
   }
 
@@ -223,7 +223,7 @@ export namespace HashTableMessage {
     }
   }
 
-  export interface IUnpublish {
+  export type IUnpublish = {
     record?: HashTableMessage.IRecord | undefined;
   }
 
@@ -259,16 +259,16 @@ export namespace HashTableMessage {
     }
   }
 
-  export interface IGetRequest {
+  export type IGetRequest = {
     requestId?: bigint;
     hash?: Uint8Array;
     ifModifiedSince?: bigint;
   }
 
   export class GetRequest {
-    requestId: bigint = BigInt(0);
-    hash: Uint8Array = new Uint8Array();
-    ifModifiedSince: bigint = BigInt(0);
+    requestId: bigint;
+    hash: Uint8Array;
+    ifModifiedSince: bigint;
 
     constructor(v?: IGetRequest) {
       this.requestId = v?.requestId || BigInt(0);
@@ -309,13 +309,13 @@ export namespace HashTableMessage {
     }
   }
 
-  export interface IGetResponse {
+  export type IGetResponse = {
     requestId?: bigint;
     record?: HashTableMessage.IRecord | undefined;
   }
 
   export class GetResponse {
-    requestId: bigint = BigInt(0);
+    requestId: bigint;
     record: HashTableMessage.Record | undefined;
 
     constructor(v?: IGetResponse) {

@@ -1,6 +1,6 @@
 import { StyleDeclarationValue, StyleSheet, reset } from "aphrodite/no-important";
 import clsx from "clsx";
-import * as React from "react";
+import React from "react";
 import { useEffect } from "react";
 
 import { CallChatClientRequest, ChatClientEvent } from "../apis/strims/chat/v1/chat";
@@ -151,10 +151,9 @@ export const useChat = () => {
 interface ProviderProps {
   networkKey: Uint8Array;
   serverKey: Uint8Array;
-  children: React.ReactChildren;
 }
 
-export const Provider = ({ networkKey, serverKey, children }: any) => {
+export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, children }) => {
   const [state, dispatch] = React.useReducer(chatReducer, initialState);
   const client = useClient();
 

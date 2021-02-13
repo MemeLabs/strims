@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useDebounce } from "react-use";
 
-const useIdleTimout = (timeout = 3000, initialState = true) => {
+const useIdleTimout = (timeout = 3000, initialState = true): [boolean, () => void, () => void] => {
   const [idle, setIdle] = useState(initialState);
   const [lastActive, setLastActive] = useState(0);
 
@@ -14,7 +14,7 @@ const useIdleTimout = (timeout = 3000, initialState = true) => {
 
   const clearTimeout = () => setIdle(true);
 
-  return [idle, renewTimeout, clearTimeout] as [boolean, () => void, () => void];
+  return [idle, renewTimeout, clearTimeout];
 };
 
 export default useIdleTimout;

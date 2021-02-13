@@ -2,16 +2,16 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface IPProfRequest {
+export type IPProfRequest = {
   name?: string;
   debug?: boolean;
   gc?: boolean;
 }
 
 export class PProfRequest {
-  name: string = "";
-  debug: boolean = false;
-  gc: boolean = false;
+  name: string;
+  debug: boolean;
+  gc: boolean;
 
   constructor(v?: IPProfRequest) {
     this.name = v?.name || "";
@@ -52,14 +52,14 @@ export class PProfRequest {
   }
 }
 
-export interface IPProfResponse {
+export type IPProfResponse = {
   name?: string;
   data?: Uint8Array;
 }
 
 export class PProfResponse {
-  name: string = "";
-  data: Uint8Array = new Uint8Array();
+  name: string;
+  data: Uint8Array;
 
   constructor(v?: IPProfResponse) {
     this.name = v?.name || "";
@@ -95,12 +95,12 @@ export class PProfResponse {
   }
 }
 
-export interface IReadMetricsRequest {
+export type IReadMetricsRequest = {
   format?: MetricsFormat;
 }
 
 export class ReadMetricsRequest {
-  format: MetricsFormat = 0;
+  format: MetricsFormat;
 
   constructor(v?: IReadMetricsRequest) {
     this.format = v?.format || 0;
@@ -131,12 +131,12 @@ export class ReadMetricsRequest {
   }
 }
 
-export interface IReadMetricsResponse {
+export type IReadMetricsResponse = {
   data?: Uint8Array;
 }
 
 export class ReadMetricsResponse {
-  data: Uint8Array = new Uint8Array();
+  data: Uint8Array;
 
   constructor(v?: IReadMetricsResponse) {
     this.data = v?.data || new Uint8Array();

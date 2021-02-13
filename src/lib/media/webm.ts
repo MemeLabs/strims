@@ -20,6 +20,7 @@ export class Encoder {
 
   public constructor(stream: MediaStream) {
     this.fileReader = new FileReader();
+    // eslint-disable-next-line
     this.fileReader.onloadend = this.handleLoadEnd.bind(this);
     this.fileReaderTasks = new WorkQueue();
 
@@ -30,6 +31,7 @@ export class Encoder {
     };
     this.mediaRecorder = new MediaRecorder(stream, options);
 
+    // eslint-disable-next-line
     this.mediaRecorder.ondataavailable = this.handleDataAvailable.bind(this);
     // this.mediaRecorder.onerror = (e) => console.log(new Date(), "onerror", e);
     // this.mediaRecorder.onpause = (e) => console.log(new Date(), "onpause", e);
@@ -103,7 +105,7 @@ export class Decoder {
     this.source = new Source(MIME_TYPE);
   }
 
-  public reset() {
+  public reset(): void {
     this.headerRead = false;
     this.clusterRead = false;
     this.source.reset();

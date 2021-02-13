@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 
 import type { Client } from "../apis/client";
 
@@ -17,36 +17,57 @@ export interface Options<
   onError?: (error: Error) => void;
 }
 
+export interface CallHookState<
+  C extends Client,
+  S extends keyof C,
+  M extends FunctionPropertyNames<C[S]>
+> {
+  value?: ResultType<C[S][M]>;
+  error?: Error;
+  loading: boolean;
+  called: boolean;
+}
+
+export type CallHookDispatcher<
+  C extends Client,
+  S extends keyof C,
+  M extends FunctionPropertyNames<C[S]>
+> = (...arg: Parameters<C[S][M]>) => ReturnType<C[S][M]>;
+
+export type CallHook<C extends Client> = <S extends keyof C, M extends FunctionPropertyNames<C[S]>>(
+  serviceName: S,
+  methodName: M,
+  options?: Options<C, S, M>
+) => [CallHookState<C, S, M>, CallHookDispatcher<C, S, M>];
+
+export interface Api<C extends Client> {
+  ClientContext: React.Context<C>;
+  Provider: React.Provider<C>;
+  useClient: () => C;
+  useCall: CallHook<C>;
+  useLazyCall: CallHook<C>;
+}
+
 const defaultOptions = {
   skip: false,
 };
 
-const create = <C extends Client>() => {
+const create = <C extends Client>(): Api<C> => {
   const ClientContext = React.createContext<C>(null);
 
   const { Provider } = ClientContext;
 
   const useClient = () => React.useContext(ClientContext);
 
-  const useCall = <S extends keyof C, M extends FunctionPropertyNames<C[S]>>(
+  const useCall: CallHook<C> = <S extends keyof C, M extends FunctionPropertyNames<C[S]>>(
     serviceName: S,
     methodName: M,
     options: Options<C, S, M> = {}
   ) => {
-    type Arguments = Parameters<C[S][M]>;
-    type Result = ResultType<C[S][M]>;
-    type CallResult = ReturnType<C[S][M]>;
-    interface State {
-      value?: Result;
-      error?: Error;
-      loading: boolean;
-      called: boolean;
-    }
-
     options = { ...defaultOptions, ...options };
 
     const client = React.useContext(ClientContext);
-    const [state, setState] = React.useState<State>({
+    const [state, setState] = React.useState<CallHookState<C, S, M>>({
       loading: !options.skip,
       called: !options.skip,
     });
@@ -71,7 +92,7 @@ const create = <C extends Client>() => {
       }
     };
 
-    const handleComplete = (value: Result) => {
+    const handleComplete = (value: ResultType<C[S][M]>) => {
       if (!mounted) {
         return;
       }
@@ -87,15 +108,15 @@ const create = <C extends Client>() => {
       }
     };
 
-    const call = (...args: Arguments): CallResult => {
-      /* eslint-disable prefer-spread */
+    const call: CallHookDispatcher<C, S, M> = (...args) => {
       const service = client[serviceName];
       const method = service?.[methodName];
       if (method === undefined) {
         throw new Error(`undefined api method ${serviceName as string}.${methodName as string}`);
       }
 
-      const value = (method as AnyFunction).apply(service, args);
+      // eslint-disable-next-line
+      const value = (method as any).apply(service, args) as ResultType<C[S][M]>;
       if (value instanceof Promise) {
         setState((prev) => ({
           ...prev,
@@ -106,7 +127,7 @@ const create = <C extends Client>() => {
       } else {
         handleComplete(value);
       }
-      return value;
+      return value as ReturnType<C[S][M]>;
     };
 
     React.useEffect(() => {
@@ -115,16 +136,14 @@ const create = <C extends Client>() => {
       }
     }, [options.skip]);
 
-    return [state, call] as [State, (...arg: Arguments) => CallResult];
+    return [state, call];
   };
 
-  const useLazyCall = <S extends keyof C, M extends FunctionPropertyNames<C[S]>>(
+  const useLazyCall: CallHook<C> = <S extends keyof C, M extends FunctionPropertyNames<C[S]>>(
     serviceName: S,
     methodName: M,
     options: Options<C, S, M> = {}
-  ) => {
-    return useCall(serviceName, methodName, { ...options, skip: true });
-  };
+  ) => useCall(serviceName, methodName, { ...options, skip: true });
 
   return {
     ClientContext,

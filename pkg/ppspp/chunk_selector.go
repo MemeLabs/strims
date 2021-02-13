@@ -272,14 +272,8 @@ func (r *FirstChunkSelector) SelectBins(count int, seen, requested, available *b
 	}
 
 	bins = append(bins, end)
-	requested.Set(end)
 
-	// fill from 0 to end so the first empty bin is end + 2
-	for end > 0 {
-		end = requested.Cover(end - 2)
-		requested.Set(end)
-		end = end.BaseLeft()
-	}
+	requested.FillBefore(end + 2)
 
 	// log.Println(">>>>>>>>", requested.FindLastFilled(), bins[0])
 

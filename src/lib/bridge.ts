@@ -1,76 +1,208 @@
 import { EventEmitter } from "events";
 
-declare function postMessage(message: any, targetOrigin?: string, transfer?: any[]): void;
-declare function postMessage(message: any, transfer?: any[]): void;
+declare function postMessage<T>(message: T, targetOrigin?: string, transfer?: Transferable[]): void;
+declare function postMessage<T>(message: T, transfer?: Transferable[]): void;
 
-const EVENT_TYPE_OPEN_BUS = 0;
-const EVENT_TYPE_OPEN_WEBRTC = 1;
-const EVENT_TYPE_OPEN_DATA_CHANNEL = 2;
-const EVENT_TYPE_DATA = 3;
-const EVENT_TYPE_ERROR = 4;
-const EVENT_TYPE_CLOSE = 5;
-const EVENT_TYPE_ICE_CANDIDATE = 6;
-const EVENT_TYPE_CONNECTION_STATE_CHANGE = 7;
-const EVENT_TYPE_ICE_GATHERING_STATE_CHANGE = 8;
-const EVENT_TYPE_SIGNALING_STATE_CHANGE = 9;
-const EVENT_TYPE_CREATE_OFFER = 10;
-const EVENT_TYPE_CREATE_ANSWER = 11;
-const EVENT_TYPE_ADD_ICE_CANDIDATE = 12;
-const EVENT_TYPE_SET_LOCAL_DESCRIPTION = 13;
-const EVENT_TYPE_SET_REMOTE_DESCRIPTION = 14;
-const EVENT_TYPE_DATA_CHANNEL = 15;
-const EVENT_TYPE_DATA_CHANNEL_DATA = 16;
-const EVENT_TYPE_DATA_CHANNEL_OPEN = 17;
-const EVENT_TYPE_DATA_CHANNEL_CLOSE = 18;
-const EVENT_TYPE_CREATE_DATA_CHANNEL = 19;
-const EVENT_TYPE_OPEN_WORKER = 20;
+interface GenericMessagePort<TIn, TOut> extends MessagePort {
+  onmessage: ((this: GenericMessagePort<TIn, TOut>, ev: MessageEvent<TIn>) => void) | null;
+  onmessageerror: ((this: GenericMessagePort<TIn, TOut>, ev: MessageEvent<TIn>) => void) | null;
+  postMessage(message: TOut, transfer: Transferable[]): void;
+  postMessage(message: TOut, options?: PostMessageOptions): void;
+}
 
-const eventTypeNames = {
-  0: "EVENT_TYPE_OPEN_BUS",
-  1: "EVENT_TYPE_OPEN_WEBRTC",
-  2: "EVENT_TYPE_OPEN_DATA_CHANNEL",
-  3: "EVENT_TYPE_DATA",
-  4: "EVENT_TYPE_ERROR",
-  5: "EVENT_TYPE_CLOSE",
-  6: "EVENT_TYPE_ICE_CANDIDATE",
-  7: "EVENT_TYPE_CONNECTION_STATE_CHANGE",
-  8: "EVENT_TYPE_ICE_GATHERING_STATE_CHANGE",
-  9: "EVENT_TYPE_SIGNALING_STATE_CHANGE",
-  10: "EVENT_TYPE_CREATE_OFFER",
-  11: "EVENT_TYPE_CREATE_ANSWER",
-  12: "EVENT_TYPE_ADD_ICE_CANDIDATE",
-  13: "EVENT_TYPE_SET_LOCAL_DESCRIPTION",
-  14: "EVENT_TYPE_SET_REMOTE_DESCRIPTION",
-  15: "EVENT_TYPE_DATA_CHANNEL",
-  16: "EVENT_TYPE_DATA_CHANNEL_DATA",
-  17: "EVENT_TYPE_DATA_CHANNEL_OPEN",
-  18: "EVENT_TYPE_DATA_CHANNEL_CLOSE",
-  19: "EVENT_TYPE_CREATE_DATA_CHANNEL",
-  20: "EVENT_TYPE_OPEN_WORKER",
+type GenericChannel<TIn, TOut> = {
+  port1: GenericMessagePort<TIn, TOut>;
+  port2: GenericMessagePort<TOut, TIn>;
 };
 
+const enum EventType {
+  OPEN_BUS = 0,
+  OPEN_WEBRTC = 1,
+  OPEN_DATA_CHANNEL = 2,
+  DATA = 3,
+  ERROR = 4,
+  CLOSE = 5,
+  ICE_CANDIDATE = 6,
+  CONNECTION_STATE_CHANGE = 7,
+  ICE_GATHERING_STATE_CHANGE = 8,
+  SIGNALING_STATE_CHANGE = 9,
+  CREATE_OFFER = 10,
+  CREATE_ANSWER = 11,
+  ADD_ICE_CANDIDATE = 12,
+  SET_LOCAL_DESCRIPTION = 13,
+  SET_REMOTE_DESCRIPTION = 14,
+  DATA_CHANNEL = 15,
+  DATA_CHANNEL_DATA = 16,
+  DATA_CHANNEL_OPEN = 17,
+  DATA_CHANNEL_CLOSE = 18,
+  CREATE_DATA_CHANNEL = 19,
+  OPEN_WORKER = 20,
+}
+
+type WorkerEvent =
+  | {
+      type: EventType.OPEN_WEBRTC;
+      port: WebRTCMessagePort;
+    }
+  | {
+      type: EventType.OPEN_DATA_CHANNEL;
+      port: GenericMessagePort<void, WebRTCDataChannelMessagePort>;
+      id: number;
+    }
+  | {
+      type: EventType.OPEN_WORKER;
+      port: WorkerMessagePort;
+      service: string;
+    }
+  | {
+      type: EventType.OPEN_BUS;
+      port: BusMessagePort;
+      label: string;
+    };
+
+type WebRTCWorkerEvent =
+  | {
+      type: EventType.CREATE_OFFER;
+    }
+  | {
+      type: EventType.CREATE_ANSWER;
+    }
+  | {
+      type: EventType.CREATE_DATA_CHANNEL;
+      label: string;
+    }
+  | {
+      type: EventType.ADD_ICE_CANDIDATE;
+      candidate: string;
+    }
+  | {
+      type: EventType.SET_LOCAL_DESCRIPTION;
+      description: string;
+    }
+  | {
+      type: EventType.SET_REMOTE_DESCRIPTION;
+      description: string;
+    }
+  | {
+      type: EventType.CLOSE;
+    };
+
+type WebRTCWindowEvent =
+  | {
+      type: EventType.ICE_CANDIDATE;
+      candidate: string;
+    }
+  | {
+      type: EventType.CONNECTION_STATE_CHANGE;
+      state: string;
+    }
+  | {
+      type: EventType.ICE_GATHERING_STATE_CHANGE;
+      state: string;
+    }
+  | {
+      type: EventType.SIGNALING_STATE_CHANGE;
+      state: string;
+    }
+  | {
+      type: EventType.CREATE_OFFER;
+      error?: string;
+      description?: string;
+    }
+  | {
+      type: EventType.CREATE_ANSWER;
+      error?: string;
+      description?: string;
+    }
+  | {
+      type: EventType.DATA_CHANNEL;
+      id: number;
+      label: string;
+    };
+
+type WebRTCMessagePort = GenericMessagePort<WebRTCWorkerEvent, WebRTCWindowEvent>;
+
+type WebRTCDataChannelWorkerEvent =
+  | {
+      type: EventType.DATA_CHANNEL_DATA;
+      data: ArrayBuffer;
+    }
+  | {
+      type: EventType.DATA_CHANNEL_CLOSE;
+    };
+
+type WebRTCDataChannelWindowEvent =
+  | {
+      type: EventType.DATA_CHANNEL_DATA;
+      data: ArrayBuffer;
+      timestamp: number;
+    }
+  | {
+      type: EventType.DATA_CHANNEL_OPEN;
+    }
+  | {
+      type: EventType.DATA_CHANNEL_CLOSE;
+    };
+
+type WebRTCDataChannelMessagePort = GenericMessagePort<
+  WebRTCDataChannelWindowEvent,
+  WebRTCDataChannelWorkerEvent
+>;
+
+type WorkerWorkerEvent = {
+  type: EventType.CLOSE;
+};
+
+type WorkerWindowEvent = {
+  port: BusMessagePort;
+};
+
+type WorkerMessagePort = GenericMessagePort<WorkerWorkerEvent, WorkerWindowEvent>;
+
+type BusEvent =
+  | {
+      type: EventType.DATA;
+      data: ArrayBuffer;
+      timestamp: number;
+    }
+  | {
+      type: EventType.CLOSE;
+    };
+
+type BusMessagePort = GenericMessagePort<BusEvent, BusEvent>;
+
 interface PortState {
-  port: MessagePort;
+  port: WebRTCDataChannelMessagePort;
   open: () => void;
 }
 
 export class WindowBridge extends EventEmitter {
-  private workerConstructor: new () => Worker;
   private nextDataChannelPortId = 0;
-  private dataChannelPorts: Map<number, PortState>;
+  private dataChannelPorts = new Map<number, PortState>();
 
-  constructor(workerConstructor: new () => Worker) {
+  constructor(private workerConstructor: new () => Worker) {
     super();
-
-    this.workerConstructor = workerConstructor;
-    this.dataChannelPorts = new Map();
-
     this.createWorker("default");
   }
 
   private createWorker(service: string, ...args: any[]): Worker {
     const worker = new this.workerConstructor();
-    worker.onmessage = this.handleWorkerMessage.bind(this);
+    worker.onmessage = ({ data }: MessageEvent<WorkerEvent>) => {
+      switch (data.type) {
+        case EventType.OPEN_WEBRTC:
+          this.openWebRTC(data.port);
+          break;
+        case EventType.OPEN_DATA_CHANNEL:
+          this.openDataChannel(data.port, data.id);
+          break;
+        case EventType.OPEN_WORKER:
+          this.openWorker(data.port, data.service);
+          break;
+        case EventType.OPEN_BUS:
+          this.openBus(data.port, data.label);
+          break;
+      }
+    };
     worker.postMessage({
       service,
       baseURI: location.origin,
@@ -79,24 +211,7 @@ export class WindowBridge extends EventEmitter {
     return worker;
   }
 
-  private handleWorkerMessage({ data }) {
-    switch (data.type) {
-      case EVENT_TYPE_OPEN_WEBRTC:
-        this.openWebRTC(data.port);
-        break;
-      case EVENT_TYPE_OPEN_DATA_CHANNEL:
-        this.openDataChannel(data.port, data.id);
-        break;
-      case EVENT_TYPE_OPEN_WORKER:
-        this.openWorker(data.port, data.service);
-        break;
-      case EVENT_TYPE_OPEN_BUS:
-        this.openBus(data.port, data.label);
-        break;
-    }
-  }
-
-  private openWebRTC(port: MessagePort) {
+  private openWebRTC(port: WebRTCMessagePort) {
     // TODO: specify ice servers...
     const peerConnection = new RTCPeerConnection({
       iceServers: [
@@ -107,27 +222,30 @@ export class WindowBridge extends EventEmitter {
     });
 
     const dataChannels: { id: number; port: MessagePort; dataChannel: RTCDataChannel }[] = [];
-    const handleDataChannel = (dataChannel) => {
+    const handleDataChannel = (dataChannel: RTCDataChannel) => {
       let open: (...arg: any[]) => void;
       const ready = new Promise((resolve) => (open = resolve));
 
-      const { port1, port2 } = new MessageChannel();
+      const { port1, port2 } = new MessageChannel() as GenericChannel<
+        WebRTCDataChannelWorkerEvent,
+        WebRTCDataChannelWindowEvent
+      >;
       const portId = this.nextDataChannelPortId++;
       this.dataChannelPorts.set(portId, { port: port2, open });
 
       port.postMessage({
-        type: EVENT_TYPE_DATA_CHANNEL,
+        type: EventType.DATA_CHANNEL,
         id: portId,
         label: dataChannel.label,
       });
 
       dataChannel.binaryType = "arraybuffer";
 
-      dataChannel.onmessage = (e: MessageEvent) =>
+      dataChannel.onmessage = (e: MessageEvent<ArrayBuffer>) =>
         ready.then(() =>
           port1.postMessage(
             {
-              type: EVENT_TYPE_DATA_CHANNEL_DATA,
+              type: EventType.DATA_CHANNEL_DATA,
               timestamp: Date.now(),
               data: e.data,
             },
@@ -138,18 +256,18 @@ export class WindowBridge extends EventEmitter {
       dataChannel.onopen = () =>
         ready.then(() =>
           port1.postMessage({
-            type: EVENT_TYPE_DATA_CHANNEL_OPEN,
+            type: EventType.DATA_CHANNEL_OPEN,
           })
         );
 
-      port1.onmessage = ({ data }) =>
+      port1.onmessage = ({ data }: MessageEvent<WebRTCDataChannelWorkerEvent>) =>
         ready.then(() => {
           // console.log("window data channel event", data);
           switch (data.type) {
-            case EVENT_TYPE_DATA_CHANNEL_DATA:
+            case EventType.DATA_CHANNEL_DATA:
               dataChannel.send(data.data);
               break;
-            case EVENT_TYPE_DATA_CHANNEL_CLOSE:
+            case EventType.DATA_CHANNEL_CLOSE:
               dataChannel.close();
               break;
           }
@@ -166,7 +284,7 @@ export class WindowBridge extends EventEmitter {
 
     const onclose = () => {
       dataChannels.forEach(({ id, port, dataChannel }) => {
-        port.postMessage({ type: EVENT_TYPE_DATA_CHANNEL_CLOSE });
+        port.postMessage({ type: EventType.DATA_CHANNEL_CLOSE });
         this.dataChannelPorts.delete(id);
 
         dataChannel.onmessage = null;
@@ -190,14 +308,14 @@ export class WindowBridge extends EventEmitter {
 
     peerConnection.onicecandidate = (e: RTCPeerConnectionIceEvent) =>
       port.postMessage({
-        type: EVENT_TYPE_ICE_CANDIDATE,
+        type: EventType.ICE_CANDIDATE,
         candidate: JSON.stringify(e.candidate),
       });
 
     peerConnection.onconnectionstatechange = () => {
       const state = peerConnection.iceConnectionState;
       port.postMessage({
-        type: EVENT_TYPE_CONNECTION_STATE_CHANGE,
+        type: EventType.CONNECTION_STATE_CHANGE,
         state,
       });
 
@@ -208,70 +326,70 @@ export class WindowBridge extends EventEmitter {
 
     peerConnection.onicegatheringstatechange = () =>
       port.postMessage({
-        type: EVENT_TYPE_ICE_GATHERING_STATE_CHANGE,
+        type: EventType.ICE_GATHERING_STATE_CHANGE,
         state: peerConnection.iceGatheringState,
       });
 
     peerConnection.onsignalingstatechange = () =>
       port.postMessage({
-        type: EVENT_TYPE_SIGNALING_STATE_CHANGE,
+        type: EventType.SIGNALING_STATE_CHANGE,
         state: peerConnection.signalingState,
       });
 
-    port.onmessage = ({ data }) => {
+    port.onmessage = ({ data }: MessageEvent<WebRTCWorkerEvent>) => {
       // console.log("window event", eventTypeNames[data.type], data);
       switch (data.type) {
-        case EVENT_TYPE_CREATE_OFFER:
+        case EventType.CREATE_OFFER:
           peerConnection
             .createOffer()
             .then((description) =>
               port.postMessage({
-                type: EVENT_TYPE_CREATE_OFFER,
+                type: EventType.CREATE_OFFER,
                 description: JSON.stringify(description),
               })
             )
             .catch((error) => {
               port.postMessage({
-                type: EVENT_TYPE_CREATE_OFFER,
+                type: EventType.CREATE_OFFER,
                 error: String(error),
               });
               onclose();
             });
           break;
-        case EVENT_TYPE_CREATE_ANSWER:
+        case EventType.CREATE_ANSWER:
           peerConnection
             .createAnswer()
             .then((description) =>
               port.postMessage({
-                type: EVENT_TYPE_CREATE_ANSWER,
+                type: EventType.CREATE_ANSWER,
                 description: JSON.stringify(description),
               })
             )
             .catch((error) => {
               port.postMessage({
-                type: EVENT_TYPE_CREATE_ANSWER,
+                type: EventType.CREATE_ANSWER,
                 error: String(error),
               });
               onclose();
             });
           break;
-        case EVENT_TYPE_CREATE_DATA_CHANNEL:
+        case EventType.CREATE_DATA_CHANNEL:
           handleDataChannel(peerConnection.createDataChannel(data.label));
           break;
-        case EVENT_TYPE_ADD_ICE_CANDIDATE:
-          peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(data.candidate)));
+        case EventType.ADD_ICE_CANDIDATE:
+          void peerConnection.addIceCandidate(new RTCIceCandidate(JSON.parse(data.candidate)));
           break;
-        case EVENT_TYPE_SET_LOCAL_DESCRIPTION:
-          peerConnection.setLocalDescription(
+        case EventType.SET_LOCAL_DESCRIPTION:
+          void peerConnection.setLocalDescription(
             new RTCSessionDescription(JSON.parse(data.description))
           );
           break;
-        case EVENT_TYPE_SET_REMOTE_DESCRIPTION:
-          peerConnection.setRemoteDescription(
+        case EventType.SET_REMOTE_DESCRIPTION:
+          void peerConnection.setRemoteDescription(
             new RTCSessionDescription(JSON.parse(data.description))
           );
           break;
-        case EVENT_TYPE_CLOSE:
+        case EventType.CLOSE:
           peerConnection.close();
           onclose();
           break;
@@ -279,7 +397,10 @@ export class WindowBridge extends EventEmitter {
     };
   }
 
-  private openDataChannel(port: MessagePort, id: number) {
+  private openDataChannel(
+    port: GenericMessagePort<void, WebRTCDataChannelMessagePort>,
+    id: number
+  ) {
     const portState = this.dataChannelPorts.get(id);
     if (portState === undefined) {
       port.postMessage(undefined);
@@ -291,13 +412,13 @@ export class WindowBridge extends EventEmitter {
     setTimeout(() => portState.open(), 100);
   }
 
-  private openWorker(port: MessagePort, service: string) {
+  private openWorker(port: WorkerMessagePort, service: string) {
     const worker = this.createWorker(service);
     this.once(`busport:${service}`, (p: MessagePort) => port.postMessage({ port: p }, [p]));
 
-    port.onmessage = ({ data }) => {
+    port.onmessage = ({ data }: MessageEvent<BusEvent>) => {
       switch (data.type) {
-        case EVENT_TYPE_CLOSE:
+        case EventType.CLOSE:
           worker.terminate();
           break;
       }
@@ -311,33 +432,27 @@ export class WindowBridge extends EventEmitter {
 }
 
 export class Bus extends EventEmitter {
-  public port: MessagePort;
-  public label: string;
-
-  constructor(port: MessagePort, label) {
+  constructor(public port: BusMessagePort, public label: string) {
     super();
 
-    this.port = port;
-    this.label = label;
-
-    port.onmessage = ({ data }) => {
+    port.onmessage = ({ data }: MessageEvent<BusEvent>) => {
       switch (data.type) {
-        case EVENT_TYPE_DATA:
+        case EventType.DATA:
           this.emit("data", data.data);
           break;
-        case EVENT_TYPE_CLOSE:
+        case EventType.CLOSE:
           this.emit("close");
           break;
       }
     };
   }
 
-  public write(data: ArrayBuffer | Uint8Array) {
+  public write(data: ArrayBuffer | Uint8Array): void {
     const buffer = data instanceof ArrayBuffer ? data : data.buffer;
 
     this.port.postMessage(
       {
-        type: EVENT_TYPE_DATA,
+        type: EventType.DATA,
         data: buffer,
         timestamp: Date.now(),
       },
@@ -345,20 +460,25 @@ export class Bus extends EventEmitter {
     );
   }
 
-  public close() {
-    this.port.postMessage({ type: EVENT_TYPE_CLOSE });
+  public close(): void {
+    this.port.postMessage({ type: EventType.CLOSE });
     this.port.close();
   }
 }
 
-export interface WebSocketProxy {
+export interface WebSocketGoProxy {
   ondata(data: Uint8Array, n: number, timestamp: number): void;
   onopen(): void;
   onclose(): void;
   onerror(message: string): void;
 }
 
-export interface WebRTCProxy {
+interface WebSocketProxy {
+  write: (data: Uint8Array) => void;
+  close: () => void;
+}
+
+export interface WebRTCGoProxy {
   onicecandidate(candidate: string): void;
   onconnectionstatechange(state: string): void;
   onicegatheringstatechange(state: string): void;
@@ -368,19 +488,48 @@ export interface WebRTCProxy {
   ondatachannel(id: number, label: string): void;
 }
 
-export interface DataChannelProxy {
+interface WebRTCProxy {
+  createOffer: () => void;
+  createAnswer: () => void;
+  createDataChannel: (label: string) => void;
+  addIceCandidate: (candidate: string) => void;
+  setLocalDescription: (description: string) => void;
+  setRemoteDescription: (description: string) => void;
+  close: () => void;
+}
+
+export interface DataChannelGoProxy {
   onerror(message: string): void;
   ondata(data: Uint8Array, n: number, timestamp: number): void;
   onclose(): void;
   onopen(): void;
 }
 
-export interface ServiceProxy {
-  openBus(any): DataChannelProxy;
+interface DataChannelProxy {
+  write: ({ buffer }: Uint8Array) => void;
+  close: () => void;
+}
+
+export interface ServiceGoProxy {
+  openBus(any): DataChannelGoProxy;
+}
+
+interface KVStoreProxy {
+  put: (key: string, value: Uint8Array, done: (error: string | null) => void) => void;
+  delete: (key: string, done: (error: string | null) => void) => void;
+  get: (key: string, done: (error: string | null, value?: Uint8Array) => void) => void;
+  scanPrefix: (prefix: string, done: (error: string | null, value?: any[]) => void) => void;
+  rollback: (done: (error: string | null) => void) => void;
+  commit: (done: (error: string | null) => void) => void;
+}
+
+interface DataChannelProxy {
+  write: ({ buffer }: Uint8Array) => void;
+  close: () => void;
 }
 
 export class WorkerBridge {
-  public openWebSocket(uri: string, proxy: WebSocketProxy) {
+  public openWebSocket(uri: string, proxy: WebSocketGoProxy): WebSocketProxy {
     const ws = new WebSocket(uri);
 
     const onclose = () => {
@@ -397,7 +546,8 @@ export class WorkerBridge {
       proxy.onclose();
     };
     ws.onerror = (e: ErrorEvent) => proxy.onerror(String(e.message || "unknown websocket error"));
-    ws.onmessage = ({ data }) => proxy.ondata(new Uint8Array(data), data.byteLength, Date.now());
+    ws.onmessage = ({ data }: MessageEvent<ArrayBuffer>) =>
+      proxy.ondata(new Uint8Array(data), data.byteLength, Date.now());
 
     return {
       write: (data: Uint8Array) => ws.send(data),
@@ -408,38 +558,41 @@ export class WorkerBridge {
     };
   }
 
-  public openWebRTC(proxy: WebRTCProxy) {
-    const { port1, port2 } = new MessageChannel();
+  public openWebRTC(proxy: WebRTCGoProxy): WebRTCProxy {
+    const { port1, port2 } = new MessageChannel() as GenericChannel<
+      WebRTCWindowEvent,
+      WebRTCWorkerEvent
+    >;
     port1.onmessage = ({ data }) => {
       // console.log("worker event", eventTypeNames[data.type], data);
       switch (data.type) {
-        case EVENT_TYPE_ICE_CANDIDATE:
+        case EventType.ICE_CANDIDATE:
           proxy.onicecandidate(data.candidate);
           break;
-        case EVENT_TYPE_CONNECTION_STATE_CHANGE:
+        case EventType.CONNECTION_STATE_CHANGE:
           proxy.onconnectionstatechange(data.state);
           break;
-        case EVENT_TYPE_ICE_GATHERING_STATE_CHANGE:
+        case EventType.ICE_GATHERING_STATE_CHANGE:
           proxy.onicegatheringstatechange(data.state);
           break;
-        case EVENT_TYPE_SIGNALING_STATE_CHANGE:
+        case EventType.SIGNALING_STATE_CHANGE:
           proxy.onsignalingstatechange(data.state);
           break;
-        case EVENT_TYPE_CREATE_OFFER:
+        case EventType.CREATE_OFFER:
           proxy.oncreateoffer(data.error, data.description);
           break;
-        case EVENT_TYPE_CREATE_ANSWER:
+        case EventType.CREATE_ANSWER:
           proxy.oncreateanswer(data.error, data.description);
           break;
-        case EVENT_TYPE_DATA_CHANNEL:
+        case EventType.DATA_CHANNEL:
           proxy.ondatachannel(data.id, data.label);
           break;
       }
     };
 
-    postMessage(
+    postMessage<WorkerEvent>(
       {
-        type: EVENT_TYPE_OPEN_WEBRTC,
+        type: EventType.OPEN_WEBRTC,
         port: port2,
       },
       [port2]
@@ -448,35 +601,35 @@ export class WorkerBridge {
     return {
       createOffer: () =>
         port1.postMessage({
-          type: EVENT_TYPE_CREATE_OFFER,
+          type: EventType.CREATE_OFFER,
         }),
       createAnswer: () =>
         port1.postMessage({
-          type: EVENT_TYPE_CREATE_ANSWER,
+          type: EventType.CREATE_ANSWER,
         }),
       createDataChannel: (label: string) =>
         port1.postMessage({
-          type: EVENT_TYPE_CREATE_DATA_CHANNEL,
+          type: EventType.CREATE_DATA_CHANNEL,
           label,
         }),
       addIceCandidate: (candidate: string) =>
         port1.postMessage({
-          type: EVENT_TYPE_ADD_ICE_CANDIDATE,
+          type: EventType.ADD_ICE_CANDIDATE,
           candidate,
         }),
       setLocalDescription: (description: string) =>
         port1.postMessage({
-          type: EVENT_TYPE_SET_LOCAL_DESCRIPTION,
+          type: EventType.SET_LOCAL_DESCRIPTION,
           description,
         }),
       setRemoteDescription: (description: string) =>
         port1.postMessage({
-          type: EVENT_TYPE_SET_REMOTE_DESCRIPTION,
+          type: EventType.SET_REMOTE_DESCRIPTION,
           description,
         }),
       close: () => {
         port1.postMessage({
-          type: EVENT_TYPE_CLOSE,
+          type: EventType.CLOSE,
         });
         port1.close();
       },
@@ -485,10 +638,13 @@ export class WorkerBridge {
 
   // openDataChannel opens a data channel created by a call to openWebRTC. This
   // allows multiple workers to share an RTCPeerConnection.
-  public openDataChannel(id: number, proxy: DataChannelProxy) {
-    const { port1, port2 } = new MessageChannel();
+  public openDataChannel(id: number, proxy: DataChannelGoProxy): DataChannelProxy {
+    const { port1, port2 } = new MessageChannel() as GenericChannel<
+      WebRTCDataChannelMessagePort,
+      void
+    >;
 
-    const ready = new Promise<MessagePort>((resolve, reject) => {
+    const ready = new Promise<WebRTCDataChannelMessagePort>((resolve, reject) => {
       port1.onmessage = ({ data: port }) => {
         port1.close();
 
@@ -503,13 +659,13 @@ export class WorkerBridge {
         port.onmessage = ({ data }) => {
           // console.log("worker data channel event", data);
           switch (data.type) {
-            case EVENT_TYPE_DATA_CHANNEL_DATA:
+            case EventType.DATA_CHANNEL_DATA:
               proxy.ondata(new Uint8Array(data.data), data.data.byteLength, data.timestamp);
               break;
-            case EVENT_TYPE_DATA_CHANNEL_OPEN:
+            case EventType.DATA_CHANNEL_OPEN:
               proxy.onopen();
               break;
-            case EVENT_TYPE_DATA_CHANNEL_CLOSE:
+            case EventType.DATA_CHANNEL_CLOSE:
               proxy.onclose();
               break;
           }
@@ -517,9 +673,9 @@ export class WorkerBridge {
       };
     });
 
-    postMessage(
+    postMessage<WorkerEvent>(
       {
-        type: EVENT_TYPE_OPEN_DATA_CHANNEL,
+        type: EventType.OPEN_DATA_CHANNEL,
         port: port2,
         id,
       },
@@ -531,7 +687,7 @@ export class WorkerBridge {
         ready.then((port) =>
           port.postMessage(
             {
-              type: EVENT_TYPE_DATA_CHANNEL_DATA,
+              type: EventType.DATA_CHANNEL_DATA,
               data: buffer,
             },
             [buffer]
@@ -540,47 +696,50 @@ export class WorkerBridge {
       close: () =>
         ready.then((port) =>
           port.postMessage({
-            type: EVENT_TYPE_DATA_CHANNEL_CLOSE,
+            type: EventType.DATA_CHANNEL_CLOSE,
           })
         ),
     };
   }
 
-  public openWorker(service: string, proxy: ServiceProxy) {
-    const { port1, port2 } = new MessageChannel();
+  public openWorker(service: string, proxy: ServiceGoProxy): void {
+    const { port1, port2 } = new MessageChannel() as GenericChannel<
+      WorkerWindowEvent,
+      WorkerWorkerEvent
+    >;
 
     port1.onmessage = ({ data: { port } }) => {
       const bus = proxy.openBus({
         write: ({ buffer }: Uint8Array) =>
           port.postMessage(
             {
-              type: EVENT_TYPE_DATA,
+              type: EventType.DATA,
               data: buffer,
               timestamp: Date.now(),
             },
             [buffer]
           ),
         close: () => {
-          port.postMessage({ type: EVENT_TYPE_CLOSE });
-          port1.postMessage({ type: EVENT_TYPE_CLOSE });
+          port.postMessage({ type: EventType.CLOSE });
+          port1.postMessage({ type: EventType.CLOSE });
         },
       });
 
       port.onmessage = ({ data }) => {
         switch (data.type) {
-          case EVENT_TYPE_DATA:
+          case EventType.DATA:
             bus.ondata(new Uint8Array(data.data), data.data.byteLength, data.timestamp);
             break;
-          case EVENT_TYPE_CLOSE:
+          case EventType.CLOSE:
             bus.onclose();
             break;
         }
       };
     };
 
-    postMessage(
+    postMessage<WorkerEvent>(
       {
-        type: EVENT_TYPE_OPEN_WORKER,
+        type: EventType.OPEN_WORKER,
         port: port2,
         service,
       },
@@ -588,23 +747,23 @@ export class WorkerBridge {
     );
   }
 
-  public openBus(label: string, proxy: DataChannelProxy) {
-    const { port1, port2 } = new MessageChannel();
+  public openBus(label: string, proxy: DataChannelGoProxy): DataChannelProxy {
+    const { port1, port2 } = new MessageChannel() as GenericChannel<BusEvent, BusEvent>;
 
-    port1.onmessage = ({ data }) => {
+    port1.onmessage = ({ data }: MessageEvent<BusEvent>) => {
       switch (data.type) {
-        case EVENT_TYPE_DATA:
+        case EventType.DATA:
           proxy.ondata(new Uint8Array(data.data), data.data.byteLength, data.timestamp);
           break;
-        case EVENT_TYPE_CLOSE:
+        case EventType.CLOSE:
           proxy.onclose();
           break;
       }
     };
 
-    postMessage(
+    postMessage<WorkerEvent>(
       {
-        type: EVENT_TYPE_OPEN_BUS,
+        type: EventType.OPEN_BUS,
         port: port2,
         label,
       },
@@ -615,21 +774,21 @@ export class WorkerBridge {
       write: ({ buffer }: Uint8Array) =>
         port1.postMessage(
           {
-            type: EVENT_TYPE_DATA,
+            type: EventType.DATA,
             data: buffer,
             timestamp: Date.now(),
           },
           [buffer]
         ),
-      close: () => port1.postMessage({ type: EVENT_TYPE_CLOSE }),
+      close: () => port1.postMessage({ type: EventType.CLOSE }),
     };
   }
 
-  public openKVStore(name: string, createTable: boolean, readOnly: boolean) {
+  public openKVStore(name: string, createTable: boolean, readOnly: boolean): KVStoreProxy {
     const openReq = indexedDB.open(name);
-    openReq.onupgradeneeded = (e: any) => {
+    openReq.onupgradeneeded = () => {
       if (!createTable) {
-        e.target.transaction.abort();
+        openReq.transaction.abort();
         return;
       }
       openReq.result.createObjectStore("data");
@@ -652,7 +811,7 @@ export class WorkerBridge {
           req.onsuccess = () => done(null, req.result);
           req.onerror = (e) => done(String(e));
         })
-        .catch((e) => done(String(e.message || "unknown storage error")));
+        .catch((e: Error) => done(String(e.message || "unknown storage error")));
     };
 
     return {
@@ -683,6 +842,7 @@ export class WorkerBridge {
           .then((tx: IDBTransaction) => {
             tx.oncomplete = () => done(null);
             tx.onerror = (e) => done(String(e));
+            // eslint-disable-next-line
             (tx as any).commit?.();
           })
           .catch((e) => done(String(e)));
@@ -690,14 +850,16 @@ export class WorkerBridge {
     };
   }
 
-  public deleteKVStore(name: string, done: (err: string | null) => void) {
+  public deleteKVStore(name: string, done: (err: string | null) => void): void {
     const res = indexedDB.deleteDatabase(name);
     res.onsuccess = () => done(null);
     res.onerror = (e) => done(String(e));
   }
 
-  public syncLogs(data: Uint8Array) {
-    const { level, caller, msg, ...args } = JSON.parse(new TextDecoder().decode(data));
+  public syncLogs(data: Uint8Array): void {
+    const { level, caller, msg, ...args } = JSON.parse(new TextDecoder().decode(data)) as {
+      [key: string]: string;
+    };
     // eslint-disable-next-line
     console.log(
       level.toUpperCase().padEnd(10),

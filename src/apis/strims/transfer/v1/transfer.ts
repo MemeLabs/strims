@@ -2,12 +2,12 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface ITransfer {
+export type ITransfer = {
   id?: Uint8Array;
 }
 
 export class Transfer {
-  id: Uint8Array = new Uint8Array();
+  id: Uint8Array;
 
   constructor(v?: ITransfer) {
     this.id = v?.id || new Uint8Array();

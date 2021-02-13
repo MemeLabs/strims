@@ -4,7 +4,7 @@ go 1.13
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0 // indirect
-	github.com/MemeLabs/protobuf v0.1.3
+	github.com/MemeLabs/protobuf v0.1.7
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/aead/ecdh v0.2.0
 	github.com/avast/retry-go v3.0.0+incompatible

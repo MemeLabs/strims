@@ -1,9 +1,18 @@
+// declare class WSReadWriter {
+//   onMethod: (method: "data", handler: (d: Uint8Array) => void) => void;
+//   onMethod: (method: "foo", handler: EventListener) => void;
+
+// }
+
+type WSReadWriterEventMap = WebSocketEventMap & {
+  "data": Uint8Array;
+};
+
 export class WSReadWriter {
   public ws: Promise<WebSocket>;
 
   constructor(uri: string) {
     const ws = new WebSocket(uri);
-    // set binaryType to arraybuffer over default Buffer objects
     ws.binaryType = "arraybuffer";
 
     this.ws = new Promise((resolve, reject) => {
@@ -12,18 +21,24 @@ export class WSReadWriter {
     });
   }
 
-  public on(method: string, handler: (...args: any[]) => any) {
-    this.ws.then((ws) => {
+  public on<K extends keyof WSReadWriterEventMap>(
+    method: K,
+    handler: (e: WSReadWriterEventMap[K]) => void
+  ): void {
+    // https://github.com/microsoft/TypeScript/issues/13995
+    // eslint-disable-next-line
+    const _handler = handler as (e: any) => void;
+
+    void this.ws.then((ws) => {
       if (method === "data") {
-        // add event listener to 'data' event
-        ws.addEventListener("message", (e) => handler(new Uint8Array(e.data)));
+        ws.addEventListener("message", (e) => _handler(new Uint8Array(e.data)));
       } else {
-        ws.addEventListener(method, handler);
+        ws.addEventListener(method, _handler);
       }
     });
   }
 
-  public write(data: Uint8Array) {
-    this.ws.then((ws) => ws.send(data));
+  public write(data: Uint8Array): void {
+    void this.ws.then((ws) => ws.send(data));
   }
 }

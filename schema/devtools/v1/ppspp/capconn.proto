@@ -19,9 +19,25 @@ message CapConnLog {
         EVENT_CODE_READ_ERR = 6;
       }
 
+      enum MessageType {
+        MESSAGE_TYPE_HANDSHAKE = 0;
+        MESSAGE_TYPE_DATA = 1;
+        MESSAGE_TYPE_ACK = 2;
+        MESSAGE_TYPE_HAVE = 3;
+        MESSAGE_TYPE_INTEGRITY = 4;
+        MESSAGE_TYPE_SIGNEDINTEGRITY = 5;
+        MESSAGE_TYPE_REQUEST = 6;
+        MESSAGE_TYPE_CANCEL = 7;
+        MESSAGE_TYPE_CHOKE = 8;
+        MESSAGE_TYPE_UNCHOKE = 9;
+        MESSAGE_TYPE_PING = 10;
+        MESSAGE_TYPE_PONG = 11;
+        MESSAGE_TYPE_END = 255;
+      }
+
       Code code = 1;
-      int64 timestamp = 2;
-      repeated uint32 message_types = 3;
+      sfixed64 timestamp = 2;
+      repeated MessageType message_types = 3;
       repeated uint64 message_addresses = 4;
     }
 

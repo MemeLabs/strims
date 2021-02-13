@@ -2,14 +2,14 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface INetworkAddress {
+export type INetworkAddress = {
   hostId?: Uint8Array;
   port?: number;
 }
 
 export class NetworkAddress {
-  hostId: Uint8Array = new Uint8Array();
-  port: number = 0;
+  hostId: Uint8Array;
+  port: number;
 
   constructor(v?: INetworkAddress) {
     this.hostId = v?.hostId || new Uint8Array();

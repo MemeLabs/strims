@@ -10,7 +10,7 @@ import {
   IDirectoryListingSnippet as strims_network_v1_IDirectoryListingSnippet,
 } from "../../network/v1/directory";
 
-export interface IVideoIngressConfig {
+export type IVideoIngressConfig = {
   enabled?: boolean;
   serverAddr?: string;
   publicServerAddr?: string;
@@ -18,16 +18,16 @@ export interface IVideoIngressConfig {
 }
 
 export class VideoIngressConfig {
-  enabled: boolean = false;
-  serverAddr: string = "";
-  publicServerAddr: string = "";
-  serviceNetworkKeys: Uint8Array[] = [];
+  enabled: boolean;
+  serverAddr: string;
+  publicServerAddr: string;
+  serviceNetworkKeys: Uint8Array[];
 
   constructor(v?: IVideoIngressConfig) {
     this.enabled = v?.enabled || false;
     this.serverAddr = v?.serverAddr || "";
     this.publicServerAddr = v?.publicServerAddr || "";
-    if (v?.serviceNetworkKeys) this.serviceNetworkKeys = v.serviceNetworkKeys;
+    this.serviceNetworkKeys = v?.serviceNetworkKeys ? v.serviceNetworkKeys : [];
   }
 
   static encode(m: VideoIngressConfig, w?: Writer): Writer {
@@ -67,7 +67,7 @@ export class VideoIngressConfig {
   }
 }
 
-export interface IVideoIngressStream {
+export type IVideoIngressStream = {
   id?: bigint;
   channelId?: bigint;
   createdAt?: bigint;
@@ -75,10 +75,10 @@ export interface IVideoIngressStream {
 }
 
 export class VideoIngressStream {
-  id: bigint = BigInt(0);
-  channelId: bigint = BigInt(0);
-  createdAt: bigint = BigInt(0);
-  updatedAt: bigint = BigInt(0);
+  id: bigint;
+  channelId: bigint;
+  createdAt: bigint;
+  updatedAt: bigint;
 
   constructor(v?: IVideoIngressStream) {
     this.id = v?.id || BigInt(0);
@@ -124,13 +124,13 @@ export class VideoIngressStream {
   }
 }
 
-export interface IVideoIngressIsSupportedRequest {
+export type IVideoIngressIsSupportedRequest = {
 }
 
 export class VideoIngressIsSupportedRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IVideoIngressIsSupportedRequest) {
-    // noop
   }
 
   static encode(m: VideoIngressIsSupportedRequest, w?: Writer): Writer {
@@ -144,12 +144,12 @@ export class VideoIngressIsSupportedRequest {
   }
 }
 
-export interface IVideoIngressIsSupportedResponse {
+export type IVideoIngressIsSupportedResponse = {
   supported?: boolean;
 }
 
 export class VideoIngressIsSupportedResponse {
-  supported: boolean = false;
+  supported: boolean;
 
   constructor(v?: IVideoIngressIsSupportedResponse) {
     this.supported = v?.supported || false;
@@ -180,13 +180,13 @@ export class VideoIngressIsSupportedResponse {
   }
 }
 
-export interface IVideoIngressGetConfigRequest {
+export type IVideoIngressGetConfigRequest = {
 }
 
 export class VideoIngressGetConfigRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IVideoIngressGetConfigRequest) {
-    // noop
   }
 
   static encode(m: VideoIngressGetConfigRequest, w?: Writer): Writer {
@@ -200,7 +200,7 @@ export class VideoIngressGetConfigRequest {
   }
 }
 
-export interface IVideoIngressGetConfigResponse {
+export type IVideoIngressGetConfigResponse = {
   config?: IVideoIngressConfig | undefined;
 }
 
@@ -236,7 +236,7 @@ export class VideoIngressGetConfigResponse {
   }
 }
 
-export interface IVideoIngressSetConfigRequest {
+export type IVideoIngressSetConfigRequest = {
   config?: IVideoIngressConfig | undefined;
 }
 
@@ -272,7 +272,7 @@ export class VideoIngressSetConfigRequest {
   }
 }
 
-export interface IVideoIngressSetConfigResponse {
+export type IVideoIngressSetConfigResponse = {
   config?: IVideoIngressConfig | undefined;
 }
 
@@ -308,13 +308,13 @@ export class VideoIngressSetConfigResponse {
   }
 }
 
-export interface IVideoIngressListStreamsRequest {
+export type IVideoIngressListStreamsRequest = {
 }
 
 export class VideoIngressListStreamsRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IVideoIngressListStreamsRequest) {
-    // noop
   }
 
   static encode(m: VideoIngressListStreamsRequest, w?: Writer): Writer {
@@ -328,15 +328,15 @@ export class VideoIngressListStreamsRequest {
   }
 }
 
-export interface IVideoIngressListStreamsResponse {
+export type IVideoIngressListStreamsResponse = {
   streams?: IVideoIngressStream[];
 }
 
 export class VideoIngressListStreamsResponse {
-  streams: VideoIngressStream[] = [];
+  streams: VideoIngressStream[];
 
   constructor(v?: IVideoIngressListStreamsResponse) {
-    if (v?.streams) this.streams = v.streams.map(v => new VideoIngressStream(v));
+    this.streams = v?.streams ? v.streams.map(v => new VideoIngressStream(v)) : [];
   }
 
   static encode(m: VideoIngressListStreamsResponse, w?: Writer): Writer {
@@ -364,12 +364,12 @@ export class VideoIngressListStreamsResponse {
   }
 }
 
-export interface IVideoIngressGetChannelURLRequest {
+export type IVideoIngressGetChannelURLRequest = {
   id?: bigint;
 }
 
 export class VideoIngressGetChannelURLRequest {
-  id: bigint = BigInt(0);
+  id: bigint;
 
   constructor(v?: IVideoIngressGetChannelURLRequest) {
     this.id = v?.id || BigInt(0);
@@ -400,16 +400,16 @@ export class VideoIngressGetChannelURLRequest {
   }
 }
 
-export interface IVideoIngressGetChannelURLResponse {
+export type IVideoIngressGetChannelURLResponse = {
   url?: string;
   serverAddr?: string;
   streamKey?: string;
 }
 
 export class VideoIngressGetChannelURLResponse {
-  url: string = "";
-  serverAddr: string = "";
-  streamKey: string = "";
+  url: string;
+  serverAddr: string;
+  streamKey: string;
 
   constructor(v?: IVideoIngressGetChannelURLResponse) {
     this.url = v?.url || "";
@@ -450,7 +450,7 @@ export class VideoIngressGetChannelURLResponse {
   }
 }
 
-export interface IVideoIngressShareCreateChannelRequest {
+export type IVideoIngressShareCreateChannelRequest = {
   directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
 }
 
@@ -486,7 +486,7 @@ export class VideoIngressShareCreateChannelRequest {
   }
 }
 
-export interface IVideoIngressShareCreateChannelResponse {
+export type IVideoIngressShareCreateChannelResponse = {
   channel?: strims_video_v1_IVideoChannel | undefined;
 }
 
@@ -522,7 +522,7 @@ export class VideoIngressShareCreateChannelResponse {
   }
 }
 
-export interface IVideoIngressShareUpdateChannelRequest {
+export type IVideoIngressShareUpdateChannelRequest = {
   directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
 }
 
@@ -558,7 +558,7 @@ export class VideoIngressShareUpdateChannelRequest {
   }
 }
 
-export interface IVideoIngressShareUpdateChannelResponse {
+export type IVideoIngressShareUpdateChannelResponse = {
   channel?: strims_video_v1_IVideoChannel | undefined;
 }
 
@@ -594,13 +594,13 @@ export class VideoIngressShareUpdateChannelResponse {
   }
 }
 
-export interface IVideoIngressShareDeleteChannelRequest {
+export type IVideoIngressShareDeleteChannelRequest = {
 }
 
 export class VideoIngressShareDeleteChannelRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IVideoIngressShareDeleteChannelRequest) {
-    // noop
   }
 
   static encode(m: VideoIngressShareDeleteChannelRequest, w?: Writer): Writer {
@@ -614,13 +614,13 @@ export class VideoIngressShareDeleteChannelRequest {
   }
 }
 
-export interface IVideoIngressShareDeleteChannelResponse {
+export type IVideoIngressShareDeleteChannelResponse = {
 }
 
 export class VideoIngressShareDeleteChannelResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IVideoIngressShareDeleteChannelResponse) {
-    // noop
   }
 
   static encode(m: VideoIngressShareDeleteChannelResponse, w?: Writer): Writer {

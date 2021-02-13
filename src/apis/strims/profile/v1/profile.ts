@@ -6,14 +6,14 @@ import {
   IKey as strims_type_IKey,
 } from "../../type/key";
 
-export interface ICreateProfileRequest {
+export type ICreateProfileRequest = {
   name?: string;
   password?: string;
 }
 
 export class CreateProfileRequest {
-  name: string = "";
-  password: string = "";
+  name: string;
+  password: string;
 
   constructor(v?: ICreateProfileRequest) {
     this.name = v?.name || "";
@@ -49,13 +49,13 @@ export class CreateProfileRequest {
   }
 }
 
-export interface ICreateProfileResponse {
+export type ICreateProfileResponse = {
   sessionId?: string;
   profile?: IProfile | undefined;
 }
 
 export class CreateProfileResponse {
-  sessionId: string = "";
+  sessionId: string;
   profile: Profile | undefined;
 
   constructor(v?: ICreateProfileResponse) {
@@ -92,14 +92,14 @@ export class CreateProfileResponse {
   }
 }
 
-export interface IUpdateProfileRequest {
+export type IUpdateProfileRequest = {
   name?: string;
   password?: string;
 }
 
 export class UpdateProfileRequest {
-  name: string = "";
-  password: string = "";
+  name: string;
+  password: string;
 
   constructor(v?: IUpdateProfileRequest) {
     this.name = v?.name || "";
@@ -135,7 +135,7 @@ export class UpdateProfileRequest {
   }
 }
 
-export interface IUpdateProfileResponse {
+export type IUpdateProfileResponse = {
   profile?: IProfile | undefined;
 }
 
@@ -171,12 +171,12 @@ export class UpdateProfileResponse {
   }
 }
 
-export interface IDeleteProfileRequest {
+export type IDeleteProfileRequest = {
   id?: bigint;
 }
 
 export class DeleteProfileRequest {
-  id: bigint = BigInt(0);
+  id: bigint;
 
   constructor(v?: IDeleteProfileRequest) {
     this.id = v?.id || BigInt(0);
@@ -207,13 +207,13 @@ export class DeleteProfileRequest {
   }
 }
 
-export interface IDeleteProfileResponse {
+export type IDeleteProfileResponse = {
 }
 
 export class DeleteProfileResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IDeleteProfileResponse) {
-    // noop
   }
 
   static encode(m: DeleteProfileResponse, w?: Writer): Writer {
@@ -227,16 +227,16 @@ export class DeleteProfileResponse {
   }
 }
 
-export interface ILoadProfileRequest {
+export type ILoadProfileRequest = {
   id?: bigint;
   name?: string;
   password?: string;
 }
 
 export class LoadProfileRequest {
-  id: bigint = BigInt(0);
-  name: string = "";
-  password: string = "";
+  id: bigint;
+  name: string;
+  password: string;
 
   constructor(v?: ILoadProfileRequest) {
     this.id = v?.id || BigInt(0);
@@ -277,13 +277,13 @@ export class LoadProfileRequest {
   }
 }
 
-export interface ILoadProfileResponse {
+export type ILoadProfileResponse = {
   sessionId?: string;
   profile?: IProfile | undefined;
 }
 
 export class LoadProfileResponse {
-  sessionId: string = "";
+  sessionId: string;
   profile: Profile | undefined;
 
   constructor(v?: ILoadProfileResponse) {
@@ -320,12 +320,12 @@ export class LoadProfileResponse {
   }
 }
 
-export interface IGetProfileRequest {
+export type IGetProfileRequest = {
   sessionId?: string;
 }
 
 export class GetProfileRequest {
-  sessionId: string = "";
+  sessionId: string;
 
   constructor(v?: IGetProfileRequest) {
     this.sessionId = v?.sessionId || "";
@@ -356,7 +356,7 @@ export class GetProfileRequest {
   }
 }
 
-export interface IGetProfileResponse {
+export type IGetProfileResponse = {
   profile?: IProfile | undefined;
 }
 
@@ -392,13 +392,13 @@ export class GetProfileResponse {
   }
 }
 
-export interface IListProfilesRequest {
+export type IListProfilesRequest = {
 }
 
 export class ListProfilesRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IListProfilesRequest) {
-    // noop
   }
 
   static encode(m: ListProfilesRequest, w?: Writer): Writer {
@@ -412,15 +412,15 @@ export class ListProfilesRequest {
   }
 }
 
-export interface IListProfilesResponse {
+export type IListProfilesResponse = {
   profiles?: IProfileSummary[];
 }
 
 export class ListProfilesResponse {
-  profiles: ProfileSummary[] = [];
+  profiles: ProfileSummary[];
 
   constructor(v?: IListProfilesResponse) {
-    if (v?.profiles) this.profiles = v.profiles.map(v => new ProfileSummary(v));
+    this.profiles = v?.profiles ? v.profiles.map(v => new ProfileSummary(v)) : [];
   }
 
   static encode(m: ListProfilesResponse, w?: Writer): Writer {
@@ -448,12 +448,12 @@ export class ListProfilesResponse {
   }
 }
 
-export interface ILoadSessionRequest {
+export type ILoadSessionRequest = {
   sessionId?: string;
 }
 
 export class LoadSessionRequest {
-  sessionId: string = "";
+  sessionId: string;
 
   constructor(v?: ILoadSessionRequest) {
     this.sessionId = v?.sessionId || "";
@@ -484,13 +484,13 @@ export class LoadSessionRequest {
   }
 }
 
-export interface ILoadSessionResponse {
+export type ILoadSessionResponse = {
   sessionId?: string;
   profile?: IProfile | undefined;
 }
 
 export class LoadSessionResponse {
-  sessionId: string = "";
+  sessionId: string;
   profile: Profile | undefined;
 
   constructor(v?: ILoadSessionResponse) {
@@ -527,13 +527,13 @@ export class LoadSessionResponse {
   }
 }
 
-export interface IStorageKey {
+export type IStorageKey = {
   kdfType?: KDFType;
   kdfOptions?: StorageKey.IKdfOptions
 }
 
 export class StorageKey {
-  kdfType: KDFType = 0;
+  kdfType: KDFType;
   kdfOptions: StorageKey.TKdfOptions;
 
   constructor(v?: IStorageKey) {
@@ -610,16 +610,16 @@ export namespace StorageKey {
     >;
   };
 
-  export interface IPBKDF2Options {
+  export type IPBKDF2Options = {
     iterations?: number;
     keySize?: number;
     salt?: Uint8Array;
   }
 
   export class PBKDF2Options {
-    iterations: number = 0;
-    keySize: number = 0;
-    salt: Uint8Array = new Uint8Array();
+    iterations: number;
+    keySize: number;
+    salt: Uint8Array;
 
     constructor(v?: IPBKDF2Options) {
       this.iterations = v?.iterations || 0;
@@ -662,7 +662,7 @@ export namespace StorageKey {
 
 }
 
-export interface IProfile {
+export type IProfile = {
   id?: bigint;
   name?: string;
   secret?: Uint8Array;
@@ -670,9 +670,9 @@ export interface IProfile {
 }
 
 export class Profile {
-  id: bigint = BigInt(0);
-  name: string = "";
-  secret: Uint8Array = new Uint8Array();
+  id: bigint;
+  name: string;
+  secret: Uint8Array;
   key: strims_type_Key | undefined;
 
   constructor(v?: IProfile) {
@@ -719,14 +719,14 @@ export class Profile {
   }
 }
 
-export interface IProfileSummary {
+export type IProfileSummary = {
   id?: bigint;
   name?: string;
 }
 
 export class ProfileSummary {
-  id: bigint = BigInt(0);
-  name: string = "";
+  id: bigint;
+  name: string;
 
   constructor(v?: IProfileSummary) {
     this.id = v?.id || BigInt(0);
@@ -762,12 +762,12 @@ export class ProfileSummary {
   }
 }
 
-export interface IProfileID {
+export type IProfileID = {
   nextId?: bigint;
 }
 
 export class ProfileID {
-  nextId: bigint = BigInt(0);
+  nextId: bigint;
 
   constructor(v?: IProfileID) {
     this.nextId = v?.nextId || BigInt(0);

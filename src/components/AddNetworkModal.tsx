@@ -1,6 +1,4 @@
-/* eslint-disable no-console */
-
-import * as React from "react";
+import React from "react";
 import { useForm } from "react-hook-form";
 import { MdClose } from "react-icons/md";
 
@@ -19,7 +17,7 @@ interface AddNetworkFormData {
   icon: ImageValue;
 }
 
-const AddNetworkModal: React.FunctionComponent<AddNetworkModalProps> = ({ onCreate, onClose }) => {
+const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) => {
   const [{ profile }] = useProfile();
 
   const [{ error, loading }, createNetwork] = useLazyCall("network", "create", {

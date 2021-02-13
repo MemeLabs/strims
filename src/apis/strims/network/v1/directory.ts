@@ -6,12 +6,12 @@ import {
   ICertificate as strims_type_ICertificate,
 } from "../../type/certificate";
 
-export interface IGetDirectoryEventsRequest {
+export type IGetDirectoryEventsRequest = {
   networkKey?: Uint8Array;
 }
 
 export class GetDirectoryEventsRequest {
-  networkKey: Uint8Array = new Uint8Array();
+  networkKey: Uint8Array;
 
   constructor(v?: IGetDirectoryEventsRequest) {
     this.networkKey = v?.networkKey || new Uint8Array();
@@ -42,12 +42,12 @@ export class GetDirectoryEventsRequest {
   }
 }
 
-export interface ITestDirectoryPublishRequest {
+export type ITestDirectoryPublishRequest = {
   networkKey?: Uint8Array;
 }
 
 export class TestDirectoryPublishRequest {
-  networkKey: Uint8Array = new Uint8Array();
+  networkKey: Uint8Array;
 
   constructor(v?: ITestDirectoryPublishRequest) {
     this.networkKey = v?.networkKey || new Uint8Array();
@@ -78,13 +78,13 @@ export class TestDirectoryPublishRequest {
   }
 }
 
-export interface ITestDirectoryPublishResponse {
+export type ITestDirectoryPublishResponse = {
 }
 
 export class TestDirectoryPublishResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: ITestDirectoryPublishResponse) {
-    // noop
   }
 
   static encode(m: TestDirectoryPublishResponse, w?: Writer): Writer {
@@ -98,21 +98,21 @@ export class TestDirectoryPublishResponse {
   }
 }
 
-export interface IDirectoryListingSnippet {
+export type IDirectoryListingSnippet = {
   title?: string;
   description?: string;
   tags?: string[];
 }
 
 export class DirectoryListingSnippet {
-  title: string = "";
-  description: string = "";
-  tags: string[] = [];
+  title: string;
+  description: string;
+  tags: string[];
 
   constructor(v?: IDirectoryListingSnippet) {
     this.title = v?.title || "";
     this.description = v?.description || "";
-    if (v?.tags) this.tags = v.tags;
+    this.tags = v?.tags ? v.tags : [];
   }
 
   static encode(m: DirectoryListingSnippet, w?: Writer): Writer {
@@ -148,7 +148,7 @@ export class DirectoryListingSnippet {
   }
 }
 
-export interface IDirectoryListingMedia {
+export type IDirectoryListingMedia = {
   startedAt?: bigint;
   mimeType?: string;
   bitrate?: number;
@@ -156,10 +156,10 @@ export interface IDirectoryListingMedia {
 }
 
 export class DirectoryListingMedia {
-  startedAt: bigint = BigInt(0);
-  mimeType: string = "";
-  bitrate: number = 0;
-  swarmUri: string = "";
+  startedAt: bigint;
+  mimeType: string;
+  bitrate: number;
+  swarmUri: string;
 
   constructor(v?: IDirectoryListingMedia) {
     this.startedAt = v?.startedAt || BigInt(0);
@@ -205,12 +205,12 @@ export class DirectoryListingMedia {
   }
 }
 
-export interface IDirectoryListingService {
+export type IDirectoryListingService = {
   type?: string;
 }
 
 export class DirectoryListingService {
-  type: string = "";
+  type: string;
 
   constructor(v?: IDirectoryListingService) {
     this.type = v?.type || "";
@@ -241,7 +241,7 @@ export class DirectoryListingService {
   }
 }
 
-export interface IDirectoryListing {
+export type IDirectoryListing = {
   creator?: strims_type_ICertificate | undefined;
   timestamp?: bigint;
   snippet?: IDirectoryListingSnippet | undefined;
@@ -252,10 +252,10 @@ export interface IDirectoryListing {
 
 export class DirectoryListing {
   creator: strims_type_Certificate | undefined;
-  timestamp: bigint = BigInt(0);
+  timestamp: bigint;
   snippet: DirectoryListingSnippet | undefined;
-  key: Uint8Array = new Uint8Array();
-  signature: Uint8Array = new Uint8Array();
+  key: Uint8Array;
+  signature: Uint8Array;
   content: DirectoryListing.TContent;
 
   constructor(v?: IDirectoryListing) {
@@ -369,7 +369,7 @@ export namespace DirectoryListing {
 
 }
 
-export interface IDirectoryEvent {
+export type IDirectoryEvent = {
   body?: DirectoryEvent.IBody
 }
 
@@ -520,7 +520,7 @@ export namespace DirectoryEvent {
     >;
   };
 
-  export interface IPublish {
+  export type IPublish = {
     listing?: IDirectoryListing | undefined;
   }
 
@@ -556,12 +556,12 @@ export namespace DirectoryEvent {
     }
   }
 
-  export interface IUnpublish {
+  export type IUnpublish = {
     key?: Uint8Array;
   }
 
   export class Unpublish {
-    key: Uint8Array = new Uint8Array();
+    key: Uint8Array;
 
     constructor(v?: IUnpublish) {
       this.key = v?.key || new Uint8Array();
@@ -592,14 +592,14 @@ export namespace DirectoryEvent {
     }
   }
 
-  export interface IViewerCountChange {
+  export type IViewerCountChange = {
     key?: Uint8Array;
     count?: number;
   }
 
   export class ViewerCountChange {
-    key: Uint8Array = new Uint8Array();
-    count: number = 0;
+    key: Uint8Array;
+    count: number;
 
     constructor(v?: IViewerCountChange) {
       this.key = v?.key || new Uint8Array();
@@ -635,21 +635,21 @@ export namespace DirectoryEvent {
     }
   }
 
-  export interface IViewerStateChange {
+  export type IViewerStateChange = {
     subject?: string;
     online?: boolean;
     viewingKeys?: Uint8Array[];
   }
 
   export class ViewerStateChange {
-    subject: string = "";
-    online: boolean = false;
-    viewingKeys: Uint8Array[] = [];
+    subject: string;
+    online: boolean;
+    viewingKeys: Uint8Array[];
 
     constructor(v?: IViewerStateChange) {
       this.subject = v?.subject || "";
       this.online = v?.online || false;
-      if (v?.viewingKeys) this.viewingKeys = v.viewingKeys;
+      this.viewingKeys = v?.viewingKeys ? v.viewingKeys : [];
     }
 
     static encode(m: ViewerStateChange, w?: Writer): Writer {
@@ -685,12 +685,12 @@ export namespace DirectoryEvent {
     }
   }
 
-  export interface IPing {
+  export type IPing = {
     time?: bigint;
   }
 
   export class Ping {
-    time: bigint = BigInt(0);
+    time: bigint;
 
     constructor(v?: IPing) {
       this.time = v?.time || BigInt(0);
@@ -721,12 +721,12 @@ export namespace DirectoryEvent {
     }
   }
 
-  export interface IPadding {
+  export type IPadding = {
     data?: Uint8Array;
   }
 
   export class Padding {
-    data: Uint8Array = new Uint8Array();
+    data: Uint8Array;
 
     constructor(v?: IPadding) {
       this.data = v?.data || new Uint8Array();
@@ -759,7 +759,7 @@ export namespace DirectoryEvent {
 
 }
 
-export interface IDirectoryPublishRequest {
+export type IDirectoryPublishRequest = {
   listing?: IDirectoryListing | undefined;
 }
 
@@ -795,13 +795,13 @@ export class DirectoryPublishRequest {
   }
 }
 
-export interface IDirectoryPublishResponse {
+export type IDirectoryPublishResponse = {
 }
 
 export class DirectoryPublishResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IDirectoryPublishResponse) {
-    // noop
   }
 
   static encode(m: DirectoryPublishResponse, w?: Writer): Writer {
@@ -815,12 +815,12 @@ export class DirectoryPublishResponse {
   }
 }
 
-export interface IDirectoryUnpublishRequest {
+export type IDirectoryUnpublishRequest = {
   key?: Uint8Array;
 }
 
 export class DirectoryUnpublishRequest {
-  key: Uint8Array = new Uint8Array();
+  key: Uint8Array;
 
   constructor(v?: IDirectoryUnpublishRequest) {
     this.key = v?.key || new Uint8Array();
@@ -851,13 +851,13 @@ export class DirectoryUnpublishRequest {
   }
 }
 
-export interface IDirectoryUnpublishResponse {
+export type IDirectoryUnpublishResponse = {
 }
 
 export class DirectoryUnpublishResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IDirectoryUnpublishResponse) {
-    // noop
   }
 
   static encode(m: DirectoryUnpublishResponse, w?: Writer): Writer {
@@ -871,12 +871,12 @@ export class DirectoryUnpublishResponse {
   }
 }
 
-export interface IDirectoryJoinRequest {
+export type IDirectoryJoinRequest = {
   key?: Uint8Array;
 }
 
 export class DirectoryJoinRequest {
-  key: Uint8Array = new Uint8Array();
+  key: Uint8Array;
 
   constructor(v?: IDirectoryJoinRequest) {
     this.key = v?.key || new Uint8Array();
@@ -907,13 +907,13 @@ export class DirectoryJoinRequest {
   }
 }
 
-export interface IDirectoryJoinResponse {
+export type IDirectoryJoinResponse = {
 }
 
 export class DirectoryJoinResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IDirectoryJoinResponse) {
-    // noop
   }
 
   static encode(m: DirectoryJoinResponse, w?: Writer): Writer {
@@ -927,12 +927,12 @@ export class DirectoryJoinResponse {
   }
 }
 
-export interface IDirectoryPartRequest {
+export type IDirectoryPartRequest = {
   key?: Uint8Array;
 }
 
 export class DirectoryPartRequest {
-  key: Uint8Array = new Uint8Array();
+  key: Uint8Array;
 
   constructor(v?: IDirectoryPartRequest) {
     this.key = v?.key || new Uint8Array();
@@ -963,13 +963,13 @@ export class DirectoryPartRequest {
   }
 }
 
-export interface IDirectoryPartResponse {
+export type IDirectoryPartResponse = {
 }
 
 export class DirectoryPartResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IDirectoryPartResponse) {
-    // noop
   }
 
   static encode(m: DirectoryPartResponse, w?: Writer): Writer {
@@ -983,13 +983,13 @@ export class DirectoryPartResponse {
   }
 }
 
-export interface IDirectoryPingRequest {
+export type IDirectoryPingRequest = {
 }
 
 export class DirectoryPingRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IDirectoryPingRequest) {
-    // noop
   }
 
   static encode(m: DirectoryPingRequest, w?: Writer): Writer {
@@ -1003,13 +1003,13 @@ export class DirectoryPingRequest {
   }
 }
 
-export interface IDirectoryPingResponse {
+export type IDirectoryPingResponse = {
 }
 
 export class DirectoryPingResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IDirectoryPingResponse) {
-    // noop
   }
 
   static encode(m: DirectoryPingResponse, w?: Writer): Writer {
@@ -1023,12 +1023,12 @@ export class DirectoryPingResponse {
   }
 }
 
-export interface IDirectoryFrontendOpenRequest {
+export type IDirectoryFrontendOpenRequest = {
   networkKey?: Uint8Array;
 }
 
 export class DirectoryFrontendOpenRequest {
-  networkKey: Uint8Array = new Uint8Array();
+  networkKey: Uint8Array;
 
   constructor(v?: IDirectoryFrontendOpenRequest) {
     this.networkKey = v?.networkKey || new Uint8Array();
@@ -1059,7 +1059,7 @@ export class DirectoryFrontendOpenRequest {
   }
 }
 
-export interface IDirectoryFrontendOpenResponse {
+export type IDirectoryFrontendOpenResponse = {
   event?: IDirectoryEvent | undefined;
 }
 
@@ -1095,12 +1095,12 @@ export class DirectoryFrontendOpenResponse {
   }
 }
 
-export interface IDirectoryFrontendTestRequest {
+export type IDirectoryFrontendTestRequest = {
   networkKey?: Uint8Array;
 }
 
 export class DirectoryFrontendTestRequest {
-  networkKey: Uint8Array = new Uint8Array();
+  networkKey: Uint8Array;
 
   constructor(v?: IDirectoryFrontendTestRequest) {
     this.networkKey = v?.networkKey || new Uint8Array();
@@ -1131,13 +1131,13 @@ export class DirectoryFrontendTestRequest {
   }
 }
 
-export interface IDirectoryFrontendTestResponse {
+export type IDirectoryFrontendTestResponse = {
 }
 
 export class DirectoryFrontendTestResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IDirectoryFrontendTestResponse) {
-    // noop
   }
 
   static encode(m: DirectoryFrontendTestResponse, w?: Writer): Writer {

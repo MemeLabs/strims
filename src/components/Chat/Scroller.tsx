@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import React, { FunctionComponent, ReactNode } from "react";
+import React from "react";
 import { Scrollbars } from "react-custom-scrollbars";
 import {
   AutoSizer,
@@ -8,6 +8,7 @@ import {
   Dimensions,
   Grid,
   List,
+  ListRowRenderer,
   OnScrollParams,
 } from "react-virtualized";
 
@@ -17,13 +18,13 @@ export interface MessageProps {
 }
 
 interface ScrollerProps {
-  renderMessage: (props: MessageProps) => ReactNode;
+  renderMessage: (MessageProps) => React.ReactNode;
   messageCount: number;
   autoScrollThreshold?: number;
   resizeDebounceTimeout?: number;
 }
 
-const Scroller: FunctionComponent<ScrollerProps> = (props) => {
+const Scroller: React.FC<ScrollerProps> = (props) => {
   return (
     <AutoSizer>
       {(dimensions: Dimensions) => <ScrollerContent {...dimensions} {...props} />}
@@ -33,16 +34,16 @@ const Scroller: FunctionComponent<ScrollerProps> = (props) => {
 
 interface ListInternal {
   Grid: Grid & {
-    _scrollingContainer: any;
-    _onScroll: any;
+    _scrollingContainer: HTMLElement;
+    _onScroll: (e: React.UIEvent) => void;
   };
 }
 
 interface ScrollbarsInternal {
-  view: any;
+  view: HTMLElement;
 }
 
-const ScrollerContent: FunctionComponent<ScrollerProps & Dimensions> = ({
+const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
   height,
   width,
   messageCount,
@@ -95,7 +96,7 @@ const ScrollerContent: FunctionComponent<ScrollerProps & Dimensions> = ({
     [autoScroll, list, messageCount, resizing]
   );
 
-  const renderRow = React.useCallback(
+  const renderRow: ListRowRenderer = React.useCallback(
     ({ index, key, style, parent }) => (
       <CellMeasurer
         cache={cache}

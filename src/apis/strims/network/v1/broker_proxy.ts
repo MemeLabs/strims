@@ -2,12 +2,12 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface IBrokerProxyRequest {
+export type IBrokerProxyRequest = {
   connMtu?: number;
 }
 
 export class BrokerProxyRequest {
-  connMtu: number = 0;
+  connMtu: number;
 
   constructor(v?: IBrokerProxyRequest) {
     this.connMtu = v?.connMtu || 0;
@@ -38,7 +38,7 @@ export class BrokerProxyRequest {
   }
 }
 
-export interface IBrokerProxyEvent {
+export type IBrokerProxyEvent = {
   body?: BrokerProxyEvent.IBody
 }
 
@@ -144,12 +144,12 @@ export namespace BrokerProxyEvent {
     >;
   };
 
-  export interface IOpen {
+  export type IOpen = {
     proxyId?: bigint;
   }
 
   export class Open {
-    proxyId: bigint = BigInt(0);
+    proxyId: bigint;
 
     constructor(v?: IOpen) {
       this.proxyId = v?.proxyId || BigInt(0);
@@ -180,12 +180,12 @@ export namespace BrokerProxyEvent {
     }
   }
 
-  export interface IData {
+  export type IData = {
     data?: Uint8Array;
   }
 
   export class Data {
-    data: Uint8Array = new Uint8Array();
+    data: Uint8Array;
 
     constructor(v?: IData) {
       this.data = v?.data || new Uint8Array();
@@ -216,13 +216,13 @@ export namespace BrokerProxyEvent {
     }
   }
 
-  export interface IRead {
+  export type IRead = {
   }
 
   export class Read {
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     constructor(v?: IRead) {
-      // noop
     }
 
     static encode(m: Read, w?: Writer): Writer {
@@ -238,18 +238,18 @@ export namespace BrokerProxyEvent {
 
 }
 
-export interface IBrokerProxySendKeysRequest {
+export type IBrokerProxySendKeysRequest = {
   proxyId?: bigint;
   keys?: Uint8Array[];
 }
 
 export class BrokerProxySendKeysRequest {
-  proxyId: bigint = BigInt(0);
-  keys: Uint8Array[] = [];
+  proxyId: bigint;
+  keys: Uint8Array[];
 
   constructor(v?: IBrokerProxySendKeysRequest) {
     this.proxyId = v?.proxyId || BigInt(0);
-    if (v?.keys) this.keys = v.keys;
+    this.keys = v?.keys ? v.keys : [];
   }
 
   static encode(m: BrokerProxySendKeysRequest, w?: Writer): Writer {
@@ -281,13 +281,13 @@ export class BrokerProxySendKeysRequest {
   }
 }
 
-export interface IBrokerProxySendKeysResponse {
+export type IBrokerProxySendKeysResponse = {
 }
 
 export class BrokerProxySendKeysResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IBrokerProxySendKeysResponse) {
-    // noop
   }
 
   static encode(m: BrokerProxySendKeysResponse, w?: Writer): Writer {
@@ -301,18 +301,18 @@ export class BrokerProxySendKeysResponse {
   }
 }
 
-export interface IBrokerProxyReceiveKeysRequest {
+export type IBrokerProxyReceiveKeysRequest = {
   proxyId?: bigint;
   keys?: Uint8Array[];
 }
 
 export class BrokerProxyReceiveKeysRequest {
-  proxyId: bigint = BigInt(0);
-  keys: Uint8Array[] = [];
+  proxyId: bigint;
+  keys: Uint8Array[];
 
   constructor(v?: IBrokerProxyReceiveKeysRequest) {
     this.proxyId = v?.proxyId || BigInt(0);
-    if (v?.keys) this.keys = v.keys;
+    this.keys = v?.keys ? v.keys : [];
   }
 
   static encode(m: BrokerProxyReceiveKeysRequest, w?: Writer): Writer {
@@ -344,15 +344,15 @@ export class BrokerProxyReceiveKeysRequest {
   }
 }
 
-export interface IBrokerProxyReceiveKeysResponse {
+export type IBrokerProxyReceiveKeysResponse = {
   keys?: Uint8Array[];
 }
 
 export class BrokerProxyReceiveKeysResponse {
-  keys: Uint8Array[] = [];
+  keys: Uint8Array[];
 
   constructor(v?: IBrokerProxyReceiveKeysResponse) {
-    if (v?.keys) this.keys = v.keys;
+    this.keys = v?.keys ? v.keys : [];
   }
 
   static encode(m: BrokerProxyReceiveKeysResponse, w?: Writer): Writer {
@@ -380,14 +380,14 @@ export class BrokerProxyReceiveKeysResponse {
   }
 }
 
-export interface IBrokerProxyDataRequest {
+export type IBrokerProxyDataRequest = {
   proxyId?: bigint;
   data?: Uint8Array;
 }
 
 export class BrokerProxyDataRequest {
-  proxyId: bigint = BigInt(0);
-  data: Uint8Array = new Uint8Array();
+  proxyId: bigint;
+  data: Uint8Array;
 
   constructor(v?: IBrokerProxyDataRequest) {
     this.proxyId = v?.proxyId || BigInt(0);
@@ -423,13 +423,13 @@ export class BrokerProxyDataRequest {
   }
 }
 
-export interface IBrokerProxyDataResponse {
+export type IBrokerProxyDataResponse = {
 }
 
 export class BrokerProxyDataResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IBrokerProxyDataResponse) {
-    // noop
   }
 
   static encode(m: BrokerProxyDataResponse, w?: Writer): Writer {
@@ -443,12 +443,12 @@ export class BrokerProxyDataResponse {
   }
 }
 
-export interface IBrokerProxyCloseRequest {
+export type IBrokerProxyCloseRequest = {
   proxyId?: bigint;
 }
 
 export class BrokerProxyCloseRequest {
-  proxyId: bigint = BigInt(0);
+  proxyId: bigint;
 
   constructor(v?: IBrokerProxyCloseRequest) {
     this.proxyId = v?.proxyId || BigInt(0);
@@ -479,13 +479,13 @@ export class BrokerProxyCloseRequest {
   }
 }
 
-export interface IBrokerProxyCloseResponse {
+export type IBrokerProxyCloseResponse = {
 }
 
 export class BrokerProxyCloseResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IBrokerProxyCloseResponse) {
-    // noop
   }
 
   static encode(m: BrokerProxyCloseResponse, w?: Writer): Writer {

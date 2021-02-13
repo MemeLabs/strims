@@ -1,5 +1,5 @@
 import { Base64 } from "js-base64";
-import * as React from "react";
+import React from "react";
 import ReactDOM from "react-dom";
 import { Controller, useForm } from "react-hook-form";
 import { Link } from "react-router-dom";

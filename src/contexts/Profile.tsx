@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 
 import { Profile } from "../apis/strims/profile/v1/profile";
 import { useLazyCall } from "./FrontendApi";
@@ -71,7 +71,7 @@ export const useProfile = () => {
   return [state, actions] as [State, typeof actions];
 };
 
-export const Provider = ({ children }: any) => {
+export const Provider: React.FC = ({ children }) => {
   const [state, setState] = React.useState(initialState);
 
   const handleDone = (profile?: Profile) =>
@@ -89,7 +89,7 @@ export const Provider = ({ children }: any) => {
   React.useEffect(() => {
     const sessionId = sessionStorage.getItem("sessionId");
     if (sessionId) {
-      loadSession({ sessionId });
+      void loadSession({ sessionId });
     } else {
       handleDone();
     }

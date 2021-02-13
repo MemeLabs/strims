@@ -2,18 +2,18 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface IEgressOpenStreamRequest {
+export type IEgressOpenStreamRequest = {
   swarmUri?: string;
   networkKeys?: Uint8Array[];
 }
 
 export class EgressOpenStreamRequest {
-  swarmUri: string = "";
-  networkKeys: Uint8Array[] = [];
+  swarmUri: string;
+  networkKeys: Uint8Array[];
 
   constructor(v?: IEgressOpenStreamRequest) {
     this.swarmUri = v?.swarmUri || "";
-    if (v?.networkKeys) this.networkKeys = v.networkKeys;
+    this.networkKeys = v?.networkKeys ? v.networkKeys : [];
   }
 
   static encode(m: EgressOpenStreamRequest, w?: Writer): Writer {
@@ -45,7 +45,7 @@ export class EgressOpenStreamRequest {
   }
 }
 
-export interface IEgressOpenStreamResponse {
+export type IEgressOpenStreamResponse = {
   body?: EgressOpenStreamResponse.IBody
 }
 
@@ -151,12 +151,12 @@ export namespace EgressOpenStreamResponse {
     >;
   };
 
-  export interface IOpen {
+  export type IOpen = {
     transferId?: Uint8Array;
   }
 
   export class Open {
-    transferId: Uint8Array = new Uint8Array();
+    transferId: Uint8Array;
 
     constructor(v?: IOpen) {
       this.transferId = v?.transferId || new Uint8Array();
@@ -187,16 +187,16 @@ export namespace EgressOpenStreamResponse {
     }
   }
 
-  export interface IData {
+  export type IData = {
     data?: Uint8Array;
     segmentEnd?: boolean;
     bufferUnderrun?: boolean;
   }
 
   export class Data {
-    data: Uint8Array = new Uint8Array();
-    segmentEnd: boolean = false;
-    bufferUnderrun: boolean = false;
+    data: Uint8Array;
+    segmentEnd: boolean;
+    bufferUnderrun: boolean;
 
     constructor(v?: IData) {
       this.data = v?.data || new Uint8Array();
@@ -237,12 +237,12 @@ export namespace EgressOpenStreamResponse {
     }
   }
 
-  export interface IError {
+  export type IError = {
     message?: string;
   }
 
   export class Error {
-    message: string = "";
+    message: string;
 
     constructor(v?: IError) {
       this.message = v?.message || "";

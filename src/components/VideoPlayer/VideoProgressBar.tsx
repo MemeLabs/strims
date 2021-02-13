@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import React, { FunctionComponent, useEffect, useState } from "react";
+import React, { useEffect, useState } from "react";
 import {
   GetHandleProps,
   GetTrackProps,
@@ -18,7 +18,7 @@ interface HandleProps {
   getHandleProps: GetHandleProps;
 }
 
-export const Handle: FunctionComponent<HandleProps> = ({
+export const Handle: React.FC<HandleProps> = ({
   domain: [min, max],
   handle: { id, value, percent },
   getHandleProps,
@@ -40,7 +40,7 @@ interface TrackProps {
   getTrackProps: GetTrackProps;
 }
 
-export const Track: FunctionComponent<TrackProps> = ({ source, target, getTrackProps }) => (
+export const Track: React.FC<TrackProps> = ({ source, target, getTrackProps }) => (
   <div
     className="video_progress_bar__track"
     style={{
@@ -56,7 +56,7 @@ interface VideoProgressBarProps {
   videoControls: VideoControls;
 }
 
-const VideoProgressBar: FunctionComponent<VideoProgressBarProps> = ({
+const VideoProgressBar: React.FC<VideoProgressBarProps> = ({
   videoState,
   videoControls,
 }) => {

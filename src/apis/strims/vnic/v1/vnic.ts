@@ -6,7 +6,7 @@ import {
   ICertificate as strims_type_ICertificate,
 } from "../../type/certificate";
 
-export interface IPeerInit {
+export type IPeerInit = {
   protocolVersion?: number;
   certificate?: strims_type_ICertificate | undefined;
   nodePlatform?: string;
@@ -14,10 +14,10 @@ export interface IPeerInit {
 }
 
 export class PeerInit {
-  protocolVersion: number = 0;
+  protocolVersion: number;
   certificate: strims_type_Certificate | undefined;
-  nodePlatform: string = "";
-  nodeVersion: string = "";
+  nodePlatform: string;
+  nodeVersion: string;
 
   constructor(v?: IPeerInit) {
     this.protocolVersion = v?.protocolVersion || 0;

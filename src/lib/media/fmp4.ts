@@ -10,7 +10,7 @@ export class Decoder {
     this.source = new Source(MIME_TYPE);
   }
 
-  public reset() {
+  public reset(): void {
     this.headerRead = false;
     this.source.reset();
   }

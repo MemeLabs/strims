@@ -10,14 +10,14 @@ import {
   ICertificate as strims_type_ICertificate,
 } from "../../type/certificate";
 
-export interface INetworkIcon {
+export type INetworkIcon = {
   data?: Uint8Array;
   type?: string;
 }
 
 export class NetworkIcon {
-  data: Uint8Array = new Uint8Array();
-  type: string = "";
+  data: Uint8Array;
+  type: string;
 
   constructor(v?: INetworkIcon) {
     this.data = v?.data || new Uint8Array();
@@ -53,13 +53,13 @@ export class NetworkIcon {
   }
 }
 
-export interface ICreateNetworkRequest {
+export type ICreateNetworkRequest = {
   name?: string;
   icon?: INetworkIcon | undefined;
 }
 
 export class CreateNetworkRequest {
-  name: string = "";
+  name: string;
   icon: NetworkIcon | undefined;
 
   constructor(v?: ICreateNetworkRequest) {
@@ -96,7 +96,7 @@ export class CreateNetworkRequest {
   }
 }
 
-export interface ICreateNetworkResponse {
+export type ICreateNetworkResponse = {
   network?: INetwork | undefined;
 }
 
@@ -132,14 +132,14 @@ export class CreateNetworkResponse {
   }
 }
 
-export interface IUpdateNetworkRequest {
+export type IUpdateNetworkRequest = {
   id?: bigint;
   name?: string;
 }
 
 export class UpdateNetworkRequest {
-  id: bigint = BigInt(0);
-  name: string = "";
+  id: bigint;
+  name: string;
 
   constructor(v?: IUpdateNetworkRequest) {
     this.id = v?.id || BigInt(0);
@@ -175,7 +175,7 @@ export class UpdateNetworkRequest {
   }
 }
 
-export interface IUpdateNetworkResponse {
+export type IUpdateNetworkResponse = {
   network?: INetwork | undefined;
 }
 
@@ -211,12 +211,12 @@ export class UpdateNetworkResponse {
   }
 }
 
-export interface IDeleteNetworkRequest {
+export type IDeleteNetworkRequest = {
   id?: bigint;
 }
 
 export class DeleteNetworkRequest {
-  id: bigint = BigInt(0);
+  id: bigint;
 
   constructor(v?: IDeleteNetworkRequest) {
     this.id = v?.id || BigInt(0);
@@ -247,13 +247,13 @@ export class DeleteNetworkRequest {
   }
 }
 
-export interface IDeleteNetworkResponse {
+export type IDeleteNetworkResponse = {
 }
 
 export class DeleteNetworkResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IDeleteNetworkResponse) {
-    // noop
   }
 
   static encode(m: DeleteNetworkResponse, w?: Writer): Writer {
@@ -267,12 +267,12 @@ export class DeleteNetworkResponse {
   }
 }
 
-export interface IGetNetworkRequest {
+export type IGetNetworkRequest = {
   id?: bigint;
 }
 
 export class GetNetworkRequest {
-  id: bigint = BigInt(0);
+  id: bigint;
 
   constructor(v?: IGetNetworkRequest) {
     this.id = v?.id || BigInt(0);
@@ -303,7 +303,7 @@ export class GetNetworkRequest {
   }
 }
 
-export interface IGetNetworkResponse {
+export type IGetNetworkResponse = {
   network?: INetwork | undefined;
 }
 
@@ -339,13 +339,13 @@ export class GetNetworkResponse {
   }
 }
 
-export interface IListNetworksRequest {
+export type IListNetworksRequest = {
 }
 
 export class ListNetworksRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IListNetworksRequest) {
-    // noop
   }
 
   static encode(m: ListNetworksRequest, w?: Writer): Writer {
@@ -359,15 +359,15 @@ export class ListNetworksRequest {
   }
 }
 
-export interface IListNetworksResponse {
+export type IListNetworksResponse = {
   networks?: INetwork[];
 }
 
 export class ListNetworksResponse {
-  networks: Network[] = [];
+  networks: Network[];
 
   constructor(v?: IListNetworksResponse) {
-    if (v?.networks) this.networks = v.networks.map(v => new Network(v));
+    this.networks = v?.networks ? v.networks.map(v => new Network(v)) : [];
   }
 
   static encode(m: ListNetworksResponse, w?: Writer): Writer {
@@ -395,7 +395,7 @@ export class ListNetworksResponse {
   }
 }
 
-export interface INetwork {
+export type INetwork = {
   id?: bigint;
   name?: string;
   key?: strims_type_IKey | undefined;
@@ -405,12 +405,12 @@ export interface INetwork {
 }
 
 export class Network {
-  id: bigint = BigInt(0);
-  name: string = "";
+  id: bigint;
+  name: string;
   key: strims_type_Key | undefined;
   certificate: strims_type_Certificate | undefined;
   icon: NetworkIcon | undefined;
-  altProfileName: string = "";
+  altProfileName: string;
 
   constructor(v?: INetwork) {
     this.id = v?.id || BigInt(0);
@@ -466,7 +466,7 @@ export class Network {
   }
 }
 
-export interface ICreateNetworkInvitationRequest {
+export type ICreateNetworkInvitationRequest = {
   signingKey?: strims_type_IKey | undefined;
   signingCert?: strims_type_ICertificate | undefined;
   networkName?: string;
@@ -475,7 +475,7 @@ export interface ICreateNetworkInvitationRequest {
 export class CreateNetworkInvitationRequest {
   signingKey: strims_type_Key | undefined;
   signingCert: strims_type_Certificate | undefined;
-  networkName: string = "";
+  networkName: string;
 
   constructor(v?: ICreateNetworkInvitationRequest) {
     this.signingKey = v?.signingKey && new strims_type_Key(v.signingKey);
@@ -516,7 +516,7 @@ export class CreateNetworkInvitationRequest {
   }
 }
 
-export interface ICreateNetworkInvitationResponse {
+export type ICreateNetworkInvitationResponse = {
   invitation?: IInvitation | undefined;
   invitationB64?: string;
   invitationBytes?: Uint8Array;
@@ -524,8 +524,8 @@ export interface ICreateNetworkInvitationResponse {
 
 export class CreateNetworkInvitationResponse {
   invitation: Invitation | undefined;
-  invitationB64: string = "";
-  invitationBytes: Uint8Array = new Uint8Array();
+  invitationB64: string;
+  invitationBytes: Uint8Array;
 
   constructor(v?: ICreateNetworkInvitationResponse) {
     this.invitation = v?.invitation && new Invitation(v.invitation);
@@ -566,14 +566,14 @@ export class CreateNetworkInvitationResponse {
   }
 }
 
-export interface IInvitation {
+export type IInvitation = {
   version?: number;
   data?: Uint8Array;
 }
 
 export class Invitation {
-  version: number = 0;
-  data: Uint8Array = new Uint8Array();
+  version: number;
+  data: Uint8Array;
 
   constructor(v?: IInvitation) {
     this.version = v?.version || 0;
@@ -609,7 +609,7 @@ export class Invitation {
   }
 }
 
-export interface IInvitationV0 {
+export type IInvitationV0 = {
   key?: strims_type_IKey | undefined;
   certificate?: strims_type_ICertificate | undefined;
   networkName?: string;
@@ -618,7 +618,7 @@ export interface IInvitationV0 {
 export class InvitationV0 {
   key: strims_type_Key | undefined;
   certificate: strims_type_Certificate | undefined;
-  networkName: string = "";
+  networkName: string;
 
   constructor(v?: IInvitationV0) {
     this.key = v?.key && new strims_type_Key(v.key);
@@ -659,7 +659,7 @@ export class InvitationV0 {
   }
 }
 
-export interface ICreateNetworkFromInvitationRequest {
+export type ICreateNetworkFromInvitationRequest = {
   invitation?: CreateNetworkFromInvitationRequest.IInvitation
 }
 
@@ -752,7 +752,7 @@ export namespace CreateNetworkFromInvitationRequest {
 
 }
 
-export interface ICreateNetworkFromInvitationResponse {
+export type ICreateNetworkFromInvitationResponse = {
   network?: INetwork | undefined;
 }
 

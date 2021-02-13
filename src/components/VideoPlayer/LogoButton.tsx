@@ -3,7 +3,19 @@ import React, { useEffect, useState } from "react";
 import { useDebounce } from "react-use";
 import { useHover } from "use-events";
 
-const LogoButton = ({
+export type LogoButtonProps = {
+  spin?: boolean;
+  flicker?: boolean;
+  pulse?: boolean;
+  disabled?: boolean;
+  visible?: boolean;
+  blur?: boolean;
+  error?: boolean;
+  idleTimeout?: number;
+  onClick?: (e: React.UIEvent) => void;
+};
+
+const LogoButton: React.FC<LogoButtonProps> = ({
   spin = false,
   flicker = false,
   pulse = false,
@@ -11,8 +23,8 @@ const LogoButton = ({
   visible = true,
   blur = false,
   error = false,
-  onClick = null,
   idleTimeout = 2000,
+  onClick,
 }) => {
   const [currentVisibility, setCurrentVisibility] = useState(true);
 
@@ -42,7 +54,7 @@ const LogoButton = ({
 
   const buttonClasses = clsx({
     logo_button: true,
-    clickable: onClick != null && !disabled,
+    clickable: onClick && !disabled,
     exiting: !visible && currentVisibility,
     hidden,
     spin,

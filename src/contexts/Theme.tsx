@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import * as React from "react";
+import React from "react";
 
 type ColorScheme = "dark" | "light";
 
@@ -43,7 +43,7 @@ const themeReducer = (state: State, action: Action): State => {
   }
 };
 
-export const useTheme = () => {
+export const useTheme = (): [State, typeof actions] => {
   const [state, dispatch] = React.useContext(ProfileContext);
   const setColorScheme = (colorScheme: ColorScheme) =>
     dispatch({
@@ -61,10 +61,10 @@ export const useTheme = () => {
     setColorScheme,
     setNavOrder,
   };
-  return [state, actions] as [State, typeof actions];
+  return [state, actions];
 };
 
-export const Provider = ({ children }: any) => {
+export const Provider: React.FC = ({ children }) => {
   const [state, dispatch] = React.useReducer(themeReducer, initialState);
 
   return (

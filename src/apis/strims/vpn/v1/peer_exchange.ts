@@ -2,7 +2,7 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface IPeerExchangeMessage {
+export type IPeerExchangeMessage = {
   body?: PeerExchangeMessage.IBody
 }
 
@@ -153,12 +153,12 @@ export namespace PeerExchangeMessage {
     >;
   };
 
-  export interface IRequest {
+  export type IRequest = {
     count?: number;
   }
 
   export class Request {
-    count: number = 0;
+    count: number;
 
     constructor(v?: IRequest) {
       this.count = v?.count || 0;
@@ -189,15 +189,15 @@ export namespace PeerExchangeMessage {
     }
   }
 
-  export interface IResponse {
+  export type IResponse = {
     ids?: Uint8Array[];
   }
 
   export class Response {
-    ids: Uint8Array[] = [];
+    ids: Uint8Array[];
 
     constructor(v?: IResponse) {
-      if (v?.ids) this.ids = v.ids;
+      this.ids = v?.ids ? v.ids : [];
     }
 
     static encode(m: Response, w?: Writer): Writer {
@@ -225,14 +225,14 @@ export namespace PeerExchangeMessage {
     }
   }
 
-  export interface IOffer {
+  export type IOffer = {
     mediationId?: bigint;
     data?: Uint8Array;
   }
 
   export class Offer {
-    mediationId: bigint = BigInt(0);
-    data: Uint8Array = new Uint8Array();
+    mediationId: bigint;
+    data: Uint8Array;
 
     constructor(v?: IOffer) {
       this.mediationId = v?.mediationId || BigInt(0);
@@ -268,14 +268,14 @@ export namespace PeerExchangeMessage {
     }
   }
 
-  export interface IAnswer {
+  export type IAnswer = {
     mediationId?: bigint;
     data?: Uint8Array;
   }
 
   export class Answer {
-    mediationId: bigint = BigInt(0);
-    data: Uint8Array = new Uint8Array();
+    mediationId: bigint;
+    data: Uint8Array;
 
     constructor(v?: IAnswer) {
       this.mediationId = v?.mediationId || BigInt(0);
@@ -311,16 +311,16 @@ export namespace PeerExchangeMessage {
     }
   }
 
-  export interface IIceCandidate {
+  export type IIceCandidate = {
     mediationId?: bigint;
     index?: bigint;
     data?: Uint8Array;
   }
 
   export class IceCandidate {
-    mediationId: bigint = BigInt(0);
-    index: bigint = BigInt(0);
-    data: Uint8Array = new Uint8Array();
+    mediationId: bigint;
+    index: bigint;
+    data: Uint8Array;
 
     constructor(v?: IIceCandidate) {
       this.mediationId = v?.mediationId || BigInt(0);
@@ -361,13 +361,13 @@ export namespace PeerExchangeMessage {
     }
   }
 
-  export interface ICallbackRequest {
+  export type ICallbackRequest = {
   }
 
   export class CallbackRequest {
 
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
     constructor(v?: ICallbackRequest) {
-      // noop
     }
 
     static encode(m: CallbackRequest, w?: Writer): Writer {

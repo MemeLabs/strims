@@ -1,6 +1,6 @@
-import * as React from "react";
+import React from "react";
 
-const LandingPageLayout = ({ children }: React.ComponentProps<any>) => (
+const LandingPageLayout: React.FC = ({ children }) => (
   <div className="landing_page">
     <div className="landing_page__header">
       <h1 className="landing_page__header__title">strims@home</h1>

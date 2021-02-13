@@ -2,7 +2,7 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface IPeerIndexMessage {
+export type IPeerIndexMessage = {
   body?: PeerIndexMessage.IBody
 }
 
@@ -123,7 +123,7 @@ export namespace PeerIndexMessage {
     >;
   };
 
-  export interface IRecord {
+  export type IRecord = {
     hash?: Uint8Array;
     key?: Uint8Array;
     hostId?: Uint8Array;
@@ -133,12 +133,12 @@ export namespace PeerIndexMessage {
   }
 
   export class Record {
-    hash: Uint8Array = new Uint8Array();
-    key: Uint8Array = new Uint8Array();
-    hostId: Uint8Array = new Uint8Array();
-    port: number = 0;
-    timestamp: bigint = BigInt(0);
-    signature: Uint8Array = new Uint8Array();
+    hash: Uint8Array;
+    key: Uint8Array;
+    hostId: Uint8Array;
+    port: number;
+    timestamp: bigint;
+    signature: Uint8Array;
 
     constructor(v?: IRecord) {
       this.hash = v?.hash || new Uint8Array();
@@ -194,7 +194,7 @@ export namespace PeerIndexMessage {
     }
   }
 
-  export interface IPublish {
+  export type IPublish = {
     record?: PeerIndexMessage.IRecord | undefined;
   }
 
@@ -230,7 +230,7 @@ export namespace PeerIndexMessage {
     }
   }
 
-  export interface IUnpublish {
+  export type IUnpublish = {
     record?: PeerIndexMessage.IRecord | undefined;
   }
 
@@ -266,14 +266,14 @@ export namespace PeerIndexMessage {
     }
   }
 
-  export interface ISearchRequest {
+  export type ISearchRequest = {
     requestId?: bigint;
     hash?: Uint8Array;
   }
 
   export class SearchRequest {
-    requestId: bigint = BigInt(0);
-    hash: Uint8Array = new Uint8Array();
+    requestId: bigint;
+    hash: Uint8Array;
 
     constructor(v?: ISearchRequest) {
       this.requestId = v?.requestId || BigInt(0);
@@ -309,18 +309,18 @@ export namespace PeerIndexMessage {
     }
   }
 
-  export interface ISearchResponse {
+  export type ISearchResponse = {
     requestId?: bigint;
     records?: PeerIndexMessage.IRecord[];
   }
 
   export class SearchResponse {
-    requestId: bigint = BigInt(0);
-    records: PeerIndexMessage.Record[] = [];
+    requestId: bigint;
+    records: PeerIndexMessage.Record[];
 
     constructor(v?: ISearchResponse) {
       this.requestId = v?.requestId || BigInt(0);
-      if (v?.records) this.records = v.records.map(v => new PeerIndexMessage.Record(v));
+      this.records = v?.records ? v.records.map(v => new PeerIndexMessage.Record(v)) : [];
     }
 
     static encode(m: SearchResponse, w?: Writer): Writer {

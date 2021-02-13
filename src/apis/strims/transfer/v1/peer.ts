@@ -2,14 +2,14 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface ITransferPeerAnnounceSwarmRequest {
+export type ITransferPeerAnnounceSwarmRequest = {
   swarmId?: Uint8Array;
   port?: number;
 }
 
 export class TransferPeerAnnounceSwarmRequest {
-  swarmId: Uint8Array = new Uint8Array();
-  port: number = 0;
+  swarmId: Uint8Array;
+  port: number;
 
   constructor(v?: ITransferPeerAnnounceSwarmRequest) {
     this.swarmId = v?.swarmId || new Uint8Array();
@@ -45,7 +45,7 @@ export class TransferPeerAnnounceSwarmRequest {
   }
 }
 
-export interface ITransferPeerAnnounceSwarmResponse {
+export type ITransferPeerAnnounceSwarmResponse = {
   body?: TransferPeerAnnounceSwarmResponse.IBody
 }
 
@@ -123,12 +123,12 @@ export namespace TransferPeerAnnounceSwarmResponse {
 
 }
 
-export interface ITransferPeerCloseSwarmRequest {
+export type ITransferPeerCloseSwarmRequest = {
   swarmId?: Uint8Array;
 }
 
 export class TransferPeerCloseSwarmRequest {
-  swarmId: Uint8Array = new Uint8Array();
+  swarmId: Uint8Array;
 
   constructor(v?: ITransferPeerCloseSwarmRequest) {
     this.swarmId = v?.swarmId || new Uint8Array();
@@ -159,13 +159,13 @@ export class TransferPeerCloseSwarmRequest {
   }
 }
 
-export interface ITransferPeerCloseSwarmResponse {
+export type ITransferPeerCloseSwarmResponse = {
 }
 
 export class TransferPeerCloseSwarmResponse {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: ITransferPeerCloseSwarmResponse) {
-    // noop
   }
 
   static encode(m: TransferPeerCloseSwarmResponse, w?: Writer): Writer {

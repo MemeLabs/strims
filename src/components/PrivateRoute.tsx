@@ -1,9 +1,9 @@
-import * as React from "react";
+import React from "react";
 import { Redirect, Route, RouteProps } from "react-router-dom";
 
 import { useProfile } from "../contexts/Profile";
 
-export const PrivateRoute = (props: RouteProps) => {
+export const PrivateRoute: React.FC<RouteProps> = (props) => {
   const [{ profile, loading }] = useProfile();
 
   if (loading) {

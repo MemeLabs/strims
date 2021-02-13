@@ -2,15 +2,15 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface ICapConnLog {
+export type ICapConnLog = {
   peerLogs?: CapConnLog.IPeerLog[];
 }
 
 export class CapConnLog {
-  peerLogs: CapConnLog.PeerLog[] = [];
+  peerLogs: CapConnLog.PeerLog[];
 
   constructor(v?: ICapConnLog) {
-    if (v?.peerLogs) this.peerLogs = v.peerLogs.map(v => new CapConnLog.PeerLog(v));
+    this.peerLogs = v?.peerLogs ? v.peerLogs.map(v => new CapConnLog.PeerLog(v)) : [];
   }
 
   static encode(m: CapConnLog, w?: Writer): Writer {
@@ -39,18 +39,18 @@ export class CapConnLog {
 }
 
 export namespace CapConnLog {
-  export interface IPeerLog {
+  export type IPeerLog = {
     label?: string;
     events?: CapConnLog.PeerLog.IEvent[];
   }
 
   export class PeerLog {
-    label: string = "";
-    events: CapConnLog.PeerLog.Event[] = [];
+    label: string;
+    events: CapConnLog.PeerLog.Event[];
 
     constructor(v?: IPeerLog) {
       this.label = v?.label || "";
-      if (v?.events) this.events = v.events.map(v => new CapConnLog.PeerLog.Event(v));
+      this.events = v?.events ? v.events.map(v => new CapConnLog.PeerLog.Event(v)) : [];
     }
 
     static encode(m: PeerLog, w?: Writer): Writer {
@@ -83,30 +83,30 @@ export namespace CapConnLog {
   }
 
   export namespace PeerLog {
-    export interface IEvent {
+    export type IEvent = {
       code?: CapConnLog.PeerLog.Event.Code;
       timestamp?: bigint;
-      messageTypes?: number[];
+      messageTypes?: CapConnLog.PeerLog.Event.MessageType[];
       messageAddresses?: bigint[];
     }
 
     export class Event {
-      code: CapConnLog.PeerLog.Event.Code = 0;
-      timestamp: bigint = BigInt(0);
-      messageTypes: number[] = [];
-      messageAddresses: bigint[] = [];
+      code: CapConnLog.PeerLog.Event.Code;
+      timestamp: bigint;
+      messageTypes: CapConnLog.PeerLog.Event.MessageType[];
+      messageAddresses: bigint[];
 
       constructor(v?: IEvent) {
         this.code = v?.code || 0;
         this.timestamp = v?.timestamp || BigInt(0);
-        if (v?.messageTypes) this.messageTypes = v.messageTypes;
-        if (v?.messageAddresses) this.messageAddresses = v.messageAddresses;
+        this.messageTypes = v?.messageTypes ? v.messageTypes : [];
+        this.messageAddresses = v?.messageAddresses ? v.messageAddresses : [];
       }
 
       static encode(m: Event, w?: Writer): Writer {
         if (!w) w = new Writer();
         if (m.code) w.uint32(8).uint32(m.code);
-        if (m.timestamp) w.uint32(16).int64(m.timestamp);
+        if (m.timestamp) w.uint32(17).sfixed64(m.timestamp);
         m.messageTypes.reduce((w, v) => w.uint32(v), w.uint32(26).fork()).ldelim();
         m.messageAddresses.reduce((w, v) => w.uint64(v), w.uint32(34).fork()).ldelim();
         return w;
@@ -123,7 +123,7 @@ export namespace CapConnLog {
             m.code = r.uint32();
             break;
             case 2:
-            m.timestamp = r.int64();
+            m.timestamp = r.sfixed64();
             break;
             case 3:
             for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.messageTypes.push(r.uint32());
@@ -150,19 +150,34 @@ export namespace CapConnLog {
         EVENT_CODE_READ = 5,
         EVENT_CODE_READ_ERR = 6,
       }
+      export enum MessageType {
+        MESSAGE_TYPE_HANDSHAKE = 0,
+        MESSAGE_TYPE_DATA = 1,
+        MESSAGE_TYPE_ACK = 2,
+        MESSAGE_TYPE_HAVE = 3,
+        MESSAGE_TYPE_INTEGRITY = 4,
+        MESSAGE_TYPE_SIGNEDINTEGRITY = 5,
+        MESSAGE_TYPE_REQUEST = 6,
+        MESSAGE_TYPE_CANCEL = 7,
+        MESSAGE_TYPE_CHOKE = 8,
+        MESSAGE_TYPE_UNCHOKE = 9,
+        MESSAGE_TYPE_PING = 10,
+        MESSAGE_TYPE_PONG = 11,
+        MESSAGE_TYPE_END = 255,
+      }
     }
 
   }
 
 }
 
-export interface ICapConnWatchLogsRequest {
+export type ICapConnWatchLogsRequest = {
 }
 
 export class CapConnWatchLogsRequest {
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: ICapConnWatchLogsRequest) {
-    // noop
   }
 
   static encode(m: CapConnWatchLogsRequest, w?: Writer): Writer {
@@ -176,14 +191,14 @@ export class CapConnWatchLogsRequest {
   }
 }
 
-export interface ICapConnWatchLogsResponse {
+export type ICapConnWatchLogsResponse = {
   op?: CapConnWatchLogsResponse.Op;
   name?: string;
 }
 
 export class CapConnWatchLogsResponse {
-  op: CapConnWatchLogsResponse.Op = 0;
-  name: string = "";
+  op: CapConnWatchLogsResponse.Op;
+  name: string;
 
   constructor(v?: ICapConnWatchLogsResponse) {
     this.op = v?.op || 0;
@@ -226,12 +241,12 @@ export namespace CapConnWatchLogsResponse {
   }
 }
 
-export interface ICapConnLoadLogRequest {
+export type ICapConnLoadLogRequest = {
   name?: string;
 }
 
 export class CapConnLoadLogRequest {
-  name: string = "";
+  name: string;
 
   constructor(v?: ICapConnLoadLogRequest) {
     this.name = v?.name || "";
@@ -262,7 +277,7 @@ export class CapConnLoadLogRequest {
   }
 }
 
-export interface ICapConnLoadLogResponse {
+export type ICapConnLoadLogResponse = {
   log?: ICapConnLog | undefined;
 }
 

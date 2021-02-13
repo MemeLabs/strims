@@ -1,4 +1,4 @@
-import * as React from "react";
+import React from "react";
 import { useForm } from "react-hook-form";
 import { Link, Redirect } from "react-router-dom";
 
@@ -8,7 +8,7 @@ import LandingPageLayout from "../components/LandingPageLayout";
 import { useCall } from "../contexts/FrontendApi";
 import { useProfile } from "../contexts/Profile";
 
-const SignUpPage = () => {
+const SignUpPage: React.FC = () => {
   const [getProfilesRes] = useCall("profile", "list");
   const [{ profile, error, loading }, profileActions] = useProfile();
   const isLocalAccountsEmpty = !getProfilesRes.loading && !getProfilesRes.value?.profiles.length;

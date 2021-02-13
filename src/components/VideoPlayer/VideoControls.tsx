@@ -1,5 +1,6 @@
 import clsx from "clsx";
 import React, { useState } from "react";
+import { IconType } from "react-icons/lib";
 import {
   MdFullscreen,
   MdFullscreenExit,
@@ -13,10 +14,18 @@ import {
 } from "react-icons/md";
 import { useDebounce } from "react-use";
 
+import { VideoControls, VideoState } from "../../hooks/useVideo";
 import VideoProgressBar from "./VideoProgressBar";
 import VideoVolume from "./VideoVolume";
 
-const Button = ({ className, tooltip, icon: Icon, onClick }) => (
+type ButtonProps = {
+  className: string;
+  tooltip: string;
+  icon: IconType;
+  onClick: React.EventHandler<React.UIEvent>;
+};
+
+const Button: React.FC<ButtonProps> = ({ className, tooltip, icon: Icon, onClick }) => (
   <div className={clsx("button-wrap", className)}>
     <button data-tip={tooltip} onClick={onClick}>
       <Icon />
@@ -24,12 +33,23 @@ const Button = ({ className, tooltip, icon: Icon, onClick }) => (
   </div>
 );
 
-const PiPButton = ({ supported, toggle }) =>
+type PiPButtonProps = {
+  supported: boolean;
+  toggle: () => void;
+};
+
+const PiPButton: React.FC<PiPButtonProps> = ({ supported, toggle }) =>
   !supported ? null : (
     <Button className="pip" tooltip="Miniplayer" onClick={toggle} icon={MdPictureInPictureAlt} />
   );
 
-const FullscreenButton = ({ supported, enabled, toggle }) =>
+type FullscreenButtonProps = {
+  supported: boolean;
+  enabled: boolean;
+  toggle: () => void;
+};
+
+const FullscreenButton: React.FC<FullscreenButtonProps> = ({ supported, enabled, toggle }) =>
   !supported ? null : (
     <Button
       className="fullscreen"
@@ -39,7 +59,19 @@ const FullscreenButton = ({ supported, enabled, toggle }) =>
     />
   );
 
-const VolumeControl = ({ volume, videoControls, onUpdateStart, onUpdateEnd }) => {
+type VolumeControlProps = {
+  volume: number;
+  videoControls: VideoControls;
+  onUpdateStart: () => void;
+  onUpdateEnd: () => void;
+};
+
+const VolumeControl: React.FC<VolumeControlProps> = ({
+  volume,
+  videoControls,
+  onUpdateStart,
+  onUpdateEnd,
+}) => {
   const volumeIcons = [MdVolumeOff, MdVolumeMute, MdVolumeDown, MdVolumeUp];
   const volumeLevel = Math.ceil(volume * (volumeIcons.length - 1));
   const VolumeIcon = volumeIcons[volumeLevel];
@@ -60,7 +92,15 @@ const VolumeControl = ({ volume, videoControls, onUpdateStart, onUpdateEnd }) =>
   );
 };
 
-const VideoControls = (props) => {
+type VideoControlsProps = {
+  visible: boolean;
+  fullscreen: boolean;
+  toggleFullscreen: () => void;
+  videoState: VideoState;
+  videoControls: VideoControls;
+};
+
+const VideoControls: React.FC<VideoControlsProps> = (props) => {
   const [active, setActive] = useState(false);
   const visible = props.visible || active;
 
@@ -93,7 +133,7 @@ const VideoControls = (props) => {
       <div className="controls_group left">
         <Button
           className="play"
-          tooltip={playing === 0 ? "Pause" : "Play"}
+          tooltip={playing ? "Pause" : "Play"}
           onClick={playing ? videoControls.pause : videoControls.play}
           icon={playing ? MdPause : MdPlayArrow}
         />

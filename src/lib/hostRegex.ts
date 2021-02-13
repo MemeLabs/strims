@@ -9,7 +9,7 @@ type Options = {
   strictPort?: boolean;
 };
 
-export default (options: Options = {}) => {
+export default (options: Options = {}): RegExp => {
   options = {
     localhost: true,
     strictPort: true,

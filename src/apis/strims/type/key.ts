@@ -2,16 +2,16 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export interface IKey {
+export type IKey = {
   type?: KeyType;
   private?: Uint8Array;
   public?: Uint8Array;
 }
 
 export class Key {
-  type: KeyType = 0;
-  private: Uint8Array = new Uint8Array();
-  public: Uint8Array = new Uint8Array();
+  type: KeyType;
+  private: Uint8Array;
+  public: Uint8Array;
 
   constructor(v?: IKey) {
     this.type = v?.type || 0;

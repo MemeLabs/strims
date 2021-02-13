@@ -1,20 +1,21 @@
 import clsx from "clsx";
-import * as React from "react";
+import React from "react";
 import Dropzone from "react-dropzone";
 import { Control, Controller } from "react-hook-form";
 import { FiAlertTriangle } from "react-icons/fi";
 import { MdAddAPhoto } from "react-icons/md";
 
-export const InputLabel = ({
+export interface InputLabelProps {
+  required?: boolean;
+  text: string;
+  description?: string;
+}
+
+export const InputLabel: React.FC<InputLabelProps> = ({
   children,
   required,
   text,
   description,
-}: {
-  children: any;
-  required?: boolean;
-  text: string;
-  description?: string;
 }) => {
   const labelClass = clsx({
     "input_label": true,
@@ -32,7 +33,11 @@ export const InputLabel = ({
   );
 };
 
-export const InputError = ({ error }: { error: any }) => {
+export interface InputErrorProps {
+  error: Error | string;
+}
+
+export const InputError: React.FC<InputErrorProps> = ({ error }) => {
   if (!error) {
     return null;
   }
@@ -52,7 +57,20 @@ export const InputError = ({ error }: { error: any }) => {
   );
 };
 
-export const TextInput = ({
+export interface TextInputProps {
+  error?: Error | string;
+  inputRef: React.Ref<HTMLInputElement>;
+  label: string;
+  description?: string;
+  name: string;
+  placeholder: string;
+  required?: boolean;
+  type?: "text" | "password";
+  disabled?: boolean;
+  defaultValue?: string;
+}
+
+export const TextInput: React.FC<TextInputProps> = ({
   error,
   inputRef,
   label,
@@ -63,34 +81,34 @@ export const TextInput = ({
   type,
   disabled,
   defaultValue,
-}: {
-  error?: any;
-  inputRef: React.Ref<HTMLInputElement>;
+}) => (
+  <InputLabel required={required} text={label} description={description}>
+    <input
+      className="input input_text"
+      name={name}
+      placeholder={placeholder}
+      ref={inputRef}
+      type={type}
+      disabled={disabled}
+      defaultValue={defaultValue}
+    />
+    <InputError error={error} />
+  </InputLabel>
+);
+
+export interface TextAreaInputProps {
+  error?: Error | string;
+  inputRef: React.Ref<HTMLTextAreaElement>;
   label: string;
   description?: string;
   name: string;
   placeholder: string;
   required?: boolean;
-  type?: "text" | "password";
   disabled?: boolean;
   defaultValue?: string;
-}) => {
-  return (
-    <InputLabel required={required} text={label} description={description}>
-      <input
-        className="input input_text"
-        name={name}
-        placeholder={placeholder}
-        ref={inputRef}
-        type={type}
-        disabled={disabled}
-        defaultValue={defaultValue}
-      />
-      <InputError error={error} />
-    </InputLabel>
-  );
-};
-export const TextAreaInput = ({
+}
+
+export const TextAreaInput: React.FC<TextAreaInputProps> = ({
   error,
   inputRef,
   label,
@@ -100,33 +118,31 @@ export const TextAreaInput = ({
   required,
   disabled,
   defaultValue,
-}: {
-  error?: any;
-  inputRef: React.Ref<HTMLTextAreaElement>;
+}) => (
+  <InputLabel required={required} text={label} description={description}>
+    <textarea
+      className="input input_textarea"
+      name={name}
+      placeholder={placeholder}
+      ref={inputRef}
+      disabled={disabled}
+      defaultValue={defaultValue}
+    />
+    <InputError error={error} />
+  </InputLabel>
+);
+
+export interface ToggleInputProps {
+  error?: Error | string;
+  inputRef: React.Ref<HTMLInputElement>;
   label: string;
   description?: string;
   name: string;
-  placeholder: string;
-  required?: boolean;
   disabled?: boolean;
-  defaultValue?: string;
-}) => {
-  return (
-    <InputLabel required={required} text={label} description={description}>
-      <textarea
-        className="input input_textarea"
-        name={name}
-        placeholder={placeholder}
-        ref={inputRef}
-        disabled={disabled}
-        defaultValue={defaultValue}
-      />
-      <InputError error={error} />
-    </InputLabel>
-  );
-};
+  defaultValue?: boolean;
+}
 
-export const ToggleInput = ({
+export const ToggleInput: React.FC<ToggleInputProps> = ({
   error,
   inputRef,
   label,
@@ -134,44 +150,32 @@ export const ToggleInput = ({
   name,
   disabled,
   defaultValue,
-}: {
-  error?: any;
-  inputRef: React.Ref<HTMLInputElement>;
-  label: string;
-  description?: string;
-  name: string;
-  disabled?: boolean;
-  defaultValue?: boolean;
-}) => {
-  return (
-    <InputLabel text={label} description={description}>
-      <input
-        className="input input_toggle"
-        name={name}
-        ref={inputRef}
-        type="checkbox"
-        disabled={disabled}
-        defaultChecked={defaultValue}
-      />
-      <InputError error={error} />
-    </InputLabel>
-  );
-};
+}) => (
+  <InputLabel text={label} description={description}>
+    <input
+      className="input input_toggle"
+      name={name}
+      ref={inputRef}
+      type="checkbox"
+      disabled={disabled}
+      defaultChecked={defaultValue}
+    />
+    <InputError error={error} />
+  </InputLabel>
+);
 
 export interface ImageValue {
   data: Uint8Array;
   type: string;
 }
 
-export const AvatarInput = ({
-  name,
-  control,
-  maxSize = 512 * 1024,
-}: {
+export interface AvatarInput {
   name: string;
   control: Control<Record<string, any>>;
   maxSize?: number;
-}) => {
+}
+
+export const AvatarInput: React.FC<AvatarInput> = ({ name, control, maxSize = 512 * 1024 }) => {
   const [previewUrl, setPreviewUrl] = React.useState<string>();
   React.useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
 
