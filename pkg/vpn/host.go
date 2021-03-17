@@ -6,10 +6,11 @@ import (
 	"errors"
 	"sync"
 
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/event"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -19,6 +20,7 @@ const reservedPortCount = 1000
 const recentMessageIDHistoryLength = 100000
 const maxMessageHops = 5
 const maxMessageReplicas = 5
+const qosClassWeight = 1
 
 // errors ...
 var (
@@ -42,6 +44,7 @@ func New(logger *zap.Logger, vnic *vnic.Host) (*Host, error) {
 	return &Host{
 		logger:           logger,
 		vnic:             vnic,
+		qosc:             vnic.QOS().AddClass(qosClassWeight),
 		recentMessageIDs: recentMessageIDs,
 		hashTableStore:   newHashTableStore(context.Background(), logger, vnic.ID()),
 		peerIndexStore:   newPeerIndexStore(context.Background(), logger, vnic.ID()),
@@ -52,6 +55,7 @@ func New(logger *zap.Logger, vnic *vnic.Host) (*Host, error) {
 type Host struct {
 	logger               *zap.Logger
 	vnic                 *vnic.Host
+	qosc                 *qos.Class
 	clientsLock          sync.Mutex
 	nodes                nodeMap
 	networkObservers     event.Observer
@@ -95,7 +99,8 @@ func (h *Host) AddNetwork(cert *certificate.Certificate) (*Node, error) {
 		return nil, ErrDuplicateNetworkKey
 	}
 
-	network := newNetwork(h.logger, h.vnic, cert, h.recentMessageIDs)
+	qosc := h.qosc.AddClass(1)
+	network := newNetwork(h.logger, h.vnic, qosc, cert, h.recentMessageIDs)
 	hashTable := newHashTable(h.logger, network, h.hashTableStore)
 	peerIndex := newPeerIndex(h.logger, network, h.peerIndexStore)
 	peerExchange := newPeerExchange(h.logger, network)

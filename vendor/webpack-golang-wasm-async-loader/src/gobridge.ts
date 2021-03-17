@@ -19,10 +19,10 @@ const caller = (name: string) => (...args: any) => new Promise((resolve, reject)
   bridge[name].apply(undefined, [ ...args, cb ]);
 });
 
-export default function(getBytes: (string) => Promise<Buffer>) {
+export default function(wasmPath: string) {
   return async (baseURI: string) => {
     const go = new g.Go();
-    const bytes = await getBytes(baseURI);
+    const bytes = await fetch(`${baseURI}/${wasmPath}`).then(res => res.arrayBuffer());
     const result = await WebAssembly.instantiate(bytes, go.importObject);
     go.run(result.instance);
 

@@ -7,8 +7,6 @@ import * as webpack from "webpack";
 
 const versionPkg = "github.com/MemeLabs/go-ppspp/pkg/version";
 
-const getGoBin = (root: string) => `${root}/bin/go`;
-
 function loader(this: webpack.loader.LoaderContext, contents: string) {
   const cb = this.async();
 
@@ -22,7 +20,7 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
     },
   };
 
-  const goBin = getGoBin(opts.env.GOROOT);
+  const goBin = `${opts.env.GOROOT}/bin/go`;
   const outFile = `${this.resourcePath}.wasm`;
 
   const args = ["build", "-mod", "readonly"];
@@ -31,10 +29,10 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
     args.push(
       "-trimpath",
       "-ldflags",
-      `-s -w -X ${versionPkg}.Platform=web -X ${versionPkg}.Version=${rev}`
+      `-s -w -X '${versionPkg}.Platform=web' -X '${versionPkg}.Version=${rev}'`
     );
   } else {
-    args.push("-ldflags", `-X ${versionPkg}.Platform=web`);
+    args.push("-ldflags", `-X '${versionPkg}.Platform=web'`);
   }
   args.push("-o", outFile, this.resourcePath);
 
@@ -57,7 +55,7 @@ function loader(this: webpack.loader.LoaderContext, contents: string) {
     cb(null, [
       `require("${join(__dirname, "..", "lib", "wasm_exec.js")}");`,
       `import gobridge from "${join(__dirname, "..", "dist", "gobridge.js")}";`,
-      `export default gobridge((baseURI) => fetch(baseURI + '/${emittedFilename}').then(res => res.arrayBuffer()));`,
+      `export default gobridge("${emittedFilename}");`,
     ].join("\n"));
   });
 }

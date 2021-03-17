@@ -63,22 +63,26 @@ func Cyan(v ...interface{}) {
 	printLog("\u001b[46m", v)
 }
 
-var logEveryNCallers = sync.Map{}
+var runEveryNCallers = sync.Map{}
 
-func logEveryN(n int, msg ...interface{}) {
-	pc, _, _, _ := runtime.Caller(1)
-	v, _ := logEveryNCallers.LoadOrStore(pc, new(uint64))
+func RunEveryNWithStackSkip(n, skip int, fn func()) {
+	pc, _, _, _ := runtime.Caller(skip)
+	v, _ := runEveryNCallers.LoadOrStore(pc, new(uint64))
 	if atomic.AddUint64(v.(*uint64), 1)%uint64(n) == 0 {
-		log.Println(msg...)
+		fn()
 	}
+}
+
+func RunEveryN(n int, fn func()) {
+	RunEveryNWithStackSkip(n, 1, fn)
 }
 
 // LogEveryN ...
 func LogEveryN(n int, msg ...interface{}) {
-	logEveryN(n, msg...)
+	RunEveryNWithStackSkip(n, 1, func() { log.Println(msg...) })
 }
 
 // LogfEveryN ...
 func LogfEveryN(n int, format string, a ...interface{}) {
-	logEveryN(n, fmt.Sprintf(format, a...))
+	RunEveryNWithStackSkip(n, 1, func() { log.Printf(format, a...) })
 }

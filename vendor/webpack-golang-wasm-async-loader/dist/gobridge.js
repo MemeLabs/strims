@@ -9,10 +9,10 @@ const caller = (name) => (...args) => new Promise((resolve, reject) => {
     const cb = (err, ...msg) => (err ? reject(err) : resolve(...msg));
     bridge[name].apply(undefined, [...args, cb]);
 });
-function default_1(getBytes) {
+function default_1(wasmPath) {
     return async (baseURI) => {
         const go = new g.Go();
-        const bytes = await getBytes(baseURI);
+        const bytes = await fetch(`${baseURI}/${wasmPath}`).then(res => res.arrayBuffer());
         const result = await WebAssembly.instantiate(bytes, go.importObject);
         go.run(result.instance);
         return Object.fromEntries(Object.keys(bridge).map((k) => [k, caller(k)]));

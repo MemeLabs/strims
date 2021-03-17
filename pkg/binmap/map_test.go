@@ -1,8 +1,10 @@
 package binmap
 
 import (
+	"fmt"
 	"testing"
 
+	"github.com/MemeLabs/go-ppspp/pkg/sortutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -213,5 +215,75 @@ func TestFillBefore(t *testing.T) {
 			assert.True(t, m.FilledAt(b))
 		}
 		assert.False(t, m.FilledAt(Bin(i)))
+	}
+}
+
+func TestIterateEmptyAt(t *testing.T) {
+	cases := []struct {
+		filled []Bin
+		bin    Bin
+		label  string
+	}{
+		{
+			filled: []Bin{2, 4, 6, 12, 22, 24},
+			label:  "basic",
+		},
+		{
+			filled: []Bin{},
+			label:  "none filled",
+		},
+		{
+			filled: []Bin{15},
+			label:  "all filled",
+		},
+		{
+			filled: []Bin{7},
+			label:  "first half filled",
+		},
+		{
+			filled: []Bin{23},
+			label:  "second half filled",
+		},
+	}
+
+	bins := []Bin{7, 15, 23}
+
+	for _, c := range cases {
+		c := c
+		for _, b := range bins {
+			b := b
+			t.Run(fmt.Sprintf("%s, bin %d", c.label, b), func(t *testing.T) {
+				k := New()
+				for _, i := range c.filled {
+					k.Set(i)
+				}
+
+				expected := map[Bin]bool{}
+				extra := []Bin{}
+
+				for i := b.BaseLeft(); i <= b.BaseRight(); i += 2 {
+					if k.EmptyAt(i) {
+						expected[i] = true
+					}
+				}
+
+				for it := k.IterateEmptyAt(b); it.Next(); {
+					i := it.Value()
+					if _, ok := expected[i]; !ok {
+						extra = append(extra, i)
+					}
+					delete(expected, i)
+				}
+
+				missing := []uint64{}
+				for i := range expected {
+					missing = append(missing, uint64(i))
+				}
+				sortutil.Uint64(missing)
+
+				assert.Equal(t, []uint64{}, missing, "bins that should be iterated were not")
+				assert.Equal(t, []Bin{}, extra, "bins that should not be iterated were")
+			})
+		}
 	}
 }

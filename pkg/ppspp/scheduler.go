@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"math/rand"
 	"sync"
 	"time"
 
@@ -22,8 +21,8 @@ func NewScheduler(ctx context.Context, logger *zap.Logger) (s *Scheduler) {
 	s = &Scheduler{
 		logger: logger,
 
-		selector: &Test3ChunkSelector{
-			seed: rand.Uint64(),
+		selector: &Test2ChunkSelector{
+			// seed: rand.Uint64(),
 		},
 	}
 
@@ -38,7 +37,7 @@ type Scheduler struct {
 
 	label string
 
-	selector *Test3ChunkSelector
+	selector *Test2ChunkSelector
 }
 
 const (
@@ -139,7 +138,7 @@ func (r *Scheduler) runPeer(p *Peer, t time.Time) {
 	// }
 
 	r.sendPongs(p, t)
-	r.sendPeerTimeouts(p, t)
+	// r.sendPeerTimeouts(p, t)
 	// r.sendPeerExchange(p, w)
 	r.sendPeerData(p, t)
 	r.sendPeerPing(p, t)
@@ -425,8 +424,12 @@ func (r *Scheduler) sendPeerPing(p *Peer, t time.Time) {
 // 	return capacity
 // }
 
+// func (r *Scheduler) peerRequestCapacity(p *Peer) int {
+// 	return p.cwnd.CWND() - p.outstandingChunks()
+// }
+
 func (r *Scheduler) peerRequestCapacity(p *Peer) int {
-	return p.cwnd.CWND() - p.outstandingChunks()
+	return 100000000
 }
 
 func (r *Scheduler) requestBins(count int, s *Swarm, c *channel) ([]binmap.Bin, int) {
@@ -437,7 +440,8 @@ func (r *Scheduler) requestBins(count int, s *Swarm, c *channel) ([]binmap.Bin, 
 	var n int
 
 	if !s.bins.Requested.Empty() {
-		bins, n = r.selector.SelectBins(count, s.store.Bins(), s.bins.Available, s.bins.Requested, c.availableBins)
+		// bins, n = r.selector.SelectBins(count, s.store.Bins(), s.bins.Available, s.bins.Requested, c.availableBins)
+		bins, n = r.selector.SelectBins(count, s.bins.Available, s.bins.Requested, c.availableBins)
 	} else {
 		bins, n = (&FirstChunkSelector{}).SelectBins(count, s.bins.Available, s.bins.Requested, c.availableBins)
 		if len(bins) != 0 {
@@ -451,4 +455,17 @@ func (r *Scheduler) requestBins(count int, s *Swarm, c *channel) ([]binmap.Bin, 
 // ChunkSelector ...
 type ChunkSelector interface {
 	SelectBins(count int, seen, requested, available *binmap.Map) ([]binmap.Bin, int)
+}
+
+// SchedulerStrategy ...
+type SchedulerStrategy interface {
+}
+
+// NewSeedScheduler ...
+func NewSeedScheduler() *SeedScheduler {
+	return &SeedScheduler{}
+}
+
+// SeedScheduler ...
+type SeedScheduler struct {
 }

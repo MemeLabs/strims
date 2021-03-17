@@ -12,8 +12,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ma"
 )
 
-// TODO: locking madness...
-
 // WriteFlushCloser ...
 type WriteFlushCloser interface {
 	io.WriteCloser

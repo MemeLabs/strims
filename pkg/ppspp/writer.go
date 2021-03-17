@@ -1,8 +1,8 @@
 package ppspp
 
 import (
-	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 )
@@ -15,8 +15,13 @@ type WriterOptions struct {
 
 // NewWriter ...
 func NewWriter(o WriterOptions) (*Writer, error) {
+	so := SwarmOptions{
+		Scheduler: NewSeedScheduler(),
+	}
+	so.Assign(o.SwarmOptions)
+
 	id := NewSwarmID(o.Key.Public)
-	s, err := NewSwarm(id, o.SwarmOptions)
+	s, err := NewSwarm(id, so)
 	if err != nil {
 		return nil, err
 	}

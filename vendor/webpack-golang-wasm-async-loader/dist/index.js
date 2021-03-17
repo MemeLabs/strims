@@ -5,7 +5,6 @@ const crypto = require("crypto");
 const fs_1 = require("fs");
 const path_1 = require("path");
 const versionPkg = "github.com/MemeLabs/go-ppspp/pkg/version";
-const getGoBin = (root) => `${root}/bin/go`;
 function loader(contents) {
     const cb = this.async();
     const opts = {
@@ -17,15 +16,15 @@ function loader(contents) {
             GOARCH: "wasm",
         },
     };
-    const goBin = getGoBin(opts.env.GOROOT);
+    const goBin = `${opts.env.GOROOT}/bin/go`;
     const outFile = `${this.resourcePath}.wasm`;
     const args = ["build", "-mod", "readonly"];
     if (this.mode === "production") {
         const rev = process.env.VERSION || child_process_1.execFileSync("git", ["rev-parse", "HEAD"]).toString().substr(0, 8);
-        args.push("-trimpath", "-ldflags", `-s -w -X ${versionPkg}.Platform=web -X ${versionPkg}.Version=${rev}`);
+        args.push("-trimpath", "-ldflags", `-s -w -X '${versionPkg}.Platform=web' -X '${versionPkg}.Version=${rev}'`);
     }
     else {
-        args.push("-ldflags", `-X ${versionPkg}.Platform=web`);
+        args.push("-ldflags", `-X '${versionPkg}.Platform=web'`);
     }
     args.push("-o", outFile, this.resourcePath);
     child_process_1.execFile(goBin, args, opts, (err) => {
@@ -43,7 +42,7 @@ function loader(contents) {
         cb(null, [
             `require("${path_1.join(__dirname, "..", "lib", "wasm_exec.js")}");`,
             `import gobridge from "${path_1.join(__dirname, "..", "dist", "gobridge.js")}";`,
-            `export default gobridge((baseURI) => fetch(baseURI + '/${emittedFilename}').then(res => res.arrayBuffer()));`,
+            `export default gobridge("${emittedFilename}");`,
         ].join("\n"));
     });
 }

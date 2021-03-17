@@ -10,6 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
+	"github.com/MemeLabs/go-ppspp/pkg/ma"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
@@ -111,6 +112,8 @@ type channel struct {
 	pongTime            time.Time
 	closeOnce           sync.Once
 	close               chan struct{}
+
+	memes [64]ma.Welford
 }
 
 func (c *channel) setLiveWindow(v int) {
@@ -137,10 +140,29 @@ func (c *channel) addRequestedBin(b binmap.Bin) {
 	c.Unlock()
 }
 
-func (c *channel) addAvailableBin(b binmap.Bin) {
+func (c *channel) addAvailableBin(b binmap.Bin, ts int64) {
 	c.Lock()
+	defer c.Unlock()
+
+	lag := float64(iotime.Load().UnixNano() - ts)
+	for it := c.availableBins.IterateEmptyAt(b); it.Next(); {
+		c.memes[it.Value()&0x7f>>1].Update(lag)
+	}
+	// debug.RunEveryN(1000, func() {
+	// 	var b strings.Builder
+	// 	for i := 0; i < 64; i++ {
+	// 		b.WriteString(fmt.Sprintf(
+	// 			"substream: %d, stddev: %0.3f, mean: %0.3f",
+	// 			i,
+	// 			c.memes[i].StdDev(),
+	// 			c.memes[i].Mean(),
+	// 		))
+	// 		b.WriteRune('\n')
+	// 	}
+	// 	fmt.Println(b.String())
+	// })
+
 	c.availableBins.Set(b)
-	c.Unlock()
 }
 
 func (c *channel) addAckedBin(b binmap.Bin) bool {
@@ -513,8 +535,8 @@ func (c *channelMessageHandler) HandleAck(m codec.Ack) {
 
 func (c *channelMessageHandler) HandleHave(v codec.Have) {
 	c.metrics.HaveCount.Inc()
-	c.channel.addAvailableBin(v.Bin())
-	c.swarm.bins.AddAvailable(v.Bin())
+	ts := c.swarm.bins.AddAvailable(v.Bin())
+	c.channel.addAvailableBin(v.Bin(), ts)
 }
 
 func (c *channelMessageHandler) HandleRequest(m codec.Request) {

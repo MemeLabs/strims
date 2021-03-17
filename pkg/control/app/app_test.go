@@ -36,7 +36,8 @@ func NewTestControlPair(logger *zap.Logger) ([]byte, []control.AppControl, error
 
 		go ctrl[i].Run(context.Background())
 
-		h := peer.NewPeerHandler(logger, ctrl[i], node.Store)
+		qosc := node.VPN.VNIC().QOS().AddClass(1)
+		h := peer.NewPeerHandler(logger, ctrl[i], node.Store, qosc)
 		for _, p := range node.VNIC.Peers() {
 			h(p)
 		}

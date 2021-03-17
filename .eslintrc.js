@@ -23,12 +23,10 @@ module.exports = {
     "@typescript-eslint/no-namespace": "off",
     "@typescript-eslint/no-explicit-any": "off",
     "prefer-arrow/prefer-arrow-functions": "error",
-    "complexity": "off",
     "max-classes-per-file": "off",
-    "max-len": "off",
+    "max-len": ["warn", { "code": 100, "ignoreComments": true }],
     "no-bitwise": "off",
     "no-console": "warn",
-    "valid-typeof": "off",
     "quote-props": ["error", "consistent"],
     // TODO: remove after this is fixed https://github.com/react-hook-form/react-hook-form/issues/2887
     "@typescript-eslint/unbound-method": "off",

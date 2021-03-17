@@ -19,6 +19,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/services/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -53,6 +54,7 @@ func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.Pro
 		logger:           logger,
 		broker:           broker,
 		vpn:              vpn,
+		qosc:             vpn.VNIC().QOS().AddClass(1),
 		store:            store,
 		profile:          profile,
 		observers:        observers,
@@ -70,6 +72,7 @@ type Control struct {
 	logger  *zap.Logger
 	broker  Broker
 	vpn     *vpn.Host
+	qosc    *qos.Class
 	store   *dao.ProfileStore
 	profile *profilev1.Profile
 
@@ -266,7 +269,7 @@ func (t *Control) renewCertificateWithPeer(ctx context.Context, network *network
 
 // AddPeer ...
 func (t *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Peer {
-	p := NewPeer(id, peer, client, t.logger, t.observers, t.broker, t.vpn, t.certificates)
+	p := NewPeer(id, peer, client, t.logger, t.observers, t.broker, t.vpn, t.qosc, t.certificates)
 
 	t.lock.Lock()
 	defer t.lock.Unlock()

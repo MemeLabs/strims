@@ -683,8 +683,8 @@ export class WorkerBridge {
     );
 
     return {
-      write: ({ buffer }: Uint8Array) =>
-        ready.then((port) =>
+      write: ({ buffer }: Uint8Array) => {
+        void ready.then((port) =>
           port.postMessage(
             {
               type: EventType.DATA_CHANNEL_DATA,
@@ -692,13 +692,15 @@ export class WorkerBridge {
             },
             [buffer]
           )
-        ),
-      close: () =>
-        ready.then((port) =>
+        );
+      },
+      close: () => {
+        void ready.then((port) =>
           port.postMessage({
             type: EventType.DATA_CHANNEL_CLOSE,
           })
-        ),
+        );
+      },
     };
   }
 

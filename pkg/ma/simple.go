@@ -61,6 +61,9 @@ func (s *Simple) AddWithTime(v uint64, t time.Time) {
 
 // Value ...
 func (s *Simple) Value() uint64 {
+	if s.n == 0 {
+		return 0
+	}
 	return s.v / s.n
 }
 
@@ -103,10 +106,10 @@ func (s *Simple) Rate(d time.Duration) uint64 {
 func (s *Simple) RateWithTime(d time.Duration, t time.Time) uint64 {
 	s.advance(t)
 
-	if s.v == 0 {
+	if s.wl == 0 {
 		return 0
 	}
-	return s.v / uint64(time.Duration(s.wl)*s.d/d)
+	return s.v * uint64(d) / uint64(time.Duration(s.wl)*s.d)
 }
 
 type simpleMeanSample struct {

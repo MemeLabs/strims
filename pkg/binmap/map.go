@@ -886,6 +886,10 @@ func (m *Map) FindLastFilled() Bin {
 	return b
 }
 
+func (m *Map) IterateEmptyAt(b Bin) EmptyAtIterator {
+	return NewEmptyAtIterator(m, b)
+}
+
 type traceHistory struct {
 	refs [64]ref
 	len  int
@@ -902,4 +906,48 @@ func (t *traceHistory) Slice() (r []ref) {
 		r[i] = t.refs[i]
 	}
 	return
+}
+
+func NewEmptyAtIterator(m *Map, b Bin) EmptyAtIterator {
+	e := EmptyAtIterator{
+		m:   m,
+		end: b.BaseRight(),
+	}
+	e.i = e.initGap(b.BaseLeft()) - 2
+	return e
+}
+
+type EmptyAtIterator struct {
+	m        *Map
+	i        Bin
+	end      Bin
+	gapLeft  Bin
+	gapRight Bin
+}
+
+func (e *EmptyAtIterator) initGap(i Bin) Bin {
+	var gap Bin
+	for i <= e.end {
+		gap = e.m.FindFilledAfter(i)
+		if gap != i {
+			break
+		}
+		i = e.m.Cover(gap).BaseRight() + 2
+	}
+
+	e.gapLeft = gap.BaseLeft()
+	e.gapRight = gap.BaseRight()
+	return i
+}
+
+func (e *EmptyAtIterator) Next() bool {
+	e.i += 2
+	if e.i == e.gapLeft {
+		e.i = e.initGap(e.gapRight + 2)
+	}
+	return e.i <= e.end
+}
+
+func (e *EmptyAtIterator) Value() Bin {
+	return e.i
 }

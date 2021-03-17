@@ -15,6 +15,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -28,6 +29,7 @@ func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers) *
 	return &Control{
 		logger:    logger,
 		vpn:       vpn,
+		qosc:      vpn.VNIC().QOS().AddClass(1),
 		observers: observers,
 		events:    events,
 		peers:     map[uint64]*Peer{},
@@ -39,6 +41,7 @@ func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers) *
 type Control struct {
 	logger    *zap.Logger
 	vpn       *vpn.Host
+	qosc      *qos.Class
 	lock      sync.Mutex
 	observers *event.Observers
 	events    chan interface{}
@@ -202,8 +205,12 @@ func (f *contactedHost) Less(o llrb.Item) bool {
 
 // AddPeer ...
 func (c *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Peer {
+	qosc := c.qosc.AddClass(1)
+	// TODO: ppspp interface to set qos class weight
+
 	p := &Peer{
 		logger:    c.logger,
+		qosc:      qosc,
 		vnicPeer:  peer,
 		swarmPeer: ppspp.NewPeer(peer.HostID().Bytes(nil)),
 		client:    client,

@@ -13,6 +13,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -20,10 +21,11 @@ import (
 )
 
 // newNetwork ...
-func newNetwork(logger *zap.Logger, host *vnic.Host, certificate *certificate.Certificate, recentMessageIDs *lru.Cache) *Network {
+func newNetwork(logger *zap.Logger, host *vnic.Host, qosc *qos.Class, certificate *certificate.Certificate, recentMessageIDs *lru.Cache) *Network {
 	return &Network{
 		logger:           logger,
 		host:             host,
+		qosc:             qosc,
 		certificate:      certificate,
 		recentMessageIDs: recentMessageIDs,
 		links:            kademlia.NewKBucket(host.ID(), 20),
@@ -85,6 +87,7 @@ func (h *nextHopMapItem) Less(o llrb.Item) bool {
 type Network struct {
 	logger           *zap.Logger
 	host             *vnic.Host
+	qosc             *qos.Class
 	seq              uint64
 	certificate      *certificate.Certificate
 	recentMessageIDs *lru.Cache
@@ -183,7 +186,7 @@ func (n *Network) AddPeer(peer *vnic.Peer, srcPort, dstPort uint16) {
 	link := &networkLink{
 		peer:        peer,
 		port:        srcPort,
-		FrameWriter: vnic.NewFrameWriter(peer.Link, dstPort),
+		FrameWriter: vnic.NewFrameWriter(peer.Link, dstPort, n.qosc),
 	}
 	peer.SetHandler(srcPort, n.handleFrame)
 

@@ -17,6 +17,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -31,6 +32,7 @@ func NewPeer(
 	observers *event.Observers,
 	broker Broker,
 	vpn *vpn.Host,
+	qosc *qos.Class,
 	certificates *certificateMap,
 ) *Peer {
 	return &Peer{
@@ -45,7 +47,7 @@ func NewPeer(
 
 		keyCount:   make(chan uint32, 1),
 		bindings:   make(chan []*networkv1.NetworkPeerBinding, 1),
-		brokerConn: peer.Channel(vnic.NetworkBrokerPort),
+		brokerConn: peer.Channel(vnic.NetworkBrokerPort, qosc),
 	}
 }
 

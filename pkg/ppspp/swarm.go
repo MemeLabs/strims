@@ -18,6 +18,7 @@ type SwarmOptions struct {
 	ChunksPerSignature int
 	LiveWindow         int
 	Integrity          integrity.VerifierOptions
+	Scheduler          SchedulerStrategy
 }
 
 // Assign ...
@@ -30,6 +31,9 @@ func (o *SwarmOptions) Assign(u SwarmOptions) {
 	}
 	if u.LiveWindow != 0 {
 		o.LiveWindow = u.LiveWindow
+	}
+	if u.Scheduler != nil {
+		o.Scheduler = u.Scheduler
 	}
 
 	o.Integrity.Assign(u.Integrity)
@@ -106,10 +110,11 @@ type swarmBins struct {
 	Requested *binmap.Map // bins we have or have requested
 	Available *binmap.Map // bins at least one peer has
 
-	binRateFast   ma.Simple
-	binRateSlow   ma.Simple
-	lastAvailable binmap.Bin
-	lastTime      time.Time
+	availableTimes timeSet
+	binRateFast    ma.Simple
+	binRateSlow    ma.Simple
+	lastAvailable  binmap.Bin
+	lastTime       time.Time
 }
 
 func (s *swarmBins) ResetRequested(b binmap.Bin) {
@@ -118,22 +123,24 @@ func (s *swarmBins) ResetRequested(b binmap.Bin) {
 	s.Requested.Reset(b)
 }
 
-func (s *swarmBins) AddAvailable(b binmap.Bin) {
+func (s *swarmBins) AddAvailable(b binmap.Bin) int64 {
 	s.Lock()
 	defer s.Unlock()
 	s.Available.Set(b)
 
+	t := iotime.Load()
+	// TODO: prune history
+	at := s.availableTimes.Set(b, t.UnixNano())
+
 	br := b.BaseRight()
 	if s.lastAvailable > br {
-		return
+		return at
 	}
-
-	t := iotime.Load()
 
 	if s.lastAvailable == 0 {
 		s.lastAvailable = br
 		s.lastTime = t
-		return
+		return at
 	}
 
 	d := uint64((br - s.lastAvailable) / 2)
@@ -145,6 +152,8 @@ func (s *swarmBins) AddAvailable(b binmap.Bin) {
 	td := time.Duration(d) * s.binRateSlow.IntervalWithTime(t)
 	et := s.lastTime.Add(td)
 	s.lastTime = s.lastTime.Add(t.Sub(et) / 2)
+
+	return at
 }
 
 func (s *swarmBins) estEndBinWithTime(t time.Time) binmap.Bin {

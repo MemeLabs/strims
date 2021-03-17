@@ -6,6 +6,7 @@ import (
 	"io"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 )
 
 var errBufferTooSmall = errors.New("buffer too small")
@@ -100,10 +101,10 @@ func (f *Frame) Free() {
 var errClosedFrameWriter = errors.New("write on closed frameReadWriter")
 
 // NewFrameReadWriter ...
-func NewFrameReadWriter(w Link, port uint16) *FrameReadWriter {
+func NewFrameReadWriter(w Link, port uint16, qc *qos.Class) *FrameReadWriter {
 	return &FrameReadWriter{
 		FrameReader: NewFrameReader(w.MTU()),
-		FrameWriter: NewFrameWriter(w, port),
+		FrameWriter: NewFrameWriter(w, port, qc),
 	}
 }
 
@@ -166,13 +167,17 @@ func (b *FrameReader) Close() error {
 }
 
 // NewFrameWriter ...
-func NewFrameWriter(w Link, port uint16) *FrameWriter {
+func NewFrameWriter(w Link, port uint16, qc *qos.Class) *FrameWriter {
 	return &FrameWriter{
 		w:           w,
 		port:        port,
 		size:        w.MTU(),
 		writeBuffer: make([]byte, w.MTU()),
 		off:         frameHeaderLen,
+		qs:          qc.AddSession(1),
+		qp: frameWriterPacket{
+			ch: make(chan struct{}, 1),
+		},
 	}
 }
 
@@ -184,6 +189,8 @@ type FrameWriter struct {
 	writeBuffer []byte
 	off         int
 	closed      bool
+	qs          *qos.Session
+	qp          frameWriterPacket
 }
 
 // MTU ...
@@ -245,6 +252,10 @@ func (b *FrameWriter) flush() error {
 	}
 	h.Marshal(b.writeBuffer)
 
+	b.qp.size = uint64(b.off)
+	b.qs.Enqueue(&b.qp)
+	<-b.qp.ch
+
 	_, err := b.w.Write(b.writeBuffer[:b.off])
 	if err == nil {
 		b.off = frameHeaderLen
@@ -256,5 +267,24 @@ func (b *FrameWriter) flush() error {
 // Close ...
 func (b *FrameWriter) Close() error {
 	b.closed = true
+	b.qs.Close()
 	return nil
+}
+
+// SetQOSWeight ...
+func (b *FrameWriter) SetQOSWeight(w uint64) {
+	b.qs.SetWeight(w)
+}
+
+type frameWriterPacket struct {
+	size uint64
+	ch   chan struct{}
+}
+
+func (p *frameWriterPacket) Size() uint64 {
+	return p.size
+}
+
+func (p *frameWriterPacket) Send() {
+	p.ch <- struct{}{}
 }

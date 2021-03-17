@@ -10,14 +10,15 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"go.uber.org/zap"
 )
 
 // NewPeerHandler ...
-func NewPeerHandler(logger *zap.Logger, app control.AppControl, store *dao.ProfileStore) vnic.PeerHandler {
+func NewPeerHandler(logger *zap.Logger, app control.AppControl, store *dao.ProfileStore, qosc *qos.Class) vnic.PeerHandler {
 	return func(peer *vnic.Peer) {
-		rw0, rw1 := peer.ChannelPair(vnic.PeerRPCClientPort, vnic.PeerRPCServerPort)
+		rw0, rw1 := peer.ChannelPair(vnic.PeerRPCClientPort, vnic.PeerRPCServerPort, qosc)
 
 		c, err := rpc.NewClient(logger, &rpc.RWFDialer{
 			Logger:           logger,

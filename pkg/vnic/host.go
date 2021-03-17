@@ -12,6 +12,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/petar/GoLLRB/llrb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -76,6 +77,14 @@ func WithLabel(label string) HostOption {
 	}
 }
 
+// WithRateLimit ...
+func WithRateLimit(limit uint64) HostOption {
+	return func(h *Host) error {
+		h.qos.SetRateLimit(limit)
+		return nil
+	}
+}
+
 // New ...
 func New(logger *zap.Logger, profileKey *key.Key, options ...HostOption) (*Host, error) {
 	hostKey, err := dao.GenerateKey()
@@ -87,6 +96,7 @@ func New(logger *zap.Logger, profileKey *key.Key, options ...HostOption) (*Host,
 		logger:     logger,
 		profileKey: profileKey,
 		key:        hostKey,
+		qos:        qos.New(),
 	}
 
 	for _, o := range options {
@@ -119,6 +129,7 @@ type Host struct {
 	peerHandlers     []PeerHandler
 	peersLock        sync.Mutex
 	peers            peerMap
+	qos              *qos.Control
 }
 
 // Close ...
@@ -231,6 +242,11 @@ func (h *Host) Peers() []*Peer {
 		return true
 	})
 	return peers
+}
+
+// QOS ...
+func (h *Host) QOS() *qos.Control {
+	return h.qos
 }
 
 func (h *Host) handlePeer(p *Peer) {

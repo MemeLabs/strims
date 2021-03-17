@@ -101,7 +101,8 @@ func (c *Instance) Init(ctx context.Context, profile *profilev1.Profile, store *
 	app := app.NewControl(c.logger, c.broker, vpn, store, profile)
 	go app.Run(ctx)
 
-	vpn.VNIC().AddPeerHandler(peer.NewPeerHandler(c.logger, app, store))
+	qosc := vpn.VNIC().QOS().AddClass(1)
+	vpn.VNIC().AddPeerHandler(peer.NewPeerHandler(c.logger, app, store, qosc))
 
 	for _, fn := range services {
 		fn(c.server, &ServiceParams{

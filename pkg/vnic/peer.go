@@ -16,6 +16,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/version"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
@@ -222,8 +223,8 @@ func (p *Peer) ReleasePort(port uint16) {
 }
 
 // Channel ...
-func (p *Peer) Channel(port uint16) *FrameReadWriter {
-	f := NewFrameReadWriter(p.Link, port)
+func (p *Peer) Channel(port uint16, qc *qos.Class) *FrameReadWriter {
+	f := NewFrameReadWriter(p.Link, port, qc)
 	p.SetHandler(port, f.HandleFrame)
 
 	p.channelsLock.Lock()
@@ -234,9 +235,9 @@ func (p *Peer) Channel(port uint16) *FrameReadWriter {
 }
 
 // ChannelPair creates a symmetric channel pair.
-func (p *Peer) ChannelPair(port0, port1 uint16) (rw0, rw1 *FrameReadWriter) {
-	rw0 = NewFrameReadWriter(p.Link, port0)
-	rw1 = NewFrameReadWriter(p.Link, port1)
+func (p *Peer) ChannelPair(port0, port1 uint16, qc *qos.Class) (rw0, rw1 *FrameReadWriter) {
+	rw0 = NewFrameReadWriter(p.Link, port0, qc)
+	rw1 = NewFrameReadWriter(p.Link, port1, qc)
 	p.SetHandler(port1, rw0.HandleFrame)
 	p.SetHandler(port0, rw1.HandleFrame)
 

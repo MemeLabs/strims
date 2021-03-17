@@ -9,6 +9,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
@@ -16,6 +17,7 @@ import (
 // Peer ...
 type Peer struct {
 	logger    *zap.Logger
+	qosc      *qos.Class
 	vnicPeer  *vnic.Peer
 	swarmPeer *ppspp.Peer
 	client    api.PeerClient
@@ -113,7 +115,7 @@ func (p *Peer) openChannel(s *peerTransfer, peerPort uint16) {
 		zap.Uint16("peerPort", peerPort),
 	)
 
-	w := vnic.NewFrameWriter(p.vnicPeer.Link, peerPort)
+	w := vnic.NewFrameWriter(p.vnicPeer.Link, peerPort, p.qosc)
 	ch, err := ppspp.OpenChannel(p.logger, p.swarmPeer, s.swarm, w)
 	if err != nil {
 		return
