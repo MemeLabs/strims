@@ -1,6 +1,8 @@
 package ppspp
 
 import (
+	"sync"
+
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
 
@@ -28,7 +30,7 @@ func (t *timeSet) Set(bin binmap.Bin, time int64) int64 {
 
 func (t *timeSet) Get(bin binmap.Bin) (int64, bool) {
 	n := t.root.get(bin)
-	if n == nil {
+	if n == nil || n.time == 0 {
 		return 0, false
 	}
 	return n.time, true
@@ -47,11 +49,18 @@ func newTimeSetNode(b binmap.Bin) *timeSetNode {
 	return newTimeSetNodeWithCount(b, 0)
 }
 
+var timeSetNodePool = sync.Pool{
+	New: func() interface{} {
+		return &timeSetNode{}
+	},
+}
+
 func newTimeSetNodeWithCount(b binmap.Bin, c uint64) *timeSetNode {
-	return &timeSetNode{
-		bin:   b,
-		count: c,
-	}
+	n := timeSetNodePool.Get().(*timeSetNode)
+	n.bin = b
+	n.count = c
+	n.time = 0
+	return n
 }
 
 type timeSetNode struct {
@@ -135,4 +144,8 @@ func (r *timeSetNode) delete() {
 
 	r.left.delete()
 	r.right.delete()
+
+	r.left = nil
+	r.right = nil
+	timeSetNodePool.Put(r)
 }

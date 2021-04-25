@@ -23,7 +23,7 @@ const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) 
   const [{ error, loading }, createNetwork] = useLazyCall("network", "create", {
     onComplete: onCreate,
   });
-  const { control, register, handleSubmit, errors } = useForm<AddNetworkFormData>({
+  const { control, handleSubmit } = useForm<AddNetworkFormData>({
     mode: "onBlur",
   });
 
@@ -48,13 +48,12 @@ const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) 
               <AvatarInput name="icon" control={control} />
             </div>
             <TextInput
-              error={errors.name && "Name is required"}
-              inputRef={register({ required: true })}
+              control={control}
+              rules={{ required: true }}
               label="Network name"
               name="name"
               defaultValue={profile ? `${profile.name}'s Network` : ""}
               placeholder="Network name"
-              required
             />
           </div>
           <div className="modal__footer">

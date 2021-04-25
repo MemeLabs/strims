@@ -3,17 +3,21 @@ package codec
 // MessageHandler ...
 type MessageHandler interface {
 	HandleHandshake(v Handshake) error
-	HandleData(v Data)
-	HandleAck(v Ack)
-	HandleHave(v Have)
-	HandleIntegrity(v Integrity)
-	HandleSignedIntegrity(v SignedIntegrity)
-	HandleRequest(v Request)
-	HandleCancel(v Cancel)
-	HandleChoke(v Choke)
-	HandleUnchoke(v Unchoke)
-	HandlePing(v Ping)
-	HandlePong(v Pong)
+	HandleData(v Data) error
+	HandleAck(v Ack) error
+	HandleHave(v Have) error
+	HandleIntegrity(v Integrity) error
+	HandleSignedIntegrity(v SignedIntegrity) error
+	HandleRequest(v Request) error
+	HandleCancel(v Cancel) error
+	HandleChoke(v Choke) error
+	HandleUnchoke(v Unchoke) error
+	HandlePing(v Ping) error
+	HandlePong(v Pong) error
+	HandleStreamRequest(v StreamRequest) error
+	HandleStreamCancel(v StreamCancel) error
+	HandleStreamOpen(v StreamOpen) error
+	HandleStreamClose(v StreamClose) error
 }
 
 // Reader ...
@@ -59,6 +63,14 @@ func (v Reader) Read(b []byte) (n int, err error) {
 			mn, err = v.readPing(b[n:])
 		case PongMessage:
 			mn, err = v.readPong(b[n:])
+		case StreamRequestMessage:
+			mn, err = v.readStreamRequest(b[n:])
+		case StreamCancelMessage:
+			mn, err = v.readStreamCancel(b[n:])
+		case StreamOpenMessage:
+			mn, err = v.readStreamOpen(b[n:])
+		case StreamCloseMessage:
+			mn, err = v.readStreamClose(b[n:])
 		case EndMessage:
 			return
 		default:
@@ -88,7 +100,7 @@ func (v Reader) readData(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	v.Handler.HandleData(msg)
+	err = v.Handler.HandleData(msg)
 	return n, err
 }
 
@@ -98,7 +110,7 @@ func (v Reader) readAck(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	v.Handler.HandleAck(msg)
+	err = v.Handler.HandleAck(msg)
 	return n, err
 }
 
@@ -108,7 +120,7 @@ func (v Reader) readHave(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	v.Handler.HandleHave(msg)
+	err = v.Handler.HandleHave(msg)
 	return n, err
 }
 
@@ -118,7 +130,7 @@ func (v Reader) readIntegrity(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	v.Handler.HandleIntegrity(msg)
+	err = v.Handler.HandleIntegrity(msg)
 	return n, err
 }
 
@@ -128,7 +140,7 @@ func (v Reader) readSignedIntegrity(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	v.Handler.HandleSignedIntegrity(msg)
+	err = v.Handler.HandleSignedIntegrity(msg)
 	return n, err
 }
 
@@ -138,7 +150,7 @@ func (v Reader) readRequest(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	v.Handler.HandleRequest(msg)
+	err = v.Handler.HandleRequest(msg)
 	return n, err
 }
 
@@ -148,7 +160,7 @@ func (v Reader) readCancel(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	v.Handler.HandleCancel(msg)
+	err = v.Handler.HandleCancel(msg)
 	return n, err
 }
 
@@ -158,7 +170,7 @@ func (v Reader) readChoke(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	v.Handler.HandleChoke(msg)
+	err = v.Handler.HandleChoke(msg)
 	return n, err
 }
 
@@ -168,7 +180,7 @@ func (v Reader) readUnchoke(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	v.Handler.HandleUnchoke(msg)
+	err = v.Handler.HandleUnchoke(msg)
 	return n, err
 }
 
@@ -178,7 +190,7 @@ func (v Reader) readPing(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	v.Handler.HandlePing(msg)
+	err = v.Handler.HandlePing(msg)
 	return n, err
 }
 
@@ -188,6 +200,46 @@ func (v Reader) readPong(b []byte) (int, error) {
 	if err != nil {
 		return 0, err
 	}
-	v.Handler.HandlePong(msg)
+	err = v.Handler.HandlePong(msg)
+	return n, err
+}
+
+func (v Reader) readStreamRequest(b []byte) (int, error) {
+	var msg StreamRequest
+	n, err := msg.Unmarshal(b)
+	if err != nil {
+		return 0, err
+	}
+	err = v.Handler.HandleStreamRequest(msg)
+	return n, err
+}
+
+func (v Reader) readStreamCancel(b []byte) (int, error) {
+	var msg StreamCancel
+	n, err := msg.Unmarshal(b)
+	if err != nil {
+		return 0, err
+	}
+	err = v.Handler.HandleStreamCancel(msg)
+	return n, err
+}
+
+func (v Reader) readStreamOpen(b []byte) (int, error) {
+	var msg StreamOpen
+	n, err := msg.Unmarshal(b)
+	if err != nil {
+		return 0, err
+	}
+	err = v.Handler.HandleStreamOpen(msg)
+	return n, err
+}
+
+func (v Reader) readStreamClose(b []byte) (int, error) {
+	var msg StreamClose
+	n, err := msg.Unmarshal(b)
+	if err != nil {
+		return 0, err
+	}
+	err = v.Handler.HandleStreamClose(msg)
 	return n, err
 }

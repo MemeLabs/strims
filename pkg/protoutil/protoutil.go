@@ -21,7 +21,7 @@ func ReadStream(r io.Reader, m proto.Message) error {
 	}
 	n := binary.BigEndian.Uint16(t[:])
 
-	b := pool.Get(n)
+	b := pool.Get(int(n))
 	defer pool.Put(b)
 
 	if _, err := io.ReadFull(r, *b); err != nil {
@@ -41,7 +41,7 @@ func WriteStream(w io.Writer, m proto.Message) error {
 		return errBufferTooSmall
 	}
 
-	b := pool.Get(uint16(n))
+	b := pool.Get(n)
 	defer pool.Put(b)
 
 	binary.BigEndian.PutUint16(*b, uint16(mn))

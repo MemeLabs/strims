@@ -1,8 +1,6 @@
-import { Base64 } from "js-base64";
 import React from "react";
 import ReactDOM from "react-dom";
 import { Controller, useForm } from "react-hook-form";
-import { Link } from "react-router-dom";
 import Select from "react-select";
 
 import {
@@ -13,27 +11,28 @@ import {
   Network,
 } from "../../apis/strims/network/v1/network";
 import { InputError, InputLabel, TextInput } from "../../components/Form";
-import { MainLayout } from "../../components/MainLayout";
 import { useCall, useClient, useLazyCall } from "../../contexts/FrontendApi";
 import { useProfile } from "../../contexts/Profile";
 import jsonutil from "../../lib/jsonutil";
 
 const NetworkForm = ({ onCreate }: { onCreate: (res: CreateNetworkResponse) => void }) => {
-  const [{ value, error, loading }, createNetwork] = useLazyCall("network", "create", {
+  const [{ error, loading }, createNetwork] = useLazyCall("network", "create", {
     onComplete: onCreate,
   });
-  const { register, handleSubmit, errors } = useForm({
+  const { control, handleSubmit } = useForm<{
+    name: string;
+  }>({
     mode: "onBlur",
   });
 
-  const onSubmit = (data) => createNetwork(new CreateNetworkRequest(data));
+  const onSubmit = handleSubmit((data) => createNetwork(new CreateNetworkRequest(data)));
 
   return (
-    <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
+    <form className="thing_form" onSubmit={onSubmit}>
       {error && <InputError error={error.message || "Error creating network"} />}
       <TextInput
-        error={errors.name}
-        inputRef={register({
+        control={control}
+        rules={{
           required: {
             value: true,
             message: "Name is required",
@@ -42,11 +41,10 @@ const NetworkForm = ({ onCreate }: { onCreate: (res: CreateNetworkResponse) => v
             value: /^\S+$/i,
             message: "Names contains invalid characers",
           },
-        })}
+        }}
         label="Name"
         name="name"
         placeholder="Enter a network name"
-        required
       />
       <div className="input_buttons">
         <button className="input input_button" disabled={loading}>
@@ -62,10 +60,10 @@ const JoinForm = ({
 }: {
   onCreate: (res: CreateNetworkFromInvitationResponse) => void;
 }) => {
-  const [{ value, error, loading }, create] = useLazyCall("network", "createFromInvitation", {
+  const [{ error, loading }, create] = useLazyCall("network", "createFromInvitation", {
     onComplete: onCreate,
   });
-  const { register, handleSubmit, errors } = useForm<{
+  const { control, handleSubmit } = useForm<{
     invitationB64: string;
   }>({
     mode: "onBlur",
@@ -83,8 +81,8 @@ const JoinForm = ({
     <form className="invite_form" onSubmit={onSubmit}>
       {error && <InputError error={error.message || "Error creating membership"} />}
       <TextInput
-        error={errors.invitationB64}
-        inputRef={register({
+        control={control}
+        rules={{
           required: {
             value: true,
             message: "invite is required",
@@ -93,11 +91,10 @@ const JoinForm = ({
             value: /^[a-zA-Z0-9+/]+={0,2}$/,
             message: "invalid invite string",
           },
-        })}
+        }}
         label="Invite string"
         name="invitationB64"
         placeholder="Enter an invite string"
-        required
       />
       <div className="input_buttons">
         <button className="input input_button" disabled={loading}>
@@ -119,18 +116,23 @@ const unwrapString = (str: string) => str.replace(/\n/g, "");
 const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: () => void }) => {
   const [bootstrapPeersRes] = useCall("bootstrap", "listPeers");
   const client = useClient();
-  const { register, handleSubmit, errors, control } = useForm({
+  const { handleSubmit, control } = useForm<{
+    peer: {
+      value: bigint;
+      label: string;
+    };
+  }>({
     mode: "onBlur",
   });
 
-  const onSubmit = (data) => {
+  const onSubmit = handleSubmit((data) => {
     console.log(data);
-    client.bootstrap.publishNetworkToPeer({
+    void client.bootstrap.publishNetworkToPeer({
       peerId: data.peer.value,
       network: network,
     });
     onClose();
-  };
+  });
 
   if (bootstrapPeersRes.loading) {
     return null;
@@ -140,16 +142,9 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
     <>
       <div className="thing_list__modal_mask"></div>
       <div className="thing_list__modal">
-        <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
+        <form className="thing_form" onSubmit={onSubmit}>
           <InputLabel required={true} text="Peer">
             <Controller
-              as={Select}
-              className="input_select"
-              placeholder="Select peer"
-              options={bootstrapPeersRes.value?.peers.map((p) => ({
-                value: p.peerId,
-                label: p.label,
-              }))}
               name="peer"
               control={control}
               rules={{
@@ -158,8 +153,23 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
                   message: "Network is required",
                 },
               }}
+              render={({ field, fieldState: { error } }) => (
+                <>
+                  <Select
+                    {...field}
+                    isMulti={true}
+                    className="input_select"
+                    placeholder="Select peer"
+                    classNamePrefix="react_select"
+                    options={bootstrapPeersRes.value?.peers.map((p) => ({
+                      value: p.peerId,
+                      label: p.label,
+                    }))}
+                  />
+                  <InputError error={error} />
+                </>
+              )}
             />
-            <InputError error={errors.peer} />
           </InputLabel>
           <div className="input_buttons">
             <button className="input input_button" onClick={onClose}>
@@ -197,7 +207,7 @@ const NetworkTable = ({ networks, onDelete }: { networks: Network[]; onDelete: (
         signingCert: network.certificate,
         networkName: network.name,
       });
-      navigator.clipboard.writeText(invitation.invitationB64);
+      void navigator.clipboard.writeText(invitation.invitationB64);
       console.log("copied invite to clipboard");
     };
 
@@ -228,7 +238,7 @@ const NetworkTable = ({ networks, onDelete }: { networks: Network[]; onDelete: (
   );
 };
 
-const NetworksPage = () => {
+const NetworksPage: React.FC = () => {
   const [networksRes, getNetworks] = useCall("network", "list");
 
   return (

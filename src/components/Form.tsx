@@ -1,9 +1,19 @@
 import clsx from "clsx";
-import React from "react";
+import React, { ReactElement } from "react";
 import Dropzone from "react-dropzone";
-import { Control, Controller } from "react-hook-form";
+import { FieldError, FieldValues, UseControllerProps, useController } from "react-hook-form";
 import { FiAlertTriangle } from "react-icons/fi";
 import { MdAddAPhoto } from "react-icons/md";
+
+type CompatibleFieldPath<T extends FieldValues, V> = {
+  [K in keyof T]: T[K] extends V ? K : never;
+}[keyof T];
+type CompatibleUseControllerProps<T, V> = UseControllerProps<T> & {
+  name: CompatibleFieldPath<T, V>;
+};
+
+const isRequired = <T extends FieldValues>({ rules }: UseControllerProps<T>) =>
+  Boolean(rules?.required);
 
 export interface InputLabelProps {
   required?: boolean;
@@ -34,7 +44,7 @@ export const InputLabel: React.FC<InputLabelProps> = ({
 };
 
 export interface InputErrorProps {
-  error: Error | string;
+  error: FieldError | Error | string;
 }
 
 export const InputError: React.FC<InputErrorProps> = ({ error }) => {
@@ -58,111 +68,97 @@ export const InputError: React.FC<InputErrorProps> = ({ error }) => {
 };
 
 export interface TextInputProps {
-  error?: Error | string;
-  inputRef: React.Ref<HTMLInputElement>;
   label: string;
   description?: string;
-  name: string;
   placeholder: string;
-  required?: boolean;
   type?: "text" | "password";
   disabled?: boolean;
-  defaultValue?: string;
 }
 
-export const TextInput: React.FC<TextInputProps> = ({
-  error,
-  inputRef,
+export const TextInput = <T extends FieldValues>({
   label,
   description,
-  name,
   placeholder,
-  required,
   type,
   disabled,
-  defaultValue,
-}) => (
-  <InputLabel required={required} text={label} description={description}>
-    <input
-      className="input input_text"
-      name={name}
-      placeholder={placeholder}
-      ref={inputRef}
-      type={type}
-      disabled={disabled}
-      defaultValue={defaultValue}
-    />
-    <InputError error={error} />
-  </InputLabel>
-);
+  ...controllerProps
+}: TextInputProps & CompatibleUseControllerProps<T, string>): ReactElement => {
+  const {
+    field,
+    fieldState: { error },
+  } = useController(controllerProps);
+
+  return (
+    <InputLabel required={isRequired(controllerProps)} text={label} description={description}>
+      <input
+        {...field}
+        className="input input_text"
+        placeholder={placeholder}
+        type={type}
+        disabled={disabled}
+      />
+      <InputError error={error} />
+    </InputLabel>
+  );
+};
 
 export interface TextAreaInputProps {
-  error?: Error | string;
-  inputRef: React.Ref<HTMLTextAreaElement>;
   label: string;
   description?: string;
   name: string;
   placeholder: string;
-  required?: boolean;
   disabled?: boolean;
-  defaultValue?: string;
 }
 
-export const TextAreaInput: React.FC<TextAreaInputProps> = ({
-  error,
-  inputRef,
+export const TextAreaInput = <T extends FieldValues>({
   label,
   description,
-  name,
   placeholder,
-  required,
   disabled,
-  defaultValue,
-}) => (
-  <InputLabel required={required} text={label} description={description}>
-    <textarea
-      className="input input_textarea"
-      name={name}
-      placeholder={placeholder}
-      ref={inputRef}
-      disabled={disabled}
-      defaultValue={defaultValue}
-    />
-    <InputError error={error} />
-  </InputLabel>
-);
+  ...controllerProps
+}: TextInputProps & CompatibleUseControllerProps<T, string>): ReactElement => {
+  const {
+    field,
+    fieldState: { error },
+  } = useController(controllerProps);
+
+  return (
+    <InputLabel required={isRequired(controllerProps)} text={label} description={description}>
+      <textarea
+        {...field}
+        className="input input_textarea"
+        placeholder={placeholder}
+        disabled={disabled}
+      />
+      <InputError error={error} />
+    </InputLabel>
+  );
+};
 
 export interface ToggleInputProps {
-  error?: Error | string;
-  inputRef: React.Ref<HTMLInputElement>;
   label: string;
   description?: string;
-  name: string;
   disabled?: boolean;
-  defaultValue?: boolean;
 }
 
-export const ToggleInput: React.FC<ToggleInputProps> = ({
-  error,
-  inputRef,
+export const ToggleInput = <T extends FieldValues>({
   label,
   description,
-  name,
   disabled,
-  defaultValue,
-}) => (
-  <InputLabel text={label} description={description}>
-    <input
-      className="input input_toggle"
-      name={name}
-      ref={inputRef}
-      type="checkbox"
-      disabled={disabled}
-      defaultChecked={defaultValue}
-    />
-    <InputError error={error} />
-  </InputLabel>
-);
+  ...controllerProps
+}: ToggleInputProps & CompatibleUseControllerProps<T, boolean>): ReactElement => {
+  const {
+    field,
+    fieldState: { error },
+  } = useController(controllerProps);
+
+  return (
+    <InputLabel text={label} description={description}>
+      <input {...field} className="input input_toggle" type="checkbox" disabled={disabled} />
+      <InputError error={error} />
+    </InputLabel>
+  );
+};
 
 export interface ImageValue {
   data: Uint8Array;
@@ -170,59 +166,59 @@ export interface ImageValue {
 }
 
 export interface AvatarInput {
-  name: string;
-  control: Control<Record<string, any>>;
   maxSize?: number;
 }
 
-export const AvatarInput: React.FC<AvatarInput> = ({ name, control, maxSize = 512 * 1024 }) => {
+export const AvatarInput = <T extends FieldValues>({
+  maxSize = 512 * 1024,
+  ...controllerProps
+}: AvatarInput & CompatibleUseControllerProps<T, ImageValue>): ReactElement => {
   const [previewUrl, setPreviewUrl] = React.useState<string>();
   React.useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
 
+  const {
+    field: { onChange },
+    fieldState: { error },
+  } = useController(controllerProps);
+
+  const handleDrop = async ([file]: File[]) => {
+    if (!file) {
+      onChange(null);
+      return;
+    }
+
+    setPreviewUrl(URL.createObjectURL(file));
+
+    const data = await new Promise<ArrayBuffer>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
+      reader.onerror = () => reject();
+      reader.readAsArrayBuffer(file);
+    });
+    onChange({
+      type: file.type,
+      data,
+    });
+  };
+
   return (
-    <Controller
-      name={name}
-      control={control}
-      defaultValue=""
-      render={({ onChange }) => {
-        const handleDrop = async ([file]: File[]) => {
-          if (!file) {
-            onChange(null);
-            return;
-          }
-
-          setPreviewUrl(URL.createObjectURL(file));
-
-          const data = await new Promise<ArrayBuffer>((resolve, reject) => {
-            const reader = new FileReader();
-            reader.onload = () => resolve(new Uint8Array(reader.result as ArrayBuffer));
-            reader.onerror = () => reject();
-            reader.readAsArrayBuffer(file);
-          });
-          onChange({
-            type: file.type,
-            data,
-          });
-        };
-
-        return (
-          <Dropzone maxSize={maxSize} multiple={false} accept="image/*" onDrop={handleDrop}>
-            {({ getRootProps, getInputProps }) => (
-              <div {...getRootProps()} className="input_avatar">
-                {previewUrl ? (
-                  <img src={previewUrl} className="input_avatar__preview" />
-                ) : (
-                  <div className="input_avatar__placeholder">
-                    <MdAddAPhoto size={30} className="input_avatar__placeholder__icon" />
-                    <span className="input_avatar__placeholder__text">upload</span>
-                  </div>
-                )}
-                <input name="file" {...getInputProps()} />
+    <>
+      <InputError error={error} />
+      <Dropzone maxSize={maxSize} multiple={false} accept="image/*" onDrop={handleDrop}>
+        {({ getRootProps, getInputProps }) => (
+          <div {...getRootProps()} className="input_avatar">
+            {previewUrl ? (
+              <img src={previewUrl} className="input_avatar__preview" />
+            ) : (
+              <div className="input_avatar__placeholder">
+                <MdAddAPhoto size={30} className="input_avatar__placeholder__icon" />
+                <span className="input_avatar__placeholder__text">upload</span>
               </div>
             )}
-          </Dropzone>
-        );
-      }}
-    />
+            <input name="file" {...getInputProps()} />
+          </div>
+        )}
+      </Dropzone>
+    </>
   );
 };

@@ -6,7 +6,9 @@ import (
 	"io/ioutil"
 	"log"
 	"math/rand"
-	"sync"
+	"net/http"
+	_ "net/http/pprof"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -24,7 +26,7 @@ func TestSwarmE2E(t *testing.T) {
 	type client struct {
 		id        []byte
 		swarm     *Swarm
-		scheduler *Scheduler
+		scheduler *Runner
 	}
 
 	newClient := func() *client {
@@ -54,32 +56,32 @@ func TestSwarmE2E(t *testing.T) {
 	logger := ppspptest.Logger()
 
 	for _, c := range clients {
-		c.scheduler = NewScheduler(ctx, logger)
+		c.scheduler = NewRunner(ctx, logger)
 	}
 
 	for i := 0; i < len(clients); i++ {
 		for j := i + 1; j < len(clients); j++ {
-			iPeer := NewPeer(clients[i].id)
-			jPeer := NewPeer(clients[j].id)
-
-			clients[i].scheduler.AddPeer(ctx, iPeer)
-			clients[j].scheduler.AddPeer(ctx, jPeer)
-
 			iConn, jConn := ppspptest.NewConnPair()
 
-			iChan, err := OpenChannel(logger, iPeer, clients[i].swarm, iConn)
+			iChannelReader, iPeer := clients[i].scheduler.RunPeer(clients[i].id, iConn)
+			jCHannelReader, jPeer := clients[j].scheduler.RunPeer(clients[j].id, jConn)
+
+			err := clients[i].scheduler.RunChannel(clients[i].swarm, iPeer, 1, 1)
 			assert.NoError(t, err, "channel open failed")
-			jChan, err := OpenChannel(logger, jPeer, clients[j].swarm, jConn)
+			err = clients[j].scheduler.RunChannel(clients[j].swarm, jPeer, 1, 1)
 			assert.NoError(t, err, "channel open failed")
 
-			go ppspptest.ReadChannelConn(iConn, iChan)
-			go ppspptest.ReadChannelConn(jConn, jChan)
+			go ppspptest.ReadChannelConn(iConn, iChannelReader)
+			go ppspptest.ReadChannelConn(jConn, jCHannelReader)
 		}
 	}
 
 	go func() {
-		tc := time.NewTicker(100 * time.Millisecond).C
-		b := make([]byte, 75000)
+		ivl := 100 * time.Millisecond
+		rate := 6000
+
+		tc := time.NewTicker(ivl).C
+		b := make([]byte, rate*1000/8/int(time.Second/ivl))
 		for range tc {
 			if _, err := src.Write(b); err != nil {
 				log.Println(err)
@@ -87,16 +89,46 @@ func TestSwarmE2E(t *testing.T) {
 		}
 	}()
 
-	var wg sync.WaitGroup
+	go func() {
+		log.Println(http.ListenAndServe(":6061", nil))
+	}()
+
+	lastReads := make([]int64, len(clients))
+	go func() {
+		t := time.NewTicker(time.Second)
+		for range t.C {
+			times := make([]time.Duration, len(clients))
+			for i := 1; i < len(clients); i++ {
+				times[i] = time.Since(time.Unix(0, atomic.LoadInt64(&lastReads[i])))
+			}
+			log.Printf("time since last read: %s", times)
+		}
+	}()
+
 	for i := 1; i < len(clients); i++ {
-		wg.Add(1)
 		go func(i int) {
-			limit := int64(500000)
-			n, err := io.CopyN(ioutil.Discard, clients[i].swarm.Reader(), limit)
-			assert.NoError(t, err, "read failed")
-			assert.Equal(t, limit, n, "short read")
-			wg.Done()
+			for {
+				limit := int64(500000)
+				n, err := io.CopyN(ioutil.Discard, clients[i].swarm.Reader(), limit)
+				// assert.NoError(t, err, "read failed")
+				// assert.Equal(t, limit, n, "short read")
+				_, _ = n, err
+				atomic.StoreInt64(&lastReads[i], time.Now().UnixNano())
+			}
 		}(i)
 	}
-	wg.Wait()
+	time.Sleep(30 * time.Second)
+
+	// var wg sync.WaitGroup
+	// for i := 1; i < len(clients); i++ {
+	// 	wg.Add(1)
+	// 	go func(i int) {
+	// 		limit := int64(500000)
+	// 		n, err := io.CopyN(ioutil.Discard, clients[i].swarm.Reader(), limit)
+	// 		assert.NoError(t, err, "read failed")
+	// 		assert.Equal(t, limit, n, "short read")
+	// 		wg.Done()
+	// 	}(i)
+	// }
+	// wg.Wait()
 }

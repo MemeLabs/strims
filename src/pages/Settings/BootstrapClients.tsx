@@ -1,6 +1,5 @@
 import React from "react";
 import { useForm } from "react-hook-form";
-import { Link } from "react-router-dom";
 
 import {
   BootstrapClient,
@@ -8,7 +7,6 @@ import {
   CreateBootstrapClientResponse,
 } from "../../apis/strims/network/v1/bootstrap/bootstrap";
 import { InputError, TextInput } from "../../components/Form";
-import { MainLayout } from "../../components/MainLayout";
 import { useCall, useLazyCall } from "../../contexts/FrontendApi";
 import jsonutil from "../../lib/jsonutil";
 
@@ -20,11 +18,13 @@ const BootstrapClientForm = ({
   const [{ error, loading }, createBootstrapClient] = useLazyCall("bootstrap", "createClient", {
     onComplete: onCreate,
   });
-  const { register, handleSubmit, errors } = useForm({
+  const { control, handleSubmit } = useForm<{
+    url: string;
+  }>({
     mode: "onBlur",
   });
 
-  const onSubmit = (data) =>
+  const onSubmit = handleSubmit((data) =>
     createBootstrapClient(
       new CreateBootstrapClientRequest({
         clientOptions: {
@@ -33,21 +33,27 @@ const BootstrapClientForm = ({
           },
         },
       })
-    );
+    )
+  );
 
   return (
-    <form className="thing_form" onSubmit={handleSubmit(onSubmit)}>
+    <form className="thing_form" onSubmit={onSubmit}>
       {error && <InputError error={error.message || "Error creating bootstrapClient"} />}
       <TextInput
-        error={errors.url && "URL is required"}
-        inputRef={register({
-          required: true,
-          pattern: /^\S+$/i,
-        })}
+        control={control}
+        rules={{
+          required: {
+            value: true,
+            message: "URL is required",
+          },
+          pattern: {
+            value: /^\S+$/i,
+            message: "Invalid format",
+          },
+        }}
         label="URL"
         name="url"
         placeholder="Enter a bootstrap url"
-        required
       />
       <div className="input_buttons">
         <button className="input input_button" disabled={loading}>
@@ -97,7 +103,7 @@ const BootstrapClientTable = ({
   return <div className="thing_list">{rows}</div>;
 };
 
-const BootstrapClientsPage = () => {
+const BootstrapClientsPage: React.FC = () => {
   const [bootstrapClientsRes, getBootstrapClients] = useCall("bootstrap", "listClients");
 
   return (

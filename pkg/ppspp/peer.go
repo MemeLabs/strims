@@ -1,162 +1,192 @@
 package ppspp
 
 import (
-	"io"
-	"math/rand"
+	"log"
 	"sync"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/etcp"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ma"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
-// WriteFlushCloser ...
-type WriteFlushCloser interface {
-	io.WriteCloser
-	MTU() int
-	Flush() error
+type peerPriority uint8
+
+const (
+	peerPriorityHigh peerPriority = 0
+	peerPriorityLow  peerPriority = 1
+)
+
+type PeerWriter interface {
+	Write(maxBytes int) (int, error)
+	WriteData(maxBytes int, b binmap.Bin, pri peerPriority) (int, error)
 }
 
-const minPingInterval = time.Second * 10
+func newPeer(id []byte, w Conn, t timeutil.Ticker) *Peer {
+	p := &Peer{
+		id:     id,
+		w:      w,
+		ready:  make(chan time.Time, 1),
+		ticker: t,
 
-// Peer ...
+		receivedBytes: ma.NewSimple(60, time.Second),
+		sentBytes:     ma.NewSimple(60, time.Second),
+
+		cs: newPeerWriterQueue(),
+	}
+	go p.run()
+	return p
+}
+
 type Peer struct {
-	sync.Mutex
 	id []byte
-	// ledbat              *ledbat.Controller
-	chunkRate           ma.Simple
-	lastChunkTime       time.Time
-	requestedChunkCount uint64
-	receivedChunkCount  uint64
-	cancelledChunkCount uint64
-	rttSampleChannel    uint64
-	rttSampleBin        binmap.Bin
-	rttSampleTime       time.Time
-	rtt                 ma.Welford
-	channels            map[*Swarm]*channelWriter
 
-	cwnd *etcp.Control
+	ready  chan time.Time
+	ticker timeutil.Ticker
+
+	lock sync.Mutex
+	w    Conn
+
+	receivedBytes ma.Simple
+	sentBytes     ma.Simple
+
+	cs peerWriterQueue
+	ds [2]peerDataQueue
 }
 
-// NewPeer ...
-func NewPeer(id []byte) *Peer {
-	return &Peer{
-		id: id,
-		// ledbat:       ledbat.New(),
-		chunkRate:    ma.NewSimple(500, 10*time.Millisecond),
-		rttSampleBin: binmap.None,
-		channels:     map[*Swarm]*channelWriter{},
+func (p *Peer) close() {
+	close(p.ready)
+	p.ticker.Stop()
+	p.w.Close()
+}
 
-		cwnd: etcp.NewControl(),
+func (p *Peer) closeChannel(c PeerWriter) {
+	p.lock.Lock()
+	p.cs.Remove(c)
+	p.ds[peerPriorityLow].Remove(c, binmap.All)
+	p.ds[peerPriorityHigh].Remove(c, binmap.All)
+	p.lock.Unlock()
+}
+
+func (p *Peer) runAt(t time.Time) {
+	select {
+	case p.ready <- t:
+	default:
 	}
 }
 
-func (p *Peer) addChannel(s *Swarm, c *channelWriter) {
-	p.Lock()
-	defer p.Unlock()
-
-	p.channels[s] = c
+func (p *Peer) runNow() {
+	p.runAt(iotime.Load())
 }
 
-func (p *Peer) removeChannel(s *Swarm) *channelWriter {
-	p.Lock()
-	defer p.Unlock()
+func (p *Peer) enqueueAt(qt *PeerWriterQueueTicket, cs PeerWriter, t time.Time) {
+	p.lock.Lock()
+	ok := p.cs.Push(qt, cs)
+	p.lock.Unlock()
 
-	c := p.channels[s]
-	delete(p.channels, s)
-
-	return c
+	if ok || !t.IsZero() {
+		p.runAt(t)
+	}
 }
 
-func (p *Peer) addDelaySample(sample time.Duration, chunkSize int) {
-	// p.Lock()
-	// defer p.Unlock()
-
-	// p.ledbat.AddDelaySample(sample, chunkSize)
+func (p *Peer) enqueue(qt *PeerWriterQueueTicket, cs PeerWriter) {
+	p.enqueueAt(qt, cs, time.Time{})
 }
 
-// outstandingChunks ...
-func (p *Peer) outstandingChunks() int {
-	return int(p.requestedChunkCount - (p.receivedChunkCount + p.cancelledChunkCount))
+func (p *Peer) enqueueNow(qt *PeerWriterQueueTicket, cs PeerWriter) {
+	p.enqueueAt(qt, cs, iotime.Load())
 }
 
-// addRequestedChunks ...
-func (p *Peer) addRequestedChunks(n uint64) {
-	p.requestedChunkCount += n
+func (p *Peer) pushData(cs ChannelScheduler, b binmap.Bin, pri peerPriority) {
+	p.lock.Lock()
+	p.ds[pri].Push(cs, b)
+	p.lock.Unlock()
 }
 
-// addCancelledChunk ...
-func (p *Peer) addCancelledChunk() {
-	p.cancelledChunkCount++
-	p.cwnd.OnDataLoss()
+func (p *Peer) pushFrontData(cs ChannelScheduler, b binmap.Bin, pri peerPriority) {
+	p.lock.Lock()
+	p.ds[pri].PushFront(cs, b)
+	p.lock.Unlock()
 }
 
-func (p *Peer) addReceivedChunk(n uint64) {
-	p.Lock()
-	defer p.Unlock()
-
-	p.receivedChunkCount += n
-	p.chunkRate.AddWithTime(n, iotime.Load())
+func (p *Peer) removeData(cs ChannelScheduler, b binmap.Bin, pri peerPriority) {
+	p.lock.Lock()
+	p.ds[pri].Remove(cs, b)
+	p.lock.Unlock()
 }
 
-// chunkInterval ...
-func (p *Peer) chunkInterval() time.Duration {
-	return p.chunkRate.Interval()
+func (p *Peer) run() {
+	var t time.Time
+	for t = range p.ready {
+		for t.IsZero() {
+			var ok bool
+			select {
+			case t, ok = <-p.ticker.C:
+			case t, ok = <-p.ready:
+			}
+			if !ok {
+				return
+			}
+		}
+
+		for {
+			idle, err := p.write()
+			if err != nil {
+				log.Println(err)
+				break
+			}
+			if idle {
+				break
+			}
+		}
+	}
 }
 
-// trackBinRTT ...
-func (p *Peer) trackBinRTT(cid uint64, bin binmap.Bin, t time.Time) {
-	if !p.rttSampleBin.IsNone() {
-		return
+func (p *Peer) write() (bool, error) {
+	var n int
+
+	p.lock.Lock()
+	cs := p.cs.Detach()
+	p.lock.Unlock()
+	for {
+		c, ok := cs.Pop()
+		if !ok {
+			break
+		}
+
+		nn, err := c.Write(p.w.MTU() - n)
+		if err == nil {
+			n += nn
+		}
 	}
 
-	p.rttSampleChannel = cid
-	p.rttSampleBin = bin
-	p.rttSampleTime = t
-}
+	for i := range p.ds {
+		for {
+			p.lock.Lock()
+			cs, bin, ok := p.ds[i].Pop()
+			p.lock.Unlock()
+			if !ok {
+				break
+			}
 
-// trackPingRTT ...
-func (p *Peer) trackPingRTT(cid uint64, t time.Time) (nonce uint64, ok bool) {
-	if !p.rttSampleBin.IsNone() || t.Sub(p.rttSampleTime) < minPingInterval {
-		return
+			nn, err := cs.WriteData(p.w.MTU()-n, bin, peerPriority(i))
+			if err != nil {
+				return true, err
+			}
+			if nn == 0 {
+				break
+			}
+			n += nn
+		}
 	}
 
-	// with even nonces Contains(nonce) is an equality check
-	nonce = uint64(rand.Int63()) << 1
-
-	p.rttSampleChannel = cid
-	p.rttSampleBin = binmap.Bin(nonce)
-	p.rttSampleTime = t
-
-	return nonce, true
-}
-
-func (p *Peer) addRTTSample(cid uint64, b binmap.Bin, delay time.Duration) {
-	p.Lock()
-	defer p.Unlock()
-
-	if p.rttSampleChannel != cid || !p.rttSampleBin.Contains(b) {
-		return
+	if err := p.w.Flush(); err != nil {
+		return true, err
 	}
 
-	rtt := iotime.Load().Sub(p.rttSampleTime)
-	if rtt > delay {
-		rtt -= delay
-	}
-	// p.ledbat.AddRTTSample(rtt)
-	p.cwnd.OnAck(rtt)
-	p.rtt.Update(float64(rtt))
-	p.rttSampleBin = binmap.None
-}
-
-// Close ...
-func (p *Peer) Close() {
-	// TODO: send empty handshake (ppspp goodbye)
-
-	for s, c := range p.channels {
-		s.removeChannel(p)
-		c.Close()
-	}
+	p.lock.Lock()
+	idle := p.ds[peerPriorityLow].Empty() && p.ds[peerPriorityHigh].Empty() && p.cs.Empty()
+	p.lock.Unlock()
+	return idle, nil
 }

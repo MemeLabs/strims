@@ -11,6 +11,7 @@ import (
 	"os/exec"
 	"sync"
 
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
 )
@@ -111,7 +112,9 @@ func (h *Transcoder) handleSegment(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if _, err := io.Copy(tw.w, r.Body); err != nil {
+	b := pool.Get(32 * 1024)
+	defer pool.Put(b)
+	if _, err := io.CopyBuffer(tw.w, r.Body, *b); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		return
 	}

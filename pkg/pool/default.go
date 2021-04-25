@@ -1,10 +1,10 @@
 package pool
 
 // DefaultPool ...
-var DefaultPool = New(8)
+var DefaultPool = New(10)
 
 // Get ...
-func Get(size uint16) *[]byte {
+func Get(size int) *[]byte {
 	return DefaultPool.Get(size)
 }
 

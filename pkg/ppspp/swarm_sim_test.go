@@ -2,11 +2,13 @@ package ppspp
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"math/rand"
 	"os"
+	"path"
 	"strconv"
 	"strings"
 	"sync"
@@ -14,7 +16,13 @@ import (
 	"testing"
 	"time"
 
+	pkgerrors "github.com/pkg/errors"
+
+	"github.com/MemeLabs/go-ppspp/pkg/errutil"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
+	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -33,7 +41,7 @@ func TestSwarmSim(t *testing.T) {
 	peers := []testPeer{
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   10 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
 			city:         ppspptest.NewYork,
 		},
 		{
@@ -89,21 +97,28 @@ func TestSwarmSim(t *testing.T) {
 		city      ppspptest.City
 		bandwidth *ppspptest.ConnThrottle
 		swarm     *Swarm
-		scheduler *Scheduler
+		runner    *Runner
 		conns     []*ppspptest.MeterConn
+		qos       *qos.Control
+		writer    testWriter
+	}
+
+	newClientID := func() []byte {
+		id := make([]byte, 64)
+		rand.Read(id)
+		return id
 	}
 
 	newClient := func(p testPeer) *client {
-		clientID := make([]byte, 64)
-		rand.Read(clientID)
 		swarm, err := NewSwarm(id, options)
 		assert.NoError(t, err, "swarm constructor failed")
 		return &client{
-			id:        clientID,
+			id:        newClientID(),
 			city:      p.city,
 			bandwidth: ppspptest.NewConnThrottle(p.downloadRate, p.uploadRate),
 			swarm:     swarm,
 			conns:     make([]*ppspptest.MeterConn, len(peers)),
+			qos:       qos.NewWithLimit(uint64(p.uploadRate)),
 		}
 	}
 
@@ -114,10 +129,12 @@ func TestSwarmSim(t *testing.T) {
 	assert.NoError(t, err, "writer constructor failed")
 
 	clients := []*client{{
+		id:        newClientID(),
 		city:      peers[0].city,
 		bandwidth: ppspptest.NewConnThrottle(peers[0].downloadRate, peers[0].uploadRate),
 		swarm:     src.Swarm(),
 		conns:     make([]*ppspptest.MeterConn, len(peers)),
+		qos:       qos.NewWithLimit(uint64(peers[0].uploadRate)),
 	}}
 	for i := 1; i < len(peers); i++ {
 		clients = append(clients, newClient(peers[i]))
@@ -128,22 +145,39 @@ func TestSwarmSim(t *testing.T) {
 	logger := ppspptest.Logger()
 
 	for _, c := range clients {
-		c.scheduler = NewScheduler(ctx, logger)
-		c.scheduler.label = c.city.Name
+		c.runner = NewRunner(ctx, logger)
+		// c.runner.label = c.city.Name
 	}
 
-	f, _ := os.OpenFile(fmt.Sprintf("/tmp/capconn/log-%d.bin", time.Now().Unix()), os.O_CREATE|os.O_WRONLY, 0644)
+	if _, err := os.Stat(ppspptest.CapConnLogDir()); os.IsNotExist(err) {
+		assert.NoError(t, os.MkdirAll(ppspptest.CapConnLogDir(), 0755))
+	}
+	capLogPath := path.Join(ppspptest.CapConnLogDir(), time.Now().Format(time.RFC3339)+ppspptest.CapLogExt)
+	log.Println("writing to cap log:", capLogPath)
+	f, err := os.OpenFile(fmt.Sprintf("%s.tmp", capLogPath), os.O_CREATE|os.O_WRONLY, 0644)
+	assert.NoError(t, err, "capconn log open failed")
 	capLog := ppspptest.NewCapLogWriter(f)
-	defer f.Close()
+	defer func() {
+		assert.NoError(t, capLog.Close())
+		assert.NoError(t, f.Close())
+		assert.NoError(t, os.Rename(f.Name(), capLogPath))
+	}()
+
+	done := make(chan struct{})
+	var doneOnce sync.Once
+
+	runSafely := func(fn func()) {
+		defer func() {
+			if err := errutil.RecoverError(recover()); err != nil {
+				fmt.Println(pkgerrors.WithStack(err))
+			}
+			doneOnce.Do(func() { close(done) })
+		}()
+		fn()
+	}
 
 	for i := 0; i < len(clients); i++ {
 		for j := i + 1; j < len(clients); j++ {
-			iPeer := NewPeer(clients[i].id)
-			jPeer := NewPeer(clients[j].id)
-
-			clients[i].scheduler.AddPeer(ctx, iPeer)
-			clients[j].scheduler.AddPeer(ctx, jPeer)
-
 			iConn, jConn := ppspptest.NewConnPair()
 
 			iConn = ppspptest.NewThrottleConn(iConn, clients[i].bandwidth)
@@ -151,6 +185,9 @@ func TestSwarmSim(t *testing.T) {
 
 			latency := ppspptest.ComputeLatency(clients[i].city.LatLng, clients[j].city.LatLng)
 			iConn, jConn = ppspptest.NewLagConnPair(iConn, jConn, latency)
+
+			iConn = ppspptest.NewQOSConn(iConn, clients[i].qos.AddSession(qos.MaxWeight))
+			jConn = ppspptest.NewQOSConn(jConn, clients[j].qos.AddSession(qos.MaxWeight))
 
 			iConn, err = ppspptest.NewCapConn(iConn, capLog.Writer(), fmt.Sprintf("%s : %s", clients[i].city.Name, clients[j].city.Name))
 			assert.NoError(t, err, "cap conn open failed")
@@ -163,17 +200,20 @@ func TestSwarmSim(t *testing.T) {
 			clients[i].conns[j] = imConn
 			clients[j].conns[i] = jmConn
 
-			iChan, err := OpenChannel(logger, iPeer, clients[i].swarm, imConn)
+			iChanReader, iPeer := clients[i].runner.RunPeer(clients[i].id, imConn)
+			jChanReader, jPeer := clients[j].runner.RunPeer(clients[j].id, jmConn)
+
+			err = clients[i].runner.RunChannel(clients[i].swarm, iPeer, codec.Channel(i), codec.Channel(j))
 			assert.NoError(t, err, "channel open failed")
-			jChan, err := OpenChannel(logger, jPeer, clients[j].swarm, jmConn)
+			err = clients[j].runner.RunChannel(clients[j].swarm, jPeer, codec.Channel(j), codec.Channel(i))
 			assert.NoError(t, err, "channel open failed")
 
-			go ppspptest.ReadChannelConn(imConn, iChan)
-			go ppspptest.ReadChannelConn(jmConn, jChan)
+			go ppspptest.ReadChannelConn(imConn, iChanReader)
+			go ppspptest.ReadChannelConn(jmConn, jChanReader)
 		}
 	}
 
-	go func() {
+	go runSafely(func() {
 		b := make([]byte, byteRate/writesPerSecond)
 		t := time.NewTicker(time.Second / time.Duration(writesPerSecond))
 		var nn int
@@ -183,9 +223,10 @@ func TestSwarmSim(t *testing.T) {
 				break
 			}
 		}
-	}()
+	})
 
-	go func() {
+	start := time.Now()
+	go runSafely(func() {
 		// f, err := os.OpenFile(fmt.Sprintf("./samples-%d.csv", time.Now().Unix()), os.O_CREATE|os.O_WRONLY, 0644)
 		// assert.Nil(t, err, "log open failed")
 		// defer f.Close()
@@ -212,17 +253,17 @@ func TestSwarmSim(t *testing.T) {
 		ticker := time.NewTicker(time.Second)
 		var tick int
 		for range ticker.C {
-			log.Println("=====================================================")
+			log.Printf("=== %-14s =====================================================", time.Since(start))
 
 			var row strings.Builder
 			row.WriteString(strconv.FormatInt(int64(tick), 10))
 			var k int
 			for i, c := range clients {
-				c.swarm.bins.Lock()
-				nextEmpty := c.swarm.bins.Requested.FindEmpty()
-				lastFilled := c.swarm.bins.Requested.FindLastFilled()
-				log.Printf("next empty bin: %s, lastFilled: %s", nextEmpty, lastFilled)
-				c.swarm.bins.Unlock()
+				// c.swarm.bins.Lock()
+				// nextEmpty := c.swarm.bins.Requested.FindEmpty()
+				// lastFilled := c.swarm.bins.Requested.FindLastFilled()
+				// log.Printf("next empty bin: %s, lastFilled: %s", nextEmpty, lastFilled)
+				// c.swarm.bins.Unlock()
 
 				log.Printf("%-16s%-20s %-12s %-7s %-12s %-12s %-7s %s", "from", "to", "bytes", "Bps", "%", "bytes", "Bps", "%")
 
@@ -252,6 +293,7 @@ func TestSwarmSim(t *testing.T) {
 					}
 				}
 				log.Printf("%-32s in: %-12d %-15d out: %-12d %-7d", c.city.Name, rn, rr, wn, wr)
+				log.Printf("%-26s readable: %-12d", c.city.Name, c.writer.WrittenBytes())
 				log.Println("")
 
 				// row.WriteString(fmt.Sprintf(",%d", wn-prev[i]))
@@ -264,33 +306,38 @@ func TestSwarmSim(t *testing.T) {
 			// log.Println("---")
 			tick++
 		}
-	}()
+	})
 
 	var wg sync.WaitGroup
-	for i := 1; i < len(clients); i++ {
-		wg.Add(1)
-		go func(i int) {
+	wg.Add(len(clients))
+	for _, c := range clients {
+		c := c
+		go runSafely(func() {
 			defer wg.Done()
 
-			var w testWriter
-			t := time.NewTicker(time.Second)
-			defer t.Stop()
-
-			// go func() {
-			// 	var prev uint64
-			// 	for range t.C {
-			// 		n := w.WrittenBytes()
-			// 		log.Printf("%d read bytes: % -10d %t", i, n-prev, (n-prev) >= 437500)
-			// 		prev = n
-			// 	}
-			// }()
-
-			if _, err := io.CopyN(&w, clients[i].swarm.Reader(), int64(bytesReadGoal)); err != nil {
-				log.Panicln(err)
+			n := int64(bytesReadGoal)
+			for n > 0 {
+				nn, err := io.CopyN(&c.writer, c.swarm.Reader(), int64(n))
+				n -= nn
+				if errors.Is(err, store.ErrBufferUnderrun) {
+					skipped, err := c.swarm.Reader().Recover()
+					if err != nil {
+						log.Panic(err)
+					}
+					log.Printf("recoverred from buffer underrun. skipped %d bytes", skipped)
+				} else if err != nil {
+					log.Panicln(err)
+				}
 			}
-		}(i)
+		})
 	}
-	wg.Wait()
+
+	go func() {
+		wg.Wait()
+		doneOnce.Do(func() { close(done) })
+	}()
+
+	<-done
 }
 
 type testWriter struct {

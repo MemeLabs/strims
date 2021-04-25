@@ -30,7 +30,7 @@ func Logger() *zap.Logger {
 
 // MessageHandler ...
 type MessageHandler interface {
-	HandleMessage(b []byte) (int, error)
+	HandleMessage(b []byte) error
 }
 
 // ReaderMTUer ...
@@ -45,9 +45,10 @@ func ReadChannelConn(c ReaderMTUer, ch MessageHandler) {
 	for {
 		n, err := c.Read(b)
 		if err != nil {
-			panic(err)
+			log.Println(err)
+			return
 		}
-		if _, err := ch.HandleMessage(b[:n]); err != nil {
+		if err := ch.HandleMessage(b[:n]); err != nil {
 			log.Println("handling message failed", err)
 		}
 	}

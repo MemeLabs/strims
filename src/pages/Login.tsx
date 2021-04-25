@@ -20,7 +20,7 @@ const LoginPage: React.FC = () => {
   const [listProfilesRes] = useCall("profile", "list");
   const [{ profile, error, loading }, profileActions] = useProfile();
   const [selectedProfile, setSelectedProfile] = React.useState<IProfileSummary | null>(null);
-  const { register, handleSubmit, errors } = useForm<ILoadProfileRequest>({
+  const { control, handleSubmit } = useForm<ILoadProfileRequest>({
     mode: "onBlur",
   });
   const { next } = useQuery<LoginQueryParams>(useLocation().search);
@@ -72,26 +72,29 @@ const LoginPage: React.FC = () => {
         )}
         {error && <InputError error={error.message || "Error logging in"} />}
         <TextInput
-          error={errors.name && "Name is required"}
-          inputRef={register({ required: true })}
+          control={control}
+          rules={{
+            required: {
+              value: true,
+              message: "Name is required",
+            },
+          }}
           label="Profile Name"
           name="name"
           placeholder="Enter your profile name"
-          required
           defaultValue={selectedProfile.name}
         />
         <TextInput
-          error={errors.password && "Password is required"}
-          inputRef={(ref) => {
-            if (ref) {
-              ref.focus();
-            }
-            register({ required: true })(ref);
+          control={control}
+          rules={{
+            required: {
+              value: true,
+              message: "Password is required",
+            },
           }}
           label="Password"
           name="password"
           placeholder="Enter your password"
-          required
           type="password"
         />
         <div className="input_buttons">

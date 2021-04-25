@@ -14,6 +14,7 @@ type Conn interface {
 	Buffered() int
 	Close() error
 	MTU() int
+	SetQOSWeight(w uint64)
 	Read(p []byte) (int, error)
 }
 
@@ -57,6 +58,8 @@ func (c *conn) Close() error {
 func (c *conn) MTU() int {
 	return connMTU
 }
+
+func (c *conn) SetQOSWeight(w uint64) {}
 
 // Read ...
 func (c *conn) Read(p []byte) (int, error) {

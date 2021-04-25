@@ -1,17 +1,15 @@
 package vpn
 
 import (
-	"crypto/rand"
-	"encoding/binary"
 	"errors"
 	"fmt"
-	"log"
 	"sync"
 	"sync/atomic"
 	"time"
 
 	vpnv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vpn/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
@@ -23,18 +21,9 @@ func init() {
 	close(closedChan)
 }
 
-func newMediationID() uint64 {
-	var b [8]byte
-	_, err := rand.Read(b[:])
-	if err != nil {
-		log.Println(err)
-	}
-	return binary.LittleEndian.Uint64(b[:])
-}
-
 func newWebRTCMediator(hostID kademlia.ID, network *Network) *webRTCMediator {
 	return &webRTCMediator{
-		mediationID:           newMediationID(),
+		mediationID:           randutil.MustUint64(),
 		id:                    hostID,
 		network:               network,
 		init:                  true,
@@ -51,7 +40,7 @@ func newWebRTCMediatorFromOffer(
 	offer []byte,
 ) *webRTCMediator {
 	return &webRTCMediator{
-		mediationID:           newMediationID(),
+		mediationID:           randutil.MustUint64(),
 		remoteMediationID:     remoteMediationID,
 		id:                    hostID,
 		network:               network,

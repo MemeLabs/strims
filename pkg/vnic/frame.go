@@ -4,12 +4,11 @@ import (
 	"encoding/binary"
 	"errors"
 	"io"
+	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 )
-
-var errBufferTooSmall = errors.New("buffer too small")
 
 const frameHeaderLen = 4
 
@@ -58,7 +57,7 @@ type Frame struct {
 
 // WriteTo ...
 func (f Frame) WriteTo(w io.Writer) (int64, error) {
-	b := pool.Get(frameHeaderLen + f.Header.Length)
+	b := pool.Get(int(frameHeaderLen + f.Header.Length))
 	n := f.Marshal(*b)
 	_, err := w.Write(*b)
 	pool.Put(b)
@@ -77,7 +76,7 @@ func (f *Frame) ReadFrom(r io.Reader) (int64, error) {
 	if err != nil {
 		return 0, err
 	}
-	f.body = pool.Get(f.Header.Length)
+	f.body = pool.Get(int(f.Header.Length))
 	f.Body = *f.body
 	bn, err := io.ReadFull(r, f.Body)
 	return hn + int64(bn), err
@@ -174,6 +173,7 @@ func NewFrameWriter(w Link, port uint16, qc *qos.Class) *FrameWriter {
 		size:        w.MTU(),
 		writeBuffer: make([]byte, w.MTU()),
 		off:         frameHeaderLen,
+		close:       make(chan struct{}),
 		qs:          qc.AddSession(1),
 		qp: frameWriterPacket{
 			ch: make(chan struct{}, 1),
@@ -189,6 +189,8 @@ type FrameWriter struct {
 	writeBuffer []byte
 	off         int
 	closed      bool
+	close       chan struct{}
+	closeOnce   sync.Once
 	qs          *qos.Session
 	qp          frameWriterPacket
 }
@@ -198,13 +200,18 @@ func (b *FrameWriter) MTU() int {
 	return b.size - frameHeaderLen
 }
 
+// Port ...
+func (b *FrameWriter) Port() uint16 {
+	return b.port
+}
+
 // WriteFrame ...
 func (b *FrameWriter) WriteFrame(p []byte) (int, error) {
-	n, err := b.write(p)
+	n, err := b.Write(p)
 	if err != nil {
 		return 0, err
 	}
-	if err := b.flush(); err != nil {
+	if err := b.Flush(); err != nil {
 		return n, err
 	}
 	return n, nil
@@ -212,10 +219,6 @@ func (b *FrameWriter) WriteFrame(p []byte) (int, error) {
 
 // Write ...
 func (b *FrameWriter) Write(p []byte) (int, error) {
-	return b.write(p)
-}
-
-func (b *FrameWriter) write(p []byte) (int, error) {
 	if b.closed {
 		return 0, errClosedFrameWriter
 	}
@@ -230,7 +233,7 @@ func (b *FrameWriter) write(p []byte) (int, error) {
 			return n, nil
 		}
 
-		if err := b.flush(); err != nil {
+		if err := b.Flush(); err != nil {
 			return n - len(p), err
 		}
 	}
@@ -238,10 +241,6 @@ func (b *FrameWriter) write(p []byte) (int, error) {
 
 // Flush ...
 func (b *FrameWriter) Flush() error {
-	return b.flush()
-}
-
-func (b *FrameWriter) flush() error {
 	if b.off == frameHeaderLen {
 		return nil
 	}
@@ -254,7 +253,11 @@ func (b *FrameWriter) flush() error {
 
 	b.qp.size = uint64(b.off)
 	b.qs.Enqueue(&b.qp)
-	<-b.qp.ch
+	select {
+	case <-b.qp.ch:
+	case <-b.close:
+		return errClosedFrameWriter
+	}
 
 	_, err := b.w.Write(b.writeBuffer[:b.off])
 	if err == nil {
@@ -266,8 +269,11 @@ func (b *FrameWriter) flush() error {
 
 // Close ...
 func (b *FrameWriter) Close() error {
-	b.closed = true
-	b.qs.Close()
+	b.closeOnce.Do(func() {
+		b.closed = true
+		close(b.close)
+		b.qs.Close()
+	})
 	return nil
 }
 

@@ -7,7 +7,6 @@ import Select from "react-select";
 import CreatableSelect from "react-select/creatable";
 import { useAsync } from "react-use";
 
-import { Certificate } from "../../apis/strims/type/certificate";
 import { VideoChannel } from "../../apis/strims/video/v1/channel";
 import { VideoIngressConfig } from "../../apis/strims/video/v1/ingress";
 import {
@@ -40,14 +39,7 @@ const VideoIngressConfigForm = () => {
   const [{ value: config }] = useCall("videoIngress", "getConfig");
   const client = useClient();
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    control,
-    errors,
-    formState,
-  } = useForm<VideoIngressConfigFormData>({
+  const { handleSubmit, reset, control, formState } = useForm<VideoIngressConfigFormData>({
     mode: "onBlur",
     defaultValues: {
       enabled: false,
@@ -78,8 +70,8 @@ const VideoIngressConfigForm = () => {
         serviceNetworks: networkOptions.filter(({ value }) => configKeys[value]),
       },
       {
-        isDirty: false,
-        isValid: true,
+        keepDirty: false,
+        keepIsValid: false,
       }
     );
   };
@@ -109,10 +101,10 @@ const VideoIngressConfigForm = () => {
         {setConfigRes.error && (
           <InputError error={setConfigRes.error.message || "Error saving ingress settings"} />
         )}
-        <ToggleInput inputRef={register} label="Enable" name="enabled" />
+        <ToggleInput control={control} label="Enable" name="enabled" />
         <TextInput
-          error={errors?.serverAddr}
-          inputRef={register({
+          control={control}
+          rules={{
             required: {
               value: true,
               message: "Server address is required",
@@ -121,16 +113,15 @@ const VideoIngressConfigForm = () => {
               value: hostRegex(),
               message: "Invalid address format",
             },
-          })}
+          }}
           label="Server address"
           description="RTMP server address"
           name="serverAddr"
           placeholder="eg. 127.0.0.1:1935"
-          required
         />
         <TextInput
-          error={errors?.publicServerAddr}
-          inputRef={register({
+          control={control}
+          rules={{
             pattern: {
               value: hostRegex({
                 localhost: false,
@@ -138,7 +129,7 @@ const VideoIngressConfigForm = () => {
               }),
               message: "Invalid address format",
             },
-          })}
+          }}
           label="Public address"
           description="Public address where peers can reach the RTMP server."
           name="publicServerAddr"
@@ -151,21 +142,20 @@ const VideoIngressConfigForm = () => {
           <Controller
             name="serviceNetworks"
             control={control}
-            render={({ onChange, onBlur, value, name }) => (
-              <Select
-                onChange={onChange}
-                onBlur={onBlur}
-                value={value}
-                name={name}
-                isMulti={true}
-                placeholder="Select network"
-                className="input_select"
-                classNamePrefix="react_select"
-                options={networkOptions}
-              />
+            render={({ field, fieldState: { error } }) => (
+              <>
+                <Select
+                  {...field}
+                  isMulti={true}
+                  placeholder="Select network"
+                  className="input_select"
+                  classNamePrefix="react_select"
+                  options={networkOptions}
+                />
+                <InputError error={error} />
+              </>
             )}
           />
-          <InputError error={errors.serviceNetworks} />
         </InputLabel>
         <label className="input_label">
           <div className="input_label__body">
@@ -204,15 +194,7 @@ interface VideoChannelFormProps {
 const VideoChannelForm: React.FC<VideoChannelFormProps> = ({ onSubmit }) => {
   const client = useClient();
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    control,
-    errors,
-    formState,
-    watch,
-  } = useForm<VideoChannelFormData>({
+  const { handleSubmit, control, formState } = useForm<VideoChannelFormData>({
     mode: "onBlur",
     defaultValues: {
       title: "",
@@ -241,8 +223,8 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({ onSubmit }) => {
       </Link>
 
       <TextInput
-        error={errors?.title}
-        inputRef={register({
+        control={control}
+        rules={{
           required: {
             value: true,
             message: "Title is required",
@@ -251,15 +233,14 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({ onSubmit }) => {
             value: 100,
             message: "Title too long",
           },
-        })}
+        }}
         label="Title"
         placeholder="Title"
         name="title"
-        required
       />
       <TextAreaInput
-        error={errors?.description}
-        inputRef={register({
+        control={control}
+        rules={{
           required: {
             value: true,
             message: "Description is required",
@@ -268,30 +249,28 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({ onSubmit }) => {
             value: 500,
             message: "Description too long",
           },
-        })}
+        }}
         label="Description"
         placeholder="Description"
         name="description"
-        required
       />
       <InputLabel text="Tags">
         <Controller
           name="tags"
           control={control}
-          render={({ onChange, onBlur, value, name }) => (
-            <CreatableSelect
-              onChange={onChange}
-              onBlur={onBlur}
-              value={value}
-              name={name}
-              isMulti={true}
-              placeholder="Tags"
-              className="input_select"
-              classNamePrefix="react_select"
-            />
+          render={({ field, fieldState: { error } }) => (
+            <>
+              <CreatableSelect
+                {...field}
+                isMulti={true}
+                placeholder="Tags"
+                className="input_select"
+                classNamePrefix="react_select"
+              />
+              <InputError error={error} />
+            </>
           )}
         />
-        <InputError error={errors.tags} />
       </InputLabel>
       <InputLabel text="Network">
         <Controller
@@ -303,22 +282,19 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({ onSubmit }) => {
               message: "Network is required",
             },
           }}
-          render={({ onChange, onBlur, value, name }) => {
-            return (
+          render={({ field, fieldState: { error } }) => (
+            <>
               <Select
-                onChange={onChange}
-                onBlur={onBlur}
-                value={value}
-                name={name}
+                {...field}
                 placeholder="Select network"
                 className="input_select"
                 classNamePrefix="react_select"
                 options={networkOptions}
               />
-            );
-          }}
+              <InputError error={error} />
+            </>
+          )}
         />
-        <InputError error={errors.networkKey} />
       </InputLabel>
       <label className="input_label">
         <div className="input_label__body">
@@ -341,7 +317,7 @@ const VideoChannels = () => {
     onComplete: listChannels,
   });
 
-  const handleSubmit = React.useCallback(async (data) => {
+  const handleSubmit = React.useCallback(async (data: VideoChannelFormData) => {
     await createChannel({
       directoryListingSnippet: {
         title: data.title,
@@ -350,7 +326,7 @@ const VideoChannels = () => {
       },
       networkKey: Base64.toUint8Array(data.networkKey.value),
     });
-    listChannels();
+    void listChannels();
   }, []);
 
   const rows = channelsRes.value?.channels?.map((channel) => {

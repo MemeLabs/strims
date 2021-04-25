@@ -243,7 +243,7 @@ func (m *Message) Unmarshal(b []byte) (n int, err error) {
 
 // WriteTo ...
 func (m Message) WriteTo(w io.Writer, host *vnic.Host) (int64, error) {
-	b := pool.Get(uint16(m.Size()))
+	b := pool.Get(m.Size())
 	defer pool.Put(b)
 
 	n, err := m.Marshal(*b, host)

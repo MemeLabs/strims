@@ -33,7 +33,7 @@ func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers) *
 		observers: observers,
 		events:    events,
 		peers:     map[uint64]*Peer{},
-		scheduler: ppspp.NewScheduler(context.Background(), logger),
+		runner:    ppspp.NewRunner(context.Background(), logger),
 	}
 }
 
@@ -48,7 +48,7 @@ type Control struct {
 	transfers llrb.LLRB
 	peers     map[uint64]*Peer
 	networks  llrb.LLRB
-	scheduler *ppspp.Scheduler
+	runner    *ppspp.Runner
 
 	contactedHosts llrb.LLRB
 }
@@ -62,10 +62,6 @@ func (c *Control) Run(ctx context.Context) {
 		select {
 		case e := <-c.events:
 			switch e := e.(type) {
-			// case PeerAddEvent:
-			// 	t.handlePeerAdd(event.Peer, event.Client)
-			// case PeerRemoveEvent:
-			// 	t.handlePeerRemove(event.Peer)
 			case event.NetworkStart:
 				c.handleNetworkStart(dao.NetworkKey(e.Network))
 			case event.NetworkStop:
@@ -111,7 +107,7 @@ func (c *Control) handleNetworkPeerOpen(peerID uint64, networkKey []byte) {
 	n.peers[peerID] = p
 
 	n.transfers.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
-		p.AnnounceSwarm(i.(*transfer).swarm)
+		p.Announce(i.(*transfer))
 		return true
 	})
 }
@@ -126,6 +122,8 @@ func (c *Control) handleNetworkPeerClose(peerID uint64, networkKey []byte) {
 	}
 
 	delete(n.peers, peerID)
+
+	// TODO: close peer transfers associated with this network?
 }
 
 func (c *Control) loadPeers(ctx context.Context) {
@@ -143,8 +141,6 @@ func (c *Control) loadNetworkPeers(ctx context.Context, n *network) {
 	if !ok {
 		return
 	}
-
-	_ = node
 
 	n.transfers.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
 		t := i.(*transfer)
@@ -205,22 +201,28 @@ func (f *contactedHost) Less(o llrb.Item) bool {
 
 // AddPeer ...
 func (c *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Peer {
-	qosc := c.qosc.AddClass(1)
-	// TODO: ppspp interface to set qos class weight
-
+	ctx, close := context.WithCancel(peer.Context())
+	w := vnic.NewFrameWriter(peer.Link, vnic.TransferPort, c.qosc)
+	cr, sp := c.runner.RunPeer(peer.HostID().Bytes(nil), w)
 	p := &Peer{
 		logger:    c.logger,
-		qosc:      qosc,
+		runner:    c.runner,
+		ctx:       ctx,
 		vnicPeer:  peer,
-		swarmPeer: ppspp.NewPeer(peer.HostID().Bytes(nil)),
+		swarmPeer: sp,
 		client:    client,
 	}
+	peer.SetHandler(vnic.TransferPort, func(_ *vnic.Peer, f vnic.Frame) error {
+		err := cr.HandleMessage(f.Body)
+		if err != nil {
+			close()
+		}
+		return err
+	})
 
 	c.lock.Lock()
-	c.lock.Unlock()
-
 	c.peers[id] = p
-	c.scheduler.AddPeer(peer.Context(), p.swarmPeer)
+	c.lock.Unlock()
 
 	return p
 }
@@ -228,28 +230,26 @@ func (c *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Pe
 // RemovePeer ...
 func (c *Control) RemovePeer(id uint64) {
 	c.lock.Lock()
-	defer c.lock.Unlock()
-
 	p, ok := c.peers[id]
+	delete(c.peers, id)
+	c.lock.Unlock()
+
 	if !ok {
 		return
 	}
 
-	delete(c.peers, id)
-	c.scheduler.RemovePeer(p.swarmPeer)
+	p.vnicPeer.RemoveHandler(vnic.TransferPort)
+	c.runner.StopPeer(p.swarmPeer)
 }
 
 // Add ...
 func (c *Control) Add(swarm *ppspp.Swarm, salt []byte) []byte {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	ctx, close := context.WithCancel(context.Background())
-
 	h := sha256.New()
 	h.Write(swarm.ID())
 	h.Write(salt)
 	id := h.Sum(nil)
+
+	ctx, close := context.WithCancel(context.Background())
 
 	t := &transfer{
 		id:    id,
@@ -258,11 +258,15 @@ func (c *Control) Add(swarm *ppspp.Swarm, salt []byte) []byte {
 		close: close,
 		swarm: swarm,
 	}
+
+	c.lock.Lock()
 	c.transfers.ReplaceOrInsert(t)
+	c.lock.Unlock()
 
 	c.logger.Debug(
 		"added swarm",
-		logutil.ByteHex("id", swarm.ID()),
+		logutil.ByteHex("id", t.id),
+		logutil.ByteHex("swarm", swarm.ID()),
 	)
 
 	return id
@@ -271,21 +275,25 @@ func (c *Control) Add(swarm *ppspp.Swarm, salt []byte) []byte {
 // Remove ...
 func (c *Control) Remove(id []byte) {
 	c.lock.Lock()
-	defer c.lock.Unlock()
-
 	t, ok := c.transfers.Get(&transfer{id: id}).(*transfer)
+	c.transfers.Delete(t)
+	c.lock.Unlock()
+
 	if !ok {
 		return
 	}
 
-	t.swarm.Close()
+	t.close()
+
+	for _, p := range c.peers {
+		p.Remove(t)
+	}
 
 	c.logger.Debug(
 		"closed swarm",
-		logutil.ByteHex("id", t.swarm.ID()),
+		logutil.ByteHex("id", t.id),
+		logutil.ByteHex("swarm", t.swarm.ID()),
 	)
-
-	t.close()
 }
 
 // List ...
@@ -296,7 +304,7 @@ func (c *Control) List() []*transferv1.Transfer {
 	ts := make([]*transferv1.Transfer, c.transfers.Len(), 0)
 	c.transfers.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
 		ts = append(ts, &transferv1.Transfer{
-			Id: i.(*transfer).swarm.ID(),
+			Id: i.(*transfer).id,
 		})
 		return true
 	})
@@ -307,20 +315,21 @@ func (c *Control) List() []*transferv1.Transfer {
 // Publish ...
 func (c *Control) Publish(id []byte, networkKey []byte) {
 	c.lock.Lock()
-	defer c.lock.Unlock()
-
-	n := c.getOrInsertNetwork(networkKey)
 
 	t, ok := c.transfers.Get(&transfer{id: id}).(*transfer)
 	if !ok {
+		c.lock.Unlock()
 		return
 	}
 
+	n := c.getOrInsertNetwork(networkKey)
 	n.transfers.ReplaceOrInsert(t)
 
 	for _, p := range n.peers {
-		p.AnnounceSwarm(t.swarm)
+		go p.Announce(t)
 	}
+
+	c.lock.Unlock()
 
 	node, ok := c.vpn.Node(networkKey)
 	if !ok {
@@ -354,11 +363,11 @@ type transfer struct {
 	swarm *ppspp.Swarm
 }
 
-func (n *transfer) Less(o llrb.Item) bool {
+func (t *transfer) Less(o llrb.Item) bool {
 	if o, ok := o.(*transfer); ok {
-		return bytes.Compare(n.id, o.id) == -1
+		return bytes.Compare(t.id, o.id) == -1
 	}
-	return !o.Less(n)
+	return !o.Less(t)
 }
 
 // network ...

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/binaryutil"
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
 
@@ -43,24 +44,24 @@ func NewAddress(b binmap.Bin) *Address {
 
 // Unmarshal ...
 func (v *Address) Unmarshal(b []byte) (int, error) {
-	*v = Address(binary.BigEndian.Uint64(b))
-	return 8, nil
+	vi, n := binary.Uvarint(b)
+	*v = Address(vi)
+	return n, nil
 }
 
 // Marshal ...
-func (v *Address) Marshal(b []byte) int {
-	binary.BigEndian.PutUint64(b, uint64(v.Bin()))
-	return 8
+func (v Address) Marshal(b []byte) int {
+	return binary.PutUvarint(b, uint64(v))
 }
 
 // ByteLen ...
-func (v *Address) ByteLen() int {
-	return 8
+func (v Address) ByteLen() int {
+	return binaryutil.UvarintLen(uint64(v))
 }
 
 // Bin ...
-func (v *Address) Bin() binmap.Bin {
-	return binmap.Bin(*v)
+func (v Address) Bin() binmap.Bin {
+	return binmap.Bin(v)
 }
 
 // Buffer ...
@@ -101,6 +102,15 @@ func (o ProtocolOptions) Find(t ProtocolOptionType) (ProtocolOption, bool) {
 		}
 	}
 	return nil, false
+}
+
+// MustFind ...
+func (o ProtocolOptions) MustFind(t ProtocolOptionType) ProtocolOption {
+	opt, ok := o.Find(t)
+	if !ok {
+		panic("protocol option does not found")
+	}
+	return opt
 }
 
 // VersionProtocolOption ...
@@ -793,6 +803,108 @@ func (v *Cancel) Type() MessageType {
 	return CancelMessage
 }
 
+// Stream ...
+type Stream uint16
+
+// NewStream ...
+func NewStream(b uint16) *Stream {
+	a := Stream(b)
+	return &a
+}
+
+// Unmarshal ...
+func (v *Stream) Unmarshal(b []byte) (int, error) {
+	*v = Stream(binary.BigEndian.Uint16(b))
+	return 2, nil
+}
+
+// Marshal ...
+func (v Stream) Marshal(b []byte) int {
+	binary.BigEndian.PutUint16(b, uint16(v))
+	return 2
+}
+
+// ByteLen ...
+func (v Stream) ByteLen() int {
+	return 2
+}
+
+// StreamAddress ...
+type StreamAddress struct {
+	Stream  Stream
+	Address Address
+}
+
+// Unmarshal ...
+func (v *StreamAddress) Unmarshal(b []byte) (size int, err error) {
+	n, err := v.Stream.Unmarshal(b)
+	if err != nil {
+		return
+	}
+	size += n
+
+	n, err = v.Address.Unmarshal(b[size:])
+	if err != nil {
+		return
+	}
+	size += n
+
+	return
+}
+
+// Marshal ...
+func (v *StreamAddress) Marshal(b []byte) (size int) {
+	size += v.Stream.Marshal(b)
+	size += v.Address.Marshal(b[size:])
+
+	return
+}
+
+// ByteLen ...
+func (v *StreamAddress) ByteLen() int {
+	return v.Stream.ByteLen() + v.Address.ByteLen()
+}
+
+// StreamRequest ...
+type StreamRequest struct {
+	StreamAddress
+}
+
+// Type ...
+func (v *StreamRequest) Type() MessageType {
+	return StreamRequestMessage
+}
+
+// StreamCancel ...
+type StreamCancel struct {
+	Stream
+}
+
+// Type ...
+func (v *StreamCancel) Type() MessageType {
+	return StreamCancelMessage
+}
+
+// StreamOpen ...
+type StreamOpen struct {
+	StreamAddress
+}
+
+// Type ...
+func (v *StreamOpen) Type() MessageType {
+	return StreamOpenMessage
+}
+
+// StreamClose ...
+type StreamClose struct {
+	Stream
+}
+
+// Type ...
+func (v *StreamClose) Type() MessageType {
+	return StreamCloseMessage
+}
+
 // Empty ...
 type Empty struct{}
 
@@ -839,4 +951,64 @@ type End struct {
 // Type ...
 func (v *End) Type() MessageType {
 	return EndMessage
+}
+
+// Channel ...
+type Channel uint64
+
+// NewChannel ...
+func NewChannel(b uint64) *Channel {
+	v := Channel(b)
+	return &v
+}
+
+// Unmarshal ...
+func (v *Channel) Unmarshal(b []byte) (int, error) {
+	vi, n := binary.Uvarint(b)
+	*v = Channel(vi)
+	return n, nil
+}
+
+// Marshal ...
+func (v Channel) Marshal(b []byte) int {
+	return binary.PutUvarint(b, uint64(v))
+}
+
+// ByteLen ...
+func (v Channel) ByteLen() int {
+	return binaryutil.UvarintLen(uint64(v))
+}
+
+// ChannelHeader ...
+type ChannelHeader struct {
+	Channel Channel
+	Length  uint16
+}
+
+// Unmarshal ...
+func (v *ChannelHeader) Unmarshal(b []byte) (size int, err error) {
+	n, err := v.Channel.Unmarshal(b)
+	if err != nil {
+		return
+	}
+	size += n
+
+	v.Length = binary.BigEndian.Uint16(b[size:])
+	size += 2
+
+	return
+}
+
+// Marshal ...
+func (v *ChannelHeader) Marshal(b []byte) (size int) {
+	size += v.Channel.Marshal(b)
+	binary.BigEndian.PutUint16(b[size:], v.Length)
+	size += 2
+
+	return
+}
+
+// ByteLen ...
+func (v *ChannelHeader) ByteLen() int {
+	return v.Channel.ByteLen() + 2
 }

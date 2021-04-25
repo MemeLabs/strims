@@ -6,24 +6,24 @@ option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1;transfer"
 option java_package = "gg.strims.transfer.v1";
 option swift_prefix = "STX";
 
-message TransferPeerAnnounceSwarmRequest {
-  bytes swarm_id = 1;
-  uint32 port = 2;
+message TransferPeerAnnounceRequest {
+  bytes id = 1;
+  uint64 channel = 2;
 }
 
-message TransferPeerAnnounceSwarmResponse {
+message TransferPeerAnnounceResponse {
   oneof body {
-    uint32 port = 1;
+    uint64 channel = 1;
   }
 }
 
-message TransferPeerCloseSwarmRequest {
-  bytes swarm_id = 1;
+message TransferPeerCloseRequest {
+  bytes id = 1;
 }
 
-message TransferPeerCloseSwarmResponse {}
+message TransferPeerCloseResponse {}
 
 service TransferPeer {
-  rpc AnnounceSwarm(TransferPeerAnnounceSwarmRequest) returns (TransferPeerAnnounceSwarmResponse);
-  rpc CloseSwarm(TransferPeerCloseSwarmRequest) returns (TransferPeerCloseSwarmResponse);
+  rpc Announce(TransferPeerAnnounceRequest) returns (TransferPeerAnnounceResponse);
+  rpc Close(TransferPeerCloseRequest) returns (TransferPeerCloseResponse);
 }

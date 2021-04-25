@@ -7,9 +7,12 @@ import (
 	"crypto/sha512"
 	"errors"
 	"hash"
+	"math/bits"
 	"time"
 
+	"github.com/zeebo/blake3"
 	"golang.org/x/crypto/blake2b"
+	"golang.org/x/crypto/sha3"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
@@ -39,6 +42,11 @@ const (
 	MerkleHashTreeFunctionBLAKE2B256
 	MerkleHashTreeFunctionBLAKE2B512
 	MerkleHashTreeFunctionMD5
+	MerkleHashTreeFunctionBLAKE3
+	MerkleHashTreeFunctionSHA3224
+	MerkleHashTreeFunctionSHA3256
+	MerkleHashTreeFunctionSHA3384
+	MerkleHashTreeFunctionSHA3512
 )
 
 // HashSize ...
@@ -54,6 +62,16 @@ func (f MerkleHashTreeFunction) HashSize() int {
 		return blake2b.Size256
 	case MerkleHashTreeFunctionBLAKE2B512:
 		return blake2b.Size
+	case MerkleHashTreeFunctionBLAKE3:
+		return blake3.New().Size()
+	case MerkleHashTreeFunctionSHA3224:
+		return sha3.New224().Size()
+	case MerkleHashTreeFunctionSHA3256:
+		return sha3.New256().Size()
+	case MerkleHashTreeFunctionSHA3384:
+		return sha3.New384().Size()
+	case MerkleHashTreeFunctionSHA3512:
+		return sha3.New512().Size()
 	default:
 		panic("unsupported hash tree function")
 	}
@@ -72,6 +90,16 @@ func (f MerkleHashTreeFunction) HashFunc() HashFunc {
 		return blake2bFunc(blake2b.New256)
 	case MerkleHashTreeFunctionBLAKE2B512:
 		return blake2bFunc(blake2b.New512)
+	case MerkleHashTreeFunctionBLAKE3:
+		return blake3Func
+	case MerkleHashTreeFunctionSHA3224:
+		return sha3.New224
+	case MerkleHashTreeFunctionSHA3256:
+		return sha3.New256
+	case MerkleHashTreeFunctionSHA3384:
+		return sha3.New384
+	case MerkleHashTreeFunctionSHA3512:
+		return sha3.New512
 	default:
 		panic("unsupported hash tree function")
 	}
@@ -85,6 +113,10 @@ func blake2bFunc(fn func([]byte) (hash.Hash, error)) HashFunc {
 		h, _ := fn(nil)
 		return h
 	}
+}
+
+func blake3Func() hash.Hash {
+	return blake3.New()
 }
 
 // LiveSignatureAlgorithm ...
@@ -150,6 +182,25 @@ func (o *VerifierOptions) Assign(u VerifierOptions) {
 	}
 	if u.LiveSignatureAlgorithm != 0 {
 		o.LiveSignatureAlgorithm = u.LiveSignatureAlgorithm
+	}
+}
+
+func MaxMessageBytes(
+	pm ProtectionMethod,
+	lsa LiveSignatureAlgorithm,
+	htf MerkleHashTreeFunction,
+	cps int,
+) int {
+	var im codec.Integrity
+	var sim codec.SignedIntegrity
+
+	switch pm {
+	case ProtectionMethodSignAll:
+		return codec.MessageTypeLen + lsa.SignatureSize() + sim.ByteLen()
+	case ProtectionMethodMerkleTree:
+		return codec.MessageTypeLen + lsa.SignatureSize() + sim.ByteLen() + bits.Len64(uint64(cps))*(codec.MessageTypeLen+htf.HashSize()+im.ByteLen())
+	default:
+		return 0
 	}
 }
 

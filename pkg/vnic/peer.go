@@ -169,23 +169,17 @@ func (p *Peer) HostID() kademlia.ID {
 // SetHandler ...
 func (p *Peer) SetHandler(port uint16, h FrameHandler) {
 	p.handlersLock.Lock()
-	p.reservationsLock.Lock()
-	defer p.reservationsLock.Unlock()
 	defer p.handlersLock.Unlock()
 
-	p.reservations[port] = struct{}{}
 	p.handlers[port] = h
 }
 
 // RemoveHandler ...
 func (p *Peer) RemoveHandler(port uint16) {
 	p.handlersLock.Lock()
-	p.reservationsLock.Lock()
-	defer p.reservationsLock.Unlock()
 	defer p.handlersLock.Unlock()
 
 	delete(p.handlers, port)
-	delete(p.reservations, port)
 }
 
 // Handler ...
@@ -197,7 +191,9 @@ func (p *Peer) Handler(port uint16) FrameHandler {
 
 // ReservePort ...
 func (p *Peer) ReservePort() (uint16, error) {
+	p.handlersLock.Lock()
 	p.reservationsLock.Lock()
+	defer p.handlersLock.Unlock()
 	defer p.reservationsLock.Unlock()
 
 	for {
@@ -207,10 +203,15 @@ func (p *Peer) ReservePort() (uint16, error) {
 		}
 		port += reservedPortCount
 
-		if _, ok := p.reservations[port]; !ok {
-			p.reservations[port] = struct{}{}
-			return port, nil
+		if _, ok := p.handlers[port]; ok {
+			continue
 		}
+		if _, ok := p.reservations[port]; ok {
+			continue
+		}
+
+		p.reservations[port] = struct{}{}
+		return port, nil
 	}
 }
 
@@ -251,11 +252,11 @@ func (p *Peer) ChannelPair(port0, port1 uint16, qc *qos.Class) (rw0, rw1 *FrameR
 
 // CloseChannel ...
 func (p *Peer) CloseChannel(f *FrameReadWriter) error {
-	p.RemoveHandler(f.port)
+	p.RemoveHandler(f.Port())
 
 	p.channelsLock.Lock()
 	defer p.channelsLock.Unlock()
-	delete(p.channels, f.port)
+	delete(p.channels, f.Port())
 
 	return f.Close()
 }

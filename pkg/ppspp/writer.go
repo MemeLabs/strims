@@ -16,7 +16,7 @@ type WriterOptions struct {
 // NewWriter ...
 func NewWriter(o WriterOptions) (*Writer, error) {
 	so := SwarmOptions{
-		Scheduler: NewSeedScheduler(),
+		SchedulingMethod: SeedSchedulingMethod,
 	}
 	so.Assign(o.SwarmOptions)
 
@@ -29,13 +29,13 @@ func NewWriter(o WriterOptions) (*Writer, error) {
 	s.store.SetOffset(0)
 
 	w, err := integrity.NewWriter(o.Key.Private, integrity.SwarmWriterOptions{
-		LiveSignatureAlgorithm: s.liveSignatureAlgorithm(),
-		ProtectionMethod:       s.contentIntegrityProtectionMethod(),
-		ChunkSize:              s.chunkSize(),
+		LiveSignatureAlgorithm: s.options.Integrity.LiveSignatureAlgorithm,
+		ProtectionMethod:       s.options.Integrity.ProtectionMethod,
+		ChunkSize:              s.options.ChunkSize,
 		Verifier:               s.verifier,
-		Writer:                 store.NewWriter(s.pubSub, s.chunkSize()),
+		Writer:                 store.NewWriter(s.pubSub, s.options.ChunkSize),
 		WriterOptions: integrity.WriterOptions{
-			ChunksPerSignature: s.chunksPerSignature(),
+			ChunksPerSignature: s.options.ChunksPerSignature,
 		},
 	})
 	if err != nil {

@@ -5,7 +5,6 @@ import (
 
 	transfer "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 )
 
 type transferService struct {
@@ -13,19 +12,19 @@ type transferService struct {
 	App  control.AppControl
 }
 
-func (s *transferService) AnnounceSwarm(ctx context.Context, req *transfer.TransferPeerAnnounceSwarmRequest) (*transfer.TransferPeerAnnounceSwarmResponse, error) {
-	port, ok := s.Peer.Transfer().AssignPort(ppspp.SwarmID(req.SwarmId), uint16(req.Port))
+func (s *transferService) Announce(ctx context.Context, req *transfer.TransferPeerAnnounceRequest) (*transfer.TransferPeerAnnounceResponse, error) {
+	channel, ok := s.Peer.Transfer().AssignPort(req.Id, req.Channel)
 	if ok {
-		return &transfer.TransferPeerAnnounceSwarmResponse{
-			Body: &transfer.TransferPeerAnnounceSwarmResponse_Port{
-				Port: uint32(port),
+		return &transfer.TransferPeerAnnounceResponse{
+			Body: &transfer.TransferPeerAnnounceResponse_Channel{
+				Channel: channel,
 			},
 		}, nil
 	}
-	return &transfer.TransferPeerAnnounceSwarmResponse{}, nil
+	return &transfer.TransferPeerAnnounceResponse{}, nil
 }
 
-func (s *transferService) CloseSwarm(ctx context.Context, req *transfer.TransferPeerCloseSwarmRequest) (*transfer.TransferPeerCloseSwarmResponse, error) {
-	s.Peer.Transfer().CloseSwarm(ppspp.SwarmID(req.SwarmId))
-	return &transfer.TransferPeerCloseSwarmResponse{}, nil
+func (s *transferService) Close(ctx context.Context, req *transfer.TransferPeerCloseRequest) (*transfer.TransferPeerCloseResponse, error) {
+	s.Peer.Transfer().Close(req.Id)
+	return &transfer.TransferPeerCloseResponse{}, nil
 }

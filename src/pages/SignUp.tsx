@@ -12,7 +12,7 @@ const SignUpPage: React.FC = () => {
   const [getProfilesRes] = useCall("profile", "list");
   const [{ profile, error, loading }, profileActions] = useProfile();
   const isLocalAccountsEmpty = !getProfilesRes.loading && !getProfilesRes.value?.profiles.length;
-  const { register, handleSubmit, errors } = useForm<ICreateProfileRequest>({
+  const { control, handleSubmit } = useForm<ICreateProfileRequest>({
     mode: "onBlur",
   });
 
@@ -32,8 +32,8 @@ const SignUpPage: React.FC = () => {
         )}
         {error && <InputError error={error.message || "Error creating profile"} />}
         <TextInput
-          error={errors.name}
-          inputRef={register({
+          control={control}
+          rules={{
             required: {
               value: true,
               message: "Name is required",
@@ -42,24 +42,22 @@ const SignUpPage: React.FC = () => {
               value: /^\S+$/i,
               message: "Name contains invalid characters",
             },
-          })}
+          }}
           label="Profile Name"
           name="name"
           placeholder="Enter a profile name"
-          required
         />
         <TextInput
-          error={errors.password}
-          inputRef={register({
+          control={control}
+          rules={{
             required: {
               value: true,
               message: "Password is required",
             },
-          })}
+          }}
           label="Password"
           name="password"
           placeholder="Enter a password"
-          required
           type="password"
         />
         <div className="input_buttons">

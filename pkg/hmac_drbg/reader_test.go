@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
+	"github.com/zeebo/blake3"
 	"golang.org/x/crypto/blake2b"
 	"golang.org/x/crypto/sha3"
 )
@@ -108,6 +109,9 @@ func BenchmarkBlake2b256(b *testing.B) {
 func BenchmarkBlake2b512(b *testing.B) {
 	runHashBenchmark(b, newBlake2B512)
 }
+func BenchmarkBlake3(b *testing.B) {
+	runHashBenchmark(b, newBlake3)
+}
 
 func runHashBenchmark(b *testing.B, h func() hash.Hash) {
 	seed := []byte{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff}
@@ -126,4 +130,8 @@ func newBlake2B256() hash.Hash {
 func newBlake2B512() hash.Hash {
 	h, _ := blake2b.New512(nil)
 	return h
+}
+
+func newBlake3() hash.Hash {
+	return blake3.New()
 }

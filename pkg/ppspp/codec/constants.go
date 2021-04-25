@@ -30,6 +30,14 @@ func (m MessageType) String() string {
 		return "Ping"
 	case PongMessage:
 		return "Pong"
+	case StreamRequestMessage:
+		return "StreamRequest"
+	case StreamCancelMessage:
+		return "StreamCancel"
+	case StreamOpenMessage:
+		return "StreamOpen"
+	case StreamCloseMessage:
+		return "StreamClose"
 	case EndMessage:
 		return "End"
 	}
@@ -38,7 +46,8 @@ func (m MessageType) String() string {
 
 // message types
 const (
-	HandshakeMessage MessageType = iota
+	_ MessageType = iota
+	HandshakeMessage
 	DataMessage
 	AckMessage
 	HaveMessage
@@ -50,6 +59,10 @@ const (
 	UnchokeMessage
 	PingMessage
 	PongMessage
+	StreamRequestMessage
+	StreamCancelMessage
+	StreamOpenMessage
+	StreamCloseMessage
 	EndMessage MessageType = 255
 )
 

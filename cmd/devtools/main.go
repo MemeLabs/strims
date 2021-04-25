@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"net/http"
@@ -125,7 +126,7 @@ func (s *capConnService) WatchLogs(ctx context.Context, req *ppsppv1.CapConnWatc
 		return nil, err
 	}
 
-	files, err := ioutil.ReadDir("/tmp/capconn")
+	files, err := ioutil.ReadDir(ppspptest.CapConnLogDir())
 	if err != nil {
 		return nil, err
 	}
@@ -134,9 +135,11 @@ func (s *capConnService) WatchLogs(ctx context.Context, req *ppsppv1.CapConnWatc
 		defer watcher.Close()
 
 		for _, f := range files {
-			ch <- &ppsppv1.CapConnWatchLogsResponse{
-				Op:   ppsppv1.CapConnWatchLogsResponse_CREATE,
-				Name: f.Name(),
+			if path.Ext(f.Name()) == ppspptest.CapLogExt {
+				ch <- &ppsppv1.CapConnWatchLogsResponse{
+					Op:   ppsppv1.CapConnWatchLogsResponse_CREATE,
+					Name: f.Name(),
+				}
 			}
 		}
 
@@ -153,9 +156,11 @@ func (s *capConnService) WatchLogs(ctx context.Context, req *ppsppv1.CapConnWatc
 				default:
 					continue EachEvent
 				}
-				ch <- &ppsppv1.CapConnWatchLogsResponse{
-					Op:   op,
-					Name: path.Base(event.Name),
+				if path.Ext(event.Name) == ppspptest.CapLogExt {
+					ch <- &ppsppv1.CapConnWatchLogsResponse{
+						Op:   op,
+						Name: path.Base(event.Name),
+					}
 				}
 			case <-ctx.Done():
 				return
@@ -238,6 +243,8 @@ func (h *capLogHandler) HandleInit(t time.Time, label string) {
 	h.label = label
 }
 
+func (h *capLogHandler) HandleEOF() {}
+
 func (h *capLogHandler) HandleWrite(t time.Time, p []byte) {
 	// h.appendEvent(ppsppv1.CapConnLog_PeerLog_Event_EVENT_CODE_WRITE, t, nil, nil)
 	h.wb.Write(p)
@@ -247,8 +254,26 @@ func (h *capLogHandler) HandleWriteErr(t time.Time, err error) {
 	h.appendEvent(ppsppv1.CapConnLog_PeerLog_Event_EVENT_CODE_WRITE_ERR, t, nil, nil)
 }
 
+func (h *capLogHandler) readChannels(b []byte, r io.Reader) error {
+	for len(b) != 0 {
+		var ch codec.ChannelHeader
+		n, err := ch.Unmarshal(b)
+		if err != nil {
+			return err
+		}
+		b = b[n:]
+
+		if _, err := r.Read(b[:ch.Length]); err != nil {
+			return err
+		}
+		b = b[ch.Length:]
+	}
+	return nil
+}
+
 func (h *capLogHandler) HandleFlush(t time.Time) {
-	h.wcr.Read(h.wb.Bytes())
+	h.readChannels(h.wb.Bytes(), h.wcr)
+
 	h.wb.Reset()
 
 	messageTypes, messageAddresses := h.wch.ReadMessages()
@@ -260,7 +285,7 @@ func (h *capLogHandler) HandleFlushErr(t time.Time, err error) {
 }
 
 func (h *capLogHandler) HandleRead(t time.Time, p []byte) {
-	h.rcr.Read(p)
+	h.readChannels(p, h.rcr)
 
 	messageTypes, messageAddresses := h.rch.ReadMessages()
 	h.appendEvent(ppsppv1.CapConnLog_PeerLog_Event_EVENT_CODE_READ, t, messageTypes, messageAddresses)
@@ -289,59 +314,90 @@ func (h *codecHandler) HandleHandshake(v codec.Handshake) error {
 	return nil
 }
 
-func (h *codecHandler) appendMessage(t codec.MessageType, a codec.Address) {
-	h.messageTypes = append(h.messageTypes, ppsppv1.CapConnLog_PeerLog_Event_MessageType(t))
-	h.messageAddresses = append(h.messageAddresses, uint64(a))
+func (h *codecHandler) appendMessage(t ppsppv1.CapConnLog_PeerLog_Event_MessageType, a uint64) {
+	h.messageTypes = append(h.messageTypes, t)
+	h.messageAddresses = append(h.messageAddresses, a)
 }
 
 func (h *codecHandler) ReadMessages() ([]ppsppv1.CapConnLog_PeerLog_Event_MessageType, []uint64) {
 	t := h.messageTypes
 	a := h.messageAddresses
-	h.messageTypes = []ppsppv1.CapConnLog_PeerLog_Event_MessageType{}
-	h.messageAddresses = []uint64{}
+	h.messageTypes = nil
+	h.messageAddresses = nil
 	return t, a
 }
 
-func (h *codecHandler) HandleData(v codec.Data) {
-	h.appendMessage(codec.DataMessage, v.Address)
+func (h *codecHandler) HandleData(v codec.Data) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_DATA, uint64(v.Address))
+	return nil
 }
 
-func (h *codecHandler) HandleAck(v codec.Ack) {
-	h.appendMessage(codec.AckMessage, v.Address)
+func (h *codecHandler) HandleAck(v codec.Ack) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_ACK, uint64(v.Address))
+	return nil
 }
 
-func (h *codecHandler) HandleHave(v codec.Have) {
-	h.appendMessage(codec.HaveMessage, v.Address)
+func (h *codecHandler) HandleHave(v codec.Have) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_HAVE, uint64(v.Address))
+	return nil
 }
 
-func (h *codecHandler) HandleIntegrity(v codec.Integrity) {
-	h.appendMessage(codec.IntegrityMessage, v.Address)
+func (h *codecHandler) HandleIntegrity(v codec.Integrity) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_INTEGRITY, uint64(v.Address))
+	return nil
 }
 
-func (h *codecHandler) HandleSignedIntegrity(v codec.SignedIntegrity) {
-	h.appendMessage(codec.SignedIntegrityMessage, v.Address)
+func (h *codecHandler) HandleSignedIntegrity(v codec.SignedIntegrity) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_SIGNED_INTEGRITY, uint64(v.Address))
+	return nil
 }
 
-func (h *codecHandler) HandleRequest(v codec.Request) {
-	h.appendMessage(codec.RequestMessage, v.Address)
+func (h *codecHandler) HandleRequest(v codec.Request) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_REQUEST, uint64(v.Address))
+	return nil
 }
 
-func (h *codecHandler) HandleCancel(v codec.Cancel) {
-	h.appendMessage(codec.CancelMessage, v.Address)
+func (h *codecHandler) HandleCancel(v codec.Cancel) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_CANCEL, uint64(v.Address))
+	return nil
 }
 
-func (h *codecHandler) HandleChoke(v codec.Choke) {
-	h.appendMessage(codec.ChokeMessage, 0)
+func (h *codecHandler) HandleChoke(v codec.Choke) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_CHOKE, 0)
+	return nil
 }
 
-func (h *codecHandler) HandleUnchoke(v codec.Unchoke) {
-	h.appendMessage(codec.UnchokeMessage, 0)
+func (h *codecHandler) HandleUnchoke(v codec.Unchoke) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_UNCHOKE, 0)
+	return nil
 }
 
-func (h *codecHandler) HandlePing(v codec.Ping) {
-	h.appendMessage(codec.PingMessage, codec.Address(v.Nonce.Value))
+func (h *codecHandler) HandlePing(v codec.Ping) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_PING, v.Nonce.Value)
+	return nil
 }
 
-func (h *codecHandler) HandlePong(v codec.Pong) {
-	h.appendMessage(codec.PongMessage, codec.Address(v.Nonce.Value))
+func (h *codecHandler) HandlePong(v codec.Pong) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_PONG, v.Nonce.Value)
+	return nil
+}
+
+func (h *codecHandler) HandleStreamRequest(v codec.StreamRequest) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_STREAM_REQUEST, uint64(v.Stream))
+	return nil
+}
+
+func (h *codecHandler) HandleStreamCancel(v codec.StreamCancel) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_STREAM_CANCEL, uint64(v.Stream))
+	return nil
+}
+
+func (h *codecHandler) HandleStreamOpen(v codec.StreamOpen) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_STREAM_OPEN, uint64(v.Stream))
+	return nil
+}
+
+func (h *codecHandler) HandleStreamClose(v codec.StreamClose) error {
+	h.appendMessage(ppsppv1.CapConnLog_PeerLog_Event_MESSAGE_TYPE_STREAM_CLOSE, uint64(v.Stream))
+	return nil
 }

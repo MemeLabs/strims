@@ -62,7 +62,7 @@ func marshalSignableMessage(m SignableMessage) *[]byte {
 
 	e := &signableMessageEncoder{}
 	rv := reflect.ValueOf(m)
-	b := pool.Get(uint16(e.len(rv)))
+	b := pool.Get(e.len(rv))
 	e.encode(rv, *b)
 
 	return b

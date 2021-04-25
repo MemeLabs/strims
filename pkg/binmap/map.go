@@ -1,11 +1,6 @@
 package binmap
 
-import (
-	"fmt"
-	"regexp"
-	"strconv"
-	"strings"
-)
+import "log"
 
 const rootRef = ref(1)
 
@@ -18,45 +13,6 @@ func New() (m *Map) {
 	return
 }
 
-// newFromString parse the debug format for building test from log output...
-func newFromString(s string) (m *Map) {
-	m = &Map{}
-
-	cellRx := regexp.MustCompile(`^(\d+)\s+(\d+)\s(\w)(?:\s+(\d+)\s(\w))?$`)
-
-	for i, l := range strings.Split(s, "\n") {
-		if i == 0 {
-			fmt.Sscanf(
-				l,
-				"freeTop: %d, allocCount: %d, cellCount: %d, rootBin: %d",
-				&m.freeTop,
-				&m.allocCount,
-				&m.cellCount,
-				&m.rootBin,
-			)
-		} else {
-			match := cellRx.FindStringSubmatch(l)
-			if len(match) == 0 {
-				continue
-			}
-
-			var left, right uint64
-			if match[3] == "F" || match[3] == "R" {
-				left, _ = strconv.ParseUint(match[2], 10, 32)
-			} else {
-				left, _ = strconv.ParseUint(match[2], 2, 32)
-			}
-			if match[5] == "R" {
-				right, _ = strconv.ParseUint(match[4], 10, 32)
-			} else {
-				right, _ = strconv.ParseUint(match[4], 2, 32)
-			}
-			m.cells = append(m.cells, cell{uint32(left), uint32(right)})
-		}
-	}
-	return
-}
-
 // Map ...
 type Map struct {
 	freeTop    ref
@@ -64,57 +20,7 @@ type Map struct {
 	cellCount  int
 	rootBin    Bin
 	cells      []cell
-}
-
-func (m *Map) String() string {
-	b := strings.Builder{}
-
-	b.WriteString(fmt.Sprintf(
-		"freeTop: %d, allocCount: %d, cellCount: %d, rootBin: %d\n",
-		m.freeTop,
-		m.allocCount,
-		m.cellCount,
-		m.rootBin,
-	))
-
-	f := freeCell{&m.cells[m.freeTop]}
-	freeRefs := map[ref]bool{m.freeTop: true}
-	for f.NextRef() != 0 && int(f.NextRef()) < len(m.cells) {
-		freeRefs[f.NextRef()] = true
-		f = freeCell{&m.cells[f.NextRef()]}
-	}
-
-	for i, c := range m.cells {
-		b.WriteString(fmt.Sprintf("%-7d", i))
-
-		if ref(i).IsMapRef() {
-			b.WriteString(fmt.Sprintf(
-				"%032s M %032s M",
-				strconv.FormatUint(uint64(c.left), 2),
-				strconv.FormatUint(uint64(c.right), 2),
-			))
-		} else if freeRefs[ref(i)] {
-			b.WriteString(fmt.Sprintf("% 32s F", strconv.FormatUint(uint64(c.left), 10)))
-		} else {
-			r := ref(i)
-			mc := m.mapCell(r)
-
-			if mc.LeftRef() {
-				b.WriteString(fmt.Sprintf("% 32s R", strconv.FormatUint(uint64(c.left), 10)))
-			} else {
-				b.WriteString(fmt.Sprintf("%032s B", strconv.FormatUint(uint64(c.left), 2)))
-			}
-			b.WriteString(" ")
-			if mc.RightRef() {
-				b.WriteString(fmt.Sprintf("% 32s R", strconv.FormatUint(uint64(c.right), 10)))
-			} else {
-				b.WriteString(fmt.Sprintf("%032s B", strconv.FormatUint(uint64(c.right), 2)))
-			}
-		}
-		b.WriteString("\n")
-	}
-
-	return b.String()
+	history    traceHistory
 }
 
 // RootBin ...
@@ -199,7 +105,7 @@ func (m *Map) reserveCells(n int) {
 	}
 
 	if m.cellCount > 2048 {
-		panic(fmt.Sprintf("we tried to allocate an suspiciously large map (%d)", m.cellCount))
+		log.Panicf("we tried to allocate an suspiciously large map (%d)", m.cellCount)
 	}
 }
 
@@ -224,9 +130,9 @@ func (m *Map) extendRoot() {
 	m.rootBin = m.rootBin.Parent()
 }
 
-func (m *Map) packCells(rs traceHistory) {
-	i := rs.len - 1
-	r := rs.refs[i]
+func (m *Map) packCells() {
+	i := m.history.len - 1
+	r := m.history.refs[i]
 	if r == rootRef {
 		return
 	}
@@ -239,7 +145,7 @@ func (m *Map) packCells(rs traceHistory) {
 	b := c.LeftBitmap()
 	for {
 		i--
-		r = rs.refs[i]
+		r = m.history.refs[i]
 		c, mc = m.cell(r)
 
 		if !mc.LeftRef() {
@@ -259,7 +165,7 @@ func (m *Map) packCells(rs traceHistory) {
 		}
 	}
 
-	nr := rs.refs[i+1]
+	nr := m.history.refs[i+1]
 	if mc.LeftRef() && c.LeftRef() == nr {
 		mc.SetLeftRef(false)
 		c.SetLeftBitmap(b)
@@ -275,16 +181,15 @@ func (m *Map) trace(target Bin) (r ref, b Bin) {
 	b = m.rootBin
 
 	for target != b {
-		mc := m.mapCell(r)
 		if target < b {
-			if mc.LeftRef() {
+			if m.mapCell(r).LeftRef() {
 				r = m.dataCell(r).LeftRef()
 				b = b.Left()
 			} else {
 				break
 			}
 		} else {
-			if mc.RightRef() {
+			if m.mapCell(r).RightRef() {
 				r = m.dataCell(r).RightRef()
 				b = b.Right()
 			} else {
@@ -295,29 +200,29 @@ func (m *Map) trace(target Bin) (r ref, b Bin) {
 	return
 }
 
-func (m *Map) traceHistory(target Bin, rs *traceHistory) (r ref, b Bin) {
+func (m *Map) traceHistory(target Bin) (r ref, b Bin) {
 	r = rootRef
 	b = m.rootBin
 
-	rs.Append(r)
+	m.history.Reset()
+	m.history.Append(r)
 	for target != b {
-		mc := m.mapCell(r)
 		if target < b {
-			if mc.LeftRef() {
+			if m.mapCell(r).LeftRef() {
 				r = m.dataCell(r).LeftRef()
 				b = b.Left()
 			} else {
 				break
 			}
 		} else {
-			if mc.RightRef() {
+			if m.mapCell(r).RightRef() {
 				r = m.dataCell(r).RightRef()
 				b = b.Right()
 			} else {
 				break
 			}
 		}
-		rs.Append(r)
+		m.history.Append(r)
 	}
 
 	return
@@ -357,6 +262,19 @@ func (m *Map) FillBefore(b Bin) {
 	}
 }
 
+// ResetBefore ...
+func (m *Map) ResetBefore(b Bin) {
+	b = b.LayerLeft()
+	for !b.IsNone() {
+		if b.IsLeft() {
+			m.Reset(b)
+			b = b.Parent().LayerLeft()
+		} else {
+			b = b.Parent()
+		}
+	}
+}
+
 func (m *Map) setLowLayerBitmap(target Bin, _bitmap bitmap) {
 	binBitmap := binBitmaps[target&bitmapLayerBits]
 	bitmap := _bitmap & binBitmap
@@ -374,8 +292,7 @@ func (m *Map) setLowLayerBitmap(target Bin, _bitmap bitmap) {
 	}
 
 	preBin := (target & ^(bitmapLayerBits + 1)) | bitmapLayerBits
-	var history traceHistory
-	r, b := m.traceHistory(target, &history)
+	r, b := m.traceHistory(target)
 
 	c := m.dataCell(r)
 	bm := bitmapEmpty
@@ -386,7 +303,7 @@ func (m *Map) setLowLayerBitmap(target Bin, _bitmap bitmap) {
 		}
 		if b == preBin {
 			c.SetLeftBitmap(c.LeftBitmap()&^binBitmap | bitmap)
-			m.packCells(history)
+			m.packCells()
 			return
 		}
 	} else {
@@ -396,7 +313,7 @@ func (m *Map) setLowLayerBitmap(target Bin, _bitmap bitmap) {
 		}
 		if b == preBin {
 			c.SetRightBitmap(c.RightBitmap()&^binBitmap | bitmap)
-			m.packCells(history)
+			m.packCells()
 			return
 		}
 	}
@@ -466,8 +383,7 @@ func (m *Map) setHighLayerBitmap(target Bin, _bitmap bitmap) {
 		}
 	}
 
-	var rs traceHistory
-	r, b := m.traceHistory(preBin, &rs)
+	r, b := m.traceHistory(preBin)
 	c, mc := m.cell(r)
 
 	var bm bitmap
@@ -483,7 +399,7 @@ func (m *Map) setHighLayerBitmap(target Bin, _bitmap bitmap) {
 		}
 		if b == preBin {
 			c.SetLeftBitmap(_bitmap)
-			m.packCells(rs)
+			m.packCells()
 			return
 		}
 	} else {
@@ -498,7 +414,7 @@ func (m *Map) setHighLayerBitmap(target Bin, _bitmap bitmap) {
 		}
 		if b == preBin {
 			c.SetRightBitmap(_bitmap)
-			m.packCells(rs)
+			m.packCells()
 			return
 		}
 	}
@@ -886,8 +802,24 @@ func (m *Map) FindLastFilled() Bin {
 	return b
 }
 
-func (m *Map) IterateEmptyAt(b Bin) EmptyAtIterator {
+// IterateEmpty ...
+func (m *Map) IterateEmpty() Iterator {
+	return NewEmptyAtIterator(m, m.rootBin)
+}
+
+// IterateFilled ...
+func (m *Map) IterateFilled() Iterator {
+	return NewFilledAtIterator(m, m.rootBin)
+}
+
+// IterateEmptyAt ...
+func (m *Map) IterateEmptyAt(b Bin) Iterator {
 	return NewEmptyAtIterator(m, b)
+}
+
+// IterateFilledAt ...
+func (m *Map) IterateFilledAt(b Bin) Iterator {
+	return NewFilledAtIterator(m, b)
 }
 
 type traceHistory struct {
@@ -908,46 +840,6 @@ func (t *traceHistory) Slice() (r []ref) {
 	return
 }
 
-func NewEmptyAtIterator(m *Map, b Bin) EmptyAtIterator {
-	e := EmptyAtIterator{
-		m:   m,
-		end: b.BaseRight(),
-	}
-	e.i = e.initGap(b.BaseLeft()) - 2
-	return e
-}
-
-type EmptyAtIterator struct {
-	m        *Map
-	i        Bin
-	end      Bin
-	gapLeft  Bin
-	gapRight Bin
-}
-
-func (e *EmptyAtIterator) initGap(i Bin) Bin {
-	var gap Bin
-	for i <= e.end {
-		gap = e.m.FindFilledAfter(i)
-		if gap != i {
-			break
-		}
-		i = e.m.Cover(gap).BaseRight() + 2
-	}
-
-	e.gapLeft = gap.BaseLeft()
-	e.gapRight = gap.BaseRight()
-	return i
-}
-
-func (e *EmptyAtIterator) Next() bool {
-	e.i += 2
-	if e.i == e.gapLeft {
-		e.i = e.initGap(e.gapRight + 2)
-	}
-	return e.i <= e.end
-}
-
-func (e *EmptyAtIterator) Value() Bin {
-	return e.i
+func (t *traceHistory) Reset() {
+	t.len = 0
 }

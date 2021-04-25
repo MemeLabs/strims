@@ -1,71 +1,83 @@
 package transfer
 
 import (
+	"bytes"
 	"context"
 	"sync"
-	"time"
 
 	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control/api"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
-	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
 
+var noopCancelFunc = func() {}
+
 // Peer ...
 type Peer struct {
 	logger    *zap.Logger
-	qosc      *qos.Class
+	runner    *ppspp.Runner
+	ctx       context.Context
 	vnicPeer  *vnic.Peer
 	swarmPeer *ppspp.Peer
 	client    api.PeerClient
 
-	lock   sync.Mutex
-	swarms llrb.LLRB
+	lock        sync.Mutex
+	transfers   llrb.LLRB
+	nextChannel uint64
 }
 
 // AssignPort ...
-func (p *Peer) AssignPort(swarmID ppspp.SwarmID, peerPort uint16) (uint16, bool) {
-	s, ok := p.getPeerTransfer(swarmID)
+func (p *Peer) AssignPort(id []byte, peerChannel uint64) (uint64, bool) {
+	pt, ok := p.getPeerTransfer(id)
 	if !ok {
 		return 0, false
 	}
 
-	p.openChannel(s, peerPort)
+	p.openChannel(pt, peerChannel)
 
-	return s.port, true
+	return pt.channel, true
 }
 
-// AnnounceSwarm ...
-func (p *Peer) AnnounceSwarm(swarm *ppspp.Swarm) {
-	s, err := p.getOrCreatePeerTransfer(swarm)
-	if err != nil {
-		return
-	}
+// Announce ...
+func (p *Peer) Announce(t *transfer) {
+	pt := p.getOrCreatePeerTransfer(t)
 
-	ctx, cancel := context.WithTimeout(p.vnicPeer.Context(), time.Second)
-	defer cancel()
-
-	req := &transferv1.TransferPeerAnnounceSwarmRequest{
-		SwarmId: swarm.ID(),
-		Port:    uint32(s.port),
+	req := &transferv1.TransferPeerAnnounceRequest{
+		Id:      t.id,
+		Channel: pt.channel,
 	}
-	res := &transferv1.TransferPeerAnnounceSwarmResponse{}
-	err = p.client.Transfer().AnnounceSwarm(ctx, req, res)
+	res := &transferv1.TransferPeerAnnounceResponse{}
+	err := p.client.Transfer().Announce(p.ctx, req, res)
 	if err != nil {
 		p.logger.Debug("failed", zap.Error(err))
 		return
 	}
 
-	p.openChannel(s, uint16(res.GetPort()))
+	p.openChannel(pt, res.GetChannel())
 }
 
-// CloseSwarm ...
-func (p *Peer) CloseSwarm(swarmID ppspp.SwarmID) {
-	if s, ok := p.getPeerTransfer(swarmID); ok {
-		p.closeChannel(s)
+// Close ...
+func (p *Peer) Close(id []byte) {
+	if pt, ok := p.getPeerTransfer(id); ok {
+		p.lock.Lock()
+		defer p.lock.Unlock()
+		pt.close()
+	}
+}
+
+// Remove ...
+func (p *Peer) Remove(t *transfer) {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+
+	pt, ok := p.transfers.Delete(&peerTransfer{transfer: t}).(*peerTransfer)
+	if ok {
+		pt.close()
 	}
 }
 
@@ -73,124 +85,95 @@ func (p *Peer) getPeerTransfer(id []byte) (*peerTransfer, bool) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	s, ok := p.swarms.Get(&peerTransfer{swarmID: id}).(*peerTransfer)
-	return s, ok
+	pt, ok := p.transfers.Get(&peerTransfer{transfer: &transfer{id: id}}).(*peerTransfer)
+	return pt, ok
 }
 
-func (p *Peer) getOrCreatePeerTransfer(swarm *ppspp.Swarm) (*peerTransfer, error) {
+func (p *Peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	s, ok := p.swarms.Get(&peerTransfer{swarmID: swarm.ID()}).(*peerTransfer)
+	pt, ok := p.transfers.Get(&peerTransfer{transfer: t}).(*peerTransfer)
 	if !ok {
-		port, err := p.vnicPeer.ReservePort()
-		if err != nil {
-			return nil, err
-		}
+		p.nextChannel++
 
-		s = &peerTransfer{
-			swarmID: swarm.ID(),
-			swarm:   swarm,
-			port:    port,
+		pt = &peerTransfer{
+			transfer: t,
+			close:    noopCancelFunc,
+			channel:  p.nextChannel,
 		}
-		p.swarms.ReplaceOrInsert(s)
+		p.transfers.ReplaceOrInsert(pt)
 	}
 
-	return s, nil
+	return pt
 }
 
-func (p *Peer) openChannel(s *peerTransfer, peerPort uint16) {
+func (p *Peer) openChannel(pt *peerTransfer, peerChannel uint64) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	if s.channel != nil || peerPort == 0 {
+	if pt.open || peerChannel == 0 {
 		return
 	}
 
-	p.logger.Debug(
-		"opening swarm channel",
+	logger := p.logger.With(
+		logutil.ByteHex("id", pt.id),
 		zap.Stringer("peer", p.vnicPeer.HostID()),
-		zap.Stringer("swarm", s.swarm.ID()),
-		zap.Uint16("localPort", s.port),
-		zap.Uint16("peerPort", peerPort),
+		zap.Stringer("swarm", pt.swarm.ID()),
+		zap.Uint64("localChannel", pt.channel),
+		zap.Uint64("peerChannel", peerChannel),
 	)
+	logger.Debug("opening swarm channel")
 
-	w := vnic.NewFrameWriter(p.vnicPeer.Link, peerPort, p.qosc)
-	ch, err := ppspp.OpenChannel(p.logger, p.swarmPeer, s.swarm, w)
+	err := p.runner.RunChannel(
+		pt.swarm,
+		p.swarmPeer,
+		codec.Channel(pt.channel),
+		codec.Channel(peerChannel),
+	)
 	if err != nil {
 		return
 	}
-	s.channel = ch
 
-	p.vnicPeer.SetHandler(s.port, func(p *vnic.Peer, f vnic.Frame) error {
-		_, err := ch.HandleMessage(f.Body)
-		if err != nil {
-			ch.Close()
-		}
-		return err
-	})
+	ctx, close := context.WithCancel(pt.ctx)
+	pt.close = close
+	pt.open = true
 
 	go func() {
 		select {
-		case <-p.vnicPeer.Done():
-		case <-ch.Done():
+		case <-p.ctx.Done():
+		case <-ctx.Done():
 		}
+
+		p.runner.StopChannel(pt.swarm, p.swarmPeer)
+
+		if !p.vnicPeer.Closed() {
+			logger.Debug("sending peer channel close")
+			req := &transferv1.TransferPeerCloseRequest{
+				Id: pt.id,
+			}
+			res := &transferv1.TransferPeerCloseResponse{}
+			err = p.client.Transfer().Close(context.Background(), req, res)
+			if err != nil {
+				logger.Debug("closing peer channel failed", zap.Error(err))
+			}
+		}
+
+		logger.Debug("closed swarm channel")
 
 		p.lock.Lock()
 		defer p.lock.Unlock()
-
-		ch.Close()
-		ppspp.CloseChannel(p.swarmPeer, s.swarm)
-		p.vnicPeer.RemoveHandler(s.port)
-
-		s.channel = nil
-
-		if !p.vnicPeer.Closed() {
-			p.logger.Debug("sending peer channel close")
-			req := &transferv1.TransferPeerCloseSwarmRequest{
-				SwarmId: s.swarmID,
-			}
-			res := &transferv1.TransferPeerCloseSwarmResponse{}
-			err = p.client.Transfer().CloseSwarm(context.Background(), req, res)
-			if err != nil {
-				p.logger.Debug(
-					"closing peer channel failed",
-					zap.Stringer("peer", p.vnicPeer.HostID()),
-					zap.Stringer("swarm", s.swarm.ID()),
-					zap.Error(err),
-				)
-			}
-		}
-
-		p.logger.Debug(
-			"closed swarm channel",
-			zap.Stringer("peer", p.vnicPeer.HostID()),
-			zap.Stringer("swarm", s.swarm.ID()),
-			zap.Uint16("localPort", s.port),
-			zap.Uint16("peerPort", peerPort),
-		)
+		pt.open = false
 	}()
 }
 
-func (p *Peer) closeChannel(s *peerTransfer) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	if s.channel != nil {
-		s.channel.Close()
-	}
-}
-
 type peerTransfer struct {
-	swarmID ppspp.SwarmID
-	swarm   *ppspp.Swarm
-	port    uint16
-	channel *ppspp.ChannelReader
+	*transfer
+	close   context.CancelFunc
+	channel uint64
+	open    bool
 }
 
-func (s *peerTransfer) Less(o llrb.Item) bool {
-	if o, ok := o.(*peerTransfer); ok {
-		return s.swarmID.Compare(o.swarmID) == -1
-	}
-	return !o.Less(s)
+func (t *peerTransfer) Less(o llrb.Item) bool {
+	return bytes.Compare(t.id, o.(*peerTransfer).id) == -1
 }

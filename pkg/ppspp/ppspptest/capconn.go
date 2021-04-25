@@ -1,13 +1,19 @@
 package ppspptest
 
 import (
+	"compress/gzip"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"os"
+	"path"
+	"sync"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/binaryutil"
 	"github.com/MemeLabs/go-ppspp/pkg/bytereader"
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 )
 
 // event codes
@@ -21,6 +27,8 @@ const (
 	CapConnRead
 	CapConnReadErr
 )
+
+const CapLogExt = ".cap"
 
 // NewCapConn ...
 func NewCapConn(c Conn, w io.Writer, label string) (*CapConn, error) {
@@ -38,6 +46,7 @@ func NewCapConn(c Conn, w io.Writer, label string) (*CapConn, error) {
 // CapConn ...
 type CapConn struct {
 	Conn
+	mu   sync.Mutex
 	w    io.Writer
 	t    time.Time
 	temp [1 + binary.MaxVarintLen64]byte
@@ -54,7 +63,9 @@ func (c *CapConn) writeEvent(code uint8) error {
 }
 
 func (c *CapConn) writeEventWithData(code uint8, p []byte) error {
-	c.writeEvent(code)
+	if err := c.writeEvent(code); err != nil {
+		return err
+	}
 	n := binary.PutUvarint(c.temp[:], uint64(len(p)))
 	if _, err := c.w.Write(c.temp[:n]); err != nil {
 		return err
@@ -66,6 +77,10 @@ func (c *CapConn) writeEventWithData(code uint8, p []byte) error {
 // Write ...
 func (c *CapConn) Write(p []byte) (int, error) {
 	n, err := c.Conn.Write(p)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if err != nil {
 		if cerr := c.writeEventWithData(CapConnWriteErr, []byte(err.Error())); cerr != nil {
 			return n, fmt.Errorf("%s (original error %w)", cerr, err)
@@ -81,6 +96,10 @@ func (c *CapConn) Write(p []byte) (int, error) {
 // Flush ...
 func (c *CapConn) Flush() error {
 	err := c.Conn.Flush()
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if err != nil {
 		if cerr := c.writeEventWithData(CapConnFlushErr, []byte(err.Error())); cerr != nil {
 			return fmt.Errorf("%s (original error %w)", cerr, err)
@@ -96,6 +115,10 @@ func (c *CapConn) Flush() error {
 // Read ...
 func (c *CapConn) Read(p []byte) (int, error) {
 	n, err := c.Conn.Read(p)
+
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	if err != nil {
 		if cerr := c.writeEventWithData(CapConnReadErr, []byte(err.Error())); cerr != nil {
 			return n, fmt.Errorf("%s (original error %w)", cerr, err)
@@ -108,6 +131,10 @@ func (c *CapConn) Read(p []byte) (int, error) {
 	return n, err
 }
 
+func CapConnLogDir() string {
+	return path.Join(os.TempDir(), "capconn")
+}
+
 // NewCapLogWriter ...
 func NewCapLogWriter(w io.Writer) *CapLogWriter {
 	return NewCapLogWriterSize(w, 4096)
@@ -115,40 +142,68 @@ func NewCapLogWriter(w io.Writer) *CapLogWriter {
 
 // NewCapLogWriterSize ...
 func NewCapLogWriterSize(w io.Writer, size int) *CapLogWriter {
-	return &CapLogWriter{w: w, size: size}
+	gzw := gzip.NewWriter(w)
+	return &CapLogWriter{
+		gzw:  gzw,
+		w:    ioutil.NewSyncWriter(gzw),
+		size: size,
+	}
 }
 
 // CapLogWriter ...
 type CapLogWriter struct {
-	w    io.Writer
-	size int
-	cws  []*capLogConnWriter
+	mu     sync.Mutex
+	gzw    *gzip.Writer
+	w      io.Writer
+	size   int
+	cws    []*capLogConnWriter
+	closed bool
 }
 
 // Writer ...
 func (w *CapLogWriter) Writer() io.Writer {
-	h := make([]byte, 2*binary.MaxVarintLen64)
-	n := binary.PutUvarint(h, uint64(len(w.cws)))
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
+	if w.closed {
+		panic("fuck")
+	}
+
+	id := len(w.cws)
+	h := make([]byte, binaryutil.UvarintLen(uint64(id)))
+	n := binary.PutUvarint(h, uint64(id))
 
 	b := make([]byte, w.size)
-	copy(b, h[:n])
+	copy(b, h)
 
-	cw := &capLogConnWriter{w.w, h[:n], b, n}
+	cw := &capLogConnWriter{
+		w:   w.w,
+		h:   h,
+		buf: b,
+		off: n,
+	}
 	w.cws = append(w.cws, cw)
 	return cw
 }
 
-// Flush ...
-func (w *CapLogWriter) Flush() error {
-	for _, cw := range w.cws {
+// Close ...
+func (w *CapLogWriter) Close() error {
+	var cws []*capLogConnWriter
+	w.mu.Lock()
+	cws = append(cws, w.cws...)
+	w.mu.Unlock()
+
+	for _, cw := range cws {
 		if err := cw.Flush(); err != nil {
 			return err
 		}
 	}
-	return nil
+
+	return w.gzw.Close()
 }
 
 type capLogConnWriter struct {
+	mu  sync.Mutex
 	w   io.Writer
 	h   []byte
 	buf []byte
@@ -156,12 +211,15 @@ type capLogConnWriter struct {
 }
 
 func (w *capLogConnWriter) Write(p []byte) (n int, err error) {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	for n < len(p) {
 		dn := copy(w.buf[w.off:], p[n:])
 		n += dn
 		w.off += dn
 
-		if n < len(p) {
+		if w.off == len(w.buf) {
 			if _, err = w.w.Write(w.buf); err != nil {
 				return
 			}
@@ -172,6 +230,9 @@ func (w *capLogConnWriter) Write(p []byte) (n int, err error) {
 }
 
 func (w *capLogConnWriter) Flush() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	if w.off == len(w.h) {
 		return nil
 	}
@@ -190,6 +251,11 @@ func ReadCapLog(r io.Reader, f func() CapLogHandler) error {
 
 // ReadCapLogSize ...
 func ReadCapLogSize(r io.Reader, size int, f func() CapLogHandler) error {
+	r, err := gzip.NewReader(r)
+	if err != nil {
+		return err
+	}
+
 	ws := map[uint64]io.WriteCloser{}
 	b := make([]byte, size)
 
@@ -224,6 +290,7 @@ func ReadCapLogSize(r io.Reader, size int, f func() CapLogHandler) error {
 // CapLogHandler ...
 type CapLogHandler interface {
 	HandleInit(t time.Time, label string)
+	HandleEOF()
 	HandleWrite(t time.Time, p []byte)
 	HandleWriteErr(t time.Time, err error)
 	HandleFlush(t time.Time)
@@ -259,6 +326,7 @@ func (p *capLogParser) Parse(r io.Reader) error {
 			}
 			p.Handler.HandleInit(t, string(b))
 		case CapConnEOF:
+			p.Handler.HandleEOF()
 			return nil
 		case CapConnWrite:
 			err = p.handleDataEvent(p.Handler.HandleWrite, t, r)
@@ -272,6 +340,9 @@ func (p *capLogParser) Parse(r io.Reader) error {
 			err = p.handleErrorEvent(p.Handler.HandleFlushErr, t, r)
 		case CapConnReadErr:
 			err = p.handleErrorEvent(p.Handler.HandleReadErr, t, r)
+		}
+		if err != nil {
+			return err
 		}
 	}
 }

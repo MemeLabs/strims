@@ -20,7 +20,7 @@ type ED25519Signer struct {
 
 // Sign ...
 func (s *ED25519Signer) Sign(t time.Time, p []byte) []byte {
-	b := pool.Get(uint16(len(p) + 8))
+	b := pool.Get(len(p) + 8)
 	defer pool.Put(b)
 	binary.BigEndian.PutUint64(*b, uint64(t.UnixNano()))
 	copy((*b)[8:], p)
@@ -45,7 +45,7 @@ type ED25519Verifier struct {
 
 // Verify ...
 func (s *ED25519Verifier) Verify(t time.Time, p []byte, sig []byte) bool {
-	b := pool.Get(uint16(len(p) + 8))
+	b := pool.Get(len(p) + 8)
 	defer pool.Put(b)
 	binary.BigEndian.PutUint64(*b, uint64(t.UnixNano()))
 	copy((*b)[8:], p)

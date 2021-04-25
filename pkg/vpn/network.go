@@ -269,7 +269,7 @@ func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
 
 // SendProto ...
 func (n *Network) SendProto(id kademlia.ID, port, srcPort uint16, msg proto.Message) error {
-	b := pool.Get(uint16(proto.Size(msg)))
+	b := pool.Get(proto.Size(msg))
 	defer pool.Put(b)
 
 	_, err := proto.MarshalOptions{}.MarshalAppend((*b)[:0], msg)
@@ -316,7 +316,7 @@ func (n *Network) callHandler(m *Message) error {
 
 // sendMessage ...
 func (n *Network) sendMessage(m *Message) error {
-	b := pool.Get(uint16(m.Size()))
+	b := pool.Get(m.Size())
 	defer pool.Put(b)
 	if _, err := m.Marshal(*b, n.host); err != nil {
 		return err

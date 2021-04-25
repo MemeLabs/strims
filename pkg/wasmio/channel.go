@@ -122,7 +122,7 @@ func (p *channel) closeWithError(err error) {
 
 func (p *channel) onData(this js.Value, args []js.Value) interface{} {
 	iotime.Store(int64(args[2].Float()))
-	b := pool.Get(uint16(args[1].Int()))
+	b := pool.Get(args[1].Int())
 	js.CopyBytesToGo(*b, args[0])
 	p.q <- b
 	return nil

@@ -1,16 +1,13 @@
 import React from "react";
 import { Controller, useForm } from "react-hook-form";
-import { Link } from "react-router-dom";
-import Select, { OptionTypeBase } from "react-select";
+import Select from "react-select";
 
 import {
   ChatServer,
   CreateChatServerRequest,
   CreateChatServerResponse,
 } from "../../apis/strims/chat/v1/chat";
-import { Certificate } from "../../apis/strims/type/certificate";
 import { InputError, InputLabel, TextInput } from "../../components/Form";
-import { MainLayout } from "../../components/MainLayout";
 import { useCall, useLazyCall } from "../../contexts/FrontendApi";
 import { rootCertificate } from "../../lib/certificate";
 import jsonutil from "../../lib/jsonutil";
@@ -29,12 +26,12 @@ const ChatServerForm = ({ onCreate }: { onCreate: (res: CreateChatServerResponse
   });
   const [networksRes] = useCall("network", "list");
 
-  const { register, handleSubmit, control, errors } = useForm<ChatServerFormData>({
+  const { handleSubmit, control } = useForm<ChatServerFormData>({
     mode: "onBlur",
   });
 
   const onSubmit = handleSubmit((data) => {
-    createChatServer(
+    void createChatServer(
       new CreateChatServerRequest({
         networkKey: data.networkKey.value,
         chatRoom: {
@@ -48,27 +45,19 @@ const ChatServerForm = ({ onCreate }: { onCreate: (res: CreateChatServerResponse
     <form className="thing_form" onSubmit={onSubmit}>
       {error && <InputError error={error.message || "Error creating chat server"} />}
       <TextInput
-        error={errors?.name}
-        inputRef={register({
+        control={control}
+        rules={{
           required: {
             value: true,
             message: "Name is required",
           },
-        })}
-        label="Name"
+        }}
         name="name"
+        label="Name"
         placeholder="Enter a chat room name"
-        required
       />
       <InputLabel required={true} text="Network">
         <Controller
-          as={Select}
-          className="input_select"
-          placeholder="Select network"
-          options={networksRes.value?.networks.map((n) => ({
-            value: rootCertificate(n.certificate).key,
-            label: n.name,
-          }))}
           name="networkKey"
           control={control}
           rules={{
@@ -77,8 +66,21 @@ const ChatServerForm = ({ onCreate }: { onCreate: (res: CreateChatServerResponse
               message: "Network is required",
             },
           }}
+          render={({ field, fieldState: { error } }) => (
+            <>
+              <Select
+                {...field}
+                className="input_select"
+                placeholder="Select network"
+                options={networksRes.value?.networks.map((n) => ({
+                  value: rootCertificate(n.certificate).key,
+                  label: n.name,
+                }))}
+              />
+              <InputError error={error} />
+            </>
+          )}
         />
-        <InputError error={errors.networkKey} />
       </InputLabel>
       <div className="input_buttons">
         <button className="input input_button" disabled={loading}>

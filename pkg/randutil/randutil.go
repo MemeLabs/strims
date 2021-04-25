@@ -23,3 +23,12 @@ func Uint64() (uint64, error) {
 	}
 	return binary.LittleEndian.Uint64(t[:]), nil
 }
+
+// MustUint64 ...
+func MustUint64() uint64 {
+	v, err := Uint64()
+	if err != nil {
+		panic(err)
+	}
+	return v
+}

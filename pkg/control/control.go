@@ -103,8 +103,8 @@ type NetworkPeerControl interface {
 
 // TransferPeerControl ...
 type TransferPeerControl interface {
-	AssignPort(swarmID ppspp.SwarmID, peerPort uint16) (uint16, bool)
-	CloseSwarm(swarmID ppspp.SwarmID)
+	AssignPort(id []byte, channel uint64) (uint64, bool)
+	Close(id []byte)
 }
 
 // BootstrapPeerControl ...

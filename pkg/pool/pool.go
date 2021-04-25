@@ -13,7 +13,7 @@ func New(n int) *Pool {
 	}
 
 	for i := 0; i < n; i++ {
-		size := 1<<(16-i) - 1
+		size := 1 << (16 - i)
 		p.zones[i] = &sync.Pool{
 			New: func() interface{} {
 				b := make([]byte, size)
@@ -32,15 +32,11 @@ type Pool struct {
 }
 
 // Get ...
-func (p *Pool) Get(size uint16) (b *[]byte) {
-	if i := bits.LeadingZeros16(size); i < p.n {
+func (p *Pool) Get(size int) (b *[]byte) {
+	if i := 16 - bits.Len32(uint32(size-1)); i < p.n {
 		b = p.zones[i].Get().(*[]byte)
 	} else {
 		b = p.zones[p.n-1].Get().(*[]byte)
-	}
-
-	if cap(*b) == 0 {
-		return p.Get(size)
 	}
 
 	*b = (*b)[:size]
@@ -49,7 +45,7 @@ func (p *Pool) Get(size uint16) (b *[]byte) {
 
 // Put ...
 func (p *Pool) Put(b *[]byte) {
-	if i := bits.LeadingZeros16(uint16(cap(*b))); i < p.n {
+	if i := 16 - bits.TrailingZeros32(uint32(cap(*b))); i < p.n {
 		p.zones[i].Put(b)
 	} else {
 		p.zones[p.n-1].Put(b)

@@ -4,13 +4,8 @@ import (
 	"encoding/hex"
 	"errors"
 	"sync"
-	"sync/atomic"
-	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/iotime"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/ma"
+	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
@@ -43,354 +38,273 @@ var (
 	errIncompatibleContentIntegrityProtectionMethod = errors.New("incompatible ContentIntegrityProtectionMethod")
 	errIncompatibleMerkleHashTreeFunction           = errors.New("incompatible MerkleHashTreeFunction")
 	errIncompatibleLiveSignatureAlgorithm           = errors.New("incompatible LiveSignatureAlgorithm")
+
+	errWriterTooSmall = errors.New("new size cannot be smaller than channel header")
 )
 
-var nextChannelID uint64
-
-// Channel ...
-// TODO: do we still need this?
-type Channel interface {
-	HandleMessage(b []byte) (int, error)
-}
-
-// OpenChannel ...
-func OpenChannel(logger *zap.Logger, p *Peer, s *Swarm, conn WriteFlushCloser) (*ChannelReader, error) {
-	c := newChannel()
-	cw := newChannelWriter(logger, newChannelWriterMetrics(s, p), c, conn)
-	cr := newChannelReader(logger, newChannelReaderMetrics(s, p), c, p, s)
-
-	if _, err := cw.WriteHandshake(newHandshake(s)); err != nil {
-		return nil, err
-	}
-	if err := cw.Flush(); err != nil {
-		return nil, err
-	}
-
-	p.addChannel(s, cw)
-	s.addChannel(p, c)
-
-	return cr, nil
-}
-
-// CloseChannel ...
-func CloseChannel(p *Peer, s *Swarm) {
-	p.removeChannel(s)
-	s.removeChannel(p)
-
-	deleteChannelWriterMetrics(s, p)
-	deleteChannelReaderMetrics(s, p)
-}
-
-// newchannel ...
-func newChannel() *channel {
-	return &channel{
-		id:                  atomic.AddUint64(&nextChannelID, 1),
-		addedBins:           binmap.New(),
-		requestedBins:       binmap.New(),
-		availableBins:       binmap.New(),
-		unackedBins:         binmap.New(),
-		sentBinHistory:      newBinTimeoutQueue(32),
-		requestedBinHistory: newBinTimeoutQueue(32),
-		close:               make(chan struct{}),
-	}
-}
-
-// channel ...
-type channel struct {
-	sync.Mutex
-	id                  uint64
-	liveWindow          int
-	choked              bool
-	addedBins           *binmap.Map      // bins to send HAVEs for
-	requestedBins       *binmap.Map      // bins to send DATA for
-	availableBins       *binmap.Map      // bins the peer claims to have
-	unackedBins         *binmap.Map      // sent bins that have not been acked
-	sentBinHistory      *binTimeoutQueue // recently sent bins
-	requestedBinHistory *binTimeoutQueue // bins recently requested from the peer
-	acks                []codec.Ack
-	pongNonce           binmap.Bin
-	pongTime            time.Time
-	closeOnce           sync.Once
-	close               chan struct{}
-
-	memes [64]ma.Welford
-}
-
-func (c *channel) setLiveWindow(v int) {
-	c.Lock()
-	c.liveWindow = v
-	c.Unlock()
-}
-
-func (c *channel) setChoked(v bool) {
-	c.Lock()
-	c.choked = true
-	c.Unlock()
-}
-
-func (c *channel) setAddedBins(m *binmap.Map) {
-	c.Lock()
-	c.addedBins = m
-	c.Unlock()
-}
-
-func (c *channel) addRequestedBin(b binmap.Bin) {
-	c.Lock()
-	c.requestedBins.Set(b)
-	c.Unlock()
-}
-
-func (c *channel) addAvailableBin(b binmap.Bin, ts int64) {
-	c.Lock()
-	defer c.Unlock()
-
-	lag := float64(iotime.Load().UnixNano() - ts)
-	for it := c.availableBins.IterateEmptyAt(b); it.Next(); {
-		c.memes[it.Value()&0x7f>>1].Update(lag)
-	}
-	// debug.RunEveryN(1000, func() {
-	// 	var b strings.Builder
-	// 	for i := 0; i < 64; i++ {
-	// 		b.WriteString(fmt.Sprintf(
-	// 			"substream: %d, stddev: %0.3f, mean: %0.3f",
-	// 			i,
-	// 			c.memes[i].StdDev(),
-	// 			c.memes[i].Mean(),
-	// 		))
-	// 		b.WriteRune('\n')
-	// 	}
-	// 	fmt.Println(b.String())
-	// })
-
-	c.availableBins.Set(b)
-}
-
-func (c *channel) addAckedBin(b binmap.Bin) bool {
-	c.Lock()
-	defer c.Unlock()
-
-	// if c.unackedBins.EmptyAt(b) {
-	// 	return false
-	// }
-
-	// c.availableBins.Set(b)
-	// c.unackedBins.Reset(b)
-
-	return true
-}
-
-func (c *channel) enqueueAck(a codec.Ack) {
-	// c.Lock()
-	// c.acks = append(c.acks, a)
-	// c.Unlock()
-}
-
-// TODO: count filled bins in b
-func (c *channel) addCancelledBins(b binmap.Bin) {
-	c.Lock()
-	c.requestedBins.Reset(b)
-	c.Unlock()
-}
-
-func (c *channel) enqueuePong(nonce binmap.Bin) {
-	c.Lock()
-	defer c.Unlock()
-
-	c.pongNonce = nonce
-	c.pongTime = iotime.Load()
-}
-
-func (c *channel) dequeuePong() *codec.Pong {
-	c.Lock()
-	defer c.Unlock()
-
-	if c.pongNonce.IsNone() {
-		return nil
-	}
-
-	p := &codec.Pong{
-		Nonce: codec.Nonce{Value: uint64(c.pongNonce)},
-		Delay: uint64(time.Since(c.pongTime)),
-	}
-
-	c.pongNonce = binmap.None
-
-	return p
-}
-
-func (c *channel) Consume(sc store.Chunk) bool {
-	c.Lock()
-	defer c.Unlock()
-
-	c.addedBins.Set(sc.Bin)
-	return true
-}
-
-func (c *channel) Close() {
-	c.closeOnce.Do(func() {
-		close(c.close)
-	})
-}
-
-func (c *channel) Done() <-chan struct{} {
-	return c.close
-}
-
 func newHandshake(swarm *Swarm) codec.Handshake {
-	h := codec.Handshake{
+	return codec.Handshake{
 		Options: []codec.ProtocolOption{
 			codec.NewSwarmIdentifierProtocolOption(swarm.ID()),
 			&codec.VersionProtocolOption{Value: 2},
 			&codec.MinimumVersionProtocolOption{Value: 2},
-			&codec.LiveWindowProtocolOption{Value: uint32(swarm.liveWindow())},
-			&codec.ChunkSizeProtocolOption{Value: uint32(swarm.chunkSize())},
-			&codec.ContentIntegrityProtectionMethodProtocolOption{Value: uint8(swarm.contentIntegrityProtectionMethod())},
-			&codec.MerkleHashTreeFunctionProtocolOption{Value: uint8(swarm.merkleHashTreeFunction())},
-			&codec.LiveSignatureAlgorithmProtocolOption{Value: uint8(swarm.liveSignatureAlgorithm())},
-			&codec.ChunksPerSignatureProtocolOption{Value: uint32(swarm.chunksPerSignature())},
+			&codec.LiveWindowProtocolOption{Value: uint32(swarm.options.LiveWindow)},
+			&codec.ChunkSizeProtocolOption{Value: uint32(swarm.options.ChunkSize)},
+			&codec.ContentIntegrityProtectionMethodProtocolOption{Value: uint8(swarm.options.Integrity.ProtectionMethod)},
+			&codec.MerkleHashTreeFunctionProtocolOption{Value: uint8(swarm.options.Integrity.MerkleHashTreeFunction)},
+			&codec.LiveSignatureAlgorithmProtocolOption{Value: uint8(swarm.options.Integrity.LiveSignatureAlgorithm)},
+			&codec.ChunksPerSignatureProtocolOption{Value: uint32(swarm.options.ChunksPerSignature)},
 		},
 	}
-
-	return h
 }
 
-func newChannelWriter(logger *zap.Logger, metrics channelWriterMetrics, channel *channel, conn WriteFlushCloser) *channelWriter {
+func newChannelWriter(metrics channelWriterMetrics, w Conn, channel codec.Channel) *channelWriter {
+	head := codec.ChannelHeader{Channel: channel}
 	return &channelWriter{
-		channel: channel,
-		w:       codec.NewWriter(conn, conn.MTU()),
+		w:       w,
+		cw:      codec.NewWriter(w, w.MTU()-head.ByteLen()),
 		metrics: metrics,
+		head:    head,
+		buf:     make([]byte, head.ByteLen()),
 	}
 }
 
 type channelWriter struct {
-	*channel
-	w       codec.Writer
+	w       Conn
+	cw      codec.Writer
 	metrics channelWriterMetrics
-}
-
-func (c *channelWriter) Flush() error {
-	return c.w.Flush()
-}
-
-func (c *channelWriter) Cap() int {
-	return c.w.Cap()
+	head    codec.ChannelHeader
+	buf     []byte
 }
 
 func (c *channelWriter) Len() int {
-	return c.w.Len()
+	if !c.cw.Dirty() {
+		return 0
+	}
+	return len(c.buf) + c.cw.Len()
 }
 
-func (c *channelWriter) Dirty() bool {
-	return c.w.Dirty()
+func (c *channelWriter) Resize(n int) error {
+	if n < len(c.buf) {
+		return errWriterTooSmall
+	}
+	return c.cw.Resize(n - len(c.buf))
+}
+
+func (c *channelWriter) Reset() {
+	c.cw.Reset()
+}
+
+func (c *channelWriter) Flush() error {
+	if !c.cw.Dirty() {
+		return nil
+	}
+
+	c.head.Length = uint16(c.cw.Len())
+	c.head.Marshal(c.buf)
+	if _, err := c.w.Write(c.buf); err != nil {
+		return err
+	}
+
+	if err := c.cw.Flush(); err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func (c *channelWriter) WriteHandshake(m codec.Handshake) (int, error) {
 	c.metrics.HandshakeCount.Inc()
-	return c.w.WriteHandshake(m)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteHandshake(m)
 }
 
 func (c *channelWriter) WriteAck(m codec.Ack) (int, error) {
 	c.metrics.AckCount.Inc()
-	return c.w.WriteAck(m)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteAck(m)
 }
 
 func (c *channelWriter) WriteHave(m codec.Have) (int, error) {
 	c.metrics.HaveCount.Inc()
-	return c.w.WriteHave(m)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteHave(m)
 }
 
 func (c *channelWriter) WriteData(m codec.Data) (int, error) {
 	c.metrics.DataCount.Inc()
 	c.metrics.ChunkCount.Add(float64(m.Address.Bin().BaseLength()))
-	return c.w.WriteData(m)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen() - m.Data.ByteLen()))
+	c.metrics.DataBytesCount.Add(float64(m.Data.ByteLen()))
+	return c.cw.WriteData(m)
 }
 
 func (c *channelWriter) WriteIntegrity(m codec.Integrity) (int, error) {
 	c.metrics.IntegrityCount.Inc()
-	return c.w.WriteIntegrity(m)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteIntegrity(m)
 }
 
 func (c *channelWriter) WriteSignedIntegrity(m codec.SignedIntegrity) (int, error) {
 	c.metrics.SignedIntegrityCount.Inc()
-	return c.w.WriteSignedIntegrity(m)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteSignedIntegrity(m)
 }
 
 func (c *channelWriter) WriteRequest(m codec.Request) (int, error) {
 	c.metrics.RequestCount.Inc()
-	return c.w.WriteRequest(m)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteRequest(m)
 }
 
 func (c *channelWriter) WritePing(m codec.Ping) (int, error) {
 	c.metrics.PingCount.Inc()
-	return c.w.WritePing(m)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WritePing(m)
 }
 
 func (c *channelWriter) WritePong(m codec.Pong) (int, error) {
 	c.metrics.PongCount.Inc()
-	return c.w.WritePong(m)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WritePong(m)
 }
 
 func (c *channelWriter) WriteCancel(m codec.Cancel) (int, error) {
 	c.metrics.CancelCount.Inc()
-	return c.w.WriteCancel(m)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteCancel(m)
 }
 
-func newChannelReader(logger *zap.Logger, metrics channelReaderMetrics, channel *channel, peer *Peer, swarm *Swarm) *ChannelReader {
+func (c *channelWriter) WriteStreamRequest(m codec.StreamRequest) (int, error) {
+	c.metrics.StreamRequestCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteStreamRequest(m)
+}
+
+func (c *channelWriter) WriteStreamCancel(m codec.StreamCancel) (int, error) {
+	c.metrics.StreamCancelCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteStreamCancel(m)
+}
+
+func (c *channelWriter) WriteStreamOpen(m codec.StreamOpen) (int, error) {
+	c.metrics.StreamOpenCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteStreamOpen(m)
+}
+
+func (c *channelWriter) WriteStreamClose(m codec.StreamClose) (int, error) {
+	c.metrics.StreamCloseCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteStreamClose(m)
+}
+
+func newChannelReader(logger *zap.Logger) *ChannelReader {
 	return &ChannelReader{
-		channel: channel,
-		r: codec.Reader{
-			ChunkSize:              swarm.chunkSize(),
-			IntegrityHashSize:      swarm.merkleHashTreeFunction().HashSize(),
-			IntegritySignatureSize: swarm.liveSignatureAlgorithm().SignatureSize(),
-			Handler: &channelMessageHandler{
-				logger:   logger,
-				swarm:    swarm,
-				peer:     peer,
-				channel:  channel,
-				metrics:  metrics,
-				verifier: swarm.verifier.ChannelVerifier(),
-			},
-		},
+		logger:   logger,
+		touched:  make([]*channelReaderChannel, 0, 16),
+		channels: map[codec.Channel]*channelReaderChannel{},
 	}
 }
 
 // ChannelReader ...
 type ChannelReader struct {
-	channel *channel
-	r       codec.Reader
+	logger   *zap.Logger
+	lock     sync.Mutex
+	v        uint64
+	touched  []*channelReaderChannel
+	channels map[codec.Channel]*channelReaderChannel
+}
+
+type channelReaderChannel struct {
+	v         uint64
+	scheduler ChannelScheduler
+	r         codec.Reader
+}
+
+func (c *ChannelReader) openChannel(channel codec.Channel, metrics channelReaderMetrics, scheduler ChannelScheduler, swarm *Swarm) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.channels[channel] = &channelReaderChannel{
+		scheduler: scheduler,
+		r: codec.Reader{
+			ChunkSize:              swarm.options.ChunkSize,
+			IntegrityHashSize:      swarm.options.Integrity.MerkleHashTreeFunction.HashSize(),
+			IntegritySignatureSize: swarm.options.Integrity.LiveSignatureAlgorithm.SignatureSize(),
+			Handler: &channelMessageHandler{
+				logger:    c.logger.With(zap.Stringer("swarm", swarm.id)),
+				swarm:     swarm,
+				scheduler: scheduler,
+				metrics:   metrics,
+				verifier:  swarm.verifier.ChannelVerifier(),
+			},
+		},
+	}
+}
+
+func (c *ChannelReader) closeChannel(channel codec.Channel) {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	delete(c.channels, channel)
 }
 
 // HandleMessage ...
-func (c *ChannelReader) HandleMessage(b []byte) (int, error) {
-	n, err := c.r.Read(b)
-	if err != nil {
-		return 0, err
+func (c *ChannelReader) HandleMessage(b []byte) (err error) {
+	defer func() {
+		if e := recover(); e != nil {
+			err = errutil.RecoverError(e)
+		}
+	}()
+
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	c.touched = c.touched[:0]
+	c.v++
+
+	for len(b) != 0 {
+		var h codec.ChannelHeader
+		n, err := h.Unmarshal(b)
+		if err != nil {
+			return err
+		}
+		b = b[n:]
+
+		if rc, ok := c.channels[h.Channel]; ok {
+			if rc.v != c.v {
+				c.touched = append(c.touched, rc)
+				rc.v = c.v
+			}
+
+			if _, err := rc.r.Read(b[:h.Length]); err != nil {
+				return err
+			}
+		}
+		b = b[h.Length:]
 	}
 
-	return n, nil
-}
+	for _, rc := range c.touched {
+		if err := rc.scheduler.HandleMessageEnd(); err != nil {
+			return err
+		}
+	}
 
-// Close ...
-func (c *ChannelReader) Close() {
-	c.channel.Close()
-}
-
-// Done ...
-func (c *ChannelReader) Done() <-chan struct{} {
-	return c.channel.Done()
+	return nil
 }
 
 type channelMessageHandler struct {
-	logger   *zap.Logger
-	swarm    *Swarm
-	peer     *Peer
-	channel  *channel
-	metrics  channelReaderMetrics
-	verifier integrity.ChannelVerifier
+	logger    *zap.Logger
+	swarm     *Swarm
+	scheduler ChannelScheduler
+	metrics   channelReaderMetrics
+	verifier  integrity.ChannelVerifier
 }
 
 func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 	c.metrics.HandshakeCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(v.ByteLen()))
 
 	if swarmID, ok := v.Options.Find(codec.SwarmIdentifierOption); ok {
 		if !c.swarm.ID().Equals(NewSwarmID(*swarmID.(*codec.SwarmIdentifierProtocolOption))) {
@@ -416,14 +330,12 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoMinimumVersionOption
 	}
 
-	if liveWindow, ok := v.Options.Find(codec.LiveWindowOption); ok {
-		c.channel.setLiveWindow(int(liveWindow.(*codec.LiveWindowProtocolOption).Value))
-	} else {
+	if _, ok := v.Options.Find(codec.LiveWindowOption); !ok {
 		return errNoLiveWindowOption
 	}
 
 	if chunkSize, ok := v.Options.Find(codec.ChunkSizeOption); ok {
-		if chunkSize.(*codec.ChunkSizeProtocolOption).Value != uint32(c.swarm.chunkSize()) {
+		if chunkSize.(*codec.ChunkSizeProtocolOption).Value != uint32(c.swarm.options.ChunkSize) {
 			return errIncompatibleChunkSizeOption
 		}
 	} else {
@@ -431,7 +343,7 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 	}
 
 	if chunksPerSignature, ok := v.Options.Find(codec.ChunksPerSignatureOption); ok {
-		if chunksPerSignature.(*codec.ChunksPerSignatureProtocolOption).Value != uint32(c.swarm.chunksPerSignature()) {
+		if chunksPerSignature.(*codec.ChunksPerSignatureProtocolOption).Value != uint32(c.swarm.options.ChunksPerSignature) {
 			return errIncompatibleChunksPerSignatureOption
 		}
 	} else {
@@ -439,7 +351,7 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 	}
 
 	if contentIntegrityProtectionMethod, ok := v.Options.Find(codec.ContentIntegrityProtectionMethodOption); ok {
-		if contentIntegrityProtectionMethod.(*codec.ContentIntegrityProtectionMethodProtocolOption).Value != uint8(c.swarm.contentIntegrityProtectionMethod()) {
+		if contentIntegrityProtectionMethod.(*codec.ContentIntegrityProtectionMethodProtocolOption).Value != uint8(c.swarm.options.Integrity.ProtectionMethod) {
 			return errIncompatibleContentIntegrityProtectionMethod
 		}
 	} else {
@@ -447,7 +359,7 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 	}
 
 	if merkleHashTreeFunction, ok := v.Options.Find(codec.MerkleHashTreeFunctionOption); ok {
-		if merkleHashTreeFunction.(*codec.MerkleHashTreeFunctionProtocolOption).Value != uint8(c.swarm.merkleHashTreeFunction()) {
+		if merkleHashTreeFunction.(*codec.MerkleHashTreeFunctionProtocolOption).Value != uint8(c.swarm.options.Integrity.MerkleHashTreeFunction) {
 			return errIncompatibleMerkleHashTreeFunction
 		}
 	} else {
@@ -455,119 +367,135 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 	}
 
 	if liveSignatureAlgorithm, ok := v.Options.Find(codec.LiveSignatureAlgorithmOption); ok {
-		if liveSignatureAlgorithm.(*codec.LiveSignatureAlgorithmProtocolOption).Value != uint8(c.swarm.liveSignatureAlgorithm()) {
+		if liveSignatureAlgorithm.(*codec.LiveSignatureAlgorithmProtocolOption).Value != uint8(c.swarm.options.Integrity.LiveSignatureAlgorithm) {
 			return errIncompatibleLiveSignatureAlgorithm
 		}
 	} else {
 		return errNoLiveSignatureAlgorithm
 	}
 
-	// TODO: send rightmost signed munro
-	c.channel.setAddedBins(c.swarm.loadedBins())
-
-	return nil
+	liveWindow := v.Options.MustFind(codec.LiveWindowOption).(*codec.LiveWindowProtocolOption).Value
+	return c.scheduler.HandleHandshake(liveWindow)
 }
 
-func (c *channelMessageHandler) HandleData(m codec.Data) {
+func (c *channelMessageHandler) HandleData(m codec.Data) error {
 	c.metrics.DataCount.Inc()
 	c.metrics.ChunkCount.Add(float64(m.Address.Bin().BaseLength()))
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen() - m.Data.ByteLen()))
+	c.metrics.DataBytesCount.Add(float64(m.Data.ByteLen()))
 
-	if v := c.verifier.ChunkVerifier(m.Address.Bin()); v != nil {
-		if verified, err := v.Verify(m.Address.Bin(), m.Data); !verified {
-			c.metrics.InvalidDataCount.Inc()
-			c.metrics.InvalidChunkCount.Add(float64(m.Address.Bin().BaseLength()))
-			c.swarm.bins.ResetRequested(m.Address.Bin())
-			c.logger.Debug(
-				"invalid data",
-				logutil.ByteHex("peer", c.peer.id),
-				zap.Stringer("swarm", c.swarm.id),
-				zap.Uint64("bin", uint64(m.Address.Bin())),
-				zap.Error(err),
-			)
-			return
-		}
+	verified, err := c.verifier.ChunkVerifier(m.Address.Bin()).Verify(m.Address.Bin(), m.Data)
+	if !verified {
+		c.metrics.InvalidDataCount.Inc()
+		c.metrics.InvalidChunkCount.Add(float64(m.Address.Bin().BaseLength()))
+		c.metrics.InvalidBytesCount.Add(float64(m.Data.ByteLen()))
+
+		c.logger.Debug(
+			"invalid data",
+			zap.Uint64("bin", uint64(m.Address.Bin())),
+			zap.Error(err),
+		)
+
+		return c.scheduler.HandleData(m.Address.Bin(), false)
 	}
 
-	c.channel.enqueueAck(codec.Ack{
-		Address: m.Address,
-		DelaySample: codec.DelaySample{
-			Duration: iotime.Load().Sub(m.Timestamp.Time),
-		},
-	})
-
-	ok := c.swarm.pubSub.Publish(store.Chunk{
+	c.swarm.pubSub.Publish(store.Chunk{
 		Bin:  m.Address.Bin(),
 		Data: m.Data,
 	})
-
-	if ok {
-		c.peer.addReceivedChunk(m.Address.Bin().BaseLength())
-	}
-	c.peer.addRTTSample(c.channel.id, m.Address.Bin(), 0)
+	return c.scheduler.HandleData(m.Address.Bin(), true)
 }
 
-func (c *channelMessageHandler) HandleIntegrity(m codec.Integrity) {
+func (c *channelMessageHandler) HandleIntegrity(m codec.Integrity) error {
 	c.metrics.IntegrityCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
 
 	if v := c.verifier.ChunkVerifier(m.Address.Bin()); v != nil {
 		v.SetIntegrity(m.Address.Bin(), m.Hash)
 	}
+	return nil
 }
 
-func (c *channelMessageHandler) HandleSignedIntegrity(m codec.SignedIntegrity) {
+func (c *channelMessageHandler) HandleSignedIntegrity(m codec.SignedIntegrity) error {
 	c.metrics.SignedIntegrityCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
 
 	if v := c.verifier.ChunkVerifier(m.Address.Bin()); v != nil {
 		v.SetSignedIntegrity(m.Address.Bin(), m.Timestamp.Time, m.Signature)
 	}
+	return nil
 }
 
-func (c *channelMessageHandler) HandleAck(m codec.Ack) {
+func (c *channelMessageHandler) HandleAck(m codec.Ack) error {
 	c.metrics.AckCount.Inc()
-
-	if c.channel.addAckedBin(m.Address.Bin()) {
-		// TODO: ack queuing delay
-		c.peer.addRTTSample(c.channel.id, m.Address.Bin(), 0)
-		c.peer.addDelaySample(m.DelaySample.Duration, c.swarm.chunkSize())
-		c.swarm.bins.AddAvailable(m.Address.Bin())
-	}
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandleAck(m.Address.Bin(), m.DelaySample.Duration)
 }
 
-func (c *channelMessageHandler) HandleHave(v codec.Have) {
+func (c *channelMessageHandler) HandleHave(m codec.Have) error {
 	c.metrics.HaveCount.Inc()
-	ts := c.swarm.bins.AddAvailable(v.Bin())
-	c.channel.addAvailableBin(v.Bin(), ts)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandleHave(m.Bin())
 }
 
-func (c *channelMessageHandler) HandleRequest(m codec.Request) {
+func (c *channelMessageHandler) HandleRequest(m codec.Request) error {
 	c.metrics.RequestCount.Inc()
-	c.channel.addRequestedBin(m.Bin())
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandleRequest(m.Bin())
 }
 
-func (c *channelMessageHandler) HandleCancel(m codec.Cancel) {
+func (c *channelMessageHandler) HandleCancel(m codec.Cancel) error {
 	c.metrics.CancelCount.Inc()
-	c.channel.addCancelledBins(m.Address.Bin())
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandleCancel(m.Bin())
 }
 
-func (c *channelMessageHandler) HandleChoke(m codec.Choke) {
+func (c *channelMessageHandler) HandleChoke(m codec.Choke) error {
 	c.metrics.ChokeCount.Inc()
-	c.channel.setChoked(true)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandleChoke()
 }
 
-func (c *channelMessageHandler) HandleUnchoke(m codec.Unchoke) {
+func (c *channelMessageHandler) HandleUnchoke(m codec.Unchoke) error {
 	c.metrics.UnchokeCount.Inc()
-	c.channel.setChoked(false)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandleUnchoke()
 }
 
-func (c *channelMessageHandler) HandlePing(m codec.Ping) {
+func (c *channelMessageHandler) HandlePing(m codec.Ping) error {
 	c.metrics.PingCount.Inc()
-	c.channel.enqueuePong(binmap.Bin(m.Nonce.Value))
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandlePing(m.Value)
 }
 
-func (c *channelMessageHandler) HandlePong(m codec.Pong) {
+func (c *channelMessageHandler) HandlePong(m codec.Pong) error {
 	c.metrics.PongCount.Inc()
-	// c.peer.addRTTSample(c.channel.id, binmap.Bin(m.Nonce.Value), time.Duration(m.Delay))
-	c.peer.addRTTSample(c.channel.id, binmap.Bin(m.Nonce.Value), 0)
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandlePong(m.Nonce.Value)
+}
+
+func (c *channelMessageHandler) HandleStreamRequest(m codec.StreamRequest) error {
+	c.metrics.StreamRequestCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandleStreamRequest(m.Stream, m.Address.Bin())
+}
+
+func (c *channelMessageHandler) HandleStreamCancel(m codec.StreamCancel) error {
+	c.metrics.StreamCancelCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandleStreamCancel(m.Stream)
+}
+
+func (c *channelMessageHandler) HandleStreamOpen(m codec.StreamOpen) error {
+	c.metrics.StreamOpenCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandleStreamOpen(m.Stream, m.Address.Bin())
+}
+
+func (c *channelMessageHandler) HandleStreamClose(m codec.StreamClose) error {
+	c.metrics.StreamCloseCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.scheduler.HandleStreamClose(m.Stream)
 }
 
 func newChannelReaderMetrics(s *Swarm, p *Peer) channelReaderMetrics {
@@ -579,6 +507,7 @@ func newChannelReaderMetrics(s *Swarm, p *Peer) channelReaderMetrics {
 		channelMetrics:    newChannelMetrics(s, p, direction),
 		InvalidDataCount:  channelMessageCount.WithLabelValues(swarmID, peerID, direction, "invalid_data"),
 		InvalidChunkCount: channelMessageCount.WithLabelValues(swarmID, peerID, direction, "invalid_chunk"),
+		InvalidBytesCount: channelMessageCount.WithLabelValues(swarmID, peerID, direction, "invalid_bytes"),
 	}
 }
 
@@ -586,6 +515,7 @@ type channelReaderMetrics struct {
 	channelMetrics
 	InvalidDataCount  prometheus.Counter
 	InvalidChunkCount prometheus.Counter
+	InvalidBytesCount prometheus.Counter
 }
 
 func deleteChannelReaderMetrics(s *Swarm, p *Peer) {
@@ -596,6 +526,7 @@ func deleteChannelReaderMetrics(s *Swarm, p *Peer) {
 	deleteChannelMetrics(s, p, direction)
 	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "invalid_data")
 	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "invalid_chunk")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "invalid_bytes")
 }
 
 func newChannelWriterMetrics(s *Swarm, p *Peer) channelWriterMetrics {
@@ -630,6 +561,12 @@ func newChannelMetrics(s *Swarm, p *Peer, direction string) channelMetrics {
 		UnchokeCount:         channelMessageCount.WithLabelValues(swarmID, peerID, direction, "unchoke_message"),
 		PingCount:            channelMessageCount.WithLabelValues(swarmID, peerID, direction, "ping_message"),
 		PongCount:            channelMessageCount.WithLabelValues(swarmID, peerID, direction, "pong_message"),
+		StreamRequestCount:   channelMessageCount.WithLabelValues(swarmID, peerID, direction, "stream_request_message"),
+		StreamCancelCount:    channelMessageCount.WithLabelValues(swarmID, peerID, direction, "stream_cancel_message"),
+		StreamOpenCount:      channelMessageCount.WithLabelValues(swarmID, peerID, direction, "stream_open_message"),
+		StreamCloseCount:     channelMessageCount.WithLabelValues(swarmID, peerID, direction, "stream_close_message"),
+		DataBytesCount:       channelMessageCount.WithLabelValues(swarmID, peerID, direction, "data_bytes"),
+		OverheadBytesCount:   channelMessageCount.WithLabelValues(swarmID, peerID, direction, "overhead_bytes"),
 	}
 }
 
@@ -647,6 +584,12 @@ type channelMetrics struct {
 	UnchokeCount         prometheus.Counter
 	PingCount            prometheus.Counter
 	PongCount            prometheus.Counter
+	StreamRequestCount   prometheus.Counter
+	StreamCancelCount    prometheus.Counter
+	StreamOpenCount      prometheus.Counter
+	StreamCloseCount     prometheus.Counter
+	DataBytesCount       prometheus.Counter
+	OverheadBytesCount   prometheus.Counter
 }
 
 func deleteChannelMetrics(s *Swarm, p *Peer, direction string) {
@@ -666,4 +609,10 @@ func deleteChannelMetrics(s *Swarm, p *Peer, direction string) {
 	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "unchoke_message")
 	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "ping_message")
 	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "pong_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "stream_request_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "stream_cancel_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "stream_open_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "stream_close_message")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "data_bytes")
+	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "overhead_bytes")
 }

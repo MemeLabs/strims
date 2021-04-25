@@ -2,39 +2,39 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 
-export type ITransferPeerAnnounceSwarmRequest = {
-  swarmId?: Uint8Array;
-  port?: number;
+export type ITransferPeerAnnounceRequest = {
+  id?: Uint8Array;
+  channel?: bigint;
 }
 
-export class TransferPeerAnnounceSwarmRequest {
-  swarmId: Uint8Array;
-  port: number;
+export class TransferPeerAnnounceRequest {
+  id: Uint8Array;
+  channel: bigint;
 
-  constructor(v?: ITransferPeerAnnounceSwarmRequest) {
-    this.swarmId = v?.swarmId || new Uint8Array();
-    this.port = v?.port || 0;
+  constructor(v?: ITransferPeerAnnounceRequest) {
+    this.id = v?.id || new Uint8Array();
+    this.channel = v?.channel || BigInt(0);
   }
 
-  static encode(m: TransferPeerAnnounceSwarmRequest, w?: Writer): Writer {
+  static encode(m: TransferPeerAnnounceRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.swarmId) w.uint32(10).bytes(m.swarmId);
-    if (m.port) w.uint32(16).uint32(m.port);
+    if (m.id) w.uint32(10).bytes(m.id);
+    if (m.channel) w.uint32(16).uint64(m.channel);
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): TransferPeerAnnounceSwarmRequest {
+  static decode(r: Reader | Uint8Array, length?: number): TransferPeerAnnounceRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new TransferPeerAnnounceSwarmRequest();
+    const m = new TransferPeerAnnounceRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.swarmId = r.bytes();
+        m.id = r.bytes();
         break;
         case 2:
-        m.port = r.uint32();
+        m.channel = r.uint64();
         break;
         default:
         r.skipType(tag & 7);
@@ -45,36 +45,36 @@ export class TransferPeerAnnounceSwarmRequest {
   }
 }
 
-export type ITransferPeerAnnounceSwarmResponse = {
-  body?: TransferPeerAnnounceSwarmResponse.IBody
+export type ITransferPeerAnnounceResponse = {
+  body?: TransferPeerAnnounceResponse.IBody
 }
 
-export class TransferPeerAnnounceSwarmResponse {
-  body: TransferPeerAnnounceSwarmResponse.TBody;
+export class TransferPeerAnnounceResponse {
+  body: TransferPeerAnnounceResponse.TBody;
 
-  constructor(v?: ITransferPeerAnnounceSwarmResponse) {
-    this.body = new TransferPeerAnnounceSwarmResponse.Body(v?.body);
+  constructor(v?: ITransferPeerAnnounceResponse) {
+    this.body = new TransferPeerAnnounceResponse.Body(v?.body);
   }
 
-  static encode(m: TransferPeerAnnounceSwarmResponse, w?: Writer): Writer {
+  static encode(m: TransferPeerAnnounceResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     switch (m.body.case) {
-      case TransferPeerAnnounceSwarmResponse.BodyCase.PORT:
-      w.uint32(8).uint32(m.body.port);
+      case TransferPeerAnnounceResponse.BodyCase.CHANNEL:
+      w.uint32(8).uint64(m.body.channel);
       break;
     }
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): TransferPeerAnnounceSwarmResponse {
+  static decode(r: Reader | Uint8Array, length?: number): TransferPeerAnnounceResponse {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new TransferPeerAnnounceSwarmResponse();
+    const m = new TransferPeerAnnounceResponse();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new TransferPeerAnnounceSwarmResponse.Body({ port: r.uint32() });
+        m.body = new TransferPeerAnnounceResponse.Body({ channel: r.uint64() });
         break;
         default:
         r.skipType(tag & 7);
@@ -85,30 +85,30 @@ export class TransferPeerAnnounceSwarmResponse {
   }
 }
 
-export namespace TransferPeerAnnounceSwarmResponse {
+export namespace TransferPeerAnnounceResponse {
   export enum BodyCase {
     NOT_SET = 0,
-    PORT = 1,
+    CHANNEL = 1,
   }
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.PORT, port: number }
+  |{ case?: BodyCase.CHANNEL, channel: bigint }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.PORT, port: number }
+  |{ case: BodyCase.CHANNEL, channel: bigint }
   >;
 
   class BodyImpl {
-    port: number;
+    channel: bigint;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
-      if (v && "port" in v) {
-        this.case = BodyCase.PORT;
-        this.port = v.port;
+      if (v && "channel" in v) {
+        this.case = BodyCase.CHANNEL;
+        this.channel = v.channel;
       }
     }
   }
@@ -116,39 +116,39 @@ export namespace TransferPeerAnnounceSwarmResponse {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { port: number } ? { case: BodyCase.PORT, port: number } :
+    T extends { channel: bigint } ? { case: BodyCase.CHANNEL, channel: bigint } :
     never
     >;
   };
 
 }
 
-export type ITransferPeerCloseSwarmRequest = {
-  swarmId?: Uint8Array;
+export type ITransferPeerCloseRequest = {
+  id?: Uint8Array;
 }
 
-export class TransferPeerCloseSwarmRequest {
-  swarmId: Uint8Array;
+export class TransferPeerCloseRequest {
+  id: Uint8Array;
 
-  constructor(v?: ITransferPeerCloseSwarmRequest) {
-    this.swarmId = v?.swarmId || new Uint8Array();
+  constructor(v?: ITransferPeerCloseRequest) {
+    this.id = v?.id || new Uint8Array();
   }
 
-  static encode(m: TransferPeerCloseSwarmRequest, w?: Writer): Writer {
+  static encode(m: TransferPeerCloseRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.swarmId) w.uint32(10).bytes(m.swarmId);
+    if (m.id) w.uint32(10).bytes(m.id);
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): TransferPeerCloseSwarmRequest {
+  static decode(r: Reader | Uint8Array, length?: number): TransferPeerCloseRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new TransferPeerCloseSwarmRequest();
+    const m = new TransferPeerCloseRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.swarmId = r.bytes();
+        m.id = r.bytes();
         break;
         default:
         r.skipType(tag & 7);
@@ -159,23 +159,23 @@ export class TransferPeerCloseSwarmRequest {
   }
 }
 
-export type ITransferPeerCloseSwarmResponse = {
+export type ITransferPeerCloseResponse = {
 }
 
-export class TransferPeerCloseSwarmResponse {
+export class TransferPeerCloseResponse {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-  constructor(v?: ITransferPeerCloseSwarmResponse) {
+  constructor(v?: ITransferPeerCloseResponse) {
   }
 
-  static encode(m: TransferPeerCloseSwarmResponse, w?: Writer): Writer {
+  static encode(m: TransferPeerCloseResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): TransferPeerCloseSwarmResponse {
+  static decode(r: Reader | Uint8Array, length?: number): TransferPeerCloseResponse {
     if (r instanceof Reader && length) r.skip(length);
-    return new TransferPeerCloseSwarmResponse();
+    return new TransferPeerCloseResponse();
   }
 }
 

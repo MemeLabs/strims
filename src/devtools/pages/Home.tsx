@@ -1,4 +1,6 @@
 import React from "react";
+import { useForm } from "react-hook-form";
+import { useWindowSize } from "react-use";
 
 import {
   CapConnLoadLogResponse,
@@ -93,83 +95,158 @@ const Sparkline: React.FC<SparklineProps> = ({
   xScale = scale(bounds(x), [margin, width - margin]),
   yScale = scale(bounds(y), [height - margin, margin]),
 }) => {
-  if (x.length === 0) {
-    return null;
-  }
+  const canvas = React.useRef<HTMLCanvasElement>();
 
-  const draw = (el: HTMLCanvasElement) => {
-    const ctx = el.getContext("2d");
-    ctx.fillStyle = "black";
+  React.useEffect(() => {
+    if (!canvas.current || x.length === 0) {
+      return;
+    }
+
+    const ctx = canvas.current.getContext("2d");
+
+    ctx.clearRect(0, 0, width, height);
+
+    ctx.beginPath();
+    for (let i = 0; i < x.length; i++) {
+      ctx.moveTo(xScale(x[i]), height - margin);
+      ctx.lineTo(xScale(x[i]), yScale(y[i]));
+    }
+    ctx.closePath();
+
     ctx.strokeStyle = "black";
     ctx.lineWidth = 1;
 
-    for (let i = 0; i < x.length; i++) {
-      ctx.moveTo(xScale(x[i]), height);
-      ctx.lineTo(xScale(x[i]), yScale(y[i]));
-
-      // ctx.moveTo(xScale(x[i]), yScale(y[i]));
-      // ctx.arc(xScale(x[i]), yScale(y[i]), 2, 0, 2 * Math.PI);
-    }
-
     ctx.stroke();
-    // ctx.fill();
-  };
-  return <canvas ref={draw} height={height} width={width} />;
+  }, [canvas.current, height, width, x, y]);
+
+  if (x.length === 0) {
+    return null;
+  }
+  return <canvas ref={canvas} height={height} width={width} />;
 };
 
 const millisecond = BigInt(1000000);
 
-const Timeline = ({ data }: { data: CapConnLoadLogResponse }) => {
-  const plots = data.log.peerLogs
-    .map(({ label, events }, i) => {
-      const times: bigint[] = [];
-      const values: bigint[] = [];
-      let lastTS = BigInt(0);
-      events.forEach((e) => {
-        if (e.code == CapConnLog.PeerLog.Event.Code.EVENT_CODE_READ) {
-          for (let i = 0; i < e.messageTypes.length; i++) {
-            if (e.messageTypes[i] == CapConnLog.PeerLog.Event.MessageType.MESSAGE_TYPE_DATA) {
-              const ts = e.timestamp / (millisecond * BigInt(50));
-              if (ts === lastTS) {
-                values[values.length - 1] += baseLength(e.messageAddresses[i]);
-                // values[values.length - 1]++;
-              } else {
-                times.push(ts);
-                // const v = values[values.length - 1] || BigInt(0);
-                values.push(baseLength(e.messageAddresses[i]) / BigInt(2));
-                // values.push(BigInt(1));
-                lastTS = ts;
+interface TimelineProps {
+  data: CapConnLoadLogResponse;
+  sparklineWidth?: number;
+  sparklineHeight?: number;
+  sparklineMargin?: number;
+}
+
+interface TimelineFormData {
+  eventCode: CapConnLog.PeerLog.Event.Code;
+  messageType: CapConnLog.PeerLog.Event.MessageType;
+}
+
+const Timeline = ({
+  data,
+  sparklineWidth = 3000,
+  sparklineHeight = 50,
+  sparklineMargin = 10,
+}: TimelineProps) => {
+  const { register, watch } = useForm<TimelineFormData>({
+    mode: "onChange",
+    defaultValues: {
+      eventCode: CapConnLog.PeerLog.Event.Code.EVENT_CODE_READ,
+      messageType: CapConnLog.PeerLog.Event.MessageType.MESSAGE_TYPE_DATA,
+    },
+  });
+  const { eventCode, messageType } = watch();
+
+  const [plots, xBounds, yBounds] = React.useMemo(() => {
+    const plots = data.log.peerLogs
+      .map(({ label, events }, i) => {
+        const times: bigint[] = [];
+        const values: bigint[] = [];
+        let lastTS = BigInt(0);
+        events.forEach((e) => {
+          if (e.code == eventCode) {
+            for (let i = 0; i < e.messageTypes.length; i++) {
+              if (e.messageTypes[i] == messageType) {
+                const ts = e.timestamp / (millisecond * BigInt(50));
+                if (ts === lastTS) {
+                  values[values.length - 1] += baseLength(e.messageAddresses[i]);
+                  // values[values.length - 1]++;
+                } else {
+                  times.push(ts);
+                  // const v = values[values.length - 1] || BigInt(0);
+                  values.push(baseLength(e.messageAddresses[i]) / BigInt(2));
+                  // values.push(BigInt(1));
+                  lastTS = ts;
+                }
               }
             }
           }
-        }
-      });
+        });
 
-      return {
-        label,
-        times,
-        values,
-        xBounds: bounds(times),
-      };
-    })
-    .sort((a, b) => a.label.localeCompare(b.label));
+        return {
+          label,
+          times,
+          values,
+          xBounds: bounds(times),
+          yBounds: bounds(values),
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label));
 
-  const xBounds = plots.reduce<bigint[]>((b, { xBounds }) => [...b, ...xBounds], []);
-  const xScale = scale(bounds(xBounds.filter((v) => v !== BigInt(0))), [0, 3000]);
+    const xBounds = plots.reduce<bigint[]>((b, { xBounds }) => [...b, ...xBounds], []);
+    const yBounds = plots.reduce<bigint[]>((b, { yBounds }) => [...b, ...yBounds], []);
+
+    return [plots, xBounds, yBounds];
+  }, [data, eventCode, messageType]);
+
+  const xScale = React.useMemo(() => {
+    return scale(bounds(xBounds.filter((v) => v !== BigInt(0))), [
+      sparklineMargin,
+      sparklineWidth - sparklineMargin,
+    ]);
+  }, [xBounds, sparklineWidth]);
+
+  const yScale = React.useMemo(() => {
+    return scale(bounds(yBounds), [sparklineHeight - sparklineMargin, sparklineMargin]);
+  }, [yBounds, sparklineHeight]);
 
   return (
-    <>
-      {plots.map(({ label, times, values }, i) => (
-        <div key={i}>
-          <div>{label}</div>
-          <Sparkline height={50} width={3000} x={times} y={values} xScale={xScale} />
-        </div>
-      ))}
-    </>
+    <div className="network_timeline">
+      <form className="network_timeline__controls">
+        <select {...register("eventCode")}>
+          <option value={CapConnLog.PeerLog.Event.Code.EVENT_CODE_READ}>READ</option>
+          <option value={CapConnLog.PeerLog.Event.Code.EVENT_CODE_FLUSH}>WRITE</option>
+        </select>
+        <select {...register("messageType")}>
+          {Object.entries(CapConnLog.PeerLog.Event.MessageType)
+            .filter(([, id]) => typeof id === "number")
+            .map(([label, id]) => (
+              <option key={id} value={id}>
+                {label}
+              </option>
+            ))}
+        </select>
+      </form>
+      <div className="network_timeline__list">
+        {plots.map(({ label, times, values }, i) => (
+          <div key={i}>
+            <div>{label}</div>
+            <Sparkline
+              height={sparklineHeight}
+              width={sparklineWidth}
+              x={times}
+              y={values}
+              xScale={xScale}
+              yScale={yScale}
+              margin={sparklineMargin}
+            />
+          </div>
+        ))}
+      </div>
+    </div>
   );
 };
 
 const Home: React.FC = () => {
+  const { width: windowWidth } = useWindowSize();
+
   const client = useClient();
   const [data, setData] = React.useState<CapConnLoadLogResponse>();
   const handleFileSelect = async (name: string) => {
@@ -178,13 +255,13 @@ const Home: React.FC = () => {
   };
 
   React.useEffect(() => {
-    void handleFileSelect("log-1612821803.bin");
+    void handleFileSelect("log-1618716710.bin");
   }, []);
 
   return (
     <div>
       <Nav />
-      {data && <Timeline data={data} />}
+      {data && <Timeline data={data} sparklineWidth={windowWidth - 100} />}
       <Files onSelect={handleFileSelect} />
     </div>
   );

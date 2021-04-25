@@ -3,6 +3,7 @@ import filterObj from "filter-obj";
 import Prism from "prismjs";
 import React, { KeyboardEvent, useCallback, useMemo, useState } from "react";
 import {
+  Descendant,
   Editor,
   Element,
   Node,
@@ -13,6 +14,7 @@ import {
   Transforms,
   createEditor,
 } from "slate";
+import { withHistory } from "slate-history";
 import { Editable, RenderLeafProps, Slate, withReact } from "slate-react";
 import urlRegex from "url-regex-safe";
 
@@ -45,6 +47,13 @@ const commands = [
   "unhideemote",
 ];
 
+const initialValue: Descendant[] = [
+  {
+    type: "paragraph",
+    children: [{ text: "" }],
+  },
+];
+
 interface ComposerProps {
   onMessage: (message: string) => void;
 }
@@ -55,13 +64,8 @@ const Composer: React.FC<ComposerProps> = ({ onMessage }) => {
   const [lastSearch, setLastSearch] = useState<SearchState | null>(null);
   const search = lastSearch || currentSearch;
 
-  const editor = useMemo(() => withReact(withNoLineBreaks(createEditor())), []);
-  const [value, setValue] = useState([
-    {
-      type: "paragraph",
-      children: [{ text: "" }],
-    },
-  ] as Node[]);
+  const editor = useMemo(() => withReact(withNoLineBreaks(withHistory(createEditor()))), []);
+  const [value, setValue] = useState<Descendant[]>(initialValue);
 
   const emoteNames = useMemo(() => test.emotes.map(({ name }) => name), [test.emotes]);
   const nicks = useMemo(() => users.map(({ nick }) => nick), [users]);
@@ -490,7 +494,7 @@ const withNoLineBreaks = (editor: Editor) => {
   editor.normalizeNode = (entry) => {
     const [node] = entry;
 
-    if (Editor.isEditor(node)) {
+    if (Editor.isEditor(node) && node.children.length > 1) {
       Transforms.mergeNodes(editor, {
         match: (node) => Element.isElement(node) && node.type === "paragraph",
       });

@@ -2,6 +2,7 @@ body {
   background: #eee;
   margin: 0;
   padding: 0;
+  font-family: sans-serif;
 }
 
 .nav {
@@ -25,5 +26,20 @@ body {
     display: block;
     margin: 1px;
     padding: 0.5em;
+  }
+}
+
+.network_timeline {
+  &__controls {
+    background: #bbb;
+    padding: 5px;
+
+    select {
+      margin-right: 5px;
+    }
+  }
+
+  &__list {
+    padding: 5px;
   }
 }

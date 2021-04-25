@@ -189,6 +189,7 @@ type SignAllWriterOptions struct {
 // NewSignAllWriter ...
 func NewSignAllWriter(o *SignAllWriterOptions) *SignAllWriter {
 	sw := &signAllWriter{
+		epochNanos:      time.Duration(iotime.Load().UnixNano()),
 		chunkSize:       o.ChunkSize,
 		swarmVerifier:   o.Verifier,
 		signatureSigner: o.Signer,
@@ -215,6 +216,7 @@ func (w *SignAllWriter) Flush() error {
 }
 
 type signAllWriter struct {
+	epochNanos      time.Duration
 	b               binmap.Bin
 	chunkSize       int
 	swarmVerifier   *SignAllSwarmVerifier
@@ -227,7 +229,7 @@ func (w *signAllWriter) Write(p []byte) (int, error) {
 		p = p[:w.chunkSize]
 	}
 
-	ts := iotime.Load()
+	ts := iotime.Load().Add(-w.epochNanos)
 	sig := w.signatureSigner.Sign(ts, p)
 	w.swarmVerifier.storeSignature(w.b, ts, sig)
 

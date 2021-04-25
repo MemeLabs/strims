@@ -8,20 +8,20 @@ import (
 
 // RegisterTransferPeerService ...
 func RegisterTransferPeerService(host rpc.ServiceRegistry, service TransferPeerService) {
-	host.RegisterMethod("strims.transfer.v1.TransferPeer.AnnounceSwarm", service.AnnounceSwarm)
-	host.RegisterMethod("strims.transfer.v1.TransferPeer.CloseSwarm", service.CloseSwarm)
+	host.RegisterMethod("strims.transfer.v1.TransferPeer.Announce", service.Announce)
+	host.RegisterMethod("strims.transfer.v1.TransferPeer.Close", service.Close)
 }
 
 // TransferPeerService ...
 type TransferPeerService interface {
-	AnnounceSwarm(
+	Announce(
 		ctx context.Context,
-		req *TransferPeerAnnounceSwarmRequest,
-	) (*TransferPeerAnnounceSwarmResponse, error)
-	CloseSwarm(
+		req *TransferPeerAnnounceRequest,
+	) (*TransferPeerAnnounceResponse, error)
+	Close(
 		ctx context.Context,
-		req *TransferPeerCloseSwarmRequest,
-	) (*TransferPeerCloseSwarmResponse, error)
+		req *TransferPeerCloseRequest,
+	) (*TransferPeerCloseResponse, error)
 }
 
 // TransferPeerClient ...
@@ -34,20 +34,20 @@ func NewTransferPeerClient(client rpc.Caller) *TransferPeerClient {
 	return &TransferPeerClient{client}
 }
 
-// AnnounceSwarm ...
-func (c *TransferPeerClient) AnnounceSwarm(
+// Announce ...
+func (c *TransferPeerClient) Announce(
 	ctx context.Context,
-	req *TransferPeerAnnounceSwarmRequest,
-	res *TransferPeerAnnounceSwarmResponse,
+	req *TransferPeerAnnounceRequest,
+	res *TransferPeerAnnounceResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.transfer.v1.TransferPeer.AnnounceSwarm", req, res)
+	return c.client.CallUnary(ctx, "strims.transfer.v1.TransferPeer.Announce", req, res)
 }
 
-// CloseSwarm ...
-func (c *TransferPeerClient) CloseSwarm(
+// Close ...
+func (c *TransferPeerClient) Close(
 	ctx context.Context,
-	req *TransferPeerCloseSwarmRequest,
-	res *TransferPeerCloseSwarmResponse,
+	req *TransferPeerCloseRequest,
+	res *TransferPeerCloseResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.transfer.v1.TransferPeer.CloseSwarm", req, res)
+	return c.client.CallUnary(ctx, "strims.transfer.v1.TransferPeer.Close", req, res)
 }

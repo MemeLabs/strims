@@ -22,7 +22,13 @@ import (
 )
 
 // NewControl ...
-func NewControl(logger *zap.Logger, broker network.Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *profilev1.Profile) control.AppControl {
+func NewControl(
+	logger *zap.Logger,
+	broker network.Broker,
+	vpn *vpn.Host,
+	store *dao.ProfileStore,
+	profile *profilev1.Profile,
+) control.AppControl {
 	observers := &event.Observers{}
 
 	var (

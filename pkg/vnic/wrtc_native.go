@@ -227,10 +227,3 @@ type dcLink struct {
 func (l dcLink) MTU() int {
 	return 16 * 1024
 }
-
-func newBool(v bool) *bool {
-	return &v
-}
-func newUint16(v uint16) *uint16 {
-	return &v
-}

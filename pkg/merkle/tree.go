@@ -179,7 +179,7 @@ func (t *Tree) Fill(b binmap.Bin, d []byte) (bool, error) {
 
 		if ok, verified := t.setOrVerify(l + binmap.Bin(i*2)); !ok {
 			return false, ErrHashMismatch
-		} else if verified && b.Layer() == 0 {
+		} else if verified && b.Base() {
 			return true, nil
 		}
 	}

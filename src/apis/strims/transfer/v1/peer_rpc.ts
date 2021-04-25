@@ -2,28 +2,28 @@ import { RPCHost } from "@memelabs/protobuf/lib/rpc/host";
 import { registerType } from "@memelabs/protobuf/lib/rpc/registry";
 
 import {
-  ITransferPeerAnnounceSwarmRequest,
-  TransferPeerAnnounceSwarmRequest,
-  TransferPeerAnnounceSwarmResponse,
-  ITransferPeerCloseSwarmRequest,
-  TransferPeerCloseSwarmRequest,
-  TransferPeerCloseSwarmResponse,
+  ITransferPeerAnnounceRequest,
+  TransferPeerAnnounceRequest,
+  TransferPeerAnnounceResponse,
+  ITransferPeerCloseRequest,
+  TransferPeerCloseRequest,
+  TransferPeerCloseResponse,
 } from "./peer";
 
-registerType("strims.transfer.v1.TransferPeerAnnounceSwarmRequest", TransferPeerAnnounceSwarmRequest);
-registerType("strims.transfer.v1.TransferPeerAnnounceSwarmResponse", TransferPeerAnnounceSwarmResponse);
-registerType("strims.transfer.v1.TransferPeerCloseSwarmRequest", TransferPeerCloseSwarmRequest);
-registerType("strims.transfer.v1.TransferPeerCloseSwarmResponse", TransferPeerCloseSwarmResponse);
+registerType("strims.transfer.v1.TransferPeerAnnounceRequest", TransferPeerAnnounceRequest);
+registerType("strims.transfer.v1.TransferPeerAnnounceResponse", TransferPeerAnnounceResponse);
+registerType("strims.transfer.v1.TransferPeerCloseRequest", TransferPeerCloseRequest);
+registerType("strims.transfer.v1.TransferPeerCloseResponse", TransferPeerCloseResponse);
 
 export class TransferPeerClient {
   constructor(private readonly host: RPCHost) {}
 
-  public announceSwarm(arg: ITransferPeerAnnounceSwarmRequest = new TransferPeerAnnounceSwarmRequest()): Promise<TransferPeerAnnounceSwarmResponse> {
-    return this.host.expectOne(this.host.call("strims.transfer.v1.TransferPeer.AnnounceSwarm", new TransferPeerAnnounceSwarmRequest(arg)));
+  public announce(arg: ITransferPeerAnnounceRequest = new TransferPeerAnnounceRequest()): Promise<TransferPeerAnnounceResponse> {
+    return this.host.expectOne(this.host.call("strims.transfer.v1.TransferPeer.Announce", new TransferPeerAnnounceRequest(arg)));
   }
 
-  public closeSwarm(arg: ITransferPeerCloseSwarmRequest = new TransferPeerCloseSwarmRequest()): Promise<TransferPeerCloseSwarmResponse> {
-    return this.host.expectOne(this.host.call("strims.transfer.v1.TransferPeer.CloseSwarm", new TransferPeerCloseSwarmRequest(arg)));
+  public close(arg: ITransferPeerCloseRequest = new TransferPeerCloseRequest()): Promise<TransferPeerCloseResponse> {
+    return this.host.expectOne(this.host.call("strims.transfer.v1.TransferPeer.Close", new TransferPeerCloseRequest(arg)));
   }
 }
 

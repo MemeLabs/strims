@@ -6,12 +6,15 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/byterope"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 )
 
 // errors ...
 var (
-	ErrBufferUnderrun = errors.New("buffer underrun")
-	ErrClosed         = errors.New("cannot read from closed buffer")
+	ErrBufferUnderrun     = errors.New("buffer underrun")
+	ErrBinDataNotSet      = errors.New("bin data not set")
+	ErrClosed             = errors.New("cannot read from closed buffer")
+	ErrReadOffsetNotFound = errors.New("viable read offset not found")
 )
 
 // NewBuffer ...
@@ -66,12 +69,17 @@ func (s *Buffer) Consume(c Chunk) bool {
 
 // Close ...
 func (s *Buffer) Close() {
+	s.swapReadable(ErrClosed)
+}
+
+func (s *Buffer) swapReadable(err error) error {
+	var prev error
 	for {
 		select {
-		case s.readable <- ErrClosed:
-			return
+		case s.readable <- err:
+			return prev
 		default:
-			<-s.readable
+			prev = <-s.readable
 		}
 	}
 }
@@ -94,8 +102,10 @@ func (s *Buffer) set(b binmap.Bin, d []byte) {
 	s.bins.Set(b)
 	if !b.Contains(s.next) {
 		if s.next < s.tail() {
-			// TODO: move next past the discontinuity
-			s.readable <- ErrBufferUnderrun
+			select {
+			case s.readable <- ErrBufferUnderrun:
+			default:
+			}
 		}
 		return
 	}
@@ -125,6 +135,25 @@ func (s *Buffer) ReadBin(b binmap.Bin, p []byte) bool {
 	return false
 }
 
+type DataWriter interface {
+	WriteData(m codec.Data) (int, error)
+}
+
+// WriteData ...
+func (s *Buffer) WriteData(b binmap.Bin, w DataWriter) (int, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if s.contains(b) {
+		i := s.index(b)
+		return w.WriteData(codec.Data{
+			Address: codec.Address(b),
+			Data:    s.buf[i : i+int(b.BaseLength()*s.chunkSize)],
+		})
+	}
+	return 0, ErrBinDataNotSet
+}
+
 // SetOffset ...
 func (s *Buffer) SetOffset(b binmap.Bin) {
 	s.lock.Lock()
@@ -137,6 +166,36 @@ func (s *Buffer) SetOffset(b binmap.Bin) {
 	s.bins.FillBefore(b)
 
 	s.readyOnce.Do(func() { close(s.ready) })
+}
+
+// Recover ...
+func (s *Buffer) Recover() (uint64, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	next := s.bins.FindFilledAfter(s.tail())
+	if next.IsNone() {
+		return 0, ErrReadOffsetNotFound
+	}
+
+	off := s.off
+	s.off = binByte(next, s.chunkSize)
+
+	s.prev = next
+	s.bins.FillBefore(next)
+
+	next = s.bins.FindEmptyAfter(next)
+	if next.IsNone() {
+		next = s.bins.RootBin().BaseRight() + 2
+	}
+	s.next = next
+
+	err := s.swapReadable(nil)
+	if err != nil && err != ErrBufferUnderrun {
+		return 0, err
+	}
+
+	return s.off - off, nil
 }
 
 // FilledAt ...

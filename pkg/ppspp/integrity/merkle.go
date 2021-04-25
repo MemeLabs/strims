@@ -129,25 +129,25 @@ func (v *MerkleSwarmVerifier) WriteIntegrity(b binmap.Bin, m *binmap.Map, w Writ
 
 	var n int
 
-	if m.EmptyAt(s.Tree.RootBin()) {
-		nn, err := w.WriteSignedIntegrity(codec.SignedIntegrity{
-			Address:   codec.Address(s.Tree.RootBin()),
-			Timestamp: codec.Timestamp{Time: s.Timestamp},
-			Signature: s.Signature,
-		})
-		n += nn
-		if err != nil {
-			return n, err
-		}
+	// if m.EmptyAt(s.Tree.RootBin()) {
+	nn, err := w.WriteSignedIntegrity(codec.SignedIntegrity{
+		Address:   codec.Address(s.Tree.RootBin()),
+		Timestamp: codec.Timestamp{Time: s.Timestamp},
+		Signature: s.Signature,
+	})
+	n += nn
+	if err != nil {
+		return n, err
 	}
+	// }
 
 	for b != s.Tree.RootBin() {
 		p := b.Parent()
-		if !m.EmptyAt(p) {
-			return n, nil
-		}
-
 		b = b.Sibling()
+		// if !m.EmptyAt(p) || !m.EmptyAt(b) {
+		// 	return n, nil
+		// }
+
 		nn, err := w.WriteIntegrity(codec.Integrity{
 			Address: codec.Address(b),
 			Hash:    s.Tree.Get(b),
@@ -311,6 +311,7 @@ type MerkleWriterOptions struct {
 // NewMerkleWriter ...
 func NewMerkleWriter(o *MerkleWriterOptions) *MerkleWriter {
 	mw := &merkleWriter{
+		epochNanos:      time.Duration(iotime.Load().UnixNano()),
 		munroLayer:      uint64(bits.TrailingZeros64(uint64(o.ChunksPerSignature))),
 		segmentSize:     o.ChunksPerSignature * o.ChunkSize,
 		swarmVerifier:   o.Verifier,
@@ -338,6 +339,7 @@ func (w *MerkleWriter) Flush() error {
 }
 
 type merkleWriter struct {
+	epochNanos      time.Duration
 	munroLayer      uint64
 	n               uint64
 	segmentSize     int
@@ -355,7 +357,7 @@ func (w *merkleWriter) Write(p []byte) (int, error) {
 	b := binmap.NewBin(w.munroLayer, w.n)
 	w.n++
 
-	ts := iotime.Load()
+	ts := iotime.Load().Add(-w.epochNanos)
 	tree := w.swarmVerifier.tree(b)
 	tree.Fill(b, p)
 	sig := w.signatureSigner.Sign(ts, tree.Get(b))
