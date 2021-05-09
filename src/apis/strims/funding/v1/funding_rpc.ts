@@ -13,7 +13,7 @@ registerType("strims.funding.v1.FundingTestResponse", FundingTestResponse);
 export class FundingClient {
   constructor(private readonly host: RPCHost) {}
 
-  public test(arg: IFundingTestRequest = new FundingTestRequest()): Promise<FundingTestResponse> {
+  public test(arg?: IFundingTestRequest): Promise<FundingTestResponse> {
     return this.host.expectOne(this.host.call("strims.funding.v1.Funding.Test", new FundingTestRequest(arg)));
   }
 }

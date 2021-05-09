@@ -48,23 +48,23 @@ registerType("strims.video.v1.VideoIngressShareDeleteChannelResponse", VideoIngr
 export class VideoIngressClient {
   constructor(private readonly host: RPCHost) {}
 
-  public isSupported(arg: IVideoIngressIsSupportedRequest = new VideoIngressIsSupportedRequest()): Promise<VideoIngressIsSupportedResponse> {
+  public isSupported(arg?: IVideoIngressIsSupportedRequest): Promise<VideoIngressIsSupportedResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.VideoIngress.IsSupported", new VideoIngressIsSupportedRequest(arg)));
   }
 
-  public getConfig(arg: IVideoIngressGetConfigRequest = new VideoIngressGetConfigRequest()): Promise<VideoIngressGetConfigResponse> {
+  public getConfig(arg?: IVideoIngressGetConfigRequest): Promise<VideoIngressGetConfigResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.VideoIngress.GetConfig", new VideoIngressGetConfigRequest(arg)));
   }
 
-  public setConfig(arg: IVideoIngressSetConfigRequest = new VideoIngressSetConfigRequest()): Promise<VideoIngressSetConfigResponse> {
+  public setConfig(arg?: IVideoIngressSetConfigRequest): Promise<VideoIngressSetConfigResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.VideoIngress.SetConfig", new VideoIngressSetConfigRequest(arg)));
   }
 
-  public listStreams(arg: IVideoIngressListStreamsRequest = new VideoIngressListStreamsRequest()): Promise<VideoIngressListStreamsResponse> {
+  public listStreams(arg?: IVideoIngressListStreamsRequest): Promise<VideoIngressListStreamsResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.VideoIngress.ListStreams", new VideoIngressListStreamsRequest(arg)));
   }
 
-  public getChannelURL(arg: IVideoIngressGetChannelURLRequest = new VideoIngressGetChannelURLRequest()): Promise<VideoIngressGetChannelURLResponse> {
+  public getChannelURL(arg?: IVideoIngressGetChannelURLRequest): Promise<VideoIngressGetChannelURLResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.VideoIngress.GetChannelURL", new VideoIngressGetChannelURLRequest(arg)));
   }
 }
@@ -72,15 +72,15 @@ export class VideoIngressClient {
 export class VideoIngressShareClient {
   constructor(private readonly host: RPCHost) {}
 
-  public createChannel(arg: IVideoIngressShareCreateChannelRequest = new VideoIngressShareCreateChannelRequest()): Promise<VideoIngressShareCreateChannelResponse> {
+  public createChannel(arg?: IVideoIngressShareCreateChannelRequest): Promise<VideoIngressShareCreateChannelResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.VideoIngressShare.CreateChannel", new VideoIngressShareCreateChannelRequest(arg)));
   }
 
-  public updateChannel(arg: IVideoIngressShareUpdateChannelRequest = new VideoIngressShareUpdateChannelRequest()): Promise<VideoIngressShareUpdateChannelResponse> {
+  public updateChannel(arg?: IVideoIngressShareUpdateChannelRequest): Promise<VideoIngressShareUpdateChannelResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.VideoIngressShare.UpdateChannel", new VideoIngressShareUpdateChannelRequest(arg)));
   }
 
-  public deleteChannel(arg: IVideoIngressShareDeleteChannelRequest = new VideoIngressShareDeleteChannelRequest()): Promise<VideoIngressShareDeleteChannelResponse> {
+  public deleteChannel(arg?: IVideoIngressShareDeleteChannelRequest): Promise<VideoIngressShareDeleteChannelResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.VideoIngressShare.DeleteChannel", new VideoIngressShareDeleteChannelRequest(arg)));
   }
 }

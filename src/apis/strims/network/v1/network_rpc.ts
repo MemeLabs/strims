@@ -43,31 +43,31 @@ registerType("strims.network.v1.CreateNetworkFromInvitationResponse", CreateNetw
 export class NetworkServiceClient {
   constructor(private readonly host: RPCHost) {}
 
-  public create(arg: ICreateNetworkRequest = new CreateNetworkRequest()): Promise<CreateNetworkResponse> {
+  public create(arg?: ICreateNetworkRequest): Promise<CreateNetworkResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.Create", new CreateNetworkRequest(arg)));
   }
 
-  public update(arg: IUpdateNetworkRequest = new UpdateNetworkRequest()): Promise<UpdateNetworkResponse> {
+  public update(arg?: IUpdateNetworkRequest): Promise<UpdateNetworkResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.Update", new UpdateNetworkRequest(arg)));
   }
 
-  public delete(arg: IDeleteNetworkRequest = new DeleteNetworkRequest()): Promise<DeleteNetworkResponse> {
+  public delete(arg?: IDeleteNetworkRequest): Promise<DeleteNetworkResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.Delete", new DeleteNetworkRequest(arg)));
   }
 
-  public get(arg: IGetNetworkRequest = new GetNetworkRequest()): Promise<GetNetworkResponse> {
+  public get(arg?: IGetNetworkRequest): Promise<GetNetworkResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.Get", new GetNetworkRequest(arg)));
   }
 
-  public list(arg: IListNetworksRequest = new ListNetworksRequest()): Promise<ListNetworksResponse> {
+  public list(arg?: IListNetworksRequest): Promise<ListNetworksResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.List", new ListNetworksRequest(arg)));
   }
 
-  public createInvitation(arg: ICreateNetworkInvitationRequest = new CreateNetworkInvitationRequest()): Promise<CreateNetworkInvitationResponse> {
+  public createInvitation(arg?: ICreateNetworkInvitationRequest): Promise<CreateNetworkInvitationResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.CreateInvitation", new CreateNetworkInvitationRequest(arg)));
   }
 
-  public createFromInvitation(arg: ICreateNetworkFromInvitationRequest = new CreateNetworkFromInvitationRequest()): Promise<CreateNetworkFromInvitationResponse> {
+  public createFromInvitation(arg?: ICreateNetworkFromInvitationRequest): Promise<CreateNetworkFromInvitationResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.CreateFromInvitation", new CreateNetworkFromInvitationRequest(arg)));
   }
 }

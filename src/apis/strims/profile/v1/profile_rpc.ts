@@ -43,31 +43,31 @@ registerType("strims.profile.v1.LoadSessionResponse", LoadSessionResponse);
 export class ProfileServiceClient {
   constructor(private readonly host: RPCHost) {}
 
-  public create(arg: ICreateProfileRequest = new CreateProfileRequest()): Promise<CreateProfileResponse> {
+  public create(arg?: ICreateProfileRequest): Promise<CreateProfileResponse> {
     return this.host.expectOne(this.host.call("strims.profile.v1.ProfileService.Create", new CreateProfileRequest(arg)));
   }
 
-  public load(arg: ILoadProfileRequest = new LoadProfileRequest()): Promise<LoadProfileResponse> {
+  public load(arg?: ILoadProfileRequest): Promise<LoadProfileResponse> {
     return this.host.expectOne(this.host.call("strims.profile.v1.ProfileService.Load", new LoadProfileRequest(arg)));
   }
 
-  public get(arg: IGetProfileRequest = new GetProfileRequest()): Promise<GetProfileResponse> {
+  public get(arg?: IGetProfileRequest): Promise<GetProfileResponse> {
     return this.host.expectOne(this.host.call("strims.profile.v1.ProfileService.Get", new GetProfileRequest(arg)));
   }
 
-  public update(arg: IUpdateProfileRequest = new UpdateProfileRequest()): Promise<UpdateProfileResponse> {
+  public update(arg?: IUpdateProfileRequest): Promise<UpdateProfileResponse> {
     return this.host.expectOne(this.host.call("strims.profile.v1.ProfileService.Update", new UpdateProfileRequest(arg)));
   }
 
-  public delete(arg: IDeleteProfileRequest = new DeleteProfileRequest()): Promise<DeleteProfileResponse> {
+  public delete(arg?: IDeleteProfileRequest): Promise<DeleteProfileResponse> {
     return this.host.expectOne(this.host.call("strims.profile.v1.ProfileService.Delete", new DeleteProfileRequest(arg)));
   }
 
-  public list(arg: IListProfilesRequest = new ListProfilesRequest()): Promise<ListProfilesResponse> {
+  public list(arg?: IListProfilesRequest): Promise<ListProfilesResponse> {
     return this.host.expectOne(this.host.call("strims.profile.v1.ProfileService.List", new ListProfilesRequest(arg)));
   }
 
-  public loadSession(arg: ILoadSessionRequest = new LoadSessionRequest()): Promise<LoadSessionResponse> {
+  public loadSession(arg?: ILoadSessionRequest): Promise<LoadSessionResponse> {
     return this.host.expectOne(this.host.call("strims.profile.v1.ProfileService.LoadSession", new LoadSessionRequest(arg)));
   }
 }

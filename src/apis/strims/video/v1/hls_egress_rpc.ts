@@ -23,15 +23,15 @@ registerType("strims.video.v1.HLSEgressCloseStreamResponse", HLSEgressCloseStrea
 export class HLSEgressClient {
   constructor(private readonly host: RPCHost) {}
 
-  public isSupported(arg: IHLSEgressIsSupportedRequest = new HLSEgressIsSupportedRequest()): Promise<HLSEgressIsSupportedResponse> {
+  public isSupported(arg?: IHLSEgressIsSupportedRequest): Promise<HLSEgressIsSupportedResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.IsSupported", new HLSEgressIsSupportedRequest(arg)));
   }
 
-  public openStream(arg: IHLSEgressOpenStreamRequest = new HLSEgressOpenStreamRequest()): Promise<HLSEgressOpenStreamResponse> {
+  public openStream(arg?: IHLSEgressOpenStreamRequest): Promise<HLSEgressOpenStreamResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.OpenStream", new HLSEgressOpenStreamRequest(arg)));
   }
 
-  public closeStream(arg: IHLSEgressCloseStreamRequest = new HLSEgressCloseStreamRequest()): Promise<HLSEgressCloseStreamResponse> {
+  public closeStream(arg?: IHLSEgressCloseStreamRequest): Promise<HLSEgressCloseStreamResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.HLSEgress.CloseStream", new HLSEgressCloseStreamRequest(arg)));
   }
 }

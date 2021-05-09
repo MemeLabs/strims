@@ -13,7 +13,7 @@ registerType("strims.network.v1.ca.CARenewResponse", CARenewResponse);
 export class CAClient {
   constructor(private readonly host: RPCHost) {}
 
-  public renew(arg: ICARenewRequest = new CARenewRequest()): Promise<CARenewResponse> {
+  public renew(arg?: ICARenewRequest): Promise<CARenewResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.ca.CA.Renew", new CARenewRequest(arg)));
   }
 }

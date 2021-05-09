@@ -18,11 +18,11 @@ registerType("strims.transfer.v1.TransferPeerCloseResponse", TransferPeerCloseRe
 export class TransferPeerClient {
   constructor(private readonly host: RPCHost) {}
 
-  public announce(arg: ITransferPeerAnnounceRequest = new TransferPeerAnnounceRequest()): Promise<TransferPeerAnnounceResponse> {
+  public announce(arg?: ITransferPeerAnnounceRequest): Promise<TransferPeerAnnounceResponse> {
     return this.host.expectOne(this.host.call("strims.transfer.v1.TransferPeer.Announce", new TransferPeerAnnounceRequest(arg)));
   }
 
-  public close(arg: ITransferPeerCloseRequest = new TransferPeerCloseRequest()): Promise<TransferPeerCloseResponse> {
+  public close(arg?: ITransferPeerCloseRequest): Promise<TransferPeerCloseResponse> {
     return this.host.expectOne(this.host.call("strims.transfer.v1.TransferPeer.Close", new TransferPeerCloseRequest(arg)));
   }
 }

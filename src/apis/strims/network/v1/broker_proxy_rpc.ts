@@ -34,23 +34,23 @@ registerType("strims.network.v1.BrokerProxyCloseResponse", BrokerProxyCloseRespo
 export class BrokerProxyClient {
   constructor(private readonly host: RPCHost) {}
 
-  public open(arg: IBrokerProxyRequest = new BrokerProxyRequest()): GenericReadable<BrokerProxyEvent> {
+  public open(arg?: IBrokerProxyRequest): GenericReadable<BrokerProxyEvent> {
     return this.host.expectMany(this.host.call("strims.network.v1.BrokerProxy.Open", new BrokerProxyRequest(arg)));
   }
 
-  public sendKeys(arg: IBrokerProxySendKeysRequest = new BrokerProxySendKeysRequest()): Promise<BrokerProxySendKeysResponse> {
+  public sendKeys(arg?: IBrokerProxySendKeysRequest): Promise<BrokerProxySendKeysResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.BrokerProxy.SendKeys", new BrokerProxySendKeysRequest(arg)));
   }
 
-  public receiveKeys(arg: IBrokerProxyReceiveKeysRequest = new BrokerProxyReceiveKeysRequest()): Promise<BrokerProxyReceiveKeysResponse> {
+  public receiveKeys(arg?: IBrokerProxyReceiveKeysRequest): Promise<BrokerProxyReceiveKeysResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.BrokerProxy.ReceiveKeys", new BrokerProxyReceiveKeysRequest(arg)));
   }
 
-  public data(arg: IBrokerProxyDataRequest = new BrokerProxyDataRequest()): Promise<BrokerProxyDataResponse> {
+  public data(arg?: IBrokerProxyDataRequest): Promise<BrokerProxyDataResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.BrokerProxy.Data", new BrokerProxyDataRequest(arg)));
   }
 
-  public close(arg: IBrokerProxyCloseRequest = new BrokerProxyCloseRequest()): Promise<BrokerProxyCloseResponse> {
+  public close(arg?: IBrokerProxyCloseRequest): Promise<BrokerProxyCloseResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.BrokerProxy.Close", new BrokerProxyCloseRequest(arg)));
   }
 }

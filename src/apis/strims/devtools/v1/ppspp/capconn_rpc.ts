@@ -19,11 +19,11 @@ registerType("strims.devtools.v1.ppspp.CapConnLoadLogResponse", CapConnLoadLogRe
 export class CapConnClient {
   constructor(private readonly host: RPCHost) {}
 
-  public watchLogs(arg: ICapConnWatchLogsRequest = new CapConnWatchLogsRequest()): GenericReadable<CapConnWatchLogsResponse> {
+  public watchLogs(arg?: ICapConnWatchLogsRequest): GenericReadable<CapConnWatchLogsResponse> {
     return this.host.expectMany(this.host.call("strims.devtools.v1.ppspp.CapConn.WatchLogs", new CapConnWatchLogsRequest(arg)));
   }
 
-  public loadLog(arg: ICapConnLoadLogRequest = new CapConnLoadLogRequest()): Promise<CapConnLoadLogResponse> {
+  public loadLog(arg?: ICapConnLoadLogRequest): Promise<CapConnLoadLogResponse> {
     return this.host.expectOne(this.host.call("strims.devtools.v1.ppspp.CapConn.LoadLog", new CapConnLoadLogRequest(arg)));
   }
 }

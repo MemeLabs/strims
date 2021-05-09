@@ -21,7 +21,7 @@ interface PProfDownload {
 
 const HomePage: React.FC = () => {
   const [{ colorScheme }, { setColorScheme }] = useTheme();
-  const [{ profile }, { clearProfile }] = useProfile();
+  // const [{ profile }, { clearProfile }] = useProfile();
 
   const client = useClient();
 

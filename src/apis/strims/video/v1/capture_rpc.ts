@@ -28,19 +28,19 @@ registerType("strims.video.v1.CaptureCloseResponse", CaptureCloseResponse);
 export class CaptureClient {
   constructor(private readonly host: RPCHost) {}
 
-  public open(arg: ICaptureOpenRequest = new CaptureOpenRequest()): Promise<CaptureOpenResponse> {
+  public open(arg?: ICaptureOpenRequest): Promise<CaptureOpenResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.Capture.Open", new CaptureOpenRequest(arg)));
   }
 
-  public update(arg: ICaptureUpdateRequest = new CaptureUpdateRequest()): Promise<CaptureUpdateResponse> {
+  public update(arg?: ICaptureUpdateRequest): Promise<CaptureUpdateResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.Capture.Update", new CaptureUpdateRequest(arg)));
   }
 
-  public append(arg: ICaptureAppendRequest = new CaptureAppendRequest()): Promise<CaptureAppendResponse> {
+  public append(arg?: ICaptureAppendRequest): Promise<CaptureAppendResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.Capture.Append", new CaptureAppendRequest(arg)));
   }
 
-  public close(arg: ICaptureCloseRequest = new CaptureCloseRequest()): Promise<CaptureCloseResponse> {
+  public close(arg?: ICaptureCloseRequest): Promise<CaptureCloseResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.Capture.Close", new CaptureCloseRequest(arg)));
   }
 }

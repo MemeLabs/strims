@@ -24,7 +24,7 @@
     "build": "webpack --mode production"
   },
   "devDependencies": {
-    "@memelabs/protobuf": "^0.1.14",
+    "@memelabs/protobuf": "^0.1.16",
     "@types/dom-mediacapture-record": "^1.0.7",
     "@types/prismjs": "^1.16.5",
     "@types/qs": "^6.9.6",
@@ -35,6 +35,7 @@
     "@types/react-router-dom": "^5.1.7",
     "@types/react-select": "^4.0.15",
     "@types/react-virtualized": "^9.21.11",
+    "@types/upng-js": "^2.1.1",
     "@types/url-regex-safe": "^1.0.0",
     "@typescript-eslint/eslint-plugin": "^4.22.0",
     "@typescript-eslint/eslint-plugin-tslint": "^4.22.0",
@@ -109,6 +110,7 @@
     "tslint-eslint-rules": "^5.4.0",
     "typescript": "^4.2.4",
     "typescript-tslint-plugin": "^1.0.1",
+    "upng-js": "^2.1.0",
     "url-loader": "^4.1.1",
     "url-regex-safe": "^2.0.2",
     "use-events": "^1.4.2",

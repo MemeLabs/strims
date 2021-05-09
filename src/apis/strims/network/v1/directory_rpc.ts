@@ -44,23 +44,23 @@ registerType("strims.network.v1.DirectoryFrontendTestResponse", DirectoryFronten
 export class DirectoryClient {
   constructor(private readonly host: RPCHost) {}
 
-  public publish(arg: IDirectoryPublishRequest = new DirectoryPublishRequest()): Promise<DirectoryPublishResponse> {
+  public publish(arg?: IDirectoryPublishRequest): Promise<DirectoryPublishResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.Directory.Publish", new DirectoryPublishRequest(arg)));
   }
 
-  public unpublish(arg: IDirectoryUnpublishRequest = new DirectoryUnpublishRequest()): Promise<DirectoryUnpublishResponse> {
+  public unpublish(arg?: IDirectoryUnpublishRequest): Promise<DirectoryUnpublishResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.Directory.Unpublish", new DirectoryUnpublishRequest(arg)));
   }
 
-  public join(arg: IDirectoryJoinRequest = new DirectoryJoinRequest()): Promise<DirectoryJoinResponse> {
+  public join(arg?: IDirectoryJoinRequest): Promise<DirectoryJoinResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.Directory.Join", new DirectoryJoinRequest(arg)));
   }
 
-  public part(arg: IDirectoryPartRequest = new DirectoryPartRequest()): Promise<DirectoryPartResponse> {
+  public part(arg?: IDirectoryPartRequest): Promise<DirectoryPartResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.Directory.Part", new DirectoryPartRequest(arg)));
   }
 
-  public ping(arg: IDirectoryPingRequest = new DirectoryPingRequest()): Promise<DirectoryPingResponse> {
+  public ping(arg?: IDirectoryPingRequest): Promise<DirectoryPingResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.Directory.Ping", new DirectoryPingRequest(arg)));
   }
 }
@@ -68,11 +68,11 @@ export class DirectoryClient {
 export class DirectoryFrontendClient {
   constructor(private readonly host: RPCHost) {}
 
-  public open(arg: IDirectoryFrontendOpenRequest = new DirectoryFrontendOpenRequest()): GenericReadable<DirectoryFrontendOpenResponse> {
+  public open(arg?: IDirectoryFrontendOpenRequest): GenericReadable<DirectoryFrontendOpenResponse> {
     return this.host.expectMany(this.host.call("strims.network.v1.DirectoryFrontend.Open", new DirectoryFrontendOpenRequest(arg)));
   }
 
-  public test(arg: IDirectoryFrontendTestRequest = new DirectoryFrontendTestRequest()): Promise<DirectoryFrontendTestResponse> {
+  public test(arg?: IDirectoryFrontendTestRequest): Promise<DirectoryFrontendTestResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.DirectoryFrontend.Test", new DirectoryFrontendTestRequest(arg)));
   }
 }

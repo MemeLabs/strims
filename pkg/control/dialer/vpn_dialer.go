@@ -11,19 +11,14 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
+	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	rpcapi "github.com/MemeLabs/protobuf/pkg/apis/rpc"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
-	"github.com/golang/protobuf/proto"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
+	"google.golang.org/protobuf/proto"
 )
-
-var callBuffers = sync.Pool{
-	New: func() interface{} {
-		return proto.NewBuffer([]byte{})
-	},
-}
 
 // VPNDialer ...
 type VPNDialer struct {
@@ -155,23 +150,23 @@ func (t *VPNTransport) HandleMessage(msg *vpn.Message) error {
 	call := rpc.NewCallIn(ctx, req, parentCallAccessor, send)
 
 	t.callsIn.Insert(addr, call)
-	go func() {
-		t.dispatcher.Dispatch(call)
-		t.callsIn.Delete(addr, req.Id)
-	}()
+	t.dispatcher.Dispatch(call, func() { t.callsIn.Delete(addr, req.Id) })
 
 	return nil
 }
 
 func (t *VPNTransport) send(ctx context.Context, call *rpcapi.Call, addr *HostAddr) error {
-	b := callBuffers.Get().(*proto.Buffer)
-	defer callBuffers.Put(b)
+	cert := t.certificate()
 
-	b.Reset()
-	if err := b.Marshal(t.certificate()); err != nil {
+	opt := proto.MarshalOptions{}
+	b := pool.Get(opt.Size(cert))
+	defer pool.Put(b)
+
+	cb, err := opt.MarshalAppend((*b)[:0], cert)
+	if err != nil {
 		return err
 	}
-	call.Headers[vpnCertificateHeader] = b.Bytes()
+	call.Headers[vpnCertificateHeader] = cb
 
 	return t.node.Network.SendProto(addr.HostID, addr.Port, t.port, call)
 }

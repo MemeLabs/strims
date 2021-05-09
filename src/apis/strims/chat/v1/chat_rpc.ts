@@ -49,35 +49,35 @@ registerType("strims.chat.v1.CallChatClientResponse", CallChatClientResponse);
 export class ChatClient {
   constructor(private readonly host: RPCHost) {}
 
-  public createServer(arg: ICreateChatServerRequest = new CreateChatServerRequest()): Promise<CreateChatServerResponse> {
+  public createServer(arg?: ICreateChatServerRequest): Promise<CreateChatServerResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.Chat.CreateServer", new CreateChatServerRequest(arg)));
   }
 
-  public updateServer(arg: IUpdateChatServerRequest = new UpdateChatServerRequest()): Promise<UpdateChatServerResponse> {
+  public updateServer(arg?: IUpdateChatServerRequest): Promise<UpdateChatServerResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.Chat.UpdateServer", new UpdateChatServerRequest(arg)));
   }
 
-  public deleteServer(arg: IDeleteChatServerRequest = new DeleteChatServerRequest()): Promise<DeleteChatServerResponse> {
+  public deleteServer(arg?: IDeleteChatServerRequest): Promise<DeleteChatServerResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.Chat.DeleteServer", new DeleteChatServerRequest(arg)));
   }
 
-  public getServer(arg: IGetChatServerRequest = new GetChatServerRequest()): Promise<GetChatServerResponse> {
+  public getServer(arg?: IGetChatServerRequest): Promise<GetChatServerResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.Chat.GetServer", new GetChatServerRequest(arg)));
   }
 
-  public listServers(arg: IListChatServersRequest = new ListChatServersRequest()): Promise<ListChatServersResponse> {
+  public listServers(arg?: IListChatServersRequest): Promise<ListChatServersResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.Chat.ListServers", new ListChatServersRequest(arg)));
   }
 
-  public openServer(arg: IOpenChatServerRequest = new OpenChatServerRequest()): GenericReadable<ChatServerEvent> {
+  public openServer(arg?: IOpenChatServerRequest): GenericReadable<ChatServerEvent> {
     return this.host.expectMany(this.host.call("strims.chat.v1.Chat.OpenServer", new OpenChatServerRequest(arg)));
   }
 
-  public openClient(arg: IOpenChatClientRequest = new OpenChatClientRequest()): GenericReadable<ChatClientEvent> {
+  public openClient(arg?: IOpenChatClientRequest): GenericReadable<ChatClientEvent> {
     return this.host.expectMany(this.host.call("strims.chat.v1.Chat.OpenClient", new OpenChatClientRequest(arg)));
   }
 
-  public callClient(arg: ICallChatClientRequest = new CallChatClientRequest()): Promise<CallChatClientResponse> {
+  public callClient(arg?: ICallChatClientRequest): Promise<CallChatClientResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.Chat.CallClient", new CallChatClientRequest(arg)));
   }
 }

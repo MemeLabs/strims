@@ -111,7 +111,7 @@ func (m *Map) reserveCells(n int) {
 
 func (m *Map) extendRoot() {
 	c, mc := m.cell(rootRef)
-	if !mc.HasRef() && c.Symmetrical() {
+	if !mc.HasRef() && c.Symmetric() {
 		c.ResetRight()
 	} else {
 		r := m.allocCell()
@@ -138,7 +138,7 @@ func (m *Map) packCells() {
 	}
 
 	c, mc := m.cell(r)
-	if mc.HasRef() || !c.Symmetrical() {
+	if mc.HasRef() || !c.Symmetric() {
 		return
 	}
 
@@ -535,7 +535,7 @@ func (m *Map) Cover(target Bin) Bin {
 		if mc.LeftRef() || mc.RightRef() {
 			return None
 		}
-		if !c.Symmetrical() {
+		if !c.Symmetric() {
 			return None
 		}
 		if c.LeftBitmap().Empty() {

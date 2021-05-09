@@ -81,7 +81,7 @@ type dataCell struct {
 	*cell
 }
 
-func (c dataCell) Symmetrical() bool {
+func (c dataCell) Symmetric() bool {
 	return c.left == c.right
 }
 

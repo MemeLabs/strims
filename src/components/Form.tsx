@@ -86,7 +86,7 @@ export const TextInput = <T extends FieldValues>({
   const {
     field,
     fieldState: { error },
-  } = useController(controllerProps);
+  } = useController({ defaultValue: "", ...controllerProps });
 
   return (
     <InputLabel required={isRequired(controllerProps)} text={label} description={description}>
@@ -116,11 +116,11 @@ export const TextAreaInput = <T extends FieldValues>({
   placeholder,
   disabled,
   ...controllerProps
-}: TextInputProps & CompatibleUseControllerProps<T, string>): ReactElement => {
+}: TextAreaInputProps & CompatibleUseControllerProps<T, string>): ReactElement => {
   const {
     field,
     fieldState: { error },
-  } = useController(controllerProps);
+  } = useController({ defaultValue: "", ...controllerProps });
 
   return (
     <InputLabel required={isRequired(controllerProps)} text={label} description={description}>
@@ -150,7 +150,7 @@ export const ToggleInput = <T extends FieldValues>({
   const {
     field,
     fieldState: { error },
-  } = useController(controllerProps);
+  } = useController({ defaultValue: false, ...controllerProps });
 
   return (
     <InputLabel text={label} description={description}>

@@ -49,7 +49,7 @@ const formatUri = (networkKey: string, { content }: DirectoryListing): string =>
   }
 };
 
-const Directory = () => {
+const Directory: React.FC = () => {
   const params = useParams<DirectoryParams>();
   const [{ colorScheme }, { setColorScheme }] = useTheme();
   const [{ profile }, { clearProfile }] = useProfile();

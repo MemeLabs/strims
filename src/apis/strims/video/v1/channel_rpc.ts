@@ -28,19 +28,19 @@ registerType("strims.video.v1.VideoChannelDeleteResponse", VideoChannelDeleteRes
 export class VideoChannelFrontendClient {
   constructor(private readonly host: RPCHost) {}
 
-  public list(arg: IVideoChannelListRequest = new VideoChannelListRequest()): Promise<VideoChannelListResponse> {
+  public list(arg?: IVideoChannelListRequest): Promise<VideoChannelListResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.List", new VideoChannelListRequest(arg)));
   }
 
-  public create(arg: IVideoChannelCreateRequest = new VideoChannelCreateRequest()): Promise<VideoChannelCreateResponse> {
+  public create(arg?: IVideoChannelCreateRequest): Promise<VideoChannelCreateResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.Create", new VideoChannelCreateRequest(arg)));
   }
 
-  public update(arg: IVideoChannelUpdateRequest = new VideoChannelUpdateRequest()): Promise<VideoChannelUpdateResponse> {
+  public update(arg?: IVideoChannelUpdateRequest): Promise<VideoChannelUpdateResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.Update", new VideoChannelUpdateRequest(arg)));
   }
 
-  public delete(arg: IVideoChannelDeleteRequest = new VideoChannelDeleteRequest()): Promise<VideoChannelDeleteResponse> {
+  public delete(arg?: IVideoChannelDeleteRequest): Promise<VideoChannelDeleteResponse> {
     return this.host.expectOne(this.host.call("strims.video.v1.VideoChannelFrontend.Delete", new VideoChannelDeleteRequest(arg)));
   }
 }

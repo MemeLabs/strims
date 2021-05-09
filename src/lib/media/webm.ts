@@ -66,6 +66,7 @@ export class Encoder {
 
     if (this.header === undefined) {
       const header = this.ebmlEncoder.encode(elms.slice(0, clusterIndex));
+      console.log(new Uint8Array(header));
       const headerBytes = header.byteLength;
 
       this.header = new Uint8Array(headerBytes + 2);

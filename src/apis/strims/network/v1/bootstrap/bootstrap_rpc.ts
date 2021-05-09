@@ -43,31 +43,31 @@ registerType("strims.network.v1.bootstrap.PublishNetworkToBootstrapPeerResponse"
 export class BootstrapFrontendClient {
   constructor(private readonly host: RPCHost) {}
 
-  public createClient(arg: ICreateBootstrapClientRequest = new CreateBootstrapClientRequest()): Promise<CreateBootstrapClientResponse> {
+  public createClient(arg?: ICreateBootstrapClientRequest): Promise<CreateBootstrapClientResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.CreateClient", new CreateBootstrapClientRequest(arg)));
   }
 
-  public updateClient(arg: IUpdateBootstrapClientRequest = new UpdateBootstrapClientRequest()): Promise<UpdateBootstrapClientResponse> {
+  public updateClient(arg?: IUpdateBootstrapClientRequest): Promise<UpdateBootstrapClientResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.UpdateClient", new UpdateBootstrapClientRequest(arg)));
   }
 
-  public deleteClient(arg: IDeleteBootstrapClientRequest = new DeleteBootstrapClientRequest()): Promise<DeleteBootstrapClientResponse> {
+  public deleteClient(arg?: IDeleteBootstrapClientRequest): Promise<DeleteBootstrapClientResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.DeleteClient", new DeleteBootstrapClientRequest(arg)));
   }
 
-  public getClient(arg: IGetBootstrapClientRequest = new GetBootstrapClientRequest()): Promise<GetBootstrapClientResponse> {
+  public getClient(arg?: IGetBootstrapClientRequest): Promise<GetBootstrapClientResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.GetClient", new GetBootstrapClientRequest(arg)));
   }
 
-  public listClients(arg: IListBootstrapClientsRequest = new ListBootstrapClientsRequest()): Promise<ListBootstrapClientsResponse> {
+  public listClients(arg?: IListBootstrapClientsRequest): Promise<ListBootstrapClientsResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.ListClients", new ListBootstrapClientsRequest(arg)));
   }
 
-  public listPeers(arg: IListBootstrapPeersRequest = new ListBootstrapPeersRequest()): Promise<ListBootstrapPeersResponse> {
+  public listPeers(arg?: IListBootstrapPeersRequest): Promise<ListBootstrapPeersResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.ListPeers", new ListBootstrapPeersRequest(arg)));
   }
 
-  public publishNetworkToPeer(arg: IPublishNetworkToBootstrapPeerRequest = new PublishNetworkToBootstrapPeerRequest()): Promise<PublishNetworkToBootstrapPeerResponse> {
+  public publishNetworkToPeer(arg?: IPublishNetworkToBootstrapPeerRequest): Promise<PublishNetworkToBootstrapPeerResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.bootstrap.BootstrapFrontend.PublishNetworkToPeer", new PublishNetworkToBootstrapPeerRequest(arg)));
   }
 }
