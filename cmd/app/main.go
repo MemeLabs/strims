@@ -11,9 +11,9 @@ import (
 	"path"
 
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/frontend"
+	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -69,7 +69,7 @@ func main() {
 		panic(err)
 	}
 
-	store, err := bboltkv.NewStore(path.Join(profileDir, ".strims"))
+	store, err := bbolt.NewStore(path.Join(profileDir, ".strims"))
 	if err != nil {
 		logger.Fatal("failed to open db", zap.Error(err))
 	}

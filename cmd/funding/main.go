@@ -9,8 +9,8 @@ import (
 	"path"
 
 	funding "github.com/MemeLabs/go-ppspp/pkg/apis/funding/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/gorilla/websocket"
@@ -28,7 +28,7 @@ func main() {
 		log.Fatalln("locaing home directory failed:", err)
 	}
 
-	store, err := bboltkv.NewStore(path.Join(homeDir, ".strims"))
+	store, err := bbolt.NewStore(path.Join(homeDir, ".strims"))
 	if err != nil {
 		log.Fatalln("opening db failed:", err)
 	}

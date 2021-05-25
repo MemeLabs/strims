@@ -26,8 +26,8 @@ require (
 	github.com/gobwas/ws v1.0.4 // indirect
 	github.com/gofrs/uuid v4.0.0+incompatible // indirect
 	github.com/golang/geo v0.0.0-20210108004804-a63082ebfb66
-	github.com/golang/protobuf v1.4.3
-	github.com/google/go-cmp v0.5.4
+	github.com/golang/protobuf v1.5.2
+	github.com/google/go-cmp v0.5.5
 	github.com/google/uuid v1.1.5 // indirect
 	github.com/gophercloud/gophercloud v0.15.0
 	github.com/gorilla/mux v1.8.0
@@ -73,8 +73,9 @@ require (
 	golang.org/x/sync v0.0.0-20201020160332-67f06af15bc9
 	golang.org/x/time v0.0.0-20200630173020-3af7569d3a1e
 	golang.zx2c4.com/wireguard/wgctrl v0.0.0-20200609130330-bd2cb7843e1b
+	gonum.org/v1/gonum v0.9.1
 	google.golang.org/appengine v1.6.7 // indirect
-	google.golang.org/protobuf v1.25.0
+	google.golang.org/protobuf v1.26.0
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	lukechampine.com/uint128 v1.1.1
 )

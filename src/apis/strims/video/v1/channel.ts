@@ -16,9 +16,9 @@ import {
 
 export type IVideoChannel = {
   id?: bigint;
-  key?: strims_type_IKey | undefined;
+  key?: strims_type_IKey;
   token?: Uint8Array;
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
+  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
   owner?: VideoChannel.IOwner
 }
 
@@ -192,7 +192,7 @@ export namespace VideoChannel {
   }
 
   export type ILocalShare = {
-    certificate?: strims_type_ICertificate | undefined;
+    certificate?: strims_type_ICertificate;
   }
 
   export class LocalShare {
@@ -350,7 +350,7 @@ export class VideoChannelListResponse {
 }
 
 export type IVideoChannelCreateRequest = {
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
+  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
   networkKey?: Uint8Array;
 }
 
@@ -393,7 +393,7 @@ export class VideoChannelCreateRequest {
 }
 
 export type IVideoChannelCreateResponse = {
-  channel?: IVideoChannel | undefined;
+  channel?: IVideoChannel;
 }
 
 export class VideoChannelCreateResponse {
@@ -430,7 +430,7 @@ export class VideoChannelCreateResponse {
 
 export type IVideoChannelUpdateRequest = {
   id?: bigint;
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
+  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
   networkKey?: Uint8Array;
 }
 
@@ -479,7 +479,7 @@ export class VideoChannelUpdateRequest {
 }
 
 export type IVideoChannelUpdateResponse = {
-  channel?: IVideoChannel | undefined;
+  channel?: IVideoChannel;
 }
 
 export class VideoChannelUpdateResponse {

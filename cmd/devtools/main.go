@@ -14,8 +14,8 @@ import (
 
 	devtoolsv1 "github.com/MemeLabs/go-ppspp/pkg/apis/devtools/v1"
 	ppsppv1 "github.com/MemeLabs/go-ppspp/pkg/apis/devtools/v1/ppspp"
-	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
@@ -37,7 +37,7 @@ func main() {
 		log.Fatalln("locaing home directory failed:", err)
 	}
 
-	store, err := bboltkv.NewStore(path.Join(homeDir, ".strims"))
+	store, err := bbolt.NewStore(path.Join(homeDir, ".strims"))
 	if err != nil {
 		log.Fatalln("opening db failed:", err)
 	}

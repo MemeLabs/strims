@@ -13,7 +13,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/dao/daotest"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
-	"github.com/MemeLabs/go-ppspp/pkg/memkv"
+	"github.com/MemeLabs/go-ppspp/pkg/kv/kvtest"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -27,7 +27,7 @@ func NewHost(logger *zap.Logger, i int) (*Host, error) {
 		return nil, err
 	}
 
-	blobStore, err := memkv.NewStore("test")
+	blobStore, err := kvtest.NewMemStore("test")
 	if err != nil {
 		return nil, err
 	}

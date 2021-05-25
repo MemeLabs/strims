@@ -1,30 +1,30 @@
-package ma
+package stats
 
 import (
 	"time"
 )
 
-// NewSimple ...
-func NewSimple(n int, d time.Duration) Simple {
-	return Simple{
+// NewSMA ...
+func NewSMA(n int, d time.Duration) SMA {
+	return SMA{
 		t: time.Now(),
 		d: d,
-		w: make([]simpleMeanSample, n),
+		w: make([]smaSample, n),
 	}
 }
 
-// Simple ...
-type Simple struct {
+// SMA ...
+type SMA struct {
 	t  time.Time
 	d  time.Duration
 	v  uint64
 	n  uint64
 	i  int
 	wl int
-	w  []simpleMeanSample
+	w  []smaSample
 }
 
-func (s *Simple) advance(t time.Time) {
+func (s *SMA) advance(t time.Time) {
 	for t.Sub(s.t) > s.d {
 		s.t = s.t.Add(s.d)
 
@@ -45,12 +45,12 @@ func (s *Simple) advance(t time.Time) {
 }
 
 // Add ...
-func (s *Simple) Add(v uint64) {
+func (s *SMA) Add(v uint64) {
 	s.AddWithTime(v, time.Now())
 }
 
 // AddWithTime ...
-func (s *Simple) AddWithTime(v uint64, t time.Time) {
+func (s *SMA) AddWithTime(v uint64, t time.Time) {
 	s.advance(t)
 
 	s.w[s.i].v += v
@@ -60,7 +60,7 @@ func (s *Simple) AddWithTime(v uint64, t time.Time) {
 }
 
 // Value ...
-func (s *Simple) Value() uint64 {
+func (s *SMA) Value() uint64 {
 	if s.n == 0 {
 		return 0
 	}
@@ -68,12 +68,12 @@ func (s *Simple) Value() uint64 {
 }
 
 // Interval ...
-func (s *Simple) Interval() time.Duration {
+func (s *SMA) Interval() time.Duration {
 	return s.IntervalWithTime(time.Now())
 }
 
 // IntervalWithTime ...
-func (s *Simple) IntervalWithTime(t time.Time) time.Duration {
+func (s *SMA) IntervalWithTime(t time.Time) time.Duration {
 	s.advance(t)
 
 	if s.v == 0 {
@@ -83,12 +83,12 @@ func (s *Simple) IntervalWithTime(t time.Time) time.Duration {
 }
 
 // SampleInterval ...
-func (s *Simple) SampleInterval() time.Duration {
+func (s *SMA) SampleInterval() time.Duration {
 	return s.SampleIntervalWithTime(time.Now())
 }
 
 // SampleIntervalWithTime ...
-func (s *Simple) SampleIntervalWithTime(t time.Time) time.Duration {
+func (s *SMA) SampleIntervalWithTime(t time.Time) time.Duration {
 	s.advance(t)
 
 	if s.n == 0 {
@@ -98,12 +98,12 @@ func (s *Simple) SampleIntervalWithTime(t time.Time) time.Duration {
 }
 
 // Rate ...
-func (s *Simple) Rate(d time.Duration) uint64 {
+func (s *SMA) Rate(d time.Duration) uint64 {
 	return s.RateWithTime(d, time.Now())
 }
 
 // RateWithTime ...
-func (s *Simple) RateWithTime(d time.Duration, t time.Time) uint64 {
+func (s *SMA) RateWithTime(d time.Duration, t time.Time) uint64 {
 	s.advance(t)
 
 	if s.wl == 0 {
@@ -112,7 +112,7 @@ func (s *Simple) RateWithTime(d time.Duration, t time.Time) uint64 {
 	return s.v * uint64(d) / uint64(time.Duration(s.wl)*s.d)
 }
 
-type simpleMeanSample struct {
+type smaSample struct {
 	v uint64
 	n uint64
 }

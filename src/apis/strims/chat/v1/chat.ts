@@ -8,7 +8,7 @@ import {
 
 export type ICreateChatServerRequest = {
   networkKey?: Uint8Array;
-  chatRoom?: IChatRoom | undefined;
+  chatRoom?: IChatRoom;
 }
 
 export class CreateChatServerRequest {
@@ -50,7 +50,7 @@ export class CreateChatServerRequest {
 }
 
 export type ICreateChatServerResponse = {
-  chatServer?: IChatServer | undefined;
+  chatServer?: IChatServer;
 }
 
 export class CreateChatServerResponse {
@@ -88,7 +88,7 @@ export class CreateChatServerResponse {
 export type IUpdateChatServerRequest = {
   id?: bigint;
   networkKey?: Uint8Array;
-  serverKey?: IChatRoom | undefined;
+  serverKey?: IChatRoom;
 }
 
 export class UpdateChatServerRequest {
@@ -136,7 +136,7 @@ export class UpdateChatServerRequest {
 }
 
 export type IUpdateChatServerResponse = {
-  chatServer?: IChatServer | undefined;
+  chatServer?: IChatServer;
 }
 
 export class UpdateChatServerResponse {
@@ -264,7 +264,7 @@ export class GetChatServerRequest {
 }
 
 export type IGetChatServerResponse = {
-  chatServer?: IChatServer | undefined;
+  chatServer?: IChatServer;
 }
 
 export class GetChatServerResponse {
@@ -356,7 +356,7 @@ export class ListChatServersResponse {
 }
 
 export type IOpenChatServerRequest = {
-  server?: IChatServer | undefined;
+  server?: IChatServer;
 }
 
 export class OpenChatServerRequest {
@@ -835,7 +835,7 @@ export namespace ChatClientEvent {
     serverTime?: bigint;
     nick?: string;
     body?: string;
-    entities?: IMessageEntities | undefined;
+    entities?: IMessageEntities;
   }
 
   export class Message {
@@ -955,8 +955,8 @@ export class ChatRoom {
 export type IChatServer = {
   id?: bigint;
   networkKey?: Uint8Array;
-  key?: strims_type_IKey | undefined;
-  chatRoom?: IChatRoom | undefined;
+  key?: strims_type_IKey;
+  chatRoom?: IChatRoom;
 }
 
 export class ChatServer {
@@ -1016,8 +1016,8 @@ export type IMessageEntities = {
   tags?: MessageEntities.ITag[];
   codeBlocks?: MessageEntities.ICodeBlock[];
   spoilers?: MessageEntities.ISpoiler[];
-  greenText?: MessageEntities.IGenericEntity | undefined;
-  selfMessage?: MessageEntities.IGenericEntity | undefined;
+  greenText?: MessageEntities.IGenericEntity;
+  selfMessage?: MessageEntities.IGenericEntity;
 }
 
 export class MessageEntities {
@@ -1139,7 +1139,7 @@ export namespace MessageEntities {
   }
 
   export type ILink = {
-    bounds?: MessageEntities.IBounds | undefined;
+    bounds?: MessageEntities.IBounds;
     url?: string;
   }
 
@@ -1182,7 +1182,7 @@ export namespace MessageEntities {
   }
 
   export type IEmote = {
-    bounds?: MessageEntities.IBounds | undefined;
+    bounds?: MessageEntities.IBounds;
     name?: string;
     modifiers?: string[];
     combo?: number;
@@ -1239,7 +1239,7 @@ export namespace MessageEntities {
   }
 
   export type INick = {
-    bounds?: MessageEntities.IBounds | undefined;
+    bounds?: MessageEntities.IBounds;
     nick?: string;
   }
 
@@ -1282,7 +1282,7 @@ export namespace MessageEntities {
   }
 
   export type ITag = {
-    bounds?: MessageEntities.IBounds | undefined;
+    bounds?: MessageEntities.IBounds;
     name?: string;
   }
 
@@ -1325,7 +1325,7 @@ export namespace MessageEntities {
   }
 
   export type ICodeBlock = {
-    bounds?: MessageEntities.IBounds | undefined;
+    bounds?: MessageEntities.IBounds;
   }
 
   export class CodeBlock {
@@ -1361,7 +1361,7 @@ export namespace MessageEntities {
   }
 
   export type ISpoiler = {
-    bounds?: MessageEntities.IBounds | undefined;
+    bounds?: MessageEntities.IBounds;
   }
 
   export class Spoiler {
@@ -1397,7 +1397,7 @@ export namespace MessageEntities {
   }
 
   export type IGenericEntity = {
-    bounds?: MessageEntities.IBounds | undefined;
+    bounds?: MessageEntities.IBounds;
   }
 
   export class GenericEntity {

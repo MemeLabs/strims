@@ -11,6 +11,7 @@ ARG USER_GID=$USER_UID
 ARG NODE_VERSION=14.x
 ARG GO_VERSION=1.16.4
 ARG PROTOC_VERSION=3.15.8
+ARG MEMELABS_PB_VERSION=0.1.17
 
 # Avoid warnings by switching to noninteractive
 ENV DEBIAN_FRONTEND=noninteractive
@@ -72,18 +73,9 @@ RUN \
   # Build gocode-gomod
   && GOPATH=/tmp/gotools GO111MODULE=off go get -x -d github.com/stamblerre/gocode 2>&1 \
   && GOPATH=/tmp/gotools GO111MODULE=off go build -o gocode-gomod github.com/stamblerre/gocode \
-  # Build protoc plugins
-  && GOPATH=/tmp/gotools GO111MODULE=off go get -x -d \
-    github.com/MemeLabs/protobuf/cmd/gorpc \
-    github.com/MemeLabs/protobuf/cmd/tsrpc \
-    github.com/MemeLabs/protobuf/cmd/ts 2>&1 \
-  && GOPATH=/tmp/gotools GO111MODULE=off go build -o protoc-gen-gorpc github.com/MemeLabs/protobuf/cmd/gorpc \
-  && GOPATH=/tmp/gotools GO111MODULE=off go build -o protoc-gen-tsrpc github.com/MemeLabs/protobuf/cmd/tsrpc \
-  && GOPATH=/tmp/gotools GO111MODULE=off go build -o protoc-gen-ts github.com/MemeLabs/protobuf/cmd/ts \
   # Install go tools
   && mv /tmp/gotools/bin/* /usr/local/bin/ \
   && mv /tmp/gotools/gocode-gomod /usr/local/bin/ \
-  && mv /tmp/gotools/protoc-gen-* /usr/local/bin/ \
   # Clean up go path
   && cd ~ \
   && rm -rf /tmp/gotools \
@@ -102,6 +94,11 @@ RUN \
   && chmod -R 755 /usr/local/include/google \
   && chmod 644 /usr/local/include/google/protobuf/* \
   && rm "protoc-${PROTOC_VERSION}-linux-x86_64.zip" \
+  # Install protoc plugins
+  && curl -LO "https://github.com/MemeLabs/protobuf/releases/download/v${MEMELABS_PB_VERSION}/protoc-plugins-${MEMELABS_PB_VERSION}-linux-x86_64.tar.gz" \
+  && tar -C /usr/local/bin --strip-components=1 -xzf "protoc-plugins-${MEMELABS_PB_VERSION}-linux-x86_64.tar.gz" \
+  && chmod -R 755 /usr/local/bin/protoc-* \
+  && rm "protoc-plugins-${MEMELABS_PB_VERSION}-linux-x86_64.tar.gz" \
   # Clean up
   && apt-get autoremove -y \
   && apt-get clean -y \

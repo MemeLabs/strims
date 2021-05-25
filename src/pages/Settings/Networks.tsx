@@ -4,9 +4,7 @@ import { Controller, useForm } from "react-hook-form";
 import Select from "react-select";
 
 import {
-  CreateNetworkFromInvitationRequest,
   CreateNetworkFromInvitationResponse,
-  CreateNetworkRequest,
   CreateNetworkResponse,
   Network,
 } from "../../apis/strims/network/v1/network";
@@ -25,7 +23,7 @@ const NetworkForm = ({ onCreate }: { onCreate: (res: CreateNetworkResponse) => v
     mode: "onBlur",
   });
 
-  const onSubmit = handleSubmit((data) => createNetwork(new CreateNetworkRequest(data)));
+  const onSubmit = handleSubmit((data) => createNetwork(data));
 
   return (
     <form className="thing_form" onSubmit={onSubmit}>
@@ -70,11 +68,9 @@ const JoinForm = ({
   });
 
   const onSubmit = handleSubmit(({ invitationB64 }) =>
-    create(
-      new CreateNetworkFromInvitationRequest({
-        invitation: { invitationB64 },
-      })
-    )
+    create({
+      invitation: { invitationB64 },
+    })
   );
 
   return (
@@ -105,14 +101,6 @@ const JoinForm = ({
   );
 };
 
-const wrapString = (str: string, cols: number) =>
-  new Array(Math.ceil(str.length / cols))
-    .fill("")
-    .map((_, i) => str.substr(i * cols, cols))
-    .join("\n");
-
-const unwrapString = (str: string) => str.replace(/\n/g, "");
-
 const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: () => void }) => {
   const [bootstrapPeersRes] = useCall("bootstrap", "listPeers");
   const client = useClient();
@@ -126,7 +114,6 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
   });
 
   const onSubmit = handleSubmit((data) => {
-    console.log(data);
     void client.bootstrap.publishNetworkToPeer({
       peerId: data.peer.value,
       network: network,
@@ -157,7 +144,6 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
                 <>
                   <Select
                     {...field}
-                    isMulti={true}
                     className="input_select"
                     placeholder="Select peer"
                     classNamePrefix="react_select"

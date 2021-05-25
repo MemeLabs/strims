@@ -9,9 +9,9 @@ import (
 	"runtime"
 
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/frontend"
+	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -54,7 +54,7 @@ func NewGoSide(s AndroidSide, appFileLocation string) (*GoSide, error) {
 		return nil, err
 	}
 
-	kv, err := bboltkv.NewStore(path.Join(appFileLocation, ".strims"))
+	kv, err := bbolt.NewStore(path.Join(appFileLocation, ".strims"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %w", err)
 	}

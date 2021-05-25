@@ -10,7 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
+	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	rpcapi "github.com/MemeLabs/protobuf/pkg/apis/rpc"
@@ -126,9 +126,9 @@ func (t *VPNTransport) HandleMessage(msg *vpn.Message) error {
 		return fmt.Errorf("unmarshaling rpc: %w", err)
 	}
 	if err := t.verifyMessage(msg, req, cert); err != nil {
-		logutil.PrintJSON(msg)
-		logutil.PrintJSON(req)
-		logutil.PrintJSON(cert)
+		debug.PrintJSON(msg)
+		debug.PrintJSON(req)
+		debug.PrintJSON(cert)
 		return fmt.Errorf("verifying rpc: %w", err)
 	}
 

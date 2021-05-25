@@ -20,6 +20,7 @@ var (
 	ErrMissingHashSubtree = errors.New("missing hash subtree")
 	ErrSignatureTooShort  = errors.New("signature too short")
 	ErrInvalidSignature   = errors.New("signature mismatch")
+	ErrBinOutOfBounds     = errors.New("bin out of bounds")
 )
 
 // MerkleOptions ...
@@ -63,10 +64,10 @@ func (v *MerkleSwarmVerifier) tree(b binmap.Bin) *merkle.Tree {
 	b = binmap.NewBin(v.treeHeight-1, uint64(b)>>v.treeHeight)
 	if ti := v.treePool.Get(); ti != nil {
 		t := ti.(*merkle.Tree)
-		t.Reset(b, nil)
+		t.Reset(b)
 		return t
 	}
-	return merkle.NewTree(b, v.chunkSize, v.hash())
+	return merkle.NewTree(b, v.chunkSize, v.hash)
 }
 
 func (v *MerkleSwarmVerifier) segment(b binmap.Bin) *merkleTreeSegment {
@@ -129,24 +130,24 @@ func (v *MerkleSwarmVerifier) WriteIntegrity(b binmap.Bin, m *binmap.Map, w Writ
 
 	var n int
 
-	// if m.EmptyAt(s.Tree.RootBin()) {
-	nn, err := w.WriteSignedIntegrity(codec.SignedIntegrity{
-		Address:   codec.Address(s.Tree.RootBin()),
-		Timestamp: codec.Timestamp{Time: s.Timestamp},
-		Signature: s.Signature,
-	})
-	n += nn
-	if err != nil {
-		return n, err
+	if m.EmptyAt(s.Tree.RootBin()) {
+		nn, err := w.WriteSignedIntegrity(codec.SignedIntegrity{
+			Address:   codec.Address(s.Tree.RootBin()),
+			Timestamp: codec.Timestamp{Time: s.Timestamp},
+			Signature: s.Signature,
+		})
+		n += nn
+		if err != nil {
+			return n, err
+		}
 	}
-	// }
 
 	for b != s.Tree.RootBin() {
 		p := b.Parent()
 		b = b.Sibling()
-		// if !m.EmptyAt(p) || !m.EmptyAt(b) {
-		// 	return n, nil
-		// }
+		if !m.EmptyAt(p) || !m.EmptyAt(b) {
+			return n, nil
+		}
 
 		nn, err := w.WriteIntegrity(codec.Integrity{
 			Address: codec.Address(b),
@@ -216,7 +217,8 @@ func (s *merkleTreeSegment) Merge(tree *merkle.Tree) {
 
 func newMerkleChannelVerifier(v *MerkleSwarmVerifier) *MerkleChannelVerifier {
 	return &MerkleChannelVerifier{
-		chunkVerifier: MerkleChunkVerifier{
+		munroLayer: v.treeHeight - 1,
+		chunkVerifier: &MerkleChunkVerifier{
 			swarmVerifier: v,
 		},
 	}
@@ -224,15 +226,16 @@ func newMerkleChannelVerifier(v *MerkleSwarmVerifier) *MerkleChannelVerifier {
 
 // MerkleChannelVerifier ...
 type MerkleChannelVerifier struct {
-	chunkVerifier MerkleChunkVerifier
+	munroLayer    uint64
+	chunkVerifier *MerkleChunkVerifier
 }
 
 // ChunkVerifier ...
 func (v *MerkleChannelVerifier) ChunkVerifier(b binmap.Bin) ChunkVerifier {
-	if !v.chunkVerifier.bin.Contains(b) {
+	if !v.chunkVerifier.bin.Contains(b.LayerShift(v.munroLayer)) {
 		v.chunkVerifier.Reset(b)
 	}
-	return &v.chunkVerifier
+	return v.chunkVerifier
 }
 
 // MerkleChunkVerifier ...
@@ -259,10 +262,16 @@ func (v *MerkleChunkVerifier) SetSignedIntegrity(b binmap.Bin, ts time.Time, sig
 
 // SetIntegrity ...
 func (v *MerkleChunkVerifier) SetIntegrity(b binmap.Bin, hash []byte) {
-	v.tree.Set(b, hash)
+	if v.bin.Contains(b) {
+		v.tree.Set(b, hash)
+	}
 }
 
 func (v *MerkleChunkVerifier) verify(b binmap.Bin, d []byte) (bool, error) {
+	if !v.bin.Contains(b) {
+		return false, ErrBinOutOfBounds
+	}
+
 	var t *merkle.Tree
 	if s := v.swarmVerifier.segment(b); s != nil {
 		if !s.LockIf(b) {
@@ -289,9 +298,11 @@ func (v *MerkleChunkVerifier) verify(b binmap.Bin, d []byte) (bool, error) {
 
 // Verify ...
 func (v *MerkleChunkVerifier) Verify(b binmap.Bin, d []byte) (bool, error) {
+	verified, err := v.verify(b, d)
+
 	v.bin = binmap.None
 
-	if verified, err := v.verify(b, d); !verified || err != nil {
+	if !verified || err != nil {
 		return false, err
 	}
 

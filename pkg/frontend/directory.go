@@ -8,7 +8,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/logutil"
+	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
@@ -33,7 +33,7 @@ func (s *directoryService) Open(ctx context.Context, r *network.DirectoryFronten
 	go func() {
 		events := s.app.Directory().ReadEvents(ctx, r.NetworkKey)
 		for e := range events {
-			logutil.PrintJSON(e)
+			debug.PrintJSON(e)
 			ch <- &network.DirectoryFrontendOpenResponse{Event: e}
 		}
 	}()

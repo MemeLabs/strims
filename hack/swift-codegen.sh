@@ -18,5 +18,4 @@ cat $* | awk '/^message/ { { printf "  Google_Protobuf_Any.register(messageType:
 echo "}" >> ${FILE}
 echo "" >> ${FILE}
 
-
 popd > /dev/null

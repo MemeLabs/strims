@@ -7,7 +7,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
-	"github.com/MemeLabs/go-ppspp/pkg/ma"
+	"github.com/MemeLabs/go-ppspp/pkg/stats"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
@@ -30,8 +30,8 @@ func newPeer(id []byte, w Conn, t timeutil.Ticker) *Peer {
 		ready:  make(chan time.Time, 1),
 		ticker: t,
 
-		receivedBytes: ma.NewSimple(60, time.Second),
-		sentBytes:     ma.NewSimple(60, time.Second),
+		receivedBytes: stats.NewSMA(60, time.Second),
+		sentBytes:     stats.NewSMA(60, time.Second),
 
 		cs: newPeerWriterQueue(),
 	}
@@ -48,8 +48,8 @@ type Peer struct {
 	lock sync.Mutex
 	w    Conn
 
-	receivedBytes ma.Simple
-	sentBytes     ma.Simple
+	receivedBytes stats.SMA
+	sentBytes     stats.SMA
 
 	cs peerWriterQueue
 	ds [2]peerDataQueue

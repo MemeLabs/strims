@@ -160,7 +160,7 @@ func (c *Control) loadNetworkPeers(ctx context.Context, n *network) {
 
 		go func() {
 			for p := range s {
-				// logutil.PrintJSON(p)
+				// debug.PrintJSON(p)
 
 				// TODO: store, sort, swap low perf hosts experimentally
 				c.connectFoundHost(n, p)

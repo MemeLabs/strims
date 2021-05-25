@@ -22,7 +22,7 @@ import {
   FiSearch,
   FiUser,
 } from "react-icons/fi";
-import { Link, useHistory } from "react-router-dom";
+import { Link, Route, Switch, useHistory } from "react-router-dom";
 import { useToggle } from "react-use";
 import usePortal from "react-useportal";
 

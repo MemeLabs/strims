@@ -1,5 +1,11 @@
 #!/bin/bash
 
+set -e
+pushd $(/bin/pwd) > /dev/null
+
+BASE="$(realpath $0)"
+cd "$(dirname $BASE)"
+
 SOURCES="$(find ../schema -iname *.proto)"
 PATH="${pwd}:$PATH" protoc \
   --proto_path=../schema \
@@ -10,3 +16,5 @@ PATH="${pwd}:$PATH" protoc \
   --ts_out=../src/apis \
   --tsrpc_out=../src/apis \
   $SOURCES
+
+popd > /dev/null

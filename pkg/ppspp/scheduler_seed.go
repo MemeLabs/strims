@@ -74,39 +74,39 @@ func (s *seedSwarmScheduler) Consume(c store.Chunk) bool {
 var zn int32
 
 func (s *seedSwarmScheduler) ChannelScheduler(p *Peer, cw *channelWriter) ChannelScheduler {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	c := &seedChannelScheduler{
 		logger:             s.logger.With(logutil.ByteHex("peer", p.id)),
 		p:                  p,
 		cw:                 cw,
 		s:                  s,
-		haveBins:           binmap.New(),
+		haveBins:           s.haveBins.Clone(),
 		peerHaveBins:       binmap.New(),
 		peerRequestStreams: map[codec.Stream]binmap.Bin{},
 	}
 
-	zzn := codec.Stream(atomic.AddInt32(&zn, 1)) - 1
+	// zzn := codec.Stream(atomic.AddInt32(&zn, 1)) - 1
+	// sc := streamCount(s.swarm.options)
+	// b := s.haveBins.FindLastFilled()
+	// if b.IsNone() {
+	// 	b = 0
+	// } else {
+	// 	b = binmap.Bin(sc) * (b / binmap.Bin(sc*2))
+	// }
+	// for i := codec.Stream(0); i < sc; i++ {
+	// 	if i%3 == zzn {
+	// 		c.peerOpenStreams = append(c.peerOpenStreams, codec.StreamAddress{
+	// 			Stream:  i,
+	// 			Address: codec.Address(b),
+	// 		})
+	// 		c.peerRequestStreams[i] = b
+	// 	}
+	// 	b += 2
+	// }
 
-	sc := streamCount(s.swarm.options)
-	b := s.haveBins.FindLastFilled()
-	if b.IsNone() {
-		b = 0
-	} else {
-		b = binmap.Bin(sc) * (b / binmap.Bin(sc*2))
-	}
-	for i := codec.Stream(0); i < sc; i++ {
-		if i%3 == zzn {
-			c.peerOpenStreams = append(c.peerOpenStreams, codec.StreamAddress{
-				Stream:  i,
-				Address: codec.Address(b),
-			})
-			c.peerRequestStreams[i] = b
-		}
-		b += 2
-	}
-
-	s.lock.Lock()
 	s.channels[p] = c
-	s.lock.Unlock()
 
 	return c
 }
@@ -194,7 +194,7 @@ func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, pri peerPri
 	}
 
 	c.lock.Lock()
-	_, err := c.s.swarm.verifier.WriteIntegrity(b, c.haveBins, c.cw)
+	_, err := c.s.swarm.verifier.WriteIntegrity(b, c.peerHaveBins, c.cw)
 	c.lock.Unlock()
 	if err != nil {
 		if errors.Is(err, codec.ErrNotEnoughSpace) {

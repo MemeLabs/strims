@@ -3,7 +3,7 @@ package dao
 import (
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/pkg/memkv"
+	"github.com/MemeLabs/go-ppspp/pkg/kv/kvtest"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -16,7 +16,7 @@ func createProfileStore(t *testing.T) *ProfileStore {
 	key, err := NewStorageKey("majoraautumn")
 	assert.Nil(t, err, "failed to storage key")
 
-	kvStore, err := memkv.NewStore("strims")
+	kvStore, err := kvtest.NewMemStore("strims")
 	assert.Nil(t, err, "failed to kv store")
 
 	pfStore := NewProfileStore(1, kvStore, key)

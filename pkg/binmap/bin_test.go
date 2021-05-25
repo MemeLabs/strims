@@ -67,3 +67,19 @@ func TestLayerLeftRight(t *testing.T) {
 		assert.Equal(t, NewBin(l, 0).LayerLeft(), None)
 	}
 }
+
+func TestLayerShift(t *testing.T) {
+	for i := uint64(0); i < 2; i++ {
+		for j := uint64(4); j < 8; j++ {
+			assert.Equal(t, NewBin(j, i).LayerShift(j-1), NewBin(j-1, i*2))
+			assert.Equal(t, NewBin(j, i).LayerShift(j-2), NewBin(j-2, i*4))
+			assert.Equal(t, NewBin(j, i).LayerShift(j-3), NewBin(j-3, i*8))
+			assert.Equal(t, NewBin(j, i).LayerShift(j-4), NewBin(j-4, i*16))
+
+			assert.Equal(t, NewBin(j-1, i*2).LayerShift(j), NewBin(j, i))
+			assert.Equal(t, NewBin(j-2, i*4).LayerShift(j), NewBin(j, i))
+			assert.Equal(t, NewBin(j-3, i*8).LayerShift(j), NewBin(j, i))
+			assert.Equal(t, NewBin(j-4, i*16).LayerShift(j), NewBin(j, i))
+		}
+	}
+}

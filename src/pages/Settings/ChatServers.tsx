@@ -2,11 +2,7 @@ import React from "react";
 import { Controller, useForm } from "react-hook-form";
 import Select from "react-select";
 
-import {
-  ChatServer,
-  CreateChatServerRequest,
-  CreateChatServerResponse,
-} from "../../apis/strims/chat/v1/chat";
+import { ChatServer, CreateChatServerResponse } from "../../apis/strims/chat/v1/chat";
 import { InputError, InputLabel, TextInput } from "../../components/Form";
 import { useCall, useLazyCall } from "../../contexts/FrontendApi";
 import { rootCertificate } from "../../lib/certificate";
@@ -30,16 +26,14 @@ const ChatServerForm = ({ onCreate }: { onCreate: (res: CreateChatServerResponse
     mode: "onBlur",
   });
 
-  const onSubmit = handleSubmit((data) => {
-    void createChatServer(
-      new CreateChatServerRequest({
-        networkKey: data.networkKey.value,
-        chatRoom: {
-          name: data.name,
-        },
-      })
-    );
-  });
+  const onSubmit = handleSubmit((data) =>
+    createChatServer({
+      networkKey: data.networkKey.value,
+      chatRoom: {
+        name: data.name,
+      },
+    })
+  );
 
   return (
     <form className="thing_form" onSubmit={onSubmit}>

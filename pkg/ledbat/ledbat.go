@@ -5,7 +5,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
-	"github.com/MemeLabs/go-ppspp/pkg/ma"
+	"github.com/MemeLabs/go-ppspp/pkg/stats"
 )
 
 const (
@@ -54,8 +54,8 @@ func New() *Controller {
 
 		lastDataLoss: time.Unix(0, 0),
 		lastAckTime:  time.Unix(0, math.MaxInt64),
-		rttMean:      ma.NewExponential(coefAlpha),
-		rttVar:       ma.NewExponential(coefBeta),
+		rttMean:      stats.NewEMA(coefAlpha),
+		rttVar:       stats.NewEMA(coefBeta),
 		debug:        false,
 	}
 
@@ -85,8 +85,8 @@ type Controller struct {
 
 	lastDataLoss time.Time
 	lastAckTime  time.Time
-	rttMean      ma.Exponential
-	rttVar       ma.Exponential
+	rttMean      stats.EMA
+	rttVar       stats.EMA
 
 	ackSize int
 

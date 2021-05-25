@@ -10,10 +10,10 @@ import (
 	"path"
 
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/frontend"
+	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -118,7 +118,7 @@ func main() {
 }
 
 func initProfileStore() (*dao.ProfileStore, error) {
-	kv, err := bboltkv.NewStore(path.Join(profileDir, ".strims"))
+	kv, err := bbolt.NewStore(path.Join(profileDir, ".strims"))
 	if err != nil {
 		log.Fatalf("failed to open db: %s", err)
 	}

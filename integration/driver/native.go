@@ -9,9 +9,9 @@ import (
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/frontend"
+	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -41,7 +41,7 @@ type nativeDriverClient struct {
 
 func (d *nativeDriver) Client(o *ClientOptions) *rpc.Client {
 	file := tempFile()
-	store, err := bboltkv.NewStore(file)
+	store, err := bbolt.NewStore(file)
 	if err != nil {
 		log.Fatalf("failed to open db: %s", err)
 	}

@@ -10,39 +10,39 @@ import (
 )
 
 // NewKVStore ...
-func NewKVStore(bridge js.Value) *KVStore {
-	return &KVStore{
+func NewKVStore(bridge js.Value) kv.BlobStore {
+	return &kvStore{
 		bridge: bridge,
 	}
 }
 
 // KVStore ...
-type KVStore struct {
+type kvStore struct {
 	bridge js.Value
 }
 
 // CreateStoreIfNotExists ...
-func (s *KVStore) CreateStoreIfNotExists(table string) error {
+func (s *kvStore) CreateStoreIfNotExists(table string) error {
 	return s.transact(table, true, true, func(tx kv.BlobTx) error { return nil })
 }
 
 // DeleteStore ...
-func (s *KVStore) DeleteStore(table string) error {
+func (s *kvStore) DeleteStore(table string) error {
 	return callProxy(s.bridge, "deleteKVStore", []interface{}{table})
 }
 
 // View ...
-func (s *KVStore) View(table string, fn func(tx kv.BlobTx) error) error {
+func (s *kvStore) View(table string, fn func(tx kv.BlobTx) error) error {
 	return s.transact(table, false, true, fn)
 }
 
 // Update ...
-func (s *KVStore) Update(table string, fn func(tx kv.BlobTx) error) error {
+func (s *kvStore) Update(table string, fn func(tx kv.BlobTx) error) error {
 	return s.transact(table, false, false, fn)
 }
 
-func (s *KVStore) transact(table string, createTable, readOnly bool, fn func(tx kv.BlobTx) error) error {
-	tx := &KVTx{
+func (s *kvStore) transact(table string, createTable, readOnly bool, fn func(tx kv.BlobTx) error) error {
+	tx := &kvTx{
 		proxy: s.bridge.Call("openKVStore", table, createTable, readOnly),
 	}
 	err := fn(tx)
@@ -54,12 +54,12 @@ func (s *KVStore) transact(table string, createTable, readOnly bool, fn func(tx 
 }
 
 // KVTx ...
-type KVTx struct {
+type kvTx struct {
 	proxy js.Value
 }
 
 // Put ...
-func (t *KVTx) Put(key string, value []byte) error {
+func (t *kvTx) Put(key string, value []byte) error {
 	b := jsUint8Array.New(len(value))
 	js.CopyBytesToJS(b, value)
 
@@ -67,12 +67,12 @@ func (t *KVTx) Put(key string, value []byte) error {
 }
 
 // Delete ...
-func (t *KVTx) Delete(key string) error {
+func (t *kvTx) Delete(key string) error {
 	return callProxy(t.proxy, "delete", []interface{}{key})
 }
 
 // Get ...
-func (t *KVTx) Get(key string) (value []byte, err error) {
+func (t *kvTx) Get(key string) (value []byte, err error) {
 	readValue := func(arg js.Value) error {
 		if arg.IsUndefined() {
 			return kv.ErrRecordNotFound
@@ -86,7 +86,7 @@ func (t *KVTx) Get(key string) (value []byte, err error) {
 }
 
 // ScanPrefix ...
-func (t *KVTx) ScanPrefix(prefix string) (values [][]byte, err error) {
+func (t *kvTx) ScanPrefix(prefix string) (values [][]byte, err error) {
 	readValue := func(arg js.Value) error {
 		l := arg.Get("length").Int()
 		values = make([][]byte, l)
@@ -102,12 +102,12 @@ func (t *KVTx) ScanPrefix(prefix string) (values [][]byte, err error) {
 }
 
 // Rollback ...
-func (t *KVTx) Rollback() error {
+func (t *kvTx) Rollback() error {
 	return callProxy(t.proxy, "rollback", []interface{}{})
 }
 
 // Commit ...
-func (t *KVTx) Commit() error {
+func (t *kvTx) Commit() error {
 	return callProxy(t.proxy, "commit", []interface{}{})
 }
 

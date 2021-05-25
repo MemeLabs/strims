@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"path"
 
-	"github.com/MemeLabs/go-ppspp/pkg/bboltkv"
+	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/control/network"
 	"github.com/MemeLabs/go-ppspp/pkg/frontend"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/kv/bbolt"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/gorilla/websocket"
@@ -17,7 +17,7 @@ import (
 )
 
 func newManager(logger *zap.Logger) (*manager, error) {
-	store, err := bboltkv.NewStore(path.Join(profileDir, ".strims"))
+	store, err := bbolt.NewStore(path.Join(profileDir, ".strims"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open db: %s", err)
 	}

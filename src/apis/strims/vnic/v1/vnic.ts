@@ -8,7 +8,7 @@ import {
 
 export type IPeerInit = {
   protocolVersion?: number;
-  certificate?: strims_type_ICertificate | undefined;
+  certificate?: strims_type_ICertificate;
   nodePlatform?: string;
   nodeVersion?: string;
 }

@@ -195,7 +195,7 @@ export namespace PeerIndexMessage {
   }
 
   export type IPublish = {
-    record?: PeerIndexMessage.IRecord | undefined;
+    record?: PeerIndexMessage.IRecord;
   }
 
   export class Publish {
@@ -231,7 +231,7 @@ export namespace PeerIndexMessage {
   }
 
   export type IUnpublish = {
-    record?: PeerIndexMessage.IRecord | undefined;
+    record?: PeerIndexMessage.IRecord;
   }
 
   export class Unpublish {

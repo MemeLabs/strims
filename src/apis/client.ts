@@ -1,6 +1,6 @@
 import { Readable, Writable } from "stream";
 
-import { RPCHost } from "@memelabs/protobuf/lib/rpc/host";
+import Host from "@memelabs/protobuf/lib/rpc/host";
 
 import { ChatClient } from "./strims/chat/v1/chat_rpc";
 import { DebugClient } from "./strims/debug/v1/debug_rpc";
@@ -29,7 +29,7 @@ export class FrontendClient {
   public videoIngress: VideoIngressClient;
 
   constructor(w: Writable, r: Readable) {
-    const host = new RPCHost(w, r);
+    const host = new Host(w, r);
     this.bootstrap = new BootstrapFrontendClient(host);
     this.chat = new ChatClient(host);
     this.debug = new DebugClient(host);
@@ -47,7 +47,7 @@ export class FundingClient {
   public funding: FundingServiceClient;
 
   constructor(w: Writable, r: Readable) {
-    const host = new RPCHost(w, r);
+    const host = new Host(w, r);
     this.funding = new FundingServiceClient(host);
   }
 }
@@ -57,7 +57,7 @@ export class DevToolsClient {
   public ppsppCapConn: CapConnClient;
 
   constructor(w: Writable, r: Readable) {
-    const host = new RPCHost(w, r);
+    const host = new Host(w, r);
     this.devTools = new DevToolsServiceClient(host);
     this.ppsppCapConn = new CapConnClient(host);
   }

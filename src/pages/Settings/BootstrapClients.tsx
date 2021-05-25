@@ -3,7 +3,6 @@ import { useForm } from "react-hook-form";
 
 import {
   BootstrapClient,
-  CreateBootstrapClientRequest,
   CreateBootstrapClientResponse,
 } from "../../apis/strims/network/v1/bootstrap/bootstrap";
 import { InputError, TextInput } from "../../components/Form";
@@ -25,15 +24,13 @@ const BootstrapClientForm = ({
   });
 
   const onSubmit = handleSubmit((data) =>
-    createBootstrapClient(
-      new CreateBootstrapClientRequest({
-        clientOptions: {
-          websocketOptions: {
-            url: data.url,
-          },
+    createBootstrapClient({
+      clientOptions: {
+        websocketOptions: {
+          url: data.url,
         },
-      })
-    )
+      },
+    })
   );
 
   return (

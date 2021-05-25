@@ -1,4 +1,4 @@
-package memkv
+package kvtest
 
 import (
 	"fmt"
@@ -7,8 +7,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 )
 
-// NewStore ...
-func NewStore(path string) (*Store, error) {
+// NewMemStore ...
+func NewMemStore(path string) (kv.BlobStore, error) {
 	db := make(map[string]map[string][]byte)
 	return &Store{store: db}, nil
 }

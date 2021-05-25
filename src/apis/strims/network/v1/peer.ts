@@ -80,7 +80,7 @@ export class NetworkPeerNegotiateResponse {
 
 export type INetworkPeerBinding = {
   port?: number;
-  certificate?: strims_type_ICertificate | undefined;
+  certificate?: strims_type_ICertificate;
 }
 
 export class NetworkPeerBinding {
@@ -250,7 +250,7 @@ export class NetworkPeerCloseResponse {
 }
 
 export type INetworkPeerUpdateCertificateRequest = {
-  certificate?: strims_type_ICertificate | undefined;
+  certificate?: strims_type_ICertificate;
 }
 
 export class NetworkPeerUpdateCertificateRequest {

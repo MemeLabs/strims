@@ -188,7 +188,7 @@ export namespace HashTableMessage {
   }
 
   export type IPublish = {
-    record?: HashTableMessage.IRecord | undefined;
+    record?: HashTableMessage.IRecord;
   }
 
   export class Publish {
@@ -224,7 +224,7 @@ export namespace HashTableMessage {
   }
 
   export type IUnpublish = {
-    record?: HashTableMessage.IRecord | undefined;
+    record?: HashTableMessage.IRecord;
   }
 
   export class Unpublish {
@@ -311,7 +311,7 @@ export namespace HashTableMessage {
 
   export type IGetResponse = {
     requestId?: bigint;
-    record?: HashTableMessage.IRecord | undefined;
+    record?: HashTableMessage.IRecord;
   }
 
   export class GetResponse {

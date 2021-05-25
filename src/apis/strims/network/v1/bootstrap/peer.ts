@@ -103,7 +103,7 @@ export class BootstrapPeerListNetworksResponse {
 }
 
 export type IBootstrapPeerPublishRequest = {
-  certificate?: strims_type_ICertificate | undefined;
+  certificate?: strims_type_ICertificate;
 }
 
 export class BootstrapPeerPublishRequest {

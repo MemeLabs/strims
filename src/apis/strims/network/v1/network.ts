@@ -55,7 +55,7 @@ export class NetworkIcon {
 
 export type ICreateNetworkRequest = {
   name?: string;
-  icon?: INetworkIcon | undefined;
+  icon?: INetworkIcon;
 }
 
 export class CreateNetworkRequest {
@@ -97,7 +97,7 @@ export class CreateNetworkRequest {
 }
 
 export type ICreateNetworkResponse = {
-  network?: INetwork | undefined;
+  network?: INetwork;
 }
 
 export class CreateNetworkResponse {
@@ -176,7 +176,7 @@ export class UpdateNetworkRequest {
 }
 
 export type IUpdateNetworkResponse = {
-  network?: INetwork | undefined;
+  network?: INetwork;
 }
 
 export class UpdateNetworkResponse {
@@ -304,7 +304,7 @@ export class GetNetworkRequest {
 }
 
 export type IGetNetworkResponse = {
-  network?: INetwork | undefined;
+  network?: INetwork;
 }
 
 export class GetNetworkResponse {
@@ -398,9 +398,9 @@ export class ListNetworksResponse {
 export type INetwork = {
   id?: bigint;
   name?: string;
-  key?: strims_type_IKey | undefined;
-  certificate?: strims_type_ICertificate | undefined;
-  icon?: INetworkIcon | undefined;
+  key?: strims_type_IKey;
+  certificate?: strims_type_ICertificate;
+  icon?: INetworkIcon;
   altProfileName?: string;
 }
 
@@ -467,8 +467,8 @@ export class Network {
 }
 
 export type ICreateNetworkInvitationRequest = {
-  signingKey?: strims_type_IKey | undefined;
-  signingCert?: strims_type_ICertificate | undefined;
+  signingKey?: strims_type_IKey;
+  signingCert?: strims_type_ICertificate;
   networkName?: string;
 }
 
@@ -517,7 +517,7 @@ export class CreateNetworkInvitationRequest {
 }
 
 export type ICreateNetworkInvitationResponse = {
-  invitation?: IInvitation | undefined;
+  invitation?: IInvitation;
   invitationB64?: string;
   invitationBytes?: Uint8Array;
 }
@@ -610,8 +610,8 @@ export class Invitation {
 }
 
 export type IInvitationV0 = {
-  key?: strims_type_IKey | undefined;
-  certificate?: strims_type_ICertificate | undefined;
+  key?: strims_type_IKey;
+  certificate?: strims_type_ICertificate;
   networkName?: string;
 }
 
@@ -753,7 +753,7 @@ export namespace CreateNetworkFromInvitationRequest {
 }
 
 export type ICreateNetworkFromInvitationResponse = {
-  network?: INetwork | undefined;
+  network?: INetwork;
 }
 
 export class CreateNetworkFromInvitationResponse {

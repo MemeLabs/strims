@@ -4,15 +4,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/ma"
+	"github.com/MemeLabs/go-ppspp/pkg/stats"
 )
 
 // NewMeterConn ...
 func NewMeterConn(c Conn) *MeterConn {
 	return &MeterConn{
 		Conn: c,
-		rma:  ma.NewSimple(100, 10*time.Millisecond),
-		wma:  ma.NewSimple(100, 10*time.Millisecond),
+		rma:  stats.NewSMA(100, 10*time.Millisecond),
+		wma:  stats.NewSMA(100, 10*time.Millisecond),
 	}
 }
 
@@ -21,7 +21,7 @@ type MeterConn struct {
 	Conn
 	mu       sync.Mutex
 	rn, wn   int64
-	rma, wma ma.Simple
+	rma, wma stats.SMA
 }
 
 // ReadBytes ...

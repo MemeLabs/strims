@@ -1,16 +1,16 @@
-package bboltkv
+package bbolt
 
 import (
 	"bytes"
 	"fmt"
 
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
-	"go.etcd.io/bbolt"
+	bboltlib "go.etcd.io/bbolt"
 )
 
 // NewStore ...
-func NewStore(path string) (*Store, error) {
-	db, err := bbolt.Open(path, 0600, nil)
+func NewStore(path string) (kv.BlobStore, error) {
+	db, err := bboltlib.Open(path, 0600, nil)
 	if err != nil {
 		return nil, err
 	}
@@ -20,12 +20,12 @@ func NewStore(path string) (*Store, error) {
 
 // Store ...
 type Store struct {
-	db *bbolt.DB
+	db *bboltlib.DB
 }
 
 // CreateStoreIfNotExists ...
 func (s *Store) CreateStoreIfNotExists(table string) error {
-	return s.db.Update(func(tx *bbolt.Tx) error {
+	return s.db.Update(func(tx *bboltlib.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte(table))
 		return err
 	})
@@ -33,14 +33,14 @@ func (s *Store) CreateStoreIfNotExists(table string) error {
 
 // DeleteStore ...
 func (s *Store) DeleteStore(table string) error {
-	return s.db.Update(func(tx *bbolt.Tx) error {
+	return s.db.Update(func(tx *bboltlib.Tx) error {
 		return tx.DeleteBucket([]byte(table))
 	})
 }
 
 // View ...
 func (s *Store) View(table string, fn func(tx kv.BlobTx) error) error {
-	return s.db.View(func(tx *bbolt.Tx) error {
+	return s.db.View(func(tx *bboltlib.Tx) error {
 		b := tx.Bucket([]byte(table))
 		if b == nil {
 			return fmt.Errorf("bucket not found %s", table)
@@ -51,7 +51,7 @@ func (s *Store) View(table string, fn func(tx kv.BlobTx) error) error {
 
 // Update ...
 func (s *Store) Update(table string, fn func(tx kv.BlobTx) error) error {
-	return s.db.Update(func(tx *bbolt.Tx) error {
+	return s.db.Update(func(tx *bboltlib.Tx) error {
 		b := tx.Bucket([]byte(table))
 		if b == nil {
 			return fmt.Errorf("bucket not found %s", table)
@@ -62,8 +62,8 @@ func (s *Store) Update(table string, fn func(tx kv.BlobTx) error) error {
 
 // Tx ...
 type Tx struct {
-	tx *bbolt.Tx
-	b  *bbolt.Bucket
+	tx *bboltlib.Tx
+	b  *bboltlib.Bucket
 }
 
 // Put ...

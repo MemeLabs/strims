@@ -7,7 +7,7 @@ import {
 } from "../../network/v1/directory";
 
 export type ICaptureOpenRequest = {
-  directorySnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
+  directorySnippet?: strims_network_v1_IDirectoryListingSnippet;
   mimeType?: string;
   networkKeys?: Uint8Array[];
 }
@@ -94,7 +94,7 @@ export class CaptureOpenResponse {
 
 export type ICaptureUpdateRequest = {
   id?: Uint8Array;
-  directorySnippet?: strims_network_v1_IDirectoryListingSnippet | undefined;
+  directorySnippet?: strims_network_v1_IDirectoryListingSnippet;
 }
 
 export class CaptureUpdateRequest {

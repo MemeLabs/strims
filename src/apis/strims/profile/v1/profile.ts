@@ -51,7 +51,7 @@ export class CreateProfileRequest {
 
 export type ICreateProfileResponse = {
   sessionId?: string;
-  profile?: IProfile | undefined;
+  profile?: IProfile;
 }
 
 export class CreateProfileResponse {
@@ -136,7 +136,7 @@ export class UpdateProfileRequest {
 }
 
 export type IUpdateProfileResponse = {
-  profile?: IProfile | undefined;
+  profile?: IProfile;
 }
 
 export class UpdateProfileResponse {
@@ -279,7 +279,7 @@ export class LoadProfileRequest {
 
 export type ILoadProfileResponse = {
   sessionId?: string;
-  profile?: IProfile | undefined;
+  profile?: IProfile;
 }
 
 export class LoadProfileResponse {
@@ -357,7 +357,7 @@ export class GetProfileRequest {
 }
 
 export type IGetProfileResponse = {
-  profile?: IProfile | undefined;
+  profile?: IProfile;
 }
 
 export class GetProfileResponse {
@@ -486,7 +486,7 @@ export class LoadSessionRequest {
 
 export type ILoadSessionResponse = {
   sessionId?: string;
-  profile?: IProfile | undefined;
+  profile?: IProfile;
 }
 
 export class LoadSessionResponse {
@@ -666,7 +666,7 @@ export type IProfile = {
   id?: bigint;
   name?: string;
   secret?: Uint8Array;
-  key?: strims_type_IKey | undefined;
+  key?: strims_type_IKey;
 }
 
 export class Profile {

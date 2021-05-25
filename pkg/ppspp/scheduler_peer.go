@@ -9,13 +9,12 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
-	"github.com/MemeLabs/go-ppspp/pkg/ma"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
+	"github.com/MemeLabs/go-ppspp/pkg/stats"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"go.uber.org/zap"
 )
@@ -24,8 +23,11 @@ var _ SwarmScheduler = &peerSwarmScheduler{}
 var _ ChannelScheduler = &peerChannelScheduler{}
 
 const (
-	schedulerGCInterval         = 5 * time.Second
-	schedulerRateUpdateInterval = time.Second
+	schedulerGCInterval          = 5 * time.Second
+	schedulerRateUpdateInterval  = 1 * time.Second
+	schedulerStreamCheckInterval = 1 * time.Second
+
+	timeGranularity = int64(time.Millisecond)
 )
 
 func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
@@ -33,8 +35,9 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 		logger:          logger,
 		swarm:           s,
 		streamBits:      binmap.Bin(streamCount(s.options)) - 1,
-		peerHaveBinRate: ma.NewSimple(15, time.Second),
+		peerHaveBinRate: stats.NewSMA(15, time.Second),
 		haveBins:        binmap.New(),
+		peerHaveBins:    binmap.New(),
 		requestBins:     binmap.New(),
 		requestStreams:  map[codec.Stream]binmap.Bin{},
 		channels:        map[*Peer]*peerChannelScheduler{},
@@ -61,11 +64,14 @@ type peerSwarmScheduler struct {
 	streamBits binmap.Bin
 	binTimes   timeSet
 
-	peerHaveBinRate ma.Simple
+	peerHaveBinRate stats.SMA
 	peerMaxHaveBin  binmap.Bin
 
 	haveBins   *binmap.Map
 	haveBinMax binmap.Bin
+
+	peerHaveBins    *binmap.Map
+	streamCheckTime time.Time
 
 	requestBins    *binmap.Map
 	requestStreams map[codec.Stream]binmap.Bin
@@ -95,14 +101,21 @@ func (s *peerSwarmScheduler) Run(t time.Time) {
 		if bps != 0 {
 			for _, cs := range s.channels {
 				cs.lock.Lock()
-				if cs.testSkip {
-					cs.test.SetLimit(0)
-				} else {
-					cs.test.SetLimit(float64(bps / len(s.channels)))
-				}
+				// if cs.testSkip {
+				// 	cs.test.SetLimit(0)
+				// } else {
+				// 	cs.test.SetLimit(float64(bps / (len(s.channels) - 1)))
+				// }
+				// cs.test.SetLimit(float64(bps / (len(s.channels) - 1)))
 				cs.lock.Unlock()
 			}
 		}
+	}
+
+	if t.Sub(s.streamCheckTime) >= schedulerStreamCheckInterval {
+		s.streamCheckTime = t
+
+		s.streamCheck()
 	}
 
 	// prune channel request times
@@ -119,6 +132,73 @@ func (s *peerSwarmScheduler) Run(t time.Time) {
 	// collect peers that swarms could do without?
 	// handle this in runner based on ingress size?
 	// unique but slow peers are also important..?
+}
+
+var glock sync.Mutex
+
+func (s *peerSwarmScheduler) streamCheck() {
+	glock.Lock()
+	defer glock.Unlock()
+
+	for _, cs := range s.channels {
+		cs.lock.Lock()
+	}
+
+	// {
+	// 	lags := []float64{}
+	// 	for _, cs := range s.channels {
+	// 		lags = lags[:0]
+	// 		for _, l := range cs.streamHaveLag {
+	// 			lags = append(lags, l.Mean())
+	// 		}
+	// 		log.Printf("%4.0f", lags)
+	// 	}
+	// }
+
+	// lags := make([]stats.Welford, len(s.channels))
+	// for i := codec.Stream(0); i < streamCount(s.swarm.options); i++ {
+	// 	lags = lags[:0]
+	// 	for _, cs := range s.channels {
+	// 		if cs.streamHaveLag[i].Count() > 0 {
+	// 			lags = append(lags, cs.streamHaveLag[i])
+	// 		}
+	// 	}
+	// 	if len(lags) == 0 {
+	// 		continue
+	// 	}
+	// 	// log.Println(spew.Sdump(lags))
+
+	// 	lag := stats.WelfordMerge(lags...)
+
+	// 	for p, cs := range s.channels {
+	// 		l := cs.streamHaveLag[i]
+
+	// 		if l.Count() > 0 {
+	// 			s.logger.Debug(
+	// 				"channel stream perf",
+	// 				zap.String("peer", fmt.Sprintf("%p", p)),
+	// 				zap.Float64s("count", []float64{l.Count(), lag.Count()}),
+	// 				zap.Float64s("mean", []float64{l.Mean(), lag.Mean()}),
+	// 				zap.Float64s("var", []float64{l.Variance(), lag.Variance()}),
+	// 				zap.Float64("t", stats.WelchTTest(l, lag)),
+	// 				zap.Float64("v", stats.WelchSatterthwaite(l, lag)),
+	// 				zap.Float64("p", stats.TDistribution(stats.WelchTTest(l, lag), stats.WelchSatterthwaite(l, lag))),
+	// 			)
+	// 		}
+	// 	}
+	// 	fmt.Print("\n")
+	// }
+
+	for _, cs := range s.channels {
+		// log.Printf("%2d", cs.streamFirstCount)
+		for i := range cs.streamFirstCount {
+			cs.streamFirstCount[i] = 0
+		}
+	}
+
+	for _, cs := range s.channels {
+		cs.lock.Unlock()
+	}
 }
 
 func (s *peerSwarmScheduler) gc() {
@@ -167,13 +247,17 @@ func (s *peerSwarmScheduler) Consume(c store.Chunk) bool {
 }
 
 func (s *peerSwarmScheduler) ChannelScheduler(p *Peer, cw *channelWriter) ChannelScheduler {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	c := &peerChannelScheduler{
 		logger:             s.logger.With(logutil.ByteHex("peer", p.id)),
 		p:                  p,
 		cw:                 cw,
 		s:                  s,
-		streamHaveLag:      make([]ma.Welford, streamCount(s.swarm.options)),
-		haveBins:           binmap.New(),
+		streamHaveLag:      make([]stats.Welford, streamCount(s.swarm.options)),
+		streamFirstCount:   make([]uint64, streamCount(s.swarm.options)),
+		haveBins:           s.haveBins.Clone(),
 		cancelBins:         binmap.New(),
 		requestBins:        newBinTimeoutQueue(128),
 		requestStreams:     map[codec.Stream]binmap.Bin{},
@@ -182,10 +266,7 @@ func (s *peerSwarmScheduler) ChannelScheduler(p *Peer, cw *channelWriter) Channe
 
 		test: qos.NewHLB(math.MaxFloat64),
 	}
-
-	s.lock.Lock()
 	s.channels[p] = c
-	s.lock.Unlock()
 
 	return c
 }
@@ -206,7 +287,7 @@ func (s *peerSwarmScheduler) CloseChannel(p *Peer) {
 }
 
 func (s *peerSwarmScheduler) binStream(b binmap.Bin) codec.Stream {
-	return codec.Stream(b & s.streamBits)
+	return codec.Stream(b >> 1 & s.streamBits)
 }
 
 type peerChannelScheduler struct {
@@ -219,10 +300,11 @@ type peerChannelScheduler struct {
 
 	lock sync.Mutex
 
-	choked        bool
-	streamHaveLag []ma.Welford
-	requestTimes  timeSet
-	dataRtt       ma.Welford
+	choked           bool
+	streamHaveLag    []stats.Welford
+	streamFirstCount []uint64
+	requestTimes     timeSet
+	dataRtt          stats.Welford
 
 	haveBins       *binmap.Map      // bins to send HAVEs for
 	cancelBins     *binmap.Map      // bins to send CANCELs for
@@ -237,8 +319,8 @@ type peerChannelScheduler struct {
 	peerOpenStreams    []codec.StreamAddress
 	peerCloseStreams   []codec.Stream
 
-	test     *qos.HLB
-	testSkip bool
+	test *qos.HLB
+	// testSkip bool
 }
 
 func (c *peerChannelScheduler) selectRequestBins() {
@@ -300,7 +382,7 @@ func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, pri peerPri
 	}
 
 	c.lock.Lock()
-	_, err := c.s.swarm.verifier.WriteIntegrity(b, c.haveBins, c.cw)
+	_, err := c.s.swarm.verifier.WriteIntegrity(b, c.peerHaveBins, c.cw)
 	c.lock.Unlock()
 	if err != nil {
 		if errors.Is(err, codec.ErrNotEnoughSpace) {
@@ -367,20 +449,28 @@ func (c *peerChannelScheduler) write1() error {
 		min = c.peerMaxHaveBin - c.peerLiveWindow
 	}
 
+	if !c.peerHaveBins.Empty() {
+		c.s.initHack.Do(func() {
+			b := c.peerHaveBins.FindLastFilled()
+			c.s.swarm.store.SetOffset(b.BaseRight())
+			c.s.requestBins.FillBefore(b.BaseRight() - 2)
+		})
+	}
+
 	var err error
 	it := binmap.NewIntersectionIterator(c.s.requestBins.IterateEmptyAt(c.peerHaveBins.RootBin()), c.peerHaveBins.IterateFilled())
-	// EachCandidate:
+EachCandidate:
 	for ok := it.NextAfter(min); ok; ok = it.Next() {
 		b := it.Value()
-		// for {
-		// 	if c.test.Check(float64(b.BaseLength() * uint64(c.s.chunkSize))) {
-		// 		break
-		// 	}
-		// 	if b.Base() {
-		// 		break EachCandidate
-		// 	}
-		// 	b = b.BaseLeft()
-		// }
+		for {
+			if c.test.Check(float64(b.BaseLength() * uint64(c.s.chunkSize))) {
+				break
+			}
+			if b.Base() {
+				break EachCandidate
+			}
+			b = b.BaseLeft()
+		}
 
 		_, err = c.cw.WriteRequest(codec.Request{Address: codec.Address(b)})
 		if errors.Is(err, codec.ErrNotEnoughSpace) {
@@ -390,10 +480,6 @@ func (c *peerChannelScheduler) write1() error {
 			break
 		}
 		c.s.requestBins.Set(it.Value())
-
-		c.s.initHack.Do(func() {
-			c.s.swarm.store.SetOffset(it.Value().BaseRight())
-		})
 	}
 
 	c.s.lock.Unlock()
@@ -483,7 +569,7 @@ func (c *peerChannelScheduler) HandleData(b binmap.Bin, valid bool) error {
 
 	c.lock.Lock()
 	if ts, ok := c.requestTimes.Get(b); ok {
-		c.dataRtt.Update(float64(now.UnixNano() - ts))
+		c.dataRtt.Update(float64((now.UnixNano() - ts) / timeGranularity))
 	}
 	c.lock.Unlock()
 	return nil
@@ -505,7 +591,8 @@ func (c *peerChannelScheduler) HandleHave(b binmap.Bin) error {
 
 	for it := c.peerHaveBins.IterateEmptyAt(b); it.NextBase(); {
 		first, _ := c.s.binTimes.Get(it.Value())
-		c.streamHaveLag[(it.Value()>>1)&c.s.streamBits].Update(float64(ts - first))
+
+		c.streamHaveLag[c.s.binStream(it.Value())].Update(float64((ts - first) / timeGranularity))
 
 		// TODO: consolidate bins before setting request bins?
 		rb, ok := c.s.requestStreams[c.s.binStream(it.Value())]
@@ -514,13 +601,26 @@ func (c *peerChannelScheduler) HandleHave(b binmap.Bin) error {
 		}
 	}
 
-	debug.RunEveryN(100000, func() {
-		d := make([]time.Duration, len(c.streamHaveLag))
-		for i := range c.streamHaveLag {
-			d[i] = time.Duration(c.streamHaveLag[i].Mean())
+	// debug.RunEveryN(100000, func() {
+	// 	d := make([]time.Duration, len(c.streamHaveLag))
+	// 	for i := range c.streamHaveLag {
+	// 		d[i] = time.Duration(c.streamHaveLag[i].Mean())
+	// 	}
+	// 	log.Printf("times %s", d)
+	// })
+
+	for it := binmap.NewIntersectionIterator(c.s.peerHaveBins.IterateEmptyAt(b), c.peerHaveBins.IterateEmptyAt(b)); it.NextBase(); {
+		c.streamFirstCount[c.s.binStream(it.Value())]++
+
+		// HAX
+		rb, ok := c.s.requestStreams[c.s.binStream(it.Value())]
+		if ok && rb <= it.Value() {
+			c.s.requestBins.Set(it.Value())
 		}
-		log.Printf("times %s", d)
-	})
+	}
+
+	c.s.peerHaveBins.Set(b)
+	c.peerHaveBins.Set(b)
 
 	// nzb := atomic.AddInt64(&zb, int64(time.Since(tts)))
 	// nza := atomic.AddInt64(&za, 1)
@@ -537,8 +637,6 @@ func (c *peerChannelScheduler) HandleHave(b binmap.Bin) error {
 	}
 
 	c.s.lock.Unlock()
-
-	c.peerHaveBins.Set(b)
 
 	c.lock.Unlock()
 
@@ -636,7 +734,7 @@ func (c *peerChannelScheduler) HandleStreamOpen(s codec.Stream, b binmap.Bin) er
 	c.requestStreams[s] = b
 	c.s.requestStreams[s] = b
 
-	c.testSkip = true
+	// c.testSkip = true
 
 	return nil
 }

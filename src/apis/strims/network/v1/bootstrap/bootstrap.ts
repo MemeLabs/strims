@@ -217,7 +217,7 @@ export namespace CreateBootstrapClientRequest {
 }
 
 export type ICreateBootstrapClientResponse = {
-  bootstrapClient?: IBootstrapClient | undefined;
+  bootstrapClient?: IBootstrapClient;
 }
 
 export class CreateBootstrapClientResponse {
@@ -338,7 +338,7 @@ export namespace UpdateBootstrapClientRequest {
 }
 
 export type IUpdateBootstrapClientResponse = {
-  bootstrapClient?: IBootstrapClient | undefined;
+  bootstrapClient?: IBootstrapClient;
 }
 
 export class UpdateBootstrapClientResponse {
@@ -466,7 +466,7 @@ export class GetBootstrapClientRequest {
 }
 
 export type IGetBootstrapClientResponse = {
-  bootstrapClient?: IBootstrapClient | undefined;
+  bootstrapClient?: IBootstrapClient;
 }
 
 export class GetBootstrapClientResponse {
@@ -784,7 +784,7 @@ export namespace BootstrapServiceMessage {
 
   export type IPublishRequest = {
     name?: string;
-    certificate?: strims_type_ICertificate | undefined;
+    certificate?: strims_type_ICertificate;
   }
 
   export class PublishRequest {
@@ -907,7 +907,7 @@ export namespace BootstrapServiceMessage {
 
 export type IPublishNetworkToBootstrapPeerRequest = {
   peerId?: bigint;
-  network?: strims_network_v1_INetwork | undefined;
+  network?: strims_network_v1_INetwork;
 }
 
 export class PublishNetworkToBootstrapPeerRequest {

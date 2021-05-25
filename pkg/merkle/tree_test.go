@@ -16,6 +16,11 @@ func rng() io.Reader {
 	return hmac_drbg.NewReader(sha256.New, []byte{1, 2, 3, 4})
 }
 
+func initRootHash(t *Tree, digest []byte) {
+	t.Set(t.rootBin, digest)
+	t.setVerified(t.rootBin)
+}
+
 func TestVerify(t *testing.T) {
 	cases := []struct {
 		chunkSize int
@@ -39,16 +44,14 @@ func TestVerify(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			r := NewTree(c.bin, c.chunkSize, sha256.New())
+			r := NewTree(c.bin, c.chunkSize, sha256.New)
 			r.Fill(c.bin, data)
 
-			// spew.Dump(r)
+			r0 := NewTree(c.bin, c.chunkSize, sha256.New)
+			initRootHash(r0, r.Get(c.bin))
 
-			r0 := NewTree(c.bin, c.chunkSize, sha256.New())
-			r0.SetRoot(r.Get(c.bin))
-
-			r1 := NewProvisionalTree(r0)
-			verified, err := r1.Verify(c.bin, data)
+			r1 := NewTree(c.bin, c.chunkSize, sha256.New)
+			verified, err := r1.VerifyWithParent(c.bin, data, r0)
 			assert.Nil(t, err, "unexpected error")
 			assert.True(t, verified, "expected successful validation")
 
@@ -67,31 +70,31 @@ func TestVerifyMerge(t *testing.T) {
 	}
 	fillBytes := data[fillBin.BaseOffset()*chunkSize : (fillBin.BaseOffset()+fillBin.BaseLength())*chunkSize]
 
-	r := NewTree(bin, chunkSize, sha256.New())
+	r := NewTree(bin, chunkSize, sha256.New)
 	r.Fill(bin, data)
 
-	copyAndVerify := func(dst, src *Tree) bool {
+	copyAndVerify := func(dst, src, parent *Tree) bool {
 		for b := fillBin; b != bin; b = b.Parent() {
 			dst.Set(b.Sibling(), src.Get(b.Sibling()))
 		}
 
-		verified, err := dst.Verify(fillBin, fillBytes)
+		verified, err := dst.VerifyWithParent(fillBin, fillBytes, parent)
 		assert.Nil(t, err, "unexpected error")
 
 		return verified
 	}
 
-	r00 := NewTree(bin, chunkSize, sha256.New())
-	r00.SetRoot(r.Get(bin))
-	r01 := NewProvisionalTree(r00)
-	assert.True(t, copyAndVerify(r01, r), "expected successful validation")
+	r00 := NewTree(bin, chunkSize, sha256.New)
+	initRootHash(r00, r.Get(bin))
+	r01 := NewTree(bin, chunkSize, sha256.New)
+	assert.True(t, copyAndVerify(r01, r, r00), "expected successful validation")
 
 	r00.Merge(r01)
 
-	r10 := NewTree(bin, chunkSize, sha256.New())
-	r10.SetRoot(r10.Get(bin))
-	r11 := NewProvisionalTree(r10)
-	assert.True(t, copyAndVerify(r11, r00), "expected successful validation")
+	r10 := NewTree(bin, chunkSize, sha256.New)
+	initRootHash(r10, r10.Get(bin))
+	r11 := NewTree(bin, chunkSize, sha256.New)
+	assert.True(t, copyAndVerify(r11, r00, r10), "expected successful validation")
 }
 
 func BenchmarkMerge(b *testing.B) {
@@ -99,7 +102,7 @@ func BenchmarkMerge(b *testing.B) {
 	root := binmap.NewBin(6, 0)
 
 	newTestTree := func(b binmap.Bin) *Tree {
-		t := NewTree(root, chunkSize, sha256.New())
+		t := NewTree(root, chunkSize, sha256.New)
 
 		for i := b.BaseLeft(); i < b.BaseRight(); i++ {
 			t.setVerified(i)
@@ -124,10 +127,11 @@ func BenchmarkMerge(b *testing.B) {
 
 	b.ResetTimer()
 
-	t := NewTree(root, chunkSize, sha256.New())
+	t := NewTree(root, chunkSize, sha256.New)
 	for i := 0; i < b.N; i++ {
 		t.verified = trees[rand.Intn(len(trees))].verified
 		t.Merge(trees[rand.Intn(len(trees))])
+		t.Reset(root)
 	}
 }
 
@@ -140,20 +144,20 @@ func TestVerifyForward(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := NewTree(root, chunkSize, sha256.New())
+	r := NewTree(root, chunkSize, sha256.New)
 	r.Fill(root, data)
 
 	// create reference node with the root hash set
-	r0 := NewTree(root, chunkSize, sha256.New())
-	r0.SetRoot(r.Get(root))
+	r0 := NewTree(root, chunkSize, sha256.New)
+	initRootHash(r0, r.Get(root))
 
-	r1 := NewProvisionalTree(r0)
+	r1 := NewTree(root, chunkSize, sha256.New)
 	// set hashes required to verify node on r1
 	for b := fillBin; b != root; b = b.Parent() {
 		r1.Set(b.Sibling(), r.Get(b.Sibling()))
 	}
 
-	verified, err := r1.Verify(17, data[8*chunkSize:10*chunkSize])
+	verified, err := r1.VerifyWithParent(17, data[8*chunkSize:10*chunkSize], r0)
 	assert.Nil(t, err, "unexpected error")
 	assert.True(t, verified)
 }
@@ -167,20 +171,20 @@ func TestNoVeriefiedReferenceNode(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	r := NewTree(bin, chunkSize, sha256.New())
+	r := NewTree(bin, chunkSize, sha256.New)
 	r.Fill(bin, data)
 
 	// create reference node with no root hash
-	r0 := NewTree(bin, chunkSize, sha256.New())
+	r0 := NewTree(bin, chunkSize, sha256.New)
 
-	r1 := NewProvisionalTree(r0)
+	r1 := NewTree(bin, chunkSize, sha256.New)
 	// set hashes required to verify node on r1
 	for b := fillBin; b != bin; b = b.Parent() {
 		r1.Set(b.Sibling(), r.Get(b.Sibling()))
 	}
 
 	// should return false since r0 has no hashes to verify against
-	verified, err := r1.Verify(17, data[8*chunkSize:10*chunkSize])
+	verified, err := r1.VerifyWithParent(17, data[8*chunkSize:10*chunkSize], r0)
 	assert.Nil(t, err, "unexpected error")
 	assert.False(t, verified)
 }

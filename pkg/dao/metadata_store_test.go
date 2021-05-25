@@ -3,14 +3,14 @@ package dao
 import (
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/pkg/memkv"
+	"github.com/MemeLabs/go-ppspp/pkg/kv/kvtest"
 	"github.com/stretchr/testify/assert"
 )
 
 func createMetadataStore(t *testing.T) *MetadataStore {
 	t.Helper()
 
-	kvStore, err := memkv.NewStore("strims")
+	kvStore, err := kvtest.NewMemStore("strims")
 	assert.Nil(t, err, "failed to create kvstore")
 
 	mdStore, err := NewMetadataStore(kvStore)

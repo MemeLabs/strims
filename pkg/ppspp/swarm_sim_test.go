@@ -30,6 +30,18 @@ type testPeer struct {
 	downloadRate int
 	uploadRate   int
 	city         ppspptest.City
+	peers        testCityList
+}
+
+type testCityList []ppspptest.City
+
+func (c testCityList) Contains(v ppspptest.City) bool {
+	for i := range c {
+		if c[i] == v {
+			return true
+		}
+	}
+	return false
 }
 
 func TestSwarmSim(t *testing.T) {
@@ -59,31 +71,39 @@ func TestSwarmSim(t *testing.T) {
 			uploadRate:   15 * ppspptest.Mbps,
 			city:         ppspptest.SanFrancisco,
 		},
-		// {
-		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
-		// 	city:         ppspptest.LosAngeles,
-		// },
-		// {
-		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
-		// 	city:         ppspptest.London,
-		// },
-		// {
-		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
-		// 	city:         ppspptest.Berlin,
-		// },
-		// {
-		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
-		// 	city:         ppspptest.Paris,
-		// },
-		// {
-		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
-		// 	city:         ppspptest.Rome,
-		// },
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.LosAngeles,
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.London,
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.Berlin,
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.Paris,
+			peers:        testCityList{ppspptest.LosAngeles, ppspptest.London, ppspptest.Berlin, ppspptest.Rome, ppspptest.HongKong},
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.Rome,
+			peers:        testCityList{ppspptest.LosAngeles, ppspptest.London, ppspptest.Berlin, ppspptest.Paris, ppspptest.HongKong},
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.HongKong,
+			peers:        testCityList{ppspptest.LosAngeles, ppspptest.London, ppspptest.Berlin, ppspptest.Paris, ppspptest.Rome},
+		},
 	}
 
 	key := ppspptest.Key()
@@ -200,16 +220,18 @@ func TestSwarmSim(t *testing.T) {
 			clients[i].conns[j] = imConn
 			clients[j].conns[i] = jmConn
 
-			iChanReader, iPeer := clients[i].runner.RunPeer(clients[i].id, imConn)
-			jChanReader, jPeer := clients[j].runner.RunPeer(clients[j].id, jmConn)
+			if (peers[i].peers == nil || peers[i].peers.Contains(peers[j].city)) && (peers[j].peers == nil || peers[j].peers.Contains(peers[i].city)) {
+				iChanReader, iPeer := clients[i].runner.RunPeer(clients[i].id, imConn)
+				jChanReader, jPeer := clients[j].runner.RunPeer(clients[j].id, jmConn)
 
-			err = clients[i].runner.RunChannel(clients[i].swarm, iPeer, codec.Channel(i), codec.Channel(j))
-			assert.NoError(t, err, "channel open failed")
-			err = clients[j].runner.RunChannel(clients[j].swarm, jPeer, codec.Channel(j), codec.Channel(i))
-			assert.NoError(t, err, "channel open failed")
+				err = clients[i].runner.RunChannel(clients[i].swarm, iPeer, codec.Channel(i), codec.Channel(j))
+				assert.NoError(t, err, "channel open failed")
+				err = clients[j].runner.RunChannel(clients[j].swarm, jPeer, codec.Channel(j), codec.Channel(i))
+				assert.NoError(t, err, "channel open failed")
 
-			go ppspptest.ReadChannelConn(imConn, iChanReader)
-			go ppspptest.ReadChannelConn(jmConn, jChanReader)
+				go ppspptest.ReadChannelConn(imConn, iChanReader)
+				go ppspptest.ReadChannelConn(jmConn, jChanReader)
+			}
 		}
 	}
 
@@ -218,6 +240,7 @@ func TestSwarmSim(t *testing.T) {
 		t := time.NewTicker(time.Second / time.Duration(writesPerSecond))
 		var nn int
 		for range t.C {
+			rand.Read(b)
 			n, _ := src.Write(b)
 			if nn += n; nn >= bytesReadGoal*2 {
 				break

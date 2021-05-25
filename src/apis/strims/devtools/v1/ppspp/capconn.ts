@@ -282,7 +282,7 @@ export class CapConnLoadLogRequest {
 }
 
 export type ICapConnLoadLogResponse = {
-  log?: ICapConnLog | undefined;
+  log?: ICapConnLog;
 }
 
 export class CapConnLoadLogResponse {

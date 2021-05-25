@@ -242,9 +242,9 @@ export class DirectoryListingService {
 }
 
 export type IDirectoryListing = {
-  creator?: strims_type_ICertificate | undefined;
+  creator?: strims_type_ICertificate;
   timestamp?: bigint;
-  snippet?: IDirectoryListingSnippet | undefined;
+  snippet?: IDirectoryListingSnippet;
   key?: Uint8Array;
   signature?: Uint8Array;
   content?: DirectoryListing.IContent
@@ -521,7 +521,7 @@ export namespace DirectoryEvent {
   };
 
   export type IPublish = {
-    listing?: IDirectoryListing | undefined;
+    listing?: IDirectoryListing;
   }
 
   export class Publish {
@@ -760,7 +760,7 @@ export namespace DirectoryEvent {
 }
 
 export type IDirectoryPublishRequest = {
-  listing?: IDirectoryListing | undefined;
+  listing?: IDirectoryListing;
 }
 
 export class DirectoryPublishRequest {
@@ -1060,7 +1060,7 @@ export class DirectoryFrontendOpenRequest {
 }
 
 export type IDirectoryFrontendOpenResponse = {
-  event?: IDirectoryEvent | undefined;
+  event?: IDirectoryEvent;
 }
 
 export class DirectoryFrontendOpenResponse {
