@@ -59,8 +59,30 @@ func (s *SMA) AddWithTime(v uint64, t time.Time) {
 	s.n++
 }
 
+// AddN ...
+func (s *SMA) AddN(c, v uint64) {
+	s.AddNWithTime(c, v, time.Now())
+}
+
+// AddNWithTime ...
+func (s *SMA) AddNWithTime(c, v uint64, t time.Time) {
+	s.advance(t)
+
+	s.w[s.i].v += c * v
+	s.w[s.i].n += c
+	s.v += c * v
+	s.n += c
+}
+
 // Value ...
 func (s *SMA) Value() uint64 {
+	return s.ValueWithTime(time.Now())
+}
+
+// ValueWithTime ...
+func (s *SMA) ValueWithTime(t time.Time) uint64 {
+	s.advance(t)
+
 	if s.n == 0 {
 		return 0
 	}
@@ -110,6 +132,21 @@ func (s *SMA) RateWithTime(d time.Duration, t time.Time) uint64 {
 		return 0
 	}
 	return s.v * uint64(d) / uint64(time.Duration(s.wl)*s.d)
+}
+
+// SampleRate ...
+func (s *SMA) SampleRate(d time.Duration) uint64 {
+	return s.SampleRateWithTime(d, time.Now())
+}
+
+// SampleRateWithTime ...
+func (s *SMA) SampleRateWithTime(d time.Duration, t time.Time) uint64 {
+	s.advance(t)
+
+	if s.wl == 0 {
+		return 0
+	}
+	return s.n * uint64(d) / uint64(time.Duration(s.wl)*s.d)
 }
 
 type smaSample struct {

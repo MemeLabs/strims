@@ -275,7 +275,7 @@ func (s *seffSession) computeMinFinish() uint64 {
 
 func (s *seffSession) minFinish() uint64 {
 	if s == nil {
-		return math.MaxUint32
+		return math.MaxUint64
 	}
 	return s.minFTime
 }

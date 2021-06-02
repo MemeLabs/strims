@@ -2,6 +2,7 @@ package ppspp
 
 import (
 	"context"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -45,7 +46,7 @@ func (c testCityList) Contains(v ppspptest.City) bool {
 }
 
 func TestSwarmSim(t *testing.T) {
-	byteRate := 8000 * ppspptest.Kbps
+	byteRate := 6000 * ppspptest.Kbps
 	writesPerSecond := 10
 
 	bytesReadGoal := byteRate * 20
@@ -90,19 +91,37 @@ func TestSwarmSim(t *testing.T) {
 			downloadRate: 150 * ppspptest.Mbps,
 			uploadRate:   15 * ppspptest.Mbps,
 			city:         ppspptest.Paris,
-			peers:        testCityList{ppspptest.LosAngeles, ppspptest.London, ppspptest.Berlin, ppspptest.Rome, ppspptest.HongKong},
+			peers:        testCityList{ppspptest.LosAngeles, ppspptest.London, ppspptest.Berlin, ppspptest.Rome, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Tokyo, ppspptest.Singapore},
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
 			uploadRate:   15 * ppspptest.Mbps,
 			city:         ppspptest.Rome,
-			peers:        testCityList{ppspptest.LosAngeles, ppspptest.London, ppspptest.Berlin, ppspptest.Paris, ppspptest.HongKong},
+			peers:        testCityList{ppspptest.LosAngeles, ppspptest.London, ppspptest.Berlin, ppspptest.Paris, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Tokyo, ppspptest.Singapore},
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
 			uploadRate:   15 * ppspptest.Mbps,
 			city:         ppspptest.HongKong,
-			peers:        testCityList{ppspptest.LosAngeles, ppspptest.London, ppspptest.Berlin, ppspptest.Paris, ppspptest.Rome},
+			peers:        testCityList{ppspptest.LosAngeles, ppspptest.London, ppspptest.Berlin, ppspptest.Paris, ppspptest.Rome, ppspptest.Moscow, ppspptest.Tokyo, ppspptest.Singapore},
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.Moscow,
+			peers:        testCityList{ppspptest.Seattle, ppspptest.Berlin, ppspptest.Paris, ppspptest.Rome, ppspptest.HongKong, ppspptest.Tokyo, ppspptest.Singapore},
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.Tokyo,
+			peers:        testCityList{ppspptest.SanFrancisco, ppspptest.Paris, ppspptest.Rome, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Singapore},
+		},
+		{
+			downloadRate: 150 * ppspptest.Mbps,
+			uploadRate:   15 * ppspptest.Mbps,
+			city:         ppspptest.Singapore,
+			peers:        testCityList{ppspptest.Paris, ppspptest.Rome, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Tokyo},
 		},
 	}
 
@@ -123,10 +142,19 @@ func TestSwarmSim(t *testing.T) {
 		writer    testWriter
 	}
 
+	var nextClientID uint16
 	newClientID := func() []byte {
-		id := make([]byte, 64)
-		rand.Read(id)
+		nextClientID++
+		id := make([]byte, 2)
+		binary.BigEndian.PutUint16(id, nextClientID)
 		return id
+	}
+
+	pairID := func(a, b []byte) []byte {
+		c := make([]byte, len(a)+len(b))
+		n := copy(c, a)
+		copy(c[n:], b)
+		return c
 	}
 
 	newClient := func(p testPeer) *client {
@@ -209,10 +237,10 @@ func TestSwarmSim(t *testing.T) {
 			iConn = ppspptest.NewQOSConn(iConn, clients[i].qos.AddSession(qos.MaxWeight))
 			jConn = ppspptest.NewQOSConn(jConn, clients[j].qos.AddSession(qos.MaxWeight))
 
-			iConn, err = ppspptest.NewCapConn(iConn, capLog.Writer(), fmt.Sprintf("%s : %s", clients[i].city.Name, clients[j].city.Name))
-			assert.NoError(t, err, "cap conn open failed")
-			jConn, err = ppspptest.NewCapConn(jConn, capLog.Writer(), fmt.Sprintf("%s : %s", clients[j].city.Name, clients[i].city.Name))
-			assert.NoError(t, err, "cap conn open failed")
+			// iConn, err = ppspptest.NewCapConn(iConn, capLog.Writer(), fmt.Sprintf("%s : %s", clients[i].city.Name, clients[j].city.Name))
+			// assert.NoError(t, err, "cap conn open failed")
+			// jConn, err = ppspptest.NewCapConn(jConn, capLog.Writer(), fmt.Sprintf("%s : %s", clients[j].city.Name, clients[i].city.Name))
+			// assert.NoError(t, err, "cap conn open failed")
 
 			imConn := ppspptest.NewMeterConn(iConn)
 			jmConn := ppspptest.NewMeterConn(jConn)
@@ -221,8 +249,8 @@ func TestSwarmSim(t *testing.T) {
 			clients[j].conns[i] = jmConn
 
 			if (peers[i].peers == nil || peers[i].peers.Contains(peers[j].city)) && (peers[j].peers == nil || peers[j].peers.Contains(peers[i].city)) {
-				iChanReader, iPeer := clients[i].runner.RunPeer(clients[i].id, imConn)
-				jChanReader, jPeer := clients[j].runner.RunPeer(clients[j].id, jmConn)
+				iChanReader, iPeer := clients[i].runner.RunPeer(pairID(clients[i].id, clients[j].id), imConn)
+				jChanReader, jPeer := clients[j].runner.RunPeer(pairID(clients[j].id, clients[i].id), jmConn)
 
 				err = clients[i].runner.RunChannel(clients[i].swarm, iPeer, codec.Channel(i), codec.Channel(j))
 				assert.NoError(t, err, "channel open failed")
@@ -273,7 +301,7 @@ func TestSwarmSim(t *testing.T) {
 		assert.Nil(t, err, "writing string failed")
 
 		// t := time.NewTicker(time.Second)
-		ticker := time.NewTicker(time.Second)
+		ticker := time.NewTicker(1 * time.Second)
 		var tick int
 		for range ticker.C {
 			log.Printf("=== %-14s =====================================================", time.Since(start))
@@ -315,7 +343,15 @@ func TestSwarmSim(t *testing.T) {
 						)
 					}
 				}
-				log.Printf("%-32s in: %-12d %-15d out: %-12d %-7d", c.city.Name, rn, rr, wn, wr)
+				log.Printf("%-32s in: %-12d %-7d %-7.2f out: %-12d %-7d %.2f",
+					c.city.Name,
+					rn,
+					rr,
+					float64(rr)/float64(peers[i].downloadRate)*100,
+					wn,
+					wr,
+					float64(wr)/float64(peers[i].uploadRate)*100,
+				)
 				log.Printf("%-26s readable: %-12d", c.city.Name, c.writer.WrittenBytes())
 				log.Println("")
 

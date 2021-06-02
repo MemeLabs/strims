@@ -2,6 +2,7 @@ package store
 
 import (
 	"errors"
+	"log"
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
@@ -55,16 +56,15 @@ type Buffer struct {
 }
 
 // Consume ...
-func (s *Buffer) Consume(c Chunk) bool {
+func (s *Buffer) Consume(c Chunk) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	if s.bins.FilledAt(c.Bin) {
-		return false
+		return
 	}
 
 	s.set(c.Bin, c.Data)
-	return true
 }
 
 // Close ...
@@ -173,6 +173,12 @@ func (s *Buffer) Recover() (uint64, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
+	emptyBins := []binmap.Bin{}
+	for it := s.bins.IterateEmpty(); it.Next(); {
+		emptyBins = append(emptyBins, it.Value())
+	}
+	log.Println(emptyBins)
+
 	next := s.bins.FindFilledAfter(s.tail())
 	if next.IsNone() {
 		return 0, ErrReadOffsetNotFound
@@ -259,9 +265,22 @@ func (s *Buffer) Read(p []byte) (int, error) {
 	}
 	defer s.lock.Unlock()
 
+	// if s.next < s.tail() {
+	// 	return 0, ErrBufferUnderrun
+	// }
+
 	l := int(s.off - binByte(s.tail(), s.chunkSize))
 	h := int(binByte(s.next-s.tail(), s.chunkSize))
 	i := s.index(s.tail())
+
+	defer func() {
+		if err := recover(); err != nil {
+			log.Printf("l %d h %d i %d s.off %d s.next %d s.tail() %d", l, h, i, s.off, s.next, s.tail())
+			log.Println(err)
+			panic("fuck")
+		}
+	}()
+
 	n := byterope.New(p).Copy(byterope.New(s.buf[i:], s.buf[:i]).Slice(l, h)...)
 
 	s.off += uint64(n)

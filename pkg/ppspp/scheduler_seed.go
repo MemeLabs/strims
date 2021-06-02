@@ -2,6 +2,7 @@ package ppspp
 
 import (
 	"errors"
+	"log"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -55,7 +56,7 @@ func (s *seedSwarmScheduler) Run(c time.Time) {
 	// decide whether to assign a stream to a peer
 }
 
-func (s *seedSwarmScheduler) Consume(c store.Chunk) bool {
+func (s *seedSwarmScheduler) Consume(c store.Chunk) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -67,8 +68,6 @@ func (s *seedSwarmScheduler) Consume(c store.Chunk) bool {
 	for _, cs := range s.channels {
 		cs.appendHaveBins(hb, c.Bin)
 	}
-
-	return true
 }
 
 var zn int32
@@ -87,24 +86,25 @@ func (s *seedSwarmScheduler) ChannelScheduler(p *Peer, cw *channelWriter) Channe
 		peerRequestStreams: map[codec.Stream]binmap.Bin{},
 	}
 
-	// zzn := codec.Stream(atomic.AddInt32(&zn, 1)) - 1
-	// sc := streamCount(s.swarm.options)
-	// b := s.haveBins.FindLastFilled()
-	// if b.IsNone() {
-	// 	b = 0
-	// } else {
-	// 	b = binmap.Bin(sc) * (b / binmap.Bin(sc*2))
-	// }
-	// for i := codec.Stream(0); i < sc; i++ {
-	// 	if i%3 == zzn {
-	// 		c.peerOpenStreams = append(c.peerOpenStreams, codec.StreamAddress{
-	// 			Stream:  i,
-	// 			Address: codec.Address(b),
-	// 		})
-	// 		c.peerRequestStreams[i] = b
-	// 	}
-	// 	b += 2
-	// }
+	// HAX
+	zzn := codec.Stream(atomic.AddInt32(&zn, 1)) - 1
+	sc := streamCount(s.swarm.options)
+	k := (sc + 2) / 3
+	for i := codec.Stream(0); i < sc; i++ {
+		if i/k == zzn {
+			c.peerOpenStreams = append(c.peerOpenStreams, codec.StreamAddress{
+				Stream:  i,
+				Address: 0,
+			})
+			c.peerRequestStreams[i] = 0
+
+			for it := s.haveBins.IterateFilled(); it.NextBase(); {
+				if s.binStream(it.Value()) == i {
+					p.pushData(c, it.Value(), peerPriorityHigh)
+				}
+			}
+		}
+	}
 
 	s.channels[p] = c
 
@@ -127,7 +127,7 @@ func (s *seedSwarmScheduler) CloseChannel(p *Peer) {
 }
 
 func (s *seedSwarmScheduler) binStream(b binmap.Bin) codec.Stream {
-	return codec.Stream(b & s.streamBits)
+	return codec.Stream(b >> 1 & s.streamBits)
 }
 
 type seedChannelScheduler struct {
@@ -176,6 +176,7 @@ func (c *seedChannelScheduler) appendHaveBins(hb, b binmap.Bin) {
 
 func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, pri peerPriority) (int, error) {
 	if err := c.cw.Resize(maxBytes); err != nil {
+		c.p.pushFrontData(c, b, pri)
 		return 0, nil
 	}
 
@@ -184,13 +185,17 @@ func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, pri peerPri
 			break
 		}
 
-		if b.Base() {
+		if b.IsBase() {
 			c.p.pushFrontData(c, b, pri)
 			return 0, nil
 		}
 
 		c.p.pushFrontData(c, b.Right(), pri)
 		b = b.Left()
+	}
+
+	if binmap.Bin(22).Contains(b) || b.Contains(22) {
+		log.Println(">>> sent data", b)
 	}
 
 	c.lock.Lock()
@@ -202,6 +207,13 @@ func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, pri peerPri
 			c.p.pushFrontData(c, b, pri)
 			return 0, nil
 		}
+		c.logger.Debug(
+			"error writing integrity",
+			zap.Uint64("bin", uint64(b)),
+			zap.Stringer("priority", pri),
+			zap.Uint16("stream", uint16(c.s.binStream(b))),
+			zap.Error(err),
+		)
 		return 0, err
 	}
 	if _, err := c.s.swarm.store.WriteData(b, c.cw); err != nil {
@@ -210,8 +222,20 @@ func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, pri peerPri
 			c.p.pushFrontData(c, b, pri)
 			return 0, nil
 		}
+		c.logger.Debug(
+			"error writing data",
+			zap.Uint64("bin", uint64(b)),
+			zap.Stringer("priority", pri),
+			zap.Uint16("stream", uint16(c.s.binStream(b))),
+			zap.Error(err),
+		)
 		return 0, err
 	}
+
+	// TODO: enable optionally?
+	c.lock.Lock()
+	c.peerHaveBins.Set(b)
+	c.lock.Unlock()
 
 	return c.flushWrites()
 }
@@ -232,12 +256,12 @@ func (c *seedChannelScheduler) write0() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if err := c.writeMapBins(c.haveBins, c.writeHave); err != nil {
-		if errors.Is(err, codec.ErrNotEnoughSpace) {
-			return nil
-		}
-		return err
-	}
+	// if err := c.writeMapBins(c.haveBins, c.writeHave); err != nil {
+	// 	if errors.Is(err, codec.ErrNotEnoughSpace) {
+	// 		return nil
+	// 	}
+	// 	return err
+	// }
 
 	if len(c.peerOpenStreams) != 0 {
 		for _, s := range c.peerOpenStreams {

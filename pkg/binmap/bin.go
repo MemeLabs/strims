@@ -120,6 +120,10 @@ func (b Bin) BaseRight() Bin {
 	return (b | (b + 1)) - 1
 }
 
+func (b Bin) Base() (l, r Bin) {
+	return b.BaseLeft(), b.BaseRight()
+}
+
 // LayerLeft bin at layer offset - 1 or None
 func (b Bin) LayerLeft() Bin {
 	if b == None {
@@ -140,8 +144,8 @@ func (b Bin) LayerRight() Bin {
 	return b + b.LayerBits() + 1
 }
 
-// Base true if b is in the base
-func (b Bin) Base() bool {
+// IsBase true if b is in the base
+func (b Bin) IsBase() bool {
 	return b&1 == 0
 }
 

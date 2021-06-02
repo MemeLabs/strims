@@ -40,21 +40,18 @@ func (p *PubSub) Unsubscribe(s Subscriber) {
 }
 
 // Publish ...
-func (p *PubSub) Publish(c Chunk) bool {
+func (p *PubSub) Publish(c Chunk) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
 	for _, s := range p.subs {
-		if !s.Consume(c) {
-			return false
-		}
+		s.Consume(c)
 	}
-	return true
 }
 
 // Subscriber ...
 type Subscriber interface {
-	Consume(c Chunk) bool
+	Consume(c Chunk)
 }
 
 // Chunk ...

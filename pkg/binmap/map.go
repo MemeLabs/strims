@@ -691,7 +691,7 @@ func (m *Map) FindEmptyAfter(target Bin) Bin {
 		} else if !m.FilledAt(b.Right()) {
 			b = b.Right()
 		}
-		if b.Base() {
+		if b.IsBase() {
 			return b
 		}
 	}
@@ -779,7 +779,7 @@ func (m *Map) FindFilledAfter(target Bin) Bin {
 		} else {
 			return None
 		}
-		if b.Base() {
+		if b.IsBase() {
 			return b
 		}
 	}

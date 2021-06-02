@@ -46,7 +46,7 @@ func (e *Iterator) initGap(i Bin) Bin {
 		i = e.findPos(e.m, i)
 		gap = e.findNeg(e.m, i)
 	}
-	if !gap.IsNone() && !gap.Base() {
+	if !gap.IsNone() && !gap.IsBase() {
 		gap = e.m.Cover(gap)
 	}
 
@@ -60,7 +60,7 @@ func (e *Iterator) NextBase() bool {
 }
 
 func (e *Iterator) NextBaseAfter(i Bin) bool {
-	if i > e.gapRight {
+	if i >= e.gapRight+2 {
 		i = e.initGap(i)
 	} else if i >= e.gapLeft {
 		i = e.initGap(e.gapRight + 2)
@@ -106,7 +106,7 @@ func (e *Iterator) nextAfter(i, imin Bin) bool {
 		i = t
 	}
 
-	for i.BaseRight() >= e.gapLeft && !i.Base() {
+	for i.BaseRight() >= e.gapLeft && !i.IsBase() {
 		i = i.Left()
 	}
 

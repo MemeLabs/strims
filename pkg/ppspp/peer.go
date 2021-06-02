@@ -13,6 +13,17 @@ import (
 
 type peerPriority uint8
 
+func (p peerPriority) String() string {
+	switch p {
+	case peerPriorityHigh:
+		return "HIGH"
+	case peerPriorityLow:
+		return "LOW"
+	default:
+		panic("invalid peer priority")
+	}
+}
+
 const (
 	peerPriorityHigh peerPriority = 0
 	peerPriorityLow  peerPriority = 1

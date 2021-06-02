@@ -7,8 +7,6 @@ import (
 	"log"
 	"math"
 	"time"
-
-	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 )
 
 // NewControl ...
@@ -28,7 +26,7 @@ type Control struct {
 	rttBase float64
 	cwnd    float64
 
-	lastDataLoss time.Time
+	// lastDataLoss time.Time
 }
 
 // OnAck ...
@@ -52,14 +50,14 @@ func (c *Control) OnAck(rtt time.Duration) {
 
 // OnDataLoss ...
 func (c *Control) OnDataLoss() {
-	now := iotime.Load()
-	if now.Sub(c.lastDataLoss) > time.Duration(c.rttCur) {
-		c.cwnd /= 2
-		if c.cwnd < 2 {
-			c.cwnd = 2
-		}
-		c.lastDataLoss = now
+	// now := iotime.Load()
+	// if now.Sub(c.lastDataLoss) > time.Duration(c.rttCur) {
+	c.cwnd /= 2
+	if c.cwnd < 2 {
+		c.cwnd = 2
 	}
+	// c.lastDataLoss = now
+	// }
 }
 
 // CWND ...

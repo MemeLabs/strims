@@ -11,7 +11,7 @@ import (
 func DebugParseMap(s string) (m *Map) {
 	m = &Map{}
 
-	cellRx := regexp.MustCompile(`^(\d+)\s+(\d+)\s(\w)(?:\s+(\d+)\s(\w))?$`)
+	cellRx := regexp.MustCompile(`^\s*(\d+)\s+(\d+)\s(\w)(?:\s+(\d+)\s(\w))?$`)
 
 	for i, l := range strings.Split(s, "\n") {
 		if i == 0 {

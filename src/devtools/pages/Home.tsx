@@ -93,7 +93,7 @@ const Sparkline: React.FC<SparklineProps> = ({
   y,
   margin = 10,
   xScale = scale(bounds(x), [margin, width - margin]),
-  yScale = scale(bounds(y), [height - margin, margin]),
+  yScale = scale(bounds(y), [height - margin - 2, margin]),
 }) => {
   const canvas = React.useRef<HTMLCanvasElement>();
 
@@ -250,7 +250,7 @@ const Home: React.FC = () => {
   const client = useClient();
   const [data, setData] = React.useState<CapConnLoadLogResponse>();
   const handleFileSelect = async (name: string) => {
-    const log = await client.ppsppCapConn.loadLog({ name });
+    const log = await client.ppsppCapConn.loadLog({ name }, { timeout: 30000 });
     setData(log);
   };
 

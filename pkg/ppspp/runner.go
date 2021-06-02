@@ -1,6 +1,7 @@
 package ppspp
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"sync"
@@ -55,7 +56,7 @@ func (r *Runner) RunChannel(s *Swarm, p *Peer, channel, peerChannel codec.Channe
 
 	rs := r.swarms[s]
 	if rs == nil {
-		logger := r.logger.With(logutil.ByteHex("swarm", s.id))
+		logger := r.logger.With(logutil.ByteHex("swarm", bytes.NewBuffer(s.id).Next(8)))
 		ss := s.options.SchedulingMethod.SwarmScheduler(logger, s)
 		rs = &runnerSwarm{
 			scheduler: ss,

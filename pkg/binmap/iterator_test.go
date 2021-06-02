@@ -412,3 +412,41 @@ func TestIterateIntersectionAfter(t *testing.T) {
 
 	assert.Equal(t, expected, actual, "filled bin mismatch")
 }
+
+func TestIterateBaseAfter(t *testing.T) {
+	filled := []Bin{11, 28}
+
+	k := New()
+	for _, i := range filled {
+		k.Set(i)
+	}
+
+	cases := []struct {
+		first    Bin
+		expected []Bin
+	}{
+		{
+			first:    0,
+			expected: []Bin{8, 10, 12, 14, 28},
+		},
+		{
+			first:    12,
+			expected: []Bin{12, 14, 28},
+		},
+		{
+			first:    30,
+			expected: []Bin{},
+		},
+	}
+
+	for _, c := range cases {
+		actual := []Bin{}
+
+		it := k.IterateFilled()
+		for ok := it.NextBaseAfter(c.first); ok; ok = it.NextBase() {
+			actual = append(actual, it.Value())
+		}
+
+		assert.Equal(t, c.expected, actual, "filled bin mismatch")
+	}
+}

@@ -30,6 +30,8 @@ const (
 
 const CapLogExt = ".cap"
 
+var errCapLogClosed = errors.New("io closed CapLog")
+
 // NewCapConn ...
 func NewCapConn(c Conn, w io.Writer, label string) (*CapConn, error) {
 	cc := &CapConn{
@@ -194,7 +196,7 @@ func (w *CapLogWriter) Close() error {
 	w.mu.Unlock()
 
 	for _, cw := range cws {
-		if err := cw.Flush(); err != nil {
+		if err := cw.Close(); err != nil {
 			return err
 		}
 	}
@@ -203,16 +205,20 @@ func (w *CapLogWriter) Close() error {
 }
 
 type capLogConnWriter struct {
-	mu  sync.Mutex
-	w   io.Writer
-	h   []byte
-	buf []byte
-	off int
+	mu     sync.Mutex
+	w      io.Writer
+	h      []byte
+	buf    []byte
+	off    int
+	closed bool
 }
 
 func (w *capLogConnWriter) Write(p []byte) (n int, err error) {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	if w.closed {
+		return 0, errCapLogClosed
+	}
 
 	for n < len(p) {
 		dn := copy(w.buf[w.off:], p[n:])
@@ -229,9 +235,10 @@ func (w *capLogConnWriter) Write(p []byte) (n int, err error) {
 	return
 }
 
-func (w *capLogConnWriter) Flush() error {
+func (w *capLogConnWriter) Close() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	w.closed = true
 
 	if w.off == len(w.h) {
 		return nil

@@ -62,3 +62,7 @@ func streamCount(opt SwarmOptions) codec.Stream {
 		return 1
 	}
 }
+
+func streamBinOffset(s codec.Stream) binmap.Bin {
+	return binmap.Bin(s * 2)
+}
