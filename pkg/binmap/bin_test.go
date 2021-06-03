@@ -1,8 +1,6 @@
 package binmap
 
 import (
-	"log"
-	"math/bits"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -84,51 +82,4 @@ func TestLayerShift(t *testing.T) {
 			assert.Equal(t, NewBin(j-4, i*16).LayerShift(j), NewBin(j, i))
 		}
 	}
-}
-
-func TestFoo(t *testing.T) {
-	size := 64
-	layer := bits.TrailingZeros64(uint64(size))
-	mask := Bin(64*2 - 1)
-
-	ban := make([]int, size*4)
-
-	stream := 63
-	b := Bin(stream * 2)
-	for i := 0; i < layer; i++ {
-		ban[b]++
-		b = b.Parent()
-	}
-
-	for j := 0; j <= size*4; j += 2 {
-		var pass []Bin
-		for i := 0; i < 16; i++ {
-
-			b := Bin(128*i + j).Parent().Parent()
-			if ban[b&mask] == 0 && b.Layer() < uint64(layer) {
-				pass = append(pass, b)
-			}
-		}
-
-		log.Println(j, pass)
-	}
-
-	// for k := 0; k < 64; k += 2 {
-	// 	var bins [4]Bin
-	// 	for i := 0; i < 4; i++ {
-	// 		bins[i] = Bin((i * 64) + k)
-	// 	}
-
-	// 	for i := 0; i < 8; i++ {
-	// 		var printable [4]Bin
-	// 		for l := 0; l < len(bins); l++ {
-	// 			printable[l] = bins[l] & mask
-	// 		}
-	// 		log.Printf("% 32b %6d", printable, printable)
-	// 		for j := 0; j < len(bins); j++ {
-	// 			bins[j] = bins[j].Parent()
-	// 		}
-	// 	}
-	// 	log.Println("---")
-	// }
 }

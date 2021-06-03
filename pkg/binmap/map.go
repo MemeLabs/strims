@@ -1,6 +1,8 @@
 package binmap
 
-import "log"
+import (
+	"log"
+)
 
 const rootRef = ref(1)
 
@@ -667,34 +669,95 @@ func (m *Map) Clone() *Map {
 	return c
 }
 
-// FindEmptyAfter ...
 func (m *Map) FindEmptyAfter(target Bin) Bin {
-	b := target
-	if m.EmptyAt(b) {
-		return b
+	if !m.rootBin.Contains(target) {
+		if target.Contains(m.rootBin) {
+			return m.FindEmpty()
+		}
+		return target
 	}
 
-	for {
-		b = b.Parent()
-		if !m.FilledAt(b.Right()) && b > target {
+	if !target.IsBase() {
+		target = target.BaseLeft()
+	}
+
+	r, b := m.traceHistory(target)
+	c, mc := m.cell(r)
+	var bm bitmap
+
+	mask := binBitmaps[bitmapLayerBits&target] - 1
+	bmBaseLeft := target &^ bitmapLayerBits
+	if target < b {
+		if !(c.LeftBitmap() | mask).Filled() {
+			b = bmBaseLeft
+			bm = c.LeftBitmap()
+			return offsetBitmapBin(b, ^(bm | mask)).BaseLeft()
+		} else if b.Left().BaseRight()&^bitmapLayerBits != bmBaseLeft && !c.LeftBitmap().Filled() {
+			b = bmBaseLeft + bitmapLayerBits + 1
+			bm = c.LeftBitmap()
+			return offsetBitmapBin(b, ^bm).BaseLeft()
+		} else if mc.RightRef() {
 			b = b.Right()
-			break
+			r = c.RightRef()
+			goto Descend
+		} else if !c.RightBitmap().Filled() {
+			b = b.Right()
+			bm = c.RightBitmap()
+			return offsetBitmapBin(b, ^bm).BaseLeft()
 		}
+	} else {
+		if !(c.RightBitmap() | mask).Filled() {
+			b = bmBaseLeft
+			bm = c.RightBitmap()
+			return offsetBitmapBin(b, ^(bm | mask)).BaseLeft()
+		} else if b.BaseRight()&^bitmapLayerBits != bmBaseLeft && !c.RightBitmap().Filled() {
+			b = bmBaseLeft + bitmapLayerBits + 1
+			bm = c.RightBitmap()
+			return offsetBitmapBin(b, ^bm).BaseLeft()
+		}
+	}
+
+	for i := m.history.len - 2; ; i-- {
 		if b == m.rootBin {
 			return None
 		}
+
+		b = b.Parent()
+		c, mc = m.cell(m.history.refs[i])
+		if !mc.RightRef() {
+			if !c.RightBitmap().Filled() {
+				b = b.Right()
+				bm = c.RightBitmap()
+				return offsetBitmapBin(b, ^bm).BaseLeft()
+			}
+		} else if c.RightRef() != r && b > target {
+			b = b.Right()
+			r = c.RightRef()
+			break
+		}
 	}
 
+Descend:
 	for {
-		if !m.FilledAt(b.Left()) && b.Left() > target {
+		c, mc := m.cell(r)
+		if mc.LeftRef() {
 			b = b.Left()
-		} else if !m.FilledAt(b.Right()) {
+			r = c.LeftRef()
+		} else if !c.LeftBitmap().Filled() {
+			b = b.Left()
+			bm = c.LeftBitmap()
+			break
+		} else if mc.RightRef() {
 			b = b.Right()
-		}
-		if b.IsBase() {
-			return b
+			r = c.RightRef()
+		} else {
+			b = b.Right()
+			bm = c.RightBitmap()
+			break
 		}
 	}
+
+	return offsetBitmapBin(b, ^bm).BaseLeft()
 }
 
 // FindFilled ...
@@ -750,39 +813,92 @@ func (m *Map) FindFilled() Bin {
 	return offsetBitmapBin(b, bm)
 }
 
-// FindFilledAfter ...
 func (m *Map) FindFilledAfter(target Bin) Bin {
-	b := target
-	if m.FilledAt(b) {
-		return b
-	}
-	if !m.rootBin.Contains(b) {
+	if !m.rootBin.Contains(target) {
 		return None
 	}
 
-	for {
-		b = b.Parent()
-		if !m.EmptyAt(b.Right()) && b > target {
+	if !target.IsBase() {
+		target = target.BaseLeft()
+	}
+
+	r, b := m.traceHistory(target)
+	c, mc := m.cell(r)
+	var bm bitmap
+
+	mask := binBitmaps[bitmapLayerBits&target] - 1
+	bmBaseLeft := target &^ bitmapLayerBits
+	if target < b {
+		if !(c.LeftBitmap() &^ mask).Empty() {
+			b = bmBaseLeft
+			bm = c.LeftBitmap()
+			return offsetBitmapBin(b, bm&^mask).BaseLeft()
+		} else if b.Left().BaseRight()&^bitmapLayerBits != bmBaseLeft && !c.LeftBitmap().Empty() {
+			b = bmBaseLeft + bitmapLayerBits + 1
+			bm = c.LeftBitmap()
+			return offsetBitmapBin(b, bm).BaseLeft()
+		} else if mc.RightRef() {
 			b = b.Right()
-			break
+			r = c.RightRef()
+			goto Descend
+		} else if !c.RightBitmap().Empty() {
+			b = b.Right()
+			bm = c.RightBitmap()
+			return offsetBitmapBin(b, bm).BaseLeft()
 		}
-		if b == m.rootBin {
-			return None
+	} else {
+		if !(c.RightBitmap() &^ mask).Empty() {
+			b = bmBaseLeft
+			bm = c.RightBitmap()
+			return offsetBitmapBin(b, bm&^mask).BaseLeft()
+		} else if b.BaseRight()&^bitmapLayerBits != bmBaseLeft && !c.RightBitmap().Empty() {
+			b = bmBaseLeft + bitmapLayerBits + 1
+			bm = c.RightBitmap()
+			return offsetBitmapBin(b, bm).BaseLeft()
 		}
 	}
 
-	for {
-		if !m.EmptyAt(b.Left()) && b.Left() > target {
-			b = b.Left()
-		} else if !m.EmptyAt(b.Right()) {
-			b = b.Right()
-		} else {
+	for i := m.history.len - 2; ; i-- {
+		if b == m.rootBin {
 			return None
 		}
-		if b.IsBase() {
-			return b
+
+		b = b.Parent()
+		c, mc = m.cell(m.history.refs[i])
+		if !mc.RightRef() {
+			if !c.RightBitmap().Empty() {
+				b = b.Right()
+				bm = c.RightBitmap()
+				return offsetBitmapBin(b, bm).BaseLeft()
+			}
+		} else if c.RightRef() != r && b > target {
+			b = b.Right()
+			r = c.RightRef()
+			break
 		}
 	}
+
+Descend:
+	for {
+		c, mc := m.cell(r)
+		if mc.LeftRef() {
+			b = b.Left()
+			r = c.LeftRef()
+		} else if !c.LeftBitmap().Empty() {
+			b = b.Left()
+			bm = c.LeftBitmap()
+			break
+		} else if mc.RightRef() {
+			b = b.Right()
+			r = c.RightRef()
+		} else {
+			b = b.Right()
+			bm = c.RightBitmap()
+			break
+		}
+	}
+
+	return offsetBitmapBin(b, bm).BaseLeft()
 }
 
 // FindLastFilled ...

@@ -1,6 +1,7 @@
 package binmap
 
 import (
+	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -170,6 +171,27 @@ func TestFindEmptyAfter2(t *testing.T) {
 	assert.Equal(t, Bin(8), m.FindEmptyAfter(2))
 }
 
+func TestFindEmptyAfterSanity(t *testing.T) {
+	m := New()
+	rand.Seed(4)
+
+	n := 1e5
+	for i := .0; i < n; i++ {
+		if p := i / n; rand.Float64() < p*p {
+			m.Set(Bin(i))
+		}
+	}
+
+	for i := 0; i < 1e6; i++ {
+		b := Bin(rand.Intn(int(n)))
+		next := m.FindEmptyAfter(b)
+		if !next.IsNone() && !m.EmptyAt(next) {
+			t.Fatalf("next empty after %s bin %s should be empty", b, next)
+			return
+		}
+	}
+}
+
 func TestFindFilled1(t *testing.T) {
 	assert := assert.New(t)
 	hole := New()
@@ -198,11 +220,82 @@ func TestFindFilled3(t *testing.T) {
 }
 
 func TestFindFilledAfter(t *testing.T) {
+	cases := []struct {
+		filled   []Bin
+		bin      Bin
+		expected Bin
+	}{
+		{
+			filled:   []Bin{1, 4, 9},
+			bin:      6,
+			expected: 8,
+		},
+		{
+			filled:   []Bin{2047, 4607, 5375, 5695, 5775, 5799, 5809, 5835, 5847, 5871, 5951, 6031, 6055, 6067, 6095, 6119, 6131, 6144, 6272, 6400, 6528, 6656, 6784, 6912, 7040, 7168, 7359, 7551, 7935, 9215, 10751, 11519, 11783, 11793, 11796, 11821, 11831, 11855, 11879, 11891, 11897, 11900},
+			bin:      6074,
+			expected: 6080,
+		},
+		{
+			filled:   []Bin{2047},
+			bin:      4014,
+			expected: 4014,
+		},
+	}
+
+	for _, c := range cases {
+		c := c
+		t.Run("", func(t *testing.T) {
+			m := New()
+			for _, b := range c.filled {
+				m.Set(b)
+			}
+
+			assert.Equal(t, c.expected, m.FindFilledAfter(c.bin))
+		})
+	}
+}
+
+func TestFindFilledAfterSanity(t *testing.T) {
 	m := New()
-	m.Set(1)
-	m.Set(4)
-	m.Set(9)
-	assert.Equal(t, Bin(8), m.FindFilledAfter(6))
+	rand.Seed(4)
+
+	n := 1e5
+	for i := .0; i < n; i++ {
+		if p := i / n; rand.Float64() < p*p {
+			m.Set(Bin(i))
+		}
+	}
+
+	for i := 0; i < 1e6; i++ {
+		b := Bin(rand.Intn(int(n)))
+		next := m.FindFilledAfter(b)
+		if !next.IsNone() && !m.FilledAt(next) {
+			t.Fatalf("next filled after %s bin %s should be filled", b, next)
+			return
+		}
+	}
+}
+
+var BenchmarkFindFilledAfterRes Bin
+
+func BenchmarkFindFilledAfter(b *testing.B) {
+	m := New()
+	rand.Seed(4)
+
+	n := 1e5
+	for i := .0; i < n; i++ {
+		if p := i / n; rand.Float64() < p*p {
+			m.Set(Bin(i))
+		}
+	}
+
+	b.ResetTimer()
+
+	var res Bin
+	for i := 0; i < b.N; i++ {
+		res = m.FindFilledAfter(Bin(rand.Intn(int(n))))
+	}
+	BenchmarkFindFilledAfterRes = res
 }
 
 func TestFillBefore(t *testing.T) {
