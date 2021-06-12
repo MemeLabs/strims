@@ -21,6 +21,7 @@ func TestURI(t *testing.T) {
 			codec.LiveSignatureAlgorithmOption:           int(integrity.LiveSignatureAlgorithmED25519),
 			codec.ChunkSizeOption:                        1024,
 			codec.ChunksPerSignatureOption:               32,
+			codec.StreamCountOption:                      32,
 		},
 	}
 

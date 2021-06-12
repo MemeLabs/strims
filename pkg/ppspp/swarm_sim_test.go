@@ -128,7 +128,8 @@ func TestSwarmSim(t *testing.T) {
 	key := ppspptest.Key()
 	id := NewSwarmID(key.Public)
 	options := SwarmOptions{
-		LiveWindow: 1 << 14,
+		LiveWindow:  1 << 14,
+		StreamCount: 16,
 	}
 
 	type client struct {

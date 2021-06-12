@@ -41,6 +41,10 @@ var protocolOptions = []struct {
 		codec.ChunksPerSignatureOption,
 		"x.ps",
 	},
+	{
+		codec.StreamCountOption,
+		"x.sc",
+	},
 }
 
 var uriScheme = "magnet:"
@@ -54,6 +58,7 @@ func (o URIOptions) SwarmOptions() SwarmOptions {
 	return SwarmOptions{
 		ChunkSize:          o[codec.ChunkSizeOption],
 		ChunksPerSignature: o[codec.ChunksPerSignatureOption],
+		StreamCount:        o[codec.StreamCountOption],
 		Integrity: integrity.VerifierOptions{
 			ProtectionMethod:       integrity.ProtectionMethod(o[codec.ContentIntegrityProtectionMethodOption]),
 			MerkleHashTreeFunction: integrity.MerkleHashTreeFunction(o[codec.MerkleHashTreeFunctionOption]),

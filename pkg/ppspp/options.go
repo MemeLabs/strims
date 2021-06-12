@@ -9,6 +9,7 @@ import (
 type SwarmOptions struct {
 	ChunkSize          int
 	ChunksPerSignature int
+	StreamCount        int
 	LiveWindow         int
 	Integrity          integrity.VerifierOptions
 	SchedulingMethod   SchedulingMethod
@@ -21,6 +22,9 @@ func (o *SwarmOptions) Assign(u SwarmOptions) {
 	}
 	if u.ChunksPerSignature != 0 {
 		o.ChunksPerSignature = u.ChunksPerSignature
+	}
+	if u.StreamCount != 0 {
+		o.StreamCount = u.StreamCount
 	}
 	if u.LiveWindow != 0 {
 		o.LiveWindow = u.LiveWindow
@@ -37,6 +41,7 @@ func (o SwarmOptions) URIOptions() URIOptions {
 	return URIOptions{
 		codec.ChunkSizeOption:                        o.ChunkSize,
 		codec.ChunksPerSignatureOption:               o.ChunksPerSignature,
+		codec.StreamCountOption:                      o.StreamCount,
 		codec.ContentIntegrityProtectionMethodOption: int(o.Integrity.ProtectionMethod),
 		codec.MerkleHashTreeFunctionOption:           int(o.Integrity.MerkleHashTreeFunction),
 		codec.LiveSignatureAlgorithmOption:           int(o.Integrity.LiveSignatureAlgorithm),
@@ -48,6 +53,7 @@ func NewDefaultSwarmOptions() SwarmOptions {
 	return SwarmOptions{
 		ChunkSize:          1024,
 		ChunksPerSignature: 64,
+		StreamCount:        1,
 		LiveWindow:         1 << 16,
 		Integrity:          integrity.NewDefaultVerifierOptions(),
 		SchedulingMethod:   PeerSchedulingMethod,

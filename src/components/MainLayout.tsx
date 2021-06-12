@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { Base64 } from "js-base64";
 // import Tooltip from "rc-tooltip";
-import React from "react";
+import React, { useCallback, useState } from "react";
 import { ReactElement } from "react";
 import {
   DragDropContext,
@@ -22,7 +22,7 @@ import {
   FiSearch,
   FiUser,
 } from "react-icons/fi";
-import { Link, Route, Switch, useHistory } from "react-router-dom";
+import { Link, useHistory } from "react-router-dom";
 import { useToggle } from "react-use";
 import usePortal from "react-useportal";
 
@@ -33,6 +33,7 @@ import { useTheme } from "../contexts/Theme";
 import useObjectURL from "../hooks/useObjectURL";
 import { rootCertificate } from "../lib/certificate";
 import AddNetworkModal from "./AddNetworkModal";
+import Debugger from "./Debugger";
 
 const Tooltip: React.FC<any> = ({ children }) => <>{children}</>;
 
@@ -208,6 +209,10 @@ export const MainLayout: React.FC = ({ children }) => {
   const [theme, { setColorScheme }] = useTheme();
   const client = useClient();
 
+  const [debuggerIsOpen, setDebuggerIsOpen] = useState(true);
+  const handleDebuggerClose = useCallback(() => setDebuggerIsOpen(false), []);
+  const handleDebuggerOpen = () => setDebuggerIsOpen(true);
+
   const toggleTheme = () =>
     theme.colorScheme === "dark" ? setColorScheme("light") : setColorScheme("dark");
 
@@ -248,9 +253,9 @@ export const MainLayout: React.FC = ({ children }) => {
           <button onClick={handleAlertsClick} className="main_layout__user_nav__link">
             <FiBell />
           </button>
-          <Link to="/" className="main_layout__user_nav__link">
+          <button onClick={handleDebuggerOpen} className="main_layout__user_nav__link">
             <FiCloud />
-          </Link>
+          </button>
           <Link to="/profile" className="main_layout__user_nav__link">
             <FiUser />
           </Link>
@@ -260,6 +265,7 @@ export const MainLayout: React.FC = ({ children }) => {
         <NetworkNav />
         {children}
       </div>
+      <Debugger isOpen={debuggerIsOpen} onClose={handleDebuggerClose} />
     </div>
   );
 };

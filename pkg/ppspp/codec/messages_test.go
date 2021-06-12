@@ -49,6 +49,10 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 			dst: &ChunksPerSignatureProtocolOption{Value: 64},
 		},
 		{
+			src: &StreamCountProtocolOption{Value: 64},
+			dst: &StreamCountProtocolOption{Value: 64},
+		},
+		{
 			src: &ContentIntegrityProtectionMethodProtocolOption{Value: 1},
 			dst: &ContentIntegrityProtectionMethodProtocolOption{Value: 1},
 		},
@@ -72,6 +76,7 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 					&LiveWindowProtocolOption{Value: 1 << 20},
 					&ChunkSizeProtocolOption{Value: 1024},
 					&ChunksPerSignatureProtocolOption{Value: 64},
+					&StreamCountProtocolOption{Value: 64},
 					&ContentIntegrityProtectionMethodProtocolOption{Value: 1},
 					&MerkleHashTreeFunctionProtocolOption{Value: 1},
 					&LiveSignatureAlgorithmProtocolOption{Value: 1},
@@ -158,7 +163,10 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 			dst: &Have{},
 		},
 		{
-			src: &Request{Address(1234)},
+			src: &Request{
+				Address:   Address(1234),
+				Timestamp: Timestamp{Time: time.Unix(1234, 1234)},
+			},
 			dst: &Request{},
 		},
 		{

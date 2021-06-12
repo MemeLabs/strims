@@ -20,7 +20,9 @@ func TestSwarmOptions(t *testing.T) {
 			req: SwarmOptions{
 				ChunkSize:          2048,
 				ChunksPerSignature: 16,
+				StreamCount:        16,
 				LiveWindow:         1 << 12,
+				SchedulingMethod:   PeerSchedulingMethod,
 				Integrity: integrity.VerifierOptions{
 					ProtectionMethod:       integrity.ProtectionMethodSignAll,
 					MerkleHashTreeFunction: integrity.MerkleHashTreeFunctionSHA256,
@@ -30,7 +32,9 @@ func TestSwarmOptions(t *testing.T) {
 			expected: SwarmOptions{
 				ChunkSize:          2048,
 				ChunksPerSignature: 16,
+				StreamCount:        16,
 				LiveWindow:         1 << 12,
+				SchedulingMethod:   PeerSchedulingMethod,
 				Integrity: integrity.VerifierOptions{
 					ProtectionMethod:       integrity.ProtectionMethodSignAll,
 					MerkleHashTreeFunction: integrity.MerkleHashTreeFunctionSHA256,

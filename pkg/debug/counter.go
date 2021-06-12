@@ -5,6 +5,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 )
@@ -12,10 +13,13 @@ import (
 var counts = [128]int64{}
 
 func IncrCounter(i int) {
+	initCounterOnce.Do(initCounter)
 	atomic.AddInt64(&counts[i], 1)
 }
 
-func init() {
+var initCounterOnce sync.Once
+
+func initCounter() {
 	go func() {
 		indices := [128]int{}
 		current := [128]int64{}

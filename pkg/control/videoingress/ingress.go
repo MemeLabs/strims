@@ -220,7 +220,8 @@ func (s *ingressStream) openWriter() (*ppspp.Swarm, ioutil.WriteFlusher, error) 
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
 		SwarmOptions: ppspp.SwarmOptions{
 			ChunkSize:          1024,
-			ChunksPerSignature: 64,
+			ChunksPerSignature: 256,
+			StreamCount:        16,
 			LiveWindow:         32 * 1024,
 			Integrity: integrity.VerifierOptions{
 				ProtectionMethod:       integrity.ProtectionMethodMerkleTree,

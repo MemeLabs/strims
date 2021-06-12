@@ -29,11 +29,6 @@ const (
 	peerPriorityLow  peerPriority = 1
 )
 
-type PeerWriter interface {
-	Write(maxBytes int) (int, error)
-	WriteData(maxBytes int, b binmap.Bin, pri peerPriority) (int, error)
-}
-
 func newPeer(id []byte, w Conn, t timeutil.Ticker) *Peer {
 	p := &Peer{
 		id:     id,
@@ -42,9 +37,8 @@ func newPeer(id []byte, w Conn, t timeutil.Ticker) *Peer {
 		ticker: t,
 
 		receivedBytes: stats.NewSMA(60, time.Second),
-		sentBytes:     stats.NewSMA(60, time.Second),
 
-		cs: newPeerWriterQueue(),
+		wq: newPeerWriterQueue(),
 	}
 	go p.run()
 	return p
@@ -60,10 +54,13 @@ type Peer struct {
 	w    Conn
 
 	receivedBytes stats.SMA
-	sentBytes     stats.SMA
 
-	cs peerWriterQueue
+	wq peerWriterQueue
 	ds [2]peerDataQueue
+}
+
+func (p *Peer) ID() []byte {
+	return p.id
 }
 
 func (p *Peer) close() {
@@ -74,9 +71,15 @@ func (p *Peer) close() {
 
 func (p *Peer) closeChannel(c PeerWriter) {
 	p.lock.Lock()
-	p.cs.Remove(c)
+	p.wq.Remove(c)
 	p.ds[peerPriorityLow].Remove(c, binmap.All)
 	p.ds[peerPriorityHigh].Remove(c, binmap.All)
+	p.lock.Unlock()
+}
+
+func (p *Peer) addReceivedBytes(n uint64, t time.Time) {
+	p.lock.Lock()
+	p.receivedBytes.AddWithTime(n, t)
 	p.lock.Unlock()
 }
 
@@ -93,7 +96,7 @@ func (p *Peer) runNow() {
 
 func (p *Peer) enqueueAt(qt *PeerWriterQueueTicket, cs PeerWriter, t time.Time) {
 	p.lock.Lock()
-	ok := p.cs.Push(qt, cs)
+	ok := p.wq.Push(qt, cs)
 	p.lock.Unlock()
 
 	if ok || !t.IsZero() {
@@ -109,19 +112,19 @@ func (p *Peer) enqueueNow(qt *PeerWriterQueueTicket, cs PeerWriter) {
 	p.enqueueAt(qt, cs, iotime.Load())
 }
 
-func (p *Peer) pushData(cs ChannelScheduler, b binmap.Bin, pri peerPriority) {
+func (p *Peer) pushData(cs PeerWriter, b binmap.Bin, t time.Time, pri peerPriority) {
 	p.lock.Lock()
-	p.ds[pri].Push(cs, b)
+	p.ds[pri].Push(cs, b, t)
 	p.lock.Unlock()
 }
 
-func (p *Peer) pushFrontData(cs ChannelScheduler, b binmap.Bin, pri peerPriority) {
+func (p *Peer) pushFrontData(cs PeerWriter, b binmap.Bin, t time.Time, pri peerPriority) {
 	p.lock.Lock()
-	p.ds[pri].PushFront(cs, b)
+	p.ds[pri].PushFront(cs, b, t)
 	p.lock.Unlock()
 }
 
-func (p *Peer) removeData(cs ChannelScheduler, b binmap.Bin, pri peerPriority) {
+func (p *Peer) removeData(cs PeerWriter, b binmap.Bin, pri peerPriority) {
 	p.lock.Lock()
 	p.ds[pri].Remove(cs, b)
 	p.lock.Unlock()
@@ -158,7 +161,7 @@ func (p *Peer) write() (bool, error) {
 	var n int
 
 	p.lock.Lock()
-	cs := p.cs.Detach()
+	cs := p.wq.Detach()
 	p.lock.Unlock()
 	for {
 		c, ok := cs.Pop()
@@ -175,13 +178,13 @@ func (p *Peer) write() (bool, error) {
 	for i := range p.ds {
 		for {
 			p.lock.Lock()
-			cs, bin, ok := p.ds[i].Pop()
+			cs, bin, t, ok := p.ds[i].Pop()
 			p.lock.Unlock()
 			if !ok {
 				break
 			}
 
-			nn, err := cs.WriteData(p.w.MTU()-n, bin, peerPriority(i))
+			nn, err := cs.WriteData(p.w.MTU()-n, bin, t, peerPriority(i))
 			if err != nil {
 				return true, err
 			}
@@ -197,7 +200,7 @@ func (p *Peer) write() (bool, error) {
 	}
 
 	p.lock.Lock()
-	idle := p.ds[peerPriorityLow].Empty() && p.ds[peerPriorityHigh].Empty() && p.cs.Empty()
+	idle := p.ds[peerPriorityLow].Empty() && p.ds[peerPriorityHigh].Empty() && p.wq.Empty()
 	p.lock.Unlock()
 	return idle, nil
 }

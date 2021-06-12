@@ -144,11 +144,11 @@ func (v *MerkleSwarmVerifier) WriteIntegrity(b binmap.Bin, m *binmap.Map, w Writ
 
 	for b != s.Tree.RootBin() {
 		p := b.Parent()
-		b = b.Sibling()
-		if !m.EmptyAt(p) || !m.EmptyAt(b) {
+		if !m.EmptyAt(p) {
 			return n, nil
 		}
 
+		b = b.Sibling()
 		nn, err := w.WriteIntegrity(codec.Integrity{
 			Address: codec.Address(b),
 			Hash:    s.Tree.Get(b),

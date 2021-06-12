@@ -3,7 +3,7 @@ package qos
 import (
 	"testing"
 
-	"github.com/tj/assert"
+	"github.com/stretchr/testify/assert"
 )
 
 func TestListPacketQueue(t *testing.T) {

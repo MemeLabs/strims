@@ -167,10 +167,6 @@ func (w *CapLogWriter) Writer() io.Writer {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	if w.closed {
-		panic("fuck")
-	}
-
 	id := len(w.cws)
 	h := make([]byte, binaryutil.UvarintLen(uint64(id)))
 	n := binary.PutUvarint(h, uint64(id))

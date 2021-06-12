@@ -18,3 +18,11 @@ var lens = [65]byte{
 func UvarintLen(v uint64) int {
 	return int(lens[bits.Len64(v)])
 }
+
+func VarintLen(v int64) int {
+	uv := uint64(v) << 1
+	if v < 0 {
+		uv = ^uv
+	}
+	return UvarintLen(uv)
+}

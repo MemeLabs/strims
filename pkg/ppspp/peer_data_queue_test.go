@@ -13,14 +13,15 @@ func TestPeerDataQueuePushPop(t *testing.T) {
 	var q peerDataQueue
 
 	for i := binmap.Bin(0); i <= 8; i += 2 {
-		q.Push(w, i)
+		q.Push(w, i, epochTime)
 	}
 
 	assert.False(t, q.Empty())
 	for i := binmap.Bin(0); i <= 8; i += 2 {
-		pw, pb, ok := q.Pop()
+		pw, pb, ts, ok := q.Pop()
 		assert.Equal(t, w, pw)
 		assert.Equal(t, i, pb)
+		assert.Equal(t, epochTime, ts)
 		assert.True(t, ok)
 	}
 	assert.True(t, q.Empty())
@@ -31,14 +32,15 @@ func TestPeerDataQueuePushFrontPop(t *testing.T) {
 	var q peerDataQueue
 
 	for i := binmap.Bin(2); i <= 8; i += 2 {
-		q.PushFront(w, i)
+		q.PushFront(w, i, epochTime)
 	}
 
 	assert.False(t, q.Empty())
 	for i := binmap.Bin(8); i >= 2; i -= 2 {
-		pw, pb, ok := q.Pop()
+		pw, pb, ts, ok := q.Pop()
 		assert.Equal(t, w, pw)
 		assert.Equal(t, i, pb)
+		assert.Equal(t, epochTime, ts)
 		assert.True(t, ok)
 	}
 	assert.True(t, q.Empty())
@@ -49,7 +51,7 @@ func TestPeerDataQueueRemove(t *testing.T) {
 	var q peerDataQueue
 
 	for i := binmap.Bin(0); i < 16; i += 2 {
-		q.Push(w, i)
+		q.Push(w, i, epochTime)
 	}
 
 	q.Remove(w, binmap.Bin(11))
@@ -58,9 +60,10 @@ func TestPeerDataQueueRemove(t *testing.T) {
 
 	assert.False(t, q.Empty())
 	for i := binmap.Bin(0); i < 8; i += 2 {
-		pw, pb, ok := q.Pop()
+		pw, pb, ts, ok := q.Pop()
 		assert.Equal(t, w, pw)
 		assert.Equal(t, i, pb)
+		assert.Equal(t, epochTime, ts)
 		assert.True(t, ok)
 	}
 
@@ -76,11 +79,11 @@ func BenchmarkPeerDataQueue(b *testing.B) {
 	size := 16
 
 	for i := 0; i < size && i < b.N; i++ {
-		q.Push(w, binmap.Bin(i*2))
+		q.Push(w, binmap.Bin(i*2), epochTime)
 	}
 
 	for i := size; i < b.N; i++ {
-		q.Push(w, binmap.Bin(i*2))
+		q.Push(w, binmap.Bin(i*2), epochTime)
 		q.Pop()
 	}
 

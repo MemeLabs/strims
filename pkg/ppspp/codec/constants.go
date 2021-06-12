@@ -1,5 +1,7 @@
 package codec
 
+import "time"
+
 // MessageType ...
 type MessageType uint8
 
@@ -113,5 +115,8 @@ const (
 	SupportedMessagesOption
 	ChunkSizeOption
 	ChunksPerSignatureOption
+	StreamCountOption
 	EndOption ProtocolOptionType = 255
 )
+
+const timeGranularity = int64(time.Millisecond)

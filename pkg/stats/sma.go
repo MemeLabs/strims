@@ -44,6 +44,22 @@ func (s *SMA) advance(t time.Time) {
 	}
 }
 
+func (s *SMA) Reset() {
+	s.ResetWithTime(time.Now())
+}
+
+func (s *SMA) ResetWithTime(t time.Time) {
+	s.t = t
+	s.v = 0
+	s.n = 0
+	s.i = 0
+	s.wl = 0
+	for i := range s.w {
+		s.w[i].n = 0
+		s.w[i].v = 0
+	}
+}
+
 // Add ...
 func (s *SMA) Add(v uint64) {
 	s.AddWithTime(v, time.Now())

@@ -450,3 +450,14 @@ func TestIterateBaseAfter(t *testing.T) {
 		assert.Equal(t, c.expected, actual, "filled bin mismatch")
 	}
 }
+
+func TestIteratorToSlice(t *testing.T) {
+	filled := []Bin{5, 11, 28, 129}
+
+	k := New()
+	for _, i := range filled {
+		k.Set(i)
+	}
+
+	assert.Equal(t, filled, k.IterateFilled().ToSlice())
+}

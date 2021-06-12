@@ -248,6 +248,33 @@ func (v *ChunksPerSignatureProtocolOption) ByteLen() int {
 	return 4
 }
 
+// StreamCountProtocolOption ...
+type StreamCountProtocolOption struct {
+	Value uint16
+}
+
+// Unmarshal ...
+func (v *StreamCountProtocolOption) Unmarshal(b []byte) (int, error) {
+	v.Value = binary.BigEndian.Uint16(b)
+	return 2, nil
+}
+
+// Marshal ...
+func (v *StreamCountProtocolOption) Marshal(b []byte) int {
+	binary.BigEndian.PutUint16(b, v.Value)
+	return 2
+}
+
+// Type ...
+func (v *StreamCountProtocolOption) Type() ProtocolOptionType {
+	return StreamCountOption
+}
+
+// ByteLen ...
+func (v *StreamCountProtocolOption) ByteLen() int {
+	return 2
+}
+
 // ContentIntegrityProtectionMethodProtocolOption ...
 type ContentIntegrityProtectionMethodProtocolOption struct {
 	Value uint8
@@ -406,6 +433,8 @@ func (v *Handshake) Unmarshal(b []byte) (size int, err error) {
 			option = &ChunkSizeProtocolOption{}
 		case ChunksPerSignatureOption:
 			option = &ChunksPerSignatureProtocolOption{}
+		case StreamCountOption:
+			option = &StreamCountProtocolOption{}
 		case ContentIntegrityProtectionMethodOption:
 			option = &ContentIntegrityProtectionMethodProtocolOption{}
 		case MerkleHashTreeFunctionOption:
@@ -467,11 +496,11 @@ type Data struct {
 }
 
 // NewData ...
-func NewData(chunkSize int, b binmap.Bin, d []byte) *Data {
+func NewData(chunkSize int, b binmap.Bin, t time.Time, d []byte) *Data {
 	return &Data{
 		chunkSize: chunkSize,
 		Address:   Address(b),
-		Timestamp: Timestamp{time.Now()},
+		Timestamp: Timestamp{t},
 		Data:      Buffer(d),
 	}
 }
@@ -526,25 +555,19 @@ type Timestamp struct {
 
 // Unmarshal ...
 func (v *Timestamp) Unmarshal(b []byte) (int, error) {
-	v.Time = time.Unix(
-		int64(binary.BigEndian.Uint32(b)),
-		int64(binary.BigEndian.Uint32(b[4:])),
-	)
-
-	return 8, nil
+	vi, n := binary.Varint(b)
+	v.Time = time.Unix(0, vi*timeGranularity)
+	return n, nil
 }
 
 // Marshal ...
-func (v *Timestamp) Marshal(b []byte) (size int) {
-	binary.BigEndian.PutUint32(b, uint32(v.Time.Unix()))
-	binary.BigEndian.PutUint32(b[4:], uint32(v.Time.Nanosecond()))
-
-	return 8
+func (v Timestamp) Marshal(b []byte) int {
+	return binary.PutVarint(b, v.Time.UnixNano()/timeGranularity)
 }
 
 // ByteLen ...
-func (v *Timestamp) ByteLen() int {
-	return 8
+func (v Timestamp) ByteLen() int {
+	return binaryutil.VarintLen(v.Time.UnixNano() / timeGranularity)
 }
 
 // DelaySample ...
@@ -554,21 +577,19 @@ type DelaySample struct {
 
 // Unmarshal ...
 func (v *DelaySample) Unmarshal(b []byte) (int, error) {
-	v.Duration = time.Duration(binary.BigEndian.Uint64(b))
-
-	return 8, nil
+	vi, n := binary.Varint(b)
+	v.Duration = time.Duration(vi * timeGranularity)
+	return n, nil
 }
 
 // Marshal ...
-func (v *DelaySample) Marshal(b []byte) (size int) {
-	binary.BigEndian.PutUint64(b, uint64(v.Duration))
-
-	return 8
+func (v DelaySample) Marshal(b []byte) int {
+	return binary.PutVarint(b, int64(v.Duration)/timeGranularity)
 }
 
 // ByteLen ...
-func (v *DelaySample) ByteLen() int {
-	return 8
+func (v DelaySample) ByteLen() int {
+	return binaryutil.VarintLen(int64(v.Duration) / timeGranularity)
 }
 
 // Ack ...
@@ -785,7 +806,38 @@ func (v *Have) Type() MessageType {
 
 // Request ...
 type Request struct {
-	Address
+	Address   Address
+	Timestamp Timestamp
+}
+
+// Unmarshal ...
+func (v *Request) Unmarshal(b []byte) (size int, err error) {
+	n, err := v.Address.Unmarshal(b)
+	if err != nil {
+		return
+	}
+	size += n
+
+	n, err = v.Timestamp.Unmarshal(b[size:])
+	if err != nil {
+		return
+	}
+	size += n
+
+	return
+}
+
+// Marshal ...
+func (v *Request) Marshal(b []byte) (size int) {
+	size += v.Address.Marshal(b)
+	size += v.Timestamp.Marshal(b[size:])
+
+	return
+}
+
+// ByteLen ...
+func (v *Request) ByteLen() int {
+	return v.Address.ByteLen() + v.Timestamp.ByteLen()
 }
 
 // Type ...

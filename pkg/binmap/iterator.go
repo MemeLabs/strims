@@ -1,19 +1,11 @@
 package binmap
 
 func NewEmptyAtIterator(m *Map, b Bin) Iterator {
-	return newIterator(m, b, findFilled, findEmpty)
+	return newIterator(m, b, (*Map).FindFilledAfter, (*Map).FindEmptyAfter)
 }
 
 func NewFilledAtIterator(m *Map, b Bin) Iterator {
-	return newIterator(m, b, findEmpty, findFilled)
-}
-
-func findFilled(m *Map, i Bin) Bin {
-	return m.FindFilledAfter(i)
-}
-
-func findEmpty(m *Map, i Bin) Bin {
-	return m.FindEmptyAfter(i)
+	return newIterator(m, b, (*Map).FindEmptyAfter, (*Map).FindFilledAfter)
 }
 
 type findFunc func(m *Map, i Bin) Bin
@@ -46,12 +38,9 @@ func (e *Iterator) initGap(i Bin) Bin {
 		i = e.findPos(e.m, i)
 		gap = e.findNeg(e.m, i)
 	}
-	if !gap.IsNone() && !gap.IsBase() {
-		gap = e.m.Cover(gap)
-	}
 
-	e.gapLeft = gap.BaseLeft()
-	e.gapRight = gap.BaseRight()
+	e.gapLeft = gap
+	e.gapRight = gap
 	return i
 }
 
@@ -66,7 +55,7 @@ func (e *Iterator) NextBaseAfter(i Bin) bool {
 		i = e.initGap(e.gapRight + 2)
 	}
 
-	e.i = i
+	e.i = i.BaseLeft()
 	return i <= e.end
 }
 
@@ -116,6 +105,22 @@ func (e *Iterator) nextAfter(i, imin Bin) bool {
 
 func (e *Iterator) Value() Bin {
 	return e.i
+}
+
+func (e Iterator) ToSlice() []Bin {
+	return iteratorToSlice(&e)
+}
+
+func (e Iterator) ToBaseSlice() []Bin {
+	return baseIteratorToSlice(&e)
+}
+
+func (e Iterator) ToSliceAfter(b Bin) []Bin {
+	return iteratorAfterToSlice(&e, b)
+}
+
+func (e Iterator) ToBaseSliceAfter(b Bin) []Bin {
+	return baseIteratorAfterToSlice(&e, b)
 }
 
 func NewIntersectionIterator(a, b Iterator) IntersectionIterator {
@@ -208,4 +213,68 @@ func (e *IntersectionIterator) next() bool {
 
 func (e *IntersectionIterator) Value() Bin {
 	return e.i
+}
+
+func (e IntersectionIterator) ToSlice() []Bin {
+	return iteratorToSlice(&e)
+}
+
+func (e IntersectionIterator) ToBaseSlice() []Bin {
+	return baseIteratorToSlice(&e)
+}
+
+func (e IntersectionIterator) ToSliceAfter(b Bin) []Bin {
+	return iteratorAfterToSlice(&e, b)
+}
+
+type iterator interface {
+	Next() bool
+	Value() Bin
+}
+
+type iteratorAfter interface {
+	iterator
+	NextAfter(Bin) bool
+}
+
+type baseIterator interface {
+	NextBase() bool
+	Value() Bin
+}
+
+type baseIteratorAfter interface {
+	baseIterator
+	NextBaseAfter(Bin) bool
+}
+
+func iteratorToSlice(it iterator) []Bin {
+	var bins []Bin
+	for it.Next() {
+		bins = append(bins, it.Value())
+	}
+	return bins
+}
+
+func baseIteratorToSlice(it baseIterator) []Bin {
+	var bins []Bin
+	for it.NextBase() {
+		bins = append(bins, it.Value())
+	}
+	return bins
+}
+
+func iteratorAfterToSlice(it iteratorAfter, b Bin) []Bin {
+	var bins []Bin
+	for ok := it.NextAfter(b); ok; ok = it.Next() {
+		bins = append(bins, it.Value())
+	}
+	return bins
+}
+
+func baseIteratorAfterToSlice(it baseIteratorAfter, b Bin) []Bin {
+	var bins []Bin
+	for ok := it.NextBaseAfter(b); ok; ok = it.NextBase() {
+		bins = append(bins, it.Value())
+	}
+	return bins
 }

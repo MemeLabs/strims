@@ -1,9 +1,5 @@
 package binmap
 
-import (
-	"log"
-)
-
 const rootRef = ref(1)
 
 // New ...
@@ -104,10 +100,6 @@ func (m *Map) reserveCells(n int) {
 			m.freeTop = ref(i)
 			m.cellCount++
 		}
-	}
-
-	if m.cellCount > 2048 {
-		log.Panicf("we tried to allocate an suspiciously large map (%d)", m.cellCount)
 	}
 }
 
@@ -719,7 +711,7 @@ func (m *Map) FindEmptyAfter(target Bin) Bin {
 
 	for i := m.history.len - 2; ; i-- {
 		if b == m.rootBin {
-			return None
+			return m.rootBin.Sibling().BaseLeft()
 		}
 
 		b = b.Parent()

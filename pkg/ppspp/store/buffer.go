@@ -4,6 +4,7 @@ import (
 	"errors"
 	"log"
 	"sync"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/byterope"
@@ -140,15 +141,16 @@ type DataWriter interface {
 }
 
 // WriteData ...
-func (s *Buffer) WriteData(b binmap.Bin, w DataWriter) (int, error) {
+func (s *Buffer) WriteData(b binmap.Bin, t time.Time, w DataWriter) (int, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
 	if s.contains(b) {
 		i := s.index(b)
 		return w.WriteData(codec.Data{
-			Address: codec.Address(b),
-			Data:    s.buf[i : i+int(b.BaseLength()*s.chunkSize)],
+			Address:   codec.Address(b),
+			Timestamp: codec.Timestamp{Time: t},
+			Data:      s.buf[i : i+int(b.BaseLength()*s.chunkSize)],
 		})
 	}
 	return 0, ErrBinDataNotSet

@@ -1,22 +1,22 @@
 package ppspp
 
 import (
-	"sync"
-
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 )
 
 type timeSet struct {
-	root *timeSetNode
+	root     *timeSetNode
+	freeHead *timeSetNode
 }
 
 func (t *timeSet) Set(bin binmap.Bin, time int64) int64 {
 	if t.root == nil {
-		t.root = newTimeSetNode(bin)
+		t.root = t.allocNode(bin, 0)
 	}
 
 	for !t.root.bin.Contains(bin) {
-		r := newTimeSetNodeWithCount(t.root.bin.Parent(), t.root.count)
+		r := t.allocNode(t.root.bin.Parent(), t.root.count)
+
 		if r.bin < t.root.bin {
 			r.right = t.root
 		} else {
@@ -25,7 +25,13 @@ func (t *timeSet) Set(bin binmap.Bin, time int64) int64 {
 		t.root = r
 	}
 
-	return t.root.set(bin, time).time
+	return t.root.set(bin, time, t).time
+}
+
+func (t *timeSet) Unset(bin binmap.Bin) {
+	if _, deleted := t.root.unset(bin, t); deleted {
+		t.root = nil
+	}
 }
 
 func (t *timeSet) Get(bin binmap.Bin) (int64, bool) {
@@ -39,28 +45,36 @@ func (t *timeSet) Get(bin binmap.Bin) (int64, bool) {
 func (t *timeSet) Prune(bin binmap.Bin) {
 	for t.root != nil && t.root.bin < bin {
 		r := t.root
-		r.left.delete()
+		r.left.delete(t)
 		t.root = r.right
 	}
-	t.root.prune(bin)
+	t.root.prune(bin, t)
 }
 
-func newTimeSetNode(b binmap.Bin) *timeSetNode {
-	return newTimeSetNodeWithCount(b, 0)
+func (t *timeSet) allocNode(b binmap.Bin, c uint64) *timeSetNode {
+	r := t.freeHead
+	if r == nil {
+		r = &timeSetNode{}
+	} else {
+		t.freeHead = r.right
+		r.right = nil
+	}
+
+	r.bin = b
+	r.count = c
+	return r
 }
 
-var timeSetNodePool = sync.Pool{
-	New: func() interface{} {
-		return &timeSetNode{}
-	},
+func (t *timeSet) freeNode(r *timeSetNode) {
+	r.left = nil
+	r.right = t.freeHead
+	r.time = 0
+	t.freeHead = r
 }
 
-func newTimeSetNodeWithCount(b binmap.Bin, c uint64) *timeSetNode {
-	n := timeSetNodePool.Get().(*timeSetNode)
-	n.bin = b
-	n.count = c
-	n.time = 0
-	return n
+type timeSetNodeAllocator interface {
+	allocNode(b binmap.Bin, c uint64) *timeSetNode
+	freeNode(r *timeSetNode)
 }
 
 type timeSetNode struct {
@@ -71,7 +85,7 @@ type timeSetNode struct {
 	time  int64
 }
 
-func (r *timeSetNode) set(b binmap.Bin, t int64) *timeSetNode {
+func (r *timeSetNode) set(b binmap.Bin, t int64, a timeSetNodeAllocator) *timeSetNode {
 	if r.bin == b {
 		if r.time == 0 {
 			r.count = r.bin.BaseLength()
@@ -87,27 +101,59 @@ func (r *timeSetNode) set(b binmap.Bin, t int64) *timeSetNode {
 	var n *timeSetNode
 	if r.bin < b {
 		if r.right == nil {
-			r.right = newTimeSetNode(r.bin.Right())
+			r.right = a.allocNode(r.bin.Right(), 0)
 		} else {
 			r.count -= r.right.count
 		}
-		n = r.right.set(b, t)
+		n = r.right.set(b, t, a)
 		r.count += r.right.count
 	} else {
 		if r.left == nil {
-			r.left = newTimeSetNode(r.bin.Left())
+			r.left = a.allocNode(r.bin.Left(), 0)
 		} else {
 			r.count -= r.left.count
 		}
-		n = r.left.set(b, t)
+		n = r.left.set(b, t, a)
 		r.count += r.left.count
 	}
 	return n
 }
 
-func (r *timeSetNode) get(b binmap.Bin) *timeSetNode {
+func (r *timeSetNode) unset(b binmap.Bin, a timeSetNodeAllocator) (bool, bool) {
 	if r == nil {
+		return false, false
+	}
+
+	var ok, deleted bool
+	if r.bin < b {
+		ok, deleted = r.right.unset(b, a)
+		if deleted {
+			r.right = nil
+		}
+	} else {
+		ok, deleted = r.left.unset(b, a)
+		if deleted {
+			r.left = nil
+		}
+	}
+
+	ok = ok || r.bin.BaseLength() == r.count
+	if ok {
+		r.count -= b.BaseLength()
+		if r.count == 0 {
+			r.delete(a)
+			return true, true
+		}
+	}
+	return ok, false
+}
+
+func (r *timeSetNode) get(b binmap.Bin) *timeSetNode {
+	if r == nil || !r.bin.Contains(b) {
 		return nil
+	}
+	if r.bin == b {
+		return r
 	}
 
 	var n *timeSetNode
@@ -123,29 +169,27 @@ func (r *timeSetNode) get(b binmap.Bin) *timeSetNode {
 	return n
 }
 
-func (r *timeSetNode) prune(b binmap.Bin) {
+func (r *timeSetNode) prune(b binmap.Bin, a timeSetNodeAllocator) {
 	if r == nil {
 		return
 	}
 
 	if r.bin < b {
-		r.left.delete()
+		r.left.delete(a)
 		r.left = nil
-		r.right.prune(b)
+		r.right.prune(b, a)
 	} else {
-		r.left.prune(b)
+		r.left.prune(b, a)
 	}
 }
 
-func (r *timeSetNode) delete() {
+func (r *timeSetNode) delete(a timeSetNodeAllocator) {
 	if r == nil {
 		return
 	}
 
-	r.left.delete()
-	r.right.delete()
+	r.left.delete(a)
+	r.right.delete(a)
 
-	r.left = nil
-	r.right = nil
-	timeSetNodePool.Put(r)
+	a.freeNode(r)
 }

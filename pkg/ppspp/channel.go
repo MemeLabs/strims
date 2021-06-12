@@ -25,6 +25,7 @@ var (
 	errNoLiveWindowOption                 = errors.New("handshake missing LiveWindowOption")
 	errNoChunkSizeOption                  = errors.New("handshake missing ChunkSizeOption")
 	errNoChunksPerSignatureOption         = errors.New("handshake missing ChunksPerSignatureOption")
+	errNoStreamCountOption                = errors.New("handshake missing StreamCountOption")
 	errNoSwarmIdentifierOption            = errors.New("handshake missing SwarmIdentifierOption")
 	errNoContentIntegrityProtectionMethod = errors.New("handshake missing ContentIntegrityProtectionMethod")
 	errNoMerkleHashTreeFunction           = errors.New("handshake missing MerkleHashTreeFunction")
@@ -34,6 +35,7 @@ var (
 	errIncompatibleMinimumVersionOption             = errors.New("incompatible MinimumVersionOption")
 	errIncompatibleChunkSizeOption                  = errors.New("incompatible ChunkSizeOption")
 	errIncompatibleChunksPerSignatureOption         = errors.New("incompatible ChunksPerSignatureOption")
+	errIncompatibleStreamCountOption                = errors.New("incompatible StreamCountOption")
 	errIncompatibleSwarmIdentifierOption            = errors.New("incompatible SwarmIdentifierOption")
 	errIncompatibleContentIntegrityProtectionMethod = errors.New("incompatible ContentIntegrityProtectionMethod")
 	errIncompatibleMerkleHashTreeFunction           = errors.New("incompatible MerkleHashTreeFunction")
@@ -54,6 +56,7 @@ func newHandshake(swarm *Swarm) codec.Handshake {
 			&codec.MerkleHashTreeFunctionProtocolOption{Value: uint8(swarm.options.Integrity.MerkleHashTreeFunction)},
 			&codec.LiveSignatureAlgorithmProtocolOption{Value: uint8(swarm.options.Integrity.LiveSignatureAlgorithm)},
 			&codec.ChunksPerSignatureProtocolOption{Value: uint32(swarm.options.ChunksPerSignature)},
+			&codec.StreamCountProtocolOption{Value: uint16(swarm.options.StreamCount)},
 		},
 	}
 }
@@ -350,6 +353,14 @@ func (c *channelMessageHandler) HandleHandshake(v codec.Handshake) error {
 		return errNoChunksPerSignatureOption
 	}
 
+	if chunksPerSignature, ok := v.Options.Find(codec.StreamCountOption); ok {
+		if chunksPerSignature.(*codec.StreamCountProtocolOption).Value != uint16(c.swarm.options.StreamCount) {
+			return errIncompatibleStreamCountOption
+		}
+	} else {
+		return errNoStreamCountOption
+	}
+
 	if contentIntegrityProtectionMethod, ok := v.Options.Find(codec.ContentIntegrityProtectionMethodOption); ok {
 		if contentIntegrityProtectionMethod.(*codec.ContentIntegrityProtectionMethodProtocolOption).Value != uint8(c.swarm.options.Integrity.ProtectionMethod) {
 			return errIncompatibleContentIntegrityProtectionMethod
@@ -396,14 +407,14 @@ func (c *channelMessageHandler) HandleData(m codec.Data) error {
 			zap.Error(err),
 		)
 
-		return c.scheduler.HandleData(m.Address.Bin(), false)
+		return c.scheduler.HandleData(m.Address.Bin(), m.Timestamp.Time, false)
 	}
 
 	c.swarm.pubSub.Publish(store.Chunk{
 		Bin:  m.Address.Bin(),
 		Data: m.Data,
 	})
-	return c.scheduler.HandleData(m.Address.Bin(), true)
+	return c.scheduler.HandleData(m.Address.Bin(), m.Timestamp.Time, true)
 }
 
 func (c *channelMessageHandler) HandleIntegrity(m codec.Integrity) error {
@@ -441,7 +452,7 @@ func (c *channelMessageHandler) HandleHave(m codec.Have) error {
 func (c *channelMessageHandler) HandleRequest(m codec.Request) error {
 	c.metrics.RequestCount.Inc()
 	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.scheduler.HandleRequest(m.Bin())
+	return c.scheduler.HandleRequest(m.Address.Bin(), m.Timestamp.Time)
 }
 
 func (c *channelMessageHandler) HandleCancel(m codec.Cancel) error {
