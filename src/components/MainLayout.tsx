@@ -2,7 +2,6 @@ import clsx from "clsx";
 import { Base64 } from "js-base64";
 // import Tooltip from "rc-tooltip";
 import React, { useCallback, useState } from "react";
-import { ReactElement } from "react";
 import {
   DragDropContext,
   Draggable,
@@ -23,16 +22,17 @@ import {
   FiUser,
 } from "react-icons/fi";
 import { Link, useHistory } from "react-router-dom";
-import { useToggle } from "react-use";
+import { useSetState, useToggle } from "react-use";
 import usePortal from "react-useportal";
 
 import { MetricsFormat } from "../apis/strims/debug/v1/debug";
-import { CreateNetworkResponse, Network } from "../apis/strims/network/v1/network";
+import { CreateNetworkResponse, Network, NetworkEvent } from "../apis/strims/network/v1/network";
 import { useCall, useClient } from "../contexts/FrontendApi";
 import { useTheme } from "../contexts/Theme";
 import useObjectURL from "../hooks/useObjectURL";
 import { rootCertificate } from "../lib/certificate";
 import AddNetworkModal from "./AddNetworkModal";
+import Badge from "./Badge";
 import Debugger from "./Debugger";
 
 const Tooltip: React.FC<any> = ({ children }) => <>{children}</>;
@@ -65,11 +65,9 @@ const NetworkAddButton: React.FC<React.ComponentProps<"button">> = ({ children, 
   );
 };
 
-interface NetworkGemProps {
-  network: Network;
-}
+type NetworkGemProps = NetworkNavItem;
 
-const NetworkGem: React.FC<NetworkGemProps> = ({ network }) => {
+const NetworkGem: React.FC<NetworkGemProps> = ({ network, peerCount }) => {
   const { icon } = network;
   const gemClassName = clsx({
     "main_layout__left__link__gem": true,
@@ -79,100 +77,142 @@ const NetworkGem: React.FC<NetworkGemProps> = ({ network }) => {
 
   if (icon) {
     const url = useObjectURL(icon.type, icon.data);
-    return <div className={gemClassName} style={{ backgroundImage: `url(${url})` }} />;
+    return (
+      <div className={gemClassName} style={{ backgroundImage: `url(${url})` }}>
+        <Badge count={peerCount} />
+      </div>
+    );
   }
 
   const backgroundColor = "green";
   return (
     <div className={gemClassName} style={{ backgroundColor }}>
       {network.name.substr(0, 1)}
+      <Badge count={peerCount} />
     </div>
   );
 };
 
-const NetworkNav: React.FC = () => {
-  const [expanded, toggleExpanded] = useToggle(false);
-  const [networks, setNetworks] = React.useState<Network[]>([]);
-  const [state, { setNavOrder }] = useTheme();
+interface NetworkNavItem {
+  network: Network;
+  peerCount: number;
+}
 
-  const [{ error, loading }] = useCall("network", "list", {
-    onComplete: (res) => setNetworks(res.networks),
-  });
+// TODO: move to theme context
+const useNetworkStuff = () => {
+  const client = useClient();
+  const [items, setItems] = React.useState<NetworkNavItem[]>([]);
 
-  const onDragEnd = React.useCallback((result: DropResult, provided: ResponderProvided) => {
-    if (!result.destination) {
-      return;
-    }
+  const addItem = (item: NetworkNavItem) => setItems((prev) => [...prev, item]);
 
-    setNetworks((prev) => {
+  const removeItem = (networkId: bigint) =>
+    setItems((prev) => prev.filter((item) => item.network.id !== networkId));
+
+  const setPeerCount = (networkId: bigint, peerCount: number) =>
+    setItems((prev) =>
+      prev.map((item) => (item.network.id === networkId ? { ...item, peerCount: peerCount } : item))
+    );
+
+  const reorderNetworks = (srcIndex: number, dstIndex: number) =>
+    setItems((prev) => {
       const next = Array.from(prev);
-      const [target] = next.splice(result.source.index, 1);
-      next.splice(result.destination.index, 0, target);
-      setNavOrder(next.map(({ id }) => Number(id)));
+      const [target] = next.splice(srcIndex, 1);
+      next.splice(dstIndex, 0, target);
+      // setNavOrder(next.map(({ id }) => Number(id)));
       return next;
     });
+
+  React.useEffect(() => {
+    const events = client.network.watch();
+    events.on("data", ({ event: { body } }) => {
+      switch (body.case) {
+        case NetworkEvent.BodyCase.NETWORK_START:
+          addItem(body.networkStart);
+          break;
+        case NetworkEvent.BodyCase.NETWORK_STOP:
+          removeItem(body.networkStop.networkId);
+          break;
+        case NetworkEvent.BodyCase.NETWORK_PEER_COUNT_UPDATE:
+          setPeerCount(
+            body.networkPeerCountUpdate.networkId,
+            body.networkPeerCountUpdate.peerCount
+          );
+          break;
+      }
+    });
+
+    return () => events.destroy();
   }, []);
 
-  let links: ReactElement;
-  if (error) {
-    links = <div>error</div>;
-  } else if (loading) {
-    links = <div>...</div>;
-  } else {
-    links = (
-      <>
-        <Tooltip placement="right" overlay="Networks">
-          <div className="main_layout__left__header_icon">
-            <BiNetworkChart />
-          </div>
-        </Tooltip>
-        <DragDropContext onDragEnd={onDragEnd}>
-          <Droppable droppableId="networks">
-            {(provided, snapshot) => (
-              <div ref={provided.innerRef} {...provided.droppableProps}>
-                {networks.map((network, i) => (
-                  <Draggable
-                    draggableId={`network-${network.id.toString()}`}
-                    index={i}
-                    key={network.id.toString()}
-                  >
-                    {(provided, snapshot) => (
-                      <div
-                        ref={provided.innerRef}
-                        {...provided.draggableProps}
-                        {...provided.dragHandleProps}
+  const ops = { reorderNetworks };
+
+  return [items, ops] as [NetworkNavItem[], typeof ops];
+};
+
+const NetworkNav: React.FC = () => {
+  const [expanded, toggleExpanded] = useToggle(false);
+  const [networks, { reorderNetworks }] = useNetworkStuff();
+  // const [state, { setNavOrder }] = useTheme();
+
+  const onDragEnd = React.useCallback((result: DropResult, provided: ResponderProvided) => {
+    if (result.destination) {
+      reorderNetworks(result.source.index, result.destination.index);
+    }
+  }, []);
+
+  const links = (
+    <>
+      <Tooltip placement="right" overlay="Networks">
+        <div className="main_layout__left__header_icon">
+          <BiNetworkChart />
+        </div>
+      </Tooltip>
+      <DragDropContext onDragEnd={onDragEnd}>
+        <Droppable droppableId="networks">
+          {(provided, snapshot) => (
+            <div ref={provided.innerRef} {...provided.droppableProps}>
+              {networks.map(({ network, peerCount }, i) => (
+                <Draggable
+                  draggableId={`network-${network.id.toString()}`}
+                  index={i}
+                  key={network.id.toString()}
+                >
+                  {(provided, snapshot) => (
+                    <div
+                      ref={provided.innerRef}
+                      {...provided.draggableProps}
+                      {...provided.dragHandleProps}
+                    >
+                      <Tooltip
+                        placement="right"
+                        trigger={["hover"]}
+                        overlay={network.name}
+                        {...(expanded ? { visible: false } : {})}
                       >
-                        <Tooltip
-                          placement="right"
-                          trigger={["hover"]}
-                          overlay={network.name}
-                          {...(expanded ? { visible: false } : {})}
+                        <Link
+                          to={`/directory/${Base64.fromUint8Array(
+                            rootCertificate(network.certificate).key,
+                            true
+                          )}`}
+                          className="main_layout__left__link"
                         >
-                          <Link
-                            to={`/directory/${Base64.fromUint8Array(
-                              rootCertificate(network.certificate).key,
-                              true
-                            )}`}
-                            className="main_layout__left__link"
-                          >
-                            <NetworkGem network={network} />
-                            <div className="main_layout__left__link__text">
-                              <span>{network.name}</span>
-                            </div>
-                          </Link>
-                        </Tooltip>
-                      </div>
-                    )}
-                  </Draggable>
-                ))}
-                {provided.placeholder}
-              </div>
-            )}
-          </Droppable>
-        </DragDropContext>
-      </>
-    );
-  }
+                          <NetworkGem network={network} peerCount={peerCount} />
+                          <div className="main_layout__left__link__text">
+                            <span>{network.name}</span>
+                          </div>
+                        </Link>
+                      </Tooltip>
+                    </div>
+                  )}
+                </Draggable>
+              ))}
+              {provided.placeholder}
+            </div>
+          )}
+        </Droppable>
+      </DragDropContext>
+    </>
+  );
 
   const classes = clsx({
     "main_layout__left": true,

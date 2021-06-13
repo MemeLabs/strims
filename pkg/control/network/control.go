@@ -61,7 +61,7 @@ func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.Pro
 		events:           events,
 		dialer:           dialer,
 		certRenewTimeout: time.NewTimer(0),
-		networks:         map[uint64]*networkv1.Network{},
+		networks:         map[uint64]*network{},
 		peers:            map[uint64]*Peer{},
 		certificates:     &certificateMap{},
 	}
@@ -82,7 +82,7 @@ type Control struct {
 	dialer            *dialer.Control
 	certRenewTimeout  *time.Timer
 	nextCertRenewTime time.Time
-	networks          map[uint64]*networkv1.Network
+	networks          map[uint64]*network
 	peers             map[uint64]*Peer
 	certificates      *certificateMap
 }
@@ -106,6 +106,10 @@ func (t *Control) Run(ctx context.Context) {
 				t.handleNetworkCertUpdate(e.Network)
 			case event.NetworkAdd:
 				t.handleNetworkAdd(ctx)
+			case event.NetworkPeerOpen:
+				t.handleNetworkPeerOpen(e.NetworkID)
+			case event.NetworkPeerClose:
+				t.handleNetworkPeerClose(e.NetworkID)
 			}
 		case <-ctx.Done():
 			return
@@ -147,17 +151,17 @@ func (t *Control) handlePeerBinding(ctx context.Context, peerID uint64, networkK
 			continue
 		}
 
-		network, ok := t.networks[c.networkID]
+		n, ok := t.networks[c.networkID]
 		if !ok {
 			continue
 		}
 
 		go func() {
-			if err := t.renewCertificateWithPeer(ctx, network, peer); err != nil {
+			if err := t.renewCertificateWithPeer(ctx, n.network, peer); err != nil {
 				t.logger.Debug(
 					"certificate renew via peer failed",
 					zap.Stringer("peer", peer.peer.HostID()),
-					logutil.ByteHex("network", networkKeyForCertificate(network.Certificate)),
+					logutil.ByteHex("network", networkKeyForCertificate(n.network.Certificate)),
 					zap.Error(err),
 				)
 			}
@@ -189,6 +193,32 @@ func (t *Control) handleNetworkAdd(ctx context.Context) {
 				t.logger.Debug("network negotiation failed", zap.Error(err))
 			}
 		}()
+	}
+}
+
+func (t *Control) handleNetworkPeerOpen(networkID uint64) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	if n, ok := t.networks[networkID]; ok {
+		n.peerCount++
+		t.observers.EmitLocal(event.NetworkPeerCountUpdate{
+			NetworkID: networkID,
+			PeerCount: n.peerCount,
+		})
+	}
+}
+
+func (t *Control) handleNetworkPeerClose(networkID uint64) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	if n, ok := t.networks[networkID]; ok {
+		n.peerCount--
+		t.observers.EmitLocal(event.NetworkPeerCountUpdate{
+			NetworkID: networkID,
+			PeerCount: n.peerCount,
+		})
 	}
 }
 
@@ -297,14 +327,14 @@ func (t *Control) startNetworks() {
 		t.logger.Fatal("loading networks failed", zap.Error(err))
 	}
 
-	for _, network := range networks {
-		t.networks[network.Id] = network
-		t.certificates.Insert(network)
-		t.dialer.ReplaceOrInsertNetwork(network)
+	for _, n := range networks {
+		t.networks[n.Id] = &network{network: n}
+		t.certificates.Insert(n)
+		t.dialer.ReplaceOrInsertNetwork(n)
 
-		cert := dao.GetRootCert(network.Certificate)
+		cert := dao.GetRootCert(n.Certificate)
 
-		if _, err := t.vpn.AddNetwork(network.Certificate); err != nil {
+		if _, err := t.vpn.AddNetwork(n.Certificate); err != nil {
 			t.logger.Error(
 				"starting network failed",
 				zap.String("name", cert.Subject),
@@ -318,7 +348,7 @@ func (t *Control) startNetworks() {
 				logutil.ByteHex("key", cert.Key),
 			)
 
-			t.observers.EmitLocal(event.NetworkStart{Network: network})
+			t.observers.EmitLocal(event.NetworkStart{Network: n})
 		}
 	}
 }
@@ -330,7 +360,7 @@ func (t *Control) scheduleCertRenewal() {
 	minNextTime := time.Unix(math.MaxInt64, 0)
 
 	for _, n := range t.networks {
-		nextTime := nextCertificateRenewTime(n)
+		nextTime := nextCertificateRenewTime(n.network)
 		if nextTime.Before(minNextTime) {
 			minNextTime = nextTime
 		}
@@ -355,15 +385,15 @@ func (t *Control) renewExpiredCerts() {
 	now := time.Now()
 	t.nextCertRenewTime = now.Add(certRecheckInterval)
 
-	for _, network := range t.networks {
-		network := network
+	for _, n := range t.networks {
+		n := n
 
-		if now.After(nextCertificateRenewTime(network)) || isCertificateSubjectMismatched(network) {
+		if now.After(nextCertificateRenewTime(n.network)) || isCertificateSubjectMismatched(n.network) {
 			go func() {
-				if err := t.renewCertificate(network); err != nil {
+				if err := t.renewCertificate(n.network); err != nil {
 					t.logger.Debug(
 						"network certificate renewal failed",
-						logutil.ByteHex("network", networkKeyForCertificate(network.Certificate)),
+						logutil.ByteHex("network", networkKeyForCertificate(n.network.Certificate)),
 						zap.Error(err),
 					)
 				}
@@ -376,12 +406,12 @@ func (t *Control) mutateNetworkWithFinalizer(id uint64, mutate func(*networkv1.N
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	network, ok := t.networks[id]
+	n, ok := t.networks[id]
 	if !ok {
 		return ErrNetworkNotFound
 	}
 
-	clone := proto.Clone(network).(*networkv1.Network)
+	clone := proto.Clone(n.network).(*networkv1.Network)
 	if err := mutate(clone); err != nil {
 		return err
 	}
@@ -390,7 +420,7 @@ func (t *Control) mutateNetworkWithFinalizer(id uint64, mutate func(*networkv1.N
 		return err
 	}
 
-	t.networks[id] = clone
+	t.networks[id].network = clone
 
 	finalize(clone)
 	return nil
@@ -433,28 +463,28 @@ func (t *Control) Certificate(networkKey []byte) (*certificate.Certificate, bool
 }
 
 // Add ...
-func (t *Control) Add(network *networkv1.Network) error {
+func (t *Control) Add(n *networkv1.Network) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	if _, ok := t.networks[network.Id]; ok {
+	if _, ok := t.networks[n.Id]; ok {
 		return errors.New("duplicate network id")
 	}
 
-	if err := dao.UpsertNetwork(t.store, network); err != nil {
+	if err := dao.UpsertNetwork(t.store, n); err != nil {
 		return err
 	}
 
-	if _, err := t.vpn.AddNetwork(network.Certificate); err != nil {
+	if _, err := t.vpn.AddNetwork(n.Certificate); err != nil {
 		return err
 	}
 
-	t.networks[network.Id] = network
-	t.certificates.Insert(network)
-	t.dialer.ReplaceOrInsertNetwork(network)
+	t.networks[n.Id] = &network{network: n}
+	t.certificates.Insert(n)
+	t.dialer.ReplaceOrInsertNetwork(n)
 
-	t.observers.EmitGlobal(event.NetworkAdd{Network: network})
-	t.observers.EmitLocal(event.NetworkStart{Network: network})
+	t.observers.EmitGlobal(event.NetworkAdd{Network: n})
+	t.observers.EmitLocal(event.NetworkStart{Network: n})
 
 	return nil
 }
@@ -464,11 +494,11 @@ func (t *Control) Remove(id uint64) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	network, ok := t.networks[id]
+	n, ok := t.networks[id]
 	if !ok {
 		return ErrNetworkNotFound
 	}
-	networkKey := networkKeyForCertificate(network.Certificate)
+	networkKey := networkKeyForCertificate(n.network.Certificate)
 
 	if err := dao.DeleteNetwork(t.store, id); err != nil {
 		return err
@@ -478,16 +508,76 @@ func (t *Control) Remove(id uint64) error {
 		p.closeNetwork(networkKey)
 	}
 
-	if err := t.vpn.RemoveNetwork(dao.NetworkKey(network)); err != nil {
+	if err := t.vpn.RemoveNetwork(dao.NetworkKey(n.network)); err != nil {
 		return err
 	}
 
-	t.dialer.RemoveNetwork(network)
+	t.dialer.RemoveNetwork(n.network)
 	t.certificates.Delete(networkKey)
 	delete(t.networks, id)
 
-	t.observers.EmitLocal(event.NetworkStop{Network: network})
-	t.observers.EmitGlobal(event.NetworkRemove{Network: network})
+	t.observers.EmitLocal(event.NetworkStop{Network: n.network})
+	t.observers.EmitGlobal(event.NetworkRemove{Network: n.network})
 
 	return nil
+}
+
+func (t *Control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent {
+	ch := make(chan *networkv1.NetworkEvent, 128)
+
+	go func() {
+		events := make(chan interface{}, 16)
+		t.observers.Notify(events)
+		defer t.observers.StopNotifying(events)
+
+		t.lock.Lock()
+		for _, n := range t.networks {
+			ch <- &networkv1.NetworkEvent{
+				Body: &networkv1.NetworkEvent_NetworkStart_{
+					NetworkStart: &networkv1.NetworkEvent_NetworkStart{
+						Network:   n.network,
+						PeerCount: uint32(n.peerCount),
+					},
+				},
+			}
+		}
+		t.lock.Unlock()
+
+		for {
+			select {
+			case e := <-events:
+				switch e := e.(type) {
+				case event.NetworkStart:
+					ch <- &networkv1.NetworkEvent{
+						Body: &networkv1.NetworkEvent_NetworkStart_{
+							NetworkStart: &networkv1.NetworkEvent_NetworkStart{
+								Network: e.Network,
+							},
+						},
+					}
+				case event.NetworkStop:
+					ch <- &networkv1.NetworkEvent{
+						Body: &networkv1.NetworkEvent_NetworkStop_{
+							NetworkStop: &networkv1.NetworkEvent_NetworkStop{
+								NetworkId: e.Network.Id,
+							},
+						},
+					}
+				case event.NetworkPeerCountUpdate:
+					ch <- &networkv1.NetworkEvent{
+						Body: &networkv1.NetworkEvent_NetworkPeerCountUpdate_{
+							NetworkPeerCountUpdate: &networkv1.NetworkEvent_NetworkPeerCountUpdate{
+								NetworkId: e.NetworkID,
+								PeerCount: uint32(e.PeerCount),
+							},
+						},
+					}
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return ch
 }

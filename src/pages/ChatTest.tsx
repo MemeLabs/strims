@@ -31,7 +31,7 @@ const ChatThing: React.FC = () => {
 
 const ChatTest: React.FC = () => {
   return (
-    <MainLayout>
+    <>
       <main className="home_page__main">
         <header className="home_page__subheader"></header>
         <section className="home_page__main__video"></section>
@@ -48,7 +48,7 @@ const ChatTest: React.FC = () => {
           </Provider>
         </div>
       </aside>
-    </MainLayout>
+    </>
   );
 };
 

@@ -788,6 +788,292 @@ export class CreateNetworkFromInvitationResponse {
   }
 }
 
+export type INetworkEvent = {
+  body?: NetworkEvent.IBody
+}
+
+export class NetworkEvent {
+  body: NetworkEvent.TBody;
+
+  constructor(v?: INetworkEvent) {
+    this.body = new NetworkEvent.Body(v?.body);
+  }
+
+  static encode(m: NetworkEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    switch (m.body.case) {
+      case NetworkEvent.BodyCase.NETWORK_START:
+      NetworkEvent.NetworkStart.encode(m.body.networkStart, w.uint32(8010).fork()).ldelim();
+      break;
+      case NetworkEvent.BodyCase.NETWORK_STOP:
+      NetworkEvent.NetworkStop.encode(m.body.networkStop, w.uint32(8018).fork()).ldelim();
+      break;
+      case NetworkEvent.BodyCase.NETWORK_PEER_COUNT_UPDATE:
+      NetworkEvent.NetworkPeerCountUpdate.encode(m.body.networkPeerCountUpdate, w.uint32(8026).fork()).ldelim();
+      break;
+    }
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): NetworkEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new NetworkEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1001:
+        m.body = new NetworkEvent.Body({ networkStart: NetworkEvent.NetworkStart.decode(r, r.uint32()) });
+        break;
+        case 1002:
+        m.body = new NetworkEvent.Body({ networkStop: NetworkEvent.NetworkStop.decode(r, r.uint32()) });
+        break;
+        case 1003:
+        m.body = new NetworkEvent.Body({ networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate.decode(r, r.uint32()) });
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace NetworkEvent {
+  export enum BodyCase {
+    NOT_SET = 0,
+    NETWORK_START = 1001,
+    NETWORK_STOP = 1002,
+    NETWORK_PEER_COUNT_UPDATE = 1003,
+  }
+
+  export type IBody =
+  { case?: BodyCase.NOT_SET }
+  |{ case?: BodyCase.NETWORK_START, networkStart: NetworkEvent.INetworkStart }
+  |{ case?: BodyCase.NETWORK_STOP, networkStop: NetworkEvent.INetworkStop }
+  |{ case?: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: NetworkEvent.INetworkPeerCountUpdate }
+  ;
+
+  export type TBody = Readonly<
+  { case: BodyCase.NOT_SET }
+  |{ case: BodyCase.NETWORK_START, networkStart: NetworkEvent.NetworkStart }
+  |{ case: BodyCase.NETWORK_STOP, networkStop: NetworkEvent.NetworkStop }
+  |{ case: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate }
+  >;
+
+  class BodyImpl {
+    networkStart: NetworkEvent.NetworkStart;
+    networkStop: NetworkEvent.NetworkStop;
+    networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate;
+    case: BodyCase = BodyCase.NOT_SET;
+
+    constructor(v?: IBody) {
+      if (v && "networkStart" in v) {
+        this.case = BodyCase.NETWORK_START;
+        this.networkStart = new NetworkEvent.NetworkStart(v.networkStart);
+      } else
+      if (v && "networkStop" in v) {
+        this.case = BodyCase.NETWORK_STOP;
+        this.networkStop = new NetworkEvent.NetworkStop(v.networkStop);
+      } else
+      if (v && "networkPeerCountUpdate" in v) {
+        this.case = BodyCase.NETWORK_PEER_COUNT_UPDATE;
+        this.networkPeerCountUpdate = new NetworkEvent.NetworkPeerCountUpdate(v.networkPeerCountUpdate);
+      }
+    }
+  }
+
+  export const Body = BodyImpl as {
+    new (): Readonly<{ case: BodyCase.NOT_SET }>;
+    new <T extends IBody>(v: T): Readonly<
+    T extends { networkStart: NetworkEvent.INetworkStart } ? { case: BodyCase.NETWORK_START, networkStart: NetworkEvent.NetworkStart } :
+    T extends { networkStop: NetworkEvent.INetworkStop } ? { case: BodyCase.NETWORK_STOP, networkStop: NetworkEvent.NetworkStop } :
+    T extends { networkPeerCountUpdate: NetworkEvent.INetworkPeerCountUpdate } ? { case: BodyCase.NETWORK_PEER_COUNT_UPDATE, networkPeerCountUpdate: NetworkEvent.NetworkPeerCountUpdate } :
+    never
+    >;
+  };
+
+  export type INetworkStart = {
+    network?: INetwork;
+    peerCount?: number;
+  }
+
+  export class NetworkStart {
+    network: Network | undefined;
+    peerCount: number;
+
+    constructor(v?: INetworkStart) {
+      this.network = v?.network && new Network(v.network);
+      this.peerCount = v?.peerCount || 0;
+    }
+
+    static encode(m: NetworkStart, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.network) Network.encode(m.network, w.uint32(10).fork()).ldelim();
+      if (m.peerCount) w.uint32(16).uint32(m.peerCount);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): NetworkStart {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new NetworkStart();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.network = Network.decode(r, r.uint32());
+          break;
+          case 2:
+          m.peerCount = r.uint32();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type INetworkStop = {
+    networkId?: bigint;
+  }
+
+  export class NetworkStop {
+    networkId: bigint;
+
+    constructor(v?: INetworkStop) {
+      this.networkId = v?.networkId || BigInt(0);
+    }
+
+    static encode(m: NetworkStop, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.networkId) w.uint32(8).uint64(m.networkId);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): NetworkStop {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new NetworkStop();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.networkId = r.uint64();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type INetworkPeerCountUpdate = {
+    networkId?: bigint;
+    peerCount?: number;
+  }
+
+  export class NetworkPeerCountUpdate {
+    networkId: bigint;
+    peerCount: number;
+
+    constructor(v?: INetworkPeerCountUpdate) {
+      this.networkId = v?.networkId || BigInt(0);
+      this.peerCount = v?.peerCount || 0;
+    }
+
+    static encode(m: NetworkPeerCountUpdate, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.networkId) w.uint32(8).uint64(m.networkId);
+      if (m.peerCount) w.uint32(16).uint32(m.peerCount);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): NetworkPeerCountUpdate {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new NetworkPeerCountUpdate();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.networkId = r.uint64();
+          break;
+          case 2:
+          m.peerCount = r.uint32();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+}
+
+export type IWatchNetworksRequest = {
+}
+
+export class WatchNetworksRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IWatchNetworksRequest) {
+  }
+
+  static encode(m: WatchNetworksRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WatchNetworksRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new WatchNetworksRequest();
+  }
+}
+
+export type IWatchNetworksResponse = {
+  event?: INetworkEvent;
+}
+
+export class WatchNetworksResponse {
+  event: NetworkEvent | undefined;
+
+  constructor(v?: IWatchNetworksResponse) {
+    this.event = v?.event && new NetworkEvent(v.event);
+  }
+
+  static encode(m: WatchNetworksResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.event) NetworkEvent.encode(m.event, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WatchNetworksResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new WatchNetworksResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.event = NetworkEvent.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export enum KeyUsage {
   KEY_USAGE_UNDEFINED = 0,
   KEY_USAGE_PEER = 1,

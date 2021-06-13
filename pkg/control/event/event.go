@@ -14,6 +14,12 @@ func (o *Observers) Notify(ch interface{}) {
 	o.local.Notify(ch)
 }
 
+// StopNotifying ...
+func (o *Observers) StopNotifying(ch interface{}) {
+	o.global.StopNotifying(ch)
+	o.local.StopNotifying(ch)
+}
+
 // EmitGlobal ...
 func (o *Observers) EmitGlobal(v interface{}) {
 	o.global.Emit(v)

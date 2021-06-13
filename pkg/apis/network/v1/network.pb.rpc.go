@@ -15,6 +15,7 @@ func RegisterNetworkServiceService(host rpc.ServiceRegistry, service NetworkServ
 	host.RegisterMethod("strims.network.v1.NetworkService.List", service.List)
 	host.RegisterMethod("strims.network.v1.NetworkService.CreateInvitation", service.CreateInvitation)
 	host.RegisterMethod("strims.network.v1.NetworkService.CreateFromInvitation", service.CreateFromInvitation)
+	host.RegisterMethod("strims.network.v1.NetworkService.Watch", service.Watch)
 }
 
 // NetworkServiceService ...
@@ -47,6 +48,10 @@ type NetworkServiceService interface {
 		ctx context.Context,
 		req *CreateNetworkFromInvitationRequest,
 	) (*CreateNetworkFromInvitationResponse, error)
+	Watch(
+		ctx context.Context,
+		req *WatchNetworksRequest,
+	) (<-chan *WatchNetworksResponse, error)
 }
 
 // NetworkServiceClient ...
@@ -120,4 +125,13 @@ func (c *NetworkServiceClient) CreateFromInvitation(
 	res *CreateNetworkFromInvitationResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.CreateFromInvitation", req, res)
+}
+
+// Watch ...
+func (c *NetworkServiceClient) Watch(
+	ctx context.Context,
+	req *WatchNetworksRequest,
+	res chan *WatchNetworksResponse,
+) error {
+	return c.client.CallStreaming(ctx, "strims.network.v1.NetworkService.Watch", req, res)
 }

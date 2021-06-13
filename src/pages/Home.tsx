@@ -191,7 +191,7 @@ const HomePage: React.FC = () => {
   // }, []);
 
   return (
-    <MainLayout>
+    <>
       <main className="home_page__main">
         <header className="home_page__subheader"></header>
         <section className="home_page__main__video">
@@ -251,7 +251,7 @@ const HomePage: React.FC = () => {
         <header className="home_page__chat__promo"></header>
         <div className="home_page__chat">chat</div>
       </aside>
-    </MainLayout>
+    </>
   );
 };
 

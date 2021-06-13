@@ -112,6 +112,34 @@ message CreateNetworkFromInvitationResponse {
   Network network = 1;
 }
 
+message NetworkEvent {
+  message NetworkStart {
+    Network network = 1;
+    uint32 peer_count = 2;
+  }
+
+  message NetworkStop {
+    uint64 network_id = 1;
+  }
+
+  message NetworkPeerCountUpdate {
+    uint64 network_id = 1;
+    uint32 peer_count = 2;
+  }
+
+  oneof body {
+    NetworkStart network_start = 1001;
+    NetworkStop network_stop = 1002;
+    NetworkPeerCountUpdate network_peer_count_update = 1003;
+  }
+}
+
+message WatchNetworksRequest {}
+
+message WatchNetworksResponse {
+  NetworkEvent event = 1;
+}
+
 service NetworkService {
   rpc Create(CreateNetworkRequest) returns (CreateNetworkResponse);
   rpc Update(UpdateNetworkRequest) returns (UpdateNetworkResponse);
@@ -120,4 +148,5 @@ service NetworkService {
   rpc List(ListNetworksRequest) returns (ListNetworksResponse);
   rpc CreateInvitation(CreateNetworkInvitationRequest) returns (CreateNetworkInvitationResponse);
   rpc CreateFromInvitation(CreateNetworkFromInvitationRequest) returns (CreateNetworkFromInvitationResponse);
+  rpc Watch(WatchNetworksRequest) returns (stream WatchNetworksResponse);
 }

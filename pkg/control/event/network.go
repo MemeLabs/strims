@@ -58,5 +58,11 @@ type NetworkPeerClose struct {
 	NetworkKey []byte
 }
 
+// NetworkPeerCountUpdate ...
+type NetworkPeerCountUpdate struct {
+	NetworkID uint64
+	PeerCount int
+}
+
 // NetworkNegotiationComplete ...
 type NetworkNegotiationComplete struct{}

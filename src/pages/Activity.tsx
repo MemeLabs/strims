@@ -429,19 +429,21 @@ const Directory = () => {
 
   React.useEffect(() => {
     const decoder = new TextDecoder();
-    const ivl = setInterval(async () => {
-      const res = await client.debug.readMetrics(
-        new ReadMetricsRequest({
-          format: 4,
-        })
-      );
-      reduceStats(parsePrometheusTextFormat(decoder.decode(res.data)));
+    const ivl = setInterval(() => {
+      void (async () => {
+        const res = await client.debug.readMetrics(
+          new ReadMetricsRequest({
+            format: 4,
+          })
+        );
+        reduceStats(parsePrometheusTextFormat(decoder.decode(res.data)));
+      })();
     }, 500);
     return () => clearInterval(ivl);
   }, []);
 
   return (
-    <MainLayout>
+    <>
       <main className="home_page__main">
         <section className="home_page__main__video">
           <table>
@@ -861,7 +863,7 @@ const Directory = () => {
         <header className="home_page__chat__promo"></header>
         <div className="home_page__chat">chat</div>
       </aside>
-    </MainLayout>
+    </>
   );
 };
 

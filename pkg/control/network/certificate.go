@@ -5,7 +5,7 @@ import (
 	"sync"
 	"time"
 
-	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
@@ -17,7 +17,7 @@ type certificateMap struct {
 	m  llrb.LLRB
 }
 
-func (c *certificateMap) Insert(network *network.Network) {
+func (c *certificateMap) Insert(network *networkv1.Network) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 
@@ -94,13 +94,13 @@ func networkKeyForCertificate(cert *certificate.Certificate) []byte {
 	return dao.GetRootCert(cert).Key
 }
 
-func nextCertificateRenewTime(network *network.Network) time.Time {
+func nextCertificateRenewTime(network *networkv1.Network) time.Time {
 	if isCertificateSubjectMismatched(network) {
 		return time.Now()
 	}
 	return time.Unix(int64(network.Certificate.NotAfter), 0).Add(-certRenewScheduleAheadDuration)
 }
 
-func isCertificateSubjectMismatched(network *network.Network) bool {
+func isCertificateSubjectMismatched(network *networkv1.Network) bool {
 	return network.AltProfileName != "" && network.AltProfileName != network.Certificate.Subject
 }

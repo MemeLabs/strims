@@ -2,6 +2,7 @@ import strims_rpc_Host, { UnaryCallOptions as strims_rpc_UnaryCallOptions } from
 import strims_rpc_Service from "@memelabs/protobuf/lib/rpc/service";
 import { registerType } from "@memelabs/protobuf/lib/rpc/registry";
 import { Call as strims_rpc_Call } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
+import { Readable as GenericReadable } from "@memelabs/protobuf/lib/rpc/stream";
 
 import {
   ICreateNetworkRequest,
@@ -25,6 +26,9 @@ import {
   ICreateNetworkFromInvitationRequest,
   CreateNetworkFromInvitationRequest,
   CreateNetworkFromInvitationResponse,
+  IWatchNetworksRequest,
+  WatchNetworksRequest,
+  WatchNetworksResponse,
 } from "./network";
 
 registerType("strims.network.v1.CreateNetworkRequest", CreateNetworkRequest);
@@ -41,6 +45,8 @@ registerType("strims.network.v1.CreateNetworkInvitationRequest", CreateNetworkIn
 registerType("strims.network.v1.CreateNetworkInvitationResponse", CreateNetworkInvitationResponse);
 registerType("strims.network.v1.CreateNetworkFromInvitationRequest", CreateNetworkFromInvitationRequest);
 registerType("strims.network.v1.CreateNetworkFromInvitationResponse", CreateNetworkFromInvitationResponse);
+registerType("strims.network.v1.WatchNetworksRequest", WatchNetworksRequest);
+registerType("strims.network.v1.WatchNetworksResponse", WatchNetworksResponse);
 
 export interface NetworkServiceService {
   create(req: CreateNetworkRequest, call: strims_rpc_Call): Promise<CreateNetworkResponse> | CreateNetworkResponse;
@@ -50,6 +56,7 @@ export interface NetworkServiceService {
   list(req: ListNetworksRequest, call: strims_rpc_Call): Promise<ListNetworksResponse> | ListNetworksResponse;
   createInvitation(req: CreateNetworkInvitationRequest, call: strims_rpc_Call): Promise<CreateNetworkInvitationResponse> | CreateNetworkInvitationResponse;
   createFromInvitation(req: CreateNetworkFromInvitationRequest, call: strims_rpc_Call): Promise<CreateNetworkFromInvitationResponse> | CreateNetworkFromInvitationResponse;
+  watch(req: WatchNetworksRequest, call: strims_rpc_Call): GenericReadable<WatchNetworksResponse>;
 }
 
 export const registerNetworkServiceService = (host: strims_rpc_Service, service: NetworkServiceService): void => {
@@ -60,6 +67,7 @@ export const registerNetworkServiceService = (host: strims_rpc_Service, service:
   host.registerMethod<ListNetworksRequest, ListNetworksResponse>("strims.network.v1.NetworkService.List", service.list.bind(service));
   host.registerMethod<CreateNetworkInvitationRequest, CreateNetworkInvitationResponse>("strims.network.v1.NetworkService.CreateInvitation", service.createInvitation.bind(service));
   host.registerMethod<CreateNetworkFromInvitationRequest, CreateNetworkFromInvitationResponse>("strims.network.v1.NetworkService.CreateFromInvitation", service.createFromInvitation.bind(service));
+  host.registerMethod<WatchNetworksRequest, WatchNetworksResponse>("strims.network.v1.NetworkService.Watch", service.watch.bind(service));
 }
 
 export class NetworkServiceClient {
@@ -91,6 +99,10 @@ export class NetworkServiceClient {
 
   public createFromInvitation(req?: ICreateNetworkFromInvitationRequest, opts?: strims_rpc_UnaryCallOptions): Promise<CreateNetworkFromInvitationResponse> {
     return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.CreateFromInvitation", new CreateNetworkFromInvitationRequest(req)), opts);
+  }
+
+  public watch(req?: IWatchNetworksRequest): GenericReadable<WatchNetworksResponse> {
+    return this.host.expectMany(this.host.call("strims.network.v1.NetworkService.Watch", new WatchNetworksRequest(req)));
   }
 }
 

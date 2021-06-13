@@ -1,6 +1,7 @@
 import React from "react";
-import { Route, Switch } from "react-router-dom";
+import { Redirect, Route, Switch } from "react-router-dom";
 
+import { MainLayout } from "../components/MainLayout";
 import { PrivateRoute } from "../components/PrivateRoute";
 import Activity from "../pages/Activity";
 import ChatTest from "../pages/ChatTest";
@@ -17,13 +18,20 @@ const Router: React.FC = () => {
     <Switch>
       <Route path="/login" exact component={LoginPage} />
       <Route path="/signup" exact component={SignUpPage} />
-      <PrivateRoute path="/" exact component={HomePage} />
-      <PrivateRoute path="/settings" component={SettingsPage} />
-      <PrivateRoute path="/directory/:networkKey" exact component={Directory} />
-      <PrivateRoute path="/player/:networkKey" exact component={PlayerTest} />
-      <PrivateRoute path="/activity" exact component={Activity} />
-      <PrivateRoute path="/chat-test" exact component={ChatTest} />
-      <Route component={NotFoundPage} />
+      <Route path="/404" exact component={NotFoundPage} />
+      <PrivateRoute>
+        <MainLayout>
+          <Switch>
+            <PrivateRoute path="/" exact component={HomePage} />
+            <PrivateRoute path="/settings" component={SettingsPage} />
+            <PrivateRoute path="/directory/:networkKey" exact component={Directory} />
+            <PrivateRoute path="/player/:networkKey" exact component={PlayerTest} />
+            <PrivateRoute path="/activity" exact component={Activity} />
+            <PrivateRoute path="/chat-test" exact component={ChatTest} />
+            <Redirect to="/404" />
+          </Switch>
+        </MainLayout>
+      </PrivateRoute>
     </Switch>
   );
 };

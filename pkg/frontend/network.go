@@ -153,3 +153,16 @@ func (s *networkService) CreateFromInvitation(ctx context.Context, r *networkv1.
 		Network: network,
 	}, nil
 }
+
+// Watch ...
+func (s *networkService) Watch(ctx context.Context, r *networkv1.WatchNetworksRequest) (<-chan *networkv1.WatchNetworksResponse, error) {
+	ch := make(chan *networkv1.WatchNetworksResponse, 1)
+
+	go func() {
+		for e := range s.app.Network().ReadEvents(ctx) {
+			ch <- &networkv1.WatchNetworksResponse{Event: e}
+		}
+	}()
+
+	return ch, nil
+}

@@ -45,6 +45,7 @@ type NetworkControl interface {
 	Certificate(networkKey []byte) (*certificate.Certificate, bool)
 	Add(network *network.Network) error
 	Remove(id uint64) error
+	ReadEvents(ctx context.Context) <-chan *network.NetworkEvent
 }
 
 // TransferControl ...
