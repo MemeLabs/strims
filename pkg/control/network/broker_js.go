@@ -28,8 +28,9 @@ var (
 // NewBrokerProxyService constructs a new BrokerFactoryService
 func NewBrokerProxyService(logger *zap.Logger) *BrokerProxyService {
 	return &BrokerProxyService{
-		logger: logger,
-		broker: NewBroker(logger),
+		logger:  logger,
+		helpers: map[uint64]*brokerProxyServiceHelper{},
+		broker:  NewBroker(logger),
 	}
 }
 
@@ -38,10 +39,11 @@ func NewBrokerProxyService(logger *zap.Logger) *BrokerProxyService {
 // are expensive. To keep from blocking time sensitive network transfers we
 // offload them to a separate web worker.
 type BrokerProxyService struct {
-	logger     *zap.Logger
-	helpers    sync.Map
-	nextPeerID uint64
-	broker     Broker
+	logger      *zap.Logger
+	helpersLock sync.Mutex
+	helpers     map[uint64]*brokerProxyServiceHelper
+	nextPeerID  uint64
+	broker      Broker
 }
 
 // Open ...
@@ -61,7 +63,10 @@ func (s *BrokerProxyService) Open(ctx context.Context, r *networkv1.BrokerProxyR
 	}
 
 	pid := atomic.AddUint64(&s.nextPeerID, 1)
-	s.helpers.Store(pid, h)
+
+	s.helpersLock.Lock()
+	s.helpers[pid] = h
+	s.helpersLock.Unlock()
 
 	go func() {
 		events <- &networkv1.BrokerProxyEvent{
@@ -73,21 +78,32 @@ func (s *BrokerProxyService) Open(ctx context.Context, r *networkv1.BrokerProxyR
 		}
 
 		<-ctx.Done()
-		s.helpers.Delete(pid)
+
+		s.helpersLock.Lock()
+		delete(s.helpers, pid)
+		s.helpersLock.Unlock()
+
 		rw.Close()
 	}()
 
 	return events, nil
 }
 
+func (s *BrokerProxyService) helper(pid uint64) (*brokerProxyServiceHelper, bool) {
+	s.helpersLock.Lock()
+	pi, ok := s.helpers[pid]
+	s.helpersLock.Unlock()
+	return pi, ok
+}
+
 // SendKeys ...
 func (s *BrokerProxyService) SendKeys(ctx context.Context, r *networkv1.BrokerProxySendKeysRequest) (*networkv1.BrokerProxySendKeysResponse, error) {
-	pi, ok := s.helpers.Load(r.ProxyId)
+	pi, ok := s.helper(r.ProxyId)
 	if !ok {
 		return nil, ErrProxyIDNotFound
 	}
 
-	if err := pi.(*brokerProxyServiceHelper).SendKeys(r.Keys); err != nil {
+	if err := pi.SendKeys(r.Keys); err != nil {
 		return nil, err
 	}
 	return &networkv1.BrokerProxySendKeysResponse{}, nil
@@ -95,12 +111,12 @@ func (s *BrokerProxyService) SendKeys(ctx context.Context, r *networkv1.BrokerPr
 
 // ReceiveKeys ...
 func (s *BrokerProxyService) ReceiveKeys(ctx context.Context, r *networkv1.BrokerProxyReceiveKeysRequest) (*networkv1.BrokerProxyReceiveKeysResponse, error) {
-	pi, ok := s.helpers.Load(r.ProxyId)
+	pi, ok := s.helper(r.ProxyId)
 	if !ok {
 		return nil, ErrProxyIDNotFound
 	}
 
-	keys, err := pi.(*brokerProxyServiceHelper).ReceiveKeys(r.Keys)
+	keys, err := pi.ReceiveKeys(r.Keys)
 	if err != nil {
 		return nil, err
 	}
@@ -109,23 +125,23 @@ func (s *BrokerProxyService) ReceiveKeys(ctx context.Context, r *networkv1.Broke
 
 // Data ...
 func (s *BrokerProxyService) Data(ctx context.Context, r *networkv1.BrokerProxyDataRequest) (*networkv1.BrokerProxyDataResponse, error) {
-	pi, ok := s.helpers.Load(r.ProxyId)
+	pi, ok := s.helper(r.ProxyId)
 	if !ok {
 		return nil, ErrProxyIDNotFound
 	}
 
-	pi.(*brokerProxyServiceHelper).rw.Data(r.Data)
+	pi.rw.Data(r.Data)
 	return &networkv1.BrokerProxyDataResponse{}, nil
 }
 
 // Close ...
 func (s *BrokerProxyService) Close(ctx context.Context, r *networkv1.BrokerProxyCloseRequest) (*networkv1.BrokerProxyCloseResponse, error) {
-	pi, ok := s.helpers.Load(r.ProxyId)
+	pi, ok := s.helper(r.ProxyId)
 	if !ok {
 		return nil, ErrProxyIDNotFound
 	}
 
-	pi.(*brokerProxyServiceHelper).Close()
+	pi.Close()
 	return &networkv1.BrokerProxyCloseResponse{}, nil
 }
 

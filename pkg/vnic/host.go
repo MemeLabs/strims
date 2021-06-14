@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"reflect"
 	"sync"
 	"time"
 
@@ -12,8 +13,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
+	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
-	"github.com/petar/GoLLRB/llrb"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"go.uber.org/zap"
@@ -97,6 +98,7 @@ func New(logger *zap.Logger, profileKey *key.Key, options ...HostOption) (*Host,
 		logger:     logger,
 		profileKey: profileKey,
 		key:        hostKey,
+		peers:      map[kademlia.ID]*Peer{},
 		qos:        qos.New(),
 	}
 
@@ -129,24 +131,26 @@ type Host struct {
 	peerHandlersLock sync.Mutex
 	peerHandlers     []PeerHandler
 	peersLock        sync.Mutex
-	peers            peerMap
+	peers            map[kademlia.ID]*Peer
 	qos              *qos.Control
 }
 
 // Close ...
 func (h *Host) Close() {
-	for _, iface := range h.interfaces {
+	for i, iface := range h.interfaces {
 		if listener, ok := iface.(Listener); ok {
 			listener.Close()
 		}
+		h.interfaces[i] = nil
 	}
+	h.interfaces = h.interfaces[:0]
 
 	h.peersLock.Lock()
 	defer h.peersLock.Unlock()
-	h.peers.Each(func(p *Peer) bool {
+	for k, p := range h.peers {
 		p.Close()
-		return true
-	})
+		delete(h.peers, k)
+	}
 }
 
 // ID ...
@@ -197,24 +201,38 @@ func (h *Host) AddLink(c Link) {
 			return
 		}
 
-		// h.logger.Debug(
-		// 	"created peer",
-		// 	logutil.ByteHex("peer", p.Certificate.Key),
-		// 	zap.String("type", reflect.TypeOf(c).String()),
-		// 	zap.Int("mtu", c.MTU()),
-		// )
+		logger := h.logger.With(
+			logutil.ByteHex("peer", p.Certificate.Key),
+			zap.Stringer("host", p.HostID()),
+			zap.Stringer("type", reflect.TypeOf(c)),
+			zap.Int("mtu", c.MTU()),
+		)
+
+		h.peersLock.Lock()
+		_, found := h.peers[p.HostID()]
+		if !found {
+			h.peers[p.HostID()] = p
+		}
+		h.peersLock.Unlock()
+
+		if found {
+			p.Close()
+			logger.Debug("closed duplicate link")
+			return
+		}
+
+		logger.Debug("created peer")
 
 		h.handlePeer(p)
 
-		h.peersLock.Lock()
-		h.peers.Insert(p.HostID(), p)
-		h.peersLock.Unlock()
-
+		logger.Debug("running peer")
 		p.run()
 
 		h.peersLock.Lock()
-		h.peers.Delete(p.HostID())
+		delete(h.peers, p.HostID())
 		h.peersLock.Unlock()
+
+		logger.Debug("closed peer")
 	}()
 }
 
@@ -225,11 +243,20 @@ func (h *Host) AddPeerHandler(fn PeerHandler) {
 	h.peerHandlers = append(h.peerHandlers, fn)
 }
 
+// HasPeer ...
+func (h *Host) HasPeer(hostID kademlia.ID) bool {
+	h.peersLock.Lock()
+	_, ok := h.peers[hostID]
+	h.peersLock.Unlock()
+	return ok
+}
+
 // GetPeer ...
 func (h *Host) GetPeer(hostID kademlia.ID) (*Peer, bool) {
 	h.peersLock.Lock()
-	defer h.peersLock.Unlock()
-	return h.peers.Get(hostID)
+	p, ok := h.peers[hostID]
+	h.peersLock.Unlock()
+	return p, ok
 }
 
 // Peers ...
@@ -237,11 +264,10 @@ func (h *Host) Peers() []*Peer {
 	h.peersLock.Lock()
 	defer h.peersLock.Unlock()
 
-	peers := []*Peer{}
-	h.peers.Each(func(p *Peer) bool {
+	peers := make([]*Peer, 0, len(h.peers))
+	for _, p := range h.peers {
 		peers = append(peers, p)
-		return true
-	})
+	}
 	return peers
 }
 
@@ -285,49 +311,15 @@ func (h *Host) Dial(addr InterfaceAddr) error {
 		return errors.New("unsupported scheme")
 	}
 
-	if err := d.Dial(h, addr); err != nil {
+	c, err := d.Dial(addr)
+	if err != nil {
 		dialErrorCount.WithLabelValues(scheme).Inc()
 		h.logger.Error("dial error", zap.Error(err))
 		return err
 	}
+
+	h.AddLink(c)
 	return nil
-}
-
-type peerMap struct {
-	m llrb.LLRB
-}
-
-func (m *peerMap) Insert(k kademlia.ID, v *Peer) {
-	m.m.InsertNoReplace(peerMapItem{k, v})
-}
-
-func (m *peerMap) Delete(k kademlia.ID) {
-	m.m.Delete(peerMapItem{k, nil})
-}
-
-func (m *peerMap) Get(k kademlia.ID) (*Peer, bool) {
-	if it := m.m.Get(peerMapItem{k, nil}); it != nil {
-		return it.(peerMapItem).v, true
-	}
-	return nil, false
-}
-
-func (m *peerMap) Each(f func(b *Peer) bool) {
-	m.m.AscendGreaterOrEqual(llrb.Inf(-1), func(i llrb.Item) bool {
-		return f(i.(peerMapItem).v)
-	})
-}
-
-type peerMapItem struct {
-	k kademlia.ID
-	v *Peer
-}
-
-func (t peerMapItem) Less(oi llrb.Item) bool {
-	if o, ok := oi.(peerMapItem); ok {
-		return t.k.Less(o.k)
-	}
-	return !oi.Less(t)
 }
 
 // Listener ...
@@ -347,7 +339,7 @@ func WithInterface(i Interface) HostOption {
 // Interface ...
 type Interface interface {
 	ValidScheme(string) bool
-	Dial(h *Host, addr InterfaceAddr) error
+	Dial(addr InterfaceAddr) (Link, error)
 }
 
 // InterfaceAddr ...

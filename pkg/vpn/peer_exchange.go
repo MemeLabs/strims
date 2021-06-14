@@ -254,8 +254,7 @@ func (s *peerExchange) HandleMessage(msg *Message) error {
 
 // Connect create mediator to negotiate connection with peer
 func (s *peerExchange) Connect(hostID kademlia.ID) error {
-	// TODO: handle races
-	if s.network.HasPeer(hostID) {
+	if s.network.VNIC().HasPeer(hostID) {
 		return nil
 	}
 
@@ -323,18 +322,22 @@ func (s *peerExchange) handleOffer(m *vpnv1.PeerExchangeMessage_Offer, msg *Mess
 }
 
 func (s *peerExchange) dial(t *webRTCMediator) error {
-	if _, ok := s.mediators[t.id]; ok {
+	if s.network.VNIC().HasPeer(t.id) {
 		return errors.New("duplicate connection attempt")
 	}
+
+	s.mediatorsLock.Lock()
+	if _, ok := s.mediators[t.id]; ok {
+		s.mediatorsLock.Unlock()
+		return errors.New("duplicate connection attempt")
+	}
+	s.mediators[t.id] = t
+	s.mediatorsLock.Unlock()
 
 	s.logger.Debug(
 		"creating connection",
 		zap.Stringer("host", t.id),
 	)
-
-	s.mediatorsLock.Lock()
-	s.mediators[t.id] = t
-	s.mediatorsLock.Unlock()
 
 	errs := make(chan error, 1)
 	go func() {

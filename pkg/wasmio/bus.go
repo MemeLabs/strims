@@ -89,7 +89,7 @@ func (p *Bus) Read(b []byte) (n int, err error) {
 
 	copy(b[:n], p.b[p.off:])
 	p.off += n
-	return
+	return n, p.err
 }
 
 // Close ...

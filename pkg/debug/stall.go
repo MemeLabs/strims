@@ -10,6 +10,11 @@ func Print(v ...interface{}) func() {
 	return func() { log.Println(v...) }
 }
 
+// Printf print formatted message to log if stalled
+func Printf(format string, v ...interface{}) func() {
+	return func() { log.Printf(format, v...) }
+}
+
 // Panic print message and panic if stalled
 func Panic(v ...interface{}) func() {
 	return func() { log.Panicln(v...) }

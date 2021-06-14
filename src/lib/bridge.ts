@@ -260,6 +260,8 @@ export class WindowBridge extends EventEmitter {
           })
         );
 
+      dataChannel.onclose = onclose;
+
       port1.onmessage = ({ data }: MessageEvent<WebRTCDataChannelWorkerEvent>) =>
         ready.then(() => {
           // console.log("window data channel event", data);
@@ -289,6 +291,7 @@ export class WindowBridge extends EventEmitter {
 
         dataChannel.onmessage = null;
         dataChannel.onopen = null;
+        dataChannel.onclose = null;
         dataChannel.close();
 
         port.onmessage = null;
@@ -667,6 +670,7 @@ export class WorkerBridge {
               break;
             case EventType.DATA_CHANNEL_CLOSE:
               proxy.onclose();
+              port.close();
               break;
           }
         };
@@ -695,11 +699,12 @@ export class WorkerBridge {
         );
       },
       close: () => {
-        void ready.then((port) =>
+        void ready.then((port) => {
           port.postMessage({
             type: EventType.DATA_CHANNEL_CLOSE,
-          })
-        );
+          });
+          port.close();
+        });
       },
     };
   }

@@ -18,5 +18,5 @@ type WebSocketProxy interface {
 
 // NewWebSocketProxy ...
 func NewWebSocketProxy(bridge js.Value, uri string) (WebSocketProxy, error) {
-	return newChannel(dataChannelMTU, bridge, "openWebSocket", uri)
+	return newChannel(webSocketMTU, bridge, "openWebSocket", uri)
 }

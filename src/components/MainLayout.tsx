@@ -249,7 +249,7 @@ export const MainLayout: React.FC = ({ children }) => {
   const [theme, { setColorScheme }] = useTheme();
   const client = useClient();
 
-  const [debuggerIsOpen, setDebuggerIsOpen] = useState(true);
+  const [debuggerIsOpen, setDebuggerIsOpen] = useState(false);
   const handleDebuggerClose = useCallback(() => setDebuggerIsOpen(false), []);
   const handleDebuggerOpen = () => setDebuggerIsOpen(true);
 

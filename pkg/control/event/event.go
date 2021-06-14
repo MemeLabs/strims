@@ -1,6 +1,8 @@
 package event
 
-import "github.com/MemeLabs/go-ppspp/pkg/event"
+import (
+	"github.com/MemeLabs/go-ppspp/pkg/event"
+)
 
 // Observers ...
 type Observers struct {

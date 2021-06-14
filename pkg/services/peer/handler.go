@@ -18,6 +18,7 @@ import (
 // NewPeerHandler ...
 func NewPeerHandler(logger *zap.Logger, app control.AppControl, store *dao.ProfileStore, qosc *qos.Class) vnic.PeerHandler {
 	return func(peer *vnic.Peer) {
+		logger := logger.With(zap.Stringer("host", peer.HostID()))
 		rw0, rw1 := peer.ChannelPair(vnic.PeerRPCClientPort, vnic.PeerRPCServerPort, qosc)
 
 		c, err := rpc.NewClient(logger, &rpc.RWFDialer{
@@ -25,6 +26,7 @@ func NewPeerHandler(logger *zap.Logger, app control.AppControl, store *dao.Profi
 			ReadWriteFlusher: rw0,
 		})
 		if err != nil {
+			logger.Info("creating peer rpc client failed", zap.Error(err))
 			return
 		}
 

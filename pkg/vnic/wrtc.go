@@ -19,18 +19,13 @@ func (w *WebRTCInterface) ValidScheme(scheme string) bool {
 }
 
 // Dial ...
-func (w *WebRTCInterface) Dial(h *Host, addr InterfaceAddr) error {
-	c, err := w.Dialer.Dial(addr.(WebRTCMediator))
-	if err != nil {
-		return err
-	}
-	h.AddLink(c)
-	return nil
+func (w *WebRTCInterface) Dial(addr InterfaceAddr) (Link, error) {
+	return w.Dialer.Dial(addr.(WebRTCMediator))
 }
 
 // WebRTCMediator ...
 type WebRTCMediator interface {
-	Scheme() string
+	InterfaceAddr
 	GetOffer() ([]byte, error)
 	GetAnswer() ([]byte, error)
 	GetICECandidates() <-chan []byte

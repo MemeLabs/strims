@@ -29,14 +29,7 @@ func (d *wsInterface) ValidScheme(scheme string) bool {
 }
 
 // Dial ...
-func (d *wsInterface) Dial(h *Host, addr InterfaceAddr) error {
+func (d *wsInterface) Dial(addr InterfaceAddr) (Link, error) {
 	url := addr.(WebSocketAddr).String()
-
-	c, err := wasmio.NewWebSocketProxy(d.bridge, url)
-	if err != nil {
-		return err
-	}
-
-	h.AddLink(c)
-	return nil
+	return wasmio.NewWebSocketProxy(d.bridge, url)
 }

@@ -528,7 +528,7 @@ func (s *peerSwarmScheduler) CloseChannel(p peerThing) {
 	s.lock.Lock()
 	cs, ok := s.channels[p]
 	if !ok {
-		s.lock.Lock()
+		s.lock.Unlock()
 		return
 	}
 
@@ -544,7 +544,7 @@ func (s *peerSwarmScheduler) CloseChannel(p peerThing) {
 
 	delete(s.channels, p)
 
-	cs.lock.Lock()
+	cs.lock.Unlock()
 	s.lock.Unlock()
 
 	p.closeChannel(cs)
@@ -1258,9 +1258,11 @@ func (c *peerChannelScheduler) HandleStreamRequest(s codec.Stream, b binmap.Bin)
 }
 
 func (c *peerChannelScheduler) HandleStreamCancel(s codec.Stream) error {
+	c.s.lock.Lock()
 	c.lock.Lock()
-	defer c.lock.Unlock()
 	c.addStreamClose(s)
+	c.lock.Unlock()
+	c.s.lock.Unlock()
 	return nil
 }
 

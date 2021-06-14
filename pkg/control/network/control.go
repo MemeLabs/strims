@@ -107,9 +107,9 @@ func (t *Control) Run(ctx context.Context) {
 			case event.NetworkAdd:
 				t.handleNetworkAdd(ctx)
 			case event.NetworkPeerOpen:
-				t.handleNetworkPeerOpen(e.NetworkID)
+				t.handleNetworkPeerCountUpdate(e.NetworkID, 1)
 			case event.NetworkPeerClose:
-				t.handleNetworkPeerClose(e.NetworkID)
+				t.handleNetworkPeerCountUpdate(e.NetworkID, -1)
 			}
 		case <-ctx.Done():
 			return
@@ -196,30 +196,22 @@ func (t *Control) handleNetworkAdd(ctx context.Context) {
 	}
 }
 
-func (t *Control) handleNetworkPeerOpen(networkID uint64) {
+func (t *Control) handleNetworkPeerCountUpdate(networkID uint64, d int) {
 	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	if n, ok := t.networks[networkID]; ok {
-		n.peerCount++
-		t.observers.EmitLocal(event.NetworkPeerCountUpdate{
-			NetworkID: networkID,
-			PeerCount: n.peerCount,
-		})
+	n, ok := t.networks[networkID]
+	if !ok {
+		t.lock.Unlock()
+		return
 	}
-}
 
-func (t *Control) handleNetworkPeerClose(networkID uint64) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
+	n.peerCount += d
+	peerCount := n.peerCount
+	t.lock.Unlock()
 
-	if n, ok := t.networks[networkID]; ok {
-		n.peerCount--
-		t.observers.EmitLocal(event.NetworkPeerCountUpdate{
-			NetworkID: networkID,
-			PeerCount: n.peerCount,
-		})
-	}
+	t.observers.EmitLocal(event.NetworkPeerCountUpdate{
+		NetworkID: networkID,
+		PeerCount: peerCount,
+	})
 }
 
 type certificateRenewFunc func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error)
@@ -526,7 +518,7 @@ func (t *Control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 	ch := make(chan *networkv1.NetworkEvent, 128)
 
 	go func() {
-		events := make(chan interface{}, 16)
+		events := make(chan interface{}, 128)
 		t.observers.Notify(events)
 		defer t.observers.StopNotifying(events)
 

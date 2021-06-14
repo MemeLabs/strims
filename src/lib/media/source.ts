@@ -28,9 +28,19 @@ export class Source {
   }
 
   public reset(): void {
-    this.sourceBufferTasks.reset();
-    this.mediaSource.removeSourceBuffer(this.sourceBuffer);
-    this.initSourceBuffer();
+    this.sourceBufferTasks.insert(() => {
+      this.sourceBufferTasks.reset();
+
+      if (this.sourceBuffer) {
+        this.mediaSource.removeSourceBuffer(this.sourceBuffer);
+        this.sourceBuffer.onupdateend = undefined;
+        this.sourceBuffer.onerror = undefined;
+        this.sourceBuffer.onabort = undefined;
+        this.sourceBuffer = undefined;
+      }
+
+      this.initSourceBuffer();
+    });
   }
 
   public appendBuffer(b: ArrayBufferView | ArrayBuffer): void {

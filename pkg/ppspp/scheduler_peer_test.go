@@ -11,12 +11,33 @@ import (
 	"go.uber.org/zap"
 )
 
-func TestPeerChannelSchedulerStreamSubImplicitRequests(t *testing.T) {
+func newTestPeerSwarmScheduler() *peerSwarmScheduler {
 	id, _ := DecodeSwarmID("ewOeQgqCCXYwVmR-nZIcbLfDszuIgV8l0Xj0OVa5Vw4")
 	swarm, _ := NewSwarm(NewSwarmID(id), SwarmOptions{StreamCount: 8})
 
 	logger, _ := zap.NewDevelopment()
-	swarmScheduler := newPeerSwarmScheduler(logger, swarm)
+	return newPeerSwarmScheduler(logger, swarm)
+}
+
+func TestPeerSwarmSchedulerStartStopChannel(t *testing.T) {
+	swarmScheduler := newTestPeerSwarmScheduler()
+
+	var closeChannelCalled bool
+	peer := &mockPeerThing{
+		closeChannelFunc: func(w PeerWriter) {
+			closeChannelCalled = true
+		},
+	}
+
+	channelScheduler := swarmScheduler.ChannelScheduler(peer, &mockChannelWriterThing{}).(*peerChannelScheduler)
+	assert.NotNil(t, channelScheduler)
+
+	swarmScheduler.CloseChannel(peer)
+	assert.True(t, closeChannelCalled, "expected peer closeChannel to be called")
+}
+
+func TestPeerChannelSchedulerStreamSubImplicitRequests(t *testing.T) {
+	swarmScheduler := newTestPeerSwarmScheduler()
 	channelScheduler := swarmScheduler.ChannelScheduler(&mockPeerThing{}, &mockChannelWriterThing{}).(*peerChannelScheduler)
 
 	peerHaveBin := binmap.NewBin(6, 0)
@@ -46,11 +67,7 @@ func TestPeerChannelSchedulerStreamSubImplicitRequests(t *testing.T) {
 }
 
 func TestPeerChannelSchedulerFoo(t *testing.T) {
-	id, _ := DecodeSwarmID("ewOeQgqCCXYwVmR-nZIcbLfDszuIgV8l0Xj0OVa5Vw4")
-	swarm, _ := NewSwarm(NewSwarmID(id), SwarmOptions{StreamCount: 8})
-
-	logger, _ := zap.NewDevelopment()
-	swarmScheduler := newPeerSwarmScheduler(logger, swarm)
+	swarmScheduler := newTestPeerSwarmScheduler()
 
 	const liveWindow = 16 * 1024
 	const mtu = 16 * 1024

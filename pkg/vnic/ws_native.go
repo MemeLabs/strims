@@ -144,7 +144,7 @@ func (f *wsInterface) Close() error {
 	return err
 }
 
-func (f *wsInterface) Dial(h *Host, addr InterfaceAddr) error {
+func (f *wsInterface) Dial(addr InterfaceAddr) (Link, error) {
 	d := &websocket.Dialer{
 		TLSClientConfig: &tls.Config{
 			InsecureSkipVerify: addr.(WebSocketAddr).InsecureSkipVerifyTLS,
@@ -152,8 +152,7 @@ func (f *wsInterface) Dial(h *Host, addr InterfaceAddr) error {
 	}
 	c, _, err := d.Dial(addr.(WebSocketAddr).URL, http.Header{})
 	if err != nil {
-		return err
+		return nil, err
 	}
-	h.AddLink(NewWSReadWriter(c))
-	return nil
+	return NewWSReadWriter(c), nil
 }

@@ -101,6 +101,11 @@ type Network struct {
 	nextHop          *nextHopMap
 }
 
+// VNIC ...
+func (n *Network) VNIC() *vnic.Host {
+	return n.host
+}
+
 // SetHandler ...
 func (n *Network) SetHandler(port uint16, h MessageHandler) error {
 	n.handlersLock.Lock()
