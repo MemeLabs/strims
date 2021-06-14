@@ -1,4 +1,4 @@
-package ppspp
+package integration
 
 import (
 	"context"
@@ -12,27 +12,28 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestSwarmE2E(t *testing.T) {
 	key := ppspptest.Key()
-	id := NewSwarmID(key.Public)
-	options := SwarmOptions{
+	id := ppspp.NewSwarmID(key.Public)
+	options := ppspp.SwarmOptions{
 		LiveWindow: 1 << 12,
 	}
 
 	type client struct {
 		id        []byte
-		swarm     *Swarm
-		scheduler *Runner
+		swarm     *ppspp.Swarm
+		scheduler *ppspp.Runner
 	}
 
 	newClient := func() *client {
 		clientID := make([]byte, 64)
 		rand.Read(clientID)
-		swarm, err := NewSwarm(id, options)
+		swarm, err := ppspp.NewSwarm(id, options)
 		assert.NoError(t, err, "swarm constructor failed")
 		return &client{
 			id:    clientID,
@@ -40,7 +41,7 @@ func TestSwarmE2E(t *testing.T) {
 		}
 	}
 
-	src, err := NewWriter(WriterOptions{
+	src, err := ppspp.NewWriter(ppspp.WriterOptions{
 		SwarmOptions: options,
 		Key:          key,
 	})
@@ -56,7 +57,7 @@ func TestSwarmE2E(t *testing.T) {
 	logger := ppspptest.Logger()
 
 	for _, c := range clients {
-		c.scheduler = NewRunner(ctx, logger)
+		c.scheduler = ppspp.NewRunner(ctx, logger)
 	}
 
 	for i := 0; i < len(clients); i++ {

@@ -88,7 +88,7 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 		{
 			src: &Data{
 				Address:   Address(22),
-				Timestamp: Timestamp{Time: time.Unix(1234, 1234)},
+				Timestamp: Timestamp{Time: time.Unix(1234, 0)},
 				Data:      Buffer{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 			},
 			dst: &Data{
@@ -97,22 +97,22 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 			expected: &Data{
 				chunkSize: 16,
 				Address:   Address(22),
-				Timestamp: Timestamp{Time: time.Unix(1234, 1234)},
+				Timestamp: Timestamp{Time: time.Unix(1234, 0)},
 				Data:      Buffer{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 			},
 		},
 		{
-			src: &Timestamp{Time: time.Unix(1234, 1234)},
+			src: &Timestamp{Time: time.Unix(1234, 0)},
 			dst: &Timestamp{},
 		},
 		{
-			src: &DelaySample{Duration: time.Duration(1234)},
+			src: &DelaySample{Duration: 1234 * time.Millisecond},
 			dst: &DelaySample{},
 		},
 		{
 			src: &Ack{
 				Address:     Address(22),
-				DelaySample: DelaySample{Duration: time.Duration(1234)},
+				DelaySample: DelaySample{Duration: 1234 * time.Millisecond},
 			},
 			dst: &Ack{},
 		},
@@ -133,7 +133,7 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 		{
 			src: &SignedIntegrity{
 				Address:   Address(22),
-				Timestamp: Timestamp{Time: time.Unix(1234, 1234)},
+				Timestamp: Timestamp{Time: time.Unix(1234, 0)},
 				Signature: Buffer{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 			},
 			dst: &SignedIntegrity{
@@ -142,7 +142,7 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 			expected: &SignedIntegrity{
 				signatureSize: 16,
 				Address:       Address(22),
-				Timestamp:     Timestamp{Time: time.Unix(1234, 1234)},
+				Timestamp:     Timestamp{Time: time.Unix(1234, 0)},
 				Signature:     Buffer{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 			},
 		},
@@ -165,7 +165,7 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 		{
 			src: &Request{
 				Address:   Address(1234),
-				Timestamp: Timestamp{Time: time.Unix(1234, 1234)},
+				Timestamp: Timestamp{Time: time.Unix(1234, 0)},
 			},
 			dst: &Request{},
 		},

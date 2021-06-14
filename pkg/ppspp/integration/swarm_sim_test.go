@@ -1,4 +1,4 @@
-package ppspp
+package integration
 
 import (
 	"context"
@@ -20,6 +20,7 @@ import (
 	pkgerrors "github.com/pkg/errors"
 
 	"github.com/MemeLabs/go-ppspp/pkg/errutil"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
@@ -126,8 +127,8 @@ func TestSwarmSim(t *testing.T) {
 	}
 
 	key := ppspptest.Key()
-	id := NewSwarmID(key.Public)
-	options := SwarmOptions{
+	id := ppspp.NewSwarmID(key.Public)
+	options := ppspp.SwarmOptions{
 		LiveWindow:  1 << 14,
 		StreamCount: 16,
 	}
@@ -136,8 +137,8 @@ func TestSwarmSim(t *testing.T) {
 		id        []byte
 		city      ppspptest.City
 		bandwidth *ppspptest.ConnThrottle
-		swarm     *Swarm
-		runner    *Runner
+		swarm     *ppspp.Swarm
+		runner    *ppspp.Runner
 		conns     []*ppspptest.MeterConn
 		qos       *qos.Control
 		writer    testWriter
@@ -159,7 +160,7 @@ func TestSwarmSim(t *testing.T) {
 	}
 
 	newClient := func(p testPeer) *client {
-		swarm, err := NewSwarm(id, options)
+		swarm, err := ppspp.NewSwarm(id, options)
 		assert.NoError(t, err, "swarm constructor failed")
 		return &client{
 			id:        newClientID(),
@@ -171,7 +172,7 @@ func TestSwarmSim(t *testing.T) {
 		}
 	}
 
-	src, err := NewWriter(WriterOptions{
+	src, err := ppspp.NewWriter(ppspp.WriterOptions{
 		SwarmOptions: options,
 		Key:          key,
 	})
@@ -194,7 +195,7 @@ func TestSwarmSim(t *testing.T) {
 	logger := ppspptest.Logger()
 
 	for _, c := range clients {
-		c.runner = NewRunner(ctx, logger)
+		c.runner = ppspp.NewRunner(ctx, logger)
 		// c.runner.label = c.city.Name
 	}
 
