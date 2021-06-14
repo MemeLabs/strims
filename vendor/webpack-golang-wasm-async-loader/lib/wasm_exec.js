@@ -102,14 +102,14 @@
 		}
 	}
 
-	if (!global.crypto && global.require) {
-		const nodeCrypto = require("crypto");
-		global.crypto = {
-			getRandomValues(b) {
-				nodeCrypto.randomFillSync(b);
-			},
-		};
-	}
+	// if (!global.crypto && global.require) {
+	// 	const nodeCrypto = require("crypto");
+	// 	global.crypto = {
+	// 		getRandomValues(b) {
+	// 			nodeCrypto.randomFillSync(b);
+	// 		},
+	// 	};
+	// }
 	// if (!global.crypto) {
 	// 	throw new Error("global.crypto is not available, polyfill required (getRandomValues only)");
 	// }
