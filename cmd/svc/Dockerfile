@@ -1,12 +1,12 @@
-FROM golang:1.14 as build
+FROM golang:1.16 as build
 
 WORKDIR /go/src/app
-COPY . . 
+COPY . .
 RUN export CGO_ENABLED=0 && go build -trimpath ./cmd/svc
 
 
 FROM alpine:latest
- 
+
 WORKDIR /app
 COPY --from=build /go/src/app/svc .
 RUN adduser svc --disabled-password && echo "svc:" | chpasswd
