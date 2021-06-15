@@ -8,7 +8,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/bytereader"
 )
 
-var sentinel = [8]byte{0, 1, 1, 2, 3, 5, 8, 13}
+var sentinel = [...]byte{0, 1, 1, 2, 3, 5, 8, 13}
 
 const sentinelLen = len(sentinel)
 

@@ -2,35 +2,39 @@ package directory
 
 import (
 	"io"
-	"io/ioutil"
 
 	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/prefixstream"
+	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/reflect/protoreflect"
 )
 
-var paddingData = make([]byte, chunkSize+1)
-var paddingOverhead = proto.Size(&network.DirectoryEvent{
-	Body: &network.DirectoryEvent_Padding_{
-		Padding: &network.DirectoryEvent_Padding{
-			Data: paddingData,
-		},
-	},
-}) - len(paddingData)
+type offsetReader interface {
+	io.Reader
+	Offset() uint64
+}
 
-func newEventReader(r io.Reader) *eventReader {
-	return &eventReader{
-		r: prefixstream.NewReader(r),
-	}
+func newEventReader(or offsetReader) *eventReader {
+	return &eventReader{or: or}
 }
 
 type eventReader struct {
-	r *prefixstream.Reader
+	or  offsetReader
+	zpr *chunkstream.ZeroPadReader
 }
 
-func (r *eventReader) ReadEvent(event *network.DirectoryEvent) error {
-	b, err := ioutil.ReadAll(r.r)
+func (r *eventReader) Read(event *network.DirectoryEvent) error {
+	if r.zpr == nil {
+		off := r.or.Offset()
+		var err error
+		r.zpr, err = chunkstream.NewZeroPadReaderSize(r.or, int64(off), chunkSize)
+		if err != nil {
+			return err
+		}
+	}
+
+	b, err := io.ReadAll(r.zpr)
 	if err != nil {
 		return err
 	}
@@ -38,45 +42,28 @@ func (r *eventReader) ReadEvent(event *network.DirectoryEvent) error {
 	return proto.Unmarshal(b, event)
 }
 
-func newEventWriter(w io.Writer) *eventWriter {
-	return &eventWriter{
-		w: prefixstream.NewWriter(w),
+func newEventWriter(w ioutil.WriteFlusher) (*eventWriter, error) {
+	zpw, err := chunkstream.NewZeroPadWriterSize(w, chunkSize)
+	if err != nil {
+		return nil, err
 	}
+	return &eventWriter{zpw: zpw}, nil
 }
 
 type eventWriter struct {
-	w   io.Writer
+	zpw *chunkstream.ZeroPadWriter
 	buf []byte
-	n   int
 }
 
-func (w *eventWriter) Write(msg protoreflect.ProtoMessage) error {
-	n, err := w.write(msg)
-	w.n += n
-	return err
-}
-
-func (w *eventWriter) Flush() error {
-	if w.n == 0 {
-		return nil
-	}
-	w.n = 0
-
-	_, err := w.write(&network.DirectoryEvent{
-		Body: &network.DirectoryEvent_Padding_{
-			Padding: &network.DirectoryEvent_Padding{
-				Data: paddingData,
-			},
-		},
-	})
-	return err
-}
-
-func (w *eventWriter) write(msg protoreflect.ProtoMessage) (int, error) {
-	b, err := proto.Marshal(msg)
+func (w *eventWriter) Write(m protoreflect.ProtoMessage) error {
+	var err error
+	w.buf, err = proto.MarshalOptions{}.MarshalAppend(w.buf[:0], m)
 	if err != nil {
-		return 0, err
+		return err
 	}
 
-	return w.w.Write(b)
+	if _, err = w.zpw.Write(w.buf); err != nil {
+		return err
+	}
+	return w.zpw.Flush()
 }

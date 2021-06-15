@@ -56,6 +56,11 @@ func newDirectoryService(logger *zap.Logger, key *key.Key, transfer *transfer.Co
 		return nil, err
 	}
 
+	ew, err := newEventWriter(w)
+	if err != nil {
+		return nil, err
+	}
+
 	transferID := transfer.Add(w.Swarm(), AddressSalt)
 	transfer.Publish(transferID, key.Public)
 
@@ -64,7 +69,7 @@ func newDirectoryService(logger *zap.Logger, key *key.Key, transfer *transfer.Co
 		transfer:        transfer,
 		done:            make(chan struct{}),
 		broadcastTicker: time.NewTicker(broadcastInterval),
-		eventWriter:     newEventWriter(w),
+		eventWriter:     ew,
 		swarm:           w.Swarm(),
 		transferID:      transferID,
 		eventReader:     newEventReader(w.Swarm().Reader()),
@@ -215,10 +220,6 @@ func (d *directoryService) broadcast(now time.Time) error {
 		if err := d.eventWriter.Write(event); err != nil {
 			return err
 		}
-	}
-
-	if err := d.eventWriter.Flush(); err != nil {
-		return err
 	}
 
 	d.lastBroadcastTime = now

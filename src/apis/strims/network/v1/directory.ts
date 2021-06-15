@@ -398,9 +398,6 @@ export class DirectoryEvent {
       case DirectoryEvent.BodyCase.PING:
       DirectoryEvent.Ping.encode(m.body.ping, w.uint32(42).fork()).ldelim();
       break;
-      case DirectoryEvent.BodyCase.PADDING:
-      DirectoryEvent.Padding.encode(m.body.padding, w.uint32(50).fork()).ldelim();
-      break;
     }
     return w;
   }
@@ -427,9 +424,6 @@ export class DirectoryEvent {
         case 5:
         m.body = new DirectoryEvent.Body({ ping: DirectoryEvent.Ping.decode(r, r.uint32()) });
         break;
-        case 6:
-        m.body = new DirectoryEvent.Body({ padding: DirectoryEvent.Padding.decode(r, r.uint32()) });
-        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -447,7 +441,6 @@ export namespace DirectoryEvent {
     VIEWER_COUNT_CHANGE = 3,
     VIEWER_STATE_CHANGE = 4,
     PING = 5,
-    PADDING = 6,
   }
 
   export type IBody =
@@ -457,7 +450,6 @@ export namespace DirectoryEvent {
   |{ case?: BodyCase.VIEWER_COUNT_CHANGE, viewerCountChange: DirectoryEvent.IViewerCountChange }
   |{ case?: BodyCase.VIEWER_STATE_CHANGE, viewerStateChange: DirectoryEvent.IViewerStateChange }
   |{ case?: BodyCase.PING, ping: DirectoryEvent.IPing }
-  |{ case?: BodyCase.PADDING, padding: DirectoryEvent.IPadding }
   ;
 
   export type TBody = Readonly<
@@ -467,7 +459,6 @@ export namespace DirectoryEvent {
   |{ case: BodyCase.VIEWER_COUNT_CHANGE, viewerCountChange: DirectoryEvent.ViewerCountChange }
   |{ case: BodyCase.VIEWER_STATE_CHANGE, viewerStateChange: DirectoryEvent.ViewerStateChange }
   |{ case: BodyCase.PING, ping: DirectoryEvent.Ping }
-  |{ case: BodyCase.PADDING, padding: DirectoryEvent.Padding }
   >;
 
   class BodyImpl {
@@ -476,7 +467,6 @@ export namespace DirectoryEvent {
     viewerCountChange: DirectoryEvent.ViewerCountChange;
     viewerStateChange: DirectoryEvent.ViewerStateChange;
     ping: DirectoryEvent.Ping;
-    padding: DirectoryEvent.Padding;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
@@ -499,10 +489,6 @@ export namespace DirectoryEvent {
       if (v && "ping" in v) {
         this.case = BodyCase.PING;
         this.ping = new DirectoryEvent.Ping(v.ping);
-      } else
-      if (v && "padding" in v) {
-        this.case = BodyCase.PADDING;
-        this.padding = new DirectoryEvent.Padding(v.padding);
       }
     }
   }
@@ -515,7 +501,6 @@ export namespace DirectoryEvent {
     T extends { viewerCountChange: DirectoryEvent.IViewerCountChange } ? { case: BodyCase.VIEWER_COUNT_CHANGE, viewerCountChange: DirectoryEvent.ViewerCountChange } :
     T extends { viewerStateChange: DirectoryEvent.IViewerStateChange } ? { case: BodyCase.VIEWER_STATE_CHANGE, viewerStateChange: DirectoryEvent.ViewerStateChange } :
     T extends { ping: DirectoryEvent.IPing } ? { case: BodyCase.PING, ping: DirectoryEvent.Ping } :
-    T extends { padding: DirectoryEvent.IPadding } ? { case: BodyCase.PADDING, padding: DirectoryEvent.Padding } :
     never
     >;
   };
@@ -711,42 +696,6 @@ export namespace DirectoryEvent {
         switch (tag >> 3) {
           case 1:
           m.time = r.int64();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
-    }
-  }
-
-  export type IPadding = {
-    data?: Uint8Array;
-  }
-
-  export class Padding {
-    data: Uint8Array;
-
-    constructor(v?: IPadding) {
-      this.data = v?.data || new Uint8Array();
-    }
-
-    static encode(m: Padding, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.data) w.uint32(10).bytes(m.data);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Padding {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Padding();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.data = r.bytes();
           break;
           default:
           r.skipType(tag & 7);

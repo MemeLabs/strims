@@ -72,17 +72,12 @@ message DirectoryEvent {
     int64 time = 1;
   }
 
-  message Padding {
-    bytes data = 1;
-  }
-
   oneof body {
     Publish publish = 1;
     Unpublish unpublish = 2;
     ViewerCountChange viewer_count_change = 3;
     ViewerStateChange viewer_state_change = 4;
     Ping ping = 5;
-    Padding padding = 6;
   }
 }
 

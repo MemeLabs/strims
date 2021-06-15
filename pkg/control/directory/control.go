@@ -128,17 +128,14 @@ func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *net
 
 			for ctx.Err() == nil {
 				event := &network.DirectoryEvent{}
-				if err := er.ReadEvent(event); err != nil {
+				if err := er.Read(event); err != nil {
 					t.logger.Debug(
 						"error reading directory event",
 						zap.Error(err),
 					)
 					continue OpenEventReader
 				}
-
-				if event.GetPadding() == nil {
-					ch <- event
-				}
+				ch <- event
 			}
 			return
 		}

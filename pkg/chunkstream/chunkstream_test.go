@@ -3,7 +3,6 @@ package chunkstream
 import (
 	"bytes"
 	"io"
-	"log"
 	"testing"
 
 	"github.com/davecgh/go-spew/spew"
@@ -132,8 +131,6 @@ func TestLengthAlignedWrite(t *testing.T) {
 		w.Write(make([]byte, MaxSize-3))
 		w.Flush()
 	}
-
-	log.Println(buf.Bytes()[0:2])
 
 	r, err := NewReaderSize(&buf, 0, MaxSize)
 	assert.Nil(t, err)

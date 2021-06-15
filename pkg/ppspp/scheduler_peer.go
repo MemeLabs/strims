@@ -83,6 +83,7 @@ func (s *peerSchedulerStream) resetSource() {
 }
 
 func (s *peerSchedulerStream) addSubscriber(cs *peerChannelScheduler, b binmap.Bin) {
+	s.removeSubscriber(cs)
 	s.subscribers = append(s.subscribers, peerSchedulerStreamSubscription{
 		startBin: b,
 		channel:  cs,
@@ -96,6 +97,7 @@ func (s *peerSchedulerStream) removeSubscriber(cs *peerChannelScheduler) {
 			s.subscribers[i] = s.subscribers[l]
 			s.subscribers[l] = peerSchedulerStreamSubscription{}
 			s.subscribers = s.subscribers[:l]
+			return
 		}
 	}
 }
