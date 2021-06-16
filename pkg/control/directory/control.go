@@ -10,7 +10,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
@@ -19,7 +19,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
-	"golang.org/x/sync/errgroup"
 )
 
 // errors ...
@@ -81,14 +80,14 @@ func (t *Control) Run(ctx context.Context) {
 	}
 }
 
-func (t *Control) handleNetworkStart(ctx context.Context, network *network.Network) {
+func (t *Control) handleNetworkStart(ctx context.Context, network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
 	t.runners.ReplaceOrInsert(newRunner(ctx, t.logger, t.vpn, t.store, t.dialer, t.transfer, network))
 }
 
-func (t *Control) handleNetworkStop(network *network.Network) {
+func (t *Control) handleNetworkStop(network *networkv1.Network) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -108,13 +107,13 @@ func (t *Control) runner(networkKey []byte) (*runner, bool) {
 }
 
 // ReadEvents ...
-func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *network.DirectoryEvent {
+func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *networkv1.DirectoryEvent {
 	r, ok := t.runner(networkKey)
 	if !ok {
 		return nil
 	}
 
-	ch := make(chan *network.DirectoryEvent, 128)
+	ch := make(chan *networkv1.DirectoryEvent, 128)
 
 	go func() {
 		defer close(ch)
@@ -123,19 +122,25 @@ func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *net
 		for {
 			er, err := r.EventReader(ctx)
 			if err != nil {
+				t.logger.Debug(
+					"error getting directory event reader",
+					zap.Error(err),
+				)
 				return
 			}
 
 			for ctx.Err() == nil {
-				event := &network.DirectoryEvent{}
-				if err := er.Read(event); err != nil {
+				b := &networkv1.DirectoryEventBroadcast{}
+				if err := er.Read(b); err != nil {
 					t.logger.Debug(
 						"error reading directory event",
 						zap.Error(err),
 					)
 					continue OpenEventReader
 				}
-				ch <- event
+				for _, e := range b.Events {
+					ch <- e
+				}
 			}
 			return
 		}
@@ -159,28 +164,28 @@ func (t *Control) ping(ctx context.Context) {
 			return true
 		}
 
-		go client.Ping(ctx, &network.DirectoryPingRequest{}, &network.DirectoryPingResponse{})
+		go client.Ping(ctx, &networkv1.DirectoryPingRequest{}, &networkv1.DirectoryPingResponse{})
 		return true
 	})
 }
 
-func (t *Control) client(networkKey []byte) (*network.DirectoryClient, error) {
+func (t *Control) client(networkKey []byte) (*networkv1.DirectoryClient, error) {
 	client, err := t.dialer.Client(networkKey, networkKey, AddressSalt)
 	if err != nil {
 		return nil, err
 	}
 
-	return network.NewDirectoryClient(client), nil
+	return networkv1.NewDirectoryClient(client), nil
 }
 
 // Publish ...
-func (t *Control) Publish(ctx context.Context, listing *network.DirectoryListing, networkKey []byte) error {
+func (t *Control) Publish(ctx context.Context, listing *networkv1.DirectoryListing, networkKey []byte) error {
 	client, err := t.client(networkKey)
 	if err != nil {
 		return err
 	}
 
-	return client.Publish(ctx, &network.DirectoryPublishRequest{Listing: listing}, &network.DirectoryPublishResponse{})
+	return client.Publish(ctx, &networkv1.DirectoryPublishRequest{Listing: listing}, &networkv1.DirectoryPublishResponse{})
 }
 
 // Unpublish ...
@@ -190,7 +195,7 @@ func (t *Control) Unpublish(ctx context.Context, key, networkKey []byte) error {
 		return err
 	}
 
-	return client.Unpublish(ctx, &network.DirectoryUnpublishRequest{Key: key}, &network.DirectoryUnpublishResponse{})
+	return client.Unpublish(ctx, &networkv1.DirectoryUnpublishRequest{Key: key}, &networkv1.DirectoryUnpublishResponse{})
 }
 
 // Join ...
@@ -200,7 +205,7 @@ func (t *Control) Join(ctx context.Context, key, networkKey []byte) error {
 		return err
 	}
 
-	return client.Join(ctx, &network.DirectoryJoinRequest{Key: key}, &network.DirectoryJoinResponse{})
+	return client.Join(ctx, &networkv1.DirectoryJoinRequest{Key: key}, &networkv1.DirectoryJoinResponse{})
 }
 
 // Part ...
@@ -210,12 +215,12 @@ func (t *Control) Part(ctx context.Context, key, networkKey []byte) error {
 		return err
 	}
 
-	return client.Part(ctx, &network.DirectoryPartRequest{Key: key}, &network.DirectoryPartResponse{})
+	return client.Part(ctx, &networkv1.DirectoryPartRequest{Key: key}, &networkv1.DirectoryPartResponse{})
 }
 
 var noopCancelFunc = func() {}
 
-func newRunner(ctx context.Context, logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, dialer *dialer.Control, transfer *transfer.Control, network *network.Network) *runner {
+func newRunner(ctx context.Context, logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, dialer *dialer.Control, transfer *transfer.Control, network *networkv1.Network) *runner {
 	r := &runner{
 		key:     dao.NetworkKey(network),
 		network: network,
@@ -226,9 +231,7 @@ func newRunner(ctx context.Context, logger *zap.Logger, vpn *vpn.Host, store *da
 		dialer:   dialer,
 		transfer: transfer,
 
-		runnable:         make(chan bool, 1),
-		clientCancelFunc: noopCancelFunc,
-		serverCancelFunc: noopCancelFunc,
+		runnable: make(chan bool, 1),
 	}
 
 	r.runnable <- true
@@ -242,7 +245,7 @@ func newRunner(ctx context.Context, logger *zap.Logger, vpn *vpn.Host, store *da
 
 type runner struct {
 	key     []byte
-	network *network.Network
+	network *networkv1.Network
 
 	logger   *zap.Logger
 	vpn      *vpn.Host
@@ -250,13 +253,11 @@ type runner struct {
 	dialer   *dialer.Control
 	transfer *transfer.Control
 
-	lock             sync.Mutex
-	closed           bool
-	client           *directoryReader
-	service          *directoryService
-	runnable         chan bool
-	clientCancelFunc context.CancelFunc
-	serverCancelFunc context.CancelFunc
+	lock     sync.Mutex
+	closed   bool
+	client   *directoryReader
+	server   *directoryServer
+	runnable chan bool
 
 	meme atomic.Value
 }
@@ -273,8 +274,8 @@ func (r *runner) Close() {
 	defer r.lock.Unlock()
 
 	r.closed = true
-	r.clientCancelFunc()
-	r.serverCancelFunc()
+	r.client.Close()
+	r.server.Close()
 }
 
 func (r *runner) Closed() bool {
@@ -284,12 +285,12 @@ func (r *runner) Closed() bool {
 	return r.closed
 }
 
-func (r *runner) EventReader(ctx context.Context) (*eventReader, error) {
+func (r *runner) EventReader(ctx context.Context) (*EventReader, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	if r.service != nil {
-		return r.service.eventReader, nil
+	if r.server != nil {
+		return r.server.eventReader, nil
 	}
 
 	r.logger.Info(
@@ -299,19 +300,15 @@ func (r *runner) EventReader(ctx context.Context) (*eventReader, error) {
 
 	<-r.runnable
 
-	client, err := newDirectoryReader(r.logger, r.key, r.transfer)
+	var err error
+	r.client, err = newDirectoryReader(r.logger, r.key)
 	if err != nil {
 		r.runnable <- true
 		return nil, err
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-
-	r.client = client
-	r.clientCancelFunc = cancel
-
 	go func() {
-		err := client.Run(ctx)
+		err := r.client.Run(ctx, r.transfer)
 		r.logger.Debug(
 			"directory client closed",
 			logutil.ByteHex("network", dao.NetworkKey(r.network)),
@@ -325,14 +322,7 @@ func (r *runner) EventReader(ctx context.Context) (*eventReader, error) {
 		r.lock.Unlock()
 	}()
 
-	return client.eventReader, nil
-}
-
-func (r *runner) closeClient() {
-	r.lock.Lock()
-	defer r.lock.Unlock()
-
-	r.clientCancelFunc()
+	return r.client.eventReader, nil
 }
 
 func (r *runner) tryStartServer(ctx context.Context) {
@@ -343,6 +333,10 @@ func (r *runner) tryStartServer(ctx context.Context) {
 			return
 		}
 
+		r.logger.Info(
+			"directory server starting",
+			logutil.ByteHex("network", dao.NetworkKey(r.network)),
+		)
 		err = r.startServer(muctx)
 		r.logger.Info(
 			"directory server closed",
@@ -355,47 +349,28 @@ func (r *runner) tryStartServer(ctx context.Context) {
 }
 
 func (r *runner) startServer(ctx context.Context) error {
-	r.logger.Info(
-		"directory server starting",
-		logutil.ByteHex("network", dao.NetworkKey(r.network)),
-	)
-
 	r.lock.Lock()
-	r.clientCancelFunc()
-
-	server, err := r.dialer.Server(r.network.Key.Public, r.network.Key, AddressSalt)
-	if err != nil {
-		r.lock.Unlock()
-		return err
-	}
+	r.client.Close()
 
 	<-r.runnable
 
-	service, err := newDirectoryService(r.logger, r.network.Key, r.transfer)
+	var err error
+	r.server, err = newDirectoryServer(r.logger, r.network)
 	if err != nil {
 		r.runnable <- true
 		r.lock.Unlock()
 		return err
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-
-	r.service = service
-	r.serverCancelFunc = cancel
 	r.lock.Unlock()
 
-	network.RegisterDirectoryService(server, service)
-
-	eg, ctx := errgroup.WithContext(ctx)
-	eg.Go(func() error { return service.Run(ctx) })
-	eg.Go(func() error { return server.Listen(ctx) })
-	err = eg.Wait()
-
-	r.runnable <- true
+	err = r.server.Run(ctx, r.dialer, r.transfer)
 
 	r.lock.Lock()
-	r.service = nil
+	r.server = nil
 	r.lock.Unlock()
+
+	r.runnable <- true
 
 	return err
 }

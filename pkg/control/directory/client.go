@@ -2,61 +2,54 @@ package directory
 
 import (
 	"context"
-	"errors"
-	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"go.uber.org/zap"
 )
 
-func newDirectoryReader(logger *zap.Logger, key []byte, transfer *transfer.Control) (*directoryReader, error) {
+func newDirectoryReader(logger *zap.Logger, key []byte) (*directoryReader, error) {
 	s, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), swarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
-	transferID := transfer.Add(s, AddressSalt)
-	transfer.Publish(transferID, key)
-
 	return &directoryReader{
 		logger:      logger,
-		transfer:    transfer,
-		done:        make(chan struct{}),
+		key:         key,
 		swarm:       s,
-		transferID:  transferID,
 		eventReader: newEventReader(s.Reader()),
 	}, nil
 }
 
 type directoryReader struct {
-	logger     *zap.Logger
-	transfer   *transfer.Control
-	closeOnce  sync.Once
-	done       chan struct{}
-	swarm      *ppspp.Swarm
-	transferID []byte
-	*eventReader
+	logger      *zap.Logger
+	key         []byte
+	swarm       *ppspp.Swarm
+	eventReader *EventReader
+	cancel      context.CancelFunc
 }
 
-func (d *directoryReader) Run(ctx context.Context) error {
-	defer d.Close()
+func (d *directoryReader) Run(ctx context.Context, transfer *transfer.Control) error {
+	ctx, cancel := context.WithCancel(ctx)
+	d.cancel = cancel
 
-	select {
-	case <-d.done:
-		return errors.New("closed")
-	case <-ctx.Done():
-		return ctx.Err()
-	}
+	transferID := transfer.Add(d.swarm, AddressSalt)
+	transfer.Publish(transferID, d.key)
+
+	<-ctx.Done()
+
+	transfer.Remove(transferID)
+	d.swarm.Close()
+
+	d.cancel = nil
+
+	return ctx.Err()
 }
 
 func (d *directoryReader) Close() {
-	d.closeOnce.Do(func() {
-		d.transfer.Remove(d.transferID)
-		close(d.done)
-	})
-}
-
-func (d *directoryReader) ping() error {
-	return nil
+	if d == nil || d.cancel == nil {
+		return
+	}
+	d.cancel()
 }

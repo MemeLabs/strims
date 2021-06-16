@@ -47,33 +47,13 @@ var swarmOptions = ppspp.SwarmOptions{
 	},
 }
 
-func newDirectoryService(logger *zap.Logger, key *key.Key, transfer *transfer.Control) (*directoryService, error) {
-	w, err := ppspp.NewWriter(ppspp.WriterOptions{
-		SwarmOptions: swarmOptions,
-		Key:          key,
-	})
-	if err != nil {
-		return nil, err
-	}
-
-	ew, err := newEventWriter(w)
-	if err != nil {
-		return nil, err
-	}
-
-	transferID := transfer.Add(w.Swarm(), AddressSalt)
-	transfer.Publish(transferID, key.Public)
-
+func newDirectoryService(logger *zap.Logger, key *key.Key, ew *EventWriter) *directoryService {
 	return &directoryService{
 		logger:          logger,
-		transfer:        transfer,
 		done:            make(chan struct{}),
 		broadcastTicker: time.NewTicker(broadcastInterval),
 		eventWriter:     ew,
-		swarm:           w.Swarm(),
-		transferID:      transferID,
-		eventReader:     newEventReader(w.Swarm().Reader()),
-	}, nil
+	}
 }
 
 type directoryService struct {
@@ -83,15 +63,12 @@ type directoryService struct {
 	done              chan struct{}
 	broadcastTicker   *time.Ticker
 	lastBroadcastTime time.Time
-	eventWriter       *eventWriter
-	swarm             *ppspp.Swarm
-	transferID        []byte
+	eventWriter       *EventWriter
 	lock              sync.Mutex
 	listings          lru
 	sessions          lru
 	users             lru
 	certificate       *certificate.Certificate
-	*eventReader
 }
 
 func (d *directoryService) Run(ctx context.Context) error {
@@ -113,7 +90,6 @@ func (d *directoryService) Run(ctx context.Context) error {
 
 func (d *directoryService) Close() {
 	d.closeOnce.Do(func() {
-		d.transfer.Remove(d.transferID)
 		d.broadcastTicker.Stop()
 		close(d.done)
 	})
@@ -123,39 +99,37 @@ func (d *directoryService) broadcast(now time.Time) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
+	var events []*networkv1.DirectoryEvent
+
 	for it := d.listings.PeekRecentlyTouched(d.lastBroadcastTime); it.Next(); {
 		l := it.Value().(*listing)
 
-		var event *networkv1.DirectoryEvent
 		if l.publishers.Len() == 0 && l.viewers.Len() == 0 {
 			d.listings.Delete(l)
-			event = &networkv1.DirectoryEvent{
+			events = append(events, &networkv1.DirectoryEvent{
 				Body: &networkv1.DirectoryEvent_Unpublish_{
 					Unpublish: &networkv1.DirectoryEvent_Unpublish{
 						Key: l.listing.Key,
 					},
 				},
-			}
+			})
 		} else if l.modifiedTime.After(d.lastBroadcastTime) {
-			event = &networkv1.DirectoryEvent{
+			events = append(events, &networkv1.DirectoryEvent{
 				Body: &networkv1.DirectoryEvent_Publish_{
 					Publish: &networkv1.DirectoryEvent_Publish{
 						Listing: l.listing,
 					},
 				},
-			}
+			})
 		} else {
-			event = &networkv1.DirectoryEvent{
+			events = append(events, &networkv1.DirectoryEvent{
 				Body: &networkv1.DirectoryEvent_ViewerCountChange_{
 					ViewerCountChange: &networkv1.DirectoryEvent_ViewerCountChange{
 						Key:   l.listing.Key,
 						Count: uint32(l.viewers.Len()),
 					},
 				},
-			}
-		}
-		if err := d.eventWriter.Write(event); err != nil {
-			return err
+			})
 		}
 	}
 
@@ -171,7 +145,7 @@ func (d *directoryService) broadcast(now time.Time) error {
 			return true
 		})
 
-		event := &networkv1.DirectoryEvent{
+		events = append(events, &networkv1.DirectoryEvent{
 			Body: &networkv1.DirectoryEvent_ViewerStateChange_{
 				ViewerStateChange: &networkv1.DirectoryEvent_ViewerStateChange{
 					Subject:     u.certificate.Subject,
@@ -179,10 +153,7 @@ func (d *directoryService) broadcast(now time.Time) error {
 					ViewingKeys: keys,
 				},
 			},
-		}
-		if err := d.eventWriter.Write(event); err != nil {
-			return err
-		}
+		})
 	}
 
 	eol := now.Add(-sessionTimeout)
@@ -196,28 +167,31 @@ func (d *directoryService) broadcast(now time.Time) error {
 
 		d.users.Delete(u)
 
-		event := &networkv1.DirectoryEvent{
+		events = append(events, &networkv1.DirectoryEvent{
 			Body: &networkv1.DirectoryEvent_ViewerStateChange_{
 				ViewerStateChange: &networkv1.DirectoryEvent_ViewerStateChange{
 					Subject: u.certificate.Subject,
 					Online:  false,
 				},
 			},
-		}
-		if err := d.eventWriter.Write(event); err != nil {
-			return err
-		}
+		})
 	}
 
 	for l, ok := d.listings.Pop(eol).(*listing); ok; l, ok = d.listings.Pop(eol).(*listing) {
-		event := &networkv1.DirectoryEvent{
+		events = append(events, &networkv1.DirectoryEvent{
 			Body: &networkv1.DirectoryEvent_Unpublish_{
 				Unpublish: &networkv1.DirectoryEvent_Unpublish{
 					Key: l.listing.Key,
 				},
 			},
-		}
-		if err := d.eventWriter.Write(event); err != nil {
+		})
+	}
+
+	if events != nil {
+		err := d.eventWriter.Write(&networkv1.DirectoryEventBroadcast{
+			Events: events,
+		})
+		if err != nil {
 			return err
 		}
 	}

@@ -1,7 +1,6 @@
 package integrity
 
 import (
-	"bufio"
 	"errors"
 	"io"
 	"math/bits"
@@ -9,6 +8,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/bufwriter"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/merkle"
@@ -324,19 +324,18 @@ func NewMerkleWriter(o *MerkleWriterOptions) *MerkleWriter {
 	mw := &merkleWriter{
 		epochNanos:      time.Duration(iotime.Load().UnixNano()),
 		munroLayer:      uint64(bits.TrailingZeros64(uint64(o.ChunksPerSignature))),
-		segmentSize:     o.ChunksPerSignature * o.ChunkSize,
 		swarmVerifier:   o.Verifier,
 		signatureSigner: o.Signer,
 		w:               o.Writer,
 	}
 	return &MerkleWriter{
-		bw: bufio.NewWriterSize(mw, mw.segmentSize),
+		bw: bufwriter.New(mw, o.ChunksPerSignature*o.ChunkSize),
 	}
 }
 
 // MerkleWriter ...
 type MerkleWriter struct {
-	bw *bufio.Writer
+	bw *bufwriter.Writer
 }
 
 // Write ...
@@ -353,7 +352,6 @@ type merkleWriter struct {
 	epochNanos      time.Duration
 	munroLayer      uint64
 	n               uint64
-	segmentSize     int
 	swarmVerifier   *MerkleSwarmVerifier
 	signatureSigner SignatureSigner
 	w               io.Writer
@@ -361,10 +359,6 @@ type merkleWriter struct {
 
 // Write ...
 func (w *merkleWriter) Write(p []byte) (int, error) {
-	if len(p) > w.segmentSize {
-		p = p[:w.segmentSize]
-	}
-
 	b := binmap.NewBin(w.munroLayer, w.n)
 	w.n++
 

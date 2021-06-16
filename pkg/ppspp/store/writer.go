@@ -1,9 +1,8 @@
 package store
 
 import (
-	"bufio"
-
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/bufwriter"
 )
 
 // Publisher ...
@@ -13,19 +12,14 @@ type Publisher interface {
 
 // NewWriter ...
 func NewWriter(pub Publisher, chunkSize int) *Writer {
-	w := &writer{
-		chunkSize: chunkSize,
-		pub:       pub,
-	}
-
 	return &Writer{
-		bw: bufio.NewWriterSize(w, chunkSize),
+		bw: bufwriter.New(&writer{pub: pub}, chunkSize),
 	}
 }
 
 // Writer ...
 type Writer struct {
-	bw *bufio.Writer
+	bw *bufwriter.Writer
 }
 
 // Write ...
@@ -40,17 +34,12 @@ func (w *Writer) Flush() error {
 
 // writer assigns addresses to chunks
 type writer struct {
-	pub       Publisher
-	chunkSize int
-	bin       binmap.Bin
+	pub Publisher
+	bin binmap.Bin
 }
 
 // Write ...
 func (w *writer) Write(p []byte) (n int, err error) {
-	if len(p) > w.chunkSize {
-		p = p[:w.chunkSize]
-	}
-
 	w.pub.Publish(Chunk{w.bin, p})
 	w.bin += 2
 	return len(p), nil

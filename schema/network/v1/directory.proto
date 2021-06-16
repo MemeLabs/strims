@@ -73,12 +73,16 @@ message DirectoryEvent {
   }
 
   oneof body {
-    Publish publish = 1;
-    Unpublish unpublish = 2;
-    ViewerCountChange viewer_count_change = 3;
-    ViewerStateChange viewer_state_change = 4;
-    Ping ping = 5;
+    Publish publish = 1001;
+    Unpublish unpublish = 1002;
+    ViewerCountChange viewer_count_change = 1003;
+    ViewerStateChange viewer_state_change = 1004;
+    Ping ping = 1005;
   }
+}
+
+message DirectoryEventBroadcast {
+  repeated DirectoryEvent events = 1;
 }
 
 message DirectoryPublishRequest {

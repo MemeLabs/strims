@@ -1,13 +1,13 @@
 package integrity
 
 import (
-	"bufio"
 	"errors"
 	"io"
 	"sync"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/bufwriter"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
@@ -190,19 +190,18 @@ type SignAllWriterOptions struct {
 func NewSignAllWriter(o *SignAllWriterOptions) *SignAllWriter {
 	sw := &signAllWriter{
 		epochNanos:      time.Duration(iotime.Load().UnixNano()),
-		chunkSize:       o.ChunkSize,
 		swarmVerifier:   o.Verifier,
 		signatureSigner: o.Signer,
 		w:               o.Writer,
 	}
 	return &SignAllWriter{
-		bw: bufio.NewWriterSize(sw, o.ChunkSize),
+		bw: bufwriter.New(sw, o.ChunkSize),
 	}
 }
 
 // SignAllWriter ...
 type SignAllWriter struct {
-	bw *bufio.Writer
+	bw *bufwriter.Writer
 }
 
 // Write ...
@@ -218,17 +217,12 @@ func (w *SignAllWriter) Flush() error {
 type signAllWriter struct {
 	epochNanos      time.Duration
 	b               binmap.Bin
-	chunkSize       int
 	swarmVerifier   *SignAllSwarmVerifier
 	signatureSigner SignatureSigner
 	w               io.Writer
 }
 
 func (w *signAllWriter) Write(p []byte) (int, error) {
-	if len(p) > w.chunkSize {
-		p = p[:w.chunkSize]
-	}
-
 	ts := iotime.Load().Add(-w.epochNanos)
 	sig := w.signatureSigner.Sign(ts, p)
 	w.swarmVerifier.storeSignature(w.b, ts, sig)

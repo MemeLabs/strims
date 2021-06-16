@@ -242,9 +242,9 @@ export class DirectoryListingService {
 }
 
 export type IDirectoryListing = {
-  creator?: strims_type_ICertificate;
+  creator?: strims_type_ICertificate | undefined;
   timestamp?: bigint;
-  snippet?: IDirectoryListingSnippet;
+  snippet?: IDirectoryListingSnippet | undefined;
   key?: Uint8Array;
   signature?: Uint8Array;
   content?: DirectoryListing.IContent
@@ -384,19 +384,19 @@ export class DirectoryEvent {
     if (!w) w = new Writer();
     switch (m.body.case) {
       case DirectoryEvent.BodyCase.PUBLISH:
-      DirectoryEvent.Publish.encode(m.body.publish, w.uint32(10).fork()).ldelim();
+      DirectoryEvent.Publish.encode(m.body.publish, w.uint32(8010).fork()).ldelim();
       break;
       case DirectoryEvent.BodyCase.UNPUBLISH:
-      DirectoryEvent.Unpublish.encode(m.body.unpublish, w.uint32(18).fork()).ldelim();
+      DirectoryEvent.Unpublish.encode(m.body.unpublish, w.uint32(8018).fork()).ldelim();
       break;
       case DirectoryEvent.BodyCase.VIEWER_COUNT_CHANGE:
-      DirectoryEvent.ViewerCountChange.encode(m.body.viewerCountChange, w.uint32(26).fork()).ldelim();
+      DirectoryEvent.ViewerCountChange.encode(m.body.viewerCountChange, w.uint32(8026).fork()).ldelim();
       break;
       case DirectoryEvent.BodyCase.VIEWER_STATE_CHANGE:
-      DirectoryEvent.ViewerStateChange.encode(m.body.viewerStateChange, w.uint32(34).fork()).ldelim();
+      DirectoryEvent.ViewerStateChange.encode(m.body.viewerStateChange, w.uint32(8034).fork()).ldelim();
       break;
       case DirectoryEvent.BodyCase.PING:
-      DirectoryEvent.Ping.encode(m.body.ping, w.uint32(42).fork()).ldelim();
+      DirectoryEvent.Ping.encode(m.body.ping, w.uint32(8042).fork()).ldelim();
       break;
     }
     return w;
@@ -409,19 +409,19 @@ export class DirectoryEvent {
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
-        case 1:
+        case 1001:
         m.body = new DirectoryEvent.Body({ publish: DirectoryEvent.Publish.decode(r, r.uint32()) });
         break;
-        case 2:
+        case 1002:
         m.body = new DirectoryEvent.Body({ unpublish: DirectoryEvent.Unpublish.decode(r, r.uint32()) });
         break;
-        case 3:
+        case 1003:
         m.body = new DirectoryEvent.Body({ viewerCountChange: DirectoryEvent.ViewerCountChange.decode(r, r.uint32()) });
         break;
-        case 4:
+        case 1004:
         m.body = new DirectoryEvent.Body({ viewerStateChange: DirectoryEvent.ViewerStateChange.decode(r, r.uint32()) });
         break;
-        case 5:
+        case 1005:
         m.body = new DirectoryEvent.Body({ ping: DirectoryEvent.Ping.decode(r, r.uint32()) });
         break;
         default:
@@ -436,11 +436,11 @@ export class DirectoryEvent {
 export namespace DirectoryEvent {
   export enum BodyCase {
     NOT_SET = 0,
-    PUBLISH = 1,
-    UNPUBLISH = 2,
-    VIEWER_COUNT_CHANGE = 3,
-    VIEWER_STATE_CHANGE = 4,
-    PING = 5,
+    PUBLISH = 1001,
+    UNPUBLISH = 1002,
+    VIEWER_COUNT_CHANGE = 1003,
+    VIEWER_STATE_CHANGE = 1004,
+    PING = 1005,
   }
 
   export type IBody =
@@ -506,7 +506,7 @@ export namespace DirectoryEvent {
   };
 
   export type IPublish = {
-    listing?: IDirectoryListing;
+    listing?: IDirectoryListing | undefined;
   }
 
   export class Publish {
@@ -708,8 +708,44 @@ export namespace DirectoryEvent {
 
 }
 
+export type IDirectoryEventBroadcast = {
+  events?: IDirectoryEvent[];
+}
+
+export class DirectoryEventBroadcast {
+  events: DirectoryEvent[];
+
+  constructor(v?: IDirectoryEventBroadcast) {
+    this.events = v?.events ? v.events.map(v => new DirectoryEvent(v)) : [];
+  }
+
+  static encode(m: DirectoryEventBroadcast, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.events) DirectoryEvent.encode(v, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DirectoryEventBroadcast {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new DirectoryEventBroadcast();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.events.push(DirectoryEvent.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IDirectoryPublishRequest = {
-  listing?: IDirectoryListing;
+  listing?: IDirectoryListing | undefined;
 }
 
 export class DirectoryPublishRequest {
@@ -1009,7 +1045,7 @@ export class DirectoryFrontendOpenRequest {
 }
 
 export type IDirectoryFrontendOpenResponse = {
-  event?: IDirectoryEvent;
+  event?: IDirectoryEvent | undefined;
 }
 
 export class DirectoryFrontendOpenResponse {

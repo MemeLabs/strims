@@ -24,8 +24,8 @@ func (l *lru) Get(u keyer) keyer {
 	return nil
 }
 
-func (l *lru) PeekRecentlyTouched(eol time.Time) *lruIterator {
-	return &lruIterator{next: l.head, eol: eol}
+func (l *lru) PeekRecentlyTouched(eol time.Time) lruIterator {
+	return lruIterator{next: l.head, eol: eol}
 }
 
 func (l *lru) GetOrInsert(u keyer) keyer {

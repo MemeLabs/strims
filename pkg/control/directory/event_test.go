@@ -15,10 +15,14 @@ func TestEventReadWriter(t *testing.T) {
 	assert.NoError(t, err)
 	r := newEventReader(b)
 
-	src := &networkv1.DirectoryEvent{
-		Body: &networkv1.DirectoryEvent_Ping_{
-			Ping: &networkv1.DirectoryEvent_Ping{
-				Time: 1257894000000000000,
+	src := &networkv1.DirectoryEventBroadcast{
+		Events: []*networkv1.DirectoryEvent{
+			{
+				Body: &networkv1.DirectoryEvent_Ping_{
+					Ping: &networkv1.DirectoryEvent_Ping{
+						Time: 1257894000000000000,
+					},
+				},
 			},
 		},
 	}
@@ -29,10 +33,10 @@ func TestEventReadWriter(t *testing.T) {
 	}
 
 	for i := 0; i < 3; i++ {
-		dst := &networkv1.DirectoryEvent{}
+		dst := &networkv1.DirectoryEventBroadcast{}
 		err = r.Read(dst)
 		assert.NoError(t, err)
-		assert.Equal(t, src.GetPing().GetTime(), dst.GetPing().GetTime())
+		assert.Equal(t, src.Events[0].GetPing().Time, dst.Events[0].GetPing().Time)
 	}
 }
 

@@ -27,6 +27,10 @@ type ZeroPadWriter struct {
 	Writer
 }
 
+func (c *ZeroPadWriter) Write(p []byte) (int, error) {
+	return c.Writer.Write(p)
+}
+
 func (c *ZeroPadWriter) Flush() error {
 	if err := c.Writer.Flush(); err != nil {
 		return err

@@ -84,7 +84,10 @@ const Directory: React.FC = () => {
                 <Link to={formatUri(params.networkKey, listing)}>
                   <span>{listing.snippet.title}</span>
                 </Link>
+                {" | "}
                 <span>{listing.snippet.tags}</span>
+                {" | "}
+                <span>{new Date(Number(listing.timestamp) * 1000).toLocaleString()}</span>
               </div>
             ))}
           </div>

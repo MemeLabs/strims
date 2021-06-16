@@ -71,6 +71,11 @@ func (s *Buffer) Consume(c Chunk) {
 // Close ...
 func (s *Buffer) Close() {
 	s.swapReadable(ErrClosed)
+	s.setReady()
+}
+
+func (s *Buffer) setReady() {
+	s.readyOnce.Do(func() { close(s.ready) })
 }
 
 func (s *Buffer) swapReadable(err error) error {
@@ -167,7 +172,7 @@ func (s *Buffer) SetOffset(b binmap.Bin) {
 
 	s.bins.FillBefore(b)
 
-	s.readyOnce.Do(func() { close(s.ready) })
+	s.setReady()
 }
 
 // Recover ...
@@ -275,13 +280,13 @@ func (s *Buffer) Read(p []byte) (int, error) {
 	h := int(binByte(s.next-s.tail(), s.chunkSize))
 	i := s.index(s.tail())
 
-	defer func() {
-		if err := recover(); err != nil {
-			log.Printf("l %d h %d i %d s.off %d s.next %d s.tail() %d", l, h, i, s.off, s.next, s.tail())
-			log.Println(err)
-			panic("fuck")
-		}
-	}()
+	// defer func() {
+	// 	if err := recover(); err != nil {
+	// 		log.Printf("l %d h %d i %d s.off %d s.next %d s.tail() %d", l, h, i, s.off, s.next, s.tail())
+	// 		log.Println(err)
+	// 		panic("fuck")
+	// 	}
+	// }()
 
 	n := byterope.New(p).Copy(byterope.New(s.buf[i:], s.buf[:i]).Slice(l, h)...)
 
