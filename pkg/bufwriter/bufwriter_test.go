@@ -34,6 +34,12 @@ func TestWriterBuffered(t *testing.T) {
 	assert.Equal(t, 22, w.n)
 }
 
+func TestWriterFlushEmpty(t *testing.T) {
+	w := New(&failWriter{}, 128)
+	err := w.Flush()
+	assert.NoError(t, err)
+}
+
 func TestWriterFailure(t *testing.T) {
 	w := New(&failWriter{}, 128)
 	w.Write(make([]byte, 50))

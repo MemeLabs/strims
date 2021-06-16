@@ -17,15 +17,15 @@ import (
 
 func TestVideoCapture(t *testing.T) {
 	logger, err := zap.NewDevelopment()
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	networkKey, ctrl, err := NewTestControlPair(logger)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	done := make(chan struct{})
 
 	key, err := dao.GenerateKey()
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	options := ppspp.WriterOptions{
 		Key:          key,
@@ -35,13 +35,14 @@ func TestVideoCapture(t *testing.T) {
 	go func() {
 		swarmURI := ppspp.NewURI(key.Public, options.SwarmOptions.URIOptions()).String()
 		_, r, err := ctrl[0].VideoEgress().OpenStream(swarmURI, [][]byte{networkKey})
-		assert.Nil(t, err)
+		assert.NoError(t, err)
+		assert.NotNil(t, r)
 
 		var n int64
 		for n < 1024*1024 {
 			nn, err := io.Copy(ioutil.Discard, r)
 			if err != nil && err != io.EOF {
-				assert.Nil(t, err)
+				assert.NoError(t, err)
 			}
 			n += nn
 		}
@@ -56,11 +57,11 @@ func TestVideoCapture(t *testing.T) {
 		[][]byte{networkKey},
 		options,
 	)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	var b [16 * 1024]byte
 	_, err = rand.Read(b[:])
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	writeTicker := time.NewTicker(time.Millisecond * 10)
 
@@ -75,7 +76,7 @@ WriteLoop:
 				n = 0
 			}
 			err = ctrl[1].VideoCapture().Append(id, b[:], segmentEnd)
-			assert.Nil(t, err)
+			assert.NoError(t, err)
 		case <-done:
 			break WriteLoop
 		}

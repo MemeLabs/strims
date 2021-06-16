@@ -45,6 +45,9 @@ func (w *Writer) Write(p []byte) (nn int, err error) {
 }
 
 func (w *Writer) Flush() error {
+	if w.n == 0 {
+		return nil
+	}
 	_, err := w.w.Write(w.buf[:w.n])
 	w.n = 0
 	return err
