@@ -4,12 +4,6 @@ import (
 	"io"
 )
 
-// max discard buffer size
-const zeroPadSize = 4096
-
-// zero padding source
-var padding [4096]byte
-
 func NewZeroPadWriter(w io.Writer) (*ZeroPadWriter, error) {
 	return NewZeroPadWriterSize(w, DefaultSize)
 }
@@ -20,33 +14,26 @@ func NewZeroPadWriterSize(w io.Writer, size int) (*ZeroPadWriter, error) {
 		return nil, err
 	}
 
-	return &ZeroPadWriter{*c}, nil
+	return &ZeroPadWriter{
+		Writer: *c,
+		pad:    make([]byte, size),
+	}, nil
 }
 
 type ZeroPadWriter struct {
 	Writer
+	pad []byte
 }
 
-func (c *ZeroPadWriter) Write(p []byte) (int, error) {
-	return c.Writer.Write(p)
-}
-
-func (c *ZeroPadWriter) Flush() error {
-	if err := c.Writer.Flush(); err != nil {
+func (c *ZeroPadWriter) Flush() (err error) {
+	if err = c.Writer.Flush(); err != nil {
 		return err
 	}
 
-	for c.woff != 0 {
-		i := len(padding)
-		if l := len(c.buf) - c.off; l < i {
-			i = l
-		}
-
-		if _, err := c.Write(padding[:i]); err != nil {
-			return err
-		}
+	if c.woff != 0 {
+		_, err = c.Write(c.pad[:len(c.pad)-c.off])
 	}
-	return nil
+	return err
 }
 
 func NewZeroPadReader(r io.Reader, offset int64) (*ZeroPadReader, error) {
@@ -59,16 +46,10 @@ func NewZeroPadReaderSize(r io.Reader, offset int64, size int) (*ZeroPadReader, 
 		return nil, err
 	}
 
-	n := zeroPadSize
-	if size < n {
-		n = size
-	}
-
-	cc := &ZeroPadReader{
+	return &ZeroPadReader{
 		Reader: *c,
-		pad:    make([]byte, n),
-	}
-	return cc, nil
+		pad:    make([]byte, size),
+	}, nil
 }
 
 type ZeroPadReader struct {
@@ -78,13 +59,8 @@ type ZeroPadReader struct {
 
 func (c *ZeroPadReader) Read(p []byte) (int, error) {
 	n, err := c.Reader.Read(p)
-	for err == io.EOF && c.off != 0 {
-		i := len(c.pad)
-		if l := c.size - c.off; l < i {
-			i = l
-		}
-
-		if _, err := c.Reader.Read(c.pad[:i]); err != nil {
+	if err == io.EOF && c.off != 0 {
+		if _, err := c.Reader.Read(c.pad[:len(c.pad)-c.off]); err != nil {
 			return n, err
 		}
 	}

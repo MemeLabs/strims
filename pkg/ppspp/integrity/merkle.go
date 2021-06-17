@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/bufwriter"
+	"github.com/MemeLabs/go-ppspp/pkg/bufioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/merkle"
@@ -329,13 +329,13 @@ func NewMerkleWriter(o *MerkleWriterOptions) *MerkleWriter {
 		w:               o.Writer,
 	}
 	return &MerkleWriter{
-		bw: bufwriter.New(mw, o.ChunksPerSignature*o.ChunkSize),
+		bw: bufioutil.NewWriter(mw, o.ChunksPerSignature*o.ChunkSize),
 	}
 }
 
 // MerkleWriter ...
 type MerkleWriter struct {
-	bw *bufwriter.Writer
+	bw *bufioutil.Writer
 }
 
 // Write ...

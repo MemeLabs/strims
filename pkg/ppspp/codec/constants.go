@@ -96,6 +96,8 @@ func (m ProtocolOptionType) String() string {
 		return "ChunkSize"
 	case ChunksPerSignatureOption:
 		return "ChunksPerSignature"
+	case StreamCountOption:
+		return "StreamCount"
 	case EndOption:
 		return "EndOption"
 	}

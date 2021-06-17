@@ -1,7 +1,6 @@
 import React from "react";
 import { Link, Switch } from "react-router-dom";
 
-import { MainLayout } from "../../components/MainLayout";
 import { PrivateRoute } from "../../components/PrivateRoute";
 import BootstrapClientsPage from "./BootstrapClients";
 import ChatServersPage from "./ChatServers";

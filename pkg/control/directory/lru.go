@@ -35,7 +35,7 @@ func (l *lru) GetOrInsert(u keyer) keyer {
 		u = i.item
 		l.remove(i)
 	} else {
-		l.items.InsertNoReplace(i)
+		l.items.ReplaceOrInsert(i)
 	}
 	l.push(i)
 	return u

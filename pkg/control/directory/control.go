@@ -231,10 +231,10 @@ func newRunner(ctx context.Context, logger *zap.Logger, vpn *vpn.Host, store *da
 		dialer:   dialer,
 		transfer: transfer,
 
-		runnable: make(chan bool, 1),
+		runnable: make(chan struct{}, 1),
 	}
 
-	r.runnable <- true
+	r.runnable <- struct{}{}
 
 	if network.Key != nil {
 		go r.tryStartServer(ctx)
@@ -257,7 +257,7 @@ type runner struct {
 	closed   bool
 	client   *directoryReader
 	server   *directoryServer
-	runnable chan bool
+	runnable chan struct{}
 
 	meme atomic.Value
 }
@@ -303,7 +303,7 @@ func (r *runner) EventReader(ctx context.Context) (*EventReader, error) {
 	var err error
 	r.client, err = newDirectoryReader(r.logger, r.key)
 	if err != nil {
-		r.runnable <- true
+		r.runnable <- struct{}{}
 		return nil, err
 	}
 
@@ -315,7 +315,7 @@ func (r *runner) EventReader(ctx context.Context) (*EventReader, error) {
 			zap.Error(err),
 		)
 
-		r.runnable <- true
+		r.runnable <- struct{}{}
 
 		r.lock.Lock()
 		r.client = nil
@@ -357,7 +357,7 @@ func (r *runner) startServer(ctx context.Context) error {
 	var err error
 	r.server, err = newDirectoryServer(r.logger, r.network)
 	if err != nil {
-		r.runnable <- true
+		r.runnable <- struct{}{}
 		r.lock.Unlock()
 		return err
 	}
@@ -370,7 +370,7 @@ func (r *runner) startServer(ctx context.Context) error {
 	r.server = nil
 	r.lock.Unlock()
 
-	r.runnable <- true
+	r.runnable <- struct{}{}
 
 	return err
 }

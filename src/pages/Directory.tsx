@@ -5,7 +5,6 @@ import React from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { DirectoryEvent, DirectoryListing } from "../apis/strims/network/v1/directory";
-import { MainLayout } from "../components/MainLayout";
 import { useClient, useLazyCall } from "../contexts/FrontendApi";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";

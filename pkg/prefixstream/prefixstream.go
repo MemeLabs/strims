@@ -5,7 +5,7 @@ import (
 	"encoding/binary"
 	"io"
 
-	"github.com/MemeLabs/go-ppspp/pkg/bytereader"
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 )
 
 var sentinel = [...]byte{0, 1, 1, 2, 3, 5, 8, 13}
@@ -88,7 +88,7 @@ func (r *Reader) readHeader() error {
 		}
 		r.h.Reset()
 
-		n, err := binary.ReadUvarint(bytereader.New(r.r))
+		n, err := binary.ReadUvarint(ioutil.NewByteReader(r.r))
 		if err != nil {
 			return err
 		}

@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binaryutil"
-	"github.com/MemeLabs/go-ppspp/pkg/bytereader"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 )
 
@@ -315,7 +314,7 @@ func (p *capLogParser) Parse(r io.Reader) error {
 			return err
 		}
 
-		d, err := binary.ReadUvarint(bytereader.New(r))
+		d, err := binary.ReadUvarint(ioutil.NewByteReader(r))
 		if err != nil {
 			return err
 		}
@@ -351,7 +350,7 @@ func (p *capLogParser) Parse(r io.Reader) error {
 }
 
 func (p *capLogParser) readData(r io.Reader) ([]byte, error) {
-	n, err := binary.ReadUvarint(bytereader.New(r))
+	n, err := binary.ReadUvarint(ioutil.NewByteReader(r))
 	if err != nil {
 		return nil, err
 	}

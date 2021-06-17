@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/bufwriter"
+	"github.com/MemeLabs/go-ppspp/pkg/bufioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
@@ -195,13 +195,13 @@ func NewSignAllWriter(o *SignAllWriterOptions) *SignAllWriter {
 		w:               o.Writer,
 	}
 	return &SignAllWriter{
-		bw: bufwriter.New(sw, o.ChunkSize),
+		bw: bufioutil.NewWriter(sw, o.ChunkSize),
 	}
 }
 
 // SignAllWriter ...
 type SignAllWriter struct {
-	bw *bufwriter.Writer
+	bw *bufioutil.Writer
 }
 
 // Write ...

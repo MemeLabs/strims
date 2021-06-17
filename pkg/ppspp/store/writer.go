@@ -2,7 +2,7 @@ package store
 
 import (
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/bufwriter"
+	"github.com/MemeLabs/go-ppspp/pkg/bufioutil"
 )
 
 // Publisher ...
@@ -13,13 +13,13 @@ type Publisher interface {
 // NewWriter ...
 func NewWriter(pub Publisher, chunkSize int) *Writer {
 	return &Writer{
-		bw: bufwriter.New(&writer{pub: pub}, chunkSize),
+		bw: bufioutil.NewWriter(&writer{pub: pub}, chunkSize),
 	}
 }
 
 // Writer ...
 type Writer struct {
-	bw *bufwriter.Writer
+	bw *bufioutil.Writer
 }
 
 // Write ...

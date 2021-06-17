@@ -1,8 +1,8 @@
-package bufwriter
+package bufioutil
 
 import "io"
 
-func New(w io.Writer, size int) *Writer {
+func NewWriter(w io.Writer, size int) *Writer {
 	return &Writer{
 		buf: make([]byte, size),
 		w:   w,

@@ -32,3 +32,12 @@ func TestUvarintLen(t *testing.T) {
 		assert.Equal(t, binary.PutUvarint(b, v), UvarintLen(v))
 	}
 }
+
+func TestVarintLen(t *testing.T) {
+	b := make([]byte, binary.MaxVarintLen64)
+	for i := 0; i <= 63; i++ {
+		v := int64(math.MaxInt64 >> i)
+		assert.Equal(t, binary.PutVarint(b, v), VarintLen(v))
+		assert.Equal(t, binary.PutVarint(b, -v), VarintLen(-v))
+	}
+}

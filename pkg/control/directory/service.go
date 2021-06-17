@@ -220,9 +220,9 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1.Directory
 		l.modifiedTime = iotime.Load()
 	}
 
-	l.publishers.InsertNoReplace(s)
-	s.publishedListings.InsertNoReplace(l)
-	u.sessions.InsertNoReplace(s)
+	l.publishers.ReplaceOrInsert(s)
+	s.publishedListings.ReplaceOrInsert(l)
+	u.sessions.ReplaceOrInsert(s)
 
 	return &networkv1.DirectoryPublishResponse{}, nil
 }
@@ -259,9 +259,9 @@ func (d *directoryService) Join(ctx context.Context, req *networkv1.DirectoryJoi
 	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
 	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()}).(*user)
 
-	l.viewers.InsertNoReplace(s)
-	s.viewedListings.InsertNoReplace(l)
-	u.sessions.InsertNoReplace(s)
+	l.viewers.ReplaceOrInsert(s)
+	s.viewedListings.ReplaceOrInsert(l)
+	u.sessions.ReplaceOrInsert(s)
 
 	return &networkv1.DirectoryJoinResponse{}, nil
 }

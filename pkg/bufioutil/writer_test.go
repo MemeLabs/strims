@@ -1,4 +1,4 @@
-package bufwriter
+package bufioutil
 
 import (
 	"bytes"
@@ -10,7 +10,7 @@ import (
 
 func TestWriterPassthrough(t *testing.T) {
 	var b bytes.Buffer
-	w := New(&b, 128)
+	w := NewWriter(&b, 128)
 	n, err := w.Write(make([]byte, 128))
 	assert.Equal(t, 128, n, "write size mismatch")
 	assert.NoError(t, err, "write should not return error")
@@ -20,7 +20,7 @@ func TestWriterPassthrough(t *testing.T) {
 
 func TestWriterBuffered(t *testing.T) {
 	var b bytes.Buffer
-	w := New(&b, 128)
+	w := NewWriter(&b, 128)
 	n, err := w.Write(make([]byte, 50))
 	assert.Equal(t, 50, n)
 	assert.NoError(t, err)
@@ -35,18 +35,18 @@ func TestWriterBuffered(t *testing.T) {
 }
 
 func TestWriterFlushEmpty(t *testing.T) {
-	w := New(&failWriter{}, 128)
+	w := NewWriter(&failWriter{}, 128)
 	err := w.Flush()
 	assert.NoError(t, err)
 }
 
 func TestWriterFailure(t *testing.T) {
-	w := New(&failWriter{}, 128)
+	w := NewWriter(&failWriter{}, 128)
 	w.Write(make([]byte, 50))
 	_, err := w.Write(make([]byte, 100))
 	assert.ErrorIs(t, errTest, err)
 
-	w = New(&failWriter{}, 128)
+	w = NewWriter(&failWriter{}, 128)
 	w.Write(make([]byte, 128))
 	assert.ErrorIs(t, errTest, err)
 }
