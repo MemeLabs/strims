@@ -29,6 +29,7 @@ const peerIndexPublishInterval = 10 * time.Minute
 const peerIndexDiscardInterval = time.Minute
 const peerIndexMaxRecordAge = 30 * time.Minute
 const peerIndexMaxSize = 5120
+const peerIndexSerchTimeout = time.Minute
 
 var nextPeerIndexID uint32
 
@@ -151,6 +152,13 @@ func (s *peerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerI
 		return nil, err
 	}
 
+	hosts := make(chan *PeerIndexHost, 32)
+	s.searchResponseChans.Store(rid, hosts)
+	cleanup := func() {
+		s.searchResponseChans.Delete(rid)
+		close(hosts)
+	}
+
 	msg := &vpnv1.PeerIndexMessage{
 		Body: &vpnv1.PeerIndexMessage_SearchRequest_{
 			SearchRequest: &vpnv1.PeerIndexMessage_SearchRequest{
@@ -160,15 +168,15 @@ func (s *peerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerI
 		},
 	}
 	if err := s.network.SendProto(target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg); err != nil {
+		cleanup()
 		return nil, err
 	}
 
-	hosts := make(chan *PeerIndexHost, 32)
-	s.searchResponseChans.Store(rid, hosts)
+	ctx, cancel := context.WithTimeout(ctx, peerIndexSerchTimeout)
 	go func() {
 		<-ctx.Done()
-		s.searchResponseChans.Delete(rid)
-		close(hosts)
+		cancel()
+		cleanup()
 	}()
 
 	return hosts, nil

@@ -29,6 +29,7 @@ const hashTableSetInterval = 10 * time.Minute
 const hashTableDiscardInterval = time.Minute
 const hashTableMaxRecordAge = 30 * time.Minute
 const hashTableMaxSize = 5120
+const hashTableGetTimeout = time.Minute
 
 // HashTable ...
 type HashTable interface {
@@ -142,6 +143,7 @@ func (s *hashTable) Set(ctx context.Context, key *key.Key, salt, value []byte) (
 type hashTableGetOptions struct {
 	disableCache bool
 	cacheOnly    bool
+	timeout      time.Duration
 }
 
 // HashTableOption ...
@@ -154,11 +156,20 @@ func DisableCache() func(*hashTableGetOptions) {
 	}
 }
 
+// WithTimeout ...
+func WithTimeout(d time.Duration) func(*hashTableGetOptions) {
+	return func(opts *hashTableGetOptions) {
+		opts.timeout = d
+	}
+}
+
 // Get ...
 func (s *hashTable) Get(ctx context.Context, key, salt []byte, options ...HashTableOption) (<-chan []byte, error) {
-	var opts hashTableGetOptions
+	opts := &hashTableGetOptions{
+		timeout: hashTableGetTimeout,
+	}
 	for _, opt := range options {
-		opt(&opts)
+		opt(opts)
 	}
 
 	hash := hashTableRecordHash(key, salt)
@@ -182,6 +193,12 @@ func (s *hashTable) Get(ctx context.Context, key, salt []byte, options ...HashTa
 		}
 	}
 
+	s.searchResponseChans.Store(rid, values)
+	cleanup := func() {
+		s.searchResponseChans.Delete(rid)
+		close(values)
+	}
+
 	if opts.disableCache || timeutil.Now().After(timeutil.Unix(timestamp, 0).Add(hashTableSetInterval)) {
 		msg := &vpnv1.HashTableMessage{
 			Body: &vpnv1.HashTableMessage_GetRequest_{
@@ -193,15 +210,16 @@ func (s *hashTable) Get(ctx context.Context, key, salt []byte, options ...HashTa
 			},
 		}
 		if err := s.network.SendProto(target, vnic.HashTablePort, vnic.HashTablePort, msg); err != nil {
+			cleanup()
 			return nil, err
 		}
 	}
 
-	s.searchResponseChans.Store(rid, values)
+	ctx, cancel := context.WithTimeout(ctx, opts.timeout)
 	go func() {
 		<-ctx.Done()
-		s.searchResponseChans.Delete(rid)
-		close(values)
+		cancel()
+		cleanup()
 	}()
 
 	return values, nil
