@@ -63,6 +63,9 @@ func WelfordMerge(ws ...Welford) Welford {
 			c = append(c, w)
 		}
 	}
+	if len(c) == 0 {
+		return Welford{}
+	}
 	return welfordMerge(c...)
 }
 

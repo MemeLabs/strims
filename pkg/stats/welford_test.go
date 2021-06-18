@@ -48,3 +48,9 @@ func TestWelfordMerge(t *testing.T) {
 	assert.LessOrEqual(t, math.Abs(w.Mean()-mean), e, "mean should be within margin of error")
 	assert.LessOrEqual(t, math.Abs(w.Variance()-variance), e, "variance should be within margin of error")
 }
+
+func TestWelfordMergeEmpty(t *testing.T) {
+	ws := make([]Welford, 4)
+	w := WelfordMerge(ws...)
+	assert.EqualValues(t, 0, w.Count())
+}
