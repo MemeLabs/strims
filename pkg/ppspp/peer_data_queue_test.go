@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/davecgh/go-spew/spew"
 	"github.com/stretchr/testify/assert"
 )
@@ -13,7 +14,7 @@ func TestPeerDataQueuePushPop(t *testing.T) {
 	var q peerDataQueue
 
 	for i := binmap.Bin(0); i <= 8; i += 2 {
-		q.Push(w, i, epochTime)
+		q.Push(w, i, timeutil.EpochTime)
 	}
 
 	assert.False(t, q.Empty())
@@ -21,7 +22,7 @@ func TestPeerDataQueuePushPop(t *testing.T) {
 		pw, pb, ts, ok := q.Pop()
 		assert.Equal(t, w, pw)
 		assert.Equal(t, i, pb)
-		assert.Equal(t, epochTime, ts)
+		assert.Equal(t, timeutil.EpochTime, ts)
 		assert.True(t, ok)
 	}
 	assert.True(t, q.Empty())
@@ -32,7 +33,7 @@ func TestPeerDataQueuePushFrontPop(t *testing.T) {
 	var q peerDataQueue
 
 	for i := binmap.Bin(2); i <= 8; i += 2 {
-		q.PushFront(w, i, epochTime)
+		q.PushFront(w, i, timeutil.EpochTime)
 	}
 
 	assert.False(t, q.Empty())
@@ -40,7 +41,7 @@ func TestPeerDataQueuePushFrontPop(t *testing.T) {
 		pw, pb, ts, ok := q.Pop()
 		assert.Equal(t, w, pw)
 		assert.Equal(t, i, pb)
-		assert.Equal(t, epochTime, ts)
+		assert.Equal(t, timeutil.EpochTime, ts)
 		assert.True(t, ok)
 	}
 	assert.True(t, q.Empty())
@@ -51,7 +52,7 @@ func TestPeerDataQueueRemove(t *testing.T) {
 	var q peerDataQueue
 
 	for i := binmap.Bin(0); i < 16; i += 2 {
-		q.Push(w, i, epochTime)
+		q.Push(w, i, timeutil.EpochTime)
 	}
 
 	q.Remove(w, binmap.Bin(11))
@@ -63,7 +64,7 @@ func TestPeerDataQueueRemove(t *testing.T) {
 		pw, pb, ts, ok := q.Pop()
 		assert.Equal(t, w, pw)
 		assert.Equal(t, i, pb)
-		assert.Equal(t, epochTime, ts)
+		assert.Equal(t, timeutil.EpochTime, ts)
 		assert.True(t, ok)
 	}
 
@@ -79,11 +80,11 @@ func BenchmarkPeerDataQueue(b *testing.B) {
 	size := 16
 
 	for i := 0; i < size && i < b.N; i++ {
-		q.Push(w, binmap.Bin(i*2), epochTime)
+		q.Push(w, binmap.Bin(i*2), timeutil.EpochTime)
 	}
 
 	for i := size; i < b.N; i++ {
-		q.Push(w, binmap.Bin(i*2), epochTime)
+		q.Push(w, binmap.Bin(i*2), timeutil.EpochTime)
 		q.Pop()
 	}
 

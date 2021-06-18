@@ -3,11 +3,11 @@ package network
 import (
 	"bytes"
 	"sync"
-	"time"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
 )
@@ -94,11 +94,11 @@ func networkKeyForCertificate(cert *certificate.Certificate) []byte {
 	return dao.GetRootCert(cert).Key
 }
 
-func nextCertificateRenewTime(network *networkv1.Network) time.Time {
+func nextCertificateRenewTime(network *networkv1.Network) timeutil.Time {
 	if isCertificateSubjectMismatched(network) {
-		return time.Now()
+		return timeutil.Now()
 	}
-	return time.Unix(int64(network.Certificate.NotAfter), 0).Add(-certRenewScheduleAheadDuration)
+	return timeutil.Unix(int64(network.Certificate.NotAfter), 0).Add(-certRenewScheduleAheadDuration)
 }
 
 func isCertificateSubjectMismatched(network *networkv1.Network) bool {

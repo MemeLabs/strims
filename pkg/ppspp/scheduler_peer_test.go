@@ -2,11 +2,11 @@ package ppspp
 
 import (
 	"testing"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
@@ -59,7 +59,7 @@ func TestPeerChannelSchedulerStreamSubImplicitRequests(t *testing.T) {
 	assert.Equal(t, []binmap.Bin{31, 64, 80, 96, 112}, swarmScheduler.requestBins.IterateFilled().ToSlice(), "expected requested bins to be filled for stream bins after sub")
 
 	swarmScheduler.Consume(store.Chunk{Bin: 64})
-	channelScheduler.HandleData(64, time.Time{}, true)
+	channelScheduler.HandleData(64, timeutil.NilTime, true)
 
 	channelScheduler.addStreamCancel(stream)
 

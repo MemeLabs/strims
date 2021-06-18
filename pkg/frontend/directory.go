@@ -2,7 +2,6 @@ package frontend
 
 import (
 	"context"
-	"time"
 
 	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
@@ -10,6 +9,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
 
@@ -55,7 +55,7 @@ func (s *directoryService) Test(ctx context.Context, r *network.DirectoryFronten
 
 	listing := &network.DirectoryListing{
 		// Creator:   creator,
-		Timestamp: time.Now().Unix(),
+		Timestamp: timeutil.Now().Unix(),
 		Snippet: &network.DirectoryListingSnippet{
 			Title:       "some title",
 			Description: "that test description",
@@ -63,7 +63,7 @@ func (s *directoryService) Test(ctx context.Context, r *network.DirectoryFronten
 		},
 		Content: &network.DirectoryListing_Media{
 			Media: &network.DirectoryListingMedia{
-				StartedAt: time.Now().Unix(),
+				StartedAt: timeutil.Now().Unix(),
 				MimeType:  rtmpingress.TranscoderMimeType,
 				// SwarmUri:  s.swarm.URI().String(),
 			},

@@ -12,9 +12,9 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
@@ -62,7 +62,7 @@ type directoryService struct {
 	closeOnce         sync.Once
 	done              chan struct{}
 	broadcastTicker   *time.Ticker
-	lastBroadcastTime time.Time
+	lastBroadcastTime timeutil.Time
 	eventWriter       *EventWriter
 	lock              sync.Mutex
 	listings          lru
@@ -77,7 +77,7 @@ func (d *directoryService) Run(ctx context.Context) error {
 	for {
 		select {
 		case now := <-d.broadcastTicker.C:
-			if err := d.broadcast(now); err != nil {
+			if err := d.broadcast(timeutil.NewFromTime(now)); err != nil {
 				return err
 			}
 		case <-d.done:
@@ -95,7 +95,7 @@ func (d *directoryService) Close() {
 	})
 }
 
-func (d *directoryService) broadcast(now time.Time) error {
+func (d *directoryService) broadcast(now timeutil.Time) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -210,14 +210,14 @@ func (d *directoryService) Publish(ctx context.Context, req *networkv1.Directory
 
 	l := d.listings.GetOrInsert(&listing{
 		listing:      req.Listing,
-		modifiedTime: iotime.Load(),
+		modifiedTime: timeutil.Now(),
 	}).(*listing)
 	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
 	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()}).(*user)
 
 	if req.Listing.Timestamp > l.listing.Timestamp {
 		l.listing = req.Listing
-		l.modifiedTime = iotime.Load()
+		l.modifiedTime = timeutil.Now()
 	}
 
 	l.publishers.ReplaceOrInsert(s)
@@ -311,7 +311,7 @@ func (d *directoryService) Ping(ctx context.Context, req *networkv1.DirectoryPin
 
 type listing struct {
 	listing      *networkv1.DirectoryListing
-	modifiedTime time.Time
+	modifiedTime timeutil.Time
 	publishers   llrb.LLRB
 	viewers      llrb.LLRB
 }

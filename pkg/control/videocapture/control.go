@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"sync"
-	"time"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
@@ -18,6 +17,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
@@ -97,7 +97,7 @@ func (c *Control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *
 
 	s := &stream{
 		transferID:       transferID,
-		startTime:        time.Now(),
+		startTime:        timeutil.Now(),
 		mimeType:         mimeType,
 		directorySnippet: directorySnippet,
 		networkKeys:      networkKeys,
@@ -189,7 +189,7 @@ func (c *Control) publishDirectoryListing(networkKey []byte, s *stream) error {
 
 	listing := &networkv1.DirectoryListing{
 		Creator:   creator,
-		Timestamp: time.Now().Unix(),
+		Timestamp: timeutil.Now().Unix(),
 		Snippet:   s.directorySnippet,
 		Content: &networkv1.DirectoryListing_Media{
 			Media: &networkv1.DirectoryListingMedia{
@@ -212,7 +212,7 @@ func (c *Control) unpublishDirectoryListing(networkKey []byte, s *stream) error 
 
 type stream struct {
 	transferID       []byte
-	startTime        time.Time
+	startTime        timeutil.Time
 	directorySnippet *networkv1.DirectoryListingSnippet
 	mimeType         string
 	networkKeys      [][]byte

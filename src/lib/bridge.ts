@@ -135,7 +135,6 @@ type WebRTCDataChannelWindowEvent =
   | {
       type: EventType.DATA_CHANNEL_DATA;
       data: ArrayBuffer;
-      timestamp: number;
     }
   | {
       type: EventType.DATA_CHANNEL_OPEN;
@@ -163,7 +162,6 @@ type BusEvent =
   | {
       type: EventType.DATA;
       data: ArrayBuffer;
-      timestamp: number;
     }
   | {
       type: EventType.CLOSE;
@@ -246,7 +244,6 @@ export class WindowBridge extends EventEmitter {
           port1.postMessage(
             {
               type: EventType.DATA_CHANNEL_DATA,
-              timestamp: Date.now(),
               data: e.data,
             },
             [e.data]
@@ -457,7 +454,6 @@ export class Bus extends EventEmitter {
       {
         type: EventType.DATA,
         data: buffer,
-        timestamp: Date.now(),
       },
       [buffer]
     );
@@ -467,18 +463,6 @@ export class Bus extends EventEmitter {
     this.port.postMessage({ type: EventType.CLOSE });
     this.port.close();
   }
-}
-
-export interface WebSocketGoProxy {
-  ondata(data: Uint8Array, n: number, timestamp: number): void;
-  onopen(): void;
-  onclose(): void;
-  onerror(message: string): void;
-}
-
-interface WebSocketProxy {
-  write: (data: Uint8Array) => void;
-  close: () => void;
 }
 
 export interface WebRTCGoProxy {
@@ -501,20 +485,20 @@ interface WebRTCProxy {
   close: () => void;
 }
 
-export interface DataChannelGoProxy {
+export interface ChannelGoProxy {
   onerror(message: string): void;
   ondata(data: Uint8Array, n: number, timestamp: number): void;
   onclose(): void;
   onopen(): void;
 }
 
-interface DataChannelProxy {
-  write: ({ buffer }: Uint8Array) => void;
+interface ChannelProxy {
+  write: (data: Uint8Array) => number;
   close: () => void;
 }
 
 export interface ServiceGoProxy {
-  openBus(any): DataChannelGoProxy;
+  openBus(any): ChannelGoProxy;
 }
 
 interface KVStoreProxy {
@@ -526,13 +510,8 @@ interface KVStoreProxy {
   commit: (done: (error: string | null) => void) => void;
 }
 
-interface DataChannelProxy {
-  write: ({ buffer }: Uint8Array) => void;
-  close: () => void;
-}
-
 export class WorkerBridge {
-  public openWebSocket(uri: string, proxy: WebSocketGoProxy): WebSocketProxy {
+  public openWebSocket(uri: string, proxy: ChannelGoProxy): ChannelProxy {
     const ws = new WebSocket(uri);
 
     const onclose = () => {
@@ -553,7 +532,10 @@ export class WorkerBridge {
       proxy.ondata(new Uint8Array(data), data.byteLength, Date.now());
 
     return {
-      write: (data: Uint8Array) => ws.send(data),
+      write: (data: Uint8Array): number => {
+        ws.send(data);
+        return Date.now();
+      },
       close: () => {
         onclose();
         ws.close();
@@ -641,7 +623,7 @@ export class WorkerBridge {
 
   // openDataChannel opens a data channel created by a call to openWebRTC. This
   // allows multiple workers to share an RTCPeerConnection.
-  public openDataChannel(id: number, proxy: DataChannelGoProxy): DataChannelProxy {
+  public openDataChannel(id: number, proxy: ChannelGoProxy): ChannelProxy {
     const { port1, port2 } = new MessageChannel() as GenericChannel<
       WebRTCDataChannelMessagePort,
       void
@@ -663,7 +645,7 @@ export class WorkerBridge {
           // console.log("worker data channel event", data);
           switch (data.type) {
             case EventType.DATA_CHANNEL_DATA:
-              proxy.ondata(new Uint8Array(data.data), data.data.byteLength, data.timestamp);
+              proxy.ondata(new Uint8Array(data.data), data.data.byteLength, Date.now());
               break;
             case EventType.DATA_CHANNEL_OPEN:
               proxy.onopen();
@@ -687,7 +669,7 @@ export class WorkerBridge {
     );
 
     return {
-      write: ({ buffer }: Uint8Array) => {
+      write: ({ buffer }: Uint8Array): number => {
         void ready.then((port) =>
           port.postMessage(
             {
@@ -697,6 +679,7 @@ export class WorkerBridge {
             [buffer]
           )
         );
+        return Date.now();
       },
       close: () => {
         void ready.then((port) => {
@@ -717,15 +700,16 @@ export class WorkerBridge {
 
     port1.onmessage = ({ data: { port } }) => {
       const bus = proxy.openBus({
-        write: ({ buffer }: Uint8Array) =>
+        write: ({ buffer }: Uint8Array) => {
           port.postMessage(
             {
               type: EventType.DATA,
               data: buffer,
-              timestamp: Date.now(),
             },
             [buffer]
-          ),
+          );
+          return Date.now();
+        },
         close: () => {
           port.postMessage({ type: EventType.CLOSE });
           port1.postMessage({ type: EventType.CLOSE });
@@ -735,7 +719,7 @@ export class WorkerBridge {
       port.onmessage = ({ data }) => {
         switch (data.type) {
           case EventType.DATA:
-            bus.ondata(new Uint8Array(data.data), data.data.byteLength, data.timestamp);
+            bus.ondata(new Uint8Array(data.data), data.data.byteLength, Date.now());
             break;
           case EventType.CLOSE:
             bus.onclose();
@@ -754,13 +738,13 @@ export class WorkerBridge {
     );
   }
 
-  public openBus(label: string, proxy: DataChannelGoProxy): DataChannelProxy {
+  public openBus(label: string, proxy: ChannelGoProxy): ChannelProxy {
     const { port1, port2 } = new MessageChannel() as GenericChannel<BusEvent, BusEvent>;
 
     port1.onmessage = ({ data }: MessageEvent<BusEvent>) => {
       switch (data.type) {
         case EventType.DATA:
-          proxy.ondata(new Uint8Array(data.data), data.data.byteLength, data.timestamp);
+          proxy.ondata(new Uint8Array(data.data), data.data.byteLength, Date.now());
           break;
         case EventType.CLOSE:
           proxy.onclose();
@@ -778,15 +762,16 @@ export class WorkerBridge {
     );
 
     return {
-      write: ({ buffer }: Uint8Array) =>
+      write: ({ buffer }: Uint8Array): number => {
         port1.postMessage(
           {
             type: EventType.DATA,
             data: buffer,
-            timestamp: Date.now(),
           },
           [buffer]
-        ),
+        );
+        return Date.now();
+      },
       close: () => port1.postMessage({ type: EventType.CLOSE }),
     };
   }

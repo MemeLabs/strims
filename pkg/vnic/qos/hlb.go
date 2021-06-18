@@ -1,12 +1,16 @@
 package qos
 
-import "time"
+import (
+	"time"
+
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+)
 
 // NewHLBWithParent ...
 func NewHLBWithParent(limit float64, parent *HLB) *HLB {
 	m := &HLB{
 		parent:   parent,
-		lastTick: time.Now(),
+		lastTick: timeutil.Now(),
 	}
 	m.SetLimit(limit)
 	return m
@@ -23,7 +27,7 @@ type HLB struct {
 	limit    float64
 	rate     float64
 	value    float64
-	lastTick time.Time
+	lastTick timeutil.Time
 }
 
 // SetLimit ...
@@ -37,7 +41,7 @@ func (m *HLB) SetLimit(limit float64) {
 
 // Check ...
 func (m *HLB) Check(n float64) bool {
-	now := time.Now()
+	now := timeutil.Now()
 	d := float64(now.Sub(m.lastTick))
 	m.lastTick = now
 	m.value -= d * m.rate

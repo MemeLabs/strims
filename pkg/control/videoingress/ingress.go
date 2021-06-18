@@ -23,6 +23,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
 )
 
@@ -147,7 +148,7 @@ func newIngressStream(
 		ctx:       ctx,
 		cancelCtx: cancel,
 
-		startTime: time.Now(),
+		startTime: timeutil.Now(),
 		conn:      conn,
 	}
 
@@ -192,7 +193,7 @@ type ingressStream struct {
 	cancelCtx context.CancelFunc
 	closeOnce sync.Once
 
-	startTime time.Time
+	startTime timeutil.Time
 	channel   *videov1.VideoChannel
 	conn      io.Closer
 
@@ -277,7 +278,7 @@ func (s *ingressStream) publishDirectoryListing() error {
 
 	listing := &networkv1.DirectoryListing{
 		Creator:   creator,
-		Timestamp: time.Now().Unix(),
+		Timestamp: timeutil.Now().Unix(),
 		Snippet:   s.channel.DirectoryListingSnippet,
 		Content: &networkv1.DirectoryListing_Media{
 			Media: &networkv1.DirectoryListingMedia{

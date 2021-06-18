@@ -15,10 +15,10 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	vpnv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vpn/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -182,7 +182,7 @@ func (s *hashTable) Get(ctx context.Context, key, salt []byte, options ...HashTa
 		}
 	}
 
-	if opts.disableCache || iotime.Load().After(time.Unix(timestamp, 0).Add(hashTableSetInterval)) {
+	if opts.disableCache || timeutil.Now().After(timeutil.Unix(timestamp, 0).Add(hashTableSetInterval)) {
 		msg := &vpnv1.HashTableMessage{
 			Body: &vpnv1.HashTableMessage_GetRequest_{
 				GetRequest: &vpnv1.HashTableMessage_GetRequest{
@@ -251,8 +251,8 @@ func (p *hashTableItem) Less(oi llrb.Item) bool {
 }
 
 // Deadline implements timeoutQueueItem
-func (p *hashTableItem) Deadline() time.Time {
-	return time.Unix(p.Record().Timestamp, 0).Add(hashTableMaxRecordAge)
+func (p *hashTableItem) Deadline() timeutil.Time {
+	return timeutil.Unix(p.Record().Timestamp, 0).Add(hashTableMaxRecordAge)
 }
 
 // newHashTableStore ...
@@ -264,7 +264,7 @@ func newHashTableStore(ctx context.Context, logger *zap.Logger, hostID kademlia.
 		discardQueue: newTimeoutQueue(ctx, hashTableDiscardInterval, hashTableMaxRecordAge),
 	}
 
-	p.ticker = TickerFunc(ctx, hashTableDiscardInterval, p.tick)
+	p.ticker = timeutil.TickerBFunc(ctx, hashTableDiscardInterval, p.tick)
 
 	return p
 }
@@ -276,7 +276,7 @@ type HashTableStore struct {
 	lock           sync.Mutex
 	records        *llrb.LLRB
 	discardQueue   *timeoutQueue
-	ticker         *Ticker
+	ticker         *timeutil.TickerB
 	nextAccessorID uint32
 }
 
@@ -292,7 +292,7 @@ func (p *HashTableStore) accessor() *hashTableStoreAccesstor {
 	}
 }
 
-func (p *HashTableStore) tick(t time.Time) {
+func (p *HashTableStore) tick(t timeutil.Time) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -451,7 +451,7 @@ func newHashTablePublisher(ctx context.Context, logger *zap.Logger, network *Net
 		close:   cancel,
 	}
 
-	p.ticker = TickerFuncWithCleanup(ctx, hashTableSetInterval, p.publish, p.unpublish)
+	p.ticker = timeutil.TickerBFuncWithCleanup(ctx, hashTableSetInterval, p.publish, p.unpublish)
 
 	return p, nil
 }
@@ -466,7 +466,7 @@ type HashTablePublisher struct {
 	network *Network
 	store   *hashTableStoreAccesstor
 	close   context.CancelFunc
-	ticker  *Ticker
+	ticker  *timeutil.TickerB
 }
 
 // Update ...
@@ -482,11 +482,11 @@ func (p *HashTablePublisher) Close() {
 }
 
 func (p *HashTablePublisher) update() error {
-	p.record.Timestamp = time.Now().Unix()
+	p.record.Timestamp = timeutil.Now().Unix()
 	return dao.SignMessage(p.record, p.key)
 }
 
-func (p *HashTablePublisher) publish(t time.Time) {
+func (p *HashTablePublisher) publish(t timeutil.Time) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 

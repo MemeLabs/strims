@@ -2,12 +2,14 @@ package stats
 
 import (
 	"time"
+
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 // NewSMA ...
 func NewSMA(n int, d time.Duration) SMA {
 	return SMA{
-		t: time.Now(),
+		t: timeutil.Now(),
 		d: d,
 		w: make([]smaSample, n),
 	}
@@ -15,7 +17,7 @@ func NewSMA(n int, d time.Duration) SMA {
 
 // SMA ...
 type SMA struct {
-	t  time.Time
+	t  timeutil.Time
 	d  time.Duration
 	v  uint64
 	n  uint64
@@ -24,9 +26,9 @@ type SMA struct {
 	w  []smaSample
 }
 
-func (s *SMA) advance(t time.Time) {
-	for t.Sub(s.t) > s.d {
-		s.t = s.t.Add(s.d)
+func (s *SMA) advance(end timeutil.Time) {
+	for t := s.t.Add(s.d); t < end; t = t.Add(s.d) {
+		s.t = t
 
 		s.i++
 		if s.i == len(s.w) {
@@ -45,10 +47,10 @@ func (s *SMA) advance(t time.Time) {
 }
 
 func (s *SMA) Reset() {
-	s.ResetWithTime(time.Now())
+	s.ResetWithTime(timeutil.Now())
 }
 
-func (s *SMA) ResetWithTime(t time.Time) {
+func (s *SMA) ResetWithTime(t timeutil.Time) {
 	s.t = t
 	s.v = 0
 	s.n = 0
@@ -62,11 +64,11 @@ func (s *SMA) ResetWithTime(t time.Time) {
 
 // Add ...
 func (s *SMA) Add(v uint64) {
-	s.AddWithTime(v, time.Now())
+	s.AddWithTime(v, timeutil.Now())
 }
 
 // AddWithTime ...
-func (s *SMA) AddWithTime(v uint64, t time.Time) {
+func (s *SMA) AddWithTime(v uint64, t timeutil.Time) {
 	s.advance(t)
 
 	s.w[s.i].v += v
@@ -77,11 +79,11 @@ func (s *SMA) AddWithTime(v uint64, t time.Time) {
 
 // AddN ...
 func (s *SMA) AddN(c, v uint64) {
-	s.AddNWithTime(c, v, time.Now())
+	s.AddNWithTime(c, v, timeutil.Now())
 }
 
 // AddNWithTime ...
-func (s *SMA) AddNWithTime(c, v uint64, t time.Time) {
+func (s *SMA) AddNWithTime(c, v uint64, t timeutil.Time) {
 	s.advance(t)
 
 	s.w[s.i].v += c * v
@@ -92,11 +94,11 @@ func (s *SMA) AddNWithTime(c, v uint64, t time.Time) {
 
 // Value ...
 func (s *SMA) Value() uint64 {
-	return s.ValueWithTime(time.Now())
+	return s.ValueWithTime(timeutil.Now())
 }
 
 // ValueWithTime ...
-func (s *SMA) ValueWithTime(t time.Time) uint64 {
+func (s *SMA) ValueWithTime(t timeutil.Time) uint64 {
 	s.advance(t)
 
 	if s.n == 0 {
@@ -107,11 +109,11 @@ func (s *SMA) ValueWithTime(t time.Time) uint64 {
 
 // Interval ...
 func (s *SMA) Interval() time.Duration {
-	return s.IntervalWithTime(time.Now())
+	return s.IntervalWithTime(timeutil.Now())
 }
 
 // IntervalWithTime ...
-func (s *SMA) IntervalWithTime(t time.Time) time.Duration {
+func (s *SMA) IntervalWithTime(t timeutil.Time) time.Duration {
 	s.advance(t)
 
 	if s.v == 0 {
@@ -122,11 +124,11 @@ func (s *SMA) IntervalWithTime(t time.Time) time.Duration {
 
 // SampleInterval ...
 func (s *SMA) SampleInterval() time.Duration {
-	return s.SampleIntervalWithTime(time.Now())
+	return s.SampleIntervalWithTime(timeutil.Now())
 }
 
 // SampleIntervalWithTime ...
-func (s *SMA) SampleIntervalWithTime(t time.Time) time.Duration {
+func (s *SMA) SampleIntervalWithTime(t timeutil.Time) time.Duration {
 	s.advance(t)
 
 	if s.n == 0 {
@@ -137,11 +139,11 @@ func (s *SMA) SampleIntervalWithTime(t time.Time) time.Duration {
 
 // Rate ...
 func (s *SMA) Rate(d time.Duration) uint64 {
-	return s.RateWithTime(d, time.Now())
+	return s.RateWithTime(d, timeutil.Now())
 }
 
 // RateWithTime ...
-func (s *SMA) RateWithTime(d time.Duration, t time.Time) uint64 {
+func (s *SMA) RateWithTime(d time.Duration, t timeutil.Time) uint64 {
 	s.advance(t)
 
 	if s.wl == 0 {
@@ -152,11 +154,11 @@ func (s *SMA) RateWithTime(d time.Duration, t time.Time) uint64 {
 
 // SampleRate ...
 func (s *SMA) SampleRate(d time.Duration) uint64 {
-	return s.SampleRateWithTime(d, time.Now())
+	return s.SampleRateWithTime(d, timeutil.Now())
 }
 
 // SampleRateWithTime ...
-func (s *SMA) SampleRateWithTime(d time.Duration, t time.Time) uint64 {
+func (s *SMA) SampleRateWithTime(d time.Duration, t timeutil.Time) uint64 {
 	s.advance(t)
 
 	if s.wl == 0 {

@@ -4,8 +4,8 @@ import (
 	"math"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/stats"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 const (
@@ -52,8 +52,8 @@ func New() *Controller {
 		cwnd: initCWND * mss,
 		cto:  time.Second,
 
-		lastDataLoss: time.Unix(0, 0),
-		lastAckTime:  time.Unix(0, math.MaxInt64),
+		lastDataLoss: timeutil.NilTime,
+		lastAckTime:  timeutil.MaxTime,
 		rttMean:      stats.NewEMA(coefAlpha),
 		rttVar:       stats.NewEMA(coefBeta),
 		debug:        false,
@@ -75,7 +75,7 @@ type Controller struct {
 	currentDelays     []time.Duration
 	baseDelayIndex    int
 	currentDelayIndex int
-	lastRollover      time.Time
+	lastRollover      timeutil.Time
 
 	flightSize int
 	cwnd       int
@@ -83,8 +83,8 @@ type Controller struct {
 	// congestion timeout
 	cto time.Duration
 
-	lastDataLoss time.Time
-	lastAckTime  time.Time
+	lastDataLoss timeutil.Time
+	lastAckTime  timeutil.Time
 	rttMean      stats.EMA
 	rttVar       stats.EMA
 
@@ -140,7 +140,7 @@ func (l *Controller) AddDelaySample(d time.Duration, size int) {
 
 	l.ackSize += size
 
-	l.lastAckTime = iotime.Load()
+	l.lastAckTime = timeutil.Now()
 }
 
 func (l *Controller) updateCurrentDelay(d time.Duration) {
@@ -152,7 +152,7 @@ func (l *Controller) updateCurrentDelay(d time.Duration) {
 }
 
 func (l *Controller) updateBaseDelay(d time.Duration) {
-	now := iotime.Load().Truncate(time.Minute)
+	now := timeutil.Now().Truncate(time.Minute)
 	if now != l.lastRollover {
 		l.lastRollover = now
 
@@ -174,7 +174,7 @@ func (l *Controller) updateBaseDelay(d time.Duration) {
 func (l *Controller) DigestDelaySamples() {
 	// if no acks have been received in cto (heavy congestion) reset cwnd
 	// and adjust cto
-	if l.flightSize > 0 && iotime.Load().Sub(l.lastAckTime) > l.cto {
+	if l.flightSize > 0 && timeutil.Now().Sub(l.lastAckTime) > l.cto {
 		l.cwnd = minCWND * mss
 		l.cto = 2 * l.cto
 		if l.cto > time.Second {
@@ -230,10 +230,10 @@ func (l *Controller) AddDataLoss(size int, retransmitting bool) {
 	// if timeout < time.Second*2 {
 	// 	timeout = time.Second * 2
 	// }
-	if l.lastDataLoss.IsZero() && iotime.Load().Sub(l.lastDataLoss) < timeout {
+	if l.lastDataLoss.IsNil() && timeutil.Now().Sub(l.lastDataLoss) < timeout {
 		return
 	}
-	l.lastDataLoss = iotime.Load()
+	l.lastDataLoss = timeutil.Now()
 
 	cwnd := l.cwnd / 2
 	if min := minCWND * mss; min > cwnd {

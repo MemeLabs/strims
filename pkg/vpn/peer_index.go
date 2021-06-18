@@ -17,6 +17,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -244,8 +245,8 @@ func (p *peerIndexItem) ID() kademlia.ID {
 }
 
 // Deadline implements timeoutQueueItem
-func (p *peerIndexItem) Deadline() time.Time {
-	return time.Unix(p.Record().Timestamp, 0).Add(peerIndexMaxRecordAge)
+func (p *peerIndexItem) Deadline() timeutil.Time {
+	return timeutil.Unix(p.Record().Timestamp, 0).Add(peerIndexMaxRecordAge)
 }
 
 // newPeerIndexStore ...
@@ -257,7 +258,7 @@ func newPeerIndexStore(ctx context.Context, logger *zap.Logger, hostID kademlia.
 		discardQueue: newTimeoutQueue(ctx, peerIndexDiscardInterval, peerIndexMaxRecordAge),
 	}
 
-	p.ticker = TickerFunc(ctx, peerIndexDiscardInterval, p.tick)
+	p.ticker = timeutil.TickerBFunc(ctx, peerIndexDiscardInterval, p.tick)
 
 	return p
 }
@@ -269,10 +270,10 @@ type PeerIndexStore struct {
 	lock         sync.Mutex
 	records      *llrb.LLRB
 	discardQueue *timeoutQueue
-	ticker       *Ticker
+	ticker       *timeutil.TickerB
 }
 
-func (p *PeerIndexStore) tick(t time.Time) {
+func (p *PeerIndexStore) tick(t timeutil.Time) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -381,7 +382,7 @@ func peerIndexRecordHash(key, salt []byte) []byte {
 
 // PeerIndexHost ...
 type PeerIndexHost struct {
-	Timestamp time.Time
+	Timestamp timeutil.Time
 	HostID    kademlia.ID
 	Port      uint16
 }
@@ -397,7 +398,7 @@ func sendPeerIndexSearchResponse(chans *sync.Map, requestID uint64, r *vpnv1.Pee
 		return false
 	}
 	h := &PeerIndexHost{
-		Timestamp: time.Unix(r.Timestamp, 0),
+		Timestamp: timeutil.Unix(r.Timestamp, 0),
 		HostID:    hostID,
 		Port:      uint16(r.Port),
 	}
@@ -430,7 +431,7 @@ func newPeerIndexPublisher(ctx context.Context, logger *zap.Logger, network *Net
 		network: network,
 	}
 
-	p.ticker = TickerFuncWithCleanup(ctx, peerIndexPublishInterval, p.publish, p.unpublish)
+	p.ticker = timeutil.TickerBFuncWithCleanup(ctx, peerIndexPublishInterval, p.publish, p.unpublish)
 
 	return p, nil
 }
@@ -440,18 +441,18 @@ type peerIndexPublisher struct {
 	record  *vpnv1.PeerIndexMessage_Record
 	target  kademlia.ID
 	network *Network
-	ticker  *Ticker
+	ticker  *timeutil.TickerB
 }
 
 func (p *peerIndexPublisher) update() error {
-	p.record.Timestamp = time.Now().Unix()
+	p.record.Timestamp = timeutil.Now().Unix()
 	if err := dao.SignMessage(p.record, p.network.host.Key()); err != nil {
 		return err
 	}
 	return nil
 }
 
-func (p *peerIndexPublisher) publish(t time.Time) {
+func (p *peerIndexPublisher) publish(t timeutil.Time) {
 	if err := p.update(); err != nil {
 		return
 	}

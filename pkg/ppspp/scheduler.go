@@ -1,12 +1,12 @@
 package ppspp
 
 import (
-	"math"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
 )
 
@@ -14,21 +14,21 @@ type SwarmScheduler interface {
 	store.Subscriber
 	ChannelScheduler(p peerThing, cw channelWriterThing) ChannelScheduler
 	CloseChannel(p peerThing)
-	Run(t time.Time)
+	Run(t timeutil.Time)
 }
 
 type PeerWriter interface {
 	Write(maxBytes int) (int, error)
-	WriteData(maxBytes int, b binmap.Bin, t time.Time, pri peerPriority) (int, error)
+	WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error)
 }
 
 type ChannelScheduler interface {
 	PeerWriter
 	HandleHandshake(liveWindow uint32) error
 	HandleAck(b binmap.Bin, delaySample time.Duration) error
-	HandleData(b binmap.Bin, t time.Time, valid bool) error
+	HandleData(b binmap.Bin, t timeutil.Time, valid bool) error
 	HandleHave(b binmap.Bin) error
-	HandleRequest(b binmap.Bin, t time.Time) error
+	HandleRequest(b binmap.Bin, t timeutil.Time) error
 	HandleCancel(b binmap.Bin) error
 	HandleChoke() error
 	HandleUnchoke() error
@@ -43,11 +43,11 @@ type ChannelScheduler interface {
 
 type peerThing interface {
 	ID() []byte
-	addReceivedBytes(uint64, time.Time)
+	addReceivedBytes(uint64, timeutil.Time)
 	enqueue(t *PeerWriterQueueTicket, w PeerWriter)
 	enqueueNow(t *PeerWriterQueueTicket, w PeerWriter)
-	pushData(w PeerWriter, b binmap.Bin, t time.Time, pri peerPriority)
-	pushFrontData(w PeerWriter, b binmap.Bin, t time.Time, pri peerPriority)
+	pushData(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
+	pushFrontData(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
 	removeData(w PeerWriter, b binmap.Bin, pri peerPriority)
 	closeChannel(w PeerWriter)
 }
@@ -94,6 +94,3 @@ const (
 func streamBinOffset(s codec.Stream) binmap.Bin {
 	return binmap.Bin(s * 2)
 }
-
-var epochTime = time.Unix(0, 0)
-var maxTime = time.Unix(0, math.MaxInt64)

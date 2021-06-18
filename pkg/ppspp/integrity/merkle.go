@@ -9,10 +9,10 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/bufioutil"
-	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/merkle"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 // errors ...
@@ -82,7 +82,7 @@ func (v *MerkleSwarmVerifier) segment(b binmap.Bin) *merkleTreeSegment {
 	return v.segments[i&v.mask]
 }
 
-func (v *MerkleSwarmVerifier) storeSegment(ts time.Time, tree *merkle.Tree, sig []byte) {
+func (v *MerkleSwarmVerifier) storeSegment(ts timeutil.Time, tree *merkle.Tree, sig []byte) {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
@@ -177,12 +177,12 @@ var segmentPool = sync.Pool{
 
 type merkleTreeSegment struct {
 	sync.Mutex
-	Timestamp time.Time
+	Timestamp timeutil.Time
 	Signature []byte
 	Tree      *merkle.Tree
 }
 
-func (s *merkleTreeSegment) Reset(ts time.Time, tree *merkle.Tree, sig []byte) {
+func (s *merkleTreeSegment) Reset(ts timeutil.Time, tree *merkle.Tree, sig []byte) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -242,7 +242,7 @@ func (v *MerkleChannelVerifier) ChunkVerifier(b binmap.Bin) ChunkVerifier {
 type MerkleChunkVerifier struct {
 	bin           binmap.Bin
 	swarmVerifier *MerkleSwarmVerifier
-	timestamp     time.Time
+	timestamp     timeutil.Time
 	signature     []byte
 	tree          *merkle.Tree
 }
@@ -255,7 +255,7 @@ func (v *MerkleChunkVerifier) Reset(b binmap.Bin) {
 }
 
 // SetSignedIntegrity ...
-func (v *MerkleChunkVerifier) SetSignedIntegrity(b binmap.Bin, ts time.Time, sig []byte) {
+func (v *MerkleChunkVerifier) SetSignedIntegrity(b binmap.Bin, ts timeutil.Time, sig []byte) {
 	v.timestamp = ts
 	v.signature = append(v.signature[:0], sig...)
 }
@@ -322,7 +322,7 @@ type MerkleWriterOptions struct {
 // NewMerkleWriter ...
 func NewMerkleWriter(o *MerkleWriterOptions) *MerkleWriter {
 	mw := &merkleWriter{
-		epochNanos:      time.Duration(iotime.Load().UnixNano()),
+		epochNanos:      time.Duration(timeutil.Now().UnixNano()),
 		munroLayer:      uint64(bits.TrailingZeros64(uint64(o.ChunksPerSignature))),
 		swarmVerifier:   o.Verifier,
 		signatureSigner: o.Signer,
@@ -362,7 +362,7 @@ func (w *merkleWriter) Write(p []byte) (int, error) {
 	b := binmap.NewBin(w.munroLayer, w.n)
 	w.n++
 
-	ts := iotime.Load().Add(-w.epochNanos)
+	ts := timeutil.Now().Add(-w.epochNanos)
 	tree := w.swarmVerifier.tree(b)
 	tree.Fill(b, p)
 	sig := w.signatureSigner.Sign(ts, tree.Get(b))

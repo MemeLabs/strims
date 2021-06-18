@@ -8,9 +8,9 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/bufioutil"
-	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 // errors ...
@@ -32,7 +32,7 @@ func NewSignAllSwarmVerifier(o *SignAllOptions) *SignAllSwarmVerifier {
 	return &SignAllSwarmVerifier{
 		mask:              uint64(o.LiveDiscardWindow - 1),
 		size:              binmap.Bin(o.LiveDiscardWindow * 2),
-		timestamps:        make([]time.Time, o.LiveDiscardWindow),
+		timestamps:        make([]timeutil.Time, o.LiveDiscardWindow),
 		signatures:        make([]byte, o.LiveDiscardWindow*o.Verifier.Size()),
 		chunkSize:         o.ChunkSize,
 		signatureVerifier: o.Verifier,
@@ -45,7 +45,7 @@ type SignAllSwarmVerifier struct {
 	mask              uint64
 	size              binmap.Bin
 	head, tail        binmap.Bin
-	timestamps        []time.Time
+	timestamps        []timeutil.Time
 	signatures        []byte
 	chunkSize         int
 	signatureVerifier SignatureVerifier
@@ -80,7 +80,7 @@ func (v *SignAllSwarmVerifier) WriteIntegrity(b binmap.Bin, m *binmap.Map, w Wri
 	return n, nil
 }
 
-func (v *SignAllSwarmVerifier) storeSignature(b binmap.Bin, ts time.Time, sig []byte) {
+func (v *SignAllSwarmVerifier) storeSignature(b binmap.Bin, ts timeutil.Time, sig []byte) {
 	v.lock.Lock()
 	defer v.lock.Unlock()
 
@@ -126,12 +126,12 @@ func (v *SignAllChannelVerifier) ChunkVerifier(b binmap.Bin) ChunkVerifier {
 type SignAllChunkVerifier struct {
 	swarmVerifier *SignAllSwarmVerifier
 	bin           binmap.Bin
-	timestamps    []time.Time
+	timestamps    []timeutil.Time
 	signatures    []byte
 }
 
 // SetSignedIntegrity ...
-func (v *SignAllChunkVerifier) SetSignedIntegrity(b binmap.Bin, ts time.Time, sig []byte) {
+func (v *SignAllChunkVerifier) SetSignedIntegrity(b binmap.Bin, ts timeutil.Time, sig []byte) {
 	if v.bin == binmap.None {
 		v.bin = b
 	}
@@ -189,7 +189,7 @@ type SignAllWriterOptions struct {
 // NewSignAllWriter ...
 func NewSignAllWriter(o *SignAllWriterOptions) *SignAllWriter {
 	sw := &signAllWriter{
-		epochNanos:      time.Duration(iotime.Load().UnixNano()),
+		epochNanos:      time.Duration(timeutil.Now().UnixNano()),
 		swarmVerifier:   o.Verifier,
 		signatureSigner: o.Signer,
 		w:               o.Writer,
@@ -223,7 +223,7 @@ type signAllWriter struct {
 }
 
 func (w *signAllWriter) Write(p []byte) (int, error) {
-	ts := iotime.Load().Add(-w.epochNanos)
+	ts := timeutil.Now().Add(-w.epochNanos)
 	sig := w.signatureSigner.Sign(ts, p)
 	w.swarmVerifier.storeSignature(w.b, ts, sig)
 

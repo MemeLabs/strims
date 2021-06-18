@@ -3,9 +3,9 @@ package integrity
 import (
 	"crypto/ed25519"
 	"encoding/binary"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 // NewED25519Signer ...
@@ -19,7 +19,7 @@ type ED25519Signer struct {
 }
 
 // Sign ...
-func (s *ED25519Signer) Sign(t time.Time, p []byte) []byte {
+func (s *ED25519Signer) Sign(t timeutil.Time, p []byte) []byte {
 	b := pool.Get(len(p) + 8)
 	defer pool.Put(b)
 	binary.BigEndian.PutUint64(*b, uint64(t.UnixNano()))
@@ -44,7 +44,7 @@ type ED25519Verifier struct {
 }
 
 // Verify ...
-func (s *ED25519Verifier) Verify(t time.Time, p []byte, sig []byte) bool {
+func (s *ED25519Verifier) Verify(t timeutil.Time, p []byte, sig []byte) bool {
 	b := pool.Get(len(p) + 8)
 	defer pool.Put(b)
 	binary.BigEndian.PutUint64(*b, uint64(t.UnixNano()))

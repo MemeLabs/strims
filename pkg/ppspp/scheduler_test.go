@@ -2,19 +2,19 @@ package ppspp
 
 import (
 	"errors"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 type mockPeerThing struct {
 	id                   []byte
-	addReceivedBytesFunc func(n uint64, t time.Time)
+	addReceivedBytesFunc func(n uint64, t timeutil.Time)
 	enqueueFunc          func(t *PeerWriterQueueTicket, w PeerWriter)
 	enqueueNowFunc       func(t *PeerWriterQueueTicket, w PeerWriter)
-	pushDataFunc         func(w PeerWriter, b binmap.Bin, t time.Time, pri peerPriority)
-	pushFrontDataFunc    func(w PeerWriter, b binmap.Bin, t time.Time, pri peerPriority)
+	pushDataFunc         func(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
+	pushFrontDataFunc    func(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
 	removeDataFunc       func(w PeerWriter, b binmap.Bin, pri peerPriority)
 	closeChannelFunc     func(w PeerWriter)
 }
@@ -22,7 +22,7 @@ type mockPeerThing struct {
 func (p *mockPeerThing) ID() []byte {
 	return p.id
 }
-func (p *mockPeerThing) addReceivedBytes(n uint64, t time.Time) {
+func (p *mockPeerThing) addReceivedBytes(n uint64, t timeutil.Time) {
 	if p.addReceivedBytesFunc != nil {
 		p.addReceivedBytesFunc(n, t)
 	}
@@ -37,12 +37,12 @@ func (p *mockPeerThing) enqueueNow(t *PeerWriterQueueTicket, w PeerWriter) {
 		p.enqueueNowFunc(t, w)
 	}
 }
-func (p *mockPeerThing) pushData(w PeerWriter, b binmap.Bin, t time.Time, pri peerPriority) {
+func (p *mockPeerThing) pushData(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
 	if p.pushDataFunc != nil {
 		p.pushDataFunc(w, b, t, pri)
 	}
 }
-func (p *mockPeerThing) pushFrontData(w PeerWriter, b binmap.Bin, t time.Time, pri peerPriority) {
+func (p *mockPeerThing) pushFrontData(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
 	if p.pushFrontDataFunc != nil {
 		p.pushFrontDataFunc(w, b, t, pri)
 	}

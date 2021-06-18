@@ -2,6 +2,7 @@ package ppspp
 
 import (
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 type timeSet struct {
@@ -9,7 +10,7 @@ type timeSet struct {
 	freeHead *timeSetNode
 }
 
-func (t *timeSet) Set(bin binmap.Bin, time int64) int64 {
+func (t *timeSet) Set(bin binmap.Bin, time timeutil.Time) timeutil.Time {
 	if t.root == nil {
 		t.root = t.allocNode(bin, 0)
 	}
@@ -34,7 +35,7 @@ func (t *timeSet) Unset(bin binmap.Bin) {
 	}
 }
 
-func (t *timeSet) Get(bin binmap.Bin) (int64, bool) {
+func (t *timeSet) Get(bin binmap.Bin) (timeutil.Time, bool) {
 	n := t.root.get(bin)
 	if n == nil || n.time == 0 {
 		return 0, false
@@ -82,10 +83,10 @@ type timeSetNode struct {
 	right *timeSetNode
 	bin   binmap.Bin
 	count uint64
-	time  int64
+	time  timeutil.Time
 }
 
-func (r *timeSetNode) set(b binmap.Bin, t int64, a timeSetNodeAllocator) *timeSetNode {
+func (r *timeSetNode) set(b binmap.Bin, t timeutil.Time, a timeSetNodeAllocator) *timeSetNode {
 	if r.bin == b {
 		if r.time == 0 {
 			r.count = r.bin.BaseLength()

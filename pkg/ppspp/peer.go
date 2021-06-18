@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/stats"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
@@ -33,7 +32,7 @@ func newPeer(id []byte, w Conn, t timeutil.Ticker) *Peer {
 	p := &Peer{
 		id:     id,
 		w:      w,
-		ready:  make(chan time.Time, 1),
+		ready:  make(chan timeutil.Time, 1),
 		ticker: t,
 
 		receivedBytes: stats.NewSMA(60, time.Second),
@@ -47,7 +46,7 @@ func newPeer(id []byte, w Conn, t timeutil.Ticker) *Peer {
 type Peer struct {
 	id []byte
 
-	ready  chan time.Time
+	ready  chan timeutil.Time
 	ticker timeutil.Ticker
 
 	lock sync.Mutex
@@ -77,13 +76,13 @@ func (p *Peer) closeChannel(c PeerWriter) {
 	p.lock.Unlock()
 }
 
-func (p *Peer) addReceivedBytes(n uint64, t time.Time) {
+func (p *Peer) addReceivedBytes(n uint64, t timeutil.Time) {
 	p.lock.Lock()
 	p.receivedBytes.AddWithTime(n, t)
 	p.lock.Unlock()
 }
 
-func (p *Peer) runAt(t time.Time) {
+func (p *Peer) runAt(t timeutil.Time) {
 	select {
 	case p.ready <- t:
 	default:
@@ -91,34 +90,34 @@ func (p *Peer) runAt(t time.Time) {
 }
 
 func (p *Peer) runNow() {
-	p.runAt(iotime.Load())
+	p.runAt(timeutil.Now())
 }
 
-func (p *Peer) enqueueAt(qt *PeerWriterQueueTicket, cs PeerWriter, t time.Time) {
+func (p *Peer) enqueueAt(qt *PeerWriterQueueTicket, cs PeerWriter, t timeutil.Time) {
 	p.lock.Lock()
 	ok := p.wq.Push(qt, cs)
 	p.lock.Unlock()
 
-	if ok || !t.IsZero() {
+	if ok || !t.IsNil() {
 		p.runAt(t)
 	}
 }
 
 func (p *Peer) enqueue(qt *PeerWriterQueueTicket, cs PeerWriter) {
-	p.enqueueAt(qt, cs, time.Time{})
+	p.enqueueAt(qt, cs, timeutil.NilTime)
 }
 
 func (p *Peer) enqueueNow(qt *PeerWriterQueueTicket, cs PeerWriter) {
-	p.enqueueAt(qt, cs, iotime.Load())
+	p.enqueueAt(qt, cs, timeutil.Now())
 }
 
-func (p *Peer) pushData(cs PeerWriter, b binmap.Bin, t time.Time, pri peerPriority) {
+func (p *Peer) pushData(cs PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
 	p.lock.Lock()
 	p.ds[pri].Push(cs, b, t)
 	p.lock.Unlock()
 }
 
-func (p *Peer) pushFrontData(cs PeerWriter, b binmap.Bin, t time.Time, pri peerPriority) {
+func (p *Peer) pushFrontData(cs PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
 	p.lock.Lock()
 	p.ds[pri].PushFront(cs, b, t)
 	p.lock.Unlock()
@@ -131,9 +130,9 @@ func (p *Peer) removeData(cs PeerWriter, b binmap.Bin, pri peerPriority) {
 }
 
 func (p *Peer) run() {
-	var t time.Time
+	var t timeutil.Time
 	for t = range p.ready {
-		for t.IsZero() {
+		for t.IsNil() {
 			var ok bool
 			select {
 			case t, ok = <-p.ticker.C:

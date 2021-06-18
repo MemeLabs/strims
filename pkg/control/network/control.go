@@ -3,7 +3,6 @@ package network
 import (
 	"context"
 	"errors"
-	"math"
 	"sync"
 	"time"
 
@@ -18,6 +17,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/services/ca"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -81,7 +81,7 @@ type Control struct {
 	events            chan interface{}
 	dialer            *dialer.Control
 	certRenewTimeout  *time.Timer
-	nextCertRenewTime time.Time
+	nextCertRenewTime timeutil.Time
 	networks          map[uint64]*network
 	peers             map[uint64]*Peer
 	certificates      *certificateMap
@@ -349,7 +349,7 @@ func (t *Control) scheduleCertRenewal() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	minNextTime := time.Unix(math.MaxInt64, 0)
+	minNextTime := timeutil.MaxTime
 
 	for _, n := range t.networks {
 		nextTime := nextCertificateRenewTime(n.network)
@@ -358,7 +358,7 @@ func (t *Control) scheduleCertRenewal() {
 		}
 	}
 
-	now := time.Now()
+	now := timeutil.Now()
 
 	if minNextTime.Before(now) {
 		minNextTime = now
@@ -374,7 +374,7 @@ func (t *Control) renewExpiredCerts() {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	now := time.Now()
+	now := timeutil.Now()
 	t.nextCertRenewTime = now.Add(certRecheckInterval)
 
 	for _, n := range t.networks {

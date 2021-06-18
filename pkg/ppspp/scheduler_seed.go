@@ -12,6 +12,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
 )
 
@@ -52,7 +53,7 @@ type seedSwarmScheduler struct {
 	chunkSize         int
 }
 
-func (s *seedSwarmScheduler) Run(c time.Time) {
+func (s *seedSwarmScheduler) Run(c timeutil.Time) {
 	// decide whether to assign a stream to a peer
 }
 
@@ -100,7 +101,7 @@ func (s *seedSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 
 			for it := s.haveBins.IterateFilled(); it.NextBase(); {
 				if s.binStream(it.Value()) == i {
-					p.pushData(c, it.Value(), epochTime, peerPriorityHigh)
+					p.pushData(c, it.Value(), timeutil.EpochTime, peerPriorityHigh)
 				}
 			}
 		}
@@ -167,14 +168,14 @@ func (c *seedChannelScheduler) appendHaveBins(hb, b binmap.Bin) {
 		bs := c.s.binStream(bl)
 		rb, ok := c.peerRequestStreams[bs]
 		if ok && rb <= bl {
-			c.p.pushData(c, bl, epochTime, peerPriorityHigh)
+			c.p.pushData(c, bl, timeutil.EpochTime, peerPriorityHigh)
 		}
 	}
 
 	c.p.enqueue(&c.r, c)
 }
 
-func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t time.Time, pri peerPriority) (int, error) {
+func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error) {
 	if err := c.cw.Resize(maxBytes); err != nil {
 		c.p.pushFrontData(c, b, t, pri)
 		return 0, nil
@@ -334,7 +335,7 @@ func (c *seedChannelScheduler) HandleAck(b binmap.Bin, delaySample time.Duration
 	return nil
 }
 
-func (c *seedChannelScheduler) HandleData(b binmap.Bin, t time.Time, valid bool) error {
+func (c *seedChannelScheduler) HandleData(b binmap.Bin, t timeutil.Time, valid bool) error {
 	return nil
 }
 
@@ -346,7 +347,7 @@ func (c *seedChannelScheduler) HandleHave(b binmap.Bin) error {
 	return nil
 }
 
-func (c *seedChannelScheduler) HandleRequest(b binmap.Bin, t time.Time) error {
+func (c *seedChannelScheduler) HandleRequest(b binmap.Bin, t timeutil.Time) error {
 	c.p.pushData(c, b, t, peerPriorityLow)
 
 	atomic.StoreUint32(&c.requestsAdded, 1)

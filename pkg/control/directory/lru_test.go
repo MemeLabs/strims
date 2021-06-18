@@ -4,7 +4,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/iotime"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/petar/GoLLRB/llrb"
 	"github.com/stretchr/testify/assert"
 )
@@ -41,7 +41,7 @@ func TestLRUSetGet(t *testing.T) {
 func TestLRUPeekRecentlyTouched(t *testing.T) {
 	var l lru
 
-	start := iotime.Load()
+	start := timeutil.Now()
 
 	l.GetOrInsert(&testItem{[]byte("a")})
 	l.GetOrInsert(&testItem{[]byte("b")})
@@ -54,7 +54,7 @@ func TestLRUPeekRecentlyTouched(t *testing.T) {
 	assert.Equal(t, []string{"c", "b", "a"}, keys)
 
 	time.Sleep(time.Millisecond)
-	start = iotime.Load()
+	start = timeutil.Now()
 
 	l.GetOrInsert(&testItem{[]byte("b")})
 	l.GetOrInsert(&testItem{[]byte("d")})

@@ -9,6 +9,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	keyapi "github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 const certPredateDuration = time.Hour
@@ -92,7 +93,7 @@ func SignCertificateRequest(
 	validDuration time.Duration,
 	key *keyapi.Key,
 ) (*certificate.Certificate, error) {
-	now := time.Now().UTC()
+	now := timeutil.Now()
 	cert := &certificate.Certificate{
 		Key:          csr.Key,
 		KeyType:      csr.KeyType,
@@ -124,7 +125,7 @@ func SignCertificateRequest(
 // VerifyCertificate ...
 func VerifyCertificate(cert *certificate.Certificate) error {
 	var errs Errors
-	now := time.Now()
+	now := timeutil.Now()
 
 	for parent := cert.GetParent(); cert != nil; cert, parent = parent, parent.GetParent() {
 		// check that either the certificare is a self-signed root or has a valid
@@ -154,10 +155,10 @@ func VerifyCertificate(cert *certificate.Certificate) error {
 			errs = append(errs, ErrInvalidSignature)
 		}
 
-		if now.Before(time.Unix(int64(cert.NotBefore), 0)) {
+		if now.Before(timeutil.Unix(int64(cert.NotBefore), 0)) {
 			errs = append(errs, ErrNotBeforeRange)
 		}
-		if now.After(time.Unix(int64(cert.NotAfter), 0)) {
+		if now.After(timeutil.Unix(int64(cert.NotAfter), 0)) {
 			errs = append(errs, ErrNotAfterRange)
 		}
 	}
@@ -192,7 +193,7 @@ func GetRootCert(cert *certificate.Certificate) *certificate.Certificate {
 
 // CertIsExpired returns true if the cert NotBefore or NotAfter dates are violated
 func CertIsExpired(cert *certificate.Certificate) bool {
-	now := uint64(time.Now().UTC().Unix())
+	now := uint64(timeutil.Now().Unix())
 	return cert.NotAfter <= now && cert.NotBefore >= now
 }
 

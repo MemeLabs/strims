@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -88,7 +89,7 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 		{
 			src: &Data{
 				Address:   Address(22),
-				Timestamp: Timestamp{Time: time.Unix(1234, 0)},
+				Timestamp: Timestamp{Time: timeutil.New(1234 * int64(time.Millisecond))},
 				Data:      Buffer{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 			},
 			dst: &Data{
@@ -97,12 +98,12 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 			expected: &Data{
 				chunkSize: 16,
 				Address:   Address(22),
-				Timestamp: Timestamp{Time: time.Unix(1234, 0)},
+				Timestamp: Timestamp{Time: timeutil.New(1234 * int64(time.Millisecond))},
 				Data:      Buffer{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 			},
 		},
 		{
-			src: &Timestamp{Time: time.Unix(1234, 0)},
+			src: &Timestamp{Time: timeutil.New(1234 * int64(time.Millisecond))},
 			dst: &Timestamp{},
 		},
 		{
@@ -133,7 +134,7 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 		{
 			src: &SignedIntegrity{
 				Address:   Address(22),
-				Timestamp: Timestamp{Time: time.Unix(1234, 0)},
+				Timestamp: Timestamp{Time: timeutil.New(1234 * int64(time.Millisecond))},
 				Signature: Buffer{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 			},
 			dst: &SignedIntegrity{
@@ -142,7 +143,7 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 			expected: &SignedIntegrity{
 				signatureSize: 16,
 				Address:       Address(22),
-				Timestamp:     Timestamp{Time: time.Unix(1234, 0)},
+				Timestamp:     Timestamp{Time: timeutil.New(1234 * int64(time.Millisecond))},
 				Signature:     Buffer{0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
 			},
 		},
@@ -165,7 +166,7 @@ func TestMessageMarshalUnmarshal(t *testing.T) {
 		{
 			src: &Request{
 				Address:   Address(1234),
-				Timestamp: Timestamp{Time: time.Unix(1234, 0)},
+				Timestamp: Timestamp{Time: timeutil.New(1234 * int64(time.Millisecond))},
 			},
 			dst: &Request{},
 		},

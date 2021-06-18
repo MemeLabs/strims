@@ -13,7 +13,7 @@ func NewTickEmitter(ivl time.Duration) *TickEmitter {
 
 type TickEmitter struct {
 	lock    sync.Mutex
-	chans   []chan time.Time
+	chans   []chan Time
 	t       *funcTicker
 	logOnce sync.Once
 }
@@ -22,7 +22,7 @@ type StopFunc func()
 
 type Ticker struct {
 	stop StopFunc
-	C    <-chan time.Time
+	C    <-chan Time
 }
 
 func (t *Ticker) Stop() {
@@ -33,7 +33,7 @@ func (r *TickEmitter) Stop() {
 	r.t.Stop()
 }
 
-func (r *TickEmitter) Subscribe(fn func(t time.Time)) StopFunc {
+func (r *TickEmitter) Subscribe(fn func(t Time)) StopFunc {
 	ch, stop := r.Chan()
 	go func() {
 		for t := range ch {
@@ -50,8 +50,8 @@ func (r *TickEmitter) Ticker() Ticker {
 	return t
 }
 
-func (r *TickEmitter) Chan() (<-chan time.Time, StopFunc) {
-	ch := make(chan time.Time, 1)
+func (r *TickEmitter) Chan() (<-chan Time, StopFunc) {
+	ch := make(chan Time, 1)
 	stop := func() {
 		r.unsubscribe(ch)
 		close(ch)
@@ -64,7 +64,7 @@ func (r *TickEmitter) Chan() (<-chan time.Time, StopFunc) {
 	return ch, stop
 }
 
-func (r *TickEmitter) unsubscribe(ch chan time.Time) {
+func (r *TickEmitter) unsubscribe(ch chan Time) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	for i := range r.chans {
@@ -78,7 +78,7 @@ func (r *TickEmitter) unsubscribe(ch chan time.Time) {
 	}
 }
 
-func (r *TickEmitter) run(t time.Time) {
+func (r *TickEmitter) run(t Time) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	for _, ch := range r.chans {

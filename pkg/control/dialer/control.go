@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"errors"
 	"sync"
-	"time"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/petar/GoLLRB/llrb"
@@ -42,8 +42,8 @@ func (t *Control) ReplaceOrInsertNetwork(network *networkv1.Network) {
 		return
 	}
 
-	now := time.Now()
-	notAfter := time.Unix(int64(network.Certificate.NotAfter), 0)
+	now := timeutil.Now()
+	notAfter := timeutil.Unix(int64(network.Certificate.NotAfter), 0)
 	if now.After(notAfter) {
 		return
 	}

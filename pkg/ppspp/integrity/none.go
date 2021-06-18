@@ -1,9 +1,8 @@
 package integrity
 
 import (
-	"time"
-
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 var noneChannelVerifier = &NoneChannelVerifier{}
@@ -34,7 +33,7 @@ func (v *NoneChannelVerifier) ChunkVerifier(b binmap.Bin) ChunkVerifier {
 type NoneChunkVerifier struct{}
 
 // SetSignedIntegrity ...
-func (v *NoneChunkVerifier) SetSignedIntegrity(b binmap.Bin, ts time.Time, sig []byte) {}
+func (v *NoneChunkVerifier) SetSignedIntegrity(b binmap.Bin, ts timeutil.Time, sig []byte) {}
 
 // SetIntegrity ...
 func (v *NoneChunkVerifier) SetIntegrity(b binmap.Bin, hash []byte) {}

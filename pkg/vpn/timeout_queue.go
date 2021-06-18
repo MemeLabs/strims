@@ -5,14 +5,16 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 type timeoutQueueItem interface {
-	Deadline() time.Time
+	Deadline() timeutil.Time
 }
 
 func newTimeoutQueue(ctx context.Context, interval, lifespan time.Duration) *timeoutQueue {
-	epoch := time.Now()
+	epoch := timeutil.Now()
 
 	q := &timeoutQueue{
 		expired:  list.New(),
@@ -26,7 +28,7 @@ func newTimeoutQueue(ctx context.Context, interval, lifespan time.Duration) *tim
 		q.windows[i] = list.New()
 	}
 
-	q.ticker = TickerFunc(ctx, interval, q.tick)
+	q.ticker = timeutil.TickerBFunc(ctx, interval, q.tick)
 
 	return q
 }
@@ -36,16 +38,16 @@ type timeoutQueue struct {
 	expired  *list.List
 	windows  []*list.List
 	interval time.Duration
-	epoch    time.Time
-	now      time.Time
-	ticker   *Ticker
+	epoch    timeutil.Time
+	now      timeutil.Time
+	ticker   *timeutil.TickerB
 }
 
-func (q *timeoutQueue) windowIndex(t time.Time) int {
+func (q *timeoutQueue) windowIndex(t timeutil.Time) int {
 	return int(t.Sub(q.epoch)/q.interval) % len(q.windows)
 }
 
-func (q *timeoutQueue) tick(now time.Time) {
+func (q *timeoutQueue) tick(now timeutil.Time) {
 	q.lock.Lock()
 	defer q.lock.Unlock()
 

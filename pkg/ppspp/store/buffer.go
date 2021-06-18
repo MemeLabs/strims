@@ -4,11 +4,11 @@ import (
 	"errors"
 	"log"
 	"sync"
-	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/byterope"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 // errors ...
@@ -146,7 +146,7 @@ type DataWriter interface {
 }
 
 // WriteData ...
-func (s *Buffer) WriteData(b binmap.Bin, t time.Time, w DataWriter) (int, error) {
+func (s *Buffer) WriteData(b binmap.Bin, t timeutil.Time, w DataWriter) (int, error) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 

@@ -7,6 +7,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/binaryutil"
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 // errors ...
@@ -496,7 +497,7 @@ type Data struct {
 }
 
 // NewData ...
-func NewData(chunkSize int, b binmap.Bin, t time.Time, d []byte) *Data {
+func NewData(chunkSize int, b binmap.Bin, t timeutil.Time, d []byte) *Data {
 	return &Data{
 		chunkSize: chunkSize,
 		Address:   Address(b),
@@ -550,13 +551,13 @@ func (v *Data) ByteLen() int {
 
 // Timestamp ...
 type Timestamp struct {
-	time.Time
+	timeutil.Time
 }
 
 // Unmarshal ...
 func (v *Timestamp) Unmarshal(b []byte) (int, error) {
 	vi, n := binary.Varint(b)
-	v.Time = time.Unix(0, vi*timeGranularity)
+	v.Time = timeutil.New(vi * timeGranularity)
 	return n, nil
 }
 

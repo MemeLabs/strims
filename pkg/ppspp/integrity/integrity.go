@@ -8,7 +8,6 @@ import (
 	"errors"
 	"hash"
 	"math/bits"
-	"time"
 
 	"github.com/zeebo/blake3"
 	"golang.org/x/crypto/blake2b"
@@ -17,6 +16,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 // ProtectionMethod ...
@@ -295,19 +295,19 @@ type ChannelVerifier interface {
 
 // ChunkVerifier ...
 type ChunkVerifier interface {
-	SetSignedIntegrity(b binmap.Bin, t time.Time, sig []byte)
+	SetSignedIntegrity(b binmap.Bin, t timeutil.Time, sig []byte)
 	SetIntegrity(b binmap.Bin, hash []byte)
 	Verify(b binmap.Bin, d []byte) (bool, error)
 }
 
 // SignatureSigner ...
 type SignatureSigner interface {
-	Sign(timestamp time.Time, hash []byte) []byte
+	Sign(timestamp timeutil.Time, hash []byte) []byte
 	Size() int
 }
 
 // SignatureVerifier ...
 type SignatureVerifier interface {
-	Verify(timestamp time.Time, hash, sig []byte) bool
+	Verify(timestamp timeutil.Time, hash, sig []byte) bool
 	Size() int
 }

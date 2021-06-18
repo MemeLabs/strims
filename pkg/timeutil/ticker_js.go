@@ -3,8 +3,8 @@
 package timeutil
 
 import (
-	"time"
 	"syscall/js"
+	"time"
 )
 
 /*
@@ -22,13 +22,13 @@ native implementation.
 implement a helper to pass the time to the tick function
 */
 
-func newFuncTicker(ivl time.Duration, fn func(t time.Time)) *funcTicker {
+func newFuncTicker(ivl time.Duration, fn func(t Time)) *funcTicker {
 	jsfn := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		fn(time.Now())
+		fn(Time(args[0].Float()) * Time(time.Millisecond))
 		return nil
 	})
 
-	id := js.Global().Call("setInterval", jsfn, js.ValueOf(int64(ivl / time.Millisecond)))
+	id := js.Global().Call("setInterval", jsfn, js.ValueOf(int64(ivl/time.Millisecond)))
 
 	return &funcTicker{jsfn, id}
 }

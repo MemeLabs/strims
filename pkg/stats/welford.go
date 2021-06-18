@@ -57,8 +57,12 @@ func (w Welford) StdDev() float64 {
 }
 
 func WelfordMerge(ws ...Welford) Welford {
-	c := make([]Welford, len(ws))
-	copy(c, ws)
+	c := make([]Welford, 0, len(ws))
+	for _, w := range ws {
+		if w.count != 0 {
+			c = append(c, w)
+		}
+	}
 	return welfordMerge(c...)
 }
 

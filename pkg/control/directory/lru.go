@@ -2,9 +2,8 @@ package directory
 
 import (
 	"bytes"
-	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/iotime"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/petar/GoLLRB/llrb"
 )
 
@@ -24,7 +23,7 @@ func (l *lru) Get(u keyer) keyer {
 	return nil
 }
 
-func (l *lru) PeekRecentlyTouched(eol time.Time) lruIterator {
+func (l *lru) PeekRecentlyTouched(eol timeutil.Time) lruIterator {
 	return lruIterator{next: l.head, eol: eol}
 }
 
@@ -52,7 +51,7 @@ func (l *lru) Delete(u keyer) {
 	l.head = i.next
 }
 
-func (l *lru) Pop(eol time.Time) keyer {
+func (l *lru) Pop(eol timeutil.Time) keyer {
 	if l.tail == nil || eol.Before(l.tail.time) {
 		return nil
 	}
@@ -85,7 +84,7 @@ func (l *lru) remove(i *lruItem) {
 }
 
 func (l *lru) push(i *lruItem) {
-	i.time = iotime.Load()
+	i.time = timeutil.Now()
 	i.next = l.head
 	i.prev = nil
 
@@ -101,7 +100,7 @@ func (l *lru) push(i *lruItem) {
 
 type lruItem struct {
 	item keyer
-	time time.Time
+	time timeutil.Time
 	prev *lruItem
 	next *lruItem
 }
@@ -117,7 +116,7 @@ func (i *lruItem) Less(o llrb.Item) bool {
 type lruIterator struct {
 	cur  *lruItem
 	next *lruItem
-	eol  time.Time
+	eol  timeutil.Time
 }
 
 func (l *lruIterator) Next() bool {

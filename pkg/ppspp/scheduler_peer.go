@@ -2,7 +2,6 @@ package ppspp
 
 import (
 	"errors"
-	"log"
 	"math"
 	"math/bits"
 	"math/rand"
@@ -12,12 +11,12 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/etcp"
-	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 	"github.com/MemeLabs/go-ppspp/pkg/stats"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 	"go.uber.org/zap"
 )
@@ -31,6 +30,7 @@ const (
 	schedulerStreamCheckInterval = 3 * time.Second
 
 	timeGranularity   = int64(time.Millisecond)
+	minRTTVar         = 200 * time.Millisecond
 	minRequestTimeout = 100 * time.Millisecond
 	maxRequestTimeout = 500 * time.Millisecond
 )
@@ -67,7 +67,7 @@ func (s *peerSchedulerStream) setSource(cs *peerChannelScheduler, b binmap.Bin) 
 	s.receivedChunkCount = 0
 }
 
-func (s *peerSchedulerStream) addReceivedChunk(t time.Time) {
+func (s *peerSchedulerStream) addReceivedChunk(t timeutil.Time) {
 	s.receivedChunkRate.AddWithTime(1, t)
 	s.receivedChunkCount++
 }
@@ -112,7 +112,7 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 	return &peerSwarmScheduler{
 		logger:            logger,
 		swarm:             s,
-		epoch:             iotime.Load(),
+		epoch:             timeutil.Now(),
 		streamCount:       codec.Stream(s.options.StreamCount),
 		streamLayer:       bits.TrailingZeros16(uint16(s.options.StreamCount)),
 		streamBits:        binmap.Bin(s.options.StreamCount) - 1,
@@ -137,22 +137,22 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 		handledData: binmap.New(),
 
 		// HAX
-		lastGCTime:      time.Now().Add(time.Duration(rand.Intn(5000)) * time.Millisecond),
-		rateUpdateTime:  time.Now().Add(time.Duration(rand.Intn(1000)) * time.Millisecond),
-		streamCheckTime: time.Now().Add(time.Duration(rand.Intn(3000)) * time.Millisecond),
+		lastGCTime:      timeutil.Now().Add(time.Duration(rand.Intn(5000)) * time.Millisecond),
+		rateUpdateTime:  timeutil.Now().Add(time.Duration(rand.Intn(1000)) * time.Millisecond),
+		streamCheckTime: timeutil.Now().Add(time.Duration(rand.Intn(3000)) * time.Millisecond),
 
-		lastDataProbeTime: time.Now(),
+		lastDataProbeTime: timeutil.Now(),
 	}
 }
 
 type peerSwarmScheduler struct {
 	logger *zap.Logger
 	swarm  *Swarm
-	epoch  time.Time
+	epoch  timeutil.Time
 
 	lock           sync.Mutex
-	lastGCTime     time.Time
-	rateUpdateTime time.Time
+	lastGCTime     timeutil.Time
+	rateUpdateTime timeutil.Time
 
 	streamCount codec.Stream
 	streamLayer int
@@ -167,7 +167,7 @@ type peerSwarmScheduler struct {
 	haveBinMax binmap.Bin
 
 	peerHaveBins    *binmap.Map
-	streamCheckTime time.Time
+	streamCheckTime timeutil.Time
 
 	requestBins *binmap.Map
 	streams     []peerSchedulerStream
@@ -184,11 +184,11 @@ type peerSwarmScheduler struct {
 	handledData *binmap.Map
 
 	lastDataProbeBin  binmap.Bin
-	lastDataProbeTime time.Time
+	lastDataProbeTime timeutil.Time
 	altDebugHack      bool
 }
 
-func (s *peerSwarmScheduler) Run(t time.Time) {
+func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -224,7 +224,7 @@ func (s *peerSwarmScheduler) Run(t time.Time) {
 	// handle this in runner based on ingress size?
 	// unique but slow peers are also important..?
 
-	if time.Since(s.lastDataProbeTime) >= time.Second*2 {
+	if t.Sub(s.lastDataProbeTime) >= time.Second*2 {
 		b := s.swarm.store.Bins().FindEmpty().BaseLeft()
 		if b == s.lastDataProbeBin {
 			s.logger.Debug("alt debugging enabled")
@@ -239,7 +239,7 @@ func (s *peerSwarmScheduler) Run(t time.Time) {
 
 // var glock sync.Mutex
 
-func (s *peerSwarmScheduler) checkStreams(t time.Time) {
+func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
 	// glock.Lock()
 	// defer glock.Unlock()
 
@@ -296,11 +296,10 @@ func (s *peerSwarmScheduler) checkStreams(t time.Time) {
 			rates[cs] = cs.dataRTT.SampleRateWithTime(time.Second, t)
 		}
 
-		// log.Println("memes ----")
 		for i := codec.Stream(0); i < s.streamCount; i++ {
 			stream := &s.streams[i]
-			if stream.source != nil {
 
+			if stream.source != nil {
 				rate := stream.receivedChunkRate.RateWithTime(time.Second, t)
 				ratePct := float64(rate) / float64(expectedRate)
 
@@ -338,19 +337,15 @@ func (s *peerSwarmScheduler) checkStreams(t time.Time) {
 				continue
 			}
 
-			// for i := codec.Stream(4); i == 4; i++ {
 			lags = lags[:0]
 			for _, cs := range s.channels {
-				if cs.streamHaveLag[i].Count() > 0 {
-					lags = append(lags, cs.streamHaveLag[i])
-				}
+				lags = append(lags, cs.streamHaveLag[i])
 			}
-			if len(lags) == 0 {
-				continue
-			}
-			// log.Println(spew.Sdump(lags))
 
 			lag := stats.WelfordMerge(lags...)
+			if lag.Count() == 0 {
+				continue
+			}
 
 			var minCS *peerChannelScheduler
 			var minLag = math.Inf(1)
@@ -458,15 +453,15 @@ func (s *peerSwarmScheduler) Consume(c store.Chunk) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	now := iotime.Load()
+	now := timeutil.Now()
 	for it := s.haveBins.IterateEmptyAt(c.Bin); it.NextBase(); {
-		stream := s.streams[s.binStream(it.Value())]
+		stream := &s.streams[s.binStream(it.Value())]
 		stream.addReceivedChunk(now)
 		stream.updatePeerHaveMax(it.Value())
 
 		for _, sub := range stream.subscribers {
 			if sub.startBin <= it.Value() {
-				sub.channel.p.pushData(sub.channel, it.Value(), epochTime, peerPriorityHigh)
+				sub.channel.p.pushData(sub.channel, it.Value(), timeutil.EpochTime, peerPriorityHigh)
 			}
 		}
 	}
@@ -535,7 +530,8 @@ func (s *peerSwarmScheduler) CloseChannel(p peerThing) {
 	}
 
 	cs.lock.Lock()
-	for i, stream := range s.streams {
+	for i := range s.streams {
+		stream := &s.streams[i]
 		stream.removeSubscriber(cs)
 		if stream.source != nil && stream.source.channel == cs {
 			cs.closeStream(codec.Stream(i))
@@ -643,7 +639,7 @@ func (c *peerChannelScheduler) timeOutRequests() {
 	var n uint64
 	var bins []uint64
 
-	for ri := c.requestBins.IterateLessThan(iotime.Load().UnixNano()); ri.Next(); {
+	for ri := c.requestBins.IterateLessThan(timeutil.Now()); ri.Next(); {
 		for ei := c.s.haveBins.IterateEmptyAt(ri.Value()); ei.NextBase(); {
 			// if (binmap.Bin(22).Contains(ei.Value()) || ei.Value().Contains(22)) && c.s.debugHack {
 			// 	log.Println(">>> timed out request")
@@ -678,14 +674,14 @@ func (c *peerChannelScheduler) timeOutRequests() {
 }
 
 func (c *peerChannelScheduler) clearRequests() {
-	for ri := c.requestBins.IterateLessThan(maxTime.UnixNano()); ri.Next(); {
+	for ri := c.requestBins.IterateLessThan(timeutil.MaxTime); ri.Next(); {
 		for ei := c.s.haveBins.IterateEmptyAt(ri.Value()); ei.NextBase(); {
 			c.s.requestBins.Reset(ei.Value())
 		}
 	}
 }
 
-func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t time.Time, pri peerPriority) (int, error) {
+func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error) {
 	// TODO: this should run on a timer
 	// c.timeOutRequests()
 
@@ -834,9 +830,8 @@ func (c *peerChannelScheduler) write1() error {
 		min = m
 	}
 
-	now := iotime.Load()
-	ts := now.UnixNano()
-	timeout := now.Add(c.requestTimeout()).UnixNano()
+	now := timeutil.Now()
+	timeout := now.Add(c.requestTimeout())
 	// debug.LogfEveryN(
 	// 	100,
 	// 	"request timeout %s flightSize: %d cwnd %d",
@@ -872,7 +867,7 @@ func (c *peerChannelScheduler) write1() error {
 
 				// c.requestSent.Set(b)
 				c.s.requestBins.Set(b)
-				c.requestTimes.Set(b, ts)
+				c.requestTimes.Set(b, now)
 				c.requestBins.Push(b, timeout)
 				c.flightSize += b.BaseLength()
 
@@ -898,7 +893,7 @@ func (c *peerChannelScheduler) requestTimeout() time.Duration {
 	if rtt == 0 {
 		return maxRequestTimeout
 	}
-	return time.Duration(rtt + math.Max(200, 4*c.dataRTTVar.Value())*float64(timeGranularity))
+	return time.Duration(rtt + math.Max(float64(minRTTVar), 4*c.dataRTTVar.Value()))
 
 	// if c.dataRTT.Count() == 0 {
 	// 	return maxRequestTimeout
@@ -974,7 +969,7 @@ func (c *peerChannelScheduler) addStreamOpen(s codec.Stream, b binmap.Bin) {
 	it := c.s.haveBins.IterateFilled()
 	for ok := it.NextBaseAfter(b); ok; ok = it.NextBase() {
 		if c.s.binStream(it.Value()) == s {
-			c.p.pushData(c, it.Value(), epochTime, peerPriorityHigh)
+			c.p.pushData(c, it.Value(), timeutil.EpochTime, peerPriorityHigh)
 		}
 	}
 
@@ -1039,7 +1034,7 @@ func (c *peerChannelScheduler) HandleAck(b binmap.Bin, delaySample time.Duration
 var tb, tc, td uint64
 var waste, nw uint64
 
-func (c *peerChannelScheduler) HandleData(b binmap.Bin, t time.Time, valid bool) error {
+func (c *peerChannelScheduler) HandleData(b binmap.Bin, t timeutil.Time, valid bool) error {
 	// if (binmap.Bin(22).Contains(b) || b.Contains(22)) && c.s.debugHack {
 	// 	log.Printf(">>> got data: bin %d valid %t", b, valid)
 	// }
@@ -1100,20 +1095,20 @@ func (c *peerChannelScheduler) HandleData(b binmap.Bin, t time.Time, valid bool)
 		return nil
 	}
 
-	ntc := atomic.AddUint64(&tc, 1)
-	ntb := atomic.AddUint64(&tb, b.BaseLength()*uint64(c.s.chunkSize))
-	if ntc%1000 == 0 {
-		log.Printf("HandleData bytes: %d chunks: %d", ntb, ntc)
-	}
+	// ntc := atomic.AddUint64(&tc, 1)
+	// ntb := atomic.AddUint64(&tb, b.BaseLength()*uint64(c.s.chunkSize))
+	// if ntc%1000 == 0 {
+	// 	log.Printf("HandleData bytes: %d chunks: %d", ntb, ntc)
+	// }
 
-	now := iotime.Load().Round(time.Millisecond)
+	now := timeutil.Now()
 
 	c.p.addReceivedBytes(b.BaseLength()*uint64(c.s.chunkSize), now)
 
 	c.lock.Lock()
-	if ts, ok := c.requestTimes.Get(b); ok && ts == t.UnixNano() {
+	if ts, ok := c.requestTimes.Get(b); ok && ts == t {
 		// LEDBAT rtt...
-		rtt := float64((now.UnixNano() - ts) / timeGranularity)
+		rtt := float64(now.Sub(ts))
 		if c.dataRTTMean.Value() == 0 {
 			c.dataRTTMean.Set(rtt)
 			c.dataRTTVar.Set(rtt / 2)
@@ -1123,7 +1118,7 @@ func (c *peerChannelScheduler) HandleData(b binmap.Bin, t time.Time, valid bool)
 		}
 		c.dataRTT.AddNWithTime(b.BaseLength(), uint64(rtt), now)
 
-		c.etcp.OnAck(time.Duration(now.UnixNano() - ts))
+		c.etcp.OnAck(now.Sub(ts))
 		if l := b.BaseLength(); c.flightSize < l {
 			c.flightSize = 0
 		} else {
@@ -1140,19 +1135,18 @@ var za, zb int64
 func (c *peerChannelScheduler) HandleHave(b binmap.Bin) error {
 	// TODO: reject far future/past bins
 
-	t := iotime.Load()
-	ts := t.UnixNano()
+	t := timeutil.Now()
 
 	c.s.lock.Lock()
-	// tts := time.Now()
-	c.s.binTimes.Set(b, ts)
+	// tts := timeutil.Now()
+	c.s.binTimes.Set(b, t)
 
 	c.lock.Lock()
 
 	for it := c.peerHaveBins.IterateEmptyAt(b); it.NextBase(); {
 		first, _ := c.s.binTimes.Get(it.Value())
 		stream := c.s.binStream(it.Value())
-		c.streamHaveLag[stream].Update(float64((ts - first) / timeGranularity))
+		c.streamHaveLag[stream].Update(float64(t.Sub(first)))
 		c.s.streams[stream].updatePeerHaveMax(it.Value())
 	}
 
@@ -1189,7 +1183,7 @@ func (c *peerChannelScheduler) HandleHave(b binmap.Bin) error {
 	return nil
 }
 
-func (c *peerChannelScheduler) HandleRequest(b binmap.Bin, t time.Time) error {
+func (c *peerChannelScheduler) HandleRequest(b binmap.Bin, t timeutil.Time) error {
 	// c.lock.Lock()
 	// if !c.requested.EmptyAt(b) {
 	// 	cancelled := !c.cancelled.EmptyAt(b)

@@ -6,7 +6,6 @@ import (
 	"errors"
 	"syscall/js"
 
-	"github.com/MemeLabs/go-ppspp/pkg/iotime"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 )
 
@@ -74,7 +73,8 @@ func (p *channel) Write(b []byte) (int, error) {
 
 	data := jsUint8Array.New(len(b))
 	js.CopyBytesToJS(data, b)
-	p.proxy.Call("write", data)
+	now := p.proxy.Call("write", data)
+	syncTime(now.Int())
 	return len(b), nil
 }
 
@@ -121,7 +121,7 @@ func (p *channel) closeWithError(err error) {
 }
 
 func (p *channel) onData(this js.Value, args []js.Value) interface{} {
-	iotime.Store(int64(args[2].Float()))
+	syncTime(args[2].Int())
 	b := pool.Get(args[1].Int())
 	js.CopyBytesToGo(*b, args[0])
 	p.q <- b

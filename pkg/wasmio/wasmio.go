@@ -5,6 +5,8 @@ package wasmio
 import (
 	"errors"
 	"syscall/js"
+
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 var jsObject = js.Global().Get("Object")
@@ -15,6 +17,10 @@ var ErrClosed = errors.New("read/write on closed proxy")
 
 // ErrOperationTimeout ...
 var ErrOperationTimeout = errors.New("operation timed out")
+
+func syncTime(t int) {
+	timeutil.SyncNow(int64(t * 1000000))
+}
 
 func interfacesFromStrings(ss []string) []interface{} {
 	ifs := make([]interface{}, len(ss))

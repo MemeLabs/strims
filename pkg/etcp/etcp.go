@@ -50,7 +50,7 @@ func (c *Control) OnAck(rtt time.Duration) {
 
 // OnDataLoss ...
 func (c *Control) OnDataLoss() {
-	// now := iotime.Load()
+	// now := timeutil.Now()
 	// if now.Sub(c.lastDataLoss) > time.Duration(c.rttCur) {
 	c.cwnd /= 2
 	if c.cwnd < 2 {

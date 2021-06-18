@@ -46,7 +46,7 @@ type Runner struct {
 	peers  map[*Peer]*ChannelReader
 	ticker *timeutil.TickEmitter
 
-	nextPeerQOSUpdate time.Time
+	nextPeerQOSUpdate timeutil.Time
 }
 
 // RunChannel ...
@@ -151,7 +151,7 @@ func (r *Runner) StopPeer(p *Peer) {
 	p.close()
 }
 
-func (r *Runner) run(t time.Time) {
+func (r *Runner) run(t timeutil.Time) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
@@ -164,7 +164,7 @@ func (r *Runner) run(t time.Time) {
 const PeerQOSUpdateInterval = time.Second
 const MinPeerQOSWeight = 50
 
-func (r *Runner) updatePeerWeights(t time.Time) {
+func (r *Runner) updatePeerWeights(t timeutil.Time) {
 	var totalBytes uint64
 	for p := range r.peers {
 		p.lock.Lock()

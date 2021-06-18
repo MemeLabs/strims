@@ -12,6 +12,7 @@ import (
 
 	daov1 "github.com/MemeLabs/go-ppspp/pkg/apis/dao/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
 )
 
@@ -59,7 +60,7 @@ func (m *Mutex) Lock(ctx context.Context) (context.Context, error) {
 
 // TryLock ...
 func (m *Mutex) TryLock(ctx context.Context) (context.Context, error) {
-	if err := m.try(time.Now()); err != nil {
+	if err := m.try(timeutil.Now()); err != nil {
 		return nil, err
 	}
 
@@ -87,7 +88,7 @@ func (m *Mutex) poll(ctx context.Context, cancel context.CancelFunc, ch chan err
 			return
 
 		case t := <-time.After(m.nextTick):
-			if err := m.try(t); err == nil && !m.held {
+			if err := m.try(timeutil.NewFromTime(t)); err == nil && !m.held {
 				m.held = true
 				ch <- nil
 			} else if err != nil && m.held {
@@ -98,7 +99,7 @@ func (m *Mutex) poll(ctx context.Context, cancel context.CancelFunc, ch chan err
 	}
 }
 
-func (m *Mutex) try(t time.Time) error {
+func (m *Mutex) try(t timeutil.Time) error {
 	err := m.store.Update(func(tx kv.RWTx) error {
 		now := t.UnixNano()
 
