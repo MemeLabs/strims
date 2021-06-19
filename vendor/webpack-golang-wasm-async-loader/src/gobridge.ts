@@ -20,8 +20,10 @@ const caller = (name: string) => (...args: any) => new Promise((resolve, reject)
 });
 
 export default function(wasmPath: string) {
-  return async (baseURI: string) => {
+  return async (baseURI: string, wasmio: unknown) => {
     const go = new g.Go();
+    go.wasmio = wasmio;
+
     const bytes = await fetch(`${baseURI}/${wasmPath}`).then(res => res.arrayBuffer());
     const result = await WebAssembly.instantiate(bytes, go.importObject);
     go.run(result.instance);

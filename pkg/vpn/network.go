@@ -14,14 +14,13 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 	"google.golang.org/protobuf/proto"
 )
 
 // newNetwork ...
-func newNetwork(logger *zap.Logger, host *vnic.Host, qosc *qos.Class, certificate *certificate.Certificate, recentMessageIDs *lru.Cache) *Network {
+func newNetwork(logger *zap.Logger, host *vnic.Host, qosc *qos.Class, certificate *certificate.Certificate, recentMessageIDs *messageIDLRU) *Network {
 	return &Network{
 		logger:           logger,
 		host:             host,
@@ -90,7 +89,7 @@ type Network struct {
 	qosc             *qos.Class
 	seq              uint64
 	certificate      *certificate.Certificate
-	recentMessageIDs *lru.Cache
+	recentMessageIDs *messageIDLRU
 	linksLock        sync.Mutex
 	links            *kademlia.KBucket
 	handlersLock     sync.Mutex
@@ -238,7 +237,7 @@ func (n *Network) handleFrame(p *vnic.Peer, f vnic.Frame) error {
 		n.nextHop.Insert(m.Trailer.Entries[i].HostID, m.Trailer.Entries[lastHopIndex].HostID, lastHopIndex-i)
 	}
 
-	if ok, _ := n.recentMessageIDs.ContainsOrAdd(m.ID(), struct{}{}); ok {
+	if ok := n.recentMessageIDs.Insert(m.ID()); !ok {
 		return nil
 	}
 

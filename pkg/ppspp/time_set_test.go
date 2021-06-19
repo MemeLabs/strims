@@ -98,6 +98,6 @@ func BenchmarkTimeGet(b *testing.B) {
 	var n int64
 	for i := binmap.Bin(0); i < binmap.Bin(b.N*2); i += 2 {
 		nn, _ := s.Get(i & m)
-		n += nn
+		n += nn.UnixNano()
 	}
 }

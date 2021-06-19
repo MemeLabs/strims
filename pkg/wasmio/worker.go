@@ -10,7 +10,7 @@ import (
 func NewWorkerProxy(bridge js.Value, service string) *Bus {
 	ch := make(chan *Bus, 1)
 	openBus := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		b, proxy := newBusFromProxy(args[0])
+		b, proxy := newBusFromProxy(args[0].Int())
 		ch <- b
 		return proxy
 	})

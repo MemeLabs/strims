@@ -26,18 +26,18 @@ func newChannel(mtu int, bridge js.Value, method string, args ...interface{}) (*
 	proxy.Set("ondata", p.funcs.Register(js.FuncOf(p.onData)))
 	proxy.Set("onclose", p.funcs.Register(js.FuncOf(p.onClose)))
 	proxy.Set("onerror", p.funcs.Register(js.FuncOf(p.onError)))
-	p.proxy = bridge.Call(method, append(args, proxy)...)
+	p.id = bridge.Call(method, append(args, proxy)...).Int()
 
 	<-p.q
 
 	return p, p.err
 }
 
-func newChannelFromProxy(mtu int, v js.Value) (*channel, js.Value) {
+func newChannelFromProxy(mtu int, id int) (*channel, js.Value) {
 	p := &channel{
-		mtu:   mtu,
-		proxy: v,
-		q:     make(chan *[]byte, 16),
+		mtu: mtu,
+		id:  id,
+		q:   make(chan *[]byte, 16),
 	}
 
 	proxy := jsObject.New()
@@ -51,7 +51,7 @@ func newChannelFromProxy(mtu int, v js.Value) (*channel, js.Value) {
 // channel ...
 type channel struct {
 	mtu    int
-	proxy  js.Value
+	id     int
 	funcs  Funcs
 	q      chan *[]byte
 	b      *[]byte
@@ -71,10 +71,12 @@ func (p *channel) Write(b []byte) (int, error) {
 		return 0, p.err
 	}
 
-	data := jsUint8Array.New(len(b))
-	js.CopyBytesToJS(data, b)
-	now := p.proxy.Call("write", data)
-	syncTime(now.Int())
+	t, ok := channelWrite(p.id, b)
+	if !ok {
+		return 0, ErrClosed
+	}
+
+	syncTime(t)
 	return len(b), nil
 }
 
@@ -107,7 +109,7 @@ func (p *channel) Read(b []byte) (n int, err error) {
 // Close ...
 func (p *channel) Close() error {
 	p.closeWithError(ErrClosed)
-	p.proxy.Call("close")
+	channelClose(p.id)
 	p.funcs.Release()
 	return nil
 }
@@ -121,9 +123,14 @@ func (p *channel) closeWithError(err error) {
 }
 
 func (p *channel) onData(this js.Value, args []js.Value) interface{} {
-	syncTime(args[2].Int())
-	b := pool.Get(args[1].Int())
-	js.CopyBytesToGo(*b, args[0])
+	b := pool.Get(args[0].Int())
+	t, ok := channelRead(p.id, *b)
+	if !ok {
+		p.closeWithError(ErrClosed)
+		return nil
+	}
+
+	syncTime(t)
 	p.q <- b
 	return nil
 }

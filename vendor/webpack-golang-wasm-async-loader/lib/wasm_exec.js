@@ -110,9 +110,9 @@
 	// 		},
 	// 	};
 	// }
-	// if (!global.crypto) {
-	// 	throw new Error("global.crypto is not available, polyfill required (getRandomValues only)");
-	// }
+	if (!global.crypto) {
+		throw new Error("global.crypto is not available, polyfill required (getRandomValues only)");
+	}
 
 	// if (!global.performance) {
 	// 	global.performance = {
@@ -126,16 +126,16 @@
 	// if (!global.TextEncoder && global.require) {
 	// 	global.TextEncoder = require("util").TextEncoder;
 	// }
-	// if (!global.TextEncoder) {
-	// 	throw new Error("global.TextEncoder is not available, polyfill required");
-	// }
+	if (!global.TextEncoder) {
+		throw new Error("global.TextEncoder is not available, polyfill required");
+	}
 
 	// if (!global.TextDecoder && global.require) {
 	// 	global.TextDecoder = require("util").TextDecoder;
 	// }
-	// if (!global.TextDecoder) {
-	// 	throw new Error("global.TextDecoder is not available, polyfill required");
-	// }
+	if (!global.TextDecoder) {
+		throw new Error("global.TextDecoder is not available, polyfill required");
+	}
 
 	// End of polyfills for common API.
 
@@ -296,8 +296,8 @@
 						setInt64(sp + 8, (timeOrigin + performance.now()) * 1000000);
 					},
 
-					// func walltime1() (sec int64, nsec int32)
-					"runtime.walltime1": (sp) => {
+					// func walltime() (sec int64, nsec int32)
+					"runtime.walltime": (sp) => {
 						sp >>>= 0;
 						const msec = (new Date).getTime();
 						setInt64(sp + 8, msec / 1000);
@@ -401,6 +401,7 @@
 							storeValue(sp + 56, result);
 							this.mem.setUint8(sp + 64, 1);
 						} catch (err) {
+							sp = this._inst.exports.getsp() >>> 0; // see comment above
 							storeValue(sp + 56, err);
 							this.mem.setUint8(sp + 64, 0);
 						}
@@ -417,6 +418,7 @@
 							storeValue(sp + 40, result);
 							this.mem.setUint8(sp + 48, 1);
 						} catch (err) {
+							sp = this._inst.exports.getsp() >>> 0; // see comment above
 							storeValue(sp + 40, err);
 							this.mem.setUint8(sp + 48, 0);
 						}
@@ -433,6 +435,7 @@
 							storeValue(sp + 40, result);
 							this.mem.setUint8(sp + 48, 1);
 						} catch (err) {
+							sp = this._inst.exports.getsp() >>> 0; // see comment above
 							storeValue(sp + 40, err);
 							this.mem.setUint8(sp + 48, 0);
 						}
@@ -497,6 +500,36 @@
 
 					"debug": (value) => {
 						console.log(value);
+					},
+
+					// func channelWrite(cid int, src []byte) (int, bool)
+					"github.com/MemeLabs/go-ppspp/pkg/wasmio.channelWrite": (sp) => {
+						sp >>>= 0
+						const cid = getInt64(sp + 8);
+						const src = loadSlice(sp + 16);
+						const copy = new Uint8Array(src.length);
+						copy.set(src);
+						const ok = this.wasmio.channelWrite(cid, copy);
+						setInt64(sp + 40, Date.now());
+						this.mem.setUint8(sp + 48, ok ? 1 : 0);
+					},
+
+					// func channelRead(cid int, b []byte) (int, bool)
+					"github.com/MemeLabs/go-ppspp/pkg/wasmio.channelRead": (sp) => {
+						sp >>>= 0
+						const cid = getInt64(sp + 8);
+						const dst = loadSlice(sp + 16);
+						const ok = this.wasmio.channelRead(cid, dst);
+						setInt64(sp + 40, Date.now());
+						this.mem.setUint8(sp + 48, ok ? 1 : 0);
+					},
+
+					// func channelClose(cid int) bool
+					"github.com/MemeLabs/go-ppspp/pkg/wasmio.channelClose": (sp) => {
+						sp >>>= 0
+						const cid = getInt64(sp + 8);
+						const ok = this.wasmio.channelClose(cid);
+						this.mem.setUint8(sp + 16, ok ? 1 : 0);
 					},
 				}
 			};

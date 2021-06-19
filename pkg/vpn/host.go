@@ -5,19 +5,20 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/event"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
-	lru "github.com/hashicorp/golang-lru"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
 
 const reservedPortCount = 1000
-const recentMessageIDHistoryLength = 100000
+const recentMessageIDHistoryDefaultSize = 1024
+const recentMessageIDHistoryTTL = 30 * time.Second
 const maxMessageHops = 5
 const maxMessageReplicas = 5
 const qosClassWeight = 1
@@ -36,18 +37,16 @@ var (
 
 // New ...
 func New(logger *zap.Logger, vnic *vnic.Host) (*Host, error) {
-	recentMessageIDs, err := lru.New(recentMessageIDHistoryLength)
-	if err != nil {
-		return nil, err
-	}
-
 	return &Host{
-		logger:           logger,
-		vnic:             vnic,
-		qosc:             vnic.QOS().AddClass(qosClassWeight),
-		recentMessageIDs: recentMessageIDs,
-		hashTableStore:   newHashTableStore(context.Background(), logger, vnic.ID()),
-		peerIndexStore:   newPeerIndexStore(context.Background(), logger, vnic.ID()),
+		logger: logger,
+		vnic:   vnic,
+		qosc:   vnic.QOS().AddClass(qosClassWeight),
+		recentMessageIDs: newMessageIDLRU(
+			recentMessageIDHistoryDefaultSize,
+			recentMessageIDHistoryTTL,
+		),
+		hashTableStore: newHashTableStore(context.Background(), logger, vnic.ID()),
+		peerIndexStore: newPeerIndexStore(context.Background(), logger, vnic.ID()),
 	}, nil
 }
 
@@ -60,7 +59,7 @@ type Host struct {
 	nodes                nodeMap
 	networkObservers     event.Observer
 	peerNetworkObservers event.Observer
-	recentMessageIDs     *lru.Cache
+	recentMessageIDs     *messageIDLRU
 	hashTableStore       *HashTableStore
 	peerIndexStore       *PeerIndexStore
 }

@@ -22,16 +22,16 @@ func NewBus(api js.Value, label string) *Bus {
 	proxy := jsObject.New()
 	proxy.Set("ondata", p.funcs.Register(js.FuncOf(p.onData)))
 	proxy.Set("onclose", p.funcs.Register(js.FuncOf(p.onClose)))
-	p.proxy = api.Call("openBus", label, proxy)
+	p.id = api.Call("openBus", label, proxy).Int()
 
 	return p
 }
 
 // newBusFromProxy ...
-func newBusFromProxy(v js.Value) (*Bus, js.Value) {
+func newBusFromProxy(id int) (*Bus, js.Value) {
 	p := &Bus{
-		proxy: v,
-		q:     make(chan []byte, 16),
+		id: id,
+		q:  make(chan []byte, 16),
 	}
 
 	proxy := jsObject.New()
@@ -43,7 +43,7 @@ func newBusFromProxy(v js.Value) (*Bus, js.Value) {
 
 // Bus ...
 type Bus struct {
-	proxy  js.Value
+	id     int
 	funcs  Funcs
 	q      chan []byte
 	b      []byte
@@ -58,10 +58,12 @@ func (p *Bus) Write(b []byte) (int, error) {
 		return 0, p.err
 	}
 
-	data := jsUint8Array.New(len(b))
-	js.CopyBytesToJS(data, b)
-	now := p.proxy.Call("write", data)
-	syncTime(now.Int())
+	t, ok := channelWrite(p.id, b)
+	if !ok {
+		return 0, ErrClosed
+	}
+
+	syncTime(t)
 	return len(b), nil
 }
 
@@ -94,7 +96,7 @@ func (p *Bus) Read(b []byte) (n int, err error) {
 // Close ...
 func (p *Bus) Close() error {
 	p.closeWithError(ErrClosed)
-	p.proxy.Call("close")
+	channelClose(p.id)
 	p.funcs.Release()
 	return nil
 }
@@ -108,9 +110,7 @@ func (p *Bus) closeWithError(err error) {
 }
 
 func (p *Bus) onData(this js.Value, args []js.Value) interface{} {
-	syncTime(args[2].Int())
-
-	n := args[1].Int()
+	n := args[0].Int()
 	b := busBuffers.Get().([]byte)
 
 	if n > cap(b) {
@@ -118,7 +118,12 @@ func (p *Bus) onData(this js.Value, args []js.Value) interface{} {
 	}
 	b = b[:n]
 
-	js.CopyBytesToGo(b, args[0])
+	t, ok := channelRead(p.id, b)
+	if !ok {
+		return ErrClosed
+	}
+
+	syncTime(t)
 	p.q <- b
 	return nil
 }

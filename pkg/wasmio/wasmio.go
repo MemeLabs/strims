@@ -22,6 +22,10 @@ func syncTime(t int) {
 	timeutil.SyncNow(int64(t * 1000000))
 }
 
+func channelWrite(cid int, src []byte) (int, bool)
+func channelRead(cid int, dst []byte) (int, bool)
+func channelClose(cid int) bool
+
 func interfacesFromStrings(ss []string) []interface{} {
 	ifs := make([]interface{}, len(ss))
 	for i, s := range ss {

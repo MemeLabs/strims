@@ -487,18 +487,19 @@ interface WebRTCProxy {
 
 export interface ChannelGoProxy {
   onerror(message: string): void;
-  ondata(data: Uint8Array, n: number, timestamp: number): void;
+  ondata(n: number): void;
   onclose(): void;
   onopen(): void;
 }
 
 interface ChannelProxy {
-  write: (data: Uint8Array) => number;
+  write: (data: Uint8Array) => void;
+  read: () => Uint8Array | undefined;
   close: () => void;
 }
 
 export interface ServiceGoProxy {
-  openBus(any): ChannelGoProxy;
+  openBus(number): ChannelGoProxy;
 }
 
 interface KVStoreProxy {
@@ -510,8 +511,73 @@ interface KVStoreProxy {
   commit: (done: (error: string | null) => void) => void;
 }
 
+interface WasmIO {
+  channelWrite: (id: number, data: Uint8Array) => boolean;
+  channelRead: (id: number, data: Uint8Array) => boolean;
+  channelClose: (id: number) => boolean;
+}
+
+class ReadQueue {
+  data?: Uint8Array;
+
+  set(data: Uint8Array): void {
+    this.data = data;
+  }
+
+  get(): Uint8Array {
+    const {data} = this;
+    this.data = undefined;
+    return data;
+  }
+}
+
 export class WorkerBridge {
-  public openWebSocket(uri: string, proxy: ChannelGoProxy): ChannelProxy {
+  private channelId = 0;
+  private channels = new Map<number, ChannelProxy>();
+
+  private channelOpen(ch: ChannelProxy): number {
+    const id = this.channelId++;
+    this.channels.set(id, ch);
+    return id;
+  }
+
+  private channelClose(id: number): boolean {
+    const ch = this.channels.get(id);
+    if (ch) {
+      this.channels.delete(id);
+      ch.close();
+      return true;
+    }
+    return false;
+  }
+
+  public wasmio(): WasmIO {
+    return {
+      channelWrite: (id: number, data: Uint8Array): boolean => {
+        const ch = this.channels.get(id);
+        if (ch) {
+          ch.write(data);
+          return true;
+        }
+        return false;
+      },
+      channelRead: (id: number, data: Uint8Array): boolean => {
+        const ch = this.channels.get(id);
+        if (ch) {
+          const src = ch.read();
+          if (!src || data.length < src.length) {
+            return false;
+          }
+          data.set(src);
+          return true;
+        }
+        return false;
+      },
+      channelClose: (id: number): boolean => this.channelClose(id),
+    };
+  }
+
+  public openWebSocket(uri: string, proxy: ChannelGoProxy): number {
     const ws = new WebSocket(uri);
 
     const onclose = () => {
@@ -519,7 +585,10 @@ export class WorkerBridge {
       ws.onclose = null;
       ws.onerror = null;
       ws.onmessage = null;
+      this.channelClose(cid);
     };
+
+    const queue = new ReadQueue();
 
     ws.binaryType = "arraybuffer";
     ws.onopen = () => proxy.onopen();
@@ -528,19 +597,21 @@ export class WorkerBridge {
       proxy.onclose();
     };
     ws.onerror = (e: ErrorEvent) => proxy.onerror(String(e.message || "unknown websocket error"));
-    ws.onmessage = ({ data }: MessageEvent<ArrayBuffer>) =>
-      proxy.ondata(new Uint8Array(data), data.byteLength, Date.now());
+    ws.onmessage = ({ data }: MessageEvent<ArrayBuffer>) => {
+      queue.set(new Uint8Array(data));
+      proxy.ondata(data.byteLength);
+    };
 
-    return {
-      write: (data: Uint8Array): number => {
-        ws.send(data);
-        return Date.now();
-      },
+    const cid = this.channelOpen({
+      write: (data: Uint8Array) => ws.send(data),
+      read: () => queue.get(),
       close: () => {
         onclose();
         ws.close();
       },
-    };
+    });
+
+    return cid;
   }
 
   public openWebRTC(proxy: WebRTCGoProxy): WebRTCProxy {
@@ -623,11 +694,13 @@ export class WorkerBridge {
 
   // openDataChannel opens a data channel created by a call to openWebRTC. This
   // allows multiple workers to share an RTCPeerConnection.
-  public openDataChannel(id: number, proxy: ChannelGoProxy): ChannelProxy {
+  public openDataChannel(id: number, proxy: ChannelGoProxy): number {
     const { port1, port2 } = new MessageChannel() as GenericChannel<
       WebRTCDataChannelMessagePort,
       void
     >;
+
+    const queue = new ReadQueue();
 
     const ready = new Promise<WebRTCDataChannelMessagePort>((resolve, reject) => {
       port1.onmessage = ({ data: port }) => {
@@ -637,6 +710,7 @@ export class WorkerBridge {
           const err = new Error("data channel invalid or in use");
           proxy.onerror(err.message);
           reject(err);
+          this.channelClose(cid);
           return;
         }
         resolve(port);
@@ -645,7 +719,8 @@ export class WorkerBridge {
           // console.log("worker data channel event", data);
           switch (data.type) {
             case EventType.DATA_CHANNEL_DATA:
-              proxy.ondata(new Uint8Array(data.data), data.data.byteLength, Date.now());
+              queue.set(new Uint8Array(data.data));
+              proxy.ondata(data.data.byteLength);
               break;
             case EventType.DATA_CHANNEL_OPEN:
               proxy.onopen();
@@ -653,6 +728,7 @@ export class WorkerBridge {
             case EventType.DATA_CHANNEL_CLOSE:
               proxy.onclose();
               port.close();
+              this.channelClose(cid);
               break;
           }
         };
@@ -668,8 +744,8 @@ export class WorkerBridge {
       [port2]
     );
 
-    return {
-      write: ({ buffer }: Uint8Array): number => {
+    const cid = this.channelOpen({
+      write: ({ buffer }: Uint8Array) => {
         void ready.then((port) =>
           port.postMessage(
             {
@@ -679,8 +755,8 @@ export class WorkerBridge {
             [buffer]
           )
         );
-        return Date.now();
       },
+      read: () => queue.get(),
       close: () => {
         void ready.then((port) => {
           port.postMessage({
@@ -689,7 +765,9 @@ export class WorkerBridge {
           port.close();
         });
       },
-    };
+    });
+
+    return cid;
   }
 
   public openWorker(service: string, proxy: ServiceGoProxy): void {
@@ -698,8 +776,10 @@ export class WorkerBridge {
       WorkerWorkerEvent
     >;
 
+    const queue = new ReadQueue();
+
     port1.onmessage = ({ data: { port } }) => {
-      const bus = proxy.openBus({
+      const cid = this.channelOpen({
         write: ({ buffer }: Uint8Array) => {
           port.postMessage(
             {
@@ -710,19 +790,24 @@ export class WorkerBridge {
           );
           return Date.now();
         },
+        read: () => queue.get(),
         close: () => {
           port.postMessage({ type: EventType.CLOSE });
           port1.postMessage({ type: EventType.CLOSE });
         },
       });
 
+      const bus = proxy.openBus(cid);
+
       port.onmessage = ({ data }) => {
         switch (data.type) {
           case EventType.DATA:
-            bus.ondata(new Uint8Array(data.data), data.data.byteLength, Date.now());
+            queue.set(new Uint8Array(data.data));
+            bus.ondata(data.data.byteLength);
             break;
           case EventType.CLOSE:
             bus.onclose();
+            this.channelClose(cid);
             break;
         }
       };
@@ -738,16 +823,20 @@ export class WorkerBridge {
     );
   }
 
-  public openBus(label: string, proxy: ChannelGoProxy): ChannelProxy {
+  public openBus(label: string, proxy: ChannelGoProxy): number {
     const { port1, port2 } = new MessageChannel() as GenericChannel<BusEvent, BusEvent>;
+
+    const queue = new ReadQueue();
 
     port1.onmessage = ({ data }: MessageEvent<BusEvent>) => {
       switch (data.type) {
         case EventType.DATA:
-          proxy.ondata(new Uint8Array(data.data), data.data.byteLength, Date.now());
+          queue.set(new Uint8Array(data.data));
+          proxy.ondata(data.data.byteLength);
           break;
         case EventType.CLOSE:
           proxy.onclose();
+          this.channelClose(cid);
           break;
       }
     };
@@ -761,19 +850,20 @@ export class WorkerBridge {
       [port2]
     );
 
-    return {
-      write: ({ buffer }: Uint8Array): number => {
+    const cid = this.channelOpen({
+      write: ({ buffer }: Uint8Array) =>
         port1.postMessage(
           {
             type: EventType.DATA,
             data: buffer,
           },
           [buffer]
-        );
-        return Date.now();
-      },
+        ),
+      read: () => queue.get(),
       close: () => port1.postMessage({ type: EventType.CLOSE }),
-    };
+    });
+
+    return cid;
   }
 
   public openKVStore(name: string, createTable: boolean, readOnly: boolean): KVStoreProxy {
