@@ -16,13 +16,13 @@ const frameHeaderLen = 4
 type FrameHeader struct {
 	Port   uint16
 	Length uint16
+	raw    [4]byte
 }
 
 // WriteTo ...
 func (f FrameHeader) WriteTo(w io.Writer) (int64, error) {
-	var t [4]byte
-	f.Marshal(t[:])
-	n, err := w.Write(t[:])
+	f.Marshal(f.raw[:])
+	n, err := w.Write(f.raw[:])
 	return int64(n), err
 }
 
@@ -35,9 +35,8 @@ func (f FrameHeader) Marshal(b []byte) int {
 
 // ReadFrom ...
 func (f *FrameHeader) ReadFrom(r io.Reader) (int64, error) {
-	var t [4]byte
-	n, err := io.ReadFull(r, t[:])
-	f.Unmarshal(t[:])
+	n, err := io.ReadFull(r, f.raw[:])
+	f.Unmarshal(f.raw[:])
 	return int64(n), err
 }
 

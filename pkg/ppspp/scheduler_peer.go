@@ -194,7 +194,7 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 
 	if t.Sub(s.lastGCTime) >= schedulerGCInterval {
 		s.lastGCTime = t
-		s.gc()
+		s.gc(t)
 	}
 
 	if t.Sub(s.streamCheckTime) >= schedulerStreamCheckInterval {
@@ -434,14 +434,17 @@ func (s *peerSwarmScheduler) doStreamSub(cs *peerChannelScheduler, stream codec.
 	}
 }
 
-func (s *peerSwarmScheduler) gc() {
-	binTimesThreshold := s.haveBinMax - s.liveWindow*2
-	s.binTimes.Prune(binTimesThreshold)
-
-	requestTimesThreshold := s.haveBins.FindEmptyAfter(s.haveBinMax - s.liveWindow)
-	if requestTimesThreshold.IsNone() {
-		requestTimesThreshold = s.haveBins.RootBin().BaseRight()
+func (s *peerSwarmScheduler) gc(t timeutil.Time) {
+	// TODO: store this so we don't record times for out of bounds haves
+	// TODO: base this on est 99th percentile peer have lag?
+	if s.peerHaveChunkRate.SampleCountWithTime(t) > 10 {
+		maxBins := binmap.Bin(s.peerHaveChunkRate.RateWithTime(30*time.Second, t) * 2)
+		if maxBins < s.haveBinMax {
+			s.binTimes.Prune(s.haveBinMax - maxBins)
+		}
 	}
+
+	requestTimesThreshold := s.swarm.Reader().Next()
 	for _, cs := range s.channels {
 		cs.lock.Lock()
 		cs.requestTimes.Prune(requestTimesThreshold)

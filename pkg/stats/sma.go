@@ -107,6 +107,17 @@ func (s *SMA) ValueWithTime(t timeutil.Time) uint64 {
 	return s.v / s.n
 }
 
+// SampleCount ...
+func (s *SMA) SampleCount() uint64 {
+	return s.SampleCountWithTime(timeutil.Now())
+}
+
+// SampleCountWithTime ...
+func (s *SMA) SampleCountWithTime(t timeutil.Time) uint64 {
+	s.advance(t)
+	return s.n
+}
+
 // Interval ...
 func (s *SMA) Interval() time.Duration {
 	return s.IntervalWithTime(timeutil.Now())

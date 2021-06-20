@@ -8,7 +8,7 @@ import (
 )
 
 func TestLRU(t *testing.T) {
-	l := newMessageIDLRU(64, 50*time.Millisecond)
+	l := newMessageIDLRU(64, time.Millisecond)
 
 	assert.True(t, l.Insert(MessageID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 	assert.True(t, l.Insert(MessageID{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
@@ -16,6 +16,27 @@ func TestLRU(t *testing.T) {
 
 	assert.False(t, l.Insert(MessageID{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 	assert.False(t, l.Insert(MessageID{2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
+}
+
+func TestLRUTTL(t *testing.T) {
+	l := newMessageIDLRU(64, 2*time.Millisecond)
+
+	assert.True(t, l.Insert(MessageID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
+	assert.True(t, l.Insert(MessageID{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
+
+	time.Sleep(time.Millisecond)
+
+	assert.False(t, l.Insert(MessageID{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
+	assert.True(t, l.Insert(MessageID{2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
+
+	time.Sleep(time.Millisecond)
+
+	assert.True(t, l.Insert(MessageID{3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
+
+	assert.False(t, l.Contains(MessageID{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
+	assert.True(t, l.Contains(MessageID{1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
+	assert.True(t, l.Contains(MessageID{2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
+	assert.True(t, l.Contains(MessageID{3, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}))
 }
 
 func TestLRUItemFind(t *testing.T) {
@@ -41,6 +62,8 @@ func BenchmarkLRU(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		var id MessageID
 		id[0] = byte(i)
+		id[1] = byte(i >> 8)
+		id[2] = byte(i >> 16)
 		l.Insert(id)
 	}
 }

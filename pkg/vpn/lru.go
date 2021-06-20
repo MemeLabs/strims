@@ -2,7 +2,6 @@ package vpn
 
 import (
 	"hash/maphash"
-	"log"
 	"math/bits"
 	"sync"
 	"time"
@@ -15,9 +14,10 @@ import (
 func newMessageIDLRU(size int, ttl time.Duration) *messageIDLRU {
 	size = 1 << bits.Len(uint(size))
 	l := &messageIDLRU{
-		ttl:  ttl,
-		mask: uint64(size - 1),
-		v:    make([]*messageIDLRUItem, size),
+		ttl:    ttl,
+		nextGC: timeutil.Now().Add(ttl),
+		mask:   uint64(size - 1),
+		v:      make([]*messageIDLRUItem, size),
 	}
 	l.h.SetSeed(maphash.MakeSeed())
 	return l
@@ -26,9 +26,9 @@ func newMessageIDLRU(size int, ttl time.Duration) *messageIDLRU {
 type messageIDLRU struct {
 	mu          sync.Mutex
 	len         int
-	new         int
 	mask        uint64
 	ttl         time.Duration
+	nextGC      timeutil.Time
 	h           maphash.Hash
 	v           []*messageIDLRUItem
 	freeTop     *messageIDLRUItem
@@ -41,6 +41,7 @@ type messageIDLRUItem struct {
 	t    timeutil.Time
 	list *messageIDLRUItem
 	next *messageIDLRUItem
+	prev *messageIDLRUItem
 }
 
 func (e *messageIDLRUItem) find(id MessageID) *messageIDLRUItem {
@@ -71,14 +72,7 @@ func (l *messageIDLRU) index(id MessageID) uint {
 
 func (l *messageIDLRU) alloc() (e *messageIDLRUItem) {
 	l.len++
-	l.new++
-
-	if l.new*2 > len(l.v) {
-		l.prune(timeutil.Now().Add(-l.ttl))
-		l.new = 0
-	}
-
-	if l.len*2 > len(l.v) {
+	if l.len*3/4 > len(l.v) {
 		l.grow()
 	}
 
@@ -94,6 +88,7 @@ func (l *messageIDLRU) alloc() (e *messageIDLRUItem) {
 func (l *messageIDLRU) free(e *messageIDLRUItem) {
 	l.len--
 	e.list = nil
+	e.prev = nil
 	e.next = l.freeTop
 	l.freeTop = e
 }
@@ -116,7 +111,7 @@ func (l *messageIDLRU) grow() {
 
 func (l *messageIDLRU) prune(t timeutil.Time) {
 	e := l.first
-	for e != nil && e.t < t {
+	for e != nil && e.t.Before(t) {
 		l.v[e.i] = l.v[e.i].remove(e)
 		ne := e.next
 		l.free(e)
@@ -125,6 +120,8 @@ func (l *messageIDLRU) prune(t timeutil.Time) {
 	l.first = e
 	if e == nil {
 		l.last = nil
+	} else {
+		e.prev = nil
 	}
 }
 
@@ -144,19 +141,45 @@ func (l *messageIDLRU) Insert(id MessageID) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 
+	t := timeutil.Now()
+	if t.After(l.nextGC) {
+		l.nextGC = t.Add(l.ttl)
+		l.prune(t.Add(-l.ttl))
+	}
+
 	i := l.index(id)
-	if l.v[i].find(id) != nil {
+	if e := l.v[i].find(id); e != nil {
+		e.t = t
+		if l.last == e {
+			return false
+		}
+
+		if e.prev != nil {
+			e.prev.next = e.next
+		}
+		if e.next != nil {
+			e.next.prev = e.prev
+		}
+		if l.first == e {
+			l.first = e.next
+		}
+		e.next = nil
+		e.prev = l.last
+		l.last.next = e
+		l.last = e
+
 		return false
 	}
 
 	e := l.alloc()
 	e.id = id
 	e.i = i
-	e.t = timeutil.Now()
+	e.t = t
 	e.list = l.v[i]
 	l.v[i] = e
 
 	if l.last != nil {
+		e.prev = l.last
 		l.last.next = e
 	}
 	l.last = e
@@ -165,12 +188,4 @@ func (l *messageIDLRU) Insert(id MessageID) bool {
 	}
 
 	return true
-}
-
-func (l *messageIDLRU) print() {
-	e := l.first
-	for e != nil {
-		log.Println(e.id)
-		e = e.next
-	}
 }

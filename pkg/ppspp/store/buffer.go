@@ -251,6 +251,12 @@ func (s *Buffer) contains(b binmap.Bin) bool {
 	return s.tail() <= b.BaseLeft() && b.BaseRight() < s.head && s.bins.FilledAt(b)
 }
 
+func (s *Buffer) Next() binmap.Bin {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	return s.next
+}
+
 // Offset ...
 func (s *Buffer) Offset() uint64 {
 	<-s.ready
