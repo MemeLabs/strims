@@ -103,11 +103,13 @@ func (s *peerSchedulerStream) removeSubscriber(cs *peerChannelScheduler) {
 }
 
 func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
-	// HAX
-	s.store.SetOffset(0)
-
 	debugHack := atomic.AddInt32(&debugHackCounter, 1)
 	logger.Debug("started", zap.Int32("debugHack", debugHack))
+
+	var signatureLayer int
+	if s.options.Integrity.ProtectionMethod == integrity.ProtectionMethodMerkleTree {
+		signatureLayer = bits.TrailingZeros16(uint16(s.options.ChunksPerSignature))
+	}
 
 	return &peerSwarmScheduler{
 		logger:            logger,
@@ -117,6 +119,7 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 		streamLayer:       bits.TrailingZeros16(uint16(s.options.StreamCount)),
 		streamBits:        binmap.Bin(s.options.StreamCount) - 1,
 		streamFills:       make([]int, s.options.StreamCount*4),
+		signatureLayer:    uint64(signatureLayer),
 		peerHaveChunkRate: stats.NewSMA(15, time.Second),
 		haveBins:          binmap.New(),
 		peerHaveBins:      binmap.New(),
@@ -154,11 +157,12 @@ type peerSwarmScheduler struct {
 	lastGCTime     timeutil.Time
 	rateUpdateTime timeutil.Time
 
-	streamCount codec.Stream
-	streamLayer int
-	streamBits  binmap.Bin
-	streamFills []int
-	binTimes    timeSet
+	streamCount    codec.Stream
+	streamLayer    int
+	signatureLayer uint64
+	streamBits     binmap.Bin
+	streamFills    []int
+	binTimes       timeSet
 
 	peerHaveChunkRate stats.SMA
 	peerMaxHaveBin    binmap.Bin
@@ -186,6 +190,8 @@ type peerSwarmScheduler struct {
 	lastDataProbeBin  binmap.Bin
 	lastDataProbeTime timeutil.Time
 	altDebugHack      bool
+
+	firstChunkSet bool
 }
 
 func (s *peerSwarmScheduler) Run(t timeutil.Time) {
@@ -193,6 +199,7 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 	defer s.lock.Unlock()
 
 	if t.Sub(s.lastGCTime) >= schedulerGCInterval {
+		// TODO: compute nextGCTime once
 		s.lastGCTime = t
 		s.gc(t)
 	}
@@ -234,6 +241,17 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 			s.lastDataProbeBin = b
 			s.lastDataProbeTime = t
 		}
+	}
+
+	if !s.firstChunkSet && !s.haveBins.Empty() {
+		s.logger.Debug(
+			"set request offset",
+			zap.Uint64("bin", uint64(s.haveBinMax)),
+			zap.Uint64("bytes", s.haveBinMax.BaseOffset()*uint64(s.chunkSize)),
+		)
+		s.requestBins.FillBefore(s.haveBinMax)
+		s.swarm.store.SetOffset(s.haveBinMax)
+		s.firstChunkSet = true
 	}
 }
 
@@ -434,14 +452,26 @@ func (s *peerSwarmScheduler) doStreamSub(cs *peerChannelScheduler, stream codec.
 	}
 }
 
+func (s *peerSwarmScheduler) setBinTime(b binmap.Bin, t timeutil.Time) {
+	// once any bin in the signature is available we can assume that all of them
+	// have been produced by the seed.
+	//
+	// depending on the seed bandwidth and stream count vs chunks per signature
+	// this may increase the variance of peer have times but experimentally it
+	// doesn't prevent subscriptions.
+	//
+	// if this works binTimes could be replaced with a ring buffer.
+	if b.Layer() < s.signatureLayer {
+		b = b.LayerShift(s.signatureLayer)
+	}
+	s.binTimes.Set(b, t)
+}
+
 func (s *peerSwarmScheduler) gc(t timeutil.Time) {
 	// TODO: store this so we don't record times for out of bounds haves
 	// TODO: base this on est 99th percentile peer have lag?
-	if s.peerHaveChunkRate.SampleCountWithTime(t) > 10 {
-		maxBins := binmap.Bin(s.peerHaveChunkRate.RateWithTime(30*time.Second, t) * 2)
-		if maxBins < s.haveBinMax {
-			s.binTimes.Prune(s.haveBinMax - maxBins)
-		}
+	if s.liveWindow*2 < s.haveBinMax {
+		s.binTimes.Prune(s.haveBinMax - s.liveWindow*2)
 	}
 
 	requestTimesThreshold := s.swarm.Reader().Next()
@@ -829,8 +859,14 @@ func (c *peerChannelScheduler) write1() error {
 	if c.peerMaxHaveBin > 2*c.peerLiveWindow {
 		min = c.peerMaxHaveBin - 2*c.peerLiveWindow
 	}
-	if m := c.s.haveBinMax - 2*c.s.liveWindow; min > m {
+	// if m := c.s.haveBinMax - 2*c.s.liveWindow; min > m {
+	// 	min = m
+	// }
+	if m := c.s.swarm.store.Next(); min > m {
 		min = m
+	}
+	if !c.s.firstChunkSet && c.peerMaxHaveBin > min {
+		min = c.peerMaxHaveBin
 	}
 
 	now := timeutil.Now()
@@ -1141,8 +1177,8 @@ func (c *peerChannelScheduler) HandleHave(b binmap.Bin) error {
 	t := timeutil.Now()
 
 	c.s.lock.Lock()
-	// tts := timeutil.Now()
-	c.s.binTimes.Set(b, t)
+
+	c.s.setBinTime(b, t)
 
 	c.lock.Lock()
 
@@ -1155,9 +1191,6 @@ func (c *peerChannelScheduler) HandleHave(b binmap.Bin) error {
 
 	c.s.peerHaveBins.Set(b)
 	c.peerHaveBins.Set(b)
-
-	// nzb := atomic.AddInt64(&zb, int64(time.Since(tts)))
-	// nza := atomic.AddInt64(&za, 1)
 
 	br := b.BaseRight()
 	if br > c.peerMaxHaveBin {

@@ -44,33 +44,77 @@ func TestZeroPadWriter(t *testing.T) {
 }
 
 func TestZeroPadReader(t *testing.T) {
-	var buf bytes.Buffer
-	w, err := NewZeroPadWriterSize(&buf, 32)
-	assert.NoError(t, err, "expected NewZeroPadWriterSize to return nil error")
-
-	b := make([]byte, 75)
-	for i := range b {
-		b[i] = 255
+	bufSize := 1024
+	cases := []struct {
+		writes []int
+		reads  []int
+		offset int
+		size   int
+	}{
+		{
+			writes: []int{75, 75, 75},
+			reads:  []int{75, 75, 75},
+			offset: 0,
+			size:   32,
+		},
+		{
+			writes: []int{75, 75, 75},
+			reads:  []int{45, 75, 75},
+			offset: 32,
+			size:   32,
+		},
+		{
+			writes: []int{75, 75, 75},
+			reads:  []int{75},
+			offset: 3 * 32,
+			size:   32,
+		},
+		{
+			writes: []int{9, 250, 311},
+			reads:  []int{9, 250, 311},
+			offset: 0,
+			size:   32,
+		},
+		{
+			writes: []int{9, 250, 311, 100, 112},
+			reads:  []int{311, 100, 112},
+			offset: 320,
+			size:   32,
+		},
 	}
+	for _, c := range cases {
+		c := c
+		t.Run("", func(t *testing.T) {
+			var buf bytes.Buffer
+			w, err := NewZeroPadWriterSize(&buf, c.size)
+			assert.NoError(t, err, "expected NewZeroPadWriterSize to return nil error")
 
-	for i := 0; i < 3; i++ {
-		_, err := w.Write(b)
-		assert.NoError(t, err, "expected ZeroPadWriter.Write to return nil error")
-		err = w.Flush()
-		assert.NoError(t, err, "expected ZeroPadWriter.Flush to return nil error")
-	}
+			in := make([]byte, bufSize)
+			for i := range in {
+				in[i] = 255
+			}
 
-	assert.Equal(t, 288, buf.Len(), "expected written byte count to be multiple of writer size")
+			for _, n := range c.writes {
+				_, err := w.Write(in[:n])
+				assert.NoError(t, err, "expected ZeroPadWriter.Write to return nil error")
+				err = w.Flush()
+				assert.NoError(t, err, "expected ZeroPadWriter.Flush to return nil error")
+			}
 
-	r, err := NewZeroPadReaderSize(&buf, 0, 32)
-	assert.NoError(t, err, "expected NewZeroPadReaderSize to return nil error")
+			assert.Equal(t, 0, buf.Len()%c.size, "expected written byte count to be multiple of writer size")
 
-	o := make([]byte, 1024)
+			buf.Next(c.offset)
+			r, err := NewZeroPadReaderSize(&buf, int64(c.offset), c.size)
+			assert.NoError(t, err, "expected NewZeroPadReaderSize to return nil error")
 
-	for i := 0; i < 3; i++ {
-		n, err := io.ReadAtLeast(r, o, 75)
-		assert.NoError(t, err, "expected ZeroPadWriter.Read to return nil error")
-		assert.Equal(t, len(b), n, "byte read count mismatch")
-		assert.Equal(t, b, o[:n], "read data mismatch")
+			out := make([]byte, bufSize)
+
+			for _, n := range c.reads {
+				nn, err := io.ReadAtLeast(r, out, n)
+				assert.NoError(t, err, "expected ZeroPadWriter.Read to return nil error")
+				assert.Equal(t, n, nn, "byte read count mismatch")
+				assert.Equal(t, in[:n], out[:nn], "read data mismatch")
+			}
+		})
 	}
 }

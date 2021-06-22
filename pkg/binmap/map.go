@@ -201,16 +201,17 @@ func (m *Map) traceHistory(target Bin) (r ref, b Bin) {
 	m.history.Reset()
 	m.history.Append(r)
 	for target != b {
+		c, mc := m.cell(r)
 		if target < b {
-			if m.mapCell(r).LeftRef() {
-				r = m.dataCell(r).LeftRef()
+			if mc.LeftRef() {
+				r = c.LeftRef()
 				b = b.Left()
 			} else {
 				break
 			}
 		} else {
-			if m.mapCell(r).RightRef() {
-				r = m.dataCell(r).RightRef()
+			if mc.RightRef() {
+				r = c.RightRef()
 				b = b.Right()
 			} else {
 				break

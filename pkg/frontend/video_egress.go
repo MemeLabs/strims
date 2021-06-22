@@ -50,26 +50,41 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 			},
 		}
 
-		var seq int
-		var bufs [3][32 * 1024]byte
+		var i int
+		var resPool [3]*videov1.EgressOpenStreamResponse
+		for i := range resPool {
+			resPool[i] = &videov1.EgressOpenStreamResponse{
+				Body: &videov1.EgressOpenStreamResponse_Data_{
+					Data: &videov1.EgressOpenStreamResponse_Data{
+						Data: make([]byte, 32*1024),
+					},
+				},
+			}
+		}
 		for {
-			b := &bufs[seq%len(bufs)]
-			seq++
+			if i++; i == len(resPool) {
+				i = 0
+			}
+			res := resPool[i]
+
+			d := res.GetData()
+			d.SegmentEnd = false
+			d.BufferUnderrun = false
+			d.Data = d.Data[:cap(d.Data)]
 
 			var n int
-			var segmentEnd, bufferUnderrun bool
 		ReadLoop:
-			for n < len(b) {
-				nn, err := r.Read(b[n:])
+			for n < len(d.Data) {
+				nn, err := r.Read(d.Data[n:])
 				n += nn
 
 				switch err {
 				case nil:
 				case io.EOF:
-					segmentEnd = true
+					d.SegmentEnd = true
 					break ReadLoop
 				case store.ErrBufferUnderrun:
-					bufferUnderrun = true
+					d.BufferUnderrun = true
 					n = 0
 					break ReadLoop
 				default:
@@ -84,15 +99,8 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 				}
 			}
 
-			ch <- &videov1.EgressOpenStreamResponse{
-				Body: &videov1.EgressOpenStreamResponse_Data_{
-					Data: &videov1.EgressOpenStreamResponse_Data{
-						Data:           b[:n],
-						SegmentEnd:     segmentEnd,
-						BufferUnderrun: bufferUnderrun,
-					},
-				},
-			}
+			d.Data = d.Data[:n]
+			ch <- res
 		}
 	}()
 	return ch, nil

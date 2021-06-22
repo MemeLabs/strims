@@ -104,8 +104,8 @@ type Peer struct {
 }
 
 func (p *Peer) run() {
+	var f Frame
 	for {
-		var f Frame
 		if _, err := f.ReadFrom(p.Link); err != nil {
 			p.logger.Info("failed to read frame", zap.Error(err))
 			break

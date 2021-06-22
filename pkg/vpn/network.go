@@ -273,11 +273,11 @@ func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
 
 // SendProto ...
 func (n *Network) SendProto(id kademlia.ID, port, srcPort uint16, msg proto.Message) error {
-	b := pool.Get(proto.Size(msg))
+	opt := proto.MarshalOptions{}
+	b := pool.Get(opt.Size(msg))
 	defer pool.Put(b)
 
-	_, err := proto.MarshalOptions{}.MarshalAppend((*b)[:0], msg)
-	if err != nil {
+	if _, err := opt.MarshalAppend((*b)[:0], msg); err != nil {
 		return err
 	}
 
@@ -330,11 +330,6 @@ func (n *Network) sendMessage(m *Message) error {
 	n.linksLock.Lock()
 	ln := n.links.Closest(m.Header.DstID, conns[:])
 	n.linksLock.Unlock()
-
-	_, test := n.links.Get(m.Header.DstID)
-	if ln != 0 && !conns[0].ID().Equals(m.Header.DstID) && test {
-		panic("but why")
-	}
 
 	if ln != 0 && conns[0].ID().Equals(m.Header.DstID) {
 		ln = 1

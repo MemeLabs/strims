@@ -161,16 +161,25 @@ func (s *Buffer) WriteData(b binmap.Bin, t timeutil.Time, w DataWriter) (int, er
 	return 0, ErrBinDataNotSet
 }
 
-// SetOffset ...
+// SetOffset set the read offset to the first contiguous filled bin <= b and the
+// next expected bin to the next empty bin >= b.
 func (s *Buffer) SetOffset(b binmap.Bin) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	s.next = b.BaseLeft()
-	s.prev = s.next
-	s.off = binByte(s.next, s.chunkSize)
+	b = b.BaseLeft()
+	next := s.bins.FindEmptyAfter(b)
+	prev := next
+	for ; s.bins.FilledAt(b); b = b.LayerLeft() {
+		b = s.bins.Cover(b).BaseLeft()
+		prev = b
+	}
 
-	s.bins.FillBefore(b)
+	s.next = next
+	s.prev = prev
+	s.off = binByte(prev, s.chunkSize)
+
+	s.bins.FillBefore(prev)
 
 	s.setReady()
 }
