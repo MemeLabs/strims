@@ -78,7 +78,7 @@ func (c *Writer) Write(p []byte) (n int, err error) {
 }
 
 // Flush flushes any remaining bytes in the buffer to w. Should be called
-// after every input segment and before Close()
+// after every input segment and before closing the underlying writer.
 func (c *Writer) Flush() (err error) {
 	if c.woff != 0 {
 		return ErrHeaderWritten

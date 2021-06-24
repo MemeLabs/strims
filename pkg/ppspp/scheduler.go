@@ -18,6 +18,7 @@ type SwarmScheduler interface {
 }
 
 type PeerWriter interface {
+	WriteHandshake() error
 	Write(maxBytes int) (int, error)
 	WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error)
 }
@@ -30,10 +31,10 @@ type ChannelScheduler interface {
 	HandleHave(b binmap.Bin) error
 	HandleRequest(b binmap.Bin, t timeutil.Time) error
 	HandleCancel(b binmap.Bin) error
-	HandleChoke() error
-	HandleUnchoke() error
 	HandlePing(nonce uint64) error
 	HandlePong(nonce uint64) error
+	HandleChoke() error
+	HandleUnchoke() error
 	HandleStreamRequest(s codec.Stream, b binmap.Bin) error
 	HandleStreamCancel(s codec.Stream) error
 	HandleStreamOpen(s codec.Stream, b binmap.Bin) error
@@ -67,6 +68,8 @@ type channelWriterThing interface {
 	WritePing(m codec.Ping) (int, error)
 	WritePong(m codec.Pong) (int, error)
 	WriteCancel(m codec.Cancel) (int, error)
+	WriteChoke(m codec.Choke) (int, error)
+	WriteUnchoke(m codec.Unchoke) (int, error)
 	WriteStreamRequest(m codec.StreamRequest) (int, error)
 	WriteStreamCancel(m codec.StreamCancel) (int, error)
 	WriteStreamOpen(m codec.StreamOpen) (int, error)

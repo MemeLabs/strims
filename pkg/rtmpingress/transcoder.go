@@ -239,8 +239,6 @@ func buildArgs(srcURI, addr, key, variant string) []string {
 		"-hls_init_time", "1",
 		"-hls_time", "1",
 		"-hls_segment_type", "fmp4",
-		// TODO: support legacy ffmpeg?
-		// "-hls_fmp4_init_filename", fmt.Sprintf("http://%s/%s/%s/init.mp4", addr, key, variant),
 		"-hls_fmp4_init_filename", "init.mp4",
 		"-hls_segment_filename", fmt.Sprintf("http://%s/%s/%s/%%d.m4s", addr, key, variant),
 		"-hls_flags", "+program_date_time+append_list+omit_endlist",

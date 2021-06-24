@@ -45,6 +45,8 @@ const HomePage: React.FC = () => {
 
   const handleColorToggle = () => setColorScheme(colorScheme === "dark" ? "light" : "dark");
 
+  const [broadcastState, setBroadcastState] =
+    React.useState<{ id: Uint8Array; mediaStream: MediaStream }>(null);
   const handleStartBroadcastClick = async () => {
     const { networks } = await client.network.list();
     const [{ id }, mediaStream] = await Promise.all([
@@ -70,17 +72,28 @@ const HomePage: React.FC = () => {
       }) as Promise<MediaStream>,
     ]);
 
-    const encoder = new webm.Encoder(mediaStream);
-
-    broadcastEncoder(encoder, id, mediaStream);
+    setBroadcastState({ id, mediaStream });
   };
 
-  const broadcastEncoder = (encoder: webm.Encoder, id: Uint8Array, mediaStream: MediaStream) => {
+  React.useEffect(() => {
+    if (!videoRef.current || !broadcastState) {
+      return;
+    }
+
+    const { id, mediaStream } = broadcastState;
+    const encoder = new webm.Encoder(mediaStream);
+
     videoRef.current.srcObject = mediaStream;
 
     encoder.ondata = (data) => client.videoCapture.append({ id, data });
     encoder.onend = (data) => client.videoCapture.append({ id, data, segmentEnd: true });
-  };
+
+    return () => {
+      encoder.stop();
+      void client.videoCapture.close({ id });
+      mediaStream.getTracks().forEach((t) => t.stop());
+    };
+  }, [videoRef.current, broadcastState]);
 
   // const handleTestClick = async () => {
   //   console.log("starting vpn");

@@ -54,7 +54,33 @@ type seedSwarmScheduler struct {
 }
 
 func (s *seedSwarmScheduler) Run(c timeutil.Time) {
-	// decide whether to assign a stream to a peer
+	// we want to send as many copies of the stream as bandwidth allows
+	// but we don't know how much bandwidth is available
+	// and we have no way to measure it...
+
+	// we want to split streams proportionally based on peer bandwidth
+	// but we can't measure that either
+	// should we collect acks?
+	// does ledbat make sense here?
+
+	// we want to make sure that every piece is delivered to all of our peers
+	// but we could be surrounded by malicious peers
+
+	// fraudulent haves are an open problem... maybe we deal with this later
+	// if we assume haves are honest -_-
+	// we can measure the "echo" for stream chunks we've sent
+	// ie measure the mean time to receive haves from peers we didn't send the stream bin to
+	// this is vulnerable to the same dishonest have bin shit that can fuck up stream subs
+	// ...so we're already assuming this is trustworthy
+	// it would be nice if there was a way to verify o.O
+
+	// ok...
+	// we can reuse the requestTime/streams stats thing from peer for this probably
+	// maybe maintain per-channel stream stats?
+
+	// when more than one peer get the same seed stream how do we parse the results?
+	// can we a/b test this?
+	// is this valid since there's no guarantee that the peers connected to us are a representative sample of the swarm?
 }
 
 func (s *seedSwarmScheduler) Consume(c store.Chunk) {
@@ -89,7 +115,7 @@ func (s *seedSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 
 	// HAX
 	zzn := codec.Stream(atomic.AddInt32(&zn, 1)) - 1
-	sc := codec.Stream(s.swarm.options.StreamCount)
+	sc := codec.Stream(c.s.swarm.options.StreamCount)
 	k := (sc + 2) / 3
 	for i := codec.Stream(0); i < sc; i++ {
 		if i/k == zzn {
@@ -99,9 +125,9 @@ func (s *seedSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 			})
 			c.peerRequestStreams[i] = 0
 
-			for it := s.haveBins.IterateFilled(); it.NextBase(); {
-				if s.binStream(it.Value()) == i {
-					p.pushData(c, it.Value(), timeutil.EpochTime, peerPriorityHigh)
+			for it := c.s.haveBins.IterateFilled(); it.NextBase(); {
+				if c.s.binStream(it.Value()) == i {
+					c.p.pushData(c, it.Value(), timeutil.EpochTime, peerPriorityHigh)
 				}
 			}
 		}
@@ -173,6 +199,25 @@ func (c *seedChannelScheduler) appendHaveBins(hb, b binmap.Bin) {
 	}
 
 	c.p.enqueue(&c.r, c)
+}
+
+func (c *seedChannelScheduler) WriteHandshake() error {
+	if _, err := c.cw.WriteHandshake(newHandshake(c.s.swarm)); err != nil {
+		return err
+	}
+
+	if _, err := c.cw.WriteChoke(codec.Choke{}); err != nil {
+		return err
+	}
+
+	if err := c.writeMapBins(c.haveBins, c.writeHave); err != nil {
+		if errors.Is(err, codec.ErrNotEnoughSpace) {
+			return nil
+		}
+		return err
+	}
+
+	return nil
 }
 
 func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error) {
@@ -257,12 +302,12 @@ func (c *seedChannelScheduler) write0() error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	// if err := c.writeMapBins(c.haveBins, c.writeHave); err != nil {
-	// 	if errors.Is(err, codec.ErrNotEnoughSpace) {
-	// 		return nil
-	// 	}
-	// 	return err
-	// }
+	if err := c.writeMapBins(c.haveBins, c.writeHave); err != nil {
+		if errors.Is(err, codec.ErrNotEnoughSpace) {
+			return nil
+		}
+		return err
+	}
 
 	if len(c.peerOpenStreams) != 0 {
 		for _, s := range c.peerOpenStreams {

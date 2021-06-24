@@ -110,7 +110,7 @@ func (c *Control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *
 
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.streams.InsertNoReplace(s)
+	c.streams.ReplaceOrInsert(s)
 
 	return transferID, nil
 }

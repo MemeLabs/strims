@@ -74,6 +74,8 @@ type mockChannelWriterThing struct {
 	WritePingFunc            func(m codec.Ping) error
 	WritePongFunc            func(m codec.Pong) error
 	WriteCancelFunc          func(m codec.Cancel) error
+	WriteChokeFunc           func(m codec.Choke) error
+	WriteUnchokeFunc         func(m codec.Unchoke) error
 	WriteStreamRequestFunc   func(m codec.StreamRequest) error
 	WriteStreamCancelFunc    func(m codec.StreamCancel) error
 	WriteStreamOpenFunc      func(m codec.StreamOpen) error
@@ -185,6 +187,22 @@ func (w *mockChannelWriterThing) WriteCancel(m codec.Cancel) (int, error) {
 	var err error
 	if w.WriteCancelFunc != nil {
 		err = w.WriteCancelFunc(m)
+	}
+	w.size -= m.ByteLen()
+	return m.ByteLen(), err
+}
+func (w *mockChannelWriterThing) WriteChoke(m codec.Choke) (int, error) {
+	var err error
+	if w.WriteChokeFunc != nil {
+		err = w.WriteChokeFunc(m)
+	}
+	w.size -= m.ByteLen()
+	return m.ByteLen(), err
+}
+func (w *mockChannelWriterThing) WriteUnchoke(m codec.Unchoke) (int, error) {
+	var err error
+	if w.WriteUnchokeFunc != nil {
+		err = w.WriteUnchokeFunc(m)
 	}
 	w.size -= m.ByteLen()
 	return m.ByteLen(), err

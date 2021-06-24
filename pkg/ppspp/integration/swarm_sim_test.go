@@ -22,6 +22,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
@@ -124,6 +125,81 @@ func TestSwarmSim(t *testing.T) {
 			city:         ppspptest.Singapore,
 			peers:        testCityList{ppspptest.Paris, ppspptest.Rome, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Tokyo},
 		},
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Cairo,
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Chennai,
+		// 	peers:        testCityList{ppspptest.Seattle, ppspptest.SanFrancisco, ppspptest.Rome, ppspptest.Tokyo, ppspptest.Cairo},
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Bogota,
+		// 	peers:        testCityList{ppspptest.London, ppspptest.Berlin, ppspptest.Chennai, ppspptest.Seoul, ppspptest.Algiers, ppspptest.Kolkata},
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Bangkok,
+		// 	peers:        testCityList{ppspptest.Moscow, ppspptest.Tokyo, ppspptest.Singapore, ppspptest.Cairo, ppspptest.Chennai, ppspptest.Bogota},
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Santiago,
+		// 	peers:        testCityList{ppspptest.Barcelona, ppspptest.Shenzhen, ppspptest.Lima, ppspptest.Seoul, ppspptest.Hanoi, ppspptest.Algiers},
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Barcelona,
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Shenzhen,
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Lima,
+		// 	peers:        testCityList{ppspptest.Santiago, ppspptest.Barcelona, ppspptest.Shenzhen, ppspptest.Rome, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Tokyo, ppspptest.Singapore},
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Seoul,
+		// 	peers:        testCityList{ppspptest.Santiago, ppspptest.Barcelona, ppspptest.Shenzhen, ppspptest.Lima, ppspptest.HongKong, ppspptest.Algiers, ppspptest.Cairo, ppspptest.Singapore},
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Hanoi,
+		// 	peers:        testCityList{ppspptest.Santiago, ppspptest.Barcelona, ppspptest.Berlin, ppspptest.Santiago, ppspptest.Seoul, ppspptest.Algiers, ppspptest.Cairo, ppspptest.Karachi},
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Algiers,
+		// 	peers:        testCityList{ppspptest.Seattle, ppspptest.Berlin, ppspptest.Santiago, ppspptest.Seoul, ppspptest.Hanoi, ppspptest.Cairo, ppspptest.Karachi},
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Kolkata,
+		// 	peers:        testCityList{ppspptest.SanFrancisco, ppspptest.Santiago, ppspptest.Seoul, ppspptest.Hanoi, ppspptest.Moscow, ppspptest.Karachi},
+		// },
+		// {
+		// 	downloadRate: 150 * ppspptest.Mbps,
+		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	city:         ppspptest.Karachi,
+		// 	peers:        testCityList{ppspptest.Paris, ppspptest.Rome, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Cairo},
+		// },
 	}
 
 	key := ppspptest.Key()
@@ -131,6 +207,9 @@ func TestSwarmSim(t *testing.T) {
 	options := ppspp.SwarmOptions{
 		LiveWindow:  1 << 14,
 		StreamCount: 16,
+		Integrity: integrity.VerifierOptions{
+			ProtectionMethod: integrity.ProtectionMethodNone,
+		},
 	}
 
 	type client struct {
@@ -250,7 +329,7 @@ func TestSwarmSim(t *testing.T) {
 			clients[i].conns[j] = imConn
 			clients[j].conns[i] = jmConn
 
-			if (peers[i].peers == nil || peers[i].peers.Contains(peers[j].city)) && (peers[j].peers == nil || peers[j].peers.Contains(peers[i].city)) {
+			if (peers[i].peers != nil && peers[i].peers.Contains(peers[j].city)) || (peers[j].peers != nil && peers[j].peers.Contains(peers[i].city)) || (peers[i].peers == nil && peers[j].peers == nil) {
 				iChanReader, iPeer := clients[i].runner.RunPeer(pairID(clients[i].id, clients[j].id), imConn)
 				jChanReader, jPeer := clients[j].runner.RunPeer(pairID(clients[j].id, clients[i].id), jmConn)
 

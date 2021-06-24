@@ -35,7 +35,7 @@ type Tree struct {
 	digests   []byte
 }
 
-// Reset sets the tree's rootbin and sets the verified bitmask to 0
+// Reset sets the tree's root bin and clears the verified bitmap
 func (t *Tree) Reset(rootBin binmap.Bin) {
 	if t.rootBin.BaseLength() != rootBin.BaseLength() {
 		panic("reset cannot change root bin size")
@@ -94,15 +94,13 @@ func (t *Tree) Set(b binmap.Bin, d []byte) {
 // check if the bin is verified
 func (t *Tree) isVerified(b binmap.Bin) bool {
 	j := b - t.baseLeft
-	i := j / 64
-	return t.verified[i]&(1<<(j-i*64)) != 0
+	return t.verified[j>>6]&(1<<(j&0x3f)) != 0
 }
 
 // mark the bin as verified
 func (t *Tree) setVerified(b binmap.Bin) {
 	j := b - t.baseLeft
-	i := j / 64
-	t.verified[i] |= 1 << (j - i*64)
+	t.verified[j>>6] |= 1 << (j & 0x3f)
 }
 
 // Get hash by bin

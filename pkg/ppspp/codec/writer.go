@@ -241,6 +241,36 @@ func (w *Writer) WriteCancel(m Cancel) (int, error) {
 	return n, nil
 }
 
+// WriteChoke ...
+func (w *Writer) WriteChoke(m Choke) (int, error) {
+	n := m.ByteLen() + MessageTypeLen
+	if err := w.ensureSpace(n); err != nil {
+		return 0, err
+	}
+
+	w.buf[w.off] = byte(m.Type())
+	w.off++
+
+	w.off += m.Marshal(w.buf[w.off:])
+
+	return n, nil
+}
+
+// WriteUnchoke ...
+func (w *Writer) WriteUnchoke(m Unchoke) (int, error) {
+	n := m.ByteLen() + MessageTypeLen
+	if err := w.ensureSpace(n); err != nil {
+		return 0, err
+	}
+
+	w.buf[w.off] = byte(m.Type())
+	w.off++
+
+	w.off += m.Marshal(w.buf[w.off:])
+
+	return n, nil
+}
+
 // WriteStreamRequest ...
 func (w *Writer) WriteStreamRequest(m StreamRequest) (int, error) {
 	n := m.ByteLen() + MessageTypeLen

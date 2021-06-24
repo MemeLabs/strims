@@ -9,6 +9,7 @@ type mockPeerWriter struct {
 	ID int
 }
 
+func (w *mockPeerWriter) WriteHandshake() error           { return nil }
 func (w *mockPeerWriter) Write(maxBytes int) (int, error) { return 0, nil }
 func (w *mockPeerWriter) WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error) {
 	return 0, nil

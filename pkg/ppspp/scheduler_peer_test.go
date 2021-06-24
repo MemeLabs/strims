@@ -105,3 +105,38 @@ func TestPeerChannelSchedulerFoo(t *testing.T) {
 	assert.True(t, writeRequestCalled)
 	assert.True(t, haveBin.Contains(writeRequestBin))
 }
+
+// type testFoo struct {
+// 	streamLayer uint64
+// 	streamBits  uint64
+// 	streams     []peerSchedulerStreamReceivedChunks
+// }
+
+// func (s *testFoo) addReceivedChunk(b binmap.Bin) {
+// 	o := b.BaseOffset()
+// 	l := b.BaseLength()
+// 	for i := uint64(0); i < l; i++ {
+// 		log.Printf("stream %d off %d", o&s.streamBits, (o+i)>>s.streamLayer)
+// 		s.streams[o&s.streamBits].addReceivedChunk((o + i) >> s.streamLayer)
+// 	}
+// }
+
+// func TestThing2(t *testing.T) {
+// 	streamCount := uint64(4)
+// 	k := testFoo{
+// 		streamLayer: uint64(bits.TrailingZeros64(streamCount)),
+// 		streamBits:  streamCount - 1,
+// 		streams:     make([]peerSchedulerStreamReceivedChunks, streamCount),
+// 	}
+
+// 	for i := binmap.Bin(0); i < 32; i += 8 {
+// 		k.addReceivedChunk(i)
+// 	}
+
+// 	k.addReceivedChunk(18)
+// 	k.addReceivedChunk(26)
+// 	k.addReceivedChunk(2)
+// 	k.addReceivedChunk(10)
+
+// 	spew.Dump(k)
+// }

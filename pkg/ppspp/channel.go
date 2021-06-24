@@ -178,6 +178,18 @@ func (c *channelWriter) WriteCancel(m codec.Cancel) (int, error) {
 	return c.cw.WriteCancel(m)
 }
 
+func (c *channelWriter) WriteChoke(m codec.Choke) (int, error) {
+	c.metrics.ChokeCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteChoke(m)
+}
+
+func (c *channelWriter) WriteUnchoke(m codec.Unchoke) (int, error) {
+	c.metrics.UnchokeCount.Inc()
+	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
+	return c.cw.WriteUnchoke(m)
+}
+
 func (c *channelWriter) WriteStreamRequest(m codec.StreamRequest) (int, error) {
 	c.metrics.StreamRequestCount.Inc()
 	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))

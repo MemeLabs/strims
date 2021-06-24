@@ -81,7 +81,7 @@ func (r *Runner) RunChannel(s *Swarm, p *Peer, channel, peerChannel codec.Channe
 	cs := rs.scheduler.ChannelScheduler(p, cw)
 	cr.openChannel(channel, newChannelReaderMetrics(s, p), cs, s)
 
-	if _, err := cw.WriteHandshake(newHandshake(s)); err != nil {
+	if err := cs.WriteHandshake(); err != nil {
 		return err
 	}
 	if err := cw.Flush(); err != nil {

@@ -45,9 +45,13 @@ export class Encoder {
   }
 
   public stop(): void {
-    this.mediaRecorder.stop();
-    this.onend(new Uint8Array());
     clearInterval(this.flushInterval);
+    this.mediaRecorder.stop();
+    this.fileReaderTasks.reset();
+    this.onend(new Uint8Array());
+
+    this.ondata = () => null;
+    this.onend = () => null;
   }
 
   private handleDataAvailable(e: BlobEvent): void {
