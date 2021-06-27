@@ -14,7 +14,7 @@ func TestLagConn(t *testing.T) {
 	tolerance := 5 * time.Millisecond
 
 	a, b := NewConnPair()
-	a, b = NewLagConnPair(a, b, latency)
+	a, b = NewLagConnPair(a, b, latency, 0)
 
 	start := time.Now()
 	var wg sync.WaitGroup

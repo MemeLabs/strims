@@ -1,6 +1,7 @@
 package ppspptest
 
 import (
+	"math/rand"
 	"time"
 
 	"github.com/golang/geo/s2"
@@ -19,25 +20,34 @@ func ComputeLatency(a, b s2.LatLng) time.Duration {
 }
 
 // NewLagConnPair ...
-func NewLagConnPair(a, b Conn, l time.Duration) (*LagConn, *LagConn) {
+func NewLagConnPair(a, b Conn, l time.Duration, jitter float64) (*LagConn, *LagConn) {
 	ach := make(chan time.Time, 128)
 	bch := make(chan time.Time, 128)
-	return &LagConn{a, l, ach, bch}, &LagConn{b, l, bch, ach}
+	j := int64(float64(l) * jitter)
+	return &LagConn{a, l, j, ach, bch}, &LagConn{b, l, j, bch, ach}
 }
 
 // LagConn ...
 type LagConn struct {
 	Conn
 	latency time.Duration
+	jitter  int64
 	wch     chan time.Time
 	rch     <-chan time.Time
 }
 
 // Flush ...
 func (c *LagConn) Flush() error {
-	err := c.Conn.Flush()
-	c.wch <- time.Now().Add(c.latency)
-	return err
+	if err := c.Conn.Flush(); err != nil {
+		return err
+	}
+
+	l := c.latency
+	if c.jitter > 0 {
+		l += time.Duration(rand.Int63n(c.jitter))
+	}
+	c.wch <- time.Now().Add(l)
+	return nil
 }
 
 // Read ...

@@ -60,11 +60,6 @@ type Buffer struct {
 func (s *Buffer) Consume(c Chunk) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
-
-	if s.bins.FilledAt(c.Bin) {
-		return
-	}
-
 	s.set(c.Bin, c.Data)
 }
 

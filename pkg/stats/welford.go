@@ -57,36 +57,27 @@ func (w Welford) StdDev() float64 {
 }
 
 func WelfordMerge(ws ...Welford) Welford {
-	c := make([]Welford, 0, len(ws))
-	for _, w := range ws {
-		if w.count != 0 {
-			c = append(c, w)
-		}
-	}
-	if len(c) == 0 {
+	switch len(ws) {
+	case 0:
 		return Welford{}
-	}
-	return welfordMerge(c...)
-}
-
-func welfordMerge(ws ...Welford) Welford {
-	n := len(ws) % 2
-	for i := n; i < len(ws); i += 2 {
-		ws[n] = welfordMergeOne(ws[i], ws[i+1])
-		n++
-	}
-	if n == 1 {
+	case 1:
 		return ws[0]
-	}
-	return welfordMerge(ws[:n]...)
-}
-
-func welfordMergeOne(w0, w1 Welford) Welford {
-	count := w0.count + w1.count
-	delta := w1.mean - w0.mean
-	return Welford{
-		count: count,
-		mean:  (w0.mean*w0.count + w1.mean*w1.count) / count,
-		m2:    w0.m2 + w1.m2 + delta*delta*w0.count*w1.count/count,
+	case 2:
+		if ws[0].count == 0 {
+			return ws[1]
+		}
+		if ws[1].count == 0 {
+			return ws[0]
+		}
+		count := ws[0].count + ws[1].count
+		delta := ws[1].mean - ws[0].mean
+		return Welford{
+			count: count,
+			mean:  (ws[0].mean*ws[0].count + ws[1].mean*ws[1].count) / count,
+			m2:    ws[0].m2 + ws[1].m2 + delta*delta*ws[0].count*ws[1].count/count,
+		}
+	default:
+		n := len(ws) >> 1
+		return WelfordMerge(WelfordMerge(ws[:n]...), WelfordMerge(ws[n:]...))
 	}
 }

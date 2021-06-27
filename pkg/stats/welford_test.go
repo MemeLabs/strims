@@ -1,6 +1,7 @@
 package stats
 
 import (
+	"fmt"
 	"math"
 	"math/rand"
 	"testing"
@@ -53,4 +54,45 @@ func TestWelfordMergeEmpty(t *testing.T) {
 	ws := make([]Welford, 4)
 	w := WelfordMerge(ws...)
 	assert.EqualValues(t, 0, w.Count())
+	assert.EqualValues(t, 0, w.Mean())
+	assert.EqualValues(t, 0, w.Variance())
+}
+
+var BenchmarkWelfordMergeRes Welford
+
+func BenchmarkWelfordMerge(b *testing.B) {
+	cases := []struct {
+		n  int
+		wn int
+	}{
+		{1000, 4},
+		{1000, 5},
+		{1000, 10},
+		{1000, 25},
+		{1000, 50},
+	}
+
+	for _, c := range cases {
+		c := c
+		b.Run(fmt.Sprintf("samples %d chunks %d", c.n, c.wn), func(b *testing.B) {
+			ws := make([]Welford, c.wn)
+
+			for i := 0; i < len(ws); i++ {
+				for j := 0; j < c.n/len(ws); j++ {
+					v := float64((i + 1) * j)
+					ws[i].Update(v)
+				}
+			}
+
+			var res Welford
+
+			b.ResetTimer()
+
+			for i := 0; i < b.N; i++ {
+				res = WelfordMerge(ws...)
+			}
+
+			BenchmarkWelfordMergeRes = res
+		})
+	}
 }

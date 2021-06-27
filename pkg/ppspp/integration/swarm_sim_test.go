@@ -53,6 +53,8 @@ func TestSwarmSim(t *testing.T) {
 
 	bytesReadGoal := byteRate * 20
 
+	jitter := .0
+
 	peers := []testPeer{
 		{
 			downloadRate: 150 * ppspptest.Mbps,
@@ -313,7 +315,7 @@ func TestSwarmSim(t *testing.T) {
 			jConn = ppspptest.NewThrottleConn(jConn, clients[j].bandwidth)
 
 			latency := ppspptest.ComputeLatency(clients[i].city.LatLng, clients[j].city.LatLng)
-			iConn, jConn = ppspptest.NewLagConnPair(iConn, jConn, latency)
+			iConn, jConn = ppspptest.NewLagConnPair(iConn, jConn, latency, jitter)
 
 			iConn = ppspptest.NewQOSConn(iConn, clients[i].qos.AddSession(qos.MaxWeight))
 			jConn = ppspptest.NewQOSConn(jConn, clients[j].qos.AddSession(qos.MaxWeight))
