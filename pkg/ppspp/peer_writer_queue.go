@@ -21,8 +21,16 @@ type peerWriterQueueItem struct {
 	c    PeerWriter
 }
 
-type PeerWriterQueueTicket struct {
+type peerWriterQueueTicket struct {
 	v uint64
+}
+
+func (t *peerWriterQueueTicket) PunchTicket(v uint64) bool {
+	if t.v == v {
+		return false
+	}
+	t.v = v
+	return true
 }
 
 func newPeerWriterQueue() peerWriterQueue {
@@ -36,11 +44,10 @@ type peerWriterQueue struct {
 	v          uint64
 }
 
-func (q *peerWriterQueue) Push(t *PeerWriterQueueTicket, c PeerWriter) bool {
-	if q.v == t.v {
+func (q *peerWriterQueue) Push(c PeerWriter) bool {
+	if !c.PunchTicket(q.v) {
 		return false
 	}
-	t.v = q.v
 
 	i := peerWriterQueueItemPool.Get().(*peerWriterQueueItem)
 	i.next = nil

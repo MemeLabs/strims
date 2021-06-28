@@ -163,7 +163,7 @@ type seedChannelScheduler struct {
 	cw     channelWriterThing
 	s      *seedSwarmScheduler
 
-	r PeerWriterQueueTicket
+	peerWriterQueueTicket
 
 	lock       sync.Mutex
 	liveWindow uint32
@@ -198,7 +198,7 @@ func (c *seedChannelScheduler) appendHaveBins(hb, b binmap.Bin) {
 		}
 	}
 
-	c.p.enqueue(&c.r, c)
+	c.p.enqueue(c)
 }
 
 func (c *seedChannelScheduler) WriteHandshake() error {
@@ -483,9 +483,9 @@ func (c *seedChannelScheduler) HandleMessageEnd() error {
 	// }
 
 	if atomic.CompareAndSwapUint32(&c.requestsAdded, 1, 0) {
-		c.p.enqueueNow(&c.r, c)
+		c.p.enqueueNow(c)
 	} else {
-		c.p.enqueue(&c.r, c)
+		c.p.enqueue(c)
 	}
 
 	return nil

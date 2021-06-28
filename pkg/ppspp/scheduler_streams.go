@@ -6,11 +6,7 @@ import (
 
 func newPeerStreamAssigner(streamCount int, channelCaps []int) *peerStreamAssigner {
 	size := streamCount + len(channelCaps) + 2
-	g := &edmondsKarpGraph{
-		nodes:   make([]edmondsKarpNode, size),
-		visited: make([]bool, size),
-		queue:   make([]int, 0, size),
-	}
+	g := newEdmondsKarpGraph(size)
 
 	for i := 0; i < streamCount; i++ {
 		g.addEdge(size-2, i, 1)
@@ -33,7 +29,7 @@ func (a *peerStreamAssigner) addCandidate(stream, channel int) {
 }
 
 type peerStreamAssignment struct {
-	channel, stream int
+	stream, channel int
 }
 
 func (a *peerStreamAssigner) run() []peerStreamAssignment {
@@ -42,8 +38,8 @@ func (a *peerStreamAssigner) run() []peerStreamAssignment {
 	var res []peerStreamAssignment
 	for i := 0; i < a.streamCount; i++ {
 		for _, e := range a.graph.nodes[i].edges {
-			if e.value == 0 {
-				res = append(res, peerStreamAssignment{e.node - a.streamCount, i})
+			if a.graph.edgeValue(i, e) == 0 {
+				res = append(res, peerStreamAssignment{i, e - a.streamCount})
 			}
 		}
 	}
@@ -52,29 +48,40 @@ func (a *peerStreamAssigner) run() []peerStreamAssignment {
 
 // Edmonds–Karp algorithm for finding maximum flow in a flow network
 // SEE https://en.wikipedia.org/wiki/Edmonds%E2%80%93Karp_algorithm
+func newEdmondsKarpGraph(size int) *edmondsKarpGraph {
+	return &edmondsKarpGraph{
+		nodes:   make([]edmondsKarpNode, size),
+		edges:   make([]int, size*size),
+		visited: make([]bool, size),
+		queue:   make([]int, 0, size),
+	}
+}
+
 type edmondsKarpGraph struct {
 	nodes   []edmondsKarpNode
+	edges   []int
 	visited []bool
 	queue   []int
 }
 
 type edmondsKarpNode struct {
-	edges []edmondsKarpEdge
-	prev  edmondsKarpTrace
+	edges []int
+	prev  int
 }
 
-type edmondsKarpTrace struct {
-	node int
-	edge int
+func (f *edmondsKarpGraph) addEdge(s, t, value int) {
+	f.nodes[s].edges = append(f.nodes[s].edges, t)
+	f.nodes[t].edges = append(f.nodes[t].edges, s)
+	f.setEdgeValue(s, t, value)
+	f.setEdgeValue(t, s, value)
 }
 
-type edmondsKarpEdge struct {
-	node  int
-	value int
+func (f *edmondsKarpGraph) edgeValue(s, t int) int {
+	return f.edges[s*len(f.nodes)+t]
 }
 
-func (f *edmondsKarpGraph) addEdge(a, b, weight int) {
-	f.nodes[a].edges = append(f.nodes[a].edges, edmondsKarpEdge{b, weight})
+func (f *edmondsKarpGraph) setEdgeValue(s, t, v int) {
+	f.edges[s*len(f.nodes)+t] = v
 }
 
 func (f *edmondsKarpGraph) bfs(s, t int) bool {
@@ -89,11 +96,11 @@ func (f *edmondsKarpGraph) bfs(s, t int) bool {
 		u := queue[0]
 		queue = queue[1:]
 
-		for i, e := range f.nodes[u].edges {
-			if !f.visited[e.node] && e.value > 0 {
-				queue = append(queue, e.node)
-				f.visited[e.node] = true
-				f.nodes[e.node].prev = edmondsKarpTrace{u, i}
+		for _, e := range f.nodes[u].edges {
+			if !f.visited[e] && f.edgeValue(u, e) > 0 {
+				queue = append(queue, e)
+				f.visited[e] = true
+				f.nodes[e].prev = u
 			}
 		}
 	}
@@ -110,19 +117,20 @@ func (f *edmondsKarpGraph) run(source, sink int) int {
 
 		for s != source {
 			p := f.nodes[s].prev
-			if f := f.nodes[p.node].edges[p.edge].value; f < pathFlow {
+			if f := f.edgeValue(p, s); f < pathFlow {
 				pathFlow = f
 			}
-			s = p.node
+			s = p
 		}
 
 		maxFlow += pathFlow
 
 		v := sink
 		for v != source {
-			p := f.nodes[v].prev
-			f.nodes[p.node].edges[p.edge].value -= pathFlow
-			v = p.node
+			u := f.nodes[v].prev
+			f.setEdgeValue(u, v, f.edgeValue(u, v)-1)
+			f.setEdgeValue(v, u, f.edgeValue(v, u)+1)
+			v = u
 		}
 	}
 

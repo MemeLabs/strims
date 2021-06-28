@@ -76,7 +76,7 @@ func TestPeerChannelSchedulerFoo(t *testing.T) {
 	var writeRequestBin binmap.Bin
 
 	p := &mockPeerThing{
-		enqueueFunc: func(t *PeerWriterQueueTicket, w PeerWriter) {
+		enqueueFunc: func(w PeerWriter) {
 			enqueueCalled = true
 		},
 	}

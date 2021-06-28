@@ -249,9 +249,7 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 	}
 
 	for _, cs := range s.channels {
-		cs.lock.Lock()
 		cs.timeOutRequests()
-		cs.lock.Unlock()
 	}
 
 	// decide which bin ranges we would consider from each peer
@@ -269,6 +267,8 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 	// unique but slow peers are also important..?
 
 	if !s.firstChunkSet && !s.haveBins.Empty() {
+		s.firstChunkSet = true
+
 		s.logger.Debug(
 			"set request offset",
 			zap.Uint64("bin", uint64(s.haveBinMax)),
@@ -276,16 +276,10 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 		)
 		s.requestBins.FillBefore(s.haveBinMax)
 		s.swarm.store.SetOffset(s.haveBinMax)
-		s.firstChunkSet = true
 	}
 }
 
-// var glock sync.Mutex
-
 func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
-	// glock.Lock()
-	// defer glock.Unlock()
-
 	streamRate := s.peerHaveChunkRate.RateWithTime(time.Second, t) / uint64(s.streamCount)
 	if streamRate == 0 {
 		return
@@ -383,7 +377,6 @@ func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
 
 	b := s.requestBins.FindLastFilled() + 2
 	for _, a := range assignments {
-		cs := channels[a.channel]
 		if ccs := currentChannels[a.stream]; ccs != nil {
 			ccs.lock.Lock()
 			ccs.logger.Debug(
@@ -391,10 +384,11 @@ func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
 				zap.Int("stream", a.stream),
 			)
 			ccs.closeStream(codec.Stream(a.stream))
-			ccs.p.enqueue(&ccs.r, ccs)
+			ccs.p.enqueue(ccs)
 			ccs.lock.Unlock()
 		}
 
+		cs := channels[a.channel]
 		cs.lock.Lock()
 		cs.logger.Debug(
 			"subscribed to stream",
@@ -402,7 +396,7 @@ func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
 			zap.Uint64("bin", uint64(b)),
 		)
 		s.doStreamSub(cs, codec.Stream(a.stream), b)
-		cs.p.enqueue(&cs.r, cs)
+		cs.p.enqueue(cs)
 		cs.lock.Unlock()
 	}
 }
@@ -609,7 +603,7 @@ type peerChannelScheduler struct {
 	cw     channelWriterThing
 	s      *peerSwarmScheduler
 
-	r PeerWriterQueueTicket
+	peerWriterQueueTicket
 
 	lock sync.Mutex
 
@@ -653,11 +647,13 @@ func (c *peerChannelScheduler) appendHaveBins(hb binmap.Bin) {
 	c.haveBins.Set(hb)
 	c.lock.Unlock()
 
-	c.p.enqueue(&c.r, c)
+	c.p.enqueue(c)
 }
 
 func (c *peerChannelScheduler) timeOutRequests() {
-	var modified bool
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
 	var n uint64
 	var bins []uint64
 
@@ -670,20 +666,18 @@ func (c *peerChannelScheduler) timeOutRequests() {
 			c.s.requestBins.Reset(ei.Value())
 			c.requestTimes.Unset(ei.Value())
 			c.cancelBins.Set(ei.Value())
-			n += ei.Value().BaseLength()
-			modified = true
+			n++
 			bins = append(bins, uint64(ei.Value()))
 		}
 	}
 
-	if modified {
+	if n > 0 {
 		c.logger.Debug(
 			"timed out requests",
 			zap.Uint64("chunks", n),
 			zap.Uint64s("bins", bins),
 		)
 
-		// c.logger.Debug("timed out requests...", zap.Uint64("count", n))
 		c.etcp.OnDataLoss()
 		if c.flightSize < n {
 			c.flightSize = 0
@@ -691,7 +685,7 @@ func (c *peerChannelScheduler) timeOutRequests() {
 			c.flightSize -= n
 		}
 
-		c.p.enqueue(&c.r, c)
+		c.p.enqueue(c)
 	}
 }
 
@@ -719,9 +713,6 @@ func (c *peerChannelScheduler) WriteHandshake() error {
 }
 
 func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error) {
-	// TODO: this should run on a timer
-	// c.timeOutRequests()
-
 	if err := c.cw.Resize(maxBytes); err != nil {
 		c.p.pushFrontData(c, b, t, pri)
 		return 0, nil
@@ -1350,9 +1341,9 @@ func (c *peerChannelScheduler) HandleStreamClose(s codec.Stream) error {
 // deprecated?
 func (c *peerChannelScheduler) HandleMessageEnd() error {
 	if atomic.CompareAndSwapUint32(&c.requestsAdded, 1, 0) {
-		c.p.enqueueNow(&c.r, c)
+		c.p.enqueueNow(c)
 	} else {
-		c.p.enqueue(&c.r, c)
+		c.p.enqueue(c)
 	}
 
 	return nil

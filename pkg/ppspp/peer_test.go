@@ -6,6 +6,7 @@ import (
 )
 
 type mockPeerWriter struct {
+	peerWriterQueueTicket
 	ID int
 }
 

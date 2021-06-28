@@ -6,23 +6,15 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-type writerTicket struct {
-	t *PeerWriterQueueTicket
-	w *mockPeerWriter
-}
-
 func TestPeerWriterQueuePushPop(t *testing.T) {
 	n := 10
-	tickets := make([]writerTicket, n)
+	writers := make([]PeerWriter, n)
 	q := newPeerWriterQueue()
 
 	for i := 0; i < 10; i++ {
-		t := writerTicket{
-			t: &PeerWriterQueueTicket{},
-			w: &mockPeerWriter{ID: i},
-		}
-		tickets[i] = t
-		q.Push(t.t, t.w)
+		w := &mockPeerWriter{ID: i}
+		writers[i] = w
+		q.Push(w)
 	}
 
 	assert.False(t, q.Empty())
@@ -37,17 +29,14 @@ func TestPeerWriterQueuePushPop(t *testing.T) {
 
 func TestPeerWriterQueueDeduplicate(t *testing.T) {
 	n := 10
-	tickets := make([]writerTicket, n)
+	writers := make([]PeerWriter, n)
 	q := newPeerWriterQueue()
 
 	for i := 0; i < 10; i++ {
-		t := writerTicket{
-			t: &PeerWriterQueueTicket{},
-			w: &mockPeerWriter{ID: i},
-		}
-		tickets[i] = t
-		q.Push(t.t, t.w)
-		q.Push(t.t, t.w)
+		w := &mockPeerWriter{ID: i}
+		writers[i] = w
+		q.Push(w)
+		q.Push(w)
 	}
 
 	assert.False(t, q.Empty())
@@ -62,20 +51,17 @@ func TestPeerWriterQueueDeduplicate(t *testing.T) {
 
 func TestPeerWriterQueueRemove(t *testing.T) {
 	n := 10
-	tickets := make([]writerTicket, n)
+	writers := make([]PeerWriter, n)
 	q := newPeerWriterQueue()
 
 	for i := 0; i < 10; i++ {
-		t := writerTicket{
-			t: &PeerWriterQueueTicket{},
-			w: &mockPeerWriter{ID: i},
-		}
-		tickets[i] = t
-		q.Push(t.t, t.w)
+		w := &mockPeerWriter{ID: i}
+		writers[i] = w
+		q.Push(w)
 	}
 
-	q.Remove(tickets[0].w)
-	q.Remove(tickets[9].w)
+	q.Remove(writers[0])
+	q.Remove(writers[9])
 
 	assert.False(t, q.Empty())
 	dq := q.Detach()
@@ -91,14 +77,11 @@ var BenchmarkPeerWriterQueueResult bool
 
 func BenchmarkPeerWriterQueue(b *testing.B) {
 	n := 10
-	tickets := make([]writerTicket, n)
+	writers := make([]PeerWriter, n)
 	q := newPeerWriterQueue()
 
 	for i := 0; i < 10; i++ {
-		tickets[i] = writerTicket{
-			t: &PeerWriterQueueTicket{},
-			w: &mockPeerWriter{ID: i},
-		}
+		writers[i] = &mockPeerWriter{ID: i}
 	}
 
 	b.ResetTimer()
@@ -106,8 +89,8 @@ func BenchmarkPeerWriterQueue(b *testing.B) {
 	var res bool
 
 	for n := 0; n < b.N; n++ {
-		for _, t := range tickets {
-			q.Push(t.t, t.w)
+		for _, w := range writers {
+			q.Push(w)
 		}
 
 		dq := q.Detach()

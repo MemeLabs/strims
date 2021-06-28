@@ -18,6 +18,7 @@ type SwarmScheduler interface {
 }
 
 type PeerWriter interface {
+	PunchTicket(v uint64) bool
 	WriteHandshake() error
 	Write(maxBytes int) (int, error)
 	WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error)
@@ -45,8 +46,8 @@ type ChannelScheduler interface {
 type peerThing interface {
 	ID() []byte
 	addReceivedBytes(uint64, timeutil.Time)
-	enqueue(t *PeerWriterQueueTicket, w PeerWriter)
-	enqueueNow(t *PeerWriterQueueTicket, w PeerWriter)
+	enqueue(w PeerWriter)
+	enqueueNow(w PeerWriter)
 	pushData(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
 	pushFrontData(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
 	removeData(w PeerWriter, b binmap.Bin, pri peerPriority)

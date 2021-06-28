@@ -11,8 +11,8 @@ import (
 type mockPeerThing struct {
 	id                   []byte
 	addReceivedBytesFunc func(n uint64, t timeutil.Time)
-	enqueueFunc          func(t *PeerWriterQueueTicket, w PeerWriter)
-	enqueueNowFunc       func(t *PeerWriterQueueTicket, w PeerWriter)
+	enqueueFunc          func(w PeerWriter)
+	enqueueNowFunc       func(w PeerWriter)
 	pushDataFunc         func(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
 	pushFrontDataFunc    func(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
 	removeDataFunc       func(w PeerWriter, b binmap.Bin, pri peerPriority)
@@ -27,14 +27,14 @@ func (p *mockPeerThing) addReceivedBytes(n uint64, t timeutil.Time) {
 		p.addReceivedBytesFunc(n, t)
 	}
 }
-func (p *mockPeerThing) enqueue(t *PeerWriterQueueTicket, w PeerWriter) {
+func (p *mockPeerThing) enqueue(w PeerWriter) {
 	if p.enqueueFunc != nil {
-		p.enqueueFunc(t, w)
+		p.enqueueFunc(w)
 	}
 }
-func (p *mockPeerThing) enqueueNow(t *PeerWriterQueueTicket, w PeerWriter) {
+func (p *mockPeerThing) enqueueNow(w PeerWriter) {
 	if p.enqueueNowFunc != nil {
-		p.enqueueNowFunc(t, w)
+		p.enqueueNowFunc(w)
 	}
 }
 func (p *mockPeerThing) pushData(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
@@ -59,6 +59,7 @@ func (p *mockPeerThing) closeChannel(w PeerWriter) {
 }
 
 type mockChannelWriterThing struct {
+	peerWriterQueueTicket
 	cap, size                int
 	ResizeFunc               func(n int) error
 	LenFunc                  func()

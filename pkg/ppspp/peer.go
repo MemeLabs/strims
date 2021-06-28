@@ -93,9 +93,9 @@ func (p *Peer) runNow() {
 	p.runAt(timeutil.Now())
 }
 
-func (p *Peer) enqueueAt(qt *PeerWriterQueueTicket, cs PeerWriter, t timeutil.Time) {
+func (p *Peer) enqueueAt(cs PeerWriter, t timeutil.Time) {
 	p.lock.Lock()
-	ok := p.wq.Push(qt, cs)
+	ok := p.wq.Push(cs)
 	p.lock.Unlock()
 
 	if ok || !t.IsNil() {
@@ -103,12 +103,12 @@ func (p *Peer) enqueueAt(qt *PeerWriterQueueTicket, cs PeerWriter, t timeutil.Ti
 	}
 }
 
-func (p *Peer) enqueue(qt *PeerWriterQueueTicket, cs PeerWriter) {
-	p.enqueueAt(qt, cs, timeutil.NilTime)
+func (p *Peer) enqueue(cs PeerWriter) {
+	p.enqueueAt(cs, timeutil.NilTime)
 }
 
-func (p *Peer) enqueueNow(qt *PeerWriterQueueTicket, cs PeerWriter) {
-	p.enqueueAt(qt, cs, timeutil.Now())
+func (p *Peer) enqueueNow(cs PeerWriter) {
+	p.enqueueAt(cs, timeutil.Now())
 }
 
 func (p *Peer) pushData(cs PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
