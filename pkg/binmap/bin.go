@@ -156,7 +156,8 @@ func (b Bin) LayerOffset() uint64 {
 
 // LayerShift leftmost bin above or below b at layer z
 func (b Bin) LayerShift(z uint64) Bin {
-	return b&^b.LayerBits() | (1 << z) - 1
+	t := Bin(1 << z)
+	return b&^(b.LayerBits()|t) | (t - 1)
 }
 
 // Contains true if o is equal to or a descendent of b

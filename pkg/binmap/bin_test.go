@@ -1,6 +1,7 @@
 package binmap
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -81,5 +82,30 @@ func TestLayerShift(t *testing.T) {
 			assert.Equal(t, NewBin(j-3, i*8).LayerShift(j), NewBin(j, i))
 			assert.Equal(t, NewBin(j-4, i*16).LayerShift(j), NewBin(j, i))
 		}
+	}
+}
+
+func TestLayerShift2(t *testing.T) {
+	cases := []struct {
+		bin   Bin
+		layer uint64
+	}{
+		{512024, 8},
+		{111, 6},
+	}
+
+	for _, c := range cases {
+		c := c
+		t.Run(fmt.Sprintf("bin %d layer %d", c.bin, c.layer), func(t *testing.T) {
+			expected := c.bin
+			for expected.Layer() > c.layer {
+				expected = expected.Left()
+			}
+			for expected.Layer() < c.layer {
+				expected = expected.Parent()
+			}
+			assert.Equal(t, expected, c.bin.LayerShift(c.layer))
+			assert.Equal(t, c.layer, c.bin.LayerShift(c.layer).Layer())
+		})
 	}
 }
