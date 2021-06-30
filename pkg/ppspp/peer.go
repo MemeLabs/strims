@@ -28,8 +28,8 @@ const (
 	peerPriorityLow  peerPriority = 1
 )
 
-func newPeer(id []byte, w Conn, t timeutil.Ticker) *Peer {
-	p := &Peer{
+func newPeer(id []byte, w Conn, t timeutil.Ticker) *peer {
+	p := &peer{
 		id:     id,
 		w:      w,
 		ready:  make(chan timeutil.Time, 1),
@@ -43,7 +43,7 @@ func newPeer(id []byte, w Conn, t timeutil.Ticker) *Peer {
 	return p
 }
 
-type Peer struct {
+type peer struct {
 	id []byte
 
 	ready  chan timeutil.Time
@@ -58,17 +58,17 @@ type Peer struct {
 	ds [2]peerDataQueue
 }
 
-func (p *Peer) ID() []byte {
+func (p *peer) ID() []byte {
 	return p.id
 }
 
-func (p *Peer) close() {
+func (p *peer) close() {
 	close(p.ready)
 	p.ticker.Stop()
 	p.w.Close()
 }
 
-func (p *Peer) closeChannel(c PeerWriter) {
+func (p *peer) CloseChannel(c peerWriter) {
 	p.lock.Lock()
 	p.wq.Remove(c)
 	p.ds[peerPriorityLow].Remove(c, binmap.All)
@@ -76,24 +76,24 @@ func (p *Peer) closeChannel(c PeerWriter) {
 	p.lock.Unlock()
 }
 
-func (p *Peer) addReceivedBytes(n uint64, t timeutil.Time) {
+func (p *peer) AddReceivedBytes(n uint64, t timeutil.Time) {
 	p.lock.Lock()
 	p.receivedBytes.AddWithTime(n, t)
 	p.lock.Unlock()
 }
 
-func (p *Peer) runAt(t timeutil.Time) {
+func (p *peer) runAt(t timeutil.Time) {
 	select {
 	case p.ready <- t:
 	default:
 	}
 }
 
-func (p *Peer) runNow() {
+func (p *peer) runNow() {
 	p.runAt(timeutil.Now())
 }
 
-func (p *Peer) enqueueAt(cs PeerWriter, t timeutil.Time) {
+func (p *peer) enqueueAt(cs peerWriter, t timeutil.Time) {
 	p.lock.Lock()
 	ok := p.wq.Push(cs)
 	p.lock.Unlock()
@@ -103,33 +103,33 @@ func (p *Peer) enqueueAt(cs PeerWriter, t timeutil.Time) {
 	}
 }
 
-func (p *Peer) enqueue(cs PeerWriter) {
+func (p *peer) Enqueue(cs peerWriter) {
 	p.enqueueAt(cs, timeutil.NilTime)
 }
 
-func (p *Peer) enqueueNow(cs PeerWriter) {
+func (p *peer) EnqueueNow(cs peerWriter) {
 	p.enqueueAt(cs, timeutil.Now())
 }
 
-func (p *Peer) pushData(cs PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
+func (p *peer) PushData(cs peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
 	p.lock.Lock()
 	p.ds[pri].Push(cs, b, t)
 	p.lock.Unlock()
 }
 
-func (p *Peer) pushFrontData(cs PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
+func (p *peer) PushFrontData(cs peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
 	p.lock.Lock()
 	p.ds[pri].PushFront(cs, b, t)
 	p.lock.Unlock()
 }
 
-func (p *Peer) removeData(cs PeerWriter, b binmap.Bin, pri peerPriority) {
+func (p *peer) RemoveData(cs peerWriter, b binmap.Bin, pri peerPriority) {
 	p.lock.Lock()
 	p.ds[pri].Remove(cs, b)
 	p.lock.Unlock()
 }
 
-func (p *Peer) run() {
+func (p *peer) run() {
 	var t timeutil.Time
 	for t = range p.ready {
 		for t.IsNil() {
@@ -156,7 +156,7 @@ func (p *Peer) run() {
 	}
 }
 
-func (p *Peer) write() (bool, error) {
+func (p *peer) write() (bool, error) {
 	var n int
 
 	p.lock.Lock()

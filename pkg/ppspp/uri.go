@@ -10,8 +10,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 )
 
-// TODO: implement this with content integrity...
-
 // errors ...
 var (
 	ErrInvalidURI = errors.New("invalid uri")

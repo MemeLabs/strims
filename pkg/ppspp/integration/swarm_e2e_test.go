@@ -25,9 +25,9 @@ func TestSwarmE2E(t *testing.T) {
 	}
 
 	type client struct {
-		id        []byte
-		swarm     *ppspp.Swarm
-		scheduler *ppspp.Runner
+		id     []byte
+		swarm  *ppspp.Swarm
+		runner *ppspp.Runner
 	}
 
 	newClient := func() *client {
@@ -57,19 +57,19 @@ func TestSwarmE2E(t *testing.T) {
 	logger := ppspptest.Logger()
 
 	for _, c := range clients {
-		c.scheduler = ppspp.NewRunner(ctx, logger)
+		c.runner = ppspp.NewRunner(ctx, logger)
 	}
 
 	for i := 0; i < len(clients); i++ {
 		for j := i + 1; j < len(clients); j++ {
 			iConn, jConn := ppspptest.NewConnPair()
 
-			iChannelReader, iPeer := clients[i].scheduler.RunPeer(clients[i].id, iConn)
-			jCHannelReader, jPeer := clients[j].scheduler.RunPeer(clients[j].id, jConn)
+			iChannelReader, iPeer := clients[i].runner.RunPeer(clients[i].id, iConn)
+			jCHannelReader, jPeer := clients[j].runner.RunPeer(clients[j].id, jConn)
 
-			err := clients[i].scheduler.RunChannel(clients[i].swarm, iPeer, 1, 1)
+			err := iPeer.RunSwarm(clients[i].swarm, 1, 1)
 			assert.NoError(t, err, "channel open failed")
-			err = clients[j].scheduler.RunChannel(clients[j].swarm, jPeer, 1, 1)
+			err = jPeer.RunSwarm(clients[j].swarm, 1, 1)
 			assert.NoError(t, err, "channel open failed")
 
 			go ppspptest.ReadChannelConn(iConn, iChannelReader)

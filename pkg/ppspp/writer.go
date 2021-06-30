@@ -28,16 +28,8 @@ func NewWriter(o WriterOptions) (*Writer, error) {
 
 	s.store.SetOffset(0)
 
-	w, err := integrity.NewWriter(o.Key.Private, integrity.SwarmWriterOptions{
-		LiveSignatureAlgorithm: s.options.Integrity.LiveSignatureAlgorithm,
-		ProtectionMethod:       s.options.Integrity.ProtectionMethod,
-		ChunkSize:              s.options.ChunkSize,
-		Verifier:               s.verifier,
-		Writer:                 store.NewWriter(s.pubSub, s.options.ChunkSize),
-		WriterOptions: integrity.WriterOptions{
-			ChunksPerSignature: s.options.ChunksPerSignature,
-		},
-	})
+	sw := store.NewWriter(s.pubSub, s.options.ChunkSize)
+	w, err := integrity.NewWriter(o.Key.Private, s.verifier, sw, s.options.IntegrityWriterOptions())
 	if err != nil {
 		return nil, err
 	}

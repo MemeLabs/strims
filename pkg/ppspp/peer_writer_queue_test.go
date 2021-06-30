@@ -8,7 +8,7 @@ import (
 
 func TestPeerWriterQueuePushPop(t *testing.T) {
 	n := 10
-	writers := make([]PeerWriter, n)
+	writers := make([]peerWriter, n)
 	q := newPeerWriterQueue()
 
 	for i := 0; i < 10; i++ {
@@ -29,7 +29,7 @@ func TestPeerWriterQueuePushPop(t *testing.T) {
 
 func TestPeerWriterQueueDeduplicate(t *testing.T) {
 	n := 10
-	writers := make([]PeerWriter, n)
+	writers := make([]peerWriter, n)
 	q := newPeerWriterQueue()
 
 	for i := 0; i < 10; i++ {
@@ -51,7 +51,7 @@ func TestPeerWriterQueueDeduplicate(t *testing.T) {
 
 func TestPeerWriterQueueRemove(t *testing.T) {
 	n := 10
-	writers := make([]PeerWriter, n)
+	writers := make([]peerWriter, n)
 	q := newPeerWriterQueue()
 
 	for i := 0; i < 10; i++ {
@@ -77,7 +77,7 @@ var BenchmarkPeerWriterQueueResult bool
 
 func BenchmarkPeerWriterQueue(b *testing.B) {
 	n := 10
-	writers := make([]PeerWriter, n)
+	writers := make([]peerWriter, n)
 	q := newPeerWriterQueue()
 
 	for i := 0; i < 10; i++ {

@@ -36,6 +36,28 @@ func (o *SwarmOptions) Assign(u SwarmOptions) {
 	o.Integrity.Assign(u.Integrity)
 }
 
+// IntegrityVerifierOptions ...
+func (o SwarmOptions) IntegrityVerifierOptions() integrity.SwarmVerifierOptions {
+	return integrity.SwarmVerifierOptions{
+		LiveDiscardWindow:  o.LiveWindow,
+		ChunkSize:          o.ChunkSize,
+		ChunksPerSignature: o.ChunksPerSignature,
+		VerifierOptions:    o.Integrity,
+	}
+}
+
+// IntegrityWriterOptions ...
+func (o SwarmOptions) IntegrityWriterOptions() integrity.SwarmWriterOptions {
+	return integrity.SwarmWriterOptions{
+		LiveSignatureAlgorithm: o.Integrity.LiveSignatureAlgorithm,
+		ProtectionMethod:       o.Integrity.ProtectionMethod,
+		ChunkSize:              o.ChunkSize,
+		WriterOptions: integrity.WriterOptions{
+			ChunksPerSignature: o.ChunksPerSignature,
+		},
+	}
+}
+
 // URIOptions ...
 func (o SwarmOptions) URIOptions() URIOptions {
 	return URIOptions{

@@ -15,6 +15,9 @@ import (
 	"go.uber.org/zap"
 )
 
+const peerQOSUpdateInterval = time.Second
+const minPeerQOSWeight = 50
+
 // Conn ...
 type Conn interface {
 	ioutil.WriteFlushCloser
@@ -23,16 +26,16 @@ type Conn interface {
 }
 
 type runnerSwarm struct {
-	scheduler SwarmScheduler
+	scheduler swarmScheduler
 	stop      timeutil.StopFunc
-	peers     map[*Peer]codec.Channel
+	peers     map[*peer]codec.Channel
 }
 
 func NewRunner(ctx context.Context, logger *zap.Logger) *Runner {
 	r := &Runner{
 		logger: logger,
 		swarms: map[*Swarm]*runnerSwarm{},
-		peers:  map[*Peer]*ChannelReader{},
+		peers:  map[*peer]*ChannelReader{},
 		ticker: timeutil.NewTickEmitter(100 * time.Millisecond),
 	}
 	r.ticker.Subscribe(r.run)
@@ -43,25 +46,25 @@ type Runner struct {
 	logger *zap.Logger
 	lock   sync.Mutex
 	swarms map[*Swarm]*runnerSwarm
-	peers  map[*Peer]*ChannelReader
+	peers  map[*peer]*ChannelReader
 	ticker *timeutil.TickEmitter
 
 	nextPeerQOSUpdate timeutil.Time
 }
 
-// RunChannel ...
-func (r *Runner) RunChannel(s *Swarm, p *Peer, channel, peerChannel codec.Channel) error {
+// runSwarmPeer ...
+func (r *Runner) runSwarmPeer(s *Swarm, p *peer, channel, peerChannel codec.Channel) error {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	rs := r.swarms[s]
 	if rs == nil {
 		logger := r.logger.With(logutil.ByteHex("swarm", bytes.NewBuffer(s.id).Next(8)))
-		ss := s.options.SchedulingMethod.SwarmScheduler(logger, s)
+		ss := s.options.SchedulingMethod.swarmScheduler(logger, s)
 		rs = &runnerSwarm{
 			scheduler: ss,
 			stop:      r.ticker.Subscribe(ss.Run),
-			peers:     map[*Peer]codec.Channel{},
+			peers:     map[*peer]codec.Channel{},
 		}
 		s.pubSub.Subscribe(ss)
 		r.swarms[s] = rs
@@ -95,38 +98,38 @@ func (r *Runner) RunChannel(s *Swarm, p *Peer, channel, peerChannel codec.Channe
 }
 
 // StopChannel ...
-func (r *Runner) StopChannel(s *Swarm, p *Peer) {
+func (r *Runner) stopSwarmPeer(s *Swarm, p *peer) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	r.stopChannel(s, p)
-}
 
-func (r *Runner) stopChannel(s *Swarm, p *Peer) {
 	rs := r.swarms[s]
 	cr := r.peers[p]
 	if rs == nil || cr == nil {
 		return
 	}
 
-	channel, ok := rs.peers[p]
+	c, ok := rs.peers[p]
 	if !ok {
 		return
 	}
+	r.stopChannel(s, p, rs, cr, c)
+}
 
+func (r *Runner) stopChannel(s *Swarm, p *peer, rs *runnerSwarm, cr *ChannelReader, c codec.Channel) {
 	delete(rs.peers, p)
 	if len(rs.peers) == 0 {
 		rs.stop()
 		delete(r.swarms, s)
 	}
 
-	cr.closeChannel(channel)
+	cr.closeChannel(c)
 	rs.scheduler.CloseChannel(p)
 
 	deleteChannelWriterMetrics(s, p)
 	deleteChannelReaderMetrics(s, p)
 }
 
-func (r *Runner) RunPeer(id []byte, w Conn) (*ChannelReader, *Peer) {
+func (r *Runner) RunPeer(id []byte, w Conn) (*ChannelReader, *RunnerPeer) {
 	p := newPeer(id, w, r.ticker.Ticker())
 	cr := newChannelReader(r.logger.With(logutil.ByteHex("peer", id)))
 
@@ -134,16 +137,21 @@ func (r *Runner) RunPeer(id []byte, w Conn) (*ChannelReader, *Peer) {
 	r.peers[p] = cr
 	r.lock.Unlock()
 
-	return cr, p
+	return cr, &RunnerPeer{r, p}
 }
 
-func (r *Runner) StopPeer(p *Peer) {
+func (r *Runner) tryStopPeer(p *peer) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
+	cr, ok := r.peers[p]
+	if !ok {
+		return
+	}
+
 	for s, rs := range r.swarms {
-		if _, ok := rs.peers[p]; ok {
-			r.stopChannel(s, p)
+		if c, ok := rs.peers[p]; ok {
+			r.stopChannel(s, p, rs, cr, c)
 		}
 	}
 
@@ -156,13 +164,10 @@ func (r *Runner) run(t timeutil.Time) {
 	defer r.lock.Unlock()
 
 	if t.After(r.nextPeerQOSUpdate) {
+		r.nextPeerQOSUpdate = t.Add(peerQOSUpdateInterval)
 		r.updatePeerWeights(t)
-		r.nextPeerQOSUpdate = t.Add(PeerQOSUpdateInterval)
 	}
 }
-
-const PeerQOSUpdateInterval = time.Second
-const MinPeerQOSWeight = 50
 
 func (r *Runner) updatePeerWeights(t timeutil.Time) {
 	var totalBytes uint64
@@ -180,12 +185,33 @@ func (r *Runner) updatePeerWeights(t timeutil.Time) {
 		weight := p.receivedBytes.RateWithTime(time.Minute, t) * qos.MaxWeight / totalBytes
 		p.lock.Unlock()
 
-		if weight < MinPeerQOSWeight {
-			weight = MinPeerQOSWeight
+		if weight < minPeerQOSWeight {
+			weight = minPeerQOSWeight
 		} else if weight > qos.MaxWeight {
 			weight = qos.MaxWeight
 		}
 
 		p.w.SetQOSWeight(weight)
 	}
+}
+
+// RunnerPeer ...
+type RunnerPeer struct {
+	r *Runner
+	p *peer
+}
+
+// RunSwarm ...
+func (p *RunnerPeer) RunSwarm(s *Swarm, channel, peerChannel codec.Channel) error {
+	return p.r.runSwarmPeer(s, p.p, channel, peerChannel)
+}
+
+// StopSwarm ...
+func (p *RunnerPeer) StopSwarm(s *Swarm) {
+	p.r.stopSwarmPeer(s, p.p)
+}
+
+// Stop ...
+func (p *RunnerPeer) Stop() {
+	p.r.tryStopPeer(p.p)
 }

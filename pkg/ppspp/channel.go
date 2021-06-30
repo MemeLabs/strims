@@ -233,11 +233,11 @@ type ChannelReader struct {
 
 type channelReaderChannel struct {
 	v         uint64
-	scheduler ChannelScheduler
+	scheduler channelScheduler
 	r         codec.Reader
 }
 
-func (c *ChannelReader) openChannel(channel codec.Channel, metrics channelReaderMetrics, scheduler ChannelScheduler, swarm *Swarm) {
+func (c *ChannelReader) openChannel(channel codec.Channel, metrics channelReaderMetrics, scheduler channelScheduler, swarm *Swarm) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -312,7 +312,7 @@ func (c *ChannelReader) HandleMessage(b []byte) (err error) {
 type channelMessageHandler struct {
 	logger    *zap.Logger
 	swarm     *Swarm
-	scheduler ChannelScheduler
+	scheduler channelScheduler
 	metrics   channelReaderMetrics
 	verifier  integrity.ChannelVerifier
 }
@@ -521,7 +521,7 @@ func (c *channelMessageHandler) HandleStreamClose(m codec.StreamClose) error {
 	return c.scheduler.HandleStreamClose(m.Stream)
 }
 
-func newChannelReaderMetrics(s *Swarm, p *Peer) channelReaderMetrics {
+func newChannelReaderMetrics(s *Swarm, p *peer) channelReaderMetrics {
 	peerID := hex.EncodeToString(p.id)
 	swarmID := s.id.String()
 	direction := "in"
@@ -541,7 +541,7 @@ type channelReaderMetrics struct {
 	InvalidBytesCount prometheus.Counter
 }
 
-func deleteChannelReaderMetrics(s *Swarm, p *Peer) {
+func deleteChannelReaderMetrics(s *Swarm, p *peer) {
 	peerID := hex.EncodeToString(p.id)
 	swarmID := s.id.String()
 	direction := "in"
@@ -552,7 +552,7 @@ func deleteChannelReaderMetrics(s *Swarm, p *Peer) {
 	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "invalid_bytes")
 }
 
-func newChannelWriterMetrics(s *Swarm, p *Peer) channelWriterMetrics {
+func newChannelWriterMetrics(s *Swarm, p *peer) channelWriterMetrics {
 	return channelWriterMetrics{
 		channelMetrics: newChannelMetrics(s, p, "out"),
 	}
@@ -562,11 +562,11 @@ type channelWriterMetrics struct {
 	channelMetrics
 }
 
-func deleteChannelWriterMetrics(s *Swarm, p *Peer) {
+func deleteChannelWriterMetrics(s *Swarm, p *peer) {
 	deleteChannelMetrics(s, p, "out")
 }
 
-func newChannelMetrics(s *Swarm, p *Peer, direction string) channelMetrics {
+func newChannelMetrics(s *Swarm, p *peer, direction string) channelMetrics {
 	peerID := hex.EncodeToString(p.id)
 	swarmID := s.id.String()
 
@@ -615,7 +615,7 @@ type channelMetrics struct {
 	OverheadBytesCount   prometheus.Counter
 }
 
-func deleteChannelMetrics(s *Swarm, p *Peer, direction string) {
+func deleteChannelMetrics(s *Swarm, p *peer, direction string) {
 	peerID := hex.EncodeToString(p.id)
 	swarmID := s.id.String()
 

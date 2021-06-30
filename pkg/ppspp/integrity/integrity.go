@@ -165,6 +165,21 @@ type SwarmVerifierOptions struct {
 	VerifierOptions
 }
 
+// MaxMessageBytes ...
+func (o SwarmVerifierOptions) MaxMessageBytes() int {
+	var im codec.Integrity
+	var sim codec.SignedIntegrity
+
+	switch o.ProtectionMethod {
+	case ProtectionMethodSignAll:
+		return codec.MessageTypeLen + o.LiveSignatureAlgorithm.SignatureSize() + sim.ByteLen()
+	case ProtectionMethodMerkleTree:
+		return codec.MessageTypeLen + o.LiveSignatureAlgorithm.SignatureSize() + sim.ByteLen() + bits.TrailingZeros64(uint64(o.ChunksPerSignature))*(codec.MessageTypeLen+o.MerkleHashTreeFunction.HashSize()+im.ByteLen())
+	default:
+		return 0
+	}
+}
+
 // VerifierOptions ...
 type VerifierOptions struct {
 	ProtectionMethod       ProtectionMethod
@@ -182,25 +197,6 @@ func (o *VerifierOptions) Assign(u VerifierOptions) {
 	}
 	if u.LiveSignatureAlgorithm != 0 {
 		o.LiveSignatureAlgorithm = u.LiveSignatureAlgorithm
-	}
-}
-
-func MaxMessageBytes(
-	pm ProtectionMethod,
-	lsa LiveSignatureAlgorithm,
-	htf MerkleHashTreeFunction,
-	cps int,
-) int {
-	var im codec.Integrity
-	var sim codec.SignedIntegrity
-
-	switch pm {
-	case ProtectionMethodSignAll:
-		return codec.MessageTypeLen + lsa.SignatureSize() + sim.ByteLen()
-	case ProtectionMethodMerkleTree:
-		return codec.MessageTypeLen + lsa.SignatureSize() + sim.ByteLen() + bits.Len64(uint64(cps))*(codec.MessageTypeLen+htf.HashSize()+im.ByteLen())
-	default:
-		return 0
 	}
 }
 
@@ -241,8 +237,6 @@ type SwarmWriterOptions struct {
 	LiveSignatureAlgorithm LiveSignatureAlgorithm
 	ProtectionMethod       ProtectionMethod
 	ChunkSize              int
-	Verifier               SwarmVerifier
-	Writer                 ioutil.WriteFlusher
 	WriterOptions
 }
 
@@ -252,7 +246,7 @@ type WriterOptions struct {
 }
 
 // NewWriter ...
-func NewWriter(key []byte, opt SwarmWriterOptions) (ioutil.WriteFlusher, error) {
+func NewWriter(key []byte, v SwarmVerifier, w ioutil.WriteFlusher, opt SwarmWriterOptions) (ioutil.WriteFlusher, error) {
 	var signatureSigner SignatureSigner
 	switch opt.LiveSignatureAlgorithm {
 	case LiveSignatureAlgorithmED25519:
@@ -261,21 +255,21 @@ func NewWriter(key []byte, opt SwarmWriterOptions) (ioutil.WriteFlusher, error) 
 
 	switch opt.ProtectionMethod {
 	case ProtectionMethodNone:
-		return opt.Writer, nil
+		return w, nil
 	case ProtectionMethodMerkleTree:
 		return NewMerkleWriter(&MerkleWriterOptions{
 			ChunksPerSignature: opt.ChunksPerSignature,
 			ChunkSize:          opt.ChunkSize,
-			Verifier:           opt.Verifier.(*MerkleSwarmVerifier),
+			Verifier:           v.(*MerkleSwarmVerifier),
 			Signer:             signatureSigner,
-			Writer:             opt.Writer,
+			Writer:             w,
 		}), nil
 	case ProtectionMethodSignAll:
 		return NewSignAllWriter(&SignAllWriterOptions{
 			ChunkSize: opt.ChunkSize,
-			Verifier:  opt.Verifier.(*SignAllSwarmVerifier),
+			Verifier:  v.(*SignAllSwarmVerifier),
 			Signer:    signatureSigner,
-			Writer:    opt.Writer,
+			Writer:    w,
 		}), nil
 	default:
 		return nil, errors.New("unsupported protection method")

@@ -11,48 +11,48 @@ import (
 type mockPeerThing struct {
 	id                   []byte
 	addReceivedBytesFunc func(n uint64, t timeutil.Time)
-	enqueueFunc          func(w PeerWriter)
-	enqueueNowFunc       func(w PeerWriter)
-	pushDataFunc         func(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
-	pushFrontDataFunc    func(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
-	removeDataFunc       func(w PeerWriter, b binmap.Bin, pri peerPriority)
-	closeChannelFunc     func(w PeerWriter)
+	enqueueFunc          func(w peerWriter)
+	enqueueNowFunc       func(w peerWriter)
+	pushDataFunc         func(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
+	pushFrontDataFunc    func(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
+	removeDataFunc       func(w peerWriter, b binmap.Bin, pri peerPriority)
+	closeChannelFunc     func(w peerWriter)
 }
 
 func (p *mockPeerThing) ID() []byte {
 	return p.id
 }
-func (p *mockPeerThing) addReceivedBytes(n uint64, t timeutil.Time) {
+func (p *mockPeerThing) AddReceivedBytes(n uint64, t timeutil.Time) {
 	if p.addReceivedBytesFunc != nil {
 		p.addReceivedBytesFunc(n, t)
 	}
 }
-func (p *mockPeerThing) enqueue(w PeerWriter) {
+func (p *mockPeerThing) Enqueue(w peerWriter) {
 	if p.enqueueFunc != nil {
 		p.enqueueFunc(w)
 	}
 }
-func (p *mockPeerThing) enqueueNow(w PeerWriter) {
+func (p *mockPeerThing) EnqueueNow(w peerWriter) {
 	if p.enqueueNowFunc != nil {
 		p.enqueueNowFunc(w)
 	}
 }
-func (p *mockPeerThing) pushData(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
+func (p *mockPeerThing) PushData(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
 	if p.pushDataFunc != nil {
 		p.pushDataFunc(w, b, t, pri)
 	}
 }
-func (p *mockPeerThing) pushFrontData(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
+func (p *mockPeerThing) PushFrontData(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority) {
 	if p.pushFrontDataFunc != nil {
 		p.pushFrontDataFunc(w, b, t, pri)
 	}
 }
-func (p *mockPeerThing) removeData(w PeerWriter, b binmap.Bin, pri peerPriority) {
+func (p *mockPeerThing) RemoveData(w peerWriter, b binmap.Bin, pri peerPriority) {
 	if p.removeDataFunc != nil {
 		p.removeDataFunc(w, b, pri)
 	}
 }
-func (p *mockPeerThing) closeChannel(w PeerWriter) {
+func (p *mockPeerThing) CloseChannel(w peerWriter) {
 	if p.closeChannelFunc != nil {
 		p.closeChannelFunc(w)
 	}

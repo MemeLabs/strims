@@ -203,14 +203,13 @@ func (f *contactedHost) Less(o llrb.Item) bool {
 func (c *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Peer {
 	ctx, close := context.WithCancel(peer.Context())
 	w := vnic.NewFrameWriter(peer.Link, vnic.TransferPort, c.qosc)
-	cr, sp := c.runner.RunPeer(peer.HostID().Bytes(nil), w)
+	cr, rp := c.runner.RunPeer(peer.HostID().Bytes(nil), w)
 	p := &Peer{
-		logger:    c.logger,
-		runner:    c.runner,
-		ctx:       ctx,
-		vnicPeer:  peer,
-		swarmPeer: sp,
-		client:    client,
+		logger:     c.logger,
+		ctx:        ctx,
+		vnicPeer:   peer,
+		runnerPeer: rp,
+		client:     client,
 	}
 	peer.SetHandler(vnic.TransferPort, func(_ *vnic.Peer, f vnic.Frame) error {
 		err := cr.HandleMessage(f.Body)
@@ -239,7 +238,7 @@ func (c *Control) RemovePeer(id uint64) {
 	}
 
 	p.vnicPeer.RemoveHandler(vnic.TransferPort)
-	c.runner.StopPeer(p.swarmPeer)
+	p.runnerPeer.Stop()
 }
 
 // Add ...

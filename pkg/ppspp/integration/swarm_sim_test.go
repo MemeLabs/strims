@@ -22,7 +22,6 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/errutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
@@ -209,9 +208,9 @@ func TestSwarmSim(t *testing.T) {
 	options := ppspp.SwarmOptions{
 		LiveWindow:  1 << 14,
 		StreamCount: 16,
-		Integrity: integrity.VerifierOptions{
-			ProtectionMethod: integrity.ProtectionMethodNone,
-		},
+		// Integrity: integrity.VerifierOptions{
+		// 	ProtectionMethod: integrity.ProtectionMethodNone,
+		// },
 	}
 
 	type client struct {
@@ -335,9 +334,9 @@ func TestSwarmSim(t *testing.T) {
 				iChanReader, iPeer := clients[i].runner.RunPeer(pairID(clients[i].id, clients[j].id), imConn)
 				jChanReader, jPeer := clients[j].runner.RunPeer(pairID(clients[j].id, clients[i].id), jmConn)
 
-				err = clients[i].runner.RunChannel(clients[i].swarm, iPeer, codec.Channel(i), codec.Channel(j))
+				err = iPeer.RunSwarm(clients[i].swarm, codec.Channel(i), codec.Channel(j))
 				assert.NoError(t, err, "channel open failed")
-				err = clients[j].runner.RunChannel(clients[j].swarm, jPeer, codec.Channel(j), codec.Channel(i))
+				err = jPeer.RunSwarm(clients[j].swarm, codec.Channel(j), codec.Channel(i))
 				assert.NoError(t, err, "channel open failed")
 
 				go ppspptest.ReadChannelConn(imConn, iChanReader)

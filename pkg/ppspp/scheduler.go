@@ -10,22 +10,22 @@ import (
 	"go.uber.org/zap"
 )
 
-type SwarmScheduler interface {
+type swarmScheduler interface {
 	store.Subscriber
-	ChannelScheduler(p peerThing, cw channelWriterThing) ChannelScheduler
+	ChannelScheduler(p peerThing, cw channelWriterThing) channelScheduler
 	CloseChannel(p peerThing)
 	Run(t timeutil.Time)
 }
 
-type PeerWriter interface {
+type peerWriter interface {
 	PunchTicket(v uint64) bool
 	WriteHandshake() error
 	Write(maxBytes int) (int, error)
 	WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error)
 }
 
-type ChannelScheduler interface {
-	PeerWriter
+type channelScheduler interface {
+	peerWriter
 	HandleHandshake(liveWindow uint32) error
 	HandleAck(b binmap.Bin, delaySample time.Duration) error
 	HandleData(b binmap.Bin, t timeutil.Time, valid bool) error
@@ -45,13 +45,13 @@ type ChannelScheduler interface {
 
 type peerThing interface {
 	ID() []byte
-	addReceivedBytes(uint64, timeutil.Time)
-	enqueue(w PeerWriter)
-	enqueueNow(w PeerWriter)
-	pushData(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
-	pushFrontData(w PeerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
-	removeData(w PeerWriter, b binmap.Bin, pri peerPriority)
-	closeChannel(w PeerWriter)
+	AddReceivedBytes(uint64, timeutil.Time)
+	Enqueue(w peerWriter)
+	EnqueueNow(w peerWriter)
+	PushData(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
+	PushFrontData(w peerWriter, b binmap.Bin, t timeutil.Time, pri peerPriority)
+	RemoveData(w peerWriter, b binmap.Bin, pri peerPriority)
+	CloseChannel(w peerWriter)
 }
 
 type channelWriterThing interface {
@@ -79,7 +79,7 @@ type channelWriterThing interface {
 
 type SchedulingMethod int
 
-func (m SchedulingMethod) SwarmScheduler(logger *zap.Logger, s *Swarm) SwarmScheduler {
+func (m SchedulingMethod) swarmScheduler(logger *zap.Logger, s *Swarm) swarmScheduler {
 	switch m {
 	case SeedSchedulingMethod:
 		return newSeedSwarmScheduler(logger, s)

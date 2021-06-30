@@ -10,14 +10,13 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
-	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
 )
 
-var _ SwarmScheduler = &seedSwarmScheduler{}
-var _ ChannelScheduler = &seedChannelScheduler{}
+var _ swarmScheduler = &seedSwarmScheduler{}
+var _ channelScheduler = &seedChannelScheduler{}
 
 func newSeedSwarmScheduler(logger *zap.Logger, s *Swarm) *seedSwarmScheduler {
 	return &seedSwarmScheduler{
@@ -27,13 +26,8 @@ func newSeedSwarmScheduler(logger *zap.Logger, s *Swarm) *seedSwarmScheduler {
 		haveBins:   binmap.New(),
 		channels:   map[peerThing]*seedChannelScheduler{},
 
-		integrityOverhead: integrity.MaxMessageBytes(
-			s.options.Integrity.ProtectionMethod,
-			s.options.Integrity.LiveSignatureAlgorithm,
-			s.options.Integrity.MerkleHashTreeFunction,
-			s.options.ChunksPerSignature,
-		),
-		chunkSize: int(s.options.ChunkSize),
+		integrityOverhead: s.options.IntegrityVerifierOptions().MaxMessageBytes(),
+		chunkSize:         int(s.options.ChunkSize),
 	}
 }
 
@@ -51,6 +45,8 @@ type seedSwarmScheduler struct {
 
 	integrityOverhead int
 	chunkSize         int
+
+	initHack int32
 }
 
 func (s *seedSwarmScheduler) Run(c timeutil.Time) {
@@ -97,9 +93,7 @@ func (s *seedSwarmScheduler) Consume(c store.Chunk) {
 	}
 }
 
-var zn int32
-
-func (s *seedSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing) ChannelScheduler {
+func (s *seedSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing) channelScheduler {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -114,11 +108,11 @@ func (s *seedSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 	}
 
 	// HAX
-	zzn := codec.Stream(atomic.AddInt32(&zn, 1)) - 1
+	initHack := codec.Stream(atomic.AddInt32(&s.initHack, 1)) - 1
 	sc := codec.Stream(c.s.swarm.options.StreamCount)
 	k := (sc + 2) / 3
 	for i := codec.Stream(0); i < sc; i++ {
-		if i/k == zzn {
+		if i/k == initHack {
 			c.peerOpenStreams = append(c.peerOpenStreams, codec.StreamAddress{
 				Stream:  i,
 				Address: 0,
@@ -127,7 +121,7 @@ func (s *seedSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 
 			for it := c.s.haveBins.IterateFilled(); it.NextBase(); {
 				if c.s.binStream(it.Value()) == i {
-					c.p.pushData(c, it.Value(), timeutil.EpochTime, peerPriorityHigh)
+					c.p.PushData(c, it.Value(), timeutil.EpochTime, peerPriorityHigh)
 				}
 			}
 		}
@@ -150,7 +144,7 @@ func (s *seedSwarmScheduler) CloseChannel(p peerThing) {
 
 	// remove requested streams
 
-	p.closeChannel(cs)
+	p.CloseChannel(cs)
 }
 
 func (s *seedSwarmScheduler) binStream(b binmap.Bin) codec.Stream {
@@ -194,11 +188,11 @@ func (c *seedChannelScheduler) appendHaveBins(hb, b binmap.Bin) {
 		bs := c.s.binStream(bl)
 		rb, ok := c.peerRequestStreams[bs]
 		if ok && rb <= bl {
-			c.p.pushData(c, bl, timeutil.EpochTime, peerPriorityHigh)
+			c.p.PushData(c, bl, timeutil.EpochTime, peerPriorityHigh)
 		}
 	}
 
-	c.p.enqueue(c)
+	c.p.Enqueue(c)
 }
 
 func (c *seedChannelScheduler) WriteHandshake() error {
@@ -222,7 +216,7 @@ func (c *seedChannelScheduler) WriteHandshake() error {
 
 func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error) {
 	if err := c.cw.Resize(maxBytes); err != nil {
-		c.p.pushFrontData(c, b, t, pri)
+		c.p.PushFrontData(c, b, t, pri)
 		return 0, nil
 	}
 
@@ -232,11 +226,11 @@ func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.
 		}
 
 		if b.IsBase() {
-			c.p.pushFrontData(c, b, t, pri)
+			c.p.PushFrontData(c, b, t, pri)
 			return 0, nil
 		}
 
-		c.p.pushFrontData(c, b.Right(), t, pri)
+		c.p.PushFrontData(c, b.Right(), t, pri)
 		b = b.Left()
 	}
 
@@ -250,7 +244,7 @@ func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.
 	if err != nil {
 		if errors.Is(err, codec.ErrNotEnoughSpace) {
 			c.cw.Reset()
-			c.p.pushFrontData(c, b, t, pri)
+			c.p.PushFrontData(c, b, t, pri)
 			return 0, nil
 		}
 		c.logger.Debug(
@@ -265,7 +259,7 @@ func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.
 	if _, err := c.s.swarm.store.WriteData(b, t, c.cw); err != nil {
 		if errors.Is(err, codec.ErrNotEnoughSpace) {
 			c.cw.Reset()
-			c.p.pushFrontData(c, b, t, pri)
+			c.p.PushFrontData(c, b, t, pri)
 			return 0, nil
 		}
 		c.logger.Debug(
@@ -393,7 +387,7 @@ func (c *seedChannelScheduler) HandleHave(b binmap.Bin) error {
 }
 
 func (c *seedChannelScheduler) HandleRequest(b binmap.Bin, t timeutil.Time) error {
-	c.p.pushData(c, b, t, peerPriorityLow)
+	c.p.PushData(c, b, t, peerPriorityLow)
 
 	atomic.StoreUint32(&c.requestsAdded, 1)
 
@@ -401,7 +395,7 @@ func (c *seedChannelScheduler) HandleRequest(b binmap.Bin, t timeutil.Time) erro
 }
 
 func (c *seedChannelScheduler) HandleCancel(b binmap.Bin) error {
-	c.p.removeData(c, b, peerPriorityLow)
+	c.p.RemoveData(c, b, peerPriorityLow)
 	return nil
 }
 
@@ -458,7 +452,7 @@ func (c *seedChannelScheduler) HandleStreamCancel(s codec.Stream) error {
 	defer c.lock.Unlock()
 	// delete enqueued sends in this stream
 	delete(c.peerRequestStreams, s)
-	c.peerCloseStreams = append(c.peerCloseStreams, s)
+	// c.peerCloseStreams = append(c.peerCloseStreams, s)
 	return nil
 }
 
@@ -483,9 +477,9 @@ func (c *seedChannelScheduler) HandleMessageEnd() error {
 	// }
 
 	if atomic.CompareAndSwapUint32(&c.requestsAdded, 1, 0) {
-		c.p.enqueueNow(c)
+		c.p.EnqueueNow(c)
 	} else {
-		c.p.enqueue(c)
+		c.p.Enqueue(c)
 	}
 
 	return nil

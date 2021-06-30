@@ -232,7 +232,8 @@ type MerkleChannelVerifier struct {
 
 // ChunkVerifier ...
 func (v *MerkleChannelVerifier) ChunkVerifier(b binmap.Bin) ChunkVerifier {
-	if !v.chunkVerifier.bin.Contains(b.LayerShift(v.munroLayer)) {
+	b = b.LayerShift(v.munroLayer)
+	if v.chunkVerifier.bin != b {
 		v.chunkVerifier.Reset(b)
 	}
 	return v.chunkVerifier

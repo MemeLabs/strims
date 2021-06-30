@@ -24,7 +24,7 @@ func TestPeerSwarmSchedulerStartStopChannel(t *testing.T) {
 
 	var closeChannelCalled bool
 	peer := &mockPeerThing{
-		closeChannelFunc: func(w PeerWriter) {
+		closeChannelFunc: func(w peerWriter) {
 			closeChannelCalled = true
 		},
 	}
@@ -76,7 +76,7 @@ func TestPeerChannelSchedulerFoo(t *testing.T) {
 	var writeRequestBin binmap.Bin
 
 	p := &mockPeerThing{
-		enqueueFunc: func(w PeerWriter) {
+		enqueueFunc: func(w peerWriter) {
 			enqueueCalled = true
 		},
 	}

@@ -21,13 +21,7 @@ func NewSwarm(id SwarmID, opt SwarmOptions) (*Swarm, error) {
 		return nil, err
 	}
 
-	vo := integrity.SwarmVerifierOptions{
-		LiveDiscardWindow:  o.LiveWindow,
-		ChunkSize:          o.ChunkSize,
-		ChunksPerSignature: o.ChunksPerSignature,
-		VerifierOptions:    o.Integrity,
-	}
-	v, err := integrity.NewVerifier(id.Binary(), vo)
+	v, err := integrity.NewVerifier(id.Binary(), o.IntegrityVerifierOptions())
 	if err != nil {
 		return nil, err
 	}

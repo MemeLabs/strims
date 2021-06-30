@@ -21,7 +21,7 @@ func putPeerDataQueueItemPool(i *peerDataQueueItem) {
 
 type peerDataQueueItem struct {
 	next *peerDataQueueItem
-	cs   PeerWriter
+	cs   peerWriter
 	bin  binmap.Bin
 	time timeutil.Time
 }
@@ -30,7 +30,7 @@ type peerDataQueue struct {
 	head, tail *peerDataQueueItem
 }
 
-func (q *peerDataQueue) Push(cs PeerWriter, b binmap.Bin, t timeutil.Time) {
+func (q *peerDataQueue) Push(cs peerWriter, b binmap.Bin, t timeutil.Time) {
 	i := peerDataQueueItemPool.Get().(*peerDataQueueItem)
 	i.cs = cs
 	i.bin = b
@@ -46,7 +46,7 @@ func (q *peerDataQueue) Push(cs PeerWriter, b binmap.Bin, t timeutil.Time) {
 	q.tail = i
 }
 
-func (q *peerDataQueue) PushFront(cs PeerWriter, b binmap.Bin, t timeutil.Time) {
+func (q *peerDataQueue) PushFront(cs peerWriter, b binmap.Bin, t timeutil.Time) {
 	i := peerDataQueueItemPool.Get().(*peerDataQueueItem)
 	i.next = q.head
 	i.cs = cs
@@ -60,7 +60,7 @@ func (q *peerDataQueue) PushFront(cs PeerWriter, b binmap.Bin, t timeutil.Time) 
 	}
 }
 
-func (q *peerDataQueue) Remove(cs PeerWriter, b binmap.Bin) {
+func (q *peerDataQueue) Remove(cs peerWriter, b binmap.Bin) {
 	var prev, next *peerDataQueueItem
 	for i := q.head; i != nil; i = next {
 		next = i.next
@@ -82,7 +82,7 @@ func (q *peerDataQueue) Remove(cs PeerWriter, b binmap.Bin) {
 	}
 }
 
-func (q *peerDataQueue) Pop() (PeerWriter, binmap.Bin, timeutil.Time, bool) {
+func (q *peerDataQueue) Pop() (peerWriter, binmap.Bin, timeutil.Time, bool) {
 	if q.head == nil {
 		return nil, binmap.None, timeutil.NilTime, false
 	}

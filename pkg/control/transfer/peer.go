@@ -19,12 +19,11 @@ var noopCancelFunc = func() {}
 
 // Peer ...
 type Peer struct {
-	logger    *zap.Logger
-	runner    *ppspp.Runner
-	ctx       context.Context
-	vnicPeer  *vnic.Peer
-	swarmPeer *ppspp.Peer
-	client    api.PeerClient
+	logger     *zap.Logger
+	ctx        context.Context
+	vnicPeer   *vnic.Peer
+	runnerPeer *ppspp.RunnerPeer
+	client     api.PeerClient
 
 	lock        sync.Mutex
 	transfers   llrb.LLRB
@@ -125,12 +124,7 @@ func (p *Peer) openChannel(pt *peerTransfer, peerChannel uint64) {
 	)
 	logger.Debug("opening swarm channel")
 
-	err := p.runner.RunChannel(
-		pt.swarm,
-		p.swarmPeer,
-		codec.Channel(pt.channel),
-		codec.Channel(peerChannel),
-	)
+	err := p.runnerPeer.RunSwarm(pt.swarm, codec.Channel(pt.channel), codec.Channel(peerChannel))
 	if err != nil {
 		return
 	}
@@ -145,7 +139,7 @@ func (p *Peer) openChannel(pt *peerTransfer, peerChannel uint64) {
 		case <-ctx.Done():
 		}
 
-		p.runner.StopChannel(pt.swarm, p.swarmPeer)
+		p.runnerPeer.StopSwarm(pt.swarm)
 
 		if !p.vnicPeer.Closed() {
 			logger.Debug("sending peer channel close")

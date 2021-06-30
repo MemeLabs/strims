@@ -18,7 +18,7 @@ func putPeerWriterQueueItemPool(i *peerWriterQueueItem) {
 
 type peerWriterQueueItem struct {
 	next *peerWriterQueueItem
-	c    PeerWriter
+	c    peerWriter
 }
 
 type peerWriterQueueTicket struct {
@@ -44,7 +44,7 @@ type peerWriterQueue struct {
 	v          uint64
 }
 
-func (q *peerWriterQueue) Push(c PeerWriter) bool {
+func (q *peerWriterQueue) Push(c peerWriter) bool {
 	if !c.PunchTicket(q.v) {
 		return false
 	}
@@ -65,7 +65,7 @@ func (q *peerWriterQueue) Push(c PeerWriter) bool {
 	return true
 }
 
-func (q *peerWriterQueue) Remove(c PeerWriter) {
+func (q *peerWriterQueue) Remove(c peerWriter) {
 	var prev *peerWriterQueueItem
 	for i := q.head; i != nil; i = i.next {
 		if i.c == c {
@@ -107,7 +107,7 @@ type detachedPeerWriterQueue struct {
 	head *peerWriterQueueItem
 }
 
-func (q *detachedPeerWriterQueue) Pop() (PeerWriter, bool) {
+func (q *detachedPeerWriterQueue) Pop() (peerWriter, bool) {
 	if q.head == nil {
 		return nil, false
 	}
