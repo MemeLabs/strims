@@ -26,6 +26,25 @@ func TestMinCostMaxFlow(t *testing.T) {
 	assert.Equal(t, 2, cost)
 }
 
+func BenchmarkMinCostMaxFlow(b *testing.B) {
+	for i := 0; i < b.N; i++ {
+		g := New(6)
+
+		g.AddEdge(0, 1, 1, 0)
+		g.AddEdge(0, 2, 1, 0)
+
+		g.AddEdge(1, 3, 1, 1)
+		g.AddEdge(1, 4, 1, 1)
+		g.AddEdge(2, 3, 1, 1)
+
+		g.AddEdge(3, 5, 1, 0)
+		g.AddEdge(4, 5, 1, 0)
+
+		var f MinCostMaxFlow
+		f.ComputeMaxFlow(g, 0, 5)
+	}
+}
+
 func TestMinCostMaxFlowLarge(t *testing.T) {
 	g := New(201)
 

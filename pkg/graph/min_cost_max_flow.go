@@ -11,7 +11,7 @@ const inf = math.MaxInt/2 - 1
 type MinCostMaxFlow struct {
 	found           []bool
 	n               int
-	cap, flow, cost [][]int
+	cap, flow, cost []int
 	prev, dist, pi  []int
 }
 
@@ -34,16 +34,16 @@ func (f *MinCostMaxFlow) search(s, t int) bool {
 				continue
 			}
 
-			if f.flow[i][s] != 0 {
-				val := f.dist[s] + f.pi[s] - f.pi[i] - f.cost[i][s]
+			if f.flow[i*f.n+s] != 0 {
+				val := f.dist[s] + f.pi[s] - f.pi[i] - f.cost[i*f.n+s]
 				if f.dist[i] > val {
 					f.dist[i] = val
 					f.prev[i] = s
 				}
 			}
 
-			if f.flow[s][i] < f.cap[s][i] {
-				val := f.dist[s] + f.pi[s] - f.pi[i] + f.cost[s][i]
+			if f.flow[s*f.n+i] < f.cap[s*f.n+i] {
+				val := f.dist[s] + f.pi[s] - f.pi[i] + f.cost[s*f.n+i]
 				if f.dist[i] > val {
 					f.dist[i] = val
 					f.prev[i] = s
@@ -69,20 +69,17 @@ func (f *MinCostMaxFlow) search(s, t int) bool {
 	return f.found[t]
 }
 
-func (f *MinCostMaxFlow) Flow() [][]int {
-	return f.flow
+func (f *MinCostMaxFlow) Flow(s, t int) int {
+	return f.flow[s*f.n+t]
 }
 
 func (f *MinCostMaxFlow) ComputeMaxFlow(g Graph, s, t int) (flow, cost int) {
 	f.cap = g.cap
 	f.cost = g.cost
+	f.n = g.n
 
-	f.n = len(f.cap)
 	f.found = make([]bool, f.n)
-	f.flow = make([][]int, f.n)
-	for i := 0; i < f.n; i++ {
-		f.flow[i] = make([]int, f.n)
-	}
+	f.flow = make([]int, f.n*f.n)
 	f.dist = make([]int, f.n+1)
 	f.prev = make([]int, f.n)
 	f.pi = make([]int, f.n)
@@ -91,10 +88,10 @@ func (f *MinCostMaxFlow) ComputeMaxFlow(g Graph, s, t int) (flow, cost int) {
 		pathFlow := inf
 		for u := t; u != s; u = f.prev[u] {
 			var pf int
-			if f.flow[u][f.prev[u]] != 0 {
-				pf = f.flow[u][f.prev[u]]
+			if f.flow[u*f.n+f.prev[u]] != 0 {
+				pf = f.flow[u*f.n+f.prev[u]]
 			} else {
-				pf = f.cap[f.prev[u]][u] - f.flow[f.prev[u]][u]
+				pf = f.cap[f.prev[u]*f.n+u] - f.flow[f.prev[u]*f.n+u]
 			}
 			if pf < pathFlow {
 				pathFlow = pf
@@ -102,12 +99,12 @@ func (f *MinCostMaxFlow) ComputeMaxFlow(g Graph, s, t int) (flow, cost int) {
 		}
 
 		for u := t; u != s; u = f.prev[u] {
-			if f.flow[u][f.prev[u]] != 0 {
-				f.flow[u][f.prev[u]] -= pathFlow
-				cost -= pathFlow * f.cost[u][f.prev[u]]
+			if f.flow[u*f.n+f.prev[u]] != 0 {
+				f.flow[u*f.n+f.prev[u]] -= pathFlow
+				cost -= pathFlow * f.cost[u*f.n+f.prev[u]]
 			} else {
-				f.flow[f.prev[u]][u] += pathFlow
-				cost += pathFlow * f.cost[f.prev[u]][u]
+				f.flow[f.prev[u]*f.n+u] += pathFlow
+				cost += pathFlow * f.cost[f.prev[u]*f.n+u]
 			}
 		}
 		flow += pathFlow
