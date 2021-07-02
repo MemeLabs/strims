@@ -35,11 +35,10 @@ type peerStreamAssignment struct {
 func (a *peerStreamAssigner) run() ([]int, []peerStreamAssignment) {
 	var f graph.MinCostMaxFlow
 	f.ComputeMaxFlow(a.graph, a.size-2, a.size-1)
-	flow := f.Flow()
 
 	var unassigned []int
 	for i := 0; i < a.streamCount; i++ {
-		if flow[a.size-2][i] == 0 {
+		if f.Flow(a.size-2, i) == 0 {
 			unassigned = append(unassigned, i)
 		}
 	}
@@ -47,7 +46,7 @@ func (a *peerStreamAssigner) run() ([]int, []peerStreamAssignment) {
 	var assignments []peerStreamAssignment
 	for i := 0; i < a.streamCount; i++ {
 		for j := a.streamCount; j < a.size-2; j++ {
-			if flow[i][j] > 0 {
+			if f.Flow(i, j) != 0 {
 				assignments = append(assignments, peerStreamAssignment{i, j - a.streamCount})
 			}
 		}

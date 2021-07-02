@@ -47,14 +47,6 @@ var (
 		Name: "strims_vnic_links_active",
 		Help: "The number of active network links",
 	})
-	linkReadBytes = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "strims_vnic_link_read_bytes",
-		Help: "The total number of bytes read from network links",
-	})
-	linkWriteBytes = promauto.NewCounter(prometheus.CounterOpts{
-		Name: "strims_vnic_link_write_bytes",
-		Help: "The total number of bytes written to network links",
-	})
 	dialCount = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "strims_vnic_dial_count",
 		Help: "The total number of dialed network connections",
@@ -351,24 +343,4 @@ type InterfaceAddr interface {
 type Link interface {
 	io.ReadWriteCloser
 	MTU() int
-}
-
-func instrumentLink(l Link) *instrumentedLink {
-	return &instrumentedLink{l}
-}
-
-type instrumentedLink struct {
-	Link
-}
-
-func (l *instrumentedLink) Read(p []byte) (int, error) {
-	n, err := l.Link.Read(p)
-	linkReadBytes.Add(float64(n))
-	return n, err
-}
-
-func (l *instrumentedLink) Write(p []byte) (int, error) {
-	n, err := l.Link.Write(p)
-	linkWriteBytes.Add(float64(n))
-	return n, err
 }

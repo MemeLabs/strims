@@ -16,6 +16,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/videochannel"
 	"github.com/MemeLabs/go-ppspp/pkg/control/videoegress"
 	"github.com/MemeLabs/go-ppspp/pkg/control/videoingress"
+	"github.com/MemeLabs/go-ppspp/pkg/control/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
@@ -42,6 +43,7 @@ func NewControl(
 		videoingressControl = videoingress.NewControl(logger, vpn, store, profile, observers, transferControl, dialerControl, networkControl, directoryControl)
 		videochannelControl = videochannel.NewControl(logger, vpn, store, observers)
 		videoegressControl  = videoegress.NewControl(logger, vpn, observers, transferControl)
+		vnicControl         = vnic.NewControl(logger, vpn, store, observers)
 		peerControl         = NewPeerControl(logger, observers, caControl, networkControl, transferControl, bootstrapControl)
 	)
 
@@ -58,6 +60,7 @@ func NewControl(
 		videoingress: videoingressControl,
 		videochannel: videochannelControl,
 		videoegress:  videoegressControl,
+		vnic:         vnicControl,
 	}
 }
 
@@ -75,6 +78,7 @@ type Control struct {
 	videoingress *videoingress.Control
 	videochannel *videochannel.Control
 	videoegress  *videoegress.Control
+	vnic         *vnic.Control
 }
 
 // Run ...
@@ -85,6 +89,7 @@ func (c *Control) Run(ctx context.Context) {
 	go c.transfer.Run(ctx)
 	go c.bootstrap.Run(ctx)
 	go c.videoingress.Run(ctx)
+	go c.vnic.Run(ctx)
 }
 
 // Dialer ...
@@ -119,3 +124,6 @@ func (c *Control) VideoChannel() control.VideoChannelControl { return c.videocha
 
 // VideoEgress ...
 func (c *Control) VideoEgress() control.VideoEgressControl { return c.videoegress }
+
+// VNIC ...
+func (c *Control) VNIC() control.VNICControl { return c.vnic }

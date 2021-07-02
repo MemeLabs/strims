@@ -14,3 +14,26 @@ message PeerInit {
   string node_platform = 3;
   string node_version = 4;
 }
+
+message Config {
+  uint64 max_upload_bytes_per_second = 1;
+}
+
+message GetConfigRequest {}
+
+message GetConfigResponse {
+  Config config = 1;
+}
+
+message SetConfigRequest {
+  Config config = 1;
+}
+
+message SetConfigResponse {
+  Config config = 1;
+}
+
+service VNICFrontend {
+  rpc GetConfig(GetConfigRequest) returns (GetConfigResponse);
+  rpc SetConfig(SetConfigRequest) returns (SetConfigResponse);
+}

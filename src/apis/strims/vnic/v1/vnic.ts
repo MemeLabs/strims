@@ -8,7 +8,7 @@ import {
 
 export type IPeerInit = {
   protocolVersion?: number;
-  certificate?: strims_type_ICertificate;
+  certificate?: strims_type_ICertificate | undefined;
   nodePlatform?: string;
   nodeVersion?: string;
 }
@@ -53,6 +53,170 @@ export class PeerInit {
         break;
         case 4:
         m.nodeVersion = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IConfig = {
+  maxUploadBytesPerSecond?: bigint;
+}
+
+export class Config {
+  maxUploadBytesPerSecond: bigint;
+
+  constructor(v?: IConfig) {
+    this.maxUploadBytesPerSecond = v?.maxUploadBytesPerSecond || BigInt(0);
+  }
+
+  static encode(m: Config, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.maxUploadBytesPerSecond) w.uint32(8).uint64(m.maxUploadBytesPerSecond);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): Config {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new Config();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.maxUploadBytesPerSecond = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IGetConfigRequest = {
+}
+
+export class GetConfigRequest {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IGetConfigRequest) {
+  }
+
+  static encode(m: GetConfigRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetConfigRequest {
+    if (r instanceof Reader && length) r.skip(length);
+    return new GetConfigRequest();
+  }
+}
+
+export type IGetConfigResponse = {
+  config?: IConfig | undefined;
+}
+
+export class GetConfigResponse {
+  config: Config | undefined;
+
+  constructor(v?: IGetConfigResponse) {
+    this.config = v?.config && new Config(v.config);
+  }
+
+  static encode(m: GetConfigResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.config) Config.encode(m.config, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetConfigResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetConfigResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.config = Config.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ISetConfigRequest = {
+  config?: IConfig | undefined;
+}
+
+export class SetConfigRequest {
+  config: Config | undefined;
+
+  constructor(v?: ISetConfigRequest) {
+    this.config = v?.config && new Config(v.config);
+  }
+
+  static encode(m: SetConfigRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.config) Config.encode(m.config, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): SetConfigRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new SetConfigRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.config = Config.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ISetConfigResponse = {
+  config?: IConfig | undefined;
+}
+
+export class SetConfigResponse {
+  config: Config | undefined;
+
+  constructor(v?: ISetConfigResponse) {
+    this.config = v?.config && new Config(v.config);
+  }
+
+  static encode(m: SetConfigResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.config) Config.encode(m.config, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): SetConfigResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new SetConfigResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.config = Config.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);

@@ -5,11 +5,12 @@ import (
 	"io"
 	"time"
 
-	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	transfer "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	video "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
+	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
+	vnicv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
@@ -19,7 +20,7 @@ import (
 // BootstrapControl ...
 type BootstrapControl interface {
 	PublishingEnabled() bool
-	Publish(ctx context.Context, peerID uint64, network *network.Network, validDuration time.Duration) error
+	Publish(ctx context.Context, peerID uint64, network *networkv1.Network, validDuration time.Duration) error
 }
 
 // CAControl ...
@@ -37,50 +38,50 @@ type DialerControl interface {
 
 // DirectoryControl ...
 type DirectoryControl interface {
-	ReadEvents(ctx context.Context, networkKey []byte) <-chan *network.DirectoryEvent
+	ReadEvents(ctx context.Context, networkKey []byte) <-chan *networkv1.DirectoryEvent
 }
 
 // NetworkControl ...
 type NetworkControl interface {
 	Certificate(networkKey []byte) (*certificate.Certificate, bool)
-	Add(network *network.Network) error
+	Add(network *networkv1.Network) error
 	Remove(id uint64) error
-	ReadEvents(ctx context.Context) <-chan *network.NetworkEvent
+	ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 }
 
 // TransferControl ...
 type TransferControl interface {
 	Add(swarm *ppspp.Swarm, salt []byte) []byte
 	Remove(id []byte)
-	List() []*transfer.Transfer
+	List() []*transferv1.Transfer
 	Publish(id []byte, networkKey []byte)
 }
 
 // VideoCaptureControl ...
 type VideoCaptureControl interface {
-	Open(mimeType string, directorySnippet *network.DirectoryListingSnippet, networkKeys [][]byte) ([]byte, error)
-	OpenWithSwarmWriterOptions(mimeType string, directorySnippet *network.DirectoryListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error)
-	Update(id []byte, directorySnippet *network.DirectoryListingSnippet) error
+	Open(mimeType string, directorySnippet *networkv1.DirectoryListingSnippet, networkKeys [][]byte) ([]byte, error)
+	OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1.DirectoryListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error)
+	Update(id []byte, directorySnippet *networkv1.DirectoryListingSnippet) error
 	Append(id []byte, b []byte, segmentEnd bool) error
 	Close(id []byte) error
 }
 
 // VideoChannelOption ...
-type VideoChannelOption func(channel *video.VideoChannel) error
+type VideoChannelOption func(channel *videov1.VideoChannel) error
 
 // VideoChannelControl ...
 type VideoChannelControl interface {
-	GetChannel(id uint64) (*video.VideoChannel, error)
-	ListChannels() ([]*video.VideoChannel, error)
-	CreateChannel(opts ...VideoChannelOption) (*video.VideoChannel, error)
-	UpdateChannel(id uint64, opts ...VideoChannelOption) (*video.VideoChannel, error)
+	GetChannel(id uint64) (*videov1.VideoChannel, error)
+	ListChannels() ([]*videov1.VideoChannel, error)
+	CreateChannel(opts ...VideoChannelOption) (*videov1.VideoChannel, error)
+	UpdateChannel(id uint64, opts ...VideoChannelOption) (*videov1.VideoChannel, error)
 	DeleteChannel(id uint64) error
 }
 
 // VideoIngressControl ...
 type VideoIngressControl interface {
-	GetIngressConfig() (*video.VideoIngressConfig, error)
-	SetIngressConfig(config *video.VideoIngressConfig) error
+	GetIngressConfig() (*videov1.VideoIngressConfig, error)
+	SetIngressConfig(config *videov1.VideoIngressConfig) error
 }
 
 // VideoEgressControlBase ...
@@ -97,7 +98,7 @@ type VideoHLSEgressControl interface {
 // NetworkPeerControl ...
 type NetworkPeerControl interface {
 	HandlePeerNegotiate(keyCount uint32)
-	HandlePeerOpen(bindings []*network.NetworkPeerBinding)
+	HandlePeerOpen(bindings []*networkv1.NetworkPeerBinding)
 	HandlePeerClose(networkKey []byte)
 	HandlePeerUpdateCertificate(cert *certificate.Certificate) error
 }
@@ -110,6 +111,12 @@ type TransferPeerControl interface {
 
 // BootstrapPeerControl ...
 type BootstrapPeerControl interface{}
+
+// VNICControl ...
+type VNICControl interface {
+	GetConfig() (*vnicv1.Config, error)
+	SetConfig(config *vnicv1.Config) error
+}
 
 // Peer ...
 type Peer interface {
@@ -143,4 +150,5 @@ type AppControl interface {
 	VideoChannel() VideoChannelControl
 	VideoIngress() VideoIngressControl
 	VideoEgress() VideoEgressControl
+	VNIC() VNICControl
 }

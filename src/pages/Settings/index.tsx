@@ -6,6 +6,7 @@ import BootstrapClientsPage from "./BootstrapClients";
 import ChatServersPage from "./ChatServers";
 import NetworksPage from "./Networks";
 import VideoIngressPage from "./VideoIngress";
+import VNICPage from "./VNIC";
 
 const SettingsPage = () => {
   return (
@@ -22,11 +23,15 @@ const SettingsPage = () => {
       <Link className="settings_link" to="/settings/video-ingress">
         Video Ingress
       </Link>
+      <Link className="settings_link" to="/settings/vnic">
+        VNIC
+      </Link>
       <Switch>
         <PrivateRoute path="/settings/networks" exact component={NetworksPage} />
         <PrivateRoute path="/settings/bootstrap-clients" exact component={BootstrapClientsPage} />
         <PrivateRoute path="/settings/chat-servers" exact component={ChatServersPage} />
         <PrivateRoute path="/settings/video-ingress" component={VideoIngressPage} />
+        <PrivateRoute path="/settings/vnic" component={VNICPage} />
       </Switch>
     </div>
   );

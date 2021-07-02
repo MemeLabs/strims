@@ -15,6 +15,7 @@ import { CaptureClient as VideoCaptureClient } from "./strims/video/v1/capture_r
 import { VideoChannelFrontendClient } from "./strims/video/v1/channel_rpc";
 import { EgressClient as VideoEgressClient } from "./strims/video/v1/egress_rpc";
 import { VideoIngressClient } from "./strims/video/v1/ingress_rpc";
+import { VNICFrontendClient } from "./strims/vnic/v1/vnic_rpc";
 
 export class FrontendClient {
   public bootstrap: BootstrapFrontendClient;
@@ -27,6 +28,7 @@ export class FrontendClient {
   public videoChannel: VideoChannelFrontendClient;
   public videoEgress: VideoEgressClient;
   public videoIngress: VideoIngressClient;
+  public vnic: VNICFrontendClient;
 
   constructor(w: Writable, r: Readable) {
     const host = new Host(w, r);
@@ -40,6 +42,7 @@ export class FrontendClient {
     this.videoChannel = new VideoChannelFrontendClient(host);
     this.videoEgress = new VideoEgressClient(host);
     this.videoIngress = new VideoIngressClient(host);
+    this.vnic = new VNICFrontendClient(host);
   }
 }
 
