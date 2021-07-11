@@ -1,4 +1,6 @@
+// +build  !js
 //go:build !js
+// +build !js
 
 package videoingress
 
@@ -6,6 +8,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"net"
 	"sync"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
@@ -38,7 +41,7 @@ func NewControl(
 	network *network.Control,
 	directory *directory.Control,
 ) *Control {
-	events := make(chan interface{}, 128)
+	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
 	return &Control{
@@ -79,7 +82,7 @@ type Control struct {
 
 // Run ...
 func (c *Control) Run(ctx context.Context) {
-	go c.loadIngressConfig()
+	go c.loadIngressConfig(ctx)
 
 	for {
 		select {
@@ -90,7 +93,7 @@ func (c *Control) Run(ctx context.Context) {
 			case event.NetworkStop:
 				c.handleNetworkStop(e.Network)
 			case event.VideoIngressConfigUpdate:
-				c.reinitIngress(e.Config)
+				c.reinitIngress(ctx, e.Config)
 			case event.VideoChannelUpdate:
 				c.handleChannelUpdate(e.Channel)
 			case event.VideoChannelRemove:
@@ -128,15 +131,15 @@ func (c *Control) handleChannelRemove(id uint64) {
 	c.ingressService.RemoveChannel(id)
 }
 
-func (c *Control) loadIngressConfig() {
+func (c *Control) loadIngressConfig(ctx context.Context) {
 	config, err := dao.GetVideoIngressConfig(c.store)
 	if err != nil {
 		c.logger.Fatal("loading video ingress config failed", zap.Error(err))
 	}
-	c.reinitIngress(config)
+	c.reinitIngress(ctx, config)
 }
 
-func (c *Control) reinitIngress(next *videov1.VideoIngressConfig) {
+func (c *Control) reinitIngress(ctx context.Context, next *videov1.VideoIngressConfig) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -165,10 +168,10 @@ func (c *Control) reinitIngress(next *videov1.VideoIngressConfig) {
 	if shutdown {
 		c.stopIngressServer()
 	} else if startup {
-		c.startIngressServer()
+		c.startIngressServer(ctx)
 	} else if next.Enabled && prev.ServerAddr != next.ServerAddr {
 		c.stopIngressServer()
-		c.startIngressServer()
+		c.startIngressServer(ctx)
 	}
 }
 
@@ -231,10 +234,11 @@ func (c *Control) stopIngressServer() {
 	}
 }
 
-func (c *Control) startIngressServer() {
+func (c *Control) startIngressServer(ctx context.Context) {
 	c.ingressServer = &rtmpingress.Server{
 		Addr:         c.ingressConfig.ServerAddr,
 		HandleStream: c.ingressService.HandleStream,
+		BaseContext:  func(net.Conn) context.Context { return ctx },
 	}
 
 	go func() {

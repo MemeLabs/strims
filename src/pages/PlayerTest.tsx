@@ -2,7 +2,6 @@ import { Base64 } from "js-base64";
 import React from "react";
 import { useLocation, useParams } from "react-router-dom";
 
-import { MainLayout } from "../components/MainLayout";
 import VideoPlayer from "../components/VideoPlayer";
 import useQuery from "../hooks/useQuery";
 

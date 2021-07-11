@@ -1,7 +1,8 @@
 import WorkQueue from "./workqueue";
 
 export class Source {
-  public readonly mediaSource: MediaSource;
+  public onReset: (src: MediaSource) => void;
+  private mediaSource: MediaSource;
   private sourceBuffer: SourceBuffer;
   private sourceBufferTasks: WorkQueue;
   private type: string;
@@ -11,20 +12,24 @@ export class Source {
     this.sourceBufferTasks.pause();
 
     this.type = type;
+    this.initMediaSource();
+  }
+
+  private initMediaSource(): void {
     this.mediaSource = new MediaSource();
 
     this.mediaSource.onsourceopen = () => {
-      this.initSourceBuffer();
+      this.sourceBuffer = this.mediaSource.addSourceBuffer(this.type);
+      // eslint-disable-next-line
+      this.sourceBuffer.onupdateend = this.sourceBufferTasks.runNext.bind(this.sourceBufferTasks);
+      this.sourceBuffer.onerror = (e) => {
+        console.log("onerror", e);
+        this.reset();
+      };
+      this.sourceBuffer.onabort = (e) => console.log("onabort", e);
+
       this.sourceBufferTasks.runNext();
     };
-  }
-
-  private initSourceBuffer(): void {
-    this.sourceBuffer = this.mediaSource.addSourceBuffer(this.type);
-    // eslint-disable-next-line
-    this.sourceBuffer.onupdateend = this.sourceBufferTasks.runNext.bind(this.sourceBufferTasks);
-    this.sourceBuffer.onerror = (e) => console.log("onerror", e);
-    this.sourceBuffer.onabort = (e) => console.log("onabort", e);
   }
 
   public reset(): void {
@@ -39,8 +44,13 @@ export class Source {
         this.sourceBuffer = undefined;
       }
 
-      this.initSourceBuffer();
+      this.initMediaSource();
+      this.onReset?.(this.mediaSource);
     });
+  }
+
+  public getMediaSource(): MediaSource {
+    return this.mediaSource;
   }
 
   public appendBuffer(b: ArrayBufferView | ArrayBuffer): void {
@@ -49,6 +59,9 @@ export class Source {
   }
 
   public bounds(): [number, number] {
+    if (!this.sourceBuffer) {
+      return [0, 0];
+    }
     const { buffered } = this.sourceBuffer;
     return buffered.length === 0 ? [0, 0] : [buffered.start(0), buffered.end(buffered.length - 1)];
   }

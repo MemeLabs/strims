@@ -1,10 +1,8 @@
 package qos
 
 // H-PFQ (Hierarchical Packet Fair Queue) from
-//  Jon C. R. Bennett, Member, IEEE, and Hui Zhang, "Hierarchical
-//  Packet Fair Queueing Algorithms"
-//
-//  https://www.academia.edu/download/48781686/90.64956820160912-12644-1bd1p1k.pdf
+//  Bennett, Jon CR, and Hui Zhang. "Hierarchical packet fair queueing
+//  algorithms." IEEE/ACM Transactions on networking 5.5 (1997): 675-689.
 
 // MaxWeight ...
 const MaxWeight = 1000

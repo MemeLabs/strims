@@ -15,6 +15,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/api"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
@@ -111,6 +112,7 @@ func (p *Peer) HandlePeerUpdateCertificate(cert *certificate.Certificate) error 
 		return ErrCertificateOwnerMismatch
 	}
 	if !isCertificateTrusted(cert) {
+		debug.PrintJSON(cert)
 		return ErrProvisionalCertificate
 	}
 
@@ -159,23 +161,25 @@ func (p *Peer) closeNetworkWithoutNotifyingPeer(networkKey []byte) error {
 	}
 	p.links.Delete(li)
 
-	node, ok := p.vpn.Node(networkKey)
-	if !ok {
-		return ErrNetworkNotFound
+	if li.(*networkBinding).open {
+		node, ok := p.vpn.Node(networkKey)
+		if !ok {
+			return ErrNetworkNotFound
+		}
+		node.Network.RemovePeer(p.peer.HostID())
+
+		p.observers.EmitLocal(event.NetworkPeerClose{
+			PeerID:     p.id,
+			NetworkID:  li.(*networkBinding).networkID,
+			NetworkKey: networkKey,
+		})
+
+		p.logger.Info(
+			"removed peer from network",
+			zap.Stringer("peer", p.peer.HostID()),
+			logutil.ByteHex("network", networkKey),
+		)
 	}
-	node.Network.RemovePeer(p.peer.HostID())
-
-	p.observers.EmitLocal(event.NetworkPeerClose{
-		PeerID:     p.id,
-		NetworkID:  li.(*networkBinding).networkID,
-		NetworkKey: networkKey,
-	})
-
-	p.logger.Info(
-		"removed peer from network",
-		zap.Stringer("peer", p.peer.HostID()),
-		logutil.ByteHex("network", networkKey),
-	)
 
 	if p.links.Len() == 0 {
 		p.peer.Close()

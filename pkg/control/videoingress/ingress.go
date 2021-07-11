@@ -1,4 +1,5 @@
 //go:build !js
+// +build !js
 
 package videoingress
 
@@ -102,7 +103,14 @@ func (s *ingressService) HandleStream(a *rtmpingress.StreamAddr, c *rtmpingress.
 	defer stream.Close()
 
 	go func() {
-		if err := s.transcoder.Transcode(a.URI, a.Key, "source", stream.w); err != nil {
+		err := s.transcoder.Transcode(
+			c.Context(),
+			a.URI,
+			a.Key,
+			"source",
+			stream.w,
+		)
+		if err != nil {
 			s.logger.Debug(
 				"transcoder finished",
 				zap.Uint64("id", stream.channel.Id),

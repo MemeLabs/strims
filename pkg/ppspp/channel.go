@@ -40,8 +40,6 @@ var (
 	errIncompatibleContentIntegrityProtectionMethod = errors.New("incompatible ContentIntegrityProtectionMethod")
 	errIncompatibleMerkleHashTreeFunction           = errors.New("incompatible MerkleHashTreeFunction")
 	errIncompatibleLiveSignatureAlgorithm           = errors.New("incompatible LiveSignatureAlgorithm")
-
-	errWriterTooSmall = errors.New("new size cannot be smaller than channel header")
 )
 
 func newHandshake(swarm *Swarm) codec.Handshake {
@@ -89,16 +87,19 @@ func (c *channelWriter) Len() int {
 
 func (c *channelWriter) Resize(n int) error {
 	if n < len(c.buf) {
-		return errWriterTooSmall
+		return codec.ErrNotEnoughSpace
 	}
 	return c.cw.Resize(n - len(c.buf))
 }
 
 func (c *channelWriter) Reset() {
+	c.metrics.Reset()
 	c.cw.Reset()
 }
 
 func (c *channelWriter) Flush() error {
+	defer c.metrics.Reset()
+
 	if !c.cw.Dirty() {
 		return nil
 	}
@@ -113,105 +114,154 @@ func (c *channelWriter) Flush() error {
 		return err
 	}
 
+	c.metrics.Merge()
 	return nil
 }
 
 func (c *channelWriter) WriteHandshake(m codec.Handshake) (int, error) {
-	c.metrics.HandshakeCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteHandshake(m)
+	n, err := c.cw.WriteHandshake(m)
+	if err == nil {
+		c.metrics.HandshakeCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteAck(m codec.Ack) (int, error) {
-	c.metrics.AckCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteAck(m)
+	n, err := c.cw.WriteAck(m)
+	if err == nil {
+		c.metrics.AckCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteHave(m codec.Have) (int, error) {
-	c.metrics.HaveCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteHave(m)
+	n, err := c.cw.WriteHave(m)
+	if err == nil {
+		c.metrics.HaveCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteData(m codec.Data) (int, error) {
-	c.metrics.DataCount.Inc()
-	c.metrics.ChunkCount.Add(float64(m.Address.Bin().BaseLength()))
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen() - m.Data.ByteLen()))
-	c.metrics.DataBytesCount.Add(float64(m.Data.ByteLen()))
-	return c.cw.WriteData(m)
+	n, err := c.cw.WriteData(m)
+	if err == nil {
+		c.metrics.DataCount++
+		c.metrics.ChunkCount += m.Address.Bin().BaseLength()
+		c.metrics.OverheadBytesCount += n - m.Data.ByteLen()
+		c.metrics.DataBytesCount += m.Data.ByteLen()
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteIntegrity(m codec.Integrity) (int, error) {
-	c.metrics.IntegrityCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteIntegrity(m)
+	n, err := c.cw.WriteIntegrity(m)
+	if err == nil {
+		c.metrics.IntegrityCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteSignedIntegrity(m codec.SignedIntegrity) (int, error) {
-	c.metrics.SignedIntegrityCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteSignedIntegrity(m)
+	n, err := c.cw.WriteSignedIntegrity(m)
+	if err == nil {
+		c.metrics.SignedIntegrityCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteRequest(m codec.Request) (int, error) {
-	c.metrics.RequestCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteRequest(m)
+	n, err := c.cw.WriteRequest(m)
+	if err == nil {
+		c.metrics.RequestCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WritePing(m codec.Ping) (int, error) {
-	c.metrics.PingCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WritePing(m)
+	n, err := c.cw.WritePing(m)
+	if err == nil {
+		c.metrics.PingCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WritePong(m codec.Pong) (int, error) {
-	c.metrics.PongCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WritePong(m)
+	n, err := c.cw.WritePong(m)
+	if err == nil {
+		c.metrics.PongCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteCancel(m codec.Cancel) (int, error) {
-	c.metrics.CancelCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteCancel(m)
+	n, err := c.cw.WriteCancel(m)
+	if err == nil {
+		c.metrics.CancelCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteChoke(m codec.Choke) (int, error) {
-	c.metrics.ChokeCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteChoke(m)
+	n, err := c.cw.WriteChoke(m)
+	if err == nil {
+		c.metrics.ChokeCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteUnchoke(m codec.Unchoke) (int, error) {
-	c.metrics.UnchokeCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteUnchoke(m)
+	n, err := c.cw.WriteUnchoke(m)
+	if err == nil {
+		c.metrics.UnchokeCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteStreamRequest(m codec.StreamRequest) (int, error) {
-	c.metrics.StreamRequestCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteStreamRequest(m)
+	n, err := c.cw.WriteStreamRequest(m)
+	if err == nil {
+		c.metrics.StreamRequestCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteStreamCancel(m codec.StreamCancel) (int, error) {
-	c.metrics.StreamCancelCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteStreamCancel(m)
+	n, err := c.cw.WriteStreamCancel(m)
+	if err == nil {
+		c.metrics.StreamCancelCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteStreamOpen(m codec.StreamOpen) (int, error) {
-	c.metrics.StreamOpenCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteStreamOpen(m)
+	n, err := c.cw.WriteStreamOpen(m)
+	if err == nil {
+		c.metrics.StreamOpenCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func (c *channelWriter) WriteStreamClose(m codec.StreamClose) (int, error) {
-	c.metrics.StreamCloseCount.Inc()
-	c.metrics.OverheadBytesCount.Add(float64(m.ByteLen()))
-	return c.cw.WriteStreamClose(m)
+	n, err := c.cw.WriteStreamClose(m)
+	if err == nil {
+		c.metrics.StreamCloseCount++
+		c.metrics.OverheadBytesCount += n
+	}
+	return n, err
 }
 
 func newChannelReader(logger *zap.Logger) *ChannelReader {
@@ -554,12 +604,75 @@ func deleteChannelReaderMetrics(s *Swarm, p *peer) {
 
 func newChannelWriterMetrics(s *Swarm, p *peer) channelWriterMetrics {
 	return channelWriterMetrics{
-		channelMetrics: newChannelMetrics(s, p, "out"),
+		m: newChannelMetrics(s, p, "out"),
 	}
 }
 
 type channelWriterMetrics struct {
-	channelMetrics
+	HandshakeCount       int
+	DataCount            int
+	ChunkCount           uint64
+	IntegrityCount       int
+	SignedIntegrityCount int
+	AckCount             int
+	HaveCount            int
+	RequestCount         int
+	CancelCount          int
+	ChokeCount           int
+	UnchokeCount         int
+	PingCount            int
+	PongCount            int
+	StreamRequestCount   int
+	StreamCancelCount    int
+	StreamOpenCount      int
+	StreamCloseCount     int
+	DataBytesCount       int
+	OverheadBytesCount   int
+	m                    channelMetrics
+}
+
+func (m *channelWriterMetrics) Merge() {
+	m.m.HandshakeCount.Add(float64(m.HandshakeCount))
+	m.m.DataCount.Add(float64(m.DataCount))
+	m.m.ChunkCount.Add(float64(m.ChunkCount))
+	m.m.IntegrityCount.Add(float64(m.IntegrityCount))
+	m.m.SignedIntegrityCount.Add(float64(m.SignedIntegrityCount))
+	m.m.AckCount.Add(float64(m.AckCount))
+	m.m.HaveCount.Add(float64(m.HaveCount))
+	m.m.RequestCount.Add(float64(m.RequestCount))
+	m.m.CancelCount.Add(float64(m.CancelCount))
+	m.m.ChokeCount.Add(float64(m.ChokeCount))
+	m.m.UnchokeCount.Add(float64(m.UnchokeCount))
+	m.m.PingCount.Add(float64(m.PingCount))
+	m.m.PongCount.Add(float64(m.PongCount))
+	m.m.StreamRequestCount.Add(float64(m.StreamRequestCount))
+	m.m.StreamCancelCount.Add(float64(m.StreamCancelCount))
+	m.m.StreamOpenCount.Add(float64(m.StreamOpenCount))
+	m.m.StreamCloseCount.Add(float64(m.StreamCloseCount))
+	m.m.DataBytesCount.Add(float64(m.DataBytesCount))
+	m.m.OverheadBytesCount.Add(float64(m.OverheadBytesCount))
+}
+
+func (m *channelWriterMetrics) Reset() {
+	m.HandshakeCount = 0
+	m.DataCount = 0
+	m.ChunkCount = 0
+	m.IntegrityCount = 0
+	m.SignedIntegrityCount = 0
+	m.AckCount = 0
+	m.HaveCount = 0
+	m.RequestCount = 0
+	m.CancelCount = 0
+	m.ChokeCount = 0
+	m.UnchokeCount = 0
+	m.PingCount = 0
+	m.PongCount = 0
+	m.StreamRequestCount = 0
+	m.StreamCancelCount = 0
+	m.StreamOpenCount = 0
+	m.StreamCloseCount = 0
+	m.DataBytesCount = 0
+	m.OverheadBytesCount = 0
 }
 
 func deleteChannelWriterMetrics(s *Swarm, p *peer) {

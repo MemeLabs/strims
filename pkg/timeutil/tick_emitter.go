@@ -5,6 +5,8 @@ import (
 	"time"
 )
 
+var DefaultTickEmitter = NewTickEmitter(100 * time.Millisecond)
+
 func NewTickEmitter(ivl time.Duration) *TickEmitter {
 	t := &TickEmitter{}
 	t.t = newFuncTicker(ivl, t.run)
@@ -51,7 +53,7 @@ func (r *TickEmitter) Ticker() Ticker {
 }
 
 func (r *TickEmitter) Chan() (<-chan Time, StopFunc) {
-	ch := make(chan Time, 1)
+	ch := make(chan Time)
 	stop := func() {
 		r.unsubscribe(ch)
 		close(ch)

@@ -40,7 +40,6 @@ func NewControl(logger *zap.Logger, transfer *transfer.Control, directory *direc
 // Control ...
 type Control struct {
 	logger    *zap.Logger
-	events    chan interface{}
 	directory *directory.Control
 	network   *network.Control
 	transfer  *transfer.Control

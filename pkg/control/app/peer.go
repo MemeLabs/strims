@@ -18,9 +18,6 @@ import (
 
 // NewPeerControl ...
 func NewPeerControl(logger *zap.Logger, observers *event.Observers, ca *ca.Control, network *network.Control, transfer *transfer.Control, bootstrap *bootstrap.Control) *PeerControl {
-	events := make(chan interface{}, 128)
-	observers.Notify(events)
-
 	return &PeerControl{
 		logger:    logger,
 		observers: observers,

@@ -286,13 +286,16 @@ func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
 	}
 
 	var candidates []*peerChannelScheduler
-	var candidateCaps []int
+	var candidateCaps []int64
 	var candidateLags [][]stats.Welford
 	for _, cs := range s.channels {
 		lag := make([]stats.Welford, len(s.streams))
 
 		cs.lock.Lock()
-		cap := int(cs.dataRTT.SampleRateWithTime(time.Second, t) / streamRate)
+		cap := int64(cs.dataRTT.SampleRateWithTime(time.Second, t) / streamRate)
+		if cap > 1 {
+			cap = 1
+		}
 
 		for j := 0; j < len(s.streams); j++ {
 			assigned := cs == currentChannels[j]
@@ -319,7 +322,7 @@ func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
 	s.logger.Debug(
 		"stream candidates",
 		zap.Int("viable", len(candidates)),
-		zap.Ints("capacities", candidateCaps),
+		zap.Int64s("capacities", candidateCaps),
 	)
 
 	temp := make([]stats.Welford, len(candidates))
@@ -331,10 +334,10 @@ func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
 		lag[i] = stats.WelfordMerge(temp...)
 	}
 	candidates = append(candidates, nil)
-	candidateCaps = append(candidateCaps, len(s.streams))
+	candidateCaps = append(candidateCaps, int64(len(s.streams)))
 	candidateLags = append(candidateLags, lag)
 
-	assigner := newPeerStreamAssigner(int(s.streamCount), candidateCaps)
+	assigner := newPeerStreamAssigner(int64(s.streamCount), candidateCaps)
 
 	for i := 0; i < len(s.streams); i++ {
 		current := currentLags[i]
@@ -345,10 +348,10 @@ func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
 		for j := 0; j < len(candidates); j++ {
 			candidate := candidateLags[j][i]
 			// if candidate.Count() > 0 {
-			// 	assigner.addCandidate(i, j, int(candidate.Mean()))
+			// 	assigner.addCandidate(i, j, int64(candidate.Mean()))
 			// }
 			if candidate.Count() > 0 {
-				assigner.addCandidate(i, j, int(candidate.Mean()))
+				assigner.addCandidate(int64(i), int64(j), int64(candidate.Mean()))
 				// p := stats.TDistribution(stats.WelchTTest(candidate, current), stats.WelchSatterthwaite(candidate, current))
 				// if p > 0.05 {
 				// 	continue
@@ -383,7 +386,7 @@ func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
 
 			ccs.logger.Debug(
 				"unsubscribed from stream",
-				zap.Int("stream", a.stream),
+				zap.Int64("stream", a.stream),
 				zap.Bool("unassigned", cs == nil),
 			)
 
@@ -399,7 +402,7 @@ func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
 
 		cs.logger.Debug(
 			"subscribed to stream",
-			zap.Int("stream", a.stream),
+			zap.Int64("stream", a.stream),
 			zap.Uint64("bin", uint64(b)),
 		)
 
@@ -519,6 +522,8 @@ func (s *peerSwarmScheduler) Consume(c store.Chunk) {
 	if b := c.Bin.BaseRight(); b > s.haveBinMax {
 		s.haveBinMax = b
 	}
+
+	s.requestBins.Set(c.Bin)
 }
 
 func (s *peerSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing) channelScheduler {
@@ -539,6 +544,7 @@ func (s *peerSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 		cancelBins:     binmap.New(),
 		requestStreams: make([]binmap.Bin, s.streamCount),
 		peerHaveBins:   binmap.New(),
+		sendRTT:        stats.NewSMA(50, 100*time.Millisecond),
 
 		// test: qos.NewHLB(math.MaxFloat64),
 
@@ -649,10 +655,13 @@ type peerChannelScheduler struct {
 	requestStreams []binmap.Bin
 	extraMessages  []codec.Message
 
-	requestsAdded  uint32
+	enqueueNow     uint32
 	peerLiveWindow binmap.Bin
 	peerMaxHaveBin binmap.Bin
 	peerHaveBins   *binmap.Map // bins the peer claims to have
+
+	sentBinTimes timeSet
+	sendRTT      stats.SMA
 
 	// test *qos.HLB
 	// testSkip bool
@@ -742,7 +751,7 @@ func (c *peerChannelScheduler) WriteHandshake() error {
 func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error) {
 	if err := c.cw.Resize(maxBytes); err != nil {
 		c.p.PushFrontData(c, b, t, pri)
-		return 0, nil
+		return 0, err
 	}
 
 	for {
@@ -752,7 +761,7 @@ func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.
 
 		if b.IsBase() {
 			c.p.PushFrontData(c, b, t, pri)
-			return 0, nil
+			return 0, codec.ErrNotEnoughSpace
 		}
 
 		c.p.PushFrontData(c, b.Right(), t, pri)
@@ -766,67 +775,58 @@ func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.
 		if errors.Is(err, codec.ErrNotEnoughSpace) {
 			c.cw.Reset()
 			c.p.PushFrontData(c, b, t, pri)
-			return 0, nil
+		} else {
+			c.logger.Debug(
+				"error writing integrity",
+				zap.Uint64("bin", uint64(b)),
+				zap.Stringer("priority", pri),
+				zap.Uint16("stream", uint16(c.s.binStream(b))),
+				zap.Error(err),
+			)
 		}
-		c.logger.Debug(
-			"error writing integrity",
-			zap.Uint64("bin", uint64(b)),
-			zap.Stringer("priority", pri),
-			zap.Uint16("stream", uint16(c.s.binStream(b))),
-			zap.Error(err),
-		)
 		return 0, err
 	}
 	if _, err := c.s.swarm.store.WriteData(b, t, c.cw); err != nil {
 		if errors.Is(err, codec.ErrNotEnoughSpace) {
 			c.cw.Reset()
 			c.p.PushFrontData(c, b, t, pri)
-			return 0, nil
+		} else {
+			c.logger.Debug(
+				"error writing data",
+				zap.Uint64("bin", uint64(b)),
+				zap.Stringer("priority", pri),
+				zap.Uint16("stream", uint16(c.s.binStream(b))),
+				zap.Error(err),
+			)
 		}
-		c.logger.Debug(
-			"error writing data",
-			zap.Uint64("bin", uint64(b)),
-			zap.Stringer("priority", pri),
-			zap.Uint16("stream", uint16(c.s.binStream(b))),
-			zap.Error(err),
-		)
 		return 0, err
 	}
 
-	// if !c.written.EmptyAt(b) {
-	// 	cancelled := !c.cancelled.EmptyAt(b)
-	// 	requested := !c.requested.EmptyAt(b)
-	// 	log.Printf("waste - double write cancelled %t requested %t", cancelled, requested)
-	// 	// os.Exit(1)
-	// }
-	// c.written.Set(b)
-
-	// TODO: enable optionally?
 	c.lock.Lock()
-	c.peerHaveBins.Set(b)
+	c.sentBinTimes.Set(b, timeutil.Now())
 	c.lock.Unlock()
-
-	// HAX: because we don't send HAVE bins from the seed this doesn't get set
-	c.s.lock.Lock()
-	c.s.requestBins.Set(b)
-	c.s.lock.Unlock()
 
 	return c.flushWrites()
 }
 
 func (c *peerChannelScheduler) Write(maxBytes int) (int, error) {
 	if err := c.cw.Resize(maxBytes); err != nil {
-		return 0, nil
-	}
-
-	if err := c.write0(); err != nil {
-		return 0, err
-	}
-	if err := c.write1(); err != nil {
 		return 0, err
 	}
 
-	return c.flushWrites()
+	err := c.write0()
+	if err == nil {
+		err = c.write1()
+	}
+	if err != nil && !errors.Is(err, codec.ErrNotEnoughSpace) {
+		return 0, err
+	}
+
+	n, ferr := c.flushWrites()
+	if ferr != nil {
+		return n, ferr
+	}
+	return n, err
 }
 
 func (c *peerChannelScheduler) write0() error {
@@ -834,16 +834,10 @@ func (c *peerChannelScheduler) write0() error {
 	defer c.lock.Unlock()
 
 	if err := c.writeMapBins(c.haveBins, c.writeHave); err != nil {
-		if errors.Is(err, codec.ErrNotEnoughSpace) {
-			return nil
-		}
 		return err
 	}
 
 	if err := c.writeMapBins(c.cancelBins, c.writeCancel); err != nil {
-		if errors.Is(err, codec.ErrNotEnoughSpace) {
-			return nil
-		}
 		return err
 	}
 
@@ -862,9 +856,6 @@ func (c *peerChannelScheduler) write0() error {
 
 		if err != nil {
 			c.pruneExtraMessages(i)
-			if errors.Is(err, codec.ErrNotEnoughSpace) {
-				return nil
-			}
 			return err
 		}
 	}
@@ -949,9 +940,6 @@ func (c *peerChannelScheduler) write1() error {
 	c.lock.Unlock()
 	c.s.lock.Unlock()
 
-	if errors.Is(err, codec.ErrNotEnoughSpace) {
-		return nil
-	}
 	return err
 }
 
@@ -1172,6 +1160,8 @@ func (c *peerChannelScheduler) HandleData(b binmap.Bin, t timeutil.Time, valid b
 
 	c.p.AddReceivedBytes(b.BaseLength()*uint64(c.s.chunkSize), now)
 
+	atomic.StoreUint32(&c.enqueueNow, 1)
+
 	c.lock.Lock()
 	if ts, ok := c.requestTimes.Get(b); ok && ts == t {
 		// LEDBAT rtt...
@@ -1216,6 +1206,11 @@ func (c *peerChannelScheduler) HandleHave(b binmap.Bin) error {
 
 		c.streamHaveLag[stream].Update(float64(t.Sub(first)))
 		c.s.streams[stream].updatePeerHaveMax(it.Value())
+
+		st, ok := c.sentBinTimes.Get(it.Value())
+		if ok {
+			c.sendRTT.AddWithTime(uint64(t-st), t)
+		}
 	}
 
 	// c.s.peerHaveBins.Set(b)
@@ -1259,7 +1254,7 @@ func (c *peerChannelScheduler) HandleRequest(b binmap.Bin, t timeutil.Time) erro
 
 	c.p.PushData(c, b, t, peerPriorityLow)
 
-	atomic.StoreUint32(&c.requestsAdded, 1)
+	atomic.StoreUint32(&c.enqueueNow, 1)
 
 	return nil
 }
@@ -1368,7 +1363,7 @@ func (c *peerChannelScheduler) HandleStreamClose(s codec.Stream) error {
 
 // deprecated?
 func (c *peerChannelScheduler) HandleMessageEnd() error {
-	if atomic.CompareAndSwapUint32(&c.requestsAdded, 1, 0) {
+	if atomic.CompareAndSwapUint32(&c.enqueueNow, 1, 0) {
 		c.p.EnqueueNow(c)
 	} else {
 		c.p.Enqueue(c)

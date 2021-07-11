@@ -18,15 +18,15 @@ import (
 
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers, transfer *transfer.Control) *Control {
-	events := make(chan interface{}, 128)
-	observers.Notify(events)
+	// events := make(chan interface{}, 8)
+	// observers.Notify(events)
 
 	return &Control{
 		logger:    logger,
 		vpn:       vpn,
 		observers: observers,
-		events:    events,
-		transfer:  transfer,
+		// events:    events,
+		transfer: transfer,
 	}
 }
 
@@ -35,8 +35,8 @@ type Control struct {
 	logger    *zap.Logger
 	vpn       *vpn.Host
 	observers *event.Observers
-	events    chan interface{}
-	transfer  *transfer.Control
+	// events    chan interface{}
+	transfer *transfer.Control
 
 	lock sync.Mutex
 }

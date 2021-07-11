@@ -48,6 +48,7 @@ func NewPeerHandler(logger *zap.Logger, app control.AppControl, store *dao.Profi
 		networkv1.RegisterNetworkPeerService(s, &networkService{p, app})
 
 		go func() {
+			logger.Debug("peer rpc server listening")
 			err := s.Listen(context.Background())
 			if err != nil {
 				logger.Debug("peer rpc server closed with error", zap.Error(err))

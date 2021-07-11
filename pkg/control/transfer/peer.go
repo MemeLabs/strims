@@ -46,18 +46,27 @@ func (p *Peer) AssignPort(id []byte, peerChannel uint64) (uint64, bool) {
 func (p *Peer) Announce(t *transfer) {
 	pt := p.getOrCreatePeerTransfer(t)
 
-	req := &transferv1.TransferPeerAnnounceRequest{
-		Id:      t.id,
-		Channel: pt.channel,
-	}
-	res := &transferv1.TransferPeerAnnounceResponse{}
-	err := p.client.Transfer().Announce(p.ctx, req, res)
-	if err != nil {
-		p.logger.Debug("failed", zap.Error(err))
-		return
-	}
+	p.logger.Debug(
+		"announcing swarm",
+		logutil.ByteHex("id", pt.id),
+		zap.Stringer("swarm", pt.swarm.ID()),
+		zap.Uint64("localChannel", pt.channel),
+	)
 
-	p.openChannel(pt, res.GetChannel())
+	go func() {
+		req := &transferv1.TransferPeerAnnounceRequest{
+			Id:      t.id,
+			Channel: pt.channel,
+		}
+		res := &transferv1.TransferPeerAnnounceResponse{}
+		err := p.client.Transfer().Announce(p.ctx, req, res)
+		if err != nil {
+			p.logger.Debug("announce failed", zap.Error(err))
+			return
+		}
+
+		p.openChannel(pt, res.GetChannel())
+	}()
 }
 
 // Close ...
@@ -74,6 +83,7 @@ func (p *Peer) Remove(t *transfer) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	p.logger.Debug("removing pt", logutil.ByteHex("id", t.id))
 	pt, ok := p.transfers.Delete(&peerTransfer{transfer: t}).(*peerTransfer)
 	if ok {
 		pt.close()
@@ -94,6 +104,7 @@ func (p *Peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
 
 	pt, ok := p.transfers.Get(&peerTransfer{transfer: t}).(*peerTransfer)
 	if !ok {
+		p.logger.Debug("new pt", logutil.ByteHex("id", t.id))
 		p.nextChannel++
 
 		pt = &peerTransfer{
@@ -102,6 +113,8 @@ func (p *Peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
 			channel:  p.nextChannel,
 		}
 		p.transfers.ReplaceOrInsert(pt)
+	} else {
+		p.logger.Debug("reusing pt", logutil.ByteHex("id", t.id))
 	}
 
 	return pt
@@ -117,7 +130,6 @@ func (p *Peer) openChannel(pt *peerTransfer, peerChannel uint64) {
 
 	logger := p.logger.With(
 		logutil.ByteHex("id", pt.id),
-		zap.Stringer("peer", p.vnicPeer.HostID()),
 		zap.Stringer("swarm", pt.swarm.ID()),
 		zap.Uint64("localChannel", pt.channel),
 		zap.Uint64("peerChannel", peerChannel),

@@ -69,6 +69,21 @@ func NewNetworkCertificate(network *networkv1.Network) (*certificate.Certificate
 	return NewSelfSignedCertificate(network.Key, certificate.KeyUsage_KEY_USAGE_SIGN, defaultCertTTL, WithSubject(network.Name))
 }
 
+func SignCertificateRequestWithNetwork(csr *certificate.CertificateRequest, network *networkv1.Network) (*certificate.Certificate, error) {
+	networkCert, err := NewNetworkCertificate(network)
+	if err != nil {
+		return nil, err
+	}
+
+	cert, err := SignCertificateRequest(csr, defaultCertTTL, network.Key)
+	if err != nil {
+		return nil, err
+	}
+	cert.ParentOneof = &certificate.Certificate_Parent{Parent: networkCert}
+
+	return cert, nil
+}
+
 // NewNetwork ...
 func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile *profilev1.Profile) (*networkv1.Network, error) {
 	id, err := g.GenerateID()
@@ -81,9 +96,11 @@ func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile
 		return nil, err
 	}
 
-	networkCert, err := NewSelfSignedCertificate(key, certificate.KeyUsage_KEY_USAGE_SIGN, defaultCertTTL, WithSubject(name))
-	if err != nil {
-		return nil, err
+	network := &networkv1.Network{
+		Id:          id,
+		Name:        name,
+		Key:         key,
+		Icon:        icon,
 	}
 
 	csr, err := NewCertificateRequest(
@@ -94,19 +111,14 @@ func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile
 	if err != nil {
 		return nil, err
 	}
-	cert, err := SignCertificateRequest(csr, defaultCertTTL, key)
+
+	cert, err := SignCertificateRequestWithNetwork(csr, network)
 	if err != nil {
 		return nil, err
 	}
-	cert.ParentOneof = &certificate.Certificate_Parent{Parent: networkCert}
+	network.Certificate = cert
 
-	return &networkv1.Network{
-		Id:          id,
-		Name:        name,
-		Key:         key,
-		Icon:        icon,
-		Certificate: cert,
-	}, nil
+	return network, nil
 }
 
 // NewNetworkFromInvitationV0 generates a network from a network invitation

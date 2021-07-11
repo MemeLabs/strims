@@ -2,8 +2,13 @@ import React, { MouseEvent, MouseEventHandler, useCallback, useRef, useState } f
 import ReactDOM from "react-dom";
 import { FiXSquare } from "react-icons/fi";
 import { useClickAway } from "react-use";
-// import { useClickAway } from "react-use";
-// import usePortal from "react-useportal";
+
+const SizeContext = React.createContext<Size>({
+  height: 0,
+  width: 0,
+});
+
+export const usePortletSize = (): Size => React.useContext(SizeContext);
 
 interface Position {
   top: number;
@@ -48,9 +53,17 @@ const DEFAULT_POS: Pos = {
 export interface PortletProps {
   onClose: () => void;
   isOpen: boolean;
+  headerSize?: number;
+  handleSize?: number;
 }
 
-const Portlet: React.FC<PortletProps> = ({ onClose, isOpen, children }) => {
+const Portlet: React.FC<PortletProps> = ({
+  onClose,
+  isOpen,
+  children,
+  headerSize = 20,
+  handleSize = 8,
+}) => {
   const [pos, setPos] = useState(DEFAULT_POS);
 
   const handleDragStart = useCallback<MouseEventHandler>((e) => {
@@ -231,14 +244,14 @@ const Portlet: React.FC<PortletProps> = ({ onClose, isOpen, children }) => {
       >
         <div
           style={{
-            flex: "8px 0 0",
+            flex: `${handleSize}px 0 0`,
             display: "flex",
             flexDirection: "row",
           }}
         >
           <div
             style={{
-              flex: "8px 0 0",
+              flex: `${handleSize}px 0 0`,
               cursor: "nw-resize",
             }}
             onMouseDown={(e) => handleResizeStart(e, "nw")}
@@ -252,7 +265,7 @@ const Portlet: React.FC<PortletProps> = ({ onClose, isOpen, children }) => {
           ></div>
           <div
             style={{
-              flex: "8px 0 0",
+              flex: `${handleSize}px 0 0`,
               cursor: "ne-resize",
             }}
             onMouseDown={(e) => handleResizeStart(e, "ne")}
@@ -267,7 +280,7 @@ const Portlet: React.FC<PortletProps> = ({ onClose, isOpen, children }) => {
         >
           <div
             style={{
-              flex: "8px 0 0",
+              flex: `${handleSize}px 0 0`,
               cursor: "w-resize",
             }}
             onMouseDown={(e) => handleResizeStart(e, "w")}
@@ -282,7 +295,7 @@ const Portlet: React.FC<PortletProps> = ({ onClose, isOpen, children }) => {
           >
             <div
               style={{
-                flex: "20px 0 0",
+                flex: `${headerSize}px 0 0`,
                 background: "orange",
                 display: "flex",
                 justifyContent: "flex-end",
@@ -301,12 +314,21 @@ const Portlet: React.FC<PortletProps> = ({ onClose, isOpen, children }) => {
                 overflow: "auto",
               }}
             >
-              <div>{children}</div>
+              <div>
+                <SizeContext.Provider
+                  value={{
+                    height: pos.size.height - handleSize * 2 - headerSize,
+                    width: pos.size.width - handleSize * 2,
+                  }}
+                >
+                  {children}
+                </SizeContext.Provider>
+              </div>
             </div>
           </div>
           <div
             style={{
-              flex: "8px 0 0",
+              flex: `${handleSize}px 0 0`,
               cursor: "e-resize",
             }}
             onMouseDown={(e) => handleResizeStart(e, "e")}
@@ -314,14 +336,14 @@ const Portlet: React.FC<PortletProps> = ({ onClose, isOpen, children }) => {
         </div>
         <div
           style={{
-            flex: "8px 0 0",
+            flex: `${handleSize}px 0 0`,
             display: "flex",
             flexDirection: "row",
           }}
         >
           <div
             style={{
-              flex: "8px 0 0",
+              flex: `${handleSize}px 0 0`,
               cursor: "sw-resize",
             }}
             onMouseDown={(e) => handleResizeStart(e, "sw")}
@@ -335,7 +357,7 @@ const Portlet: React.FC<PortletProps> = ({ onClose, isOpen, children }) => {
           ></div>
           <div
             style={{
-              flex: "8px 0 0",
+              flex: `${handleSize}px 0 0`,
               cursor: "se-resize",
             }}
             onMouseDown={(e) => handleResizeStart(e, "se")}

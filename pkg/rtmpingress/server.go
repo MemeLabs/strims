@@ -1,6 +1,7 @@
 package rtmpingress
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"sync"
@@ -25,6 +26,7 @@ type Server struct {
 	Addr         string
 	CheckOrigin  func(a *StreamAddr, c *Conn) bool
 	HandleStream func(a *StreamAddr, c *Conn)
+	BaseContext  func(nc net.Conn) context.Context
 	Logger       *zap.Logger
 
 	streams  streams
@@ -49,7 +51,7 @@ func (s *Server) handleConn(c *rtmp.Conn, nc net.Conn) {
 		return
 	}
 
-	ic := NewConn(nc)
+	ic := NewConn(s.connContext(nc), nc)
 	defer ic.Close()
 
 	a := &StreamAddr{
@@ -71,6 +73,13 @@ func (s *Server) handleConn(c *rtmp.Conn, nc net.Conn) {
 	} else {
 		stream.addSub(c.CloseNotify(), c)
 	}
+}
+
+func (s *Server) connContext(nc net.Conn) context.Context {
+	if s.BaseContext != nil {
+		return s.BaseContext(nc)
+	}
+	return context.Background()
 }
 
 // Close ...
@@ -123,17 +132,20 @@ func (s *Server) Listen() (err error) {
 }
 
 // NewConn ...
-func NewConn(nc net.Conn) *Conn {
+func NewConn(ctx context.Context, nc net.Conn) *Conn {
+	ctx, cancel := context.WithCancel(ctx)
 	return &Conn{
-		Conn:  nc,
-		close: make(chan struct{}),
+		Conn:   nc,
+		ctx:    ctx,
+		cancel: cancel,
 	}
 }
 
 // Conn ...
 type Conn struct {
 	net.Conn
-	close     chan struct{}
+	ctx       context.Context
+	cancel    context.CancelFunc
 	closeOnce sync.Once
 }
 
@@ -141,12 +153,17 @@ type Conn struct {
 func (c *Conn) Close() (err error) {
 	c.closeOnce.Do(func() {
 		err = c.Conn.Close()
-		close(c.close)
+		c.cancel()
 	})
 	return
 }
 
 // CloseNotify ...
 func (c *Conn) CloseNotify() <-chan struct{} {
-	return c.close
+	return c.ctx.Done()
+}
+
+// Context ...
+func (c *Conn) Context() context.Context {
+	return c.ctx
 }

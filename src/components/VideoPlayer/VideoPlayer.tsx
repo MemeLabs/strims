@@ -29,7 +29,13 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   }, [videoState.error]);
 
   useEffect(() => {
-    videoControls.setSrc(URL.createObjectURL(mediaSource));
+    if (!videoProps.ref.current || !mediaSource) {
+      return;
+    }
+
+    const src = URL.createObjectURL(mediaSource);
+    videoControls.setSrc(src);
+    return () => URL.revokeObjectURL(src);
   }, [videoProps.ref, mediaSource]);
 
   const waitingSpinner =

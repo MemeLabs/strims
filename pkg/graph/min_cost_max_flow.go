@@ -2,7 +2,7 @@ package graph
 
 import "math"
 
-const inf = math.MaxInt/2 - 1
+const inf = int64(math.MaxInt64/2 - 1)
 
 // MinCostMaxFlow finds the minimum cost max flow of a weighted flow network
 // using the Ford–Fulkerson algorithm with Bellman-Ford search.
@@ -10,12 +10,12 @@ const inf = math.MaxInt/2 - 1
 //     https://en.wikipedia.org/wiki/Bellman%E2%80%93Ford_algorithm
 type MinCostMaxFlow struct {
 	found           []bool
-	n               int
-	cap, flow, cost []int
-	prev, dist, pi  []int
+	n               int64
+	cap, flow, cost []int64
+	prev, dist, pi  []int64
 }
 
-func (f *MinCostMaxFlow) search(s, t int) bool {
+func (f *MinCostMaxFlow) search(s, t int64) bool {
 	for i := range f.found {
 		f.found[i] = false
 	}
@@ -29,7 +29,7 @@ func (f *MinCostMaxFlow) search(s, t int) bool {
 		best := f.n
 		f.found[s] = true
 
-		for i := 0; i < f.n; i++ {
+		for i := int64(0); i < f.n; i++ {
 			if f.found[i] {
 				continue
 			}
@@ -58,36 +58,36 @@ func (f *MinCostMaxFlow) search(s, t int) bool {
 		s = best
 	}
 
-	for k := 0; k < f.n; k++ {
-		pi := f.pi[k] + f.dist[k]
+	for i := int64(0); i < f.n; i++ {
+		pi := f.pi[i] + f.dist[i]
 		if pi > inf {
 			pi = inf
 		}
-		f.pi[k] = pi
+		f.pi[i] = pi
 	}
 
 	return f.found[t]
 }
 
-func (f *MinCostMaxFlow) Flow(s, t int) int {
+func (f *MinCostMaxFlow) Flow(s, t int64) int64 {
 	return f.flow[s*f.n+t]
 }
 
-func (f *MinCostMaxFlow) ComputeMaxFlow(g Graph, s, t int) (flow, cost int) {
+func (f *MinCostMaxFlow) ComputeMaxFlow(g Graph, s, t int64) (flow, cost int64) {
 	f.cap = g.cap
 	f.cost = g.cost
 	f.n = g.n
 
 	f.found = make([]bool, f.n)
-	f.flow = make([]int, f.n*f.n)
-	f.dist = make([]int, f.n+1)
-	f.prev = make([]int, f.n)
-	f.pi = make([]int, f.n)
+	f.flow = make([]int64, f.n*f.n)
+	f.dist = make([]int64, f.n+1)
+	f.prev = make([]int64, f.n)
+	f.pi = make([]int64, f.n)
 
 	for f.search(s, t) {
 		pathFlow := inf
 		for u := t; u != s; u = f.prev[u] {
-			var pf int
+			var pf int64
 			if f.flow[u*f.n+f.prev[u]] != 0 {
 				pf = f.flow[u*f.n+f.prev[u]]
 			} else {

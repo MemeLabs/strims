@@ -47,7 +47,7 @@ type Broker interface {
 
 // NewControl ...
 func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *profilev1.Profile, observers *event.Observers, dialer *dialer.Control) *Control {
-	events := make(chan interface{}, 128)
+	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
 	return &Control{
@@ -248,6 +248,15 @@ func (t *Control) renewCertificateWithRenewFunc(network *networkv1.Network, fn c
 
 // renewCertificate ...
 func (t *Control) renewCertificate(network *networkv1.Network) error {
+	if network.Key != nil {
+		return t.renewCertificateWithRenewFunc(
+			network,
+			func(ctx context.Context, _ *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
+				return dao.SignCertificateRequestWithNetwork(csr, network)
+			},
+		)
+	}
+
 	return t.renewCertificateWithRenewFunc(
 		network,
 		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
@@ -515,13 +524,9 @@ func (t *Control) Remove(id uint64) error {
 }
 
 func (t *Control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent {
-	ch := make(chan *networkv1.NetworkEvent, 128)
+	ch := make(chan *networkv1.NetworkEvent, 8)
 
 	go func() {
-		events := make(chan interface{}, 128)
-		t.observers.Notify(events)
-		defer t.observers.StopNotifying(events)
-
 		t.lock.Lock()
 		for _, n := range t.networks {
 			ch <- &networkv1.NetworkEvent{
@@ -534,6 +539,10 @@ func (t *Control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 			}
 		}
 		t.lock.Unlock()
+
+		events := make(chan interface{}, 8)
+		t.observers.Notify(events)
+		defer t.observers.StopNotifying(events)
 
 		for {
 			select {

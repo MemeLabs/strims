@@ -73,7 +73,7 @@ func newPeer(logger *zap.Logger, link Link, hostKey *key.Key, hostCert *certific
 
 	p := &Peer{
 		logger:       logger,
-		Link:         link,
+		Link:         instrumentLink(link, hostID),
 		Certificate:  init.Certificate.GetParent(),
 		hostID:       hostID,
 		handlers:     map[uint16]FrameHandler{},
@@ -136,6 +136,7 @@ func (p *Peer) Close() {
 		atomic.StoreUint32(&p.closed, 1)
 		p.close()
 		p.Link.Close()
+		deleteInstrumentedLinkMetrics(p.hostID)
 
 		p.channelsLock.Lock()
 		defer p.channelsLock.Unlock()

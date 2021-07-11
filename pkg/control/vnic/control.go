@@ -18,15 +18,15 @@ func NewControl(
 	store *dao.ProfileStore,
 	observers *event.Observers,
 ) *Control {
-	events := make(chan interface{}, 128)
-	observers.Notify(events)
+	// events := make(chan interface{}, 8)
+	// observers.Notify(events)
 
 	return &Control{
-		logger:        logger,
-		vpn:           vpn,
-		store:         store,
-		observers:     observers,
-		events:        events,
+		logger:    logger,
+		vpn:       vpn,
+		store:     store,
+		observers: observers,
+		// events:        events,
 		ingressConfig: &vnicv1.Config{},
 	}
 }
@@ -37,7 +37,7 @@ type Control struct {
 	vpn       *vpn.Host
 	store     *dao.ProfileStore
 	observers *event.Observers
-	events    chan interface{}
+	// events    chan interface{}
 
 	lock          sync.Mutex
 	ingressConfig *vnicv1.Config

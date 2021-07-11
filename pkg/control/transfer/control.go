@@ -23,7 +23,7 @@ import (
 
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers) *Control {
-	events := make(chan interface{}, 128)
+	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
 	return &Control{
@@ -205,7 +205,7 @@ func (c *Control) AddPeer(id uint64, peer *vnic.Peer, client api.PeerClient) *Pe
 	w := vnic.NewFrameWriter(peer.Link, vnic.TransferPort, c.qosc)
 	cr, rp := c.runner.RunPeer(peer.HostID().Bytes(nil), w)
 	p := &Peer{
-		logger:     c.logger,
+		logger:     c.logger.With(zap.Stringer("peer", peer.HostID())),
 		ctx:        ctx,
 		vnicPeer:   peer,
 		runnerPeer: rp,
@@ -274,13 +274,18 @@ func (c *Control) Add(swarm *ppspp.Swarm, salt []byte) []byte {
 // Remove ...
 func (c *Control) Remove(id []byte) {
 	c.lock.Lock()
-	t, ok := c.transfers.Get(&transfer{id: id}).(*transfer)
-	c.transfers.Delete(t)
-	c.lock.Unlock()
+	defer c.lock.Unlock()
 
+	t, ok := c.transfers.Get(&transfer{id: id}).(*transfer)
 	if !ok {
 		return
 	}
+
+	c.transfers.Delete(t)
+	c.networks.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
+		i.(*network).transfers.Delete(t)
+		return true
+	})
 
 	t.close()
 
@@ -325,7 +330,7 @@ func (c *Control) Publish(id []byte, networkKey []byte) {
 	n.transfers.ReplaceOrInsert(t)
 
 	for _, p := range n.peers {
-		go p.Announce(t)
+		p.Announce(t)
 	}
 
 	c.lock.Unlock()

@@ -1,4 +1,5 @@
 //go:build !js
+// +build !js
 
 package vnic
 
@@ -206,24 +207,33 @@ func (d WebRTCDialer) dialWebRTC(m WebRTCMediator, pc *webrtc.PeerConnection) (L
 		if err != nil {
 			return nil, err
 		}
-		return newDCLink(rwc), nil
+
+		mtu := pc.SCTP().GetCapabilities().MaxMessageSize
+		if mtu > maxDCMTU {
+			mtu = maxDCMTU
+		}
+		return newDCLink(rwc, int(mtu)), nil
 	case <-time.After(time.Second * 10):
 		return nil, fmt.Errorf("data channel receive timeout")
 	}
 }
 
-func newDCLink(rwc io.ReadWriteCloser) *dcLink {
+const maxDCMTU = 64 * 1024
+
+func newDCLink(rwc io.ReadWriteCloser, mtu int) *dcLink {
 	return &dcLink{
-		Reader:      bufio.NewReaderSize(rwc, 16*1024),
+		Reader:      bufio.NewReaderSize(rwc, mtu),
 		WriteCloser: rwc,
+		mtu:         mtu,
 	}
 }
 
 type dcLink struct {
 	io.Reader
 	io.WriteCloser
+	mtu int
 }
 
 func (l dcLink) MTU() int {
-	return 16 * 1024
+	return l.mtu
 }

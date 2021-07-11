@@ -31,6 +31,7 @@ import (
 type testPeer struct {
 	downloadRate int
 	uploadRate   int
+	uploadLimit  int
 	city         ppspptest.City
 	peers        testCityList
 }
@@ -57,147 +58,173 @@ func TestSwarmSim(t *testing.T) {
 	peers := []testPeer{
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.NewYork,
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.Boston,
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.Seattle,
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.SanFrancisco,
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.LosAngeles,
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.London,
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.Berlin,
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.Paris,
 			peers:        testCityList{ppspptest.LosAngeles, ppspptest.London, ppspptest.Berlin, ppspptest.Rome, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Tokyo, ppspptest.Singapore},
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.Rome,
 			peers:        testCityList{ppspptest.LosAngeles, ppspptest.London, ppspptest.Berlin, ppspptest.Paris, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Tokyo, ppspptest.Singapore},
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.HongKong,
 			peers:        testCityList{ppspptest.LosAngeles, ppspptest.London, ppspptest.Berlin, ppspptest.Paris, ppspptest.Rome, ppspptest.Moscow, ppspptest.Tokyo, ppspptest.Singapore},
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.Moscow,
 			peers:        testCityList{ppspptest.Seattle, ppspptest.Berlin, ppspptest.Paris, ppspptest.Rome, ppspptest.HongKong, ppspptest.Tokyo, ppspptest.Singapore},
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.Tokyo,
 			peers:        testCityList{ppspptest.SanFrancisco, ppspptest.Paris, ppspptest.Rome, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Singapore},
 		},
 		{
 			downloadRate: 150 * ppspptest.Mbps,
-			uploadRate:   15 * ppspptest.Mbps,
+			uploadRate:   25 * ppspptest.Mbps,
+			uploadLimit:  15 * ppspptest.Mbps,
 			city:         ppspptest.Singapore,
 			peers:        testCityList{ppspptest.Paris, ppspptest.Rome, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Tokyo},
 		},
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Cairo,
 		// },
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Chennai,
 		// 	peers:        testCityList{ppspptest.Seattle, ppspptest.SanFrancisco, ppspptest.Rome, ppspptest.Tokyo, ppspptest.Cairo},
 		// },
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Bogota,
 		// 	peers:        testCityList{ppspptest.London, ppspptest.Berlin, ppspptest.Chennai, ppspptest.Seoul, ppspptest.Algiers, ppspptest.Kolkata},
 		// },
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Bangkok,
 		// 	peers:        testCityList{ppspptest.Moscow, ppspptest.Tokyo, ppspptest.Singapore, ppspptest.Cairo, ppspptest.Chennai, ppspptest.Bogota},
 		// },
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Santiago,
 		// 	peers:        testCityList{ppspptest.Barcelona, ppspptest.Shenzhen, ppspptest.Lima, ppspptest.Seoul, ppspptest.Hanoi, ppspptest.Algiers},
 		// },
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Barcelona,
 		// },
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Shenzhen,
 		// },
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Lima,
 		// 	peers:        testCityList{ppspptest.Santiago, ppspptest.Barcelona, ppspptest.Shenzhen, ppspptest.Rome, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Tokyo, ppspptest.Singapore},
 		// },
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Seoul,
 		// 	peers:        testCityList{ppspptest.Santiago, ppspptest.Barcelona, ppspptest.Shenzhen, ppspptest.Lima, ppspptest.HongKong, ppspptest.Algiers, ppspptest.Cairo, ppspptest.Singapore},
 		// },
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Hanoi,
 		// 	peers:        testCityList{ppspptest.Santiago, ppspptest.Barcelona, ppspptest.Berlin, ppspptest.Santiago, ppspptest.Seoul, ppspptest.Algiers, ppspptest.Cairo, ppspptest.Karachi},
 		// },
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Algiers,
 		// 	peers:        testCityList{ppspptest.Seattle, ppspptest.Berlin, ppspptest.Santiago, ppspptest.Seoul, ppspptest.Hanoi, ppspptest.Cairo, ppspptest.Karachi},
 		// },
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Kolkata,
 		// 	peers:        testCityList{ppspptest.SanFrancisco, ppspptest.Santiago, ppspptest.Seoul, ppspptest.Hanoi, ppspptest.Moscow, ppspptest.Karachi},
 		// },
 		// {
 		// 	downloadRate: 150 * ppspptest.Mbps,
-		// 	uploadRate:   15 * ppspptest.Mbps,
+		// 	uploadRate:   25 * ppspptest.Mbps,
+		// 	uploadLimit:  15 * ppspptest.Mbps,
 		// 	city:         ppspptest.Karachi,
 		// 	peers:        testCityList{ppspptest.Paris, ppspptest.Rome, ppspptest.HongKong, ppspptest.Moscow, ppspptest.Cairo},
 		// },
@@ -239,16 +266,17 @@ func TestSwarmSim(t *testing.T) {
 		return c
 	}
 
-	newClient := func(p testPeer) *client {
+	clients := make([]*client, len(peers))
+	for i, p := range peers {
 		swarm, err := ppspp.NewSwarm(id, options)
 		assert.NoError(t, err, "swarm constructor failed")
-		return &client{
+		clients[i] = &client{
 			id:        newClientID(),
 			city:      p.city,
 			bandwidth: ppspptest.NewConnThrottle(p.downloadRate, p.uploadRate),
 			swarm:     swarm,
 			conns:     make([]*ppspptest.MeterConn, len(peers)),
-			qos:       qos.NewWithLimit(uint64(p.uploadRate)),
+			qos:       qos.NewWithLimit(uint64(p.uploadLimit)),
 		}
 	}
 
@@ -257,18 +285,7 @@ func TestSwarmSim(t *testing.T) {
 		Key:          key,
 	})
 	assert.NoError(t, err, "writer constructor failed")
-
-	clients := []*client{{
-		id:        newClientID(),
-		city:      peers[0].city,
-		bandwidth: ppspptest.NewConnThrottle(peers[0].downloadRate, peers[0].uploadRate),
-		swarm:     src.Swarm(),
-		conns:     make([]*ppspptest.MeterConn, len(peers)),
-		qos:       qos.NewWithLimit(uint64(peers[0].uploadRate)),
-	}}
-	for i := 1; i < len(peers); i++ {
-		clients = append(clients, newClient(peers[i]))
-	}
+	clients[0].swarm = src.Swarm()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -421,7 +438,7 @@ func TestSwarmSim(t *testing.T) {
 							float64(conn.ReadByteRate())/float64(peers[i].downloadRate)*100,
 							conn.WrittenBytes(),
 							conn.WriteByteRate(),
-							float64(conn.WriteByteRate())/float64(peers[i].uploadRate)*100,
+							float64(conn.WriteByteRate())/float64(peers[i].uploadLimit)*100,
 						)
 					}
 				}
@@ -432,7 +449,7 @@ func TestSwarmSim(t *testing.T) {
 					float64(rr)/float64(peers[i].downloadRate)*100,
 					wn,
 					wr,
-					float64(wr)/float64(peers[i].uploadRate)*100,
+					float64(wr)/float64(peers[i].uploadLimit)*100,
 				)
 				log.Printf("%-26s readable: %-12d", c.city.Name, c.writer.WrittenBytes())
 				log.Println("")

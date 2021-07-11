@@ -2,7 +2,8 @@ package qos
 
 import (
 	"sync"
-	"time"
+
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
 
 // New ...
@@ -61,8 +62,11 @@ func (c *Control) Dequeue() Packet {
 }
 
 func (c *Control) run() {
-	t := time.NewTimer(0)
+	tc, stop := timeutil.DefaultTickEmitter.Chan()
+	defer stop()
+
 	for range c.ready {
+		t := timeutil.Now()
 		for {
 			c.lock.Lock()
 
@@ -71,10 +75,9 @@ func (c *Control) run() {
 				c.lock.Unlock()
 				break
 			}
-			if !c.hlb.Check(float64(p.Size())) {
+			if !c.hlb.CheckWithTime(float64(p.Size()), t) {
 				c.lock.Unlock()
-				t.Reset(50 * time.Millisecond)
-				<-t.C
+				t = <-tc
 				continue
 			}
 
@@ -101,8 +104,6 @@ func (c *Class) SetWeight(w uint64) {
 
 // AddClass ...
 func (c *Class) AddClass(w uint64) *Class {
-	c.ctrl.lock.Lock()
-	defer c.ctrl.lock.Unlock()
 	return &Class{
 		ctrl: c.ctrl,
 		pfq: &pfqNode{
@@ -117,8 +118,6 @@ func (c *Class) AddClass(w uint64) *Class {
 
 // AddSession ...
 func (c *Class) AddSession(w uint64) *Session {
-	c.ctrl.lock.Lock()
-	defer c.ctrl.lock.Unlock()
 	return &Session{
 		ctrl: c.ctrl,
 		pfq: &pfqLeaf{

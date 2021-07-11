@@ -1,11 +1,13 @@
 package ppspp
 
 import (
+	"errors"
 	"log"
 	"sync"
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/stats"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 )
@@ -32,7 +34,7 @@ func newPeer(id []byte, w Conn, t timeutil.Ticker) *peer {
 	p := &peer{
 		id:     id,
 		w:      w,
-		ready:  make(chan timeutil.Time, 1),
+		ready:  make(chan timeutil.Time, 2),
 		ticker: t,
 
 		receivedBytes: stats.NewSMA(60, time.Second),
@@ -160,37 +162,46 @@ func (p *peer) write() (bool, error) {
 	var n int
 
 	p.lock.Lock()
-	cs := p.wq.Detach()
+	pws := p.wq.Detach()
 	p.lock.Unlock()
 	for {
-		c, ok := cs.Pop()
+		pw, ok := pws.Pop()
 		if !ok {
 			break
 		}
 
-		nn, err := c.Write(p.w.MTU() - n)
-		if err == nil {
-			n += nn
+		nn, err := pw.Write(p.w.MTU() - n)
+		n += nn
+		if err != nil {
+			if !errors.Is(err, codec.ErrNotEnoughSpace) {
+				return true, err
+			}
+
+			p.lock.Lock()
+			p.wq.Push(pw)
+			p.wq.Reattach(pws)
+			p.lock.Unlock()
+			break
 		}
 	}
 
 	for i := range p.ds {
 		for {
 			p.lock.Lock()
-			cs, bin, t, ok := p.ds[i].Pop()
+			pw, bin, t, ok := p.ds[i].Pop()
 			p.lock.Unlock()
 			if !ok {
 				break
 			}
 
-			nn, err := cs.WriteData(p.w.MTU()-n, bin, t, peerPriority(i))
+			nn, err := pw.WriteData(p.w.MTU()-n, bin, t, peerPriority(i))
+			n += nn
 			if err != nil {
-				return true, err
-			}
-			if nn == 0 {
+				if !errors.Is(err, codec.ErrNotEnoughSpace) {
+					return true, err
+				}
 				break
 			}
-			n += nn
 		}
 	}
 

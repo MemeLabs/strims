@@ -5,9 +5,7 @@ import React from "react";
 import { Link, useParams } from "react-router-dom";
 
 import { DirectoryEvent, DirectoryListing } from "../apis/strims/network/v1/directory";
-import { useClient, useLazyCall } from "../contexts/FrontendApi";
-import { useProfile } from "../contexts/Profile";
-import { useTheme } from "../contexts/Theme";
+import { useClient } from "../contexts/FrontendApi";
 
 interface Listing {
   key: string;
@@ -50,21 +48,19 @@ const formatUri = (networkKey: string, { content }: DirectoryListing): string =>
 
 const Directory: React.FC = () => {
   const params = useParams<DirectoryParams>();
-  const [{ colorScheme }, { setColorScheme }] = useTheme();
-  const [{ profile }, { clearProfile }] = useProfile();
   const [listings, dispatch] = React.useReducer(directoryReducer, []);
   const client = useClient();
 
-  const networkKey = Base64.toUint8Array(params.networkKey);
-
   React.useEffect(() => {
+    const networkKey = Base64.toUint8Array(params.networkKey);
     const events = client.directory.open({ networkKey });
     events.on("data", ({ event }) => dispatch(event));
     events.on("close", () => console.log("directory event stream closed"));
     return () => events.destroy();
-  }, []);
+  }, [params.networkKey]);
 
   const handleTestClick = async () => {
+    const networkKey = Base64.toUint8Array(params.networkKey);
     const res = await client.directory.test({ networkKey });
     console.log(res);
   };

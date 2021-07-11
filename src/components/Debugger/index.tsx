@@ -1,41 +1,39 @@
 import "../../styles/debugger.scss";
 
+import PBReader from "@memelabs/protobuf/lib/pb/reader";
 import React from "react";
 
+import { MetricFamily } from "../../apis/io/prometheus/client/metrics";
+import { MetricsFormat } from "../../apis/strims/debug/v1/debug";
 import { useClient, useLazyCall } from "../../contexts/FrontendApi";
+import ActivityChart from "./ActivityChart";
 import Portlet, { PortletProps } from "./Portlet";
 
 type DebuggerProps = PortletProps;
 
-interface PProfDownload {
-  name: string;
-  url: string;
-}
-
 const Debugger: React.FC<DebuggerProps> = ({ onClose, isOpen }) => {
   const client = useClient();
 
-  const [pprofData, pprof] = useLazyCall("debug", "pProf");
-  const [pprofDownloads, setPProfDownloads] = React.useState([] as PProfDownload[]);
-
-  const addDownload = (name: string, data: Uint8Array) => {
-    const f = new File([data], name, {
-      type: "application/binary",
-    });
-    setPProfDownloads((prev) => [...prev, { name, url: URL.createObjectURL(f) }]);
-  };
-
-  React.useEffect(() => {
-    if (!pprofData.value) {
-      return;
-    }
-    const now = new Date();
-    addDownload(`${pprofData.value.name}-${now.toISOString()}.profile`, pprofData.value.data);
-  }, [pprofData.value]);
+  const [, pprof] = useLazyCall("debug", "pProf", {
+    onComplete: ({ data, name }) => {
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(new Blob([data], { type: "application/binary" }));
+      a.download = `${name}-${new Date().toISOString()}.profile`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    },
+  });
 
   const handleReadMetricsClick = async () => {
-    const { data } = await client.debug.readMetrics({ format: 0 });
-    console.log(new TextDecoder().decode(data));
+    const { data } = await client.debug.readMetrics({
+      format: MetricsFormat.METRICS_FORMAT_PROTO_DELIM,
+    });
+
+    const metricFamilies: MetricFamily[] = [];
+    for (const r = new PBReader(data); r.pos < r.len; ) {
+      metricFamilies.push(MetricFamily.decode(r, r.uint32()));
+    }
+    console.log(metricFamilies);
   };
 
   return (
@@ -55,13 +53,7 @@ const Debugger: React.FC<DebuggerProps> = ({ onClose, isOpen }) => {
         </button>
       </div>
       <div>
-        {pprofDownloads.map(({ name, url }, i) => (
-          <div className="debugger__downloads" key={i}>
-            <a href={url} download={name}>
-              {name}
-            </a>
-          </div>
-        ))}
+        <ActivityChart />
       </div>
     </Portlet>
   );

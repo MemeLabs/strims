@@ -48,7 +48,7 @@ func TestServerTranscodesMultipleStreams(t *testing.T) {
 		HandleStream: func(a *StreamAddr, c *Conn) {
 			for _, tc := range tcs {
 				go func(variant string, tw *tw) {
-					if err := z.Transcode(a.URI, a.Key, variant, tw); err != nil {
+					if err := z.Transcode(c.Context(), a.URI, a.Key, variant, tw); err != nil {
 						log.Println(err)
 					}
 				}(tc.variant, tc.tw)
@@ -96,7 +96,7 @@ func TestServerClosesStreamOnCheckOriginReject(t *testing.T) {
 		Addr: rtmpServerAddr,
 		HandleStream: func(a *StreamAddr, c *Conn) {
 			go func() {
-				if err := z.Transcode(a.URI, a.Key, "source", newTw()); err != nil {
+				if err := z.Transcode(c.Context(), a.URI, a.Key, "source", newTw()); err != nil {
 					log.Println(err)
 				}
 			}()
@@ -134,7 +134,7 @@ func TestServerAcceptsMultipleStreams(t *testing.T) {
 			handleCalled = true
 			z := newTw()
 			go func() {
-				if err := x.Transcode(a.URI, a.Key, "source", z); err != nil {
+				if err := x.Transcode(c.Context(), a.URI, a.Key, "source", z); err != nil {
 					log.Println(err)
 				}
 			}()

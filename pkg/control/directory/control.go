@@ -28,7 +28,7 @@ var (
 
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers, dialer *dialer.Control, transfer *transfer.Control) *Control {
-	events := make(chan interface{}, 128)
+	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
 	return &Control{
@@ -113,13 +113,12 @@ func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *net
 		return nil
 	}
 
-	ch := make(chan *networkv1.DirectoryEvent, 128)
+	ch := make(chan *networkv1.DirectoryEvent, 8)
 
 	go func() {
 		defer close(ch)
 
-	OpenEventReader:
-		for {
+		for ctx.Err() == nil {
 			er, err := r.EventReader(ctx)
 			if err != nil {
 				t.logger.Debug(
@@ -129,20 +128,19 @@ func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *net
 				return
 			}
 
-			for ctx.Err() == nil {
+			for {
 				b := &networkv1.DirectoryEventBroadcast{}
 				if err := er.Read(b); err != nil {
 					t.logger.Debug(
 						"error reading directory event",
 						zap.Error(err),
 					)
-					continue OpenEventReader
+					break
 				}
 				for _, e := range b.Events {
 					ch <- e
 				}
 			}
-			return
 		}
 	}()
 

@@ -8,12 +8,12 @@ import (
 )
 
 func TestPeerStreamAssigner(t *testing.T) {
-	caps := []int{0, 2, 0, 3, 1, 1, 0, 0, 2, 0}
+	caps := []int64{0, 2, 0, 3, 1, 1, 0, 0, 2, 0}
 	asn := newPeerStreamAssigner(32, caps)
 
 	r := rand.New(rand.NewSource(0))
-	for i := 0; i < 32; i++ {
-		for j := 0; j < 10; j++ {
+	for i := int64(0); i < 32; i++ {
+		for j := int64(0); j < 10; j++ {
 			if r.Float32() < 0.1 {
 				asn.addCandidate(i, j, 1)
 			}

@@ -53,6 +53,11 @@ func (q *peerWriterQueue) Push(c peerWriter) bool {
 	i.next = nil
 	i.c = c
 
+	q.push(i)
+	return true
+}
+
+func (q *peerWriterQueue) push(i *peerWriterQueueItem) {
 	if q.head == nil {
 		q.head = i
 	}
@@ -61,8 +66,6 @@ func (q *peerWriterQueue) Push(c peerWriter) bool {
 		q.tail.next = i
 	}
 	q.tail = i
-
-	return true
 }
 
 func (q *peerWriterQueue) Remove(c peerWriter) {
@@ -97,6 +100,19 @@ func (q *peerWriterQueue) Detach() detachedPeerWriterQueue {
 	q.v++
 
 	return c
+}
+
+func (q *peerWriterQueue) Reattach(dq detachedPeerWriterQueue) {
+	for dq.head != nil {
+		i := dq.head
+		dq.head = i.next
+
+		if i.c.PunchTicket(q.v) {
+			q.push(i)
+		} else {
+			putPeerWriterQueueItemPool(i)
+		}
+	}
 }
 
 func (q *peerWriterQueue) Empty() bool {

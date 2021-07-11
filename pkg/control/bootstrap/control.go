@@ -19,7 +19,7 @@ import (
 
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) *Control {
-	events := make(chan interface{}, 128)
+	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
 	return &Control{
@@ -70,13 +70,18 @@ func (t *Control) handlePeerAdd(ctx context.Context, id uint64) {
 		return
 	}
 
-	var res bootstrap.BootstrapPeerGetPublishEnabledResponse
-	if err := peer.client.Bootstrap().GetPublishEnabled(ctx, &bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
-		t.logger.Debug("bootstrap publish enabled check failed", zap.Error(err))
-	}
+	go func() {
+		ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+		defer cancel()
 
-	// TODO: locking...
-	peer.PublishEnabled = res.Enabled
+		var res bootstrap.BootstrapPeerGetPublishEnabledResponse
+		if err := peer.client.Bootstrap().GetPublishEnabled(ctx, &bootstrap.BootstrapPeerGetPublishEnabledRequest{}, &res); err != nil {
+			t.logger.Debug("bootstrap publish enabled check failed", zap.Error(err))
+		}
+
+		// TODO: locking...
+		peer.PublishEnabled = res.Enabled
+	}()
 }
 
 // AddPeer ...

@@ -41,15 +41,19 @@ func (m *HLB) SetLimit(limit float64) {
 
 // Check ...
 func (m *HLB) Check(n float64) bool {
-	now := timeutil.Now()
-	d := float64(now.Sub(m.lastTick))
-	m.lastTick = now
+	return m.CheckWithTime(n, timeutil.Now())
+}
+
+// CheckWithTime ...
+func (m *HLB) CheckWithTime(n float64, t timeutil.Time) bool {
+	d := float64(t.Sub(m.lastTick))
+	m.lastTick = t
 	m.value -= d * m.rate
 	if m.value < 0 {
 		m.value = 0
 	}
 
-	if m.value+n >= m.limit || (m.parent != nil && !m.parent.Check(n)) {
+	if m.value+n >= m.limit || (m.parent != nil && !m.parent.CheckWithTime(n, t)) {
 		return false
 	}
 

@@ -50,6 +50,7 @@ require (
 	github.com/pion/webrtc/v3 v3.0.3
 	github.com/pkg/errors v0.9.1
 	github.com/prometheus/client_golang v1.9.0
+	github.com/prometheus/client_model v0.2.0 // indirect
 	github.com/prometheus/common v0.15.0
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/scaleway/scaleway-sdk-go v1.0.0-beta.6

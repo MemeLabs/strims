@@ -1,6 +1,7 @@
 package rtmpingress
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -145,7 +146,7 @@ func (h *Transcoder) close(k transcoderKey, cmd *exec.Cmd) {
 }
 
 // Transcode ...
-func (h *Transcoder) Transcode(srcURI, key, variant string, w WriteFlushCloser) error {
+func (h *Transcoder) Transcode(ctx context.Context, srcURI, key, variant string, w WriteFlushCloser) error {
 	bin, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		return err
@@ -163,7 +164,7 @@ func (h *Transcoder) Transcode(srcURI, key, variant string, w WriteFlushCloser) 
 	k := transcoderKey{key, variant}
 	h.writers.Store(k, &transcoderWriter{w: w})
 
-	cmd := exec.Command(bin, buildArgs(srcURI, h.lis.Addr().String(), key, variant)...)
+	cmd := exec.CommandContext(ctx, bin, buildArgs(srcURI, h.lis.Addr().String(), key, variant)...)
 	defer h.close(k, cmd)
 
 	h.logger.Debug("starting ffmpeg", zap.Stringer("cmd", cmd))

@@ -1,5 +1,4 @@
-import { MutableRefObject, useEffect, useMemo } from "react";
-import { useGetSet } from "react-use";
+import { MutableRefObject, useEffect, useMemo, useState } from "react";
 
 import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
 import { useClient } from "../contexts/FrontendApi";
@@ -31,11 +30,16 @@ const useMediaSource = ({
 }: MediaSourceProps): MediaSource => {
   const client = useClient();
 
-  const [mediaSource, clientEvents] = useMemo(() => {
+  const [mediaSource, setMediaSource] = useState<MediaSource>(null);
+
+  const clientEvents = useMemo(() => {
     const [fileFormat] = mimeType.split(";", 1) as [MimeType];
     const Decoder = decoders[fileFormat];
     const decoder = new Decoder();
     let started = false;
+
+    setMediaSource(decoder.source.getMediaSource());
+    decoder.source.onReset = setMediaSource;
 
     console.log({
       swarmUri,
@@ -53,6 +57,7 @@ const useMediaSource = ({
           decoder.write(body.data.data);
           if (body.data.bufferUnderrun) {
             decoder.reset();
+            started = false;
           }
 
           if (body.data.segmentEnd) {
@@ -69,7 +74,7 @@ const useMediaSource = ({
     });
     clientEvents.on("error", (e) => console.log(e));
 
-    return [decoder.source.mediaSource, clientEvents];
+    return clientEvents;
   }, []);
 
   useEffect(() => () => clientEvents.destroy(), []);

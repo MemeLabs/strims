@@ -87,7 +87,11 @@ func isPeerCertificateOwner(peer *vnic.Peer, cert *certificate.Certificate) bool
 // fail: provisional peer > network member > network ca
 // fail: provisional peer > invitation > network member > network ca
 func isCertificateTrusted(cert *certificate.Certificate) bool {
-	return bytes.Equal(networkKeyForCertificate(cert), cert.GetParent().Key)
+	return bytes.Equal(networkKeyForCertificate(cert), cert.GetParent().Key) && !isCertificateExpired(cert)
+}
+
+func isCertificateExpired(cert *certificate.Certificate) bool {
+	return timeutil.Now().After(timeutil.Unix(int64(cert.NotAfter), 0))
 }
 
 func networkKeyForCertificate(cert *certificate.Certificate) []byte {

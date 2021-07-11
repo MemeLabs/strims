@@ -2,6 +2,7 @@ package ca
 
 import (
 	"context"
+	"log"
 	"sync"
 	"time"
 
@@ -9,6 +10,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"go.uber.org/zap"
 )
 
@@ -57,16 +59,13 @@ func (s *Service) Renew(ctxt context.Context, req *ca.CARenewRequest) (*ca.CARen
 
 	// TODO: check subject (nick) availability
 	// TODO: verify invitation policy
-	networkCert, err := dao.NewSelfSignedCertificate(s.network.Key, certificate.KeyUsage_KEY_USAGE_SIGN, certificateValidDuration, dao.WithSubject(s.network.Name))
+	cert, err := dao.SignCertificateRequestWithNetwork(req.CertificateRequest, s.network)
 	if err != nil {
 		return nil, err
 	}
 
-	cert, err := dao.SignCertificateRequest(req.CertificateRequest, certificateValidDuration, s.network.Key)
-	if err != nil {
-		return nil, err
-	}
-	cert.ParentOneof = &certificate.Certificate_Parent{Parent: networkCert}
+	log.Println("issued new cert")
+	debug.PrintJSON(cert)
 
 	return &ca.CARenewResponse{Certificate: cert}, nil
 }

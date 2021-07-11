@@ -64,14 +64,15 @@ func (c *MeterConn) Read(p []byte) (int, error) {
 	return n, err
 }
 
-// Write ...
-func (c *MeterConn) Write(p []byte) (int, error) {
-	n, err := c.Conn.Write(p)
+// Flush ...
+func (c *MeterConn) Flush() error {
+	n := c.Conn.Buffered()
+	err := c.Conn.Flush()
 
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.wn += int64(n)
 	c.wma.Add(uint64(n))
 
-	return n, err
+	return err
 }

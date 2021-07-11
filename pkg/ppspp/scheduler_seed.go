@@ -217,7 +217,7 @@ func (c *seedChannelScheduler) WriteHandshake() error {
 func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.Time, pri peerPriority) (int, error) {
 	if err := c.cw.Resize(maxBytes); err != nil {
 		c.p.PushFrontData(c, b, t, pri)
-		return 0, nil
+		return 0, err
 	}
 
 	for {
@@ -227,15 +227,11 @@ func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.
 
 		if b.IsBase() {
 			c.p.PushFrontData(c, b, t, pri)
-			return 0, nil
+			return 0, codec.ErrNotEnoughSpace
 		}
 
 		c.p.PushFrontData(c, b.Right(), t, pri)
 		b = b.Left()
-	}
-
-	if binmap.Bin(22).Contains(b) || b.Contains(22) {
-		log.Println(">>> sent data", b)
 	}
 
 	c.lock.Lock()
@@ -245,44 +241,43 @@ func (c *seedChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.
 		if errors.Is(err, codec.ErrNotEnoughSpace) {
 			c.cw.Reset()
 			c.p.PushFrontData(c, b, t, pri)
-			return 0, nil
+		} else {
+			c.logger.Debug(
+				"error writing integrity",
+				zap.Uint64("bin", uint64(b)),
+				zap.Stringer("priority", pri),
+				zap.Uint16("stream", uint16(c.s.binStream(b))),
+				zap.Error(err),
+			)
 		}
-		c.logger.Debug(
-			"error writing integrity",
-			zap.Uint64("bin", uint64(b)),
-			zap.Stringer("priority", pri),
-			zap.Uint16("stream", uint16(c.s.binStream(b))),
-			zap.Error(err),
-		)
 		return 0, err
 	}
 	if _, err := c.s.swarm.store.WriteData(b, t, c.cw); err != nil {
 		if errors.Is(err, codec.ErrNotEnoughSpace) {
 			c.cw.Reset()
 			c.p.PushFrontData(c, b, t, pri)
-			return 0, nil
+		} else {
+			c.logger.Debug(
+				"error writing data",
+				zap.Uint64("bin", uint64(b)),
+				zap.Stringer("priority", pri),
+				zap.Uint16("stream", uint16(c.s.binStream(b))),
+				zap.Error(err),
+			)
 		}
-		c.logger.Debug(
-			"error writing data",
-			zap.Uint64("bin", uint64(b)),
-			zap.Stringer("priority", pri),
-			zap.Uint16("stream", uint16(c.s.binStream(b))),
-			zap.Error(err),
-		)
 		return 0, err
 	}
 
-	// TODO: enable optionally?
-	c.lock.Lock()
-	c.peerHaveBins.Set(b)
-	c.lock.Unlock()
+	// c.lock.Lock()
+	// c.sentBinTimes.Set(b, timeutil.Now())
+	// c.lock.Unlock()
 
 	return c.flushWrites()
 }
 
 func (c *seedChannelScheduler) Write(maxBytes int) (int, error) {
 	if err := c.cw.Resize(maxBytes); err != nil {
-		return 0, nil
+		return 0, err
 	}
 
 	if err := c.write0(); err != nil {

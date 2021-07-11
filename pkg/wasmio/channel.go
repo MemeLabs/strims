@@ -1,4 +1,5 @@
 //go:build js
+// +build js
 
 package wasmio
 
@@ -9,6 +10,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 )
 
+const maxChannelMTU = 64 * 1024
+
 // newChannel ...
 func newChannel(mtu int, bridge js.Value, method string, args ...interface{}) (*channel, error) {
 	p := &channel{
@@ -17,6 +20,13 @@ func newChannel(mtu int, bridge js.Value, method string, args ...interface{}) (*
 	}
 
 	onOpen := func(this js.Value, args []js.Value) interface{} {
+		if len(args) == 1 {
+			p.mtu = args[0].Int()
+			if p.mtu > maxChannelMTU {
+				p.mtu = maxChannelMTU
+			}
+		}
+
 		p.q <- nil
 		return nil
 	}
