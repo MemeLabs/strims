@@ -16,6 +16,7 @@ func RegisterNetworkServiceService(host rpc.ServiceRegistry, service NetworkServ
 	host.RegisterMethod("strims.network.v1.NetworkService.CreateInvitation", service.CreateInvitation)
 	host.RegisterMethod("strims.network.v1.NetworkService.CreateFromInvitation", service.CreateFromInvitation)
 	host.RegisterMethod("strims.network.v1.NetworkService.Watch", service.Watch)
+	host.RegisterMethod("strims.network.v1.NetworkService.SetDisplayOrder", service.SetDisplayOrder)
 }
 
 // NetworkServiceService ...
@@ -52,6 +53,10 @@ type NetworkServiceService interface {
 		ctx context.Context,
 		req *WatchNetworksRequest,
 	) (<-chan *WatchNetworksResponse, error)
+	SetDisplayOrder(
+		ctx context.Context,
+		req *SetDisplayOrderRequest,
+	) (*SetDisplayOrderResponse, error)
 }
 
 // NetworkServiceClient ...
@@ -134,4 +139,13 @@ func (c *NetworkServiceClient) Watch(
 	res chan *WatchNetworksResponse,
 ) error {
 	return c.client.CallStreaming(ctx, "strims.network.v1.NetworkService.Watch", req, res)
+}
+
+// SetDisplayOrder ...
+func (c *NetworkServiceClient) SetDisplayOrder(
+	ctx context.Context,
+	req *SetDisplayOrderRequest,
+	res *SetDisplayOrderResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.SetDisplayOrder", req, res)
 }

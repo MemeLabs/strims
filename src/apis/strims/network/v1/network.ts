@@ -55,7 +55,7 @@ export class NetworkIcon {
 
 export type ICreateNetworkRequest = {
   name?: string;
-  icon?: INetworkIcon;
+  icon?: INetworkIcon | undefined;
 }
 
 export class CreateNetworkRequest {
@@ -97,7 +97,7 @@ export class CreateNetworkRequest {
 }
 
 export type ICreateNetworkResponse = {
-  network?: INetwork;
+  network?: INetwork | undefined;
 }
 
 export class CreateNetworkResponse {
@@ -176,7 +176,7 @@ export class UpdateNetworkRequest {
 }
 
 export type IUpdateNetworkResponse = {
-  network?: INetwork;
+  network?: INetwork | undefined;
 }
 
 export class UpdateNetworkResponse {
@@ -304,7 +304,7 @@ export class GetNetworkRequest {
 }
 
 export type IGetNetworkResponse = {
-  network?: INetwork;
+  network?: INetwork | undefined;
 }
 
 export class GetNetworkResponse {
@@ -398,10 +398,11 @@ export class ListNetworksResponse {
 export type INetwork = {
   id?: bigint;
   name?: string;
-  key?: strims_type_IKey;
-  certificate?: strims_type_ICertificate;
-  icon?: INetworkIcon;
+  key?: strims_type_IKey | undefined;
+  certificate?: strims_type_ICertificate | undefined;
+  icon?: INetworkIcon | undefined;
   altProfileName?: string;
+  displayOrder?: number;
 }
 
 export class Network {
@@ -411,6 +412,7 @@ export class Network {
   certificate: strims_type_Certificate | undefined;
   icon: NetworkIcon | undefined;
   altProfileName: string;
+  displayOrder: number;
 
   constructor(v?: INetwork) {
     this.id = v?.id || BigInt(0);
@@ -419,6 +421,7 @@ export class Network {
     this.certificate = v?.certificate && new strims_type_Certificate(v.certificate);
     this.icon = v?.icon && new NetworkIcon(v.icon);
     this.altProfileName = v?.altProfileName || "";
+    this.displayOrder = v?.displayOrder || 0;
   }
 
   static encode(m: Network, w?: Writer): Writer {
@@ -429,6 +432,7 @@ export class Network {
     if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(34).fork()).ldelim();
     if (m.icon) NetworkIcon.encode(m.icon, w.uint32(42).fork()).ldelim();
     if (m.altProfileName) w.uint32(50).string(m.altProfileName);
+    if (m.displayOrder) w.uint32(56).uint32(m.displayOrder);
     return w;
   }
 
@@ -457,6 +461,9 @@ export class Network {
         case 6:
         m.altProfileName = r.string();
         break;
+        case 7:
+        m.displayOrder = r.uint32();
+        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -467,8 +474,8 @@ export class Network {
 }
 
 export type ICreateNetworkInvitationRequest = {
-  signingKey?: strims_type_IKey;
-  signingCert?: strims_type_ICertificate;
+  signingKey?: strims_type_IKey | undefined;
+  signingCert?: strims_type_ICertificate | undefined;
   networkName?: string;
 }
 
@@ -517,7 +524,7 @@ export class CreateNetworkInvitationRequest {
 }
 
 export type ICreateNetworkInvitationResponse = {
-  invitation?: IInvitation;
+  invitation?: IInvitation | undefined;
   invitationB64?: string;
   invitationBytes?: Uint8Array;
 }
@@ -610,8 +617,8 @@ export class Invitation {
 }
 
 export type IInvitationV0 = {
-  key?: strims_type_IKey;
-  certificate?: strims_type_ICertificate;
+  key?: strims_type_IKey | undefined;
+  certificate?: strims_type_ICertificate | undefined;
   networkName?: string;
 }
 
@@ -753,7 +760,7 @@ export namespace CreateNetworkFromInvitationRequest {
 }
 
 export type ICreateNetworkFromInvitationResponse = {
-  network?: INetwork;
+  network?: INetwork | undefined;
 }
 
 export class CreateNetworkFromInvitationResponse {
@@ -895,7 +902,7 @@ export namespace NetworkEvent {
   };
 
   export type INetworkStart = {
-    network?: INetwork;
+    network?: INetwork | undefined;
     peerCount?: number;
   }
 
@@ -1039,7 +1046,7 @@ export class WatchNetworksRequest {
 }
 
 export type IWatchNetworksResponse = {
-  event?: INetworkEvent;
+  event?: INetworkEvent | undefined;
 }
 
 export class WatchNetworksResponse {
@@ -1071,6 +1078,62 @@ export class WatchNetworksResponse {
       }
     }
     return m;
+  }
+}
+
+export type ISetDisplayOrderRequest = {
+  networkIds?: bigint[];
+}
+
+export class SetDisplayOrderRequest {
+  networkIds: bigint[];
+
+  constructor(v?: ISetDisplayOrderRequest) {
+    this.networkIds = v?.networkIds ? v.networkIds : [];
+  }
+
+  static encode(m: SetDisplayOrderRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    m.networkIds.reduce((w, v) => w.uint64(v), w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): SetDisplayOrderRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new SetDisplayOrderRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.networkIds.push(r.uint64());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ISetDisplayOrderResponse = {
+}
+
+export class SetDisplayOrderResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: ISetDisplayOrderResponse) {
+  }
+
+  static encode(m: SetDisplayOrderResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): SetDisplayOrderResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new SetDisplayOrderResponse();
   }
 }
 

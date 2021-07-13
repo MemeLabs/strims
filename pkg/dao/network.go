@@ -64,6 +64,17 @@ func GetNetworks(s kv.Store) (v []*networkv1.Network, err error) {
 	return
 }
 
+// NextNetworkDisplayOrder ...
+func NextNetworkDisplayOrder(s kv.Store) (n uint32, err error) {
+	networks, err := GetNetworks(s)
+	for _, v := range networks {
+		if v.DisplayOrder >= n {
+			n = v.DisplayOrder + 1
+		}
+	}
+	return
+}
+
 // NewNetworkCertificate ...
 func NewNetworkCertificate(network *networkv1.Network) (*certificate.Certificate, error) {
 	return NewSelfSignedCertificate(network.Key, certificate.KeyUsage_KEY_USAGE_SIGN, defaultCertTTL, WithSubject(network.Name))
@@ -97,10 +108,10 @@ func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile
 	}
 
 	network := &networkv1.Network{
-		Id:          id,
-		Name:        name,
-		Key:         key,
-		Icon:        icon,
+		Id:   id,
+		Name: name,
+		Key:  key,
+		Icon: icon,
 	}
 
 	csr, err := NewCertificateRequest(

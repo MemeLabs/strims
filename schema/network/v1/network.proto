@@ -59,6 +59,7 @@ message Network {
   strims.type.Certificate certificate = 4;
   NetworkIcon icon = 5;
   string alt_profile_name = 6;
+  uint32 display_order = 7;
 }
 
 enum KeyUsage {
@@ -140,6 +141,12 @@ message WatchNetworksResponse {
   NetworkEvent event = 1;
 }
 
+message SetDisplayOrderRequest {
+  repeated uint64 network_ids = 1;
+}
+
+message SetDisplayOrderResponse {}
+
 service NetworkService {
   rpc Create(CreateNetworkRequest) returns (CreateNetworkResponse);
   rpc Update(UpdateNetworkRequest) returns (UpdateNetworkResponse);
@@ -149,4 +156,5 @@ service NetworkService {
   rpc CreateInvitation(CreateNetworkInvitationRequest) returns (CreateNetworkInvitationResponse);
   rpc CreateFromInvitation(CreateNetworkFromInvitationRequest) returns (CreateNetworkFromInvitationResponse);
   rpc Watch(WatchNetworksRequest) returns (stream WatchNetworksResponse);
+  rpc SetDisplayOrder(SetDisplayOrderRequest) returns (SetDisplayOrderResponse);
 }

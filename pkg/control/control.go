@@ -47,6 +47,7 @@ type NetworkControl interface {
 	Add(network *networkv1.Network) error
 	Remove(id uint64) error
 	ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
+	SetDisplayOrder(ids []uint64) error
 }
 
 // TransferControl ...

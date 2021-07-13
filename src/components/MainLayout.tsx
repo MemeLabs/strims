@@ -2,13 +2,7 @@ import clsx from "clsx";
 import { Base64 } from "js-base64";
 // import Tooltip from "rc-tooltip";
 import React, { useCallback, useState } from "react";
-import {
-  DragDropContext,
-  Draggable,
-  DropResult,
-  Droppable,
-  ResponderProvided,
-} from "react-beautiful-dnd";
+import { DragDropContext, Draggable, DropResult, Droppable } from "react-beautiful-dnd";
 import { BiNetworkChart } from "react-icons/bi";
 import {
   FiActivity,
@@ -22,12 +16,12 @@ import {
   FiUser,
 } from "react-icons/fi";
 import { Link, useHistory } from "react-router-dom";
-import { useSetState, useToggle } from "react-use";
+import { useToggle } from "react-use";
 import usePortal from "react-useportal";
 
 import { MetricsFormat } from "../apis/strims/debug/v1/debug";
 import { CreateNetworkResponse, Network, NetworkEvent } from "../apis/strims/network/v1/network";
-import { useCall, useClient } from "../contexts/FrontendApi";
+import { useClient } from "../contexts/FrontendApi";
 import { useTheme } from "../contexts/Theme";
 import useObjectURL from "../hooks/useObjectURL";
 import { rootCertificate } from "../lib/certificate";
@@ -103,7 +97,15 @@ const useNetworkStuff = () => {
   const client = useClient();
   const [items, setItems] = React.useState<NetworkNavItem[]>([]);
 
-  const addItem = (item: NetworkNavItem) => setItems((prev) => [...prev, item]);
+  const addItem = (item: NetworkNavItem) =>
+    setItems((prev) => {
+      const next = Array.from(prev);
+      const i = next.findIndex(
+        ({ network: { displayOrder } }) => displayOrder > item.network.displayOrder
+      );
+      next.splice(i === -1 ? next.length : i, 0, item);
+      return next;
+    });
 
   const removeItem = (networkId: bigint) =>
     setItems((prev) => prev.filter((item) => item.network.id !== networkId));
@@ -118,7 +120,7 @@ const useNetworkStuff = () => {
       const next = Array.from(prev);
       const [target] = next.splice(srcIndex, 1);
       next.splice(dstIndex, 0, target);
-      // setNavOrder(next.map(({ id }) => Number(id)));
+      void client.network.setDisplayOrder({ networkIds: next.map(({ network: { id } }) => id) });
       return next;
     });
 
@@ -154,7 +156,7 @@ const NetworkNav: React.FC = () => {
   const [networks, { reorderNetworks }] = useNetworkStuff();
   // const [state, { setNavOrder }] = useTheme();
 
-  const onDragEnd = React.useCallback((result: DropResult, provided: ResponderProvided) => {
+  const onDragEnd = React.useCallback((result: DropResult) => {
     if (result.destination) {
       reorderNetworks(result.source.index, result.destination.index);
     }
@@ -169,20 +171,16 @@ const NetworkNav: React.FC = () => {
       </Tooltip>
       <DragDropContext onDragEnd={onDragEnd}>
         <Droppable droppableId="networks">
-          {(provided, snapshot) => (
-            <div ref={provided.innerRef} {...provided.droppableProps}>
+          {({ innerRef, droppableProps, placeholder }) => (
+            <div ref={innerRef} {...droppableProps}>
               {networks.map(({ network, peerCount }, i) => (
                 <Draggable
                   draggableId={`network-${network.id.toString()}`}
                   index={i}
                   key={network.id.toString()}
                 >
-                  {(provided, snapshot) => (
-                    <div
-                      ref={provided.innerRef}
-                      {...provided.draggableProps}
-                      {...provided.dragHandleProps}
-                    >
+                  {({ innerRef, draggableProps, dragHandleProps }) => (
+                    <div ref={innerRef} {...draggableProps} {...dragHandleProps}>
                       <Tooltip
                         placement="right"
                         trigger={["hover"]}
@@ -206,7 +204,7 @@ const NetworkNav: React.FC = () => {
                   )}
                 </Draggable>
               ))}
-              {provided.placeholder}
+              {placeholder}
             </div>
           )}
         </Droppable>

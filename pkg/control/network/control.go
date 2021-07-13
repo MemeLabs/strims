@@ -15,6 +15,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
+	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/services/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
@@ -472,7 +473,16 @@ func (t *Control) Add(n *networkv1.Network) error {
 		return errors.New("duplicate network id")
 	}
 
-	if err := dao.UpsertNetwork(t.store, n); err != nil {
+	err := t.store.Update(func(tx kv.RWTx) error {
+		order, err := dao.NextNetworkDisplayOrder(tx)
+		if err != nil {
+			return err
+		}
+
+		n.DisplayOrder = order
+		return dao.UpsertNetwork(tx, n)
+	})
+	if err != nil {
 		return err
 	}
 
@@ -581,4 +591,36 @@ func (t *Control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 	}()
 
 	return ch
+}
+
+func (t *Control) SetDisplayOrder(ids []uint64) error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	if len(ids) != len(t.networks) {
+		return errors.New("network id list incomplete")
+	}
+
+	return t.store.Update(func(tx kv.RWTx) error {
+		for i, id := range ids {
+			n, ok := t.networks[id]
+			if !ok {
+				return ErrNetworkNotFound
+			}
+
+			if n.network.DisplayOrder == uint32(i) {
+				continue
+			}
+
+			clone := proto.Clone(n.network).(*networkv1.Network)
+			clone.DisplayOrder = uint32(i)
+
+			if err := dao.UpsertNetwork(tx, clone); err != nil {
+				return err
+			}
+
+			t.networks[id].network = clone
+		}
+		return nil
+	})
 }

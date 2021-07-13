@@ -166,3 +166,11 @@ func (s *networkService) Watch(ctx context.Context, r *networkv1.WatchNetworksRe
 
 	return ch, nil
 }
+
+// SetDisplayOrder ...
+func (s *networkService) SetDisplayOrder(ctx context.Context, r *networkv1.SetDisplayOrderRequest) (*networkv1.SetDisplayOrderResponse, error) {
+	if err := s.app.Network().SetDisplayOrder(r.NetworkIds); err != nil {
+		return nil, err
+	}
+	return &networkv1.SetDisplayOrderResponse{}, nil
+}

@@ -480,6 +480,20 @@ func (s *peerSwarmScheduler) gc(t timeutil.Time) {
 	for _, cs := range s.channels {
 		cs.lock.Lock()
 		cs.requestTimes.Prune(requestTimesThreshold)
+
+		if !cs.sentBinMin.IsNone() {
+			n0 := cs.sentBinTimes.Size()
+			cs.sentBinTimes.Prune(cs.sentBinMin)
+			n1 := cs.sentBinTimes.Size()
+			cs.logger.Debug(
+				"pruned sent bin times",
+				zap.Uint64("threshold", uint64(cs.sentBinMin)),
+				zap.Int("removed", n0-n1),
+				zap.Int("remaining", n1),
+				zap.Duration("rtt", time.Duration(cs.sendRTT.Value()).Round(time.Millisecond)),
+			)
+			cs.sentBinMin = binmap.None
+		}
 		cs.lock.Unlock()
 	}
 }
@@ -494,7 +508,7 @@ func (s *peerSwarmScheduler) Consume(c store.Chunk) {
 	wastedChunks := c.Bin.BaseLength()
 
 	for it := s.haveBins.IterateEmptyAt(c.Bin); it.NextBase(); {
-		first, _ := s.binTimes.Get(it.Value())
+		_, first, _ := s.binTimes.Get(it.Value())
 		stream := &s.streams[s.binStream(it.Value())]
 		stream.addReceivedChunk(s.binStreamOffset(it.Value()), t, t.Sub(first))
 		stream.updatePeerHaveMax(it.Value())
@@ -544,6 +558,7 @@ func (s *peerSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 		cancelBins:     binmap.New(),
 		requestStreams: make([]binmap.Bin, s.streamCount),
 		peerHaveBins:   binmap.New(),
+		sentBinMin:     binmap.None,
 		sendRTT:        stats.NewSMA(50, 100*time.Millisecond),
 
 		// test: qos.NewHLB(math.MaxFloat64),
@@ -651,7 +666,6 @@ type peerChannelScheduler struct {
 	haveBins       *binmap.Map // bins to send HAVEs for
 	cancelBins     *binmap.Map // bins to send CANCELs for
 	requestBins    binQueue    // bins recently requested from the peer
-	streamBins     binQueue
 	requestStreams []binmap.Bin
 	extraMessages  []codec.Message
 
@@ -661,6 +675,7 @@ type peerChannelScheduler struct {
 	peerHaveBins   *binmap.Map // bins the peer claims to have
 
 	sentBinTimes timeSet
+	sentBinMin   binmap.Bin
 	sendRTT      stats.SMA
 
 	// test *qos.HLB
@@ -802,8 +817,13 @@ func (c *peerChannelScheduler) WriteData(maxBytes int, b binmap.Bin, t timeutil.
 		return 0, err
 	}
 
+	now := timeutil.Now()
 	c.lock.Lock()
-	c.sentBinTimes.Set(b, timeutil.Now())
+	c.sentBinTimes.Set(b, now)
+
+	if bl := b.BaseLeft(); c.sentBinMin > bl {
+		c.sentBinMin = bl
+	}
 	c.lock.Unlock()
 
 	return c.flushWrites()
@@ -1163,7 +1183,7 @@ func (c *peerChannelScheduler) HandleData(b binmap.Bin, t timeutil.Time, valid b
 	atomic.StoreUint32(&c.enqueueNow, 1)
 
 	c.lock.Lock()
-	if ts, ok := c.requestTimes.Get(b); ok && ts == t {
+	if _, ts, ok := c.requestTimes.Get(b); ok && ts == t {
 		// LEDBAT rtt...
 		rtt := float64(now.Sub(ts))
 		if c.dataRTTMean.Value() == 0 {
@@ -1201,15 +1221,16 @@ func (c *peerChannelScheduler) HandleHave(b binmap.Bin) error {
 	c.lock.Lock()
 
 	for it := c.peerHaveBins.IterateEmptyAt(b); it.NextBase(); {
-		first, _ := c.s.binTimes.Get(it.Value())
+		_, first, _ := c.s.binTimes.Get(it.Value())
 		stream := c.s.binStream(it.Value())
 
 		c.streamHaveLag[stream].Update(float64(t.Sub(first)))
 		c.s.streams[stream].updatePeerHaveMax(it.Value())
 
-		st, ok := c.sentBinTimes.Get(it.Value())
+		sb, st, ok := c.sentBinTimes.Get(it.Value())
 		if ok {
-			c.sendRTT.AddWithTime(uint64(t-st), t)
+			c.sendRTT.AddNWithTime(sb.BaseLength(), uint64(t-st), t)
+			c.sentBinTimes.Unset(sb)
 		}
 	}
 

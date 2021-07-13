@@ -28,7 +28,7 @@
     "@types/dom-mediacapture-record": "^1.0.7",
     "@types/prismjs": "^1.16.5",
     "@types/qs": "^6.9.6",
-    "@types/react-beautiful-dnd": "^13.0.0",
+    "@types/react-beautiful-dnd": "^13.1.1",
     "@types/react-custom-scrollbars": "^4.0.7",
     "@types/react-document-title": "^2.0.4",
     "@types/react-dropzone": "^5.1.0",

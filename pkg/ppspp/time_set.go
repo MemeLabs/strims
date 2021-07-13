@@ -10,6 +10,10 @@ type timeSet struct {
 	freeHead *timeSetNode
 }
 
+func (t *timeSet) Size() int {
+	return t.root.size()
+}
+
 func (t *timeSet) Set(bin binmap.Bin, time timeutil.Time) timeutil.Time {
 	if t.root == nil {
 		t.root = t.allocNode(bin, 0)
@@ -35,12 +39,12 @@ func (t *timeSet) Unset(bin binmap.Bin) {
 	}
 }
 
-func (t *timeSet) Get(bin binmap.Bin) (timeutil.Time, bool) {
+func (t *timeSet) Get(bin binmap.Bin) (binmap.Bin, timeutil.Time, bool) {
 	n := t.root.get(bin)
 	if n == nil || n.time == 0 {
-		return 0, false
+		return 0, 0, false
 	}
-	return n.time, true
+	return n.bin, n.time, true
 }
 
 func (t *timeSet) Prune(bin binmap.Bin) {
@@ -84,6 +88,13 @@ type timeSetNode struct {
 	bin   binmap.Bin
 	count uint64
 	time  timeutil.Time
+}
+
+func (r *timeSetNode) size() int {
+	if r == nil {
+		return 0
+	}
+	return r.left.size() + r.right.size() + 1
 }
 
 func (r *timeSetNode) set(b binmap.Bin, t timeutil.Time, a timeSetNodeAllocator) *timeSetNode {

@@ -29,6 +29,9 @@ import {
   IWatchNetworksRequest,
   WatchNetworksRequest,
   WatchNetworksResponse,
+  ISetDisplayOrderRequest,
+  SetDisplayOrderRequest,
+  SetDisplayOrderResponse,
 } from "./network";
 
 registerType("strims.network.v1.CreateNetworkRequest", CreateNetworkRequest);
@@ -47,6 +50,8 @@ registerType("strims.network.v1.CreateNetworkFromInvitationRequest", CreateNetwo
 registerType("strims.network.v1.CreateNetworkFromInvitationResponse", CreateNetworkFromInvitationResponse);
 registerType("strims.network.v1.WatchNetworksRequest", WatchNetworksRequest);
 registerType("strims.network.v1.WatchNetworksResponse", WatchNetworksResponse);
+registerType("strims.network.v1.SetDisplayOrderRequest", SetDisplayOrderRequest);
+registerType("strims.network.v1.SetDisplayOrderResponse", SetDisplayOrderResponse);
 
 export interface NetworkServiceService {
   create(req: CreateNetworkRequest, call: strims_rpc_Call): Promise<CreateNetworkResponse> | CreateNetworkResponse;
@@ -57,6 +62,7 @@ export interface NetworkServiceService {
   createInvitation(req: CreateNetworkInvitationRequest, call: strims_rpc_Call): Promise<CreateNetworkInvitationResponse> | CreateNetworkInvitationResponse;
   createFromInvitation(req: CreateNetworkFromInvitationRequest, call: strims_rpc_Call): Promise<CreateNetworkFromInvitationResponse> | CreateNetworkFromInvitationResponse;
   watch(req: WatchNetworksRequest, call: strims_rpc_Call): GenericReadable<WatchNetworksResponse>;
+  setDisplayOrder(req: SetDisplayOrderRequest, call: strims_rpc_Call): Promise<SetDisplayOrderResponse> | SetDisplayOrderResponse;
 }
 
 export const registerNetworkServiceService = (host: strims_rpc_Service, service: NetworkServiceService): void => {
@@ -68,6 +74,7 @@ export const registerNetworkServiceService = (host: strims_rpc_Service, service:
   host.registerMethod<CreateNetworkInvitationRequest, CreateNetworkInvitationResponse>("strims.network.v1.NetworkService.CreateInvitation", service.createInvitation.bind(service));
   host.registerMethod<CreateNetworkFromInvitationRequest, CreateNetworkFromInvitationResponse>("strims.network.v1.NetworkService.CreateFromInvitation", service.createFromInvitation.bind(service));
   host.registerMethod<WatchNetworksRequest, WatchNetworksResponse>("strims.network.v1.NetworkService.Watch", service.watch.bind(service));
+  host.registerMethod<SetDisplayOrderRequest, SetDisplayOrderResponse>("strims.network.v1.NetworkService.SetDisplayOrder", service.setDisplayOrder.bind(service));
 }
 
 export class NetworkServiceClient {
@@ -103,6 +110,10 @@ export class NetworkServiceClient {
 
   public watch(req?: IWatchNetworksRequest): GenericReadable<WatchNetworksResponse> {
     return this.host.expectMany(this.host.call("strims.network.v1.NetworkService.Watch", new WatchNetworksRequest(req)));
+  }
+
+  public setDisplayOrder(req?: ISetDisplayOrderRequest, opts?: strims_rpc_UnaryCallOptions): Promise<SetDisplayOrderResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.SetDisplayOrder", new SetDisplayOrderRequest(req)), opts);
   }
 }
 
