@@ -246,19 +246,33 @@ func (n *Network) handleFrame(p *vnic.Peer, f vnic.Frame) error {
 
 // Send ...
 func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
+	return n.SendWithFlags(id, port, srcPort, b, MstdFlags)
+}
+
+// SendWithFlags ...
+func (n *Network) SendWithFlags(id kademlia.ID, port, srcPort uint16, b []byte, f uint16) error {
+	var hs networkMessageHandler = (*Network).handleMessage
+	if f&Mencrypt != 0 {
+		hs = stackNetworkMessageHandler(hs, encryptMessage)
+	}
+	if f&Mcompress != 0 {
+		hs = stackNetworkMessageHandler(hs, compressMessage)
+	}
+
 	// n.logger.Debug(
 	// 	"sending message",
 	// 	zap.Stringer("dst", id),
 	// 	zap.Uint16("srcPort", srcPort),
 	// 	zap.Uint16("dstPort", port),
 	// )
-	return n.handleMessage(&Message{
+	return hs(n, &Message{
 		Header: MessageHeader{
 			DstID:   id,
 			DstPort: port,
 			SrcPort: srcPort,
 			Seq:     uint16(atomic.AddUint64(&n.seq, 1)),
 			Length:  uint16(len(b)),
+			Flags:   f,
 		},
 		Body: b,
 		Trailer: MessageTrailer{
@@ -273,6 +287,11 @@ func (n *Network) Send(id kademlia.ID, port, srcPort uint16, b []byte) error {
 
 // SendProto ...
 func (n *Network) SendProto(id kademlia.ID, port, srcPort uint16, msg proto.Message) error {
+	return n.SendProtoWithFlags(id, port, srcPort, msg, MstdFlags)
+}
+
+// SendProtoWithFlags ...
+func (n *Network) SendProtoWithFlags(id kademlia.ID, port, srcPort uint16, msg proto.Message, f uint16) error {
 	opt := proto.MarshalOptions{}
 	b := pool.Get(opt.Size(msg))
 	defer pool.Put(b)
@@ -281,7 +300,7 @@ func (n *Network) SendProto(id kademlia.ID, port, srcPort uint16, msg proto.Mess
 		return err
 	}
 
-	return n.Send(id, port, srcPort, *b)
+	return n.SendWithFlags(id, port, srcPort, *b, f)
 }
 
 func (n *Network) handleMessage(m *Message) error {
@@ -313,7 +332,19 @@ func (n *Network) handleMessage(m *Message) error {
 
 func (n *Network) callHandler(m *Message) error {
 	if h, ok := n.handlers[m.Header.DstPort]; ok {
-		return h.HandleMessage(m)
+		var hs networkMessageHandler = func(n *Network, m *Message) error {
+			return h.HandleMessage(m)
+		}
+		if m.Header.Flags&Mcompress != 0 {
+			hs = stackNetworkMessageHandler(hs, decompressMessage)
+		}
+		if m.Header.Flags&Mencrypt != 0 {
+			hs = stackNetworkMessageHandler(hs, decryptMessage)
+		} else {
+			hs = stackNetworkMessageHandler(hs, verifyMessage)
+		}
+
+		return hs(n, m.Clone())
 	}
 	return nil
 }
@@ -372,6 +403,16 @@ func (n *Network) sendMessage(m *Message) error {
 	}
 
 	return nil
+}
+
+type messageFilter func(n *Network, m *Message, next networkMessageHandler) error
+
+type networkMessageHandler func(n *Network, m *Message) error
+
+func stackNetworkMessageHandler(hs networkMessageHandler, f messageFilter) networkMessageHandler {
+	return func(n *Network, m *Message) error {
+		return f(n, m, hs)
+	}
 }
 
 // MessageHandler ...

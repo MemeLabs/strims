@@ -14,7 +14,7 @@ import (
 
 var errBufferTooSmall = errors.New("buffer too small")
 
-const messageHeaderLen = kademlia.IDLength + 8
+const messageHeaderLen = kademlia.IDLength + 10
 
 // MessageHeader ...
 type MessageHeader struct {
@@ -23,7 +23,14 @@ type MessageHeader struct {
 	SrcPort uint16
 	Seq     uint16
 	Length  uint16
+	Flags   uint16
 }
+
+const (
+	Mcompress uint16 = 1 << iota
+	Mencrypt
+	MstdFlags uint16 = Mcompress | Mencrypt
+)
 
 // Marshal ...
 func (m MessageHeader) Marshal(b []byte) (n int, err error) {
@@ -37,6 +44,7 @@ func (m MessageHeader) Marshal(b []byte) (n int, err error) {
 	binary.BigEndian.PutUint16(b[kademlia.IDLength+2:], m.SrcPort)
 	binary.BigEndian.PutUint16(b[kademlia.IDLength+4:], m.Seq)
 	binary.BigEndian.PutUint16(b[kademlia.IDLength+6:], m.Length)
+	binary.BigEndian.PutUint16(b[kademlia.IDLength+8:], m.Flags)
 	return messageHeaderLen, nil
 }
 
@@ -53,6 +61,7 @@ func (m *MessageHeader) Unmarshal(b []byte) (n int, err error) {
 	m.SrcPort = binary.BigEndian.Uint16(b[kademlia.IDLength+2:])
 	m.Seq = binary.BigEndian.Uint16(b[kademlia.IDLength+4:])
 	m.Length = binary.BigEndian.Uint16(b[kademlia.IDLength+6:])
+	m.Flags = binary.BigEndian.Uint16(b[kademlia.IDLength+8:])
 	return messageHeaderLen, nil
 }
 
@@ -186,27 +195,36 @@ func (m *Message) Verify(hop int) bool {
 	return ed25519.Verify(trailer.HostID.Bytes(nil), m.rawBytes[:msgLen], trailer.Signature)
 }
 
+// Clone ...
+func (m Message) Clone() *Message {
+	return &m
+}
+
 // Marshal ...
 func (m *Message) Marshal(b []byte, host *vnic.Host) (n int, err error) {
-	if len(b) < m.Size() {
-		return 0, errBufferTooSmall
+	if m.rawBytes == nil {
+		if len(b) < m.Size() {
+			return 0, errBufferTooSmall
+		}
+
+		d, err := m.Header.Marshal(b)
+		if err != nil {
+			return 0, err
+		}
+		n += d
+
+		n += copy(b[n:], m.Body)
+
+		d, err = m.Trailer.Marshal(b[n:])
+		if err != nil {
+			return 0, err
+		}
+		n += d
+	} else {
+		n += copy(b, m.rawBytes)
 	}
 
-	d, err := m.Header.Marshal(b)
-	if err != nil {
-		return 0, err
-	}
-	n += d
-
-	n += copy(b[n:], m.Body)
-
-	d, err = m.Trailer.Marshal(b[n:])
-	if err != nil {
-		return 0, err
-	}
-	n += d
-
-	d, err = host.ID().Marshal(b[n:])
+	d, err := host.ID().Marshal(b[n:])
 	if err != nil {
 		return 0, err
 	}

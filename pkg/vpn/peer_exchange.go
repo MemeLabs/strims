@@ -226,10 +226,6 @@ type peerExchange struct {
 
 // HandleMessage ...
 func (s *peerExchange) HandleMessage(msg *Message) error {
-	if !msg.Verify(0) {
-		return nil
-	}
-
 	var m vpnv1.PeerExchangeMessage
 	if err := proto.Unmarshal(msg.Body, &m); err != nil {
 		return err

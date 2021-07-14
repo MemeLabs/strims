@@ -113,7 +113,7 @@ func (s *peerIndex) handleSearchRequest(m *vpnv1.PeerIndexMessage_SearchRequest,
 			},
 		},
 	}
-	return s.network.SendProto(originHostID, vnic.PeerIndexPort, vnic.PeerIndexPort, msg)
+	return s.network.SendProtoWithFlags(originHostID, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mcompress)
 }
 
 func (s *peerIndex) handleSearchResponse(m *vpnv1.PeerIndexMessage_SearchResponse) error {
@@ -167,7 +167,7 @@ func (s *peerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerI
 			},
 		},
 	}
-	if err := s.network.SendProto(target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg); err != nil {
+	if err := s.network.SendProtoWithFlags(target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mcompress); err != nil {
 		cleanup()
 		return nil, err
 	}
@@ -472,7 +472,7 @@ func (p *peerIndexPublisher) publish(t timeutil.Time) {
 			},
 		},
 	}
-	if err := p.network.SendProto(p.target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg); err != nil {
+	if err := p.network.SendProtoWithFlags(p.target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mcompress); err != nil {
 		p.logger.Debug(
 			"error publishing peer index item",
 			zap.Error(err),
@@ -492,7 +492,7 @@ func (p *peerIndexPublisher) unpublish() {
 			},
 		},
 	}
-	if err := p.network.SendProto(p.target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg); err != nil {
+	if err := p.network.SendProtoWithFlags(p.target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mcompress); err != nil {
 		p.logger.Debug(
 			"error unpublishing peer index item",
 			zap.Error(err),

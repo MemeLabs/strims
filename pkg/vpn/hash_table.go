@@ -109,7 +109,7 @@ func (s *hashTable) handleGetRequest(m *vpnv1.HashTableMessage_GetRequest, origi
 			},
 		},
 	}
-	return s.network.SendProto(originHostID, vnic.HashTablePort, vnic.HashTablePort, msg)
+	return s.network.SendProtoWithFlags(originHostID, vnic.HashTablePort, vnic.HashTablePort, msg, Mcompress)
 }
 
 func (s *hashTable) handleGetResponse(m *vpnv1.HashTableMessage_GetResponse, target kademlia.ID) error {
@@ -209,7 +209,7 @@ func (s *hashTable) Get(ctx context.Context, key, salt []byte, options ...HashTa
 				},
 			},
 		}
-		if err := s.network.SendProto(target, vnic.HashTablePort, vnic.HashTablePort, msg); err != nil {
+		if err := s.network.SendProtoWithFlags(target, vnic.HashTablePort, vnic.HashTablePort, msg, Mcompress); err != nil {
 			cleanup()
 			return nil, err
 		}
@@ -521,7 +521,7 @@ func (p *HashTablePublisher) publish(t timeutil.Time) {
 			},
 		},
 	}
-	if err := p.network.SendProto(p.target, vnic.HashTablePort, vnic.HashTablePort, msg); err != nil {
+	if err := p.network.SendProtoWithFlags(p.target, vnic.HashTablePort, vnic.HashTablePort, msg, Mcompress); err != nil {
 		p.logger.Debug(
 			"error publishing hash table item",
 			zap.Error(err),
@@ -544,7 +544,7 @@ func (p *HashTablePublisher) unpublish() {
 			},
 		},
 	}
-	if err := p.network.SendProto(p.target, vnic.HashTablePort, vnic.HashTablePort, msg); err != nil {
+	if err := p.network.SendProtoWithFlags(p.target, vnic.HashTablePort, vnic.HashTablePort, msg, Mcompress); err != nil {
 		p.logger.Debug(
 			"error unpublishing hash table item",
 			zap.Error(err),

@@ -3,9 +3,6 @@ package dialer
 import (
 	"bytes"
 	"context"
-	"crypto/aes"
-	"crypto/cipher"
-	"crypto/rand"
 	"errors"
 	"fmt"
 	"sync"
@@ -13,15 +10,12 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/ed25519util"
-	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	rpcapi "github.com/MemeLabs/protobuf/pkg/apis/rpc"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
-	"golang.org/x/crypto/curve25519"
 	"google.golang.org/protobuf/proto"
 )
 
@@ -121,19 +115,8 @@ func (t *VPNTransport) Listen() error {
 
 // HandleMessage ...
 func (t *VPNTransport) HandleMessage(msg *vpn.Message) error {
-	c, err := t.cipher(msg.Trailer.Entries[0].HostID)
-	if err != nil {
-		return err
-	}
-	p := pool.Get(len(msg.Body))
-	defer pool.Put(p)
-	b, err := c.Open((*p)[:0], msg.Body)
-	if err != nil {
-		return err
-	}
-
 	req := &rpcapi.Call{}
-	if err := proto.Unmarshal(b, req); err != nil {
+	if err := proto.Unmarshal(msg.Body, req); err != nil {
 		return fmt.Errorf("unmarshaling rpc: %w", err)
 	}
 
@@ -169,36 +152,18 @@ func (t *VPNTransport) HandleMessage(msg *vpn.Message) error {
 }
 
 func (t *VPNTransport) send(ctx context.Context, call *rpcapi.Call, addr *HostAddr) error {
-	opt := proto.MarshalOptions{}
-
 	cert := t.certificate()
-	p0 := pool.Get(opt.Size(cert))
-	defer pool.Put(p0)
-	b0, err := opt.MarshalAppend((*p0)[:0], cert)
-	if err != nil {
-		return err
-	}
-	call.Headers[vpnCertificateHeader] = b0
 
-	p1 := pool.Get(opt.Size(call))
-	defer pool.Put(p1)
-	b1, err := opt.MarshalAppend((*p1)[:0], call)
+	opt := proto.MarshalOptions{}
+	p := pool.Get(opt.Size(cert))
+	defer pool.Put(p)
+	b, err := opt.MarshalAppend((*p)[:0], cert)
 	if err != nil {
 		return err
 	}
+	call.Headers[vpnCertificateHeader] = b
 
-	c, err := t.cipher(addr.HostID)
-	if err != nil {
-		return err
-	}
-	p2 := pool.Get(len(b1) + c.Overhead())
-	defer pool.Put(p2)
-	b2, err := c.Seal((*p2)[:0], b1)
-	if err != nil {
-		return err
-	}
-
-	return t.node.Network.Send(addr.HostID, addr.Port, t.port, b2)
+	return t.node.Network.SendProto(addr.HostID, addr.Port, t.port, call)
 }
 
 // Call ...
@@ -221,23 +186,6 @@ func (t *VPNTransport) Call(call *rpc.CallOut, fn rpc.ResponseFunc) error {
 	return fn()
 }
 
-func (t *VPNTransport) cipher(hostID kademlia.ID) (*transportCipher, error) {
-	var ed25519Private [64]byte
-	var ed25519Public [32]byte
-	hostID.Bytes(ed25519Public[:])
-	copy(ed25519Private[:], t.node.Host.VNIC().Key().Private)
-
-	var curve25519Private, curve25519Public [32]byte
-	ed25519util.PrivateKeyToCurve25519(&curve25519Private, &ed25519Private)
-	ed25519util.PublicKeyToCurve25519(&curve25519Public, &ed25519Public)
-
-	secret, err := curve25519.X25519(curve25519Private[:], curve25519Public[:])
-	if err != nil {
-		return nil, err
-	}
-	return newTransportCipher(secret)
-}
-
 const vpnCertificateHeader = "certificate"
 
 func (t *VPNTransport) verifyMessage(msg *vpn.Message, req *rpcapi.Call, cert *certificate.Certificate) error {
@@ -250,9 +198,6 @@ func (t *VPNTransport) verifyMessage(msg *vpn.Message, req *rpcapi.Call, cert *c
 	}
 	if err := dao.VerifyCertificate(cert); err != nil {
 		return err
-	}
-	if !msg.Verify(0) {
-		return errors.New("invalid message signature")
 	}
 	return nil
 }
@@ -333,41 +278,4 @@ func (a *vpnParentCallAccessor) ParentCallOut() *rpc.CallOut {
 		return p.(*rpc.CallOut)
 	}
 	return nil
-}
-
-func newTransportCipher(k []byte) (*transportCipher, error) {
-	block, err := aes.NewCipher(k)
-	if err != nil {
-		return nil, err
-	}
-	aesgcm, err := cipher.NewGCM(block)
-	if err != nil {
-		return nil, err
-	}
-
-	return &transportCipher{
-		cipher: aesgcm,
-	}, nil
-}
-
-type transportCipher struct {
-	cipher cipher.AEAD
-}
-
-func (t *transportCipher) Overhead() int {
-	return t.cipher.NonceSize() + t.cipher.Overhead()
-}
-
-func (t *transportCipher) Seal(b, p []byte) ([]byte, error) {
-	n := t.cipher.NonceSize()
-	if _, err := rand.Read(b[:n]); err != nil {
-		return nil, err
-	}
-
-	return t.cipher.Seal(b[:n], b[:n], p, nil), nil
-}
-
-func (t *transportCipher) Open(b, p []byte) ([]byte, error) {
-	n := t.cipher.NonceSize()
-	return t.cipher.Open(b, p[:n], p[n:], nil)
 }
