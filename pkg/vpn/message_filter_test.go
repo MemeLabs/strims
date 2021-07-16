@@ -38,7 +38,7 @@ func TestMessageCipher(t *testing.T) {
 	assert.NotEqualValues(t, p, b)
 }
 
-func TestMarshalUnmarshalCompressed(t *testing.T) {
+func TestCompressUncompress(t *testing.T) {
 	body := []byte(strings.Repeat("some message large enough to be compressed", 64))
 	msg := Message{
 		Header: MessageHeader{
@@ -48,27 +48,18 @@ func TestMarshalUnmarshalCompressed(t *testing.T) {
 		Body: body,
 	}
 
-	var b []byte
-	var mhs networkMessageHandler = func(n *Network, m *Message) error {
-		b = make([]byte, msg.Size())
-		_, err := msg.Marshal(b, host(t))
-		return err
-	}
-	mhs = stackNetworkMessageHandler(mhs, compressMessage)
-	err := mhs(nil, &msg)
-	assert.NoError(t, err)
-
-	var uhs networkMessageHandler = func(n *Network, m *Message) error {
-		m.Trailer = MessageTrailer{}
+	var hs networkMessageHandler = func(n *Network, m *Message) error {
 		assert.ObjectsAreEqualValues(msg, m)
+		assert.EqualValues(t, len(m.Body), m.Header.Length)
 		return nil
 	}
-	uhs = stackNetworkMessageHandler(uhs, decompressMessage)
+	hs = stackNetworkMessageHandler(hs, uncompressMessage)
+	hs = stackNetworkMessageHandler(hs, func(n *Network, m *Message, next networkMessageHandler) error {
+		assert.GreaterOrEqual(t, len(body), len(m.Body))
+		assert.EqualValues(t, len(m.Body), m.Header.Length)
+		return next(n, m)
+	})
+	hs = stackNetworkMessageHandler(hs, compressMessage)
 
-	var msg1 Message
-	_, err = msg1.Unmarshal(b)
-	assert.NoError(t, err)
-
-	err = uhs(nil, &msg1)
-	assert.NoError(t, err)
+	hs(nil, &msg)
 }

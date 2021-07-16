@@ -29,7 +29,7 @@ func compressMessage(n *Network, m *Message, next networkMessageHandler) error {
 	return next(n, m)
 }
 
-func decompressMessage(n *Network, m *Message, next networkMessageHandler) error {
+func uncompressMessage(n *Network, m *Message, next networkMessageHandler) error {
 	l, err := s2.DecodedLen(m.Body)
 	if err != nil {
 		return err
@@ -49,14 +49,6 @@ func decompressMessage(n *Network, m *Message, next networkMessageHandler) error
 }
 
 var errSignatureMismatch = errors.New("message signature mismatch")
-
-func verifyMessage(n *Network, m *Message, next networkMessageHandler) error {
-	if !m.Verify(0) {
-		return errSignatureMismatch
-	}
-
-	return next(n, m)
-}
 
 func encryptMessage(n *Network, m *Message, next networkMessageHandler) error {
 	c, err := newMessageCipher(n.VNIC().Key(), m.Header.DstID)

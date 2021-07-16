@@ -1,6 +1,8 @@
 package timeutil
 
 import (
+	"encoding/binary"
+	"errors"
 	"math"
 	"time"
 )
@@ -8,6 +10,8 @@ import (
 const NilTime = Time(math.MinInt64)
 const MaxTime = Time(math.MaxInt64)
 const EpochTime = Time(0)
+
+const TimeLength = 8
 
 func New(epoch int64) Time {
 	return Time(epoch)
@@ -61,4 +65,27 @@ func (t Time) Time() time.Time {
 
 func (t Time) String() string {
 	return t.Time().String()
+}
+
+func (t *Time) Unmarshal(b []byte) (int, error) {
+	if len(b) < TimeLength {
+		return 0, errors.New("buffer too short")
+	}
+
+	*t = Time(binary.BigEndian.Uint64(b))
+	return TimeLength, nil
+}
+
+func (t Time) Marshal(b []byte) (int, error) {
+	if len(b) < TimeLength {
+		return 0, errors.New("buffer too short")
+	}
+
+	binary.BigEndian.PutUint64(b, uint64(t))
+	return 8, nil
+}
+
+func UnmarshalTime(b []byte) (t Time, err error) {
+	_, err = t.Unmarshal(b)
+	return
 }

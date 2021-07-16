@@ -63,6 +63,10 @@ func (r *TickEmitter) Chan() (<-chan Time, StopFunc) {
 	defer r.lock.Unlock()
 	r.chans = append(r.chans, ch)
 
+	if len(r.chans) == 1 {
+		r.t.Start()
+	}
+
 	return ch, stop
 }
 
@@ -77,6 +81,10 @@ func (r *TickEmitter) unsubscribe(ch chan Time) {
 			r.chans = r.chans[:l]
 			return
 		}
+	}
+
+	if len(r.chans) == 0 {
+		r.t.Stop()
 	}
 }
 

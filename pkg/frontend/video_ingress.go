@@ -8,8 +8,8 @@ import (
 	"errors"
 	"fmt"
 
-	profile "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
-	video "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
+	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
+	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -17,7 +17,7 @@ import (
 
 func init() {
 	RegisterService(func(server *rpc.Server, params *ServiceParams) {
-		video.RegisterVideoIngressService(server, &videoIngressService{
+		videov1.RegisterVideoIngressService(server, &videoIngressService{
 			profile: params.Profile,
 			app:     params.App,
 		})
@@ -26,34 +26,34 @@ func init() {
 
 // videoIngressService ...
 type videoIngressService struct {
-	profile *profile.Profile
+	profile *profilev1.Profile
 	app     control.AppControl
 }
 
-func (s *videoIngressService) IsSupported(ctx context.Context, r *video.VideoIngressIsSupportedRequest) (*video.VideoIngressIsSupportedResponse, error) {
-	return &video.VideoIngressIsSupportedResponse{Supported: true}, nil
+func (s *videoIngressService) IsSupported(ctx context.Context, r *videov1.VideoIngressIsSupportedRequest) (*videov1.VideoIngressIsSupportedResponse, error) {
+	return &videov1.VideoIngressIsSupportedResponse{Supported: true}, nil
 }
 
-func (s *videoIngressService) GetConfig(ctx context.Context, r *video.VideoIngressGetConfigRequest) (*video.VideoIngressGetConfigResponse, error) {
+func (s *videoIngressService) GetConfig(ctx context.Context, r *videov1.VideoIngressGetConfigRequest) (*videov1.VideoIngressGetConfigResponse, error) {
 	config, err := s.app.VideoIngress().GetIngressConfig()
 	if err != nil {
 		return nil, err
 	}
-	return &video.VideoIngressGetConfigResponse{Config: config}, nil
+	return &videov1.VideoIngressGetConfigResponse{Config: config}, nil
 }
 
-func (s *videoIngressService) SetConfig(ctx context.Context, r *video.VideoIngressSetConfigRequest) (*video.VideoIngressSetConfigResponse, error) {
+func (s *videoIngressService) SetConfig(ctx context.Context, r *videov1.VideoIngressSetConfigRequest) (*videov1.VideoIngressSetConfigResponse, error) {
 	if err := s.app.VideoIngress().SetIngressConfig(r.Config); err != nil {
 		return nil, err
 	}
-	return &video.VideoIngressSetConfigResponse{Config: r.Config}, nil
+	return &videov1.VideoIngressSetConfigResponse{Config: r.Config}, nil
 }
 
-func (s *videoIngressService) ListStreams(ctx context.Context, r *video.VideoIngressListStreamsRequest) (*video.VideoIngressListStreamsResponse, error) {
+func (s *videoIngressService) ListStreams(ctx context.Context, r *videov1.VideoIngressListStreamsRequest) (*videov1.VideoIngressListStreamsResponse, error) {
 	return nil, rpc.ErrNotImplemented
 }
 
-func (s *videoIngressService) GetChannelURL(ctx context.Context, r *video.VideoIngressGetChannelURLRequest) (*video.VideoIngressGetChannelURLResponse, error) {
+func (s *videoIngressService) GetChannelURL(ctx context.Context, r *videov1.VideoIngressGetChannelURLRequest) (*videov1.VideoIngressGetChannelURLResponse, error) {
 	channel, err := s.app.VideoChannel().GetChannel(r.Id)
 	if err != nil {
 		return nil, err
@@ -63,7 +63,7 @@ func (s *videoIngressService) GetChannelURL(ctx context.Context, r *video.VideoI
 	var id uint64
 
 	switch o := channel.Owner.(type) {
-	case *video.VideoChannel_Local_:
+	case *videov1.VideoChannel_Local_:
 		config, err := s.app.VideoIngress().GetIngressConfig()
 		if err != nil {
 			return nil, err
@@ -75,7 +75,7 @@ func (s *videoIngressService) GetChannelURL(ctx context.Context, r *video.VideoI
 		}
 
 		id = channel.Id
-	case *video.VideoChannel_RemoteShare_:
+	case *videov1.VideoChannel_RemoteShare_:
 		serverAddr = o.RemoteShare.ServerAddr
 		id = o.RemoteShare.Id
 	default:
@@ -84,7 +84,7 @@ func (s *videoIngressService) GetChannelURL(ctx context.Context, r *video.VideoI
 
 	key := dao.FormatVideoChannelStreamKey(id, channel.Token, s.profile.Key)
 
-	return &video.VideoIngressGetChannelURLResponse{
+	return &videov1.VideoIngressGetChannelURLResponse{
 		Url:        fmt.Sprintf("rtmp://%s/live/%s", serverAddr, key),
 		ServerAddr: serverAddr,
 		StreamKey:  key,

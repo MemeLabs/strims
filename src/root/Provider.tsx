@@ -1,4 +1,4 @@
-import React from "react";
+import React, { Suspense } from "react";
 
 import { FrontendClient } from "../apis/client";
 import { Provider as ApiProvider } from "../contexts/FrontendApi";
@@ -12,13 +12,13 @@ export interface ProviderProps {
 }
 
 const Provider: React.FC<ProviderProps> = ({ client, children }) => (
-  <React.Suspense fallback={<LoadingMessage />}>
+  <Suspense fallback={<LoadingMessage />}>
     <ApiProvider value={client}>
       <ThemeProvider>
         <ProfileProvider>{children}</ProfileProvider>
       </ThemeProvider>
     </ApiProvider>
-  </React.Suspense>
+  </Suspense>
 );
 
 export default Provider;

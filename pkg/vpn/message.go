@@ -9,6 +9,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 )
 
@@ -29,7 +30,7 @@ type MessageHeader struct {
 const (
 	Mcompress uint16 = 1 << iota
 	Mencrypt
-	MstdFlags uint16 = Mcompress | Mencrypt
+	MstdFlags uint16 = Mencrypt
 )
 
 // Marshal ...
@@ -37,14 +38,15 @@ func (m MessageHeader) Marshal(b []byte) (n int, err error) {
 	if len(b) < messageHeaderLen {
 		return 0, errBufferTooSmall
 	}
-	if _, err = m.DstID.Marshal(b); err != nil {
+	n, err = m.DstID.Marshal(b)
+	if err != nil {
 		return
 	}
-	binary.BigEndian.PutUint16(b[kademlia.IDLength:], m.DstPort)
-	binary.BigEndian.PutUint16(b[kademlia.IDLength+2:], m.SrcPort)
-	binary.BigEndian.PutUint16(b[kademlia.IDLength+4:], m.Seq)
-	binary.BigEndian.PutUint16(b[kademlia.IDLength+6:], m.Length)
-	binary.BigEndian.PutUint16(b[kademlia.IDLength+8:], m.Flags)
+	binary.BigEndian.PutUint16(b[n:], m.DstPort)
+	binary.BigEndian.PutUint16(b[n+2:], m.SrcPort)
+	binary.BigEndian.PutUint16(b[n+4:], m.Seq)
+	binary.BigEndian.PutUint16(b[n+6:], m.Length)
+	binary.BigEndian.PutUint16(b[n+8:], m.Flags)
 	return messageHeaderLen, nil
 }
 
@@ -53,19 +55,20 @@ func (m *MessageHeader) Unmarshal(b []byte) (n int, err error) {
 	if len(b) < messageHeaderLen {
 		return 0, errBufferTooSmall
 	}
-	m.DstID, err = kademlia.UnmarshalID(b)
+	n, err = m.DstID.Unmarshal(b)
 	if err != nil {
 		return
 	}
-	m.DstPort = binary.BigEndian.Uint16(b[kademlia.IDLength:])
-	m.SrcPort = binary.BigEndian.Uint16(b[kademlia.IDLength+2:])
-	m.Seq = binary.BigEndian.Uint16(b[kademlia.IDLength+4:])
-	m.Length = binary.BigEndian.Uint16(b[kademlia.IDLength+6:])
-	m.Flags = binary.BigEndian.Uint16(b[kademlia.IDLength+8:])
+	m.DstPort = binary.BigEndian.Uint16(b[n:])
+	m.SrcPort = binary.BigEndian.Uint16(b[n+2:])
+	m.Seq = binary.BigEndian.Uint16(b[n+4:])
+	m.Length = binary.BigEndian.Uint16(b[n+6:])
+	m.Flags = binary.BigEndian.Uint16(b[n+8:])
 	return messageHeaderLen, nil
 }
 
-const messageTrailerLen = kademlia.IDLength + 64
+const messageTrailerPayloadLen = timeutil.TimeLength + kademlia.IDLength
+const messageTrailerLen = messageTrailerPayloadLen + ed25519.SignatureSize
 
 // MessageTrailer represents the messages path
 // index 0 is the sender and subsequent indexes are hops
@@ -117,6 +120,7 @@ func (m MessageTrailer) Contains(hostID kademlia.ID) bool {
 
 // MessageTrailerEntry represents a node in the message path
 type MessageTrailerEntry struct {
+	Time      timeutil.Time
 	HostID    kademlia.ID
 	Signature []byte
 }
@@ -126,11 +130,18 @@ func (m *MessageTrailerEntry) Marshal(b []byte) (n int, err error) {
 	if len(b) < messageTrailerLen {
 		return 0, errBufferTooSmall
 	}
-	if _, err = m.HostID.Marshal(b); err != nil {
+	d, err := m.Time.Marshal(b)
+	if err != nil {
 		return
 	}
-	copy(b[kademlia.IDLength:], m.Signature)
-	return messageTrailerLen, nil
+	n += d
+	d, err = m.HostID.Marshal(b[n:])
+	if err != nil {
+		return
+	}
+	n += d
+	n += copy(b[n:], m.Signature)
+	return n, nil
 }
 
 // Unmarshal ...
@@ -138,12 +149,19 @@ func (m *MessageTrailerEntry) Unmarshal(b []byte) (n int, err error) {
 	if len(b) < messageTrailerLen {
 		return 0, errBufferTooSmall
 	}
-	m.HostID, err = kademlia.UnmarshalID(b)
+	d, err := m.Time.Unmarshal(b)
 	if err != nil {
 		return
 	}
-	m.Signature = b[kademlia.IDLength:]
-	return messageTrailerLen, nil
+	n += d
+	d, err = m.HostID.Unmarshal(b[n:])
+	if err != nil {
+		return
+	}
+	n += d
+	m.Signature = b[n : n+ed25519.SignatureSize]
+	n += ed25519.SignatureSize
+	return n, nil
 }
 
 // Message ...
@@ -191,12 +209,12 @@ func (m *Message) Verify(hop int) bool {
 		return false
 	}
 	trailer := m.Trailer.Entries[hop]
-	msgLen := messageHeaderLen + len(m.Body) + hop*messageTrailerLen + kademlia.IDLength
+	msgLen := messageHeaderLen + len(m.Body) + hop*messageTrailerLen + messageTrailerPayloadLen
 	return ed25519.Verify(trailer.HostID.Bytes(nil), m.rawBytes[:msgLen], trailer.Signature)
 }
 
-// Clone ...
-func (m Message) Clone() *Message {
+// ShallowClone ...
+func (m Message) ShallowClone() *Message {
 	return &m
 }
 
@@ -224,7 +242,12 @@ func (m *Message) Marshal(b []byte, host *vnic.Host) (n int, err error) {
 		n += copy(b, m.rawBytes)
 	}
 
-	d, err := host.ID().Marshal(b[n:])
+	d, err := timeutil.Now().Marshal(b[n:])
+	if err != nil {
+		return 0, err
+	}
+	n += d
+	d, err = host.ID().Marshal(b[n:])
 	if err != nil {
 		return 0, err
 	}

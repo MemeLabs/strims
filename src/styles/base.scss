@@ -54,6 +54,11 @@ html, body {
   --input-disabled-bg: #{$slate-300};
   --input-disabled-color: #{$gray-100};
   --input-placeholder-color: #{$gray-100};
+  --input-button-hover-bg: #{$slate-500};
+  --input-button-hover-color: #{$gray-500};
+
+  --link-active-bg: #{$slate-300};
+  --link-hover-bg: #{$slate-400};
 }
 
 .app--light {
@@ -65,4 +70,9 @@ html, body {
   --input-disabled-bg: #{$gray-500};
   --input-disabled-color: #{$slate-500};
   --input-placeholder-color: #{$slate-400};
+  --input-button-hover-bg: #{$gray-500};
+  --input-button-hover-color: #{$slate-300};
+
+  --link-active-bg: #{$gray-300};
+  --link-hover-bg: #{$gray-400};
 }

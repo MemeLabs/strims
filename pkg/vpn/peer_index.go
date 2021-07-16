@@ -113,7 +113,7 @@ func (s *peerIndex) handleSearchRequest(m *vpnv1.PeerIndexMessage_SearchRequest,
 			},
 		},
 	}
-	return s.network.SendProtoWithFlags(originHostID, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mcompress)
+	return s.network.SendProtoWithFlags(originHostID, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, 0)
 }
 
 func (s *peerIndex) handleSearchResponse(m *vpnv1.PeerIndexMessage_SearchResponse) error {
@@ -167,7 +167,7 @@ func (s *peerIndex) Search(ctx context.Context, key, salt []byte) (<-chan *PeerI
 			},
 		},
 	}
-	if err := s.network.SendProtoWithFlags(target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mcompress); err != nil {
+	if err := s.network.SendProtoWithFlags(target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, 0); err != nil {
 		cleanup()
 		return nil, err
 	}
@@ -319,7 +319,7 @@ func (p *PeerIndexStore) Insert(peerIndexID uint32, r *vpnv1.PeerIndexMessage_Re
 		p.logger.Debug(
 			"inserting peer index item",
 			logutil.ByteHex("key", r.Key),
-			logutil.ByteHex("hostId", r.HostId),
+			logutil.ByteHex("host", r.HostId),
 			zap.Uint32("port", r.Port),
 		)
 		prev.SetRecord(r)
@@ -343,7 +343,7 @@ func (p *PeerIndexStore) Remove(peerIndexID uint32, r *vpnv1.PeerIndexMessage_Re
 		p.logger.Debug(
 			"removing peer index item",
 			logutil.ByteHex("key", r.Key),
-			logutil.ByteHex("hostId", r.HostId),
+			logutil.ByteHex("host", r.HostId),
 			zap.Uint32("port", r.Port),
 		)
 		p.records.Delete(item)
@@ -472,7 +472,7 @@ func (p *peerIndexPublisher) publish(t timeutil.Time) {
 			},
 		},
 	}
-	if err := p.network.SendProtoWithFlags(p.target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mcompress); err != nil {
+	if err := p.network.SendProtoWithFlags(p.target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, 0); err != nil {
 		p.logger.Debug(
 			"error publishing peer index item",
 			zap.Error(err),
@@ -492,7 +492,7 @@ func (p *peerIndexPublisher) unpublish() {
 			},
 		},
 	}
-	if err := p.network.SendProtoWithFlags(p.target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, Mcompress); err != nil {
+	if err := p.network.SendProtoWithFlags(p.target, vnic.PeerIndexPort, vnic.PeerIndexPort, msg, 0); err != nil {
 		p.logger.Debug(
 			"error unpublishing peer index item",
 			zap.Error(err),

@@ -15,7 +15,7 @@ import {
   FiSearch,
   FiUser,
 } from "react-icons/fi";
-import { Link, useHistory } from "react-router-dom";
+import { Link, NavLink, useHistory } from "react-router-dom";
 import { useToggle } from "react-use";
 import usePortal from "react-useportal";
 
@@ -268,15 +268,28 @@ export const MainLayout: React.FC = ({ children }) => {
           <button onClick={toggleTheme} className="main_layout__primary_nav__logo">
             <FiHome />
           </button>
-          <Link to="/settings" className="main_layout__primary_nav__link">
+          <NavLink
+            to="/settings"
+            className="main_layout__primary_nav__link"
+            activeClassName="main_layout__primary_nav__link--active"
+          >
             Categories
-          </Link>
-          <Link to="/" className="main_layout__primary_nav__link">
+          </NavLink>
+          <NavLink
+            to="/"
+            exact
+            className="main_layout__primary_nav__link"
+            activeClassName="main_layout__primary_nav__link--active"
+          >
             Streams
-          </Link>
-          <Link to="/broadcast" className="main_layout__primary_nav__link">
+          </NavLink>
+          <NavLink
+            to="/broadcast"
+            className="main_layout__primary_nav__link"
+            activeClassName="main_layout__primary_nav__link--active"
+          >
             Broadcast
-          </Link>
+          </NavLink>
         </div>
         <div className="main_layout__search">
           <input className="main_layout__search__input" placeholder="search..." />

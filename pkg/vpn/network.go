@@ -233,6 +233,10 @@ func (n *Network) handleFrame(p *vnic.Peer, f vnic.Frame) error {
 		return errors.New("message last hop trailer mismatch")
 	}
 
+	// TODO: verify messages here to prevent next hop/recent message index
+	// poisoning. hop 0 always needs to be verified and hop n needs to be verified
+	// if we are going to add it to the next hop index
+
 	for i := 0; i < lastHopIndex; i++ {
 		n.nextHop.Insert(m.Trailer.Entries[i].HostID, m.Trailer.Entries[lastHopIndex].HostID, lastHopIndex-i)
 	}
@@ -336,15 +340,13 @@ func (n *Network) callHandler(m *Message) error {
 			return h.HandleMessage(m)
 		}
 		if m.Header.Flags&Mcompress != 0 {
-			hs = stackNetworkMessageHandler(hs, decompressMessage)
+			hs = stackNetworkMessageHandler(hs, uncompressMessage)
 		}
 		if m.Header.Flags&Mencrypt != 0 {
 			hs = stackNetworkMessageHandler(hs, decryptMessage)
-		} else {
-			hs = stackNetworkMessageHandler(hs, verifyMessage)
 		}
 
-		return hs(n, m.Clone())
+		return hs(n, m.ShallowClone())
 	}
 	return nil
 }

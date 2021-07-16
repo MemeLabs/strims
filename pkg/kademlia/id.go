@@ -29,18 +29,9 @@ func NewID() (ID, error) {
 }
 
 // UnmarshalID ...
-func UnmarshalID(b []byte) (ID, error) {
-	if len(b) < IDLength {
-		return ID{}, errors.New("not enough bytes in id")
-	}
-
-	var d ID
-	d[0] = binary.BigEndian.Uint64(b)
-	d[1] = binary.BigEndian.Uint64(b[8:])
-	d[2] = binary.BigEndian.Uint64(b[16:])
-	d[3] = binary.BigEndian.Uint64(b[24:])
-
-	return d, nil
+func UnmarshalID(b []byte) (d ID, err error) {
+	_, err = d.Unmarshal(b)
+	return
 }
 
 // MustUnmarshalID ....
@@ -52,10 +43,24 @@ func MustUnmarshalID(b []byte) ID {
 	return id
 }
 
+// Unmarshal ...
+func (d *ID) Unmarshal(b []byte) (int, error) {
+	if len(b) < IDLength {
+		return 0, errors.New("buffer too short")
+	}
+
+	d[0] = binary.BigEndian.Uint64(b)
+	d[1] = binary.BigEndian.Uint64(b[8:])
+	d[2] = binary.BigEndian.Uint64(b[16:])
+	d[3] = binary.BigEndian.Uint64(b[24:])
+
+	return IDLength, nil
+}
+
 // Marshal ...
 func (d ID) Marshal(b []byte) (int, error) {
 	if len(b) < IDLength {
-		return 0, errors.New("not enough bytes in id")
+		return 0, errors.New("buffer too short")
 	}
 
 	binary.BigEndian.PutUint64(b, d[0])

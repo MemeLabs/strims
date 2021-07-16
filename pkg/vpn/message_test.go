@@ -28,6 +28,7 @@ func TestMarshalUnmarshal(t *testing.T) {
 			SrcPort: 102,
 			Seq:     103,
 			Length:  4,
+			Flags:   MstdFlags,
 		},
 		Body: []byte("test"),
 	}
@@ -52,6 +53,7 @@ func TestVerify(t *testing.T) {
 			SrcPort: 102,
 			Seq:     103,
 			Length:  4,
+			Flags:   MstdFlags,
 		},
 		Body: []byte("test"),
 	}

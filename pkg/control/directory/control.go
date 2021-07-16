@@ -17,6 +17,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
+	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
@@ -121,20 +122,14 @@ func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *net
 		for ctx.Err() == nil {
 			er, err := r.EventReader(ctx)
 			if err != nil {
-				t.logger.Debug(
-					"error getting directory event reader",
-					zap.Error(err),
-				)
+				t.logger.Debug("error getting directory event reader", zap.Error(err))
 				return
 			}
 
 			for {
 				b := &networkv1.DirectoryEventBroadcast{}
 				if err := er.Read(b); err != nil {
-					t.logger.Debug(
-						"error reading directory event",
-						zap.Error(err),
-					)
+					t.logger.Debug("error reading directory event", zap.Error(err))
 					break
 				}
 				for _, e := range b.Events {
@@ -152,68 +147,75 @@ func (t *Control) ping(ctx context.Context) {
 	defer t.lock.Unlock()
 
 	t.runners.AscendLessThan(llrb.Inf(1), func(i llrb.Item) bool {
-		client, err := t.client(i.(*runner).key)
+		r := i.(*runner)
+		c, dc, err := t.client(r.key)
 		if err != nil {
-			t.logger.Debug(
-				"pinging directory failed",
-				logutil.ByteHex("network", i.(*runner).key),
-				zap.Error(err),
-			)
+			r.logger.Debug("directory ping failed", zap.Error(err))
 			return true
 		}
 
-		go client.Ping(ctx, &networkv1.DirectoryPingRequest{}, &networkv1.DirectoryPingResponse{})
+		go func() {
+			err := dc.Ping(ctx, &networkv1.DirectoryPingRequest{}, &networkv1.DirectoryPingResponse{})
+			if err != nil {
+				r.logger.Debug("directory ping failed", zap.Error(err))
+			}
+			c.Close()
+		}()
 		return true
 	})
 }
 
-func (t *Control) client(networkKey []byte) (*networkv1.DirectoryClient, error) {
+func (t *Control) client(networkKey []byte) (*rpc.Client, *networkv1.DirectoryClient, error) {
 	client, err := t.dialer.Client(networkKey, networkKey, AddressSalt)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
-	return networkv1.NewDirectoryClient(client), nil
+	return client, networkv1.NewDirectoryClient(client), nil
 }
 
 // Publish ...
 func (t *Control) Publish(ctx context.Context, listing *networkv1.DirectoryListing, networkKey []byte) error {
-	client, err := t.client(networkKey)
+	c, dc, err := t.client(networkKey)
 	if err != nil {
 		return err
 	}
+	defer c.Close()
 
-	return client.Publish(ctx, &networkv1.DirectoryPublishRequest{Listing: listing}, &networkv1.DirectoryPublishResponse{})
+	return dc.Publish(ctx, &networkv1.DirectoryPublishRequest{Listing: listing}, &networkv1.DirectoryPublishResponse{})
 }
 
 // Unpublish ...
 func (t *Control) Unpublish(ctx context.Context, key, networkKey []byte) error {
-	client, err := t.client(networkKey)
+	c, dc, err := t.client(networkKey)
 	if err != nil {
 		return err
 	}
+	defer c.Close()
 
-	return client.Unpublish(ctx, &networkv1.DirectoryUnpublishRequest{Key: key}, &networkv1.DirectoryUnpublishResponse{})
+	return dc.Unpublish(ctx, &networkv1.DirectoryUnpublishRequest{Key: key}, &networkv1.DirectoryUnpublishResponse{})
 }
 
 // Join ...
 func (t *Control) Join(ctx context.Context, key, networkKey []byte) error {
-	client, err := t.client(networkKey)
+	c, dc, err := t.client(networkKey)
 	if err != nil {
 		return err
 	}
+	defer c.Close()
 
-	return client.Join(ctx, &networkv1.DirectoryJoinRequest{Key: key}, &networkv1.DirectoryJoinResponse{})
+	return dc.Join(ctx, &networkv1.DirectoryJoinRequest{Key: key}, &networkv1.DirectoryJoinResponse{})
 }
 
 // Part ...
 func (t *Control) Part(ctx context.Context, key, networkKey []byte) error {
-	client, err := t.client(networkKey)
+	c, dc, err := t.client(networkKey)
 	if err != nil {
 		return err
 	}
+	defer c.Close()
 
-	return client.Part(ctx, &networkv1.DirectoryPartRequest{Key: key}, &networkv1.DirectoryPartResponse{})
+	return dc.Part(ctx, &networkv1.DirectoryPartRequest{Key: key}, &networkv1.DirectoryPartResponse{})
 }
 
 var noopCancelFunc = func() {}
@@ -223,7 +225,7 @@ func newRunner(ctx context.Context, logger *zap.Logger, vpn *vpn.Host, store *da
 		key:     dao.NetworkKey(network),
 		network: network,
 
-		logger:   logger,
+		logger:   logger.With(logutil.ByteHex("network", dao.NetworkKey(network))),
 		vpn:      vpn,
 		store:    store,
 		dialer:   dialer,
@@ -291,10 +293,7 @@ func (r *runner) EventReader(ctx context.Context) (*EventReader, error) {
 		return r.server.eventReader, nil
 	}
 
-	r.logger.Info(
-		"directory client starting",
-		logutil.ByteHex("network", dao.NetworkKey(r.network)),
-	)
+	r.logger.Info("directory client starting")
 
 	<-r.runnable
 
@@ -307,11 +306,7 @@ func (r *runner) EventReader(ctx context.Context) (*EventReader, error) {
 
 	go func() {
 		err := r.client.Run(ctx, r.transfer)
-		r.logger.Debug(
-			"directory client closed",
-			logutil.ByteHex("network", dao.NetworkKey(r.network)),
-			zap.Error(err),
-		)
+		r.logger.Debug("directory client closed", zap.Error(err))
 
 		r.runnable <- struct{}{}
 
@@ -331,16 +326,9 @@ func (r *runner) tryStartServer(ctx context.Context) {
 			return
 		}
 
-		r.logger.Info(
-			"directory server starting",
-			logutil.ByteHex("network", dao.NetworkKey(r.network)),
-		)
+		r.logger.Info("directory server starting")
 		err = r.startServer(muctx)
-		r.logger.Info(
-			"directory server closed",
-			logutil.ByteHex("network", dao.NetworkKey(r.network)),
-			zap.Error(err),
-		)
+		r.logger.Info("directory server closed", zap.Error(err))
 
 		mu.Release()
 	}

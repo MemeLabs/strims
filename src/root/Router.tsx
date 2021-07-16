@@ -1,39 +1,81 @@
-import React from "react";
+import React, { Suspense, lazy } from "react";
 import { Redirect, Route, Switch } from "react-router-dom";
 
 import { MainLayout } from "../components/MainLayout";
 import { PrivateRoute } from "../components/PrivateRoute";
-import Activity from "../pages/Activity";
-import ChatTest from "../pages/ChatTest";
-import Directory from "../pages/Directory";
-import HomePage from "../pages/Home";
-import LoginPage from "../pages/Login";
-import NotFoundPage from "../pages/NotFound";
-import PlayerTest from "../pages/PlayerTest";
-import SettingsPage from "../pages/Settings";
-import SignUpPage from "../pages/SignUp";
+import Login from "../pages/Login";
+import NotFound from "../pages/NotFound";
+import SettingsLayout from "../pages/Settings/Layout";
+import SignUp from "../pages/SignUp";
 
-const Router: React.FC = () => {
-  return (
+const SettingsRouter: React.FC = () => (
+  <Suspense fallback={null}>
     <Switch>
-      <Route path="/login" exact component={LoginPage} />
-      <Route path="/signup" exact component={SignUpPage} />
-      <Route path="/404" exact component={NotFoundPage} />
-      <PrivateRoute>
-        <MainLayout>
-          <Switch>
-            <PrivateRoute path="/" exact component={HomePage} />
-            <PrivateRoute path="/settings" component={SettingsPage} />
-            <PrivateRoute path="/directory/:networkKey" exact component={Directory} />
-            <PrivateRoute path="/player/:networkKey" exact component={PlayerTest} />
-            <PrivateRoute path="/activity" exact component={Activity} />
-            <PrivateRoute path="/chat-test" exact component={ChatTest} />
-            <Redirect to="/404" />
-          </Switch>
-        </MainLayout>
-      </PrivateRoute>
+      <PrivateRoute
+        path="/settings/networks"
+        exact
+        component={lazy(() => import("../pages/Settings/Networks"))}
+      />
+      <PrivateRoute
+        path="/settings/bootstrap-clients"
+        exact
+        component={lazy(() => import("../pages/Settings/BootstrapClients"))}
+      />
+      <PrivateRoute
+        path="/settings/chat-servers"
+        exact
+        component={lazy(() => import("../pages/Settings/ChatServers"))}
+      />
+      <PrivateRoute
+        path="/settings/video-ingress"
+        component={lazy(() => import("../pages/Settings/VideoIngress"))}
+      />
+      <PrivateRoute
+        path="/settings/vnic"
+        component={lazy(() => import("../pages/Settings/VNIC"))}
+      />
+      <Redirect to="/settings/networks" />
     </Switch>
-  );
-};
+  </Suspense>
+);
 
-export default Router;
+const MainRouter: React.FC = () => (
+  <Suspense fallback={null}>
+    <Switch>
+      <PrivateRoute path="/" exact component={lazy(() => import("../pages/Home"))} />
+      <PrivateRoute path="/settings">
+        <SettingsLayout>
+          <SettingsRouter />
+        </SettingsLayout>
+      </PrivateRoute>
+      <PrivateRoute
+        path="/directory/:networkKey"
+        exact
+        component={lazy(() => import("../pages/Directory"))}
+      />
+      <PrivateRoute
+        path="/player/:networkKey"
+        exact
+        component={lazy(() => import("../pages/PlayerTest"))}
+      />
+      <PrivateRoute path="/activity" exact component={lazy(() => import("../pages/Activity"))} />
+      <PrivateRoute path="/chat-test" exact component={lazy(() => import("../pages/ChatTest"))} />
+      <Redirect to="/404" />
+    </Switch>
+  </Suspense>
+);
+
+const RootRouter: React.FC = () => (
+  <Switch>
+    <Route path="/login" exact component={Login} />
+    <Route path="/signup" exact component={SignUp} />
+    <Route path="/404" exact component={NotFound} />
+    <PrivateRoute>
+      <MainLayout>
+        <MainRouter />
+      </MainLayout>
+    </PrivateRoute>
+  </Switch>
+);
+
+export default RootRouter;

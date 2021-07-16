@@ -224,7 +224,7 @@
       align-content: center;
     }
 
-    &__link:hover {
+    &__link--active, &__link:hover {
       border-bottom-color: red;
     }
   }

@@ -49,16 +49,16 @@ func newPeer(logger *zap.Logger, link Link, hostKey *key.Key, hostCert *certific
 		NodeVersion:     version.Version,
 	})
 	if err != nil {
-		return nil, fmt.Errorf("writing peer init failed: %w", err)
+		return nil, fmt.Errorf("writing peer init: %w", err)
 	}
 
 	var init vnicv1.PeerInit
 	if err = protoutil.ReadStream(link, &init); err != nil {
-		return nil, fmt.Errorf("reading peer init failed: %w", err)
+		return nil, fmt.Errorf("reading peer init: %w", err)
 	}
 
 	if err := dao.VerifyCertificate(init.Certificate); err != nil {
-		return nil, fmt.Errorf("peer cert verification failed: %w", err)
+		return nil, fmt.Errorf("peer cert verification: %w", err)
 	}
 	if init.Certificate.GetParent() == nil {
 		return nil, errors.New("invalid peer certificate")

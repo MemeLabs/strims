@@ -90,14 +90,8 @@
 
   &:hover:not(:disabled) {
     cursor: pointer;
-
-    @include color-scheme('dark') {
-      background: $gray-500;
-      color: #222;
-    }
-    @include color-scheme('light') {
-      background: $gray-300;
-    }
+    background: var(--input-button-hover-bg);
+    color: var(--input-button-hover-color);
   }
 
   &:disabled {
@@ -108,10 +102,6 @@
   &--borderless {
     border: none;
     box-shadow: none;
-
-    &, &:hover {
-      background: transparent;
-    }
   }
 }
 
