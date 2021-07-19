@@ -88,7 +88,6 @@ func (s *ingressService) HandleStream(a *rtmpingress.StreamAddr, c *rtmpingress.
 		s.transfer,
 		s.network,
 		s.directory,
-		s.transcoder,
 		a,
 		c,
 	)
@@ -133,25 +132,62 @@ func (s *ingressService) HandleStream(a *rtmpingress.StreamAddr, c *rtmpingress.
 	s.lock.Unlock()
 }
 
+func (s *ingressService) HandlePassthruStream(a *rtmpingress.StreamAddr, c *rtmpingress.Conn) (ioutil.WriteFlusher, error) {
+	stream, err := newIngressStream(
+		s.logger,
+		s.store,
+		s.transfer,
+		s.network,
+		s.directory,
+		a,
+		c,
+	)
+	if err != nil {
+		s.logger.Info(
+			"setting up stream failed",
+			zap.String("key", a.Key),
+			zap.Error(err),
+		)
+		return nil, err
+	}
+
+	s.logger.Info("rtmp stream opened", zap.Uint64("id", stream.channel.Id))
+
+	s.lock.Lock()
+	s.streams[stream.channel.Id] = stream
+	s.lock.Unlock()
+
+	go func() {
+		<-c.CloseNotify()
+		s.logger.Debug("rtmp stream closed", zap.Uint64("id", stream.channel.Id))
+
+		s.lock.Lock()
+		delete(s.streams, stream.channel.Id)
+		s.lock.Unlock()
+
+		stream.Close()
+	}()
+
+	return stream.w, nil
+}
+
 func newIngressStream(
 	logger *zap.Logger,
 	store *dao.ProfileStore,
 	transfer *transfer.Control,
 	network *network.Control,
 	directory *directory.Control,
-	transcoder *rtmpingress.Transcoder,
 	addr *rtmpingress.StreamAddr,
 	conn io.Closer,
 ) (s *ingressStream, err error) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	s = &ingressStream{
-		logger:     logger,
-		store:      store,
-		transfer:   transfer,
-		network:    network,
-		directory:  directory,
-		transcoder: transcoder,
+		logger:    logger,
+		store:     store,
+		transfer:  transfer,
+		network:   network,
+		directory: directory,
 
 		ctx:       ctx,
 		cancelCtx: cancel,
@@ -190,12 +226,11 @@ func newIngressStream(
 }
 
 type ingressStream struct {
-	logger     *zap.Logger
-	store      *dao.ProfileStore
-	transfer   *transfer.Control
-	network    *network.Control
-	directory  *directory.Control
-	transcoder *rtmpingress.Transcoder
+	logger    *zap.Logger
+	store     *dao.ProfileStore
+	transfer  *transfer.Control
+	network   *network.Control
+	directory *directory.Control
 
 	ctx       context.Context
 	cancelCtx context.CancelFunc

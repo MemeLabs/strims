@@ -1,17 +1,18 @@
 package rtmpingress
 
 import (
+	"bytes"
 	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"net"
 	"net/http"
 	"os"
 	"os/exec"
 	"sync"
 
+	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/gorilla/mux"
 	"go.uber.org/zap"
@@ -81,18 +82,18 @@ func (h *Transcoder) handleInit(w http.ResponseWriter, r *http.Request) {
 	tw.mu.Lock()
 	defer tw.mu.Unlock()
 
-	b, err := ioutil.ReadAll(r.Body)
-	if err != nil {
+	var b bytes.Buffer
+	if _, err := b.ReadFrom(r.Body); err != nil {
 		http.Error(w, http.StatusText(http.StatusInternalServerError), http.StatusInternalServerError)
 		h.logger.Debug("error reading init segment", zap.Error(err))
 		return
 	}
 
-	tw.init = make([]byte, len(b)+2)
-	binary.BigEndian.PutUint16(tw.init, uint16(len(b)))
-	copy(tw.init[2:], b)
+	tw.init = make([]byte, b.Len()+2)
+	binary.BigEndian.PutUint16(tw.init, uint16(b.Len()))
+	b.Read(tw.init[2:])
 
-	h.logger.Debug("read init segment", zap.Int("length", len(b)))
+	h.logger.Debug("read init segment", zap.Int("length", b.Len()))
 }
 
 func (h *Transcoder) handleSegment(w http.ResponseWriter, r *http.Request) {
@@ -146,7 +147,7 @@ func (h *Transcoder) close(k transcoderKey, cmd *exec.Cmd) {
 }
 
 // Transcode ...
-func (h *Transcoder) Transcode(ctx context.Context, srcURI, key, variant string, w WriteFlushCloser) error {
+func (h *Transcoder) Transcode(ctx context.Context, srcURI, key, variant string, w ioutil.WriteFlusher) error {
 	bin, err := exec.LookPath("ffmpeg")
 	if err != nil {
 		return err
@@ -184,13 +185,7 @@ type transcoderKey struct {
 type transcoderWriter struct {
 	mu   sync.Mutex
 	init []byte
-	w    WriteFlushCloser
-}
-
-// WriteFlushCloser ...
-type WriteFlushCloser interface {
-	Write(p []byte) (int, error)
-	Flush() error
+	w    ioutil.WriteFlusher
 }
 
 func postHandleFunc(f http.HandlerFunc) http.HandlerFunc {

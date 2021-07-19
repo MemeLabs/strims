@@ -244,14 +244,14 @@ const Portlet: React.FC<PortletProps> = ({
       >
         <div
           style={{
-            flex: `${handleSize}px 0 0`,
+            flex: `0 0 ${handleSize}px`,
             display: "flex",
             flexDirection: "row",
           }}
         >
           <div
             style={{
-              flex: `${handleSize}px 0 0`,
+              flex: `0 0 ${handleSize}px`,
               cursor: "nw-resize",
             }}
             onMouseDown={(e) => handleResizeStart(e, "nw")}
@@ -265,7 +265,7 @@ const Portlet: React.FC<PortletProps> = ({
           ></div>
           <div
             style={{
-              flex: `${handleSize}px 0 0`,
+              flex: `0 0 ${handleSize}px`,
               cursor: "ne-resize",
             }}
             onMouseDown={(e) => handleResizeStart(e, "ne")}
@@ -280,7 +280,7 @@ const Portlet: React.FC<PortletProps> = ({
         >
           <div
             style={{
-              flex: `${handleSize}px 0 0`,
+              flex: `0 0 ${handleSize}px`,
               cursor: "w-resize",
             }}
             onMouseDown={(e) => handleResizeStart(e, "w")}
@@ -295,7 +295,7 @@ const Portlet: React.FC<PortletProps> = ({
           >
             <div
               style={{
-                flex: `${headerSize}px 0 0`,
+                flex: `0 0 ${headerSize}px`,
                 background: "orange",
                 display: "flex",
                 justifyContent: "flex-end",
@@ -328,7 +328,7 @@ const Portlet: React.FC<PortletProps> = ({
           </div>
           <div
             style={{
-              flex: `${handleSize}px 0 0`,
+              flex: `0 0 ${handleSize}px`,
               cursor: "e-resize",
             }}
             onMouseDown={(e) => handleResizeStart(e, "e")}
@@ -336,14 +336,14 @@ const Portlet: React.FC<PortletProps> = ({
         </div>
         <div
           style={{
-            flex: `${handleSize}px 0 0`,
+            flex: `0 0 ${handleSize}px`,
             display: "flex",
             flexDirection: "row",
           }}
         >
           <div
             style={{
-              flex: `${handleSize}px 0 0`,
+              flex: `0 0 ${handleSize}px`,
               cursor: "sw-resize",
             }}
             onMouseDown={(e) => handleResizeStart(e, "sw")}
@@ -357,7 +357,7 @@ const Portlet: React.FC<PortletProps> = ({
           ></div>
           <div
             style={{
-              flex: `${handleSize}px 0 0`,
+              flex: `0 0 ${handleSize}px`,
               cursor: "se-resize",
             }}
             onMouseDown={(e) => handleResizeStart(e, "se")}

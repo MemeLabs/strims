@@ -17,6 +17,7 @@ require (
 	github.com/docker/docker v1.13.1
 	github.com/docker/go-connections v0.4.0
 	github.com/docker/go-units v0.4.0 // indirect
+	github.com/edgeware/mp4ff v0.24.0
 	github.com/emicklei/proto v1.9.0
 	github.com/emirpasic/gods v1.12.0
 	github.com/friendsofgo/errors v0.9.2
@@ -34,7 +35,7 @@ require (
 	github.com/gorilla/websocket v1.4.2
 	github.com/hetznercloud/hcloud-go v1.23.1
 	github.com/kat-co/vala v0.0.0-20170210184112-42e1d8b61f12
-	github.com/klauspost/compress v1.13.1 // indirect
+	github.com/klauspost/compress v1.13.1
 	github.com/lib/pq v1.9.0
 	github.com/magiconair/properties v1.8.4 // indirect
 	github.com/mailru/easyjson v0.7.6 // indirect
