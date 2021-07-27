@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react";
+import { useRef, useState } from "react";
 
 import useReady from "./useReady";
 
@@ -47,6 +47,8 @@ export interface VideoState {
   currentTime: number;
   seekableStart: number;
   seekableEnd: number;
+  videoHeight: number;
+  videoWidth: number;
   supportPiP: boolean;
   pip: boolean;
   src: string;
@@ -225,6 +227,9 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
     unsafelySetCurrentTime(time);
   };
 
+  const videoHeight = ref.current?.videoHeight;
+  const videoWidth = ref.current?.videoWidth;
+
   const supportPiP =
     document.pictureInPictureEnabled && ref.current && !ref.current.disablePictureInPicture;
   const pip = ref.current === document.pictureInPictureElement;
@@ -260,6 +265,8 @@ const useVideo = (): [VideoState, VideoProps, VideoControls] => {
       currentTime,
       seekableStart,
       seekableEnd,
+      videoHeight,
+      videoWidth,
       supportPiP,
       pip,
       src,

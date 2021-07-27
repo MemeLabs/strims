@@ -13,6 +13,7 @@ interface Listing {
 }
 
 const directoryReducer = (listings: Listing[], { body: action }: DirectoryEvent): Listing[] => {
+  console.log(action);
   switch (action.case) {
     case DirectoryEvent.BodyCase.PUBLISH: {
       const listing: Listing = {
@@ -66,34 +67,24 @@ const Directory: React.FC = () => {
   };
 
   return (
-    <>
-      <main className="home_page__main">
-        <header className="home_page__subheader"></header>
-        <section className="home_page__main__video">
-          <div>
-            <button onClick={handleTestClick} className="input input_button">
-              test
-            </button>
-            {listings.map(({ key, listing }) => (
-              <div key={key}>
-                <Link to={formatUri(params.networkKey, listing)}>
-                  <span>{listing.snippet.title}</span>
-                </Link>
-                {" | "}
-                <span>{listing.snippet.tags}</span>
-                {" | "}
-                <span>{new Date(Number(listing.timestamp) * 1000).toLocaleString()}</span>
-              </div>
-            ))}
+    <section className="home_page__main__video">
+      <div>
+        <button onClick={handleTestClick} className="input input_button">
+          test
+        </button>
+        {listings.map(({ key, listing }) => (
+          <div key={key}>
+            <Link to={formatUri(params.networkKey, listing)}>
+              <span>{listing.snippet.title}</span>
+            </Link>
+            {" | "}
+            <span>{listing.snippet.tags}</span>
+            {" | "}
+            <span>{new Date(Number(listing.timestamp) * 1000).toLocaleString()}</span>
           </div>
-        </section>
-      </main>
-      <aside className="home_page__right">
-        <header className="home_page__subheader"></header>
-        <header className="home_page__chat__promo"></header>
-        <div className="home_page__chat">chat</div>
-      </aside>
-    </>
+        ))}
+      </div>
+    </section>
   );
 };
 

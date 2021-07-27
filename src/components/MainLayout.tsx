@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { Base64 } from "js-base64";
 // import Tooltip from "rc-tooltip";
-import React, { useCallback, useState } from "react";
+import React, { useCallback, useContext, useState } from "react";
 import { DragDropContext, Draggable, DropResult, Droppable } from "react-beautiful-dnd";
 import { BiNetworkChart } from "react-icons/bi";
 import {
@@ -20,14 +20,17 @@ import { useToggle } from "react-use";
 import usePortal from "react-useportal";
 
 import { MetricsFormat } from "../apis/strims/debug/v1/debug";
-import { CreateNetworkResponse, Network, NetworkEvent } from "../apis/strims/network/v1/network";
+import { CreateNetworkResponse, Network } from "../apis/strims/network/v1/network";
 import { useClient } from "../contexts/FrontendApi";
+import { NetworkContext, Provider as NetworkProvider } from "../contexts/Network";
 import { useTheme } from "../contexts/Theme";
 import useObjectURL from "../hooks/useObjectURL";
 import { rootCertificate } from "../lib/certificate";
 import AddNetworkModal from "./AddNetworkModal";
 import Badge from "./Badge";
+import ChatPanel from "./ChatPanel";
 import Debugger from "./Debugger";
+import PlayerEmbed from "./PlayerEmbed";
 
 const Tooltip: React.FC<any> = ({ children }) => <>{children}</>;
 
@@ -92,73 +95,14 @@ interface NetworkNavItem {
   peerCount: number;
 }
 
-// TODO: move to theme context
-const useNetworkStuff = () => {
-  const client = useClient();
-  const [items, setItems] = React.useState<NetworkNavItem[]>([]);
-
-  const addItem = (item: NetworkNavItem) =>
-    setItems((prev) => {
-      const next = Array.from(prev);
-      const i = next.findIndex(
-        ({ network: { displayOrder } }) => displayOrder > item.network.displayOrder
-      );
-      next.splice(i === -1 ? next.length : i, 0, item);
-      return next;
-    });
-
-  const removeItem = (networkId: bigint) =>
-    setItems((prev) => prev.filter((item) => item.network.id !== networkId));
-
-  const setPeerCount = (networkId: bigint, peerCount: number) =>
-    setItems((prev) =>
-      prev.map((item) => (item.network.id === networkId ? { ...item, peerCount: peerCount } : item))
-    );
-
-  const reorderNetworks = (srcIndex: number, dstIndex: number) =>
-    setItems((prev) => {
-      const next = Array.from(prev);
-      const [target] = next.splice(srcIndex, 1);
-      next.splice(dstIndex, 0, target);
-      void client.network.setDisplayOrder({ networkIds: next.map(({ network: { id } }) => id) });
-      return next;
-    });
-
-  React.useEffect(() => {
-    const events = client.network.watch();
-    events.on("data", ({ event: { body } }) => {
-      switch (body.case) {
-        case NetworkEvent.BodyCase.NETWORK_START:
-          addItem(body.networkStart);
-          break;
-        case NetworkEvent.BodyCase.NETWORK_STOP:
-          removeItem(body.networkStop.networkId);
-          break;
-        case NetworkEvent.BodyCase.NETWORK_PEER_COUNT_UPDATE:
-          setPeerCount(
-            body.networkPeerCountUpdate.networkId,
-            body.networkPeerCountUpdate.peerCount
-          );
-          break;
-      }
-    });
-
-    return () => events.destroy();
-  }, []);
-
-  const ops = { reorderNetworks };
-
-  return [items, ops] as [NetworkNavItem[], typeof ops];
-};
-
 const NetworkNav: React.FC = () => {
   const [expanded, toggleExpanded] = useToggle(false);
-  const [networks, { reorderNetworks }] = useNetworkStuff();
+  const [networks, { setDisplayOrder }] = useContext(NetworkContext);
   // const [state, { setNavOrder }] = useTheme();
 
   const onDragEnd = React.useCallback((result: DropResult) => {
     if (result.destination) {
-      reorderNetworks(result.source.index, result.destination.index);
+      setDisplayOrder(result.source.index, result.destination.index);
     }
   }, []);
 
@@ -262,61 +206,74 @@ export const MainLayout: React.FC = ({ children }) => {
   };
 
   return (
-    <div className="main_layout">
-      <header className="main_layout__header">
-        <div className="main_layout__primary_nav">
-          <button onClick={toggleTheme} className="main_layout__primary_nav__logo">
-            <FiHome />
-          </button>
-          <NavLink
-            to="/settings"
-            className="main_layout__primary_nav__link"
-            activeClassName="main_layout__primary_nav__link--active"
-          >
-            Categories
-          </NavLink>
-          <NavLink
-            to="/"
-            exact
-            className="main_layout__primary_nav__link"
-            activeClassName="main_layout__primary_nav__link--active"
-          >
-            Streams
-          </NavLink>
-          <NavLink
-            to="/broadcast"
-            className="main_layout__primary_nav__link"
-            activeClassName="main_layout__primary_nav__link--active"
-          >
-            Broadcast
-          </NavLink>
+    <NetworkProvider>
+      <div className="main_layout">
+        <header className="main_layout__header">
+          <div className="main_layout__primary_nav">
+            <button onClick={toggleTheme} className="main_layout__primary_nav__logo">
+              <FiHome />
+            </button>
+            <NavLink
+              to="/settings"
+              className="main_layout__primary_nav__link"
+              activeClassName="main_layout__primary_nav__link--active"
+            >
+              Categories
+            </NavLink>
+            <NavLink
+              to="/"
+              exact
+              className="main_layout__primary_nav__link"
+              activeClassName="main_layout__primary_nav__link--active"
+            >
+              Streams
+            </NavLink>
+            <NavLink
+              to="/broadcast"
+              className="main_layout__primary_nav__link"
+              activeClassName="main_layout__primary_nav__link--active"
+            >
+              Broadcast
+            </NavLink>
+          </div>
+          <div className="main_layout__search">
+            <input className="main_layout__search__input" placeholder="search..." />
+            <button className="main_layout__search__button">
+              <FiSearch />
+            </button>
+          </div>
+          <div className="main_layout__user_nav">
+            <Link to="/activity" className="main_layout__user_nav__link">
+              <FiActivity />
+            </Link>
+            <button onClick={handleAlertsClick} className="main_layout__user_nav__link">
+              <FiBell />
+            </button>
+            <button onClick={handleDebuggerOpen} className="main_layout__user_nav__link">
+              <FiCloud />
+            </button>
+            <Link to="/profile" className="main_layout__user_nav__link">
+              <FiUser />
+            </Link>
+          </div>
+        </header>
+        <div className="main_layout__body">
+          <NetworkNav />
+          {children}
         </div>
-        <div className="main_layout__search">
-          <input className="main_layout__search__input" placeholder="search..." />
-          <button className="main_layout__search__button">
-            <FiSearch />
-          </button>
-        </div>
-        <div className="main_layout__user_nav">
-          <Link to="/activity" className="main_layout__user_nav__link">
-            <FiActivity />
-          </Link>
-          <button onClick={handleAlertsClick} className="main_layout__user_nav__link">
-            <FiBell />
-          </button>
-          <button onClick={handleDebuggerOpen} className="main_layout__user_nav__link">
-            <FiCloud />
-          </button>
-          <Link to="/profile" className="main_layout__user_nav__link">
-            <FiUser />
-          </Link>
-        </div>
-      </header>
-      <div className="main_layout__content">
-        <NetworkNav />
-        {children}
+        <Debugger isOpen={debuggerIsOpen} onClose={handleDebuggerClose} />
       </div>
-      <Debugger isOpen={debuggerIsOpen} onClose={handleDebuggerClose} />
-    </div>
+    </NetworkProvider>
+  );
+};
+
+export const MainBodyLayout: React.FC = ({ children }) => {
+  return (
+    <>
+      <main className="main_layout__content">
+        <PlayerEmbed>{children}</PlayerEmbed>
+      </main>
+      <ChatPanel />
+    </>
   );
 };

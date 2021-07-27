@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from "react";
+import React, { CSSProperties, useEffect, useRef } from "react";
 import { MdLoop } from "react-icons/md";
 import useFullscreen from "use-fullscreen";
 
@@ -10,6 +10,7 @@ import VideoControls from "./VideoControls";
 
 type SwarmPlayerProps = Pick<MediaSourceProps, "networkKey" | "swarmUri" | "mimeType"> & {
   volumeStepSize?: number;
+  disableControls?: boolean;
 };
 
 const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
@@ -17,6 +18,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   swarmUri,
   mimeType,
   volumeStepSize = 0.1,
+  disableControls = false,
 }) => {
   const rootRef = useRef();
   const [controlsHidden, renewControlsTimeout, clearControlsTimeout] = useIdleTimeout();
@@ -65,6 +67,11 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
     [videoState.volume, volumeStepSize]
   );
 
+  let aspectRatio = "16/9";
+  if (videoState.videoWidth && videoState.videoHeight) {
+    aspectRatio = `${videoState.videoWidth}/${videoState.videoHeight}`;
+  }
+
   return (
     <div
       className="video_player"
@@ -73,13 +80,14 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
       onDoubleClick={handleToggleFullscreen}
       onWheel={handleWheel}
       ref={rootRef}
+      style={{ aspectRatio }}
     >
       <video onClick={(e) => e.preventDefault()} className="video_player__video" {...videoProps} />
       {waitingSpinner}
       <VideoControls
         videoState={videoState}
         videoControls={videoControls}
-        visible={!controlsHidden}
+        visible={!controlsHidden && !disableControls}
         fullscreen={isFullscreen}
         toggleFullscreen={handleToggleFullscreen}
       />

@@ -112,23 +112,18 @@ func (m *webRTCMediator) addICECandidate(index uint64, candidate []byte) (bool, 
 	m.remoteICELock.Lock()
 	defer m.remoteICELock.Unlock()
 
-	index = 1 << index
-	if m.remoteICEReadIndices&index != 0 {
-		return false, nil
-	}
 	if candidate == nil {
 		m.remoteICELastIndex = index
-	}
-	m.remoteICEReadIndices |= index
+	} else if i := uint64(1) << index; m.remoteICEReadIndices&i == 0 {
+		m.remoteICEReadIndices |= i
 
-	if candidate != nil {
 		select {
 		case m.remoteICECandiates <- candidate:
 		default:
 		}
 	}
 
-	if m.remoteICELastIndex != 0 && m.remoteICEReadIndices == m.remoteICELastIndex^(m.remoteICELastIndex-1) {
+	if m.remoteICELastIndex != 0 && m.remoteICEReadIndices == m.remoteICELastIndex-1 {
 		m.remoteICECloseOnce.Do(func() { close(m.remoteICECandiates) })
 		return true, nil
 	}

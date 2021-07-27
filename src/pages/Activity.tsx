@@ -443,427 +443,418 @@ const Directory = () => {
   }, []);
 
   return (
-    <>
-      <main className="home_page__main">
-        <section className="home_page__main__video">
-          <table>
-            <tbody>
-              <tr>
-                <td>go_goroutines</td>
-                <td>{stats.go_goroutines.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_goroutines.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_info</td>
-                <td>{stats.go_info.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_info.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_alloc_bytes</td>
-                <td>{stats.go_memstats_alloc_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_alloc_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_alloc_bytes_total</td>
-                <td>{stats.go_memstats_alloc_bytes_total.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_alloc_bytes_total.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_buck_hash_sys_bytes</td>
-                <td>{stats.go_memstats_buck_hash_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_buck_hash_sys_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_frees</td>
-                <td>{stats.go_memstats_frees.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_frees.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_frees_total</td>
-                <td>{stats.go_memstats_frees_total.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_frees_total.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_gc_cpu_fraction</td>
-                <td>{stats.go_memstats_gc_cpu_fraction.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_gc_cpu_fraction.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_gc_sys_bytes</td>
-                <td>{stats.go_memstats_gc_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_gc_sys_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_heap_alloc_bytes</td>
-                <td>{stats.go_memstats_heap_alloc_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_heap_alloc_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_heap_idle_bytes</td>
-                <td>{stats.go_memstats_heap_idle_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_heap_idle_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_heap_inuse_bytes</td>
-                <td>{stats.go_memstats_heap_inuse_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_heap_inuse_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_heap_objects</td>
-                <td>{stats.go_memstats_heap_objects.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_heap_objects.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_heap_released_bytes</td>
-                <td>{stats.go_memstats_heap_released_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_heap_released_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_heap_sys_bytes</td>
-                <td>{stats.go_memstats_heap_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_heap_sys_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_last_gc_time_seconds</td>
-                <td>{stats.go_memstats_last_gc_time_seconds.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_last_gc_time_seconds.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_lookups</td>
-                <td>{stats.go_memstats_lookups.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_lookups.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_lookups_total</td>
-                <td>{stats.go_memstats_lookups_total.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_lookups_total.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_mallocs</td>
-                <td>{stats.go_memstats_mallocs.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_mallocs.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_mallocs_total</td>
-                <td>{stats.go_memstats_mallocs_total.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_mallocs_total.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_mcache_inuse_bytes</td>
-                <td>{stats.go_memstats_mcache_inuse_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_mcache_inuse_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_mcache_sys_bytes</td>
-                <td>{stats.go_memstats_mcache_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_mcache_sys_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_mspan_inuse_bytes</td>
-                <td>{stats.go_memstats_mspan_inuse_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_mspan_inuse_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_mspan_sys_bytes</td>
-                <td>{stats.go_memstats_mspan_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_mspan_sys_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_next_gc_bytes</td>
-                <td>{stats.go_memstats_next_gc_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_next_gc_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_other_sys_bytes</td>
-                <td>{stats.go_memstats_other_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_other_sys_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_stack_inuse_bytes</td>
-                <td>{stats.go_memstats_stack_inuse_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_stack_inuse_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_stack_sys_bytes</td>
-                <td>{stats.go_memstats_stack_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_stack_sys_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-              <tr>
-                <td>go_memstats_sys_bytes</td>
-                <td>{stats.go_memstats_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
-                <td style={{ height: "20px", width: "360px" }}>
-                  <Sparklines
-                    data={stats.go_memstats_sys_bytes.metrics[0]?.values || []}
-                    limit={60}
-                    width={360}
-                    height={20}
-                  >
-                    <SparklinesBars />
-                  </Sparklines>
-                </td>
-              </tr>
-            </tbody>
-          </table>
-        </section>
-      </main>
-      <aside className="home_page__right">
-        <header className="home_page__subheader"></header>
-        <header className="home_page__chat__promo"></header>
-        <div className="home_page__chat">chat</div>
-      </aside>
-    </>
+    <section className="home_page__main__video">
+      <table>
+        <tbody>
+          <tr>
+            <td>go_goroutines</td>
+            <td>{stats.go_goroutines.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_goroutines.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_info</td>
+            <td>{stats.go_info.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_info.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_alloc_bytes</td>
+            <td>{stats.go_memstats_alloc_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_alloc_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_alloc_bytes_total</td>
+            <td>{stats.go_memstats_alloc_bytes_total.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_alloc_bytes_total.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_buck_hash_sys_bytes</td>
+            <td>{stats.go_memstats_buck_hash_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_buck_hash_sys_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_frees</td>
+            <td>{stats.go_memstats_frees.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_frees.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_frees_total</td>
+            <td>{stats.go_memstats_frees_total.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_frees_total.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_gc_cpu_fraction</td>
+            <td>{stats.go_memstats_gc_cpu_fraction.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_gc_cpu_fraction.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_gc_sys_bytes</td>
+            <td>{stats.go_memstats_gc_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_gc_sys_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_heap_alloc_bytes</td>
+            <td>{stats.go_memstats_heap_alloc_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_heap_alloc_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_heap_idle_bytes</td>
+            <td>{stats.go_memstats_heap_idle_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_heap_idle_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_heap_inuse_bytes</td>
+            <td>{stats.go_memstats_heap_inuse_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_heap_inuse_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_heap_objects</td>
+            <td>{stats.go_memstats_heap_objects.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_heap_objects.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_heap_released_bytes</td>
+            <td>{stats.go_memstats_heap_released_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_heap_released_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_heap_sys_bytes</td>
+            <td>{stats.go_memstats_heap_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_heap_sys_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_last_gc_time_seconds</td>
+            <td>{stats.go_memstats_last_gc_time_seconds.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_last_gc_time_seconds.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_lookups</td>
+            <td>{stats.go_memstats_lookups.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_lookups.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_lookups_total</td>
+            <td>{stats.go_memstats_lookups_total.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_lookups_total.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_mallocs</td>
+            <td>{stats.go_memstats_mallocs.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_mallocs.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_mallocs_total</td>
+            <td>{stats.go_memstats_mallocs_total.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_mallocs_total.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_mcache_inuse_bytes</td>
+            <td>{stats.go_memstats_mcache_inuse_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_mcache_inuse_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_mcache_sys_bytes</td>
+            <td>{stats.go_memstats_mcache_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_mcache_sys_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_mspan_inuse_bytes</td>
+            <td>{stats.go_memstats_mspan_inuse_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_mspan_inuse_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_mspan_sys_bytes</td>
+            <td>{stats.go_memstats_mspan_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_mspan_sys_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_next_gc_bytes</td>
+            <td>{stats.go_memstats_next_gc_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_next_gc_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_other_sys_bytes</td>
+            <td>{stats.go_memstats_other_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_other_sys_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_stack_inuse_bytes</td>
+            <td>{stats.go_memstats_stack_inuse_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_stack_inuse_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_stack_sys_bytes</td>
+            <td>{stats.go_memstats_stack_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_stack_sys_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+          <tr>
+            <td>go_memstats_sys_bytes</td>
+            <td>{stats.go_memstats_sys_bytes.metrics[0]?.prev?.toLocaleString()}</td>
+            <td style={{ height: "20px", width: "360px" }}>
+              <Sparklines
+                data={stats.go_memstats_sys_bytes.metrics[0]?.values || []}
+                limit={60}
+                width={360}
+                height={20}
+              >
+                <SparklinesBars />
+              </Sparklines>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
   );
 };
 

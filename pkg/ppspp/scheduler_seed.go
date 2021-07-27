@@ -3,6 +3,7 @@ package ppspp
 import (
 	"errors"
 	"log"
+	"math/bits"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -10,7 +11,9 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
+	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
+	"github.com/MemeLabs/go-ppspp/pkg/stats"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
 )
@@ -19,15 +22,25 @@ var _ swarmScheduler = &seedSwarmScheduler{}
 var _ channelScheduler = &seedChannelScheduler{}
 
 func newSeedSwarmScheduler(logger *zap.Logger, s *Swarm) *seedSwarmScheduler {
+	var signatureLayer int
+	if s.options.Integrity.ProtectionMethod == integrity.ProtectionMethodMerkleTree {
+		signatureLayer = bits.TrailingZeros16(uint16(s.options.ChunksPerSignature))
+	}
+
 	return &seedSwarmScheduler{
-		logger:     logger,
-		swarm:      s,
-		streamBits: binmap.Bin(s.options.StreamCount) - 1,
-		haveBins:   binmap.New(),
-		channels:   map[peerThing]*seedChannelScheduler{},
+		logger: logger,
+		swarm:  s,
+
+		streamCount:    codec.Stream(s.options.StreamCount),
+		streamBits:     binmap.Bin(s.options.StreamCount) - 1,
+		signatureLayer: uint64(signatureLayer),
+
+		haveBins: binmap.New(),
+		channels: map[peerThing]*seedChannelScheduler{},
 
 		integrityOverhead: s.options.IntegrityVerifierOptions().MaxMessageBytes(),
 		chunkSize:         int(s.options.ChunkSize),
+		liveWindow:        binmap.Bin(s.options.LiveWindow * 2),
 	}
 }
 
@@ -35,8 +48,12 @@ type seedSwarmScheduler struct {
 	logger *zap.Logger
 	swarm  *Swarm
 
-	lock       sync.Mutex
-	streamBits binmap.Bin
+	lock sync.Mutex
+
+	streamCount    codec.Stream
+	streamBits     binmap.Bin
+	signatureLayer uint64
+	binTimes       timeSet
 
 	haveBins   *binmap.Map
 	haveBinMax binmap.Bin
@@ -45,11 +62,15 @@ type seedSwarmScheduler struct {
 
 	integrityOverhead int
 	chunkSize         int
+	liveWindow        binmap.Bin
 
 	initHack int32
+
+	nextGCTime          timeutil.Time
+	nextStreamCheckTime timeutil.Time
 }
 
-func (s *seedSwarmScheduler) Run(c timeutil.Time) {
+func (s *seedSwarmScheduler) Run(t timeutil.Time) {
 	// we want to send as many copies of the stream as bandwidth allows
 	// but we don't know how much bandwidth is available
 	// and we have no way to measure it...
@@ -77,6 +98,70 @@ func (s *seedSwarmScheduler) Run(c timeutil.Time) {
 	// when more than one peer get the same seed stream how do we parse the results?
 	// can we a/b test this?
 	// is this valid since there's no guarantee that the peers connected to us are a representative sample of the swarm?
+
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if t.After(s.nextGCTime) {
+		s.nextGCTime = t.Add(schedulerGCInterval)
+		s.gc(t)
+	}
+
+	if t.After(s.nextStreamCheckTime) {
+		s.nextStreamCheckTime = t.Add(schedulerStreamCheckInterval)
+		s.checkStreams(t)
+	}
+}
+
+func (s *seedSwarmScheduler) checkStreams(t timeutil.Time) {
+	// experiments
+	// * test/control groups
+
+	ls := make([][]stats.Welford, s.streamCount)
+	for i := range ls {
+		ls[i] = make([]stats.Welford, 0, len(s.channels))
+	}
+	for _, cs := range s.channels {
+		cs.lock.Lock()
+		for i, l := range cs.streamHaveLag {
+			ls[i] = append(ls[i], l)
+			cs.streamHaveLag[i].Reset()
+		}
+		cs.lock.Unlock()
+	}
+
+	for i := range ls {
+		l := stats.WelfordMerge(ls[i]...)
+		s.logger.Debug(
+			"stream lag summary",
+			zap.Int("stream", i),
+			zap.Duration("mean", time.Duration(l.Mean())),
+			zap.Duration("stddev", time.Duration(l.StdDev())),
+			zap.Int("count", int(l.Count())),
+		)
+	}
+
+}
+
+func (s *seedSwarmScheduler) setBinTime(b binmap.Bin, t timeutil.Time) {
+	// once any bin in the signature is available we can assume that all of them
+	// have been produced by the seed.
+	//
+	// depending on the seed bandwidth and stream count vs chunks per signature
+	// this may increase the variance of peer have times but experimentally it
+	// doesn't prevent subscriptions.
+	//
+	// if this works binTimes could be replaced with a ring buffer.
+	if b.Layer() < s.signatureLayer {
+		b = b.LayerShift(s.signatureLayer)
+	}
+	s.binTimes.Set(b, t)
+}
+
+func (s *seedSwarmScheduler) gc(t timeutil.Time) {
+	if s.liveWindow < s.haveBinMax {
+		s.binTimes.Prune(s.haveBinMax - s.liveWindow)
+	}
 }
 
 func (s *seedSwarmScheduler) Consume(c store.Chunk) {
@@ -91,6 +176,12 @@ func (s *seedSwarmScheduler) Consume(c store.Chunk) {
 	for _, cs := range s.channels {
 		cs.appendHaveBins(hb, c.Bin)
 	}
+
+	s.setBinTime(c.Bin, timeutil.Now())
+
+	if b := c.Bin.BaseRight(); b > s.haveBinMax {
+		s.haveBinMax = b
+	}
 }
 
 func (s *seedSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing) channelScheduler {
@@ -102,32 +193,14 @@ func (s *seedSwarmScheduler) ChannelScheduler(p peerThing, cw channelWriterThing
 		p:                  p,
 		cw:                 cw,
 		s:                  s,
+		streamHaveLag:      make([]stats.Welford, s.streamCount),
 		haveBins:           s.haveBins.Clone(),
 		peerHaveBins:       binmap.New(),
 		peerRequestStreams: map[codec.Stream]binmap.Bin{},
 	}
-
-	// HAX
-	initHack := codec.Stream(atomic.AddInt32(&s.initHack, 1)) - 1
-	sc := codec.Stream(c.s.swarm.options.StreamCount)
-	k := (sc + 2) / 3
-	for i := codec.Stream(0); i < sc; i++ {
-		if i/k == initHack {
-			c.peerOpenStreams = append(c.peerOpenStreams, codec.StreamAddress{
-				Stream:  i,
-				Address: 0,
-			})
-			c.peerRequestStreams[i] = 0
-
-			for it := c.s.haveBins.IterateFilled(); it.NextBase(); {
-				if c.s.binStream(it.Value()) == i {
-					c.p.PushData(c, it.Value(), timeutil.EpochTime, peerPriorityHigh)
-				}
-			}
-		}
-	}
-
 	s.channels[p] = c
+
+	s.assignChannelStreams(c)
 
 	return c
 }
@@ -147,6 +220,35 @@ func (s *seedSwarmScheduler) CloseChannel(p peerThing) {
 	p.CloseChannel(cs)
 }
 
+func (s *seedSwarmScheduler) assignChannelStreams(c *seedChannelScheduler) {
+	if len(s.channels) == 1 {
+		for i := 0; i < s.swarm.options.StreamCount; i++ {
+			s.assignChannelStream(c, codec.Stream(i))
+		}
+		return
+	}
+
+	// how do we pick the streams we want to try reassigning?
+	// * how much bandwidth do we have?
+	// * which streams are performing poorly?
+	// * which streams are undersubscribed?
+	// * are we happy with the distribution we already have? maybe we don't want to do anything
+}
+
+func (s *seedSwarmScheduler) assignChannelStream(c *seedChannelScheduler, i codec.Stream) {
+	c.peerOpenStreams = append(c.peerOpenStreams, codec.StreamAddress{
+		Stream:  i,
+		Address: 0,
+	})
+	c.peerRequestStreams[i] = 0
+
+	for it := c.s.haveBins.IterateFilled(); it.NextBase(); {
+		if c.s.binStream(it.Value()) == i {
+			c.p.PushData(c, it.Value(), timeutil.EpochTime, peerPriorityHigh)
+		}
+	}
+}
+
 func (s *seedSwarmScheduler) binStream(b binmap.Bin) codec.Stream {
 	return codec.Stream(b >> 1 & s.streamBits)
 }
@@ -162,6 +264,8 @@ type seedChannelScheduler struct {
 	lock       sync.Mutex
 	liveWindow uint32
 	choked     bool
+
+	streamHaveLag []stats.Welford
 
 	haveBins *binmap.Map // bins to send HAVEs for
 
@@ -374,9 +478,20 @@ func (c *seedChannelScheduler) HandleData(b binmap.Bin, t timeutil.Time, valid b
 }
 
 func (c *seedChannelScheduler) HandleHave(b binmap.Bin) error {
+	t := timeutil.Now()
+
+	c.s.lock.Lock()
 	c.lock.Lock()
+
+	for it := c.peerHaveBins.IterateEmptyAt(b); it.NextBase(); {
+		_, first, _ := c.s.binTimes.Get(it.Value())
+		stream := c.s.binStream(it.Value())
+		c.streamHaveLag[stream].Update(float64(t.Sub(first)))
+	}
+
 	c.peerHaveBins.Set(b)
 	c.lock.Unlock()
+	c.s.lock.Unlock()
 
 	return nil
 }

@@ -6,6 +6,7 @@ type ColorScheme = "dark" | "light";
 interface State {
   colorScheme: ColorScheme;
   navOrder: number[];
+  miniPlayer: boolean;
 }
 
 type Action =
@@ -16,11 +17,16 @@ type Action =
   | {
       type: "SET_NAV_ORDER";
       navOrder: number[];
+    }
+  | {
+      type: "TOGGLE_MINI_PLAYER";
+      mini: boolean;
     };
 
 const initialState: State = {
   colorScheme: "dark",
   navOrder: [],
+  miniPlayer: false,
 };
 
 const ProfileContext = React.createContext<[State, (action: Action) => void]>(null);
@@ -37,6 +43,11 @@ const themeReducer = (state: State, action: Action): State => {
       return {
         ...state,
         navOrder: action.navOrder,
+      };
+    case "TOGGLE_MINI_PLAYER":
+      return {
+        ...state,
+        miniPlayer: action.mini,
       };
     default:
       return state;
@@ -57,9 +68,16 @@ export const useTheme = (): [State, typeof actions] => {
       navOrder,
     });
 
+  const toggleMiniPlayer = (mini: boolean) =>
+    dispatch({
+      type: "TOGGLE_MINI_PLAYER",
+      mini,
+    });
+
   const actions = {
     setColorScheme,
     setNavOrder,
+    toggleMiniPlayer,
   };
   return [state, actions];
 };

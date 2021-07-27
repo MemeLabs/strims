@@ -1,7 +1,7 @@
 import React, { Suspense, lazy } from "react";
 import { Redirect, Route, Switch } from "react-router-dom";
 
-import { MainLayout } from "../components/MainLayout";
+import { MainBodyLayout, MainLayout } from "../components/MainLayout";
 import { PrivateRoute } from "../components/PrivateRoute";
 import Login from "../pages/Login";
 import NotFound from "../pages/NotFound";
@@ -40,29 +40,43 @@ const SettingsRouter: React.FC = () => (
 );
 
 const MainRouter: React.FC = () => (
-  <Suspense fallback={null}>
-    <Switch>
-      <PrivateRoute path="/" exact component={lazy(() => import("../pages/Home"))} />
-      <PrivateRoute path="/settings">
-        <SettingsLayout>
-          <SettingsRouter />
-        </SettingsLayout>
-      </PrivateRoute>
-      <PrivateRoute
-        path="/directory/:networkKey"
-        exact
-        component={lazy(() => import("../pages/Directory"))}
-      />
-      <PrivateRoute
-        path="/player/:networkKey"
-        exact
-        component={lazy(() => import("../pages/PlayerTest"))}
-      />
-      <PrivateRoute path="/activity" exact component={lazy(() => import("../pages/Activity"))} />
-      <PrivateRoute path="/chat-test" exact component={lazy(() => import("../pages/ChatTest"))} />
-      <Redirect to="/404" />
-    </Switch>
-  </Suspense>
+  <Switch>
+    <PrivateRoute path="/settings">
+      <SettingsLayout>
+        <SettingsRouter />
+      </SettingsLayout>
+    </PrivateRoute>
+    <PrivateRoute>
+      <MainBodyLayout>
+        <Suspense fallback={null}>
+          <Switch>
+            <PrivateRoute path="/" exact component={lazy(() => import("../pages/Home"))} />
+            <PrivateRoute
+              path="/directory/:networkKey"
+              exact
+              component={lazy(() => import("../pages/Directory"))}
+            />
+            <PrivateRoute
+              path="/player/:networkKey"
+              exact
+              component={lazy(() => import("../pages/PlayerTest"))}
+            />
+            <PrivateRoute
+              path="/activity"
+              exact
+              component={lazy(() => import("../pages/Activity"))}
+            />
+            <PrivateRoute
+              path="/chat-test"
+              exact
+              component={lazy(() => import("../pages/ChatTest"))}
+            />
+            <Redirect to="/404" />
+          </Switch>
+        </Suspense>
+      </MainBodyLayout>
+    </PrivateRoute>
+  </Switch>
 );
 
 const RootRouter: React.FC = () => (

@@ -265,7 +265,7 @@ type LegacyMessage = {
 };
 
 export const messages = history
-  .map((v) => (JSON.parse(v.substr(4)) as unknown) as LegacyMessage)
+  .map((v) => JSON.parse(v.substr(4)) as unknown as LegacyMessage)
   .map(
     ({ nick, timestamp, data, entities }) =>
       new ChatClientEvent.Message({
@@ -283,7 +283,7 @@ export default (() => {
   }) as GenericReadable<ChatClientEvent.Message>;
 
   let i = 0;
-  setInterval(() => events.push(messages[i++ % history.length]), 10000);
+  setInterval(() => events.push(messages[i++ % history.length]), 5000);
 
   return events;
 })();

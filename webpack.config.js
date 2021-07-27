@@ -194,6 +194,15 @@ module.exports = (env, argv) => {
                 },
               },
               {
+                test: /\.shared-worker\.ts$/,
+                loader: "worker-loader",
+                options: {
+                  inline: "fallback",
+                  worker: "SharedWorker",
+                  chunkFilename: "[id].[contenthash].shared-worker.js",
+                },
+              },
+              {
                 test: /\.go/,
                 use: ["golang-wasm-async-loader"],
               },

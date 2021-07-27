@@ -8,3 +8,27 @@
     width: 100%;
   }
 }
+
+.player_embed {
+  position: absolute;
+  background: #000;
+  // aspect-ratio: 16 / 9;
+  max-height: calc(100vh - 100px);
+
+  &--large {
+    top: 0;
+    left: 0;
+    width: 100%;
+  }
+
+  &--pip {
+    position: fixed;
+    bottom: 0;
+    width: 400px;
+    z-index: 1;
+  }
+
+  &--closed {
+    display: none;
+  }
+}

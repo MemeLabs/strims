@@ -1,8 +1,8 @@
 import { Base64 } from "js-base64";
-import React from "react";
+import React, { useContext, useEffect } from "react";
 import { useLocation, useParams } from "react-router-dom";
 
-import VideoPlayer from "../components/VideoPlayer";
+import { PlayerContext, PlayerMode } from "../components/PlayerEmbed";
 import useQuery from "../hooks/useQuery";
 
 interface PlayerTestRouteParams {
@@ -18,25 +18,20 @@ const PlayerTest: React.FC = () => {
   const params = useParams<PlayerTestRouteParams>();
   const query = useQuery<PlayerTestQueryParams>(useLocation().search);
 
-  return (
-    <>
-      <main className="home_page__main">
-        <header className="home_page__subheader"></header>
-        <section className="home_page__main__video">
-          <VideoPlayer
-            networkKey={Base64.toUint8Array(params.networkKey)}
-            swarmUri={query.swarmUri}
-            mimeType={query.mimeType}
-          />
-        </section>
-      </main>
-      <aside className="home_page__right">
-        <header className="home_page__subheader"></header>
-        <header className="home_page__chat__promo"></header>
-        <div className="home_page__chat chat"></div>
-      </aside>
-    </>
-  );
+  const { setMode, setSource } = useContext(PlayerContext);
+  useEffect(() => {
+    setMode(PlayerMode.LARGE);
+    setSource({
+      networkKey: Base64.toUint8Array(params.networkKey),
+      swarmUri: query.swarmUri,
+      mimeType: query.mimeType,
+    });
+    return () => setMode(PlayerMode.PIP);
+  }, [params.networkKey, query.swarmUri, query.mimeType]);
+
+  // TODO: stream metadata... title/description/links/viewers/stream metrics/etc
+  // directory api
+  return null;
 };
 
 export default PlayerTest;

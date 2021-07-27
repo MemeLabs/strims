@@ -1,9 +1,10 @@
 /* eslint-disable no-console */
 
 // import { Base64 } from "js-base64";
-import React from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 
 import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
+import { PlayerContext, PlayerMode } from "../components/PlayerEmbed";
 import { useClient, useLazyCall } from "../contexts/FrontendApi";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
@@ -25,9 +26,9 @@ const HomePage: React.FC = () => {
   const client = useClient();
 
   const [pprofData, pprof] = useLazyCall("debug", "pProf");
-  const [pprofDownloads, setPProfDownloads] = React.useState([] as PProfDownload[]);
+  const [pprofDownloads, setPProfDownloads] = useState([] as PProfDownload[]);
 
-  const videoRef = React.useRef<HTMLVideoElement>();
+  const videoRef = useRef<HTMLVideoElement>();
 
   const addDownload = (name: string, data: Uint8Array) => {
     const f = new File([data], name, {
@@ -36,7 +37,7 @@ const HomePage: React.FC = () => {
     setPProfDownloads((prev) => [...prev, { name, url: URL.createObjectURL(f) }]);
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!pprofData.value) {
       return;
     }
@@ -46,7 +47,7 @@ const HomePage: React.FC = () => {
   const handleColorToggle = () => setColorScheme(colorScheme === "dark" ? "light" : "dark");
 
   const [broadcastState, setBroadcastState] =
-    React.useState<{ id: Uint8Array; mediaStream: MediaStream }>(null);
+    useState<{ id: Uint8Array; mediaStream: MediaStream }>(null);
   const handleStartBroadcastClick = async () => {
     const { networks } = await client.network.list();
     const [{ id }, mediaStream] = await Promise.all([
@@ -75,7 +76,7 @@ const HomePage: React.FC = () => {
     setBroadcastState({ id, mediaStream });
   };
 
-  React.useEffect(() => {
+  useEffect(() => {
     if (!videoRef.current || !broadcastState) {
       return;
     }
@@ -198,71 +199,76 @@ const HomePage: React.FC = () => {
     console.log(new TextDecoder().decode(data));
   };
 
-  // React.useEffect(() => {
+  // useEffect(() => {
   //   handleTestClick();
   // }, []);
 
+  const { setMode } = useContext(PlayerContext);
+
   return (
     <>
-      <main className="home_page__main">
-        <header className="home_page__subheader"></header>
-        <section className="home_page__main__video">
-          <div>
-            <button className="input input_button" onClick={handleColorToggle}>
-              toggle theme
-            </button>
-            <button className="input input_button" onClick={handleStartBroadcastClick}>
-              start broadcast
-            </button>
-            {/* <button
+      <header className="home_page__subheader"></header>
+      <section className="home_page__main__video">
+        <div>
+          <button className="input input_button" onClick={handleColorToggle}>
+            toggle theme
+          </button>
+          <button className="input input_button" onClick={handleStartBroadcastClick}>
+            start broadcast
+          </button>
+          {/* <button
               className="input input_button"
               onClick={() => handleViewBroadcastClick(new webm.Decoder())}
             >
               view broadcast
             </button> */}
-            {/* <button
+          {/* <button
               className="input input_button"
               onClick={() => handleViewBroadcastClick(new fmp4.Decoder())}
             >
               view rtmp broadcast
             </button> */}
-            <button className="input input_button" onClick={() => pprof({ name: "allocs" })}>
-              allocs profile
-            </button>
-            <button className="input input_button" onClick={() => pprof({ name: "goroutine" })}>
-              goroutine profile
-            </button>
-            <button className="input input_button" onClick={() => pprof({ name: "heap" })}>
-              heap profile
-            </button>
-            {/* <button className="input input_button" onClick={handleTestClick}>
+          <button className="input input_button" onClick={() => pprof({ name: "allocs" })}>
+            allocs profile
+          </button>
+          <button className="input input_button" onClick={() => pprof({ name: "goroutine" })}>
+            goroutine profile
+          </button>
+          <button className="input input_button" onClick={() => pprof({ name: "heap" })}>
+            heap profile
+          </button>
+          {/* <button className="input input_button" onClick={handleTestClick}>
               test
             </button> */}
-            {/* <button className="input input_button" onClick={handleChatClientClick}>
+          {/* <button className="input input_button" onClick={handleChatClientClick}>
               chat client
             </button>
             <button className="input input_button" onClick={handleChatServerClick}>
               chat server
             </button> */}
-            <button className="input input_button" onClick={handleReadMetricsClick}>
-              read metrics
-            </button>
-          </div>
-          <div>
-            {pprofDownloads.map(({ name, url }, i) => (
-              <a href={url} download={name} key={i}>
-                {name}
-              </a>
-            ))}
-          </div>
-          <video className="home_page__main__video__video" controls autoPlay ref={videoRef} />
-        </section>
-      </main>
-      <aside className="home_page__right">
-        <header className="home_page__subheader"></header>
-        <header className="home_page__chat__promo"></header>
-        <div className="home_page__chat">chat</div>
-      </aside>
+          <button className="input input_button" onClick={handleReadMetricsClick}>
+            read metrics
+          </button>
+          <button className="input input_button" onClick={() => setMode(PlayerMode.LARGE)}>
+            large
+          </button>
+          <button className="input input_button" onClick={() => setMode(PlayerMode.PIP)}>
+            pip
+          </button>
+          <button className="input input_button" onClick={() => setMode(PlayerMode.CLOSED)}>
+            closed
+          </button>
+        </div>
+        <div>
+          {pprofDownloads.map(({ name, url }, i) => (
+            <a href={url} download={name} key={i}>
+              {name}
+            </a>
+          ))}
+        </div>
+        <video className="home_page__main__video__video" controls autoPlay ref={videoRef} />
+        <div style={{ height: "1000px", width: "50px" }} />
+      </section>
     </>
   );
 };

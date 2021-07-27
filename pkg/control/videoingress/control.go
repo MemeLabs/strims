@@ -1,4 +1,3 @@
-// +build  !js
 //go:build !js
 // +build !js
 
@@ -28,6 +27,11 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
+
+type server interface {
+	Listen() error
+	Close() error
+}
 
 // NewControl ...
 func NewControl(
@@ -73,12 +77,11 @@ type Control struct {
 	events    chan interface{}
 	dialer    *dialer.Control
 
-	ingressService        *ingressService
-	lock                  sync.Mutex
-	ingressConfig         *videov1.VideoIngressConfig
-	shareServers          llrb.LLRB
-	ingressServer         *rtmpingress.Server
-	ingressPassthruServer *rtmpingress.PassthruServer
+	ingressService *ingressService
+	lock           sync.Mutex
+	ingressConfig  *videov1.VideoIngressConfig
+	shareServers   llrb.LLRB
+	ingressServer  server
 }
 
 // Run ...
@@ -226,56 +229,44 @@ func (c *Control) startIngressShareServer(ctx context.Context, networkKey []byte
 	return eg.Wait()
 }
 
-// func (c *Control) stopIngressServer() {
-// 	if c.ingressServer != nil {
-// 		if err := c.ingressServer.Close(); err != nil {
-// 			c.logger.Debug("ingress server returned errors while closing", zap.Error(err))
-// 		}
-// 		c.ingressServer = nil
-// 	}
-// }
-
-// func (c *Control) startIngressServer(ctx context.Context) {
-// 	c.ingressServer = &rtmpingress.Server{
-// 		Addr:         c.ingressConfig.ServerAddr,
-// 		HandleStream: c.ingressService.HandleStream,
-// 		BaseContext:  func(net.Conn) context.Context { return ctx },
-// 		Logger:       c.logger,
-// 	}
-
-// 	go func() {
-// 		c.logger.Debug(
-// 			"starting ingress server",
-// 			zap.String("address", c.ingressConfig.ServerAddr),
-// 		)
-// 		err := c.ingressServer.Listen()
-// 		c.logger.Debug("ingress server closed", zap.Error(err))
-// 	}()
-// }
-
 func (c *Control) stopIngressServer() {
-	if c.ingressPassthruServer != nil {
-		if err := c.ingressPassthruServer.Close(); err != nil {
+	if c.ingressServer != nil {
+		if err := c.ingressServer.Close(); err != nil {
 			c.logger.Debug("ingress server returned errors while closing", zap.Error(err))
 		}
-		c.ingressPassthruServer = nil
+		c.ingressServer = nil
 	}
 }
 
-func (c *Control) startIngressServer(ctx context.Context) {
-	c.ingressPassthruServer = &rtmpingress.PassthruServer{
+func (c *Control) createServer(ctx context.Context) server {
+	return &rtmpingress.Server{
+		Addr:         c.ingressConfig.ServerAddr,
+		HandleStream: c.ingressService.HandleStream,
+		BaseContext:  func(net.Conn) context.Context { return ctx },
+		Logger:       c.logger,
+	}
+}
+
+func (c *Control) createPassthruServer(ctx context.Context) server {
+	return &rtmpingress.PassthruServer{
 		Addr:         c.ingressConfig.ServerAddr,
 		HandleStream: c.ingressService.HandlePassthruStream,
 		BaseContext:  func(net.Conn) context.Context { return ctx },
 		Logger:       c.logger,
 	}
+}
+
+func (c *Control) startIngressServer(ctx context.Context) {
+	// TODO: allow configuring server mode?
+	c.ingressServer = c.createPassthruServer(ctx)
+	// c.ingressServer = c.createServer(ctx)
 
 	go func() {
 		c.logger.Debug(
 			"starting ingress server",
 			zap.String("address", c.ingressConfig.ServerAddr),
 		)
-		err := c.ingressPassthruServer.Listen()
+		err := c.ingressServer.Listen()
 		c.logger.Debug("ingress server closed", zap.Error(err))
 	}()
 }

@@ -161,7 +161,6 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 	return &peerSwarmScheduler{
 		logger: logger,
 		swarm:  s,
-		epoch:  timeutil.Now(),
 
 		streamCount:    codec.Stream(s.options.StreamCount),
 		streamLayer:    uint64(bits.TrailingZeros16(uint16(s.options.StreamCount))),
@@ -191,7 +190,6 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 type peerSwarmScheduler struct {
 	logger *zap.Logger
 	swarm  *Swarm
-	epoch  timeutil.Time
 
 	lock sync.Mutex
 

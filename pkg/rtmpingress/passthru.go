@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math"
 	"net"
@@ -12,10 +13,9 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/edgeware/mp4ff/aac"
+	"github.com/edgeware/mp4ff/avc"
 	"github.com/edgeware/mp4ff/mp4"
 	"github.com/nareix/joy5/av"
-	caac "github.com/nareix/joy5/codec/aac"
-	"github.com/nareix/joy5/codec/h264"
 	"github.com/nareix/joy5/format/flv/flvio"
 	"github.com/nareix/joy5/format/rtmp"
 	"go.uber.org/multierr"
@@ -107,25 +107,29 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 	var track [2][]av.Packet
 	var timeScale [2]float64
 	var baseMediaDecodeTime [2]time.Duration
+	var totalSize [2]int
 
 	seq := uint32(1)
 
-	var b bytes.Buffer
 	var ib []byte
 
 	for {
 		pkt, err := c.ReadPacket()
 		if err != nil {
-			return err
+			return fmt.Errorf("reading rtmp packet: %w", err)
 		}
 
-		if pkt.IsKeyFrame && len(track[0]) != 0 {
+		// HAX: chunked stream output gets scuffed by short keyframes so we
+		// probably need a limit here but it should at least be configurable
+		if pkt.IsKeyFrame && totalSize[0]+totalSize[1] >= 32*1024 {
 			if ib == nil {
 				f := mp4.NewFile()
 				f.AddChild(init.Ftyp, 0)
 				f.AddChild(init.Moov, 0)
+
+				var b bytes.Buffer
 				if err := f.Encode(&b); err != nil {
-					return err
+					return fmt.Errorf("encoding mp4 init: %w", err)
 				}
 
 				ib = make([]byte, b.Len()+2)
@@ -134,12 +138,11 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 			}
 
 			if _, err := w.Write(ib); err != nil {
-				return err
+				return fmt.Errorf("writing mp4 init: %w", err)
 			}
 
 			segmentOffsetTime := baseMediaDecodeTime
 
-			var totalSize [2]int
 			var traf [2]mp4.TrafBox
 			for i, pkts := range track {
 				traf[i].AddChild(mp4.CreateTfhd(uint32(i + 1)))
@@ -150,7 +153,7 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 					dur := pkt.Time - baseMediaDecodeTime[i]
 					baseMediaDecodeTime[i] = pkt.Time
 
-					totalSize[i] += len(pkt.Data)
+					// totalSize[i] += len(pkt.Data)
 
 					traf[i].Trun.AddSample(&mp4.Sample{
 						Dur:  uint32(math.Round(float64(dur) * timeScale[i])),
@@ -170,15 +173,13 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 				}
 			}
 
-			b.Reset()
-
 			styp := &mp4.StypBox{
 				MajorBrand:       "msdh",
 				MinorVersion:     0,
 				CompatibleBrands: []string{"msdh", "msix"},
 			}
-			if err := styp.Encode(&b); err != nil {
-				return err
+			if err := styp.Encode(w); err != nil {
+				return fmt.Errorf("encoding stype: %w", err)
 			}
 
 			for i := range track {
@@ -195,8 +196,8 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 						},
 					},
 				}
-				if err := sidx.Encode(&b); err != nil {
-					return err
+				if err := sidx.Encode(w); err != nil {
+					return fmt.Errorf("encoding sidx: %w", err)
 				}
 			}
 
@@ -211,74 +212,64 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 			traf[0].Trun.DataOffset = int32(moof.Size() + mdat.HeaderSize())
 			traf[1].Trun.DataOffset = traf[0].Trun.DataOffset + int32(totalSize[0])
 
-			if err := moof.Encode(&b); err != nil {
-				return err
+			if err := moof.Encode(w); err != nil {
+				return fmt.Errorf("encoding moof: %w", err)
 			}
-			if err := mdat.Encode(&b); err != nil {
-				return err
+			if err := mdat.Encode(w); err != nil {
+				return fmt.Errorf("encoding mdat: %w", err)
 			}
 
-			if _, err := w.Write(b.Bytes()); err != nil {
-				return err
-			}
 			if err := w.Flush(); err != nil {
-				return err
+				return fmt.Errorf("flushing segment: %w", err)
 			}
 
 			seq++
 
 			track[0] = track[0][:0]
 			track[1] = track[1][:0]
+			totalSize[0] = 0
+			totalSize[1] = 0
 		}
 
 		switch pkt.Type {
 		case av.Metadata:
 			vals, err := flvio.ParseAMFVals(pkt.Data, false)
 			if err != nil {
-				return err
+				return fmt.Errorf("parsing amf header: %w", err)
 			}
 
-			for _, v := range vals[0].(flvio.AMFMap) {
-				if v.K == "framerate" {
-					timeScale[0] = (v.V.(float64) * 512.0) / float64(time.Second)
-				}
+			if v := vals[0].(flvio.AMFMap).Get("framerate"); v != nil {
+				timeScale[0] = (v.V.(float64) * 512.0) / float64(time.Second)
+			} else {
+				return errors.New("no framerate if amf")
 			}
 		case av.H264DecoderConfig:
-			d := make([]byte, len(pkt.Data))
-			copy(d, pkt.Data)
-
-			c, err := h264.FromDecoderConfig(d)
+			c, err := avc.DecodeAVCDecConfRec(bytes.NewBuffer(pkt.Data))
 			if err != nil {
-				return err
+				return fmt.Errorf("parsing avc decoder config: %w", err)
 			}
 
-			var sps, pps [][]byte
-			for _, v := range c.SPS {
-				sps = append(sps, v)
-			}
-			for _, v := range c.PPS {
-				pps = append(pps, v)
-			}
-
-			init.Moov.Traks[0].SetAVCDescriptor("avc1", sps, pps)
+			init.Moov.Traks[0].SetAVCDescriptor("avc1", c.SPSnalus, c.PPSnalus)
 			init.Moov.Traks[0].Mdia.Mdhd.Timescale = uint32(timeScale[0] * float64(time.Second))
 			init.Moov.Traks[0].Mdia.Hdlr.Name = "VideoHandler"
 			init.Moov.Traks[0].Mdia.Minf.Stbl.Stsd.AvcX.CompressorName = ""
 		case av.AACDecoderConfig:
-			c, err := caac.FromMPEG4AudioConfigBytes(pkt.Data)
+			c, err := aac.DecodeAudioSpecificConfig(bytes.NewBuffer(pkt.Data))
 			if err != nil {
-				return err
+				return fmt.Errorf("decoding avc config: %w", err)
 			}
 
-			timeScale[1] = float64(c.Config.SampleRate) / float64(time.Second)
+			timeScale[1] = float64(c.SamplingFrequency) / float64(time.Second)
 
-			init.Moov.Traks[1].SetAACDescriptor(aac.AAClc, c.Config.SampleRate)
-			init.Moov.Traks[1].Mdia.Mdhd.Timescale = uint32(c.Config.SampleRate)
+			init.Moov.Traks[1].SetAACDescriptor(aac.AAClc, c.SamplingFrequency)
+			init.Moov.Traks[1].Mdia.Mdhd.Timescale = uint32(c.SamplingFrequency)
 			init.Moov.Traks[1].Mdia.Hdlr.Name = "SoundHandler"
 		case av.H264:
 			track[0] = append(track[0], pkt)
+			totalSize[0] += len(pkt.Data)
 		case av.AAC:
 			track[1] = append(track[1], pkt)
+			totalSize[1] += len(pkt.Data)
 		}
 	}
 }
