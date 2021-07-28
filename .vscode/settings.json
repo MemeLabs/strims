@@ -73,7 +73,7 @@
     "compile_on_save": true,
     "options": [
       "--proto_path=${workspaceRoot}/schema",
-      "--proto_path=${workspaceRoot}/vendor/prometheus_client_model",
+      // "--proto_path=${workspaceRoot}/vendor/prometheus_client_model",
       "--go_out=pkg/apis",
       "--go_opt=module=github.com/MemeLabs/go-ppspp/pkg/apis",
       "--gorpc_out=pkg/apis",

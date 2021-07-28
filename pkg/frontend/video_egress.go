@@ -40,7 +40,11 @@ func (s *videoEgressService) OpenStream(ctx context.Context, r *videov1.EgressOp
 			}
 			return
 		}
-		defer r.Close()
+
+		go func() {
+			<-ctx.Done()
+			r.Close()
+		}()
 
 		ch <- &videov1.EgressOpenStreamResponse{
 			Body: &videov1.EgressOpenStreamResponse_Open_{

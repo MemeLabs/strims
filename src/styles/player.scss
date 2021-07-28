@@ -12,7 +12,6 @@
 .player_embed {
   position: absolute;
   background: #000;
-  // aspect-ratio: 16 / 9;
   max-height: calc(100vh - 100px);
 
   &--large {
@@ -30,5 +29,42 @@
 
   &--closed {
     display: none;
+  }
+
+  &__pip_mask {
+    visibility: hidden;
+    display: flex;
+    position: absolute;
+    top: 0;
+    height: 100%;
+    width: 100%;
+    background: rgba(0, 0, 0, 0.6);
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s ease-in-out;
+
+    &__expand,
+    &__close {
+      cursor: pointer;
+      opacity: 0.9;
+      transition: all 0.2s ease-in-out;
+
+      &:hover {
+        opacity: 1;
+        filter: drop-shadow(0 0 8px #fff);
+      }
+    }
+
+    &__close {
+      position: absolute;
+      top: 10px;
+      right: 10px;
+    }
+  }
+
+  &--pip:hover &__pip_mask {
+    visibility: visible;
+    opacity: 1;
   }
 }

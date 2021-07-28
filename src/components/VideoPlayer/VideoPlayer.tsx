@@ -11,6 +11,7 @@ import VideoControls from "./VideoControls";
 type SwarmPlayerProps = Pick<MediaSourceProps, "networkKey" | "swarmUri" | "mimeType"> & {
   volumeStepSize?: number;
   disableControls?: boolean;
+  defaultAspectRatio?: string | number;
 };
 
 const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
@@ -19,6 +20,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   mimeType,
   volumeStepSize = 0.1,
   disableControls = false,
+  defaultAspectRatio = "16/9",
 }) => {
   const rootRef = useRef();
   const [controlsHidden, renewControlsTimeout, clearControlsTimeout] = useIdleTimeout();
@@ -67,7 +69,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
     [videoState.volume, volumeStepSize]
   );
 
-  let aspectRatio = "16/9";
+  let aspectRatio = defaultAspectRatio;
   if (videoState.videoWidth && videoState.videoHeight) {
     aspectRatio = `${videoState.videoWidth}/${videoState.videoHeight}`;
   }

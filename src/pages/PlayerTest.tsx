@@ -16,9 +16,11 @@ interface PlayerTestQueryParams {
 
 const PlayerTest: React.FC = () => {
   const params = useParams<PlayerTestRouteParams>();
-  const query = useQuery<PlayerTestQueryParams>(useLocation().search);
+  const location = useLocation();
+  console.log(location);
+  const query = useQuery<PlayerTestQueryParams>(location.search);
 
-  const { setMode, setSource } = useContext(PlayerContext);
+  const { setMode, setSource, setPath } = useContext(PlayerContext);
   useEffect(() => {
     setMode(PlayerMode.LARGE);
     setSource({
@@ -26,6 +28,7 @@ const PlayerTest: React.FC = () => {
       swarmUri: query.swarmUri,
       mimeType: query.mimeType,
     });
+    setPath(location.pathname + location.search);
     return () => setMode(PlayerMode.PIP);
   }, [params.networkKey, query.swarmUri, query.mimeType]);
 

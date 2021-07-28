@@ -32,7 +32,7 @@ const useMediaSource = ({
 
   const [mediaSource, setMediaSource] = useState<MediaSource>(null);
 
-  const clientEvents = useMemo(() => {
+  const [clientEvents] = useState(() => {
     const [fileFormat] = mimeType.split(";", 1) as [MimeType];
     const Decoder = decoders[fileFormat];
     const decoder = new Decoder();
@@ -75,7 +75,7 @@ const useMediaSource = ({
     clientEvents.on("error", (e) => console.log(e));
 
     return clientEvents;
-  }, []);
+  });
 
   useEffect(() => () => clientEvents.destroy(), []);
 

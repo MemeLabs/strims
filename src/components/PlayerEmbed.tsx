@@ -1,8 +1,11 @@
 import "../styles/player.scss";
 
 import clsx from "clsx";
-import React, { CSSProperties, createContext, useMemo, useRef, useState } from "react";
+import React, { CSSProperties, createContext, useCallback, useMemo, useRef, useState } from "react";
 import { Scrollbars } from "react-custom-scrollbars";
+import { BsBoxArrowInUpRight } from "react-icons/bs";
+import { FiX } from "react-icons/fi";
+import { Link } from "react-router-dom";
 import { useResizeObserver } from "use-events";
 
 import VideoPlayer from "./VideoPlayer";
@@ -20,6 +23,8 @@ interface PlayerSource {
 }
 
 interface PlayerState {
+  path: string;
+  setPath: (path: string) => void;
   source: PlayerSource;
   setSource: (source: PlayerSource) => void;
   mode: PlayerMode;
@@ -29,11 +34,14 @@ interface PlayerState {
 export const PlayerContext = createContext<PlayerState>(null);
 
 const PlayerEmbed: React.FC = ({ children }) => {
+  const [path, setPath] = useState<string>("");
   const [source, setSource] = useState<PlayerSource>(null);
   const [mode, setMode] = useState<PlayerMode>(PlayerMode.PIP);
 
   const value = useMemo<PlayerState>(
     () => ({
+      path,
+      setPath,
       source,
       setSource,
       mode,
@@ -41,6 +49,11 @@ const PlayerEmbed: React.FC = ({ children }) => {
     }),
     [source, mode]
   );
+
+  const handleClose = useCallback(() => {
+    setMode(PlayerMode.CLOSED);
+    setSource(null);
+  }, []);
 
   const playerEmbedClass = clsx({
     "player_embed": true,
@@ -70,6 +83,16 @@ const PlayerEmbed: React.FC = ({ children }) => {
               mimeType={source.mimeType}
               disableControls={mode == PlayerMode.PIP}
             />
+          )}
+          {mode == PlayerMode.PIP && (
+            <div className="player_embed__pip_mask">
+              <button className="player_embed__pip_mask__close" onClick={handleClose}>
+                <FiX size={22} />
+              </button>
+              <Link to={path} className="player_embed__pip_mask__expand">
+                <BsBoxArrowInUpRight size={22} />
+              </Link>
+            </div>
           )}
         </div>
       </Scrollbars>
