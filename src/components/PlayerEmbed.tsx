@@ -3,7 +3,7 @@ import "../styles/player.scss";
 import clsx from "clsx";
 import React, { CSSProperties, createContext, useCallback, useMemo, useRef, useState } from "react";
 import { Scrollbars } from "react-custom-scrollbars";
-import { BsBoxArrowInUpRight } from "react-icons/bs";
+import { BsBoxArrowUpRight } from "react-icons/bs";
 import { FiX } from "react-icons/fi";
 import { Link } from "react-router-dom";
 import { useResizeObserver } from "use-events";
@@ -90,7 +90,7 @@ const PlayerEmbed: React.FC = ({ children }) => {
                 <FiX size={22} />
               </button>
               <Link to={path} className="player_embed__pip_mask__expand">
-                <BsBoxArrowInUpRight size={22} />
+                <BsBoxArrowUpRight size={22} />
               </Link>
             </div>
           )}
