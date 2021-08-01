@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
   GetHandleProps,
   GetTrackProps,
@@ -11,6 +11,7 @@ import {
 } from "react-compound-slider";
 
 import useIdleTimeout from "../../hooks/useIdleTimeout";
+import useReady from "../../hooks/useReady";
 import useUpdates from "../../hooks/useUpdates";
 
 interface HandleProps {
@@ -57,9 +58,16 @@ interface VolumeProps {
   onUpdate: (value: number) => void;
   onSlideStart: () => void;
   onSlideEnd: () => void;
+  stepSize?: number;
 }
 
-const VideoVolume: React.FC<VolumeProps> = ({ value, onUpdate, onSlideStart, onSlideEnd }) => {
+const VideoVolume: React.FC<VolumeProps> = ({
+  value,
+  onUpdate,
+  onSlideStart,
+  onSlideEnd,
+  stepSize = 0.1,
+}) => {
   const [dragging, setDragging] = useState(false);
   const [idle, renewIdleTimeout] = useIdleTimeout();
 
@@ -71,7 +79,7 @@ const VideoVolume: React.FC<VolumeProps> = ({ value, onUpdate, onSlideStart, onS
     active: !idle,
   });
 
-  const handleUpdate = React.useCallback(
+  const handleUpdate = useCallback(
     (values: number[]) => {
       if (dragging) {
         onUpdate(values[0]);
@@ -80,54 +88,74 @@ const VideoVolume: React.FC<VolumeProps> = ({ value, onUpdate, onSlideStart, onS
     [dragging]
   );
 
-  const handleSlideStart = React.useCallback(() => {
+  const handleSlideStart = useCallback(() => {
     onSlideStart();
     setDragging(true);
   }, []);
 
-  const handleSlideEnd = React.useCallback(() => {
+  const handleSlideEnd = useCallback(() => {
     onSlideEnd();
     setDragging(false);
   }, []);
 
+  // state dispatchers invoked with a callback from outside react event handler
+  // call stacks throw errors so we have to smuggle the current value into the
+  // event handler in a reference.
+  const valueRef = useRef<number>();
+  valueRef.current = value;
+
+  const ref = useRef<HTMLDivElement>();
+  useReady(() => {
+    const handleWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const direction = e.deltaY < 0 ? 1 : -1;
+      onUpdate(valueRef.current + direction * stepSize);
+    };
+    ref.current.addEventListener("wheel", handleWheel, { capture: true, passive: false });
+  }, [ref.current]);
+
   return (
-    <Slider
-      mode={1}
-      step={0.01}
-      className={sliderClassNames}
-      domain={[0, 1]}
-      onUpdate={handleUpdate}
-      onSlideStart={handleSlideStart}
-      onSlideEnd={handleSlideEnd}
-      values={[value]}
-    >
-      <Rail>
-        {({ getRailProps }) => <div className="video_volume__rail" {...getRailProps()} />}
-      </Rail>
-      <Handles>
-        {({ handles, getHandleProps }) => (
-          <div>
-            {handles.map((handle) => (
-              <Handle
-                key={handle.id}
-                handle={handle}
-                domain={[0, 1]}
-                getHandleProps={getHandleProps}
-              />
-            ))}
-          </div>
-        )}
-      </Handles>
-      <Tracks right={false}>
-        {({ tracks, getTrackProps }) => (
-          <div>
-            {tracks.map(({ id, source, target }) => (
-              <Track key={id} source={source} target={target} getTrackProps={getTrackProps} />
-            ))}
-          </div>
-        )}
-      </Tracks>
-    </Slider>
+    <div ref={ref}>
+      <Slider
+        mode={1}
+        step={0.01}
+        className={sliderClassNames}
+        domain={[0, 1]}
+        onUpdate={handleUpdate}
+        onSlideStart={handleSlideStart}
+        onSlideEnd={handleSlideEnd}
+        values={[value]}
+      >
+        <Rail>
+          {({ getRailProps }) => <div className="video_volume__rail" {...getRailProps()} />}
+        </Rail>
+        <Handles>
+          {({ handles, getHandleProps }) => (
+            <div>
+              {handles.map((handle) => (
+                <Handle
+                  key={handle.id}
+                  handle={handle}
+                  domain={[0, 1]}
+                  getHandleProps={getHandleProps}
+                />
+              ))}
+            </div>
+          )}
+        </Handles>
+        <Tracks right={false}>
+          {({ tracks, getTrackProps }) => (
+            <div>
+              {tracks.map(({ id, source, target }) => (
+                <Track key={id} source={source} target={target} getTrackProps={getTrackProps} />
+              ))}
+            </div>
+          )}
+        </Tracks>
+      </Slider>
+    </div>
   );
 };
 

@@ -17,7 +17,6 @@ interface PlayerTestQueryParams {
 const PlayerTest: React.FC = () => {
   const params = useParams<PlayerTestRouteParams>();
   const location = useLocation();
-  console.log(location);
   const query = useQuery<PlayerTestQueryParams>(location.search);
 
   const { setMode, setSource, setPath } = useContext(PlayerContext);
@@ -34,7 +33,7 @@ const PlayerTest: React.FC = () => {
 
   // TODO: stream metadata... title/description/links/viewers/stream metrics/etc
   // directory api
-  return null;
+  return <div style={{ height: "1000px" }} />;
 };
 
 export default PlayerTest;

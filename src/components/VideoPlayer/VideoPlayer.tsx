@@ -1,15 +1,15 @@
-import React, { CSSProperties, useEffect, useRef } from "react";
+import React, { useContext, useEffect, useRef } from "react";
 import { MdLoop } from "react-icons/md";
 import useFullscreen from "use-fullscreen";
 
 import useIdleTimeout from "../../hooks/useIdleTimeout";
 import useMediaSource, { MediaSourceProps } from "../../hooks/useMediaSource";
 import useVideo from "../../hooks/useVideo";
+import { MainLayoutContext } from "../MainLayout";
 import LogoButton from "./LogoButton";
 import VideoControls from "./VideoControls";
 
 type SwarmPlayerProps = Pick<MediaSourceProps, "networkKey" | "swarmUri" | "mimeType"> & {
-  volumeStepSize?: number;
   disableControls?: boolean;
   defaultAspectRatio?: string | number;
 };
@@ -18,13 +18,13 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
   networkKey,
   swarmUri,
   mimeType,
-  volumeStepSize = 0.1,
   disableControls = false,
   defaultAspectRatio = "16/9",
 }) => {
   const rootRef = useRef();
   const [controlsHidden, renewControlsTimeout, clearControlsTimeout] = useIdleTimeout();
   const [isFullscreen, toggleFullscreen] = useFullscreen();
+  const { theaterMode, toggleTheaterMode } = useContext(MainLayoutContext);
   const [videoState, videoProps, videoControls] = useVideo();
   const mediaSource = useMediaSource({ networkKey, swarmUri, mimeType, videoRef: videoProps.ref });
 
@@ -60,14 +60,7 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
 
   const handleToggleFullscreen = () => toggleFullscreen(rootRef.current);
 
-  const handleWheel = React.useCallback<React.EventHandler<React.WheelEvent<HTMLDivElement>>>(
-    (e) => {
-      const direction = e.deltaY < 0 ? 1 : -1;
-      videoControls.setVolume(videoState.volume + direction * volumeStepSize);
-      renewControlsTimeout();
-    },
-    [videoState.volume, volumeStepSize]
-  );
+  useEffect(renewControlsTimeout, [videoState.volume]);
 
   let aspectRatio = defaultAspectRatio;
   if (videoState.videoWidth && videoState.videoHeight) {
@@ -80,7 +73,6 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
       onMouseMove={renewControlsTimeout}
       onMouseLeave={clearControlsTimeout}
       onDoubleClick={handleToggleFullscreen}
-      onWheel={handleWheel}
       ref={rootRef}
       style={{ aspectRatio }}
     >
@@ -92,6 +84,8 @@ const SwarmPlayer: React.FC<SwarmPlayerProps> = ({
         visible={!controlsHidden && !disableControls}
         fullscreen={isFullscreen}
         toggleFullscreen={handleToggleFullscreen}
+        theaterMode={theaterMode}
+        toggleTheaterMode={toggleTheaterMode}
       />
     </div>
   );

@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import { Base64 } from "js-base64";
 // import Tooltip from "rc-tooltip";
-import React, { useCallback, useContext, useState } from "react";
+import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { DragDropContext, Draggable, DropResult, Droppable } from "react-beautiful-dnd";
 import { BiNetworkChart } from "react-icons/bi";
 import {
@@ -187,6 +187,13 @@ const NetworkNav: React.FC = () => {
   );
 };
 
+type MainLayoutContextProps = {
+  theaterMode: boolean;
+  toggleTheaterMode: (state: boolean) => void;
+};
+
+export const MainLayoutContext = createContext<MainLayoutContextProps>(null);
+
 export const MainLayout: React.FC = ({ children }) => {
   const [theme, { setColorScheme }] = useTheme();
   const client = useClient();
@@ -205,64 +212,80 @@ export const MainLayout: React.FC = ({ children }) => {
     console.log(new TextDecoder().decode(data));
   };
 
+  const [theaterMode, toggleTheaterMode] = useState<boolean>(false);
+  const context = useMemo<MainLayoutContextProps>(
+    () => ({
+      theaterMode,
+      toggleTheaterMode,
+    }),
+    [theaterMode]
+  );
+
+  const mainLayoutClass = clsx({
+    "main_layout": true,
+    "main_layout--theater_mode": theaterMode,
+  });
+
   return (
     <NetworkProvider>
-      <div className="main_layout">
-        <header className="main_layout__header">
-          <div className="main_layout__primary_nav">
-            <button onClick={toggleTheme} className="main_layout__primary_nav__logo">
-              <FiHome />
-            </button>
-            <NavLink
-              to="/settings"
-              className="main_layout__primary_nav__link"
-              activeClassName="main_layout__primary_nav__link--active"
-            >
-              Categories
-            </NavLink>
-            <NavLink
-              to="/"
-              exact
-              className="main_layout__primary_nav__link"
-              activeClassName="main_layout__primary_nav__link--active"
-            >
-              Streams
-            </NavLink>
-            <NavLink
-              to="/broadcast"
-              className="main_layout__primary_nav__link"
-              activeClassName="main_layout__primary_nav__link--active"
-            >
-              Broadcast
-            </NavLink>
+      <MainLayoutContext.Provider value={context}>
+        <div className={mainLayoutClass}>
+          <header className="main_layout__header">
+            <div className="main_layout__primary_nav">
+              <button onClick={toggleTheme} className="main_layout__primary_nav__logo">
+                <FiHome />
+              </button>
+              <NavLink
+                to="/settings"
+                className="main_layout__primary_nav__link"
+                activeClassName="main_layout__primary_nav__link--active"
+              >
+                Categories
+              </NavLink>
+              <NavLink
+                to="/"
+                exact
+                className="main_layout__primary_nav__link"
+                activeClassName="main_layout__primary_nav__link--active"
+              >
+                Streams
+              </NavLink>
+              <NavLink
+                to="/broadcast"
+                className="main_layout__primary_nav__link"
+                activeClassName="main_layout__primary_nav__link--active"
+              >
+                Broadcast
+              </NavLink>
+            </div>
+            <div className="main_layout__search">
+              <input className="main_layout__search__input" placeholder="search..." />
+              <button className="main_layout__search__button">
+                <FiSearch />
+              </button>
+            </div>
+            <div className="main_layout__user_nav">
+              <Link to="/activity" className="main_layout__user_nav__link">
+                <FiActivity />
+              </Link>
+              <button onClick={handleAlertsClick} className="main_layout__user_nav__link">
+                <FiBell />
+              </button>
+              <button onClick={handleDebuggerOpen} className="main_layout__user_nav__link">
+                <FiCloud />
+              </button>
+              <Link to="/profile" className="main_layout__user_nav__link">
+                <FiUser />
+              </Link>
+            </div>
+          </header>
+          <div className="main_layout__body">
+            <NetworkNav />
+            {children}
           </div>
-          <div className="main_layout__search">
-            <input className="main_layout__search__input" placeholder="search..." />
-            <button className="main_layout__search__button">
-              <FiSearch />
-            </button>
-          </div>
-          <div className="main_layout__user_nav">
-            <Link to="/activity" className="main_layout__user_nav__link">
-              <FiActivity />
-            </Link>
-            <button onClick={handleAlertsClick} className="main_layout__user_nav__link">
-              <FiBell />
-            </button>
-            <button onClick={handleDebuggerOpen} className="main_layout__user_nav__link">
-              <FiCloud />
-            </button>
-            <Link to="/profile" className="main_layout__user_nav__link">
-              <FiUser />
-            </Link>
-          </div>
-        </header>
-        <div className="main_layout__body">
-          <NetworkNav />
-          {children}
+          <Debugger isOpen={debuggerIsOpen} onClose={handleDebuggerClose} />
         </div>
-        <Debugger isOpen={debuggerIsOpen} onClose={handleDebuggerClose} />
-      </div>
+      </MainLayoutContext.Provider>
     </NetworkProvider>
   );
 };

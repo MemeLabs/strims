@@ -12,6 +12,7 @@ import {
   MdVolumeOff,
   MdVolumeUp,
 } from "react-icons/md";
+import { RiLayoutRightLine } from "react-icons/ri";
 import { useDebounce } from "react-use";
 
 import { VideoControls, VideoState } from "../../hooks/useVideo";
@@ -42,6 +43,20 @@ const PiPButton: React.FC<PiPButtonProps> = ({ supported, toggle }) =>
   !supported ? null : (
     <Button className="pip" tooltip="Miniplayer" onClick={toggle} icon={MdPictureInPictureAlt} />
   );
+
+type TheaterButtonProps = {
+  enabled: boolean;
+  toggle: (state: boolean) => void;
+};
+
+const TheaterButton: React.FC<TheaterButtonProps> = ({ enabled, toggle }) => (
+  <Button
+    className="theater"
+    tooltip={enabled ? "Exit theater mode" : "Theater mode"}
+    onClick={() => toggle(!enabled)}
+    icon={RiLayoutRightLine}
+  />
+);
 
 type FullscreenButtonProps = {
   supported: boolean;
@@ -96,6 +111,8 @@ type VideoControlsProps = {
   visible: boolean;
   fullscreen: boolean;
   toggleFullscreen: () => void;
+  theaterMode: boolean;
+  toggleTheaterMode: (state: boolean) => void;
   videoState: VideoState;
   videoControls: VideoControls;
 };
@@ -149,6 +166,7 @@ const VideoControls: React.FC<VideoControlsProps> = (props) => {
       </div>
       <div className="controls_group right">
         <PiPButton supported={videoState.supportPiP} toggle={videoControls.togglePiP} />
+        <TheaterButton enabled={props.theaterMode} toggle={props.toggleTheaterMode} />
         <FullscreenButton
           supported={document.fullscreenEnabled}
           enabled={props.fullscreen}

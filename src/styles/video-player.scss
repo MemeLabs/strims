@@ -49,7 +49,7 @@
   background: rgba(0, 0, 0, 0.2);
   transition: 400ms opacity ease-in-out;
 
-  >div {
+  > div {
     flex-grow: 0;
   }
 
@@ -92,7 +92,8 @@
     padding: 10px;
     position: relative;
 
-    button, svg {
+    button,
+    svg {
       position: relative;
       background: none;
       margin: 0;
@@ -107,6 +108,11 @@
     svg {
       cursor: pointer;
       fill: #fff;
+    }
+
+    &.theater svg {
+      height: 24px;
+      vertical-align: middle;
     }
   }
 

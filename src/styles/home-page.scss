@@ -298,6 +298,14 @@
       padding: 0 0.5em;
     }
   }
+
+  &--theater_mode {
+    .main_layout__left,
+    .main_layout__header {
+      flex: 0 0 0;
+      overflow: hidden;
+    }
+  }
 }
 
 .home_page {
