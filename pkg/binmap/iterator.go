@@ -1,19 +1,18 @@
 package binmap
 
 func NewEmptyAtIterator(m *Map, b Bin) Iterator {
-	return newIterator(m, b, (*Map).FindFilledAfter, (*Map).FindEmptyAfter)
+	return newIterator(b, m.FindFilledAfter, m.FindEmptyAfter)
 }
 
 func NewFilledAtIterator(m *Map, b Bin) Iterator {
-	return newIterator(m, b, (*Map).FindEmptyAfter, (*Map).FindFilledAfter)
+	return newIterator(b, m.FindEmptyAfter, m.FindFilledAfter)
 }
 
-type findFunc func(m *Map, i Bin) Bin
+type findFunc func(i Bin) Bin
 
-func newIterator(m *Map, b Bin, findNeg, findPos findFunc) Iterator {
+func newIterator(b Bin, findNeg, findPos findFunc) Iterator {
 	i := b.BaseLeft() - 2
 	return Iterator{
-		m:        m,
 		findNeg:  findNeg,
 		findPos:  findPos,
 		i:        i,
@@ -23,7 +22,6 @@ func newIterator(m *Map, b Bin, findNeg, findPos findFunc) Iterator {
 }
 
 type Iterator struct {
-	m        *Map
 	findNeg  findFunc
 	findPos  findFunc
 	i        Bin
@@ -33,10 +31,10 @@ type Iterator struct {
 }
 
 func (e *Iterator) initGap(i Bin) Bin {
-	gap := e.findNeg(e.m, i)
+	gap := e.findNeg(i)
 	if gap == i {
-		i = e.findPos(e.m, i)
-		gap = e.findNeg(e.m, i)
+		i = e.findPos(i)
+		gap = e.findNeg(i)
 	}
 
 	e.gapLeft = gap

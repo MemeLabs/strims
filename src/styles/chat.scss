@@ -5,6 +5,8 @@
   height: 0;
   font-size: 0.9em;
   line-height: 1.4em;
+  position: relative;
+  overflow: hidden;
 
   &__messages {
     flex: 1 1;
@@ -28,11 +30,11 @@
       display: inline-block;
       border: 1px solid;
 
-      @include color-scheme('dark') {
+      @include color-scheme("dark") {
         background: $slate-400;
         border-color: $slate-500 $slate-200 $slate-200 $slate-500;
       }
-      @include color-scheme('light') {
+      @include color-scheme("light") {
         background: $gray-400;
         border-color: $gray-500 $gray-200 $gray-200 $gray-500;
       }
@@ -43,7 +45,7 @@
     }
 
     &__link {
-      color: #02C2FF;
+      color: #02c2ff;
       position: relative;
 
       &:hover {
@@ -51,7 +53,7 @@
       }
 
       &:visited {
-        color: #A66BE5;
+        color: #a66be5;
       }
 
       @at-root .chat__message--tag_nsfw & {
@@ -67,7 +69,7 @@
       }
 
       @at-root .chat__message--tag_loud & {
-        border-bottom: 1px dashed #02C2FF;
+        border-bottom: 1px dashed #02c2ff;
       }
     }
 
@@ -83,22 +85,22 @@
       cursor: pointer;
       background: $slate-400;
       padding: 0 3px;
-      transition: color .2s ease-in-out;
+      transition: color 0.2s ease-in-out;
 
-      &>.chat__emote,
-      &>.chat__emote_container,
-      &>.chat__message__code,
-      &>.chat__message__link {
-        transition: opacity .2s ease-in-out;
+      & > .chat__emote,
+      & > .chat__emote_container,
+      & > .chat__message__code,
+      & > .chat__message__link {
+        transition: opacity 0.2s ease-in-out;
       }
 
       &--hidden {
         color: transparent;
 
-        &>.chat__emote,
-        &>.chat__emote_container,
-        &>.chat__message__code,
-        &>.chat__message__link {
+        & > .chat__emote,
+        & > .chat__emote_container,
+        & > .chat__message__code,
+        & > .chat__message__link {
           opacity: 0;
         }
       }
@@ -110,7 +112,7 @@
     }
 
     &__greentext {
-      color: #6CA528;
+      color: #6ca528;
     }
   }
 
@@ -118,12 +120,12 @@
     &__scrollbar_handle {
       border-radius: 3px;
       opacity: 0;
-      transition: opacity .2s ease-in-out 1s;
+      transition: opacity 0.2s ease-in-out 1s;
 
-      @include color-scheme('dark') {
+      @include color-scheme("dark") {
         background: rgba($white, 0.5);
       }
-      @include color-scheme('light') {
+      @include color-scheme("light") {
         background: rgba($slate-300, 0.5);
       }
 
@@ -162,6 +164,81 @@
     flex: 0 1;
   }
 
+  &__nav {
+    flex: 0 1;
+    display: flex;
+    flex-direction: row;
+
+    &__left,
+    &__right {
+      flex: 1;
+      display: flex;
+      flex-direction: row;
+    }
+
+    &__right {
+      justify-content: flex-end;
+    }
+
+    &__icon {
+      width: 20px;
+      height: 20px;
+      margin: 0 5px 5px;
+      cursor: pointer;
+
+      @include color-scheme("dark") {
+        color: rgba($white, 0.5);
+      }
+      @include color-scheme("light") {
+        color: rgba($slate-300, 0.5);
+      }
+    }
+  }
+
+  &__panel {
+    background: $slate-300;
+    display: flex;
+    flex-direction: column;
+    height: 100%;
+    position: absolute;
+    transition: transform 0.2s ease-in-out;
+    width: 300px;
+    z-index: 1;
+
+    &--left {
+      transform: translateX(-300px);
+    }
+
+    &--right {
+      right: 0;
+      transform: translateX(300px);
+    }
+
+    &--active {
+      transform: translateX(0);
+      z-index: 2;
+    }
+
+    &__header {
+      align-items: center;
+      border-bottom: 1px solid $slate-500;
+      color: $gray-100;
+      display: flex;
+      justify-content: space-between;
+      padding: 5px 10px;
+
+      &__close_button {
+        height: 15px;
+        width: 15px;
+        cursor: pointer;
+      }
+    }
+
+    &__body {
+      flex: 1;
+    }
+  }
+
   &__composer {
     margin: 5px;
     padding: 10px 5px;
@@ -169,11 +246,11 @@
     border-width: 1px;
     border-style: solid;
 
-    @include color-scheme('dark') {
+    @include color-scheme("dark") {
       background: $slate-300;
       border-color: $slate-500;
     }
-    @include color-scheme('light') {
+    @include color-scheme("light") {
       background: $gray-500;
       border-color: $gray-300;
     }
@@ -184,7 +261,7 @@
       }
 
       &--greentext {
-        color: #6CA528;
+        color: #6ca528;
       }
 
       &--code {
@@ -224,10 +301,10 @@
         padding: 10px;
         position: absolute;
 
-        @include color-scheme('dark') {
+        @include color-scheme("dark") {
           background: $slate-200;
         }
-        @include color-scheme('light') {
+        @include color-scheme("light") {
           background: $gray-500;
         }
       }
@@ -237,10 +314,10 @@
         border-radius: 3px;
 
         &--selected {
-          @include color-scheme('dark') {
+          @include color-scheme("dark") {
             background: $slate-400;
           }
-          @include color-scheme('light') {
+          @include color-scheme("light") {
             background: $gray-300;
           }
         }

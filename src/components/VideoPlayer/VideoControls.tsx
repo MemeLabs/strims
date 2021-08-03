@@ -12,7 +12,7 @@ import {
   MdVolumeOff,
   MdVolumeUp,
 } from "react-icons/md";
-import { RiLayoutRightLine } from "react-icons/ri";
+import { RiLayout6Line, RiLayoutRightLine } from "react-icons/ri";
 import { useDebounce } from "react-use";
 
 import { VideoControls, VideoState } from "../../hooks/useVideo";
@@ -54,7 +54,7 @@ const TheaterButton: React.FC<TheaterButtonProps> = ({ enabled, toggle }) => (
     className="theater"
     tooltip={enabled ? "Exit theater mode" : "Theater mode"}
     onClick={() => toggle(!enabled)}
-    icon={RiLayoutRightLine}
+    icon={enabled ? RiLayout6Line : RiLayoutRightLine}
   />
 );
 

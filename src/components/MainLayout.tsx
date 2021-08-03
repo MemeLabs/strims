@@ -32,6 +32,80 @@ import ChatPanel from "./ChatPanel";
 import Debugger from "./Debugger";
 import PlayerEmbed from "./PlayerEmbed";
 
+const Header: React.FC = () => {
+  const [theme, { setColorScheme }] = useTheme();
+  const client = useClient();
+
+  const [debuggerIsOpen, setDebuggerIsOpen] = useState(false);
+  const handleDebuggerClose = useCallback(() => setDebuggerIsOpen(false), []);
+  const handleDebuggerOpen = () => setDebuggerIsOpen(true);
+
+  const toggleTheme = () =>
+    theme.colorScheme === "dark" ? setColorScheme("light") : setColorScheme("dark");
+
+  const handleAlertsClick = async () => {
+    const { data } = await client.debug.readMetrics({
+      format: MetricsFormat.METRICS_FORMAT_TEXT,
+    });
+    console.log(new TextDecoder().decode(data));
+  };
+
+  return (
+    <>
+      <header className="main_layout__header">
+        <div className="main_layout__primary_nav">
+          <button onClick={toggleTheme} className="main_layout__primary_nav__logo">
+            <FiHome />
+          </button>
+          <NavLink
+            to="/settings"
+            className="main_layout__primary_nav__link"
+            activeClassName="main_layout__primary_nav__link--active"
+          >
+            Categories
+          </NavLink>
+          <NavLink
+            to="/"
+            exact
+            className="main_layout__primary_nav__link"
+            activeClassName="main_layout__primary_nav__link--active"
+          >
+            Streams
+          </NavLink>
+          <NavLink
+            to="/broadcast"
+            className="main_layout__primary_nav__link"
+            activeClassName="main_layout__primary_nav__link--active"
+          >
+            Broadcast
+          </NavLink>
+        </div>
+        <div className="main_layout__search">
+          <input className="main_layout__search__input" placeholder="search..." />
+          <button className="main_layout__search__button">
+            <FiSearch />
+          </button>
+        </div>
+        <div className="main_layout__user_nav">
+          <Link to="/activity" className="main_layout__user_nav__link">
+            <FiActivity />
+          </Link>
+          <button onClick={handleAlertsClick} className="main_layout__user_nav__link">
+            <FiBell />
+          </button>
+          <button onClick={handleDebuggerOpen} className="main_layout__user_nav__link">
+            <FiCloud />
+          </button>
+          <Link to="/profile" className="main_layout__user_nav__link">
+            <FiUser />
+          </Link>
+        </div>
+      </header>
+      <Debugger isOpen={debuggerIsOpen} onClose={handleDebuggerClose} />
+    </>
+  );
+};
+
 const Tooltip: React.FC<any> = ({ children }) => <>{children}</>;
 
 const NetworkAddButton: React.FC<React.ComponentProps<"button">> = ({ children, ...props }) => {
@@ -195,23 +269,6 @@ type MainLayoutContextProps = {
 export const MainLayoutContext = createContext<MainLayoutContextProps>(null);
 
 export const MainLayout: React.FC = ({ children }) => {
-  const [theme, { setColorScheme }] = useTheme();
-  const client = useClient();
-
-  const [debuggerIsOpen, setDebuggerIsOpen] = useState(false);
-  const handleDebuggerClose = useCallback(() => setDebuggerIsOpen(false), []);
-  const handleDebuggerOpen = () => setDebuggerIsOpen(true);
-
-  const toggleTheme = () =>
-    theme.colorScheme === "dark" ? setColorScheme("light") : setColorScheme("dark");
-
-  const handleAlertsClick = async () => {
-    const { data } = await client.debug.readMetrics({
-      format: MetricsFormat.METRICS_FORMAT_TEXT,
-    });
-    console.log(new TextDecoder().decode(data));
-  };
-
   const [theaterMode, toggleTheaterMode] = useState<boolean>(false);
   const context = useMemo<MainLayoutContextProps>(
     () => ({
@@ -230,60 +287,11 @@ export const MainLayout: React.FC = ({ children }) => {
     <NetworkProvider>
       <MainLayoutContext.Provider value={context}>
         <div className={mainLayoutClass}>
-          <header className="main_layout__header">
-            <div className="main_layout__primary_nav">
-              <button onClick={toggleTheme} className="main_layout__primary_nav__logo">
-                <FiHome />
-              </button>
-              <NavLink
-                to="/settings"
-                className="main_layout__primary_nav__link"
-                activeClassName="main_layout__primary_nav__link--active"
-              >
-                Categories
-              </NavLink>
-              <NavLink
-                to="/"
-                exact
-                className="main_layout__primary_nav__link"
-                activeClassName="main_layout__primary_nav__link--active"
-              >
-                Streams
-              </NavLink>
-              <NavLink
-                to="/broadcast"
-                className="main_layout__primary_nav__link"
-                activeClassName="main_layout__primary_nav__link--active"
-              >
-                Broadcast
-              </NavLink>
-            </div>
-            <div className="main_layout__search">
-              <input className="main_layout__search__input" placeholder="search..." />
-              <button className="main_layout__search__button">
-                <FiSearch />
-              </button>
-            </div>
-            <div className="main_layout__user_nav">
-              <Link to="/activity" className="main_layout__user_nav__link">
-                <FiActivity />
-              </Link>
-              <button onClick={handleAlertsClick} className="main_layout__user_nav__link">
-                <FiBell />
-              </button>
-              <button onClick={handleDebuggerOpen} className="main_layout__user_nav__link">
-                <FiCloud />
-              </button>
-              <Link to="/profile" className="main_layout__user_nav__link">
-                <FiUser />
-              </Link>
-            </div>
-          </header>
+          <Header />
           <div className="main_layout__body">
             <NetworkNav />
             {children}
           </div>
-          <Debugger isOpen={debuggerIsOpen} onClose={handleDebuggerClose} />
         </div>
       </MainLayoutContext.Provider>
     </NetworkProvider>

@@ -91,7 +91,7 @@ const PlayerEmbed: React.FC = ({ children }) => {
 
   return (
     <PlayerContext.Provider value={context}>
-      <Scrollbars ref={scrollbarRef}>
+      <Scrollbars ref={scrollbarRef} autoHide={true}>
         <div className="player_embed__container" style={containerStyle}>
           {children}
         </div>
