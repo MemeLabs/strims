@@ -85,41 +85,11 @@ func (t *Control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	t.runners.ReplaceOrInsert(newRunner(ctx, t.logger, t.vpn, t.store, t.dialer, t.transfer, network))
-}
-
-func (t *Control) handleNetworkStop(network *networkv1.Network) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	key := &runner{key: dao.NetworkKey(network)}
-	if r, ok := t.runners.Get(key).(*runner); ok {
-		t.runners.Delete(key)
-		r.Close()
-	}
-}
-
-func (t *Control) runner(networkKey []byte) (*runner, bool) {
-	t.lock.Lock()
-	defer t.lock.Unlock()
-
-	r, ok := t.runners.Get(&runner{key: networkKey}).(*runner)
-	return r, ok
-}
-
-// ReadEvents ...
-func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *networkv1.DirectoryEvent {
-	r, ok := t.runner(networkKey)
-	if !ok {
-		return nil
-	}
-
-	ch := make(chan *networkv1.DirectoryEvent, 8)
+	r := newRunner(ctx, t.logger, t.vpn, t.store, t.dialer, t.transfer, network)
+	t.runners.ReplaceOrInsert(r)
 
 	go func() {
-		defer close(ch)
-
-		for ctx.Err() == nil {
+		for {
 			er, err := r.EventReader(ctx)
 			if err != nil {
 				t.logger.Debug("error getting directory event reader", zap.Error(err))
@@ -132,14 +102,26 @@ func (t *Control) ReadEvents(ctx context.Context, networkKey []byte) <-chan *net
 					t.logger.Debug("error reading directory event", zap.Error(err))
 					break
 				}
-				for _, e := range b.Events {
-					ch <- e
-				}
+
+				t.observers.EmitLocal(event.DirectoryEvent{
+					NetworkID:  network.Id,
+					NetworkKey: dao.GetRootCert(network.Certificate).Key,
+					Broadcast:  b,
+				})
 			}
 		}
 	}()
+}
 
-	return ch
+func (t *Control) handleNetworkStop(network *networkv1.Network) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+
+	key := &runner{key: dao.NetworkKey(network)}
+	if r, ok := t.runners.Get(key).(*runner); ok {
+		t.runners.Delete(key)
+		r.Close()
+	}
 }
 
 func (t *Control) ping(ctx context.Context) {
@@ -288,6 +270,10 @@ func (r *runner) Closed() bool {
 func (r *runner) EventReader(ctx context.Context) (*EventReader, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+
+	if r.closed {
+		return nil, errors.New("cannot read from closed runner")
+	}
 
 	if r.server != nil {
 		return r.server.eventReader, nil

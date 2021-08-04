@@ -3,6 +3,7 @@ package transfer
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 
 	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
@@ -37,7 +38,15 @@ func (p *Peer) AssignPort(id []byte, peerChannel uint64) (uint64, bool) {
 		return 0, false
 	}
 
-	p.openChannel(pt, peerChannel)
+	p.logger.Debug(
+		"assigning port",
+		logutil.ByteHex("id", pt.id),
+		zap.Stringer("swarm", pt.swarm.ID()),
+		zap.Uint64("localChannel", pt.channel),
+		zap.Uint64("peerChannel", peerChannel),
+	)
+
+	pt.commands <- peerTransferCommand{peerTransferStart, peerChannel}
 
 	return pt.channel, true
 }
@@ -65,16 +74,14 @@ func (p *Peer) Announce(t *transfer) {
 			return
 		}
 
-		p.openChannel(pt, res.GetChannel())
+		pt.commands <- peerTransferCommand{peerTransferStart, res.GetChannel()}
 	}()
 }
 
 // Close ...
 func (p *Peer) Close(id []byte) {
 	if pt, ok := p.getPeerTransfer(id); ok {
-		p.lock.Lock()
-		defer p.lock.Unlock()
-		pt.close()
+		pt.commands <- peerTransferCommand{op: peerTransferStop}
 	}
 }
 
@@ -103,81 +110,94 @@ func (p *Peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
 	defer p.lock.Unlock()
 
 	pt, ok := p.transfers.Get(&peerTransfer{transfer: t}).(*peerTransfer)
-	if !ok {
-		p.logger.Debug("new pt", logutil.ByteHex("id", t.id))
-		p.nextChannel++
-
-		pt = &peerTransfer{
-			transfer: t,
-			close:    noopCancelFunc,
-			channel:  p.nextChannel,
-		}
-		p.transfers.ReplaceOrInsert(pt)
-	} else {
-		p.logger.Debug("reusing pt", logutil.ByteHex("id", t.id))
+	if ok {
+		return pt
 	}
+
+	p.nextChannel++
+
+	logger := p.logger.With(
+		logutil.ByteHex("id", t.id),
+		zap.Stringer("swarm", t.swarm.ID()),
+		zap.Uint64("localChannel", p.nextChannel),
+	)
+
+	logger.Debug("creating peer transfer")
+
+	pt = &peerTransfer{
+		transfer: t,
+		channel:  p.nextChannel,
+		commands: make(chan peerTransferCommand, 8),
+	}
+	p.transfers.ReplaceOrInsert(pt)
+
+	go func() {
+		err := p.runPeerTransfer(logger, pt)
+		logger.Debug("peer transfer closed", zap.Error(err))
+	}()
 
 	return pt
 }
 
-func (p *Peer) openChannel(pt *peerTransfer, peerChannel uint64) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	if pt.open || peerChannel == 0 {
-		return
-	}
-
-	logger := p.logger.With(
-		logutil.ByteHex("id", pt.id),
-		zap.Stringer("swarm", pt.swarm.ID()),
-		zap.Uint64("localChannel", pt.channel),
-		zap.Uint64("peerChannel", peerChannel),
-	)
-	logger.Debug("opening swarm channel")
-
-	err := p.runnerPeer.RunSwarm(pt.swarm, codec.Channel(pt.channel), codec.Channel(peerChannel))
-	if err != nil {
-		return
-	}
-
-	ctx, close := context.WithCancel(pt.ctx)
-	pt.close = close
-	pt.open = true
-
-	go func() {
+func (p *Peer) runPeerTransfer(logger *zap.Logger, pt *peerTransfer) error {
+	for {
 		select {
+		case cmd := <-pt.commands:
+			switch cmd.op {
+			case peerTransferStart:
+				if pt.open || cmd.peerChannel == 0 {
+					continue
+				}
+
+				logger.Debug(
+					"opening swarm channel",
+					zap.Uint64("peerChannel", cmd.peerChannel),
+				)
+
+				err := p.runnerPeer.RunSwarm(pt.swarm, codec.Channel(pt.channel), codec.Channel(cmd.peerChannel))
+				if err != nil {
+					return fmt.Errorf("unable to start swarm channel: %w", err)
+				}
+				pt.open = true
+			case peerTransferStop:
+				logger.Debug("closing swarm channel")
+
+				p.runnerPeer.StopSwarm(pt.swarm)
+				pt.open = false
+
+				req := &transferv1.TransferPeerCloseRequest{Id: pt.id}
+				res := &transferv1.TransferPeerCloseResponse{}
+				err := p.client.Transfer().Close(context.Background(), req, res)
+				if err != nil {
+					return fmt.Errorf("unable to notify peer of channel closure: %w", err)
+				}
+			}
+		case <-pt.ctx.Done():
+			return fmt.Errorf("transfer closed: %w", pt.ctx.Err())
 		case <-p.ctx.Done():
-		case <-ctx.Done():
+			return fmt.Errorf("peer closed: %w", pt.ctx.Err())
 		}
+	}
+}
 
-		p.runnerPeer.StopSwarm(pt.swarm)
+type peerTransferOp int
 
-		if !p.vnicPeer.Closed() {
-			logger.Debug("sending peer channel close")
-			req := &transferv1.TransferPeerCloseRequest{
-				Id: pt.id,
-			}
-			res := &transferv1.TransferPeerCloseResponse{}
-			err = p.client.Transfer().Close(context.Background(), req, res)
-			if err != nil {
-				logger.Debug("closing peer channel failed", zap.Error(err))
-			}
-		}
+const (
+	peerTransferStart peerTransferOp = iota
+	peerTransferStop
+	peerTransferShutdown
+)
 
-		logger.Debug("closed swarm channel")
-
-		p.lock.Lock()
-		defer p.lock.Unlock()
-		pt.open = false
-	}()
+type peerTransferCommand struct {
+	op          peerTransferOp
+	peerChannel uint64
 }
 
 type peerTransfer struct {
 	*transfer
-	close   context.CancelFunc
-	channel uint64
-	open    bool
+	commands chan peerTransferCommand
+	channel  uint64
+	open     bool
 }
 
 func (t *peerTransfer) Less(o llrb.Item) bool {

@@ -14,8 +14,22 @@ import Composer from "../components/Chat/Composer";
 import Message from "../components/Chat/Message";
 import Scroller, { MessageProps } from "../components/Chat/Scroller";
 import { Provider, useChat } from "../contexts/Chat";
+import Emote from "./Chat/Emote";
+import * as test from "./Chat/test-emotes";
 
-enum ChatPanelRole {
+const TestEmotes: React.FC = () => {
+  return (
+    <Scrollbars autoHide={true}>
+      {test.emotes.map((e) => (
+        <div key={e.name} style={{ margin: "1em" }}>
+          <Emote name={e.name} />
+        </div>
+      ))}
+    </Scrollbars>
+  );
+};
+
+enum ChatDrawerRole {
   None = "none",
   Emotes = "emotes",
   Whispers = "whispers",
@@ -23,56 +37,63 @@ enum ChatPanelRole {
   Users = "users",
 }
 
-interface ChatPanelBodyProps {
+interface ChatDrawerBodyProps {
   onClose: () => void;
 }
 
-const ChatPanelBody: React.FC<ChatPanelBodyProps> = ({ onClose, children }) => {
+const ChatDrawerBody: React.FC<ChatDrawerBodyProps> = ({ onClose, children }) => {
   const ref = useRef<HTMLDivElement>(null);
   useClickAway(ref, onClose, ["click"]);
 
   return (
-    <div className="chat__panel__body" ref={ref}>
+    <div className="chat__drawer__body" ref={ref}>
       {children}
     </div>
   );
 };
 
-interface ChatPanelProps extends ChatPanelBodyProps {
+interface ChatDrawerProps extends ChatDrawerBodyProps {
   side: "left" | "right";
-  role: ChatPanelRole;
+  role: ChatDrawerRole;
   title: string;
   active: boolean;
 }
 
-const ChatPanel: React.FC<ChatPanelProps> = ({ side, role, active, title, onClose, children }) => {
+const ChatDrawer: React.FC<ChatDrawerProps> = ({
+  side,
+  role,
+  active,
+  title,
+  onClose,
+  children,
+}) => {
   const classNames = clsx({
-    "chat__panel": true,
-    [`chat__panel--${side}`]: true,
-    [`chat__panel--${role}`]: true,
-    "chat__panel--active": active,
+    "chat__drawer": true,
+    [`chat__drawer--${side}`]: true,
+    [`chat__drawer--${role}`]: true,
+    "chat__drawer--active": active,
   });
 
   const Icon = side === "left" ? ImCircleLeft : ImCircleRight;
 
   return (
     <div className={classNames}>
-      <div className="chat__panel__header">
+      <div className="chat__drawer__header">
         <span>{title}</span>
-        <Icon className="chat__panel__header__close_button" onClick={onClose} />
+        <Icon className="chat__drawer__header__close_button" onClick={onClose} />
       </div>
-      {active && <ChatPanelBody onClose={onClose}>{children}</ChatPanelBody>}
+      {active && <ChatDrawerBody onClose={onClose}>{children}</ChatDrawerBody>}
     </div>
   );
 };
 
-type ChatPanelButtonProps = {
+type ChatDrawerButtonProps = {
   icon: IconType;
   onClick: () => void;
   active: boolean;
 };
 
-const ChatPanelButton: React.FC<ChatPanelButtonProps> = ({ icon: Icon, onClick, active }) => {
+const ChatDrawerButton: React.FC<ChatDrawerButtonProps> = ({ icon: Icon, onClick, active }) => {
   const className = clsx({
     "chat__nav__icon": true,
     "chat__nav__icon--active": active,
@@ -96,49 +117,49 @@ const TestContent: React.FC = () => (
 
 const ChatThing: React.FC = () => {
   const [state, { sendMessage }] = useChat();
-  const [activePanel, setActivePanel] = useState(ChatPanelRole.None);
+  const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
-  const closePanel = useCallback(() => setActivePanel(ChatPanelRole.None), []);
+  const closePanel = useCallback(() => setActivePanel(ChatDrawerRole.None), []);
 
   return (
     <>
       <div className="chat__messages">
-        <ChatPanel
+        <ChatDrawer
           title="Emotes"
           side="left"
-          role={ChatPanelRole.Emotes}
-          active={activePanel === ChatPanelRole.Emotes}
+          role={ChatDrawerRole.Emotes}
+          active={activePanel === ChatDrawerRole.Emotes}
           onClose={closePanel}
         >
-          <TestContent />
-        </ChatPanel>
-        <ChatPanel
+          <TestEmotes />
+        </ChatDrawer>
+        <ChatDrawer
           title="Whispers"
           side="left"
-          role={ChatPanelRole.Whispers}
-          active={activePanel === ChatPanelRole.Whispers}
+          role={ChatDrawerRole.Whispers}
+          active={activePanel === ChatDrawerRole.Whispers}
           onClose={closePanel}
         >
           <TestContent />
-        </ChatPanel>
-        <ChatPanel
+        </ChatDrawer>
+        <ChatDrawer
           title="Settings"
           side="right"
-          role={ChatPanelRole.Settings}
-          active={activePanel === ChatPanelRole.Settings}
+          role={ChatDrawerRole.Settings}
+          active={activePanel === ChatDrawerRole.Settings}
           onClose={closePanel}
         >
           <TestContent />
-        </ChatPanel>
-        <ChatPanel
+        </ChatDrawer>
+        <ChatDrawer
           title="Users"
           side="right"
-          role={ChatPanelRole.Users}
-          active={activePanel === ChatPanelRole.Users}
+          role={ChatDrawerRole.Users}
+          active={activePanel === ChatDrawerRole.Users}
           onClose={closePanel}
         >
           <TestContent />
-        </ChatPanel>
+        </ChatDrawer>
         <Scroller
           renderMessage={({ index, style }: MessageProps) => (
             <Message message={state.messages[index]} style={style} />
@@ -151,27 +172,27 @@ const ChatThing: React.FC = () => {
       </div>
       <div className="chat__nav">
         <div className="chat__nav__left">
-          <ChatPanelButton
+          <ChatDrawerButton
             icon={BiSmile}
-            active={activePanel === ChatPanelRole.Emotes}
-            onClick={() => setActivePanel(ChatPanelRole.Emotes)}
+            active={activePanel === ChatDrawerRole.Emotes}
+            onClick={() => setActivePanel(ChatDrawerRole.Emotes)}
           />
-          <ChatPanelButton
+          <ChatDrawerButton
             icon={BiConversation}
-            active={activePanel === ChatPanelRole.Whispers}
-            onClick={() => setActivePanel(ChatPanelRole.Whispers)}
+            active={activePanel === ChatDrawerRole.Whispers}
+            onClick={() => setActivePanel(ChatDrawerRole.Whispers)}
           />
         </div>
         <div className="chat__nav__right">
-          <ChatPanelButton
+          <ChatDrawerButton
             icon={FiSettings}
-            active={activePanel === ChatPanelRole.Settings}
-            onClick={() => setActivePanel(ChatPanelRole.Settings)}
+            active={activePanel === ChatDrawerRole.Settings}
+            onClick={() => setActivePanel(ChatDrawerRole.Settings)}
           />
-          <ChatPanelButton
+          <ChatDrawerButton
             icon={HiOutlineUserGroup}
-            active={activePanel === ChatPanelRole.Users}
-            onClick={() => setActivePanel(ChatPanelRole.Users)}
+            active={activePanel === ChatDrawerRole.Users}
+            onClick={() => setActivePanel(ChatDrawerRole.Users)}
           />
         </div>
       </div>
@@ -179,7 +200,7 @@ const ChatThing: React.FC = () => {
   );
 };
 
-const Chat: React.FC = () => {
+const ChatPanel: React.FC = () => {
   const [closed, toggleClosed] = useToggle(false);
 
   const className = clsx({
@@ -212,4 +233,4 @@ const Chat: React.FC = () => {
   );
 };
 
-export default Chat;
+export default ChatPanel;

@@ -4,23 +4,15 @@ import { Base64 } from "js-base64";
 import React, { createContext, useCallback, useContext, useMemo, useState } from "react";
 import { DragDropContext, Draggable, DropResult, Droppable } from "react-beautiful-dnd";
 import { BiNetworkChart } from "react-icons/bi";
-import {
-  FiActivity,
-  FiArrowLeft,
-  FiArrowRight,
-  FiBell,
-  FiCloud,
-  FiHome,
-  FiPlus,
-  FiSearch,
-  FiUser,
-} from "react-icons/fi";
+import { BsArrowBarLeft, BsArrowBarRight } from "react-icons/bs";
+import { FiActivity, FiBell, FiCloud, FiHome, FiPlus, FiSearch, FiUser } from "react-icons/fi";
 import { Link, NavLink, useHistory } from "react-router-dom";
 import { useToggle } from "react-use";
 import usePortal from "react-useportal";
 
 import { MetricsFormat } from "../apis/strims/debug/v1/debug";
 import { CreateNetworkResponse, Network } from "../apis/strims/network/v1/network";
+import { Provider as DirectoryProvider } from "../contexts/Directory";
 import { useClient } from "../contexts/FrontendApi";
 import { NetworkContext, Provider as NetworkProvider } from "../contexts/Network";
 import { useTheme } from "../contexts/Theme";
@@ -246,7 +238,7 @@ const NetworkNav: React.FC = () => {
           overlay={expanded ? "Collapse" : "Expand"}
         >
           <button onClick={toggleExpanded} className="main_layout__left__toggle__icon">
-            {expanded ? <FiArrowLeft /> : <FiArrowRight />}
+            {expanded ? <BsArrowBarLeft /> : <BsArrowBarRight />}
           </button>
         </Tooltip>
       </div>
@@ -285,15 +277,17 @@ export const MainLayout: React.FC = ({ children }) => {
 
   return (
     <NetworkProvider>
-      <MainLayoutContext.Provider value={context}>
-        <div className={mainLayoutClass}>
-          <Header />
-          <div className="main_layout__body">
-            <NetworkNav />
-            {children}
+      <DirectoryProvider>
+        <MainLayoutContext.Provider value={context}>
+          <div className={mainLayoutClass}>
+            <Header />
+            <div className="main_layout__body">
+              <NetworkNav />
+              {children}
+            </div>
           </div>
-        </div>
-      </MainLayoutContext.Provider>
+        </MainLayoutContext.Provider>
+      </DirectoryProvider>
     </NetworkProvider>
   );
 };

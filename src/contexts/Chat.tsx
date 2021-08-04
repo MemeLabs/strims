@@ -106,13 +106,15 @@ const createEmoteStyles = (emotes: Emote[]) => {
   const styles = {};
 
   emotes.forEach((emote) => {
-    const image = emote.versions.find(({ size }) => size === "1x");
+    const imageSet = emote.versions.map(({ url, size }) => `url(${url}) ${size}`);
+    const { dimensions } = emote.versions.find(({ size }) => size === "1x");
     styles[emote.name] = {
-      background: `url(${image.url})`,
-      width: `${image.dimensions.width}px`,
-      height: `${image.dimensions.height}px`,
-      marginTop: `calc(0.5em - ${image.dimensions.height / 2}px)`,
-      marginBottom: `calc(0.5em - ${image.dimensions.height / 2}px)`,
+      backgroundImage: `image-set(${imageSet.join(", ")})`,
+      backgroundRepeat: "no-repeat",
+      width: `${dimensions.width}px`,
+      height: `${dimensions.height}px`,
+      marginTop: `calc(0.5em - ${dimensions.height / 2}px)`,
+      marginBottom: `calc(0.5em - ${dimensions.height / 2}px)`,
     };
   });
 

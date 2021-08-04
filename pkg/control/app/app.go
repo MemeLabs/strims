@@ -49,6 +49,7 @@ func NewControl(
 
 	return &Control{
 		logger:       logger,
+		observers:    observers,
 		dialer:       dialerControl,
 		ca:           caControl,
 		directory:    directoryControl,
@@ -67,6 +68,7 @@ func NewControl(
 // Control ...
 type Control struct {
 	logger       *zap.Logger
+	observers    *event.Observers
 	dialer       *dialer.Control
 	ca           *ca.Control
 	directory    *directory.Control
@@ -90,6 +92,10 @@ func (c *Control) Run(ctx context.Context) {
 	go c.bootstrap.Run(ctx)
 	go c.videoingress.Run(ctx)
 	go c.vnic.Run(ctx)
+}
+
+func (c *Control) Events() *event.Observers {
+	return c.observers
 }
 
 // Dialer ...

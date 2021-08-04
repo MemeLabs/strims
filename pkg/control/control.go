@@ -12,6 +12,7 @@ import (
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	vnicv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control/api"
+	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -37,9 +38,7 @@ type DialerControl interface {
 }
 
 // DirectoryControl ...
-type DirectoryControl interface {
-	ReadEvents(ctx context.Context, networkKey []byte) <-chan *networkv1.DirectoryEvent
-}
+type DirectoryControl interface{}
 
 // NetworkControl ...
 type NetworkControl interface {
@@ -140,6 +139,7 @@ type PeerControl interface {
 // AppControl ...
 type AppControl interface {
 	Run(ctx context.Context)
+	Events() *event.Observers
 	Peer() PeerControl
 	Bootstrap() BootstrapControl
 	CA() CAControl

@@ -221,12 +221,12 @@ func (s *seedSwarmScheduler) CloseChannel(p peerThing) {
 }
 
 func (s *seedSwarmScheduler) assignChannelStreams(c *seedChannelScheduler) {
-	if len(s.channels) == 1 {
-		for i := 0; i < s.swarm.options.StreamCount; i++ {
-			s.assignChannelStream(c, codec.Stream(i))
-		}
-		return
+	// if len(s.channels) == 1 {
+	for i := 0; i < s.swarm.options.StreamCount; i++ {
+		s.assignChannelStream(c, codec.Stream(i))
 	}
+	return
+	// }
 
 	// how do we pick the streams we want to try reassigning?
 	// * how much bandwidth do we have?

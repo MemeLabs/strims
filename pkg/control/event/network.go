@@ -66,3 +66,9 @@ type NetworkPeerCountUpdate struct {
 
 // NetworkNegotiationComplete ...
 type NetworkNegotiationComplete struct{}
+
+type DirectoryEvent struct {
+	NetworkID  uint64
+	NetworkKey []byte
+	Broadcast  *network.DirectoryEventBroadcast
+}

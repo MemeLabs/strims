@@ -192,26 +192,37 @@
       @include color-scheme("light") {
         color: rgba($slate-300, 0.5);
       }
+
+      &--active {
+        @include color-scheme("dark") {
+          color: rgba($white, 0.8);
+        }
+        @include color-scheme("light") {
+          color: rgba($slate-300, 0.8);
+        }
+      }
     }
   }
 
-  &__panel {
+  &__drawer {
+    $width: 350px;
+
     background: $slate-300;
     display: flex;
     flex-direction: column;
     height: 100%;
     position: absolute;
     transition: transform 0.2s ease-in-out;
-    width: 300px;
+    width: $width;
     z-index: 1;
 
     &--left {
-      transform: translateX(-300px);
+      transform: translateX(-$width);
     }
 
     &--right {
       right: 0;
-      transform: translateX(300px);
+      transform: translateX($width);
     }
 
     &--active {

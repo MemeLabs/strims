@@ -26,6 +26,7 @@
   "devDependencies": {
     "@memelabs/protobuf": "^0.1.17",
     "@types/dom-mediacapture-record": "^1.0.10",
+    "@types/lodash": "^4.14.172",
     "@types/prismjs": "^1.16.6",
     "@types/qs": "^6.9.7",
     "@types/react-beautiful-dnd": "^13.1.1",
@@ -64,6 +65,7 @@
     "import-sort-style-module": "^6.0.0",
     "ip-regex": "^4.3.0",
     "js-base64": "^3.6.1",
+    "lodash": "^4.17.21",
     "mediastream-to-webm": "^1.0.2",
     "mini-css-extract-plugin": "^2.1.0",
     "mux.js": "^5.12.2",

@@ -14,6 +14,7 @@ import (
 const maxEventBroadcastSize = 10 * 1024 * 1024
 
 var errMaxEventBroadcastSize = errors.New("i/o exceeds max event bundle size")
+var errReadError = errors.New("i/o ")
 
 type offsetReader interface {
 	io.Reader
@@ -31,7 +32,9 @@ type EventReader struct {
 }
 
 func (r *EventReader) Read(m protoreflect.ProtoMessage) error {
+	var retryOnError bool
 	if r.zpr == nil {
+		retryOnError = true
 		off := r.or.Offset()
 		var err error
 		r.zpr, err = chunkstream.NewZeroPadReaderSize(r.or, int64(off), chunkSize)
@@ -46,7 +49,13 @@ func (r *EventReader) Read(m protoreflect.ProtoMessage) error {
 		return err
 	}
 
-	return proto.Unmarshal(r.buf.Bytes(), m)
+	err = proto.Unmarshal(r.buf.Bytes(), m)
+	if err != nil && retryOnError {
+		// the first message may be incomplete but we don't know until we try to
+		// decode it. if it fails we can pick up at the next message.
+		return r.Read(m)
+	}
+	return err
 }
 
 func newEventWriter(w ioutil.WriteFlusher) (*EventWriter, error) {

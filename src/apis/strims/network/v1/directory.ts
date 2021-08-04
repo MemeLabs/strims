@@ -242,9 +242,9 @@ export class DirectoryListingService {
 }
 
 export type IDirectoryListing = {
-  creator?: strims_type_ICertificate;
+  creator?: strims_type_ICertificate | undefined;
   timestamp?: bigint;
-  snippet?: IDirectoryListingSnippet;
+  snippet?: IDirectoryListingSnippet | undefined;
   key?: Uint8Array;
   signature?: Uint8Array;
   content?: DirectoryListing.IContent
@@ -506,7 +506,7 @@ export namespace DirectoryEvent {
   };
 
   export type IPublish = {
-    listing?: IDirectoryListing;
+    listing?: IDirectoryListing | undefined;
   }
 
   export class Publish {
@@ -745,7 +745,7 @@ export class DirectoryEventBroadcast {
 }
 
 export type IDirectoryPublishRequest = {
-  listing?: IDirectoryListing;
+  listing?: IDirectoryListing | undefined;
 }
 
 export class DirectoryPublishRequest {
@@ -1009,55 +1009,54 @@ export class DirectoryPingResponse {
 }
 
 export type IDirectoryFrontendOpenRequest = {
-  networkKey?: Uint8Array;
 }
 
 export class DirectoryFrontendOpenRequest {
-  networkKey: Uint8Array;
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   constructor(v?: IDirectoryFrontendOpenRequest) {
-    this.networkKey = v?.networkKey || new Uint8Array();
   }
 
   static encode(m: DirectoryFrontendOpenRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.networkKey) w.uint32(10).bytes(m.networkKey);
     return w;
   }
 
   static decode(r: Reader | Uint8Array, length?: number): DirectoryFrontendOpenRequest {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new DirectoryFrontendOpenRequest();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.networkKey = r.bytes();
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
+    if (r instanceof Reader && length) r.skip(length);
+    return new DirectoryFrontendOpenRequest();
   }
 }
 
 export type IDirectoryFrontendOpenResponse = {
-  event?: IDirectoryEvent;
+  networkId?: bigint;
+  networkKey?: Uint8Array;
+  body?: DirectoryFrontendOpenResponse.IBody
 }
 
 export class DirectoryFrontendOpenResponse {
-  event: DirectoryEvent | undefined;
+  networkId: bigint;
+  networkKey: Uint8Array;
+  body: DirectoryFrontendOpenResponse.TBody;
 
   constructor(v?: IDirectoryFrontendOpenResponse) {
-    this.event = v?.event && new DirectoryEvent(v.event);
+    this.networkId = v?.networkId || BigInt(0);
+    this.networkKey = v?.networkKey || new Uint8Array();
+    this.body = new DirectoryFrontendOpenResponse.Body(v?.body);
   }
 
   static encode(m: DirectoryFrontendOpenResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.event) DirectoryEvent.encode(m.event, w.uint32(10).fork()).ldelim();
+    if (m.networkId) w.uint32(8).uint64(m.networkId);
+    if (m.networkKey) w.uint32(18).bytes(m.networkKey);
+    switch (m.body.case) {
+      case DirectoryFrontendOpenResponse.BodyCase.CLOSE:
+      DirectoryFrontendOpenResponse.DirectoryClose.encode(m.body.close, w.uint32(8010).fork()).ldelim();
+      break;
+      case DirectoryFrontendOpenResponse.BodyCase.BROADCAST:
+      DirectoryEventBroadcast.encode(m.body.broadcast, w.uint32(8018).fork()).ldelim();
+      break;
+    }
     return w;
   }
 
@@ -1069,7 +1068,16 @@ export class DirectoryFrontendOpenResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.event = DirectoryEvent.decode(r, r.uint32());
+        m.networkId = r.uint64();
+        break;
+        case 2:
+        m.networkKey = r.bytes();
+        break;
+        case 1001:
+        m.body = new DirectoryFrontendOpenResponse.Body({ close: DirectoryFrontendOpenResponse.DirectoryClose.decode(r, r.uint32()) });
+        break;
+        case 1002:
+        m.body = new DirectoryFrontendOpenResponse.Body({ broadcast: DirectoryEventBroadcast.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -1078,6 +1086,73 @@ export class DirectoryFrontendOpenResponse {
     }
     return m;
   }
+}
+
+export namespace DirectoryFrontendOpenResponse {
+  export enum BodyCase {
+    NOT_SET = 0,
+    CLOSE = 1001,
+    BROADCAST = 1002,
+  }
+
+  export type IBody =
+  { case?: BodyCase.NOT_SET }
+  |{ case?: BodyCase.CLOSE, close: DirectoryFrontendOpenResponse.IDirectoryClose }
+  |{ case?: BodyCase.BROADCAST, broadcast: IDirectoryEventBroadcast }
+  ;
+
+  export type TBody = Readonly<
+  { case: BodyCase.NOT_SET }
+  |{ case: BodyCase.CLOSE, close: DirectoryFrontendOpenResponse.DirectoryClose }
+  |{ case: BodyCase.BROADCAST, broadcast: DirectoryEventBroadcast }
+  >;
+
+  class BodyImpl {
+    close: DirectoryFrontendOpenResponse.DirectoryClose;
+    broadcast: DirectoryEventBroadcast;
+    case: BodyCase = BodyCase.NOT_SET;
+
+    constructor(v?: IBody) {
+      if (v && "close" in v) {
+        this.case = BodyCase.CLOSE;
+        this.close = new DirectoryFrontendOpenResponse.DirectoryClose(v.close);
+      } else
+      if (v && "broadcast" in v) {
+        this.case = BodyCase.BROADCAST;
+        this.broadcast = new DirectoryEventBroadcast(v.broadcast);
+      }
+    }
+  }
+
+  export const Body = BodyImpl as {
+    new (): Readonly<{ case: BodyCase.NOT_SET }>;
+    new <T extends IBody>(v: T): Readonly<
+    T extends { close: DirectoryFrontendOpenResponse.IDirectoryClose } ? { case: BodyCase.CLOSE, close: DirectoryFrontendOpenResponse.DirectoryClose } :
+    T extends { broadcast: IDirectoryEventBroadcast } ? { case: BodyCase.BROADCAST, broadcast: DirectoryEventBroadcast } :
+    never
+    >;
+  };
+
+  export type IDirectoryClose = {
+  }
+
+  export class DirectoryClose {
+
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+    constructor(v?: IDirectoryClose) {
+    }
+
+    static encode(m: DirectoryClose, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): DirectoryClose {
+      if (r instanceof Reader && length) r.skip(length);
+      return new DirectoryClose();
+    }
+  }
+
 }
 
 export type IDirectoryFrontendTestRequest = {

@@ -6,8 +6,8 @@ import (
 	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/directory"
+	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -31,10 +31,34 @@ func (s *directoryService) Open(ctx context.Context, r *network.DirectoryFronten
 	ch := make(chan *network.DirectoryFrontendOpenResponse, 128)
 
 	go func() {
-		events := s.app.Directory().ReadEvents(ctx, r.NetworkKey)
-		for e := range events {
-			debug.PrintJSON(e)
-			ch <- &network.DirectoryFrontendOpenResponse{Event: e}
+		raw := make(chan interface{}, 8)
+		s.app.Events().Notify(raw)
+
+		for {
+			select {
+			case e := <-raw:
+				switch e := e.(type) {
+				case event.DirectoryEvent:
+					ch <- &network.DirectoryFrontendOpenResponse{
+						NetworkId:  e.NetworkID,
+						NetworkKey: e.NetworkKey,
+						Body: &network.DirectoryFrontendOpenResponse_Broadcast{
+							Broadcast: e.Broadcast,
+						},
+					}
+				case event.NetworkStop:
+					ch <- &network.DirectoryFrontendOpenResponse{
+						NetworkId:  e.Network.Id,
+						NetworkKey: e.Network.Key.Public,
+						Body:       &network.DirectoryFrontendOpenResponse_Close{},
+					}
+				}
+			case <-ctx.Done():
+				s.app.Events().StopNotifying(raw)
+				close(raw)
+				close(ch)
+				return
+			}
 		}
 	}()
 

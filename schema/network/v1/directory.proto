@@ -121,12 +121,17 @@ service Directory {
   rpc Ping(DirectoryPingRequest) returns (DirectoryPingResponse);
 }
 
-message DirectoryFrontendOpenRequest {
-  bytes network_key = 1;
-}
+message DirectoryFrontendOpenRequest {}
 
 message DirectoryFrontendOpenResponse {
-  DirectoryEvent event = 1;
+  message DirectoryClose {}
+
+  uint64 network_id = 1;
+  bytes network_key = 2;
+  oneof body {
+    DirectoryClose close = 1001;
+    DirectoryEventBroadcast broadcast = 1002;
+  }
 }
 
 message DirectoryFrontendTestRequest {
