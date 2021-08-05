@@ -3,7 +3,6 @@ package transfer
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"sync"
 
 	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
@@ -15,8 +14,6 @@ import (
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
-
-var noopCancelFunc = func() {}
 
 // Peer ...
 type Peer struct {
@@ -31,36 +28,34 @@ type Peer struct {
 	nextChannel uint64
 }
 
-// AssignPort ...
+// AssignPort starts a peer transfer when it exists in response to announce from
+// peer
 func (p *Peer) AssignPort(id []byte, peerChannel uint64) (uint64, bool) {
 	pt, ok := p.getPeerTransfer(id)
 	if !ok {
 		return 0, false
 	}
 
-	p.logger.Debug(
+	pt.logger.Debug(
 		"assigning port",
-		logutil.ByteHex("id", pt.id),
-		zap.Stringer("swarm", pt.swarm.ID()),
-		zap.Uint64("localChannel", pt.channel),
 		zap.Uint64("peerChannel", peerChannel),
 	)
 
-	pt.commands <- peerTransferCommand{peerTransferStart, peerChannel}
-
-	return pt.channel, true
+	return pt.channel, p.startPeerTransfer(pt, peerChannel)
 }
 
-// Announce ...
+// Close stops a peer transfer when it exists in response to close from peer
+func (p *Peer) Close(id []byte) {
+	if pt, ok := p.getPeerTransfer(id); ok {
+		p.stopPeerTransfer(pt, false)
+	}
+}
+
+// Announce creates and notifies peer of the transfer t
 func (p *Peer) Announce(t *transfer) {
 	pt := p.getOrCreatePeerTransfer(t)
 
-	p.logger.Debug(
-		"announcing swarm",
-		logutil.ByteHex("id", pt.id),
-		zap.Stringer("swarm", pt.swarm.ID()),
-		zap.Uint64("localChannel", pt.channel),
-	)
+	pt.logger.Debug("announcing swarm")
 
 	go func() {
 		req := &transferv1.TransferPeerAnnounceRequest{
@@ -70,30 +65,25 @@ func (p *Peer) Announce(t *transfer) {
 		res := &transferv1.TransferPeerAnnounceResponse{}
 		err := p.client.Transfer().Announce(p.ctx, req, res)
 		if err != nil {
-			p.logger.Debug("announce failed", zap.Error(err))
+			pt.logger.Debug("announce failed", zap.Error(err))
 			return
 		}
 
-		pt.commands <- peerTransferCommand{peerTransferStart, res.GetChannel()}
+		if res.GetChannel() != 0 {
+			p.startPeerTransfer(pt, res.GetChannel())
+		}
 	}()
 }
 
-// Close ...
-func (p *Peer) Close(id []byte) {
-	if pt, ok := p.getPeerTransfer(id); ok {
-		pt.commands <- peerTransferCommand{op: peerTransferStop}
-	}
-}
-
-// Remove ...
+// Remove cleans up the peer transfer for the removed transfer t
 func (p *Peer) Remove(t *transfer) {
 	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	p.logger.Debug("removing pt", logutil.ByteHex("id", t.id))
 	pt, ok := p.transfers.Delete(&peerTransfer{transfer: t}).(*peerTransfer)
+	p.lock.Unlock()
+
 	if ok {
-		pt.close()
+		pt.logger.Debug("removed peer transfer")
+		p.stopPeerTransfer(pt, true)
 	}
 }
 
@@ -111,93 +101,97 @@ func (p *Peer) getOrCreatePeerTransfer(t *transfer) *peerTransfer {
 
 	pt, ok := p.transfers.Get(&peerTransfer{transfer: t}).(*peerTransfer)
 	if ok {
+		pt.logger.Debug("reused peer transfer")
 		return pt
 	}
 
 	p.nextChannel++
 
-	logger := p.logger.With(
-		logutil.ByteHex("id", t.id),
-		zap.Stringer("swarm", t.swarm.ID()),
-		zap.Uint64("localChannel", p.nextChannel),
-	)
-
-	logger.Debug("creating peer transfer")
-
 	pt = &peerTransfer{
+		logger: p.logger.With(
+			logutil.ByteHex("id", t.id),
+			zap.Stringer("swarm", t.swarm.ID()),
+			zap.Uint64("localChannel", p.nextChannel),
+		),
 		transfer: t,
 		channel:  p.nextChannel,
-		commands: make(chan peerTransferCommand, 8),
+		stop:     make(chan struct{}),
 	}
 	p.transfers.ReplaceOrInsert(pt)
 
-	go func() {
-		err := p.runPeerTransfer(logger, pt)
-		logger.Debug("peer transfer closed", zap.Error(err))
-	}()
+	pt.logger.Debug("created peer transfer")
 
 	return pt
 }
 
-func (p *Peer) runPeerTransfer(logger *zap.Logger, pt *peerTransfer) error {
-	for {
+func (p *Peer) startPeerTransfer(pt *peerTransfer, peerChannel uint64) bool {
+	pt.lock.Lock()
+	defer pt.lock.Unlock()
+
+	if pt.open {
+		return true
+	}
+
+	pt.logger.Debug(
+		"opening swarm channel",
+		zap.Uint64("peerChannel", peerChannel),
+	)
+
+	err := p.runnerPeer.RunSwarm(pt.swarm, codec.Channel(pt.channel), codec.Channel(peerChannel))
+	if err != nil {
+		pt.logger.Debug("unable to start swarm channel", zap.Error(err))
+		return false
+	}
+	pt.open = true
+
+	go func() {
 		select {
-		case cmd := <-pt.commands:
-			switch cmd.op {
-			case peerTransferStart:
-				if pt.open || cmd.peerChannel == 0 {
-					continue
-				}
-
-				logger.Debug(
-					"opening swarm channel",
-					zap.Uint64("peerChannel", cmd.peerChannel),
-				)
-
-				err := p.runnerPeer.RunSwarm(pt.swarm, codec.Channel(pt.channel), codec.Channel(cmd.peerChannel))
-				if err != nil {
-					return fmt.Errorf("unable to start swarm channel: %w", err)
-				}
-				pt.open = true
-			case peerTransferStop:
-				logger.Debug("closing swarm channel")
-
-				p.runnerPeer.StopSwarm(pt.swarm)
-				pt.open = false
-
-				req := &transferv1.TransferPeerCloseRequest{Id: pt.id}
-				res := &transferv1.TransferPeerCloseResponse{}
-				err := p.client.Transfer().Close(context.Background(), req, res)
-				if err != nil {
-					return fmt.Errorf("unable to notify peer of channel closure: %w", err)
-				}
-			}
 		case <-pt.ctx.Done():
-			return fmt.Errorf("transfer closed: %w", pt.ctx.Err())
+			p.stopPeerTransfer(pt, true)
 		case <-p.ctx.Done():
-			return fmt.Errorf("peer closed: %w", pt.ctx.Err())
+			p.stopPeerTransfer(pt, false)
+		case <-pt.stop:
+		}
+	}()
+
+	return true
+}
+
+func (p *Peer) stopPeerTransfer(pt *peerTransfer, notifyPeer bool) {
+	pt.lock.Lock()
+	defer pt.lock.Unlock()
+
+	if !pt.open {
+		return
+	}
+
+	pt.logger.Debug("closing swarm channel")
+
+	p.runnerPeer.StopSwarm(pt.swarm)
+	pt.open = false
+
+	select {
+	case pt.stop <- struct{}{}:
+	default:
+	}
+
+	if notifyPeer {
+		req := &transferv1.TransferPeerCloseRequest{Id: pt.id}
+		res := &transferv1.TransferPeerCloseResponse{}
+		err := p.client.Transfer().Close(context.Background(), req, res)
+		if err != nil {
+			pt.logger.Debug("unable to notify peer of channel closure", zap.Error(err))
 		}
 	}
 }
 
-type peerTransferOp int
-
-const (
-	peerTransferStart peerTransferOp = iota
-	peerTransferStop
-	peerTransferShutdown
-)
-
-type peerTransferCommand struct {
-	op          peerTransferOp
-	peerChannel uint64
-}
-
 type peerTransfer struct {
+	logger  *zap.Logger
+	lock    sync.Mutex
+	channel uint64
+	stop    chan struct{}
+	open    bool
 	*transfer
-	commands chan peerTransferCommand
-	channel  uint64
-	open     bool
 }
 
 func (t *peerTransfer) Less(o llrb.Item) bool {

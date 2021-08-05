@@ -175,7 +175,6 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 
 			styp := &mp4.StypBox{
 				MajorBrand:       "msdh",
-				MinorVersion:     0,
 				CompatibleBrands: []string{"msdh", "msix"},
 			}
 			if err := styp.Encode(w); err != nil {

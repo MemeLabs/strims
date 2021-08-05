@@ -64,7 +64,7 @@ type webRTCMediator struct {
 	nextICESendIndex      uint64
 	remoteICELock         sync.Mutex
 	remoteICEReadIndices  uint64
-	remoteICELastIndex    uint64
+	remoteICEAllIndices   uint64
 	remoteICECandiates    chan []byte
 	remoteICECloseOnce    sync.Once
 	remoteDescriptionDone chan struct{}
@@ -112,10 +112,11 @@ func (m *webRTCMediator) addICECandidate(index uint64, candidate []byte) (bool, 
 	m.remoteICELock.Lock()
 	defer m.remoteICELock.Unlock()
 
+	mask := uint64(1) << index
 	if candidate == nil {
-		m.remoteICELastIndex = index
-	} else if i := uint64(1) << index; m.remoteICEReadIndices&i == 0 {
-		m.remoteICEReadIndices |= i
+		m.remoteICEAllIndices = mask - 1
+	} else if m.remoteICEReadIndices&mask == 0 {
+		m.remoteICEReadIndices |= mask
 
 		select {
 		case m.remoteICECandiates <- candidate:
@@ -123,7 +124,7 @@ func (m *webRTCMediator) addICECandidate(index uint64, candidate []byte) (bool, 
 		}
 	}
 
-	if m.remoteICELastIndex != 0 && m.remoteICEReadIndices == m.remoteICELastIndex-1 {
+	if m.remoteICEAllIndices != 0 && m.remoteICEReadIndices == m.remoteICEAllIndices {
 		m.remoteICECloseOnce.Do(func() { close(m.remoteICECandiates) })
 		return true, nil
 	}
