@@ -13,28 +13,8 @@
 .thing_list {
   margin: 20px 0;
 
-  &__item {
-    border-radius: 4px;
-    border: 1px solid;
-    background: $slate-300;
-    padding: 20px;
-    width: 80vw;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: block;
-
-    @include color-scheme('dark') {
-      border-color: $slate-500;
-      background: $slate-300;
-    }
-    @include color-scheme('light') {
-      border-color: $gray-500;
-      background: $gray-300;
-    }
-  }
-
   &__modal_mask {
-    background: rgba(0, 0,0, 0.5);
+    background: rgba(0, 0, 0, 0.5);
     content: "";
     height: 100vh;
     left: 0;
@@ -54,4 +34,8 @@
     width: 800px;
     z-index: 999;
   }
+}
+
+.test_image {
+  animation: 10s linear;
 }

@@ -13,6 +13,11 @@ func RegisterChatService(host rpc.ServiceRegistry, service ChatService) {
 	host.RegisterMethod("strims.chat.v1.Chat.DeleteServer", service.DeleteServer)
 	host.RegisterMethod("strims.chat.v1.Chat.GetServer", service.GetServer)
 	host.RegisterMethod("strims.chat.v1.Chat.ListServers", service.ListServers)
+	host.RegisterMethod("strims.chat.v1.Chat.CreateEmote", service.CreateEmote)
+	host.RegisterMethod("strims.chat.v1.Chat.UpdateEmote", service.UpdateEmote)
+	host.RegisterMethod("strims.chat.v1.Chat.DeleteEmote", service.DeleteEmote)
+	host.RegisterMethod("strims.chat.v1.Chat.GetEmote", service.GetEmote)
+	host.RegisterMethod("strims.chat.v1.Chat.ListEmotes", service.ListEmotes)
 	host.RegisterMethod("strims.chat.v1.Chat.OpenServer", service.OpenServer)
 	host.RegisterMethod("strims.chat.v1.Chat.OpenClient", service.OpenClient)
 	host.RegisterMethod("strims.chat.v1.Chat.CallClient", service.CallClient)
@@ -22,36 +27,56 @@ func RegisterChatService(host rpc.ServiceRegistry, service ChatService) {
 type ChatService interface {
 	CreateServer(
 		ctx context.Context,
-		req *CreateChatServerRequest,
-	) (*CreateChatServerResponse, error)
+		req *CreateServerRequest,
+	) (*CreateServerResponse, error)
 	UpdateServer(
 		ctx context.Context,
-		req *UpdateChatServerRequest,
-	) (*UpdateChatServerResponse, error)
+		req *UpdateServerRequest,
+	) (*UpdateServerResponse, error)
 	DeleteServer(
 		ctx context.Context,
-		req *DeleteChatServerRequest,
-	) (*DeleteChatServerResponse, error)
+		req *DeleteServerRequest,
+	) (*DeleteServerResponse, error)
 	GetServer(
 		ctx context.Context,
-		req *GetChatServerRequest,
-	) (*GetChatServerResponse, error)
+		req *GetServerRequest,
+	) (*GetServerResponse, error)
 	ListServers(
 		ctx context.Context,
-		req *ListChatServersRequest,
-	) (*ListChatServersResponse, error)
+		req *ListServersRequest,
+	) (*ListServersResponse, error)
+	CreateEmote(
+		ctx context.Context,
+		req *CreateEmoteRequest,
+	) (*CreateEmoteResponse, error)
+	UpdateEmote(
+		ctx context.Context,
+		req *UpdateEmoteRequest,
+	) (*UpdateEmoteResponse, error)
+	DeleteEmote(
+		ctx context.Context,
+		req *DeleteEmoteRequest,
+	) (*DeleteEmoteResponse, error)
+	GetEmote(
+		ctx context.Context,
+		req *GetEmoteRequest,
+	) (*GetEmoteResponse, error)
+	ListEmotes(
+		ctx context.Context,
+		req *ListEmotesRequest,
+	) (*ListEmotesResponse, error)
 	OpenServer(
 		ctx context.Context,
-		req *OpenChatServerRequest,
-	) (<-chan *ChatServerEvent, error)
+		req *OpenServerRequest,
+	) (<-chan *ServerEvent, error)
 	OpenClient(
 		ctx context.Context,
-		req *OpenChatClientRequest,
-	) (<-chan *ChatClientEvent, error)
+		req *OpenClientRequest,
+	) (<-chan *ClientEvent, error)
 	CallClient(
 		ctx context.Context,
-		req *CallChatClientRequest,
-	) (*CallChatClientResponse, error)
+		req *CallClientRequest,
+	) (*CallClientResponse, error)
 }
 
 // ChatClient ...
@@ -67,8 +92,8 @@ func NewChatClient(client rpc.Caller) *ChatClient {
 // CreateServer ...
 func (c *ChatClient) CreateServer(
 	ctx context.Context,
-	req *CreateChatServerRequest,
-	res *CreateChatServerResponse,
+	req *CreateServerRequest,
+	res *CreateServerResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.CreateServer", req, res)
 }
@@ -76,8 +101,8 @@ func (c *ChatClient) CreateServer(
 // UpdateServer ...
 func (c *ChatClient) UpdateServer(
 	ctx context.Context,
-	req *UpdateChatServerRequest,
-	res *UpdateChatServerResponse,
+	req *UpdateServerRequest,
+	res *UpdateServerResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.UpdateServer", req, res)
 }
@@ -85,8 +110,8 @@ func (c *ChatClient) UpdateServer(
 // DeleteServer ...
 func (c *ChatClient) DeleteServer(
 	ctx context.Context,
-	req *DeleteChatServerRequest,
-	res *DeleteChatServerResponse,
+	req *DeleteServerRequest,
+	res *DeleteServerResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.DeleteServer", req, res)
 }
@@ -94,8 +119,8 @@ func (c *ChatClient) DeleteServer(
 // GetServer ...
 func (c *ChatClient) GetServer(
 	ctx context.Context,
-	req *GetChatServerRequest,
-	res *GetChatServerResponse,
+	req *GetServerRequest,
+	res *GetServerResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.GetServer", req, res)
 }
@@ -103,17 +128,62 @@ func (c *ChatClient) GetServer(
 // ListServers ...
 func (c *ChatClient) ListServers(
 	ctx context.Context,
-	req *ListChatServersRequest,
-	res *ListChatServersResponse,
+	req *ListServersRequest,
+	res *ListServersResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.ListServers", req, res)
+}
+
+// CreateEmote ...
+func (c *ChatClient) CreateEmote(
+	ctx context.Context,
+	req *CreateEmoteRequest,
+	res *CreateEmoteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.CreateEmote", req, res)
+}
+
+// UpdateEmote ...
+func (c *ChatClient) UpdateEmote(
+	ctx context.Context,
+	req *UpdateEmoteRequest,
+	res *UpdateEmoteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.UpdateEmote", req, res)
+}
+
+// DeleteEmote ...
+func (c *ChatClient) DeleteEmote(
+	ctx context.Context,
+	req *DeleteEmoteRequest,
+	res *DeleteEmoteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.DeleteEmote", req, res)
+}
+
+// GetEmote ...
+func (c *ChatClient) GetEmote(
+	ctx context.Context,
+	req *GetEmoteRequest,
+	res *GetEmoteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.GetEmote", req, res)
+}
+
+// ListEmotes ...
+func (c *ChatClient) ListEmotes(
+	ctx context.Context,
+	req *ListEmotesRequest,
+	res *ListEmotesResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.ListEmotes", req, res)
 }
 
 // OpenServer ...
 func (c *ChatClient) OpenServer(
 	ctx context.Context,
-	req *OpenChatServerRequest,
-	res chan *ChatServerEvent,
+	req *OpenServerRequest,
+	res chan *ServerEvent,
 ) error {
 	return c.client.CallStreaming(ctx, "strims.chat.v1.Chat.OpenServer", req, res)
 }
@@ -121,8 +191,8 @@ func (c *ChatClient) OpenServer(
 // OpenClient ...
 func (c *ChatClient) OpenClient(
 	ctx context.Context,
-	req *OpenChatClientRequest,
-	res chan *ChatClientEvent,
+	req *OpenClientRequest,
+	res chan *ClientEvent,
 ) error {
 	return c.client.CallStreaming(ctx, "strims.chat.v1.Chat.OpenClient", req, res)
 }
@@ -130,8 +200,8 @@ func (c *ChatClient) OpenClient(
 // CallClient ...
 func (c *ChatClient) CallClient(
 	ctx context.Context,
-	req *CallChatClientRequest,
-	res *CallChatClientResponse,
+	req *CallClientRequest,
+	res *CallClientResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.Chat.CallClient", req, res)
 }

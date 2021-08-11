@@ -5,6 +5,7 @@ import (
 	"io"
 	"time"
 
+	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
@@ -136,6 +137,13 @@ type PeerControl interface {
 	List() []Peer
 }
 
+type ChatControl interface {
+	SyncServer(s *chatv1.Server)
+	RemoveServer(id uint64)
+	SyncEmote(serverID uint64, e *chatv1.Emote)
+	RemoveEmote(id uint64)
+}
+
 // AppControl ...
 type AppControl interface {
 	Run(ctx context.Context)
@@ -143,6 +151,7 @@ type AppControl interface {
 	Peer() PeerControl
 	Bootstrap() BootstrapControl
 	CA() CAControl
+	Chat() ChatControl
 	Dialer() DialerControl
 	Directory() DirectoryControl
 	Network() NetworkControl

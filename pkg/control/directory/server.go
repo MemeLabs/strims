@@ -7,6 +7,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
+	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 )
@@ -23,7 +24,7 @@ func newDirectoryServer(
 		return nil, err
 	}
 
-	ew, err := newEventWriter(w)
+	ew, err := protoutil.NewChunkStreamWriter(w, chunkSize)
 	if err != nil {
 		return nil, err
 	}
@@ -33,7 +34,7 @@ func newDirectoryServer(
 		network:     network,
 		swarm:       w.Swarm(),
 		service:     newDirectoryService(logger, network.Key, ew),
-		eventReader: newEventReader(w.Swarm().Reader()),
+		eventReader: protoutil.NewChunkStreamReader(w.Swarm().Reader(), chunkSize),
 	}
 	return s, nil
 }
@@ -43,7 +44,7 @@ type directoryServer struct {
 	network     *networkv1.Network
 	swarm       *ppspp.Swarm
 	service     *directoryService
-	eventReader *EventReader
+	eventReader *protoutil.ChunkStreamReader
 	cancel      context.CancelFunc
 }
 

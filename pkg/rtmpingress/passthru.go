@@ -153,8 +153,6 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 					dur := pkt.Time - baseMediaDecodeTime[i]
 					baseMediaDecodeTime[i] = pkt.Time
 
-					// totalSize[i] += len(pkt.Data)
-
 					traf[i].Trun.AddSample(&mp4.Sample{
 						Dur:  uint32(math.Round(float64(dur) * timeScale[i])),
 						Size: uint32(len(pkt.Data)),

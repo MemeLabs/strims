@@ -7,6 +7,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/bootstrap"
 	"github.com/MemeLabs/go-ppspp/pkg/control/ca"
+	"github.com/MemeLabs/go-ppspp/pkg/control/chat"
 	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
 	"github.com/MemeLabs/go-ppspp/pkg/control/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
@@ -36,6 +37,7 @@ func NewControl(
 		dialerControl       = dialer.NewControl(logger, vpn, profile)
 		transferControl     = transfer.NewControl(logger, vpn, observers)
 		caControl           = ca.NewControl(logger, vpn, store, observers, dialerControl)
+		chatControl         = chat.NewControl(logger, vpn, store, observers, dialerControl, transferControl)
 		directoryControl    = directory.NewControl(logger, vpn, store, observers, dialerControl, transferControl)
 		networkControl      = network.NewControl(logger, broker, vpn, store, profile, observers, dialerControl)
 		bootstrapControl    = bootstrap.NewControl(logger, vpn, store, observers)
@@ -52,6 +54,7 @@ func NewControl(
 		observers:    observers,
 		dialer:       dialerControl,
 		ca:           caControl,
+		chat:         chatControl,
 		directory:    directoryControl,
 		peer:         peerControl,
 		network:      networkControl,
@@ -71,6 +74,7 @@ type Control struct {
 	observers    *event.Observers
 	dialer       *dialer.Control
 	ca           *ca.Control
+	chat         *chat.Control
 	directory    *directory.Control
 	peer         *PeerControl
 	network      *network.Control
@@ -103,6 +107,9 @@ func (c *Control) Dialer() control.DialerControl { return c.dialer }
 
 // CA ...
 func (c *Control) CA() control.CAControl { return c.ca }
+
+// Chat ...
+func (c *Control) Chat() control.ChatControl { return c.chat }
 
 // Directory ...
 func (c *Control) Directory() control.DirectoryControl { return c.directory }

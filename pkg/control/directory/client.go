@@ -5,6 +5,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
+	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"go.uber.org/zap"
 )
 
@@ -18,7 +19,7 @@ func newDirectoryReader(logger *zap.Logger, key []byte) (*directoryReader, error
 		logger:      logger,
 		key:         key,
 		swarm:       s,
-		eventReader: newEventReader(s.Reader()),
+		eventReader: protoutil.NewChunkStreamReader(s.Reader(), chunkSize),
 	}, nil
 }
 
@@ -26,7 +27,7 @@ type directoryReader struct {
 	logger      *zap.Logger
 	key         []byte
 	swarm       *ppspp.Swarm
-	eventReader *EventReader
+	eventReader *protoutil.ChunkStreamReader
 	cancel      context.CancelFunc
 }
 

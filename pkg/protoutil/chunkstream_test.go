@@ -1,4 +1,4 @@
-package directory
+package protoutil
 
 import (
 	"bytes"
@@ -8,12 +8,12 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestEventReadWriter(t *testing.T) {
+func TestChunkStreamReadWriter(t *testing.T) {
 	b := &testOffsetReadWriter{}
 
-	w, err := newEventWriter(b)
+	w, err := NewChunkStreamWriter(b, 1024)
 	assert.NoError(t, err)
-	r := newEventReader(b)
+	r := NewChunkStreamReader(b, 1024)
 
 	src := &networkv1.DirectoryEventBroadcast{
 		Events: []*networkv1.DirectoryEvent{

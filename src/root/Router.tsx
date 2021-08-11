@@ -23,7 +23,6 @@ const SettingsRouter: React.FC = () => (
       />
       <PrivateRoute
         path="/settings/chat-servers"
-        exact
         component={lazy(() => import("../pages/Settings/ChatServers"))}
       />
       <PrivateRoute

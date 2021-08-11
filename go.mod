@@ -22,6 +22,7 @@ require (
 	github.com/emirpasic/gods v1.12.0
 	github.com/friendsofgo/errors v0.9.2
 	github.com/fsnotify/fsnotify v1.4.9
+	github.com/giorgisio/goav v0.1.0 // indirect
 	github.com/gobwas/httphead v0.0.0-20200921212729-da3d93bc3c58 // indirect
 	github.com/gobwas/pool v0.2.1 // indirect
 	github.com/gobwas/ws v1.0.4 // indirect

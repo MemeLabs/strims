@@ -1,4 +1,5 @@
 import clsx from "clsx";
+import { get } from "lodash";
 import React, { ReactElement } from "react";
 import Dropzone from "react-dropzone";
 import { FieldError, FieldValues, UseControllerProps, useController } from "react-hook-form";
@@ -33,13 +34,13 @@ export const InputLabel: React.FC<InputLabelProps> = ({
   });
 
   return (
-    <label className={labelClass}>
+    <div className={labelClass}>
       <div className="input_label__text">{text}</div>
       <div className="input_label__body">
         {children}
         {description && <div className="input_label__description">{description}</div>}
       </div>
-    </label>
+    </div>
   );
 };
 
@@ -148,13 +149,19 @@ export const ToggleInput = <T extends FieldValues>({
   ...controllerProps
 }: ToggleInputProps & CompatibleUseControllerProps<T, boolean>): ReactElement => {
   const {
-    field,
+    field: { value, ...field },
     fieldState: { error },
   } = useController({ defaultValue: false, ...controllerProps });
 
   return (
     <InputLabel text={label} description={description}>
-      <input {...field} className="input input_toggle" type="checkbox" disabled={disabled} />
+      <input
+        {...field}
+        checked={value}
+        className="input input_toggle"
+        type="checkbox"
+        disabled={disabled}
+      />
       <InputError error={error} />
     </InputLabel>
   );
@@ -163,16 +170,44 @@ export const ToggleInput = <T extends FieldValues>({
 export interface ImageValue {
   data: Uint8Array;
   type: string;
+  height: number;
+  width: number;
 }
 
-export interface AvatarInput {
+export interface ImageInputPlaceholderProps {
+  classNameBase: string;
+}
+
+export const ImageInputPlaceholder: React.FC<ImageInputPlaceholderProps> = ({ classNameBase }) => (
+  <div className={`${classNameBase}__placeholder`}>
+    <MdAddAPhoto size={30} className={`${classNameBase}__placeholder__icon`} />
+    <span className={`${classNameBase}__placeholder__text`}>upload</span>
+  </div>
+);
+
+export interface ImageInputPreviewProps {
+  src: string;
+  classNameBase: string;
+}
+
+export const ImageInputPreview: React.FC<ImageInputPreviewProps> = ({ src, classNameBase }) => (
+  <img src={src} className={`${classNameBase}__preview`} />
+);
+
+export interface ImageInput {
   maxSize?: number;
+  classNameBase?: string;
+  placeholder?: React.ComponentType<ImageInputPlaceholderProps>;
+  preview?: React.ComponentType<ImageInputPreviewProps>;
 }
 
-export const AvatarInput = <T extends FieldValues>({
+export const ImageInput = <T extends FieldValues>({
   maxSize = 512 * 1024,
+  classNameBase = "input_image",
+  placeholder: Placeholder = ImageInputPlaceholder,
+  preview: Preview = ImageInputPreview,
   ...controllerProps
-}: AvatarInput & CompatibleUseControllerProps<T, ImageValue>): ReactElement => {
+}: ImageInput & CompatibleUseControllerProps<T, ImageValue>): ReactElement => {
   const [previewUrl, setPreviewUrl] = React.useState<string>();
   React.useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
 
@@ -187,7 +222,8 @@ export const AvatarInput = <T extends FieldValues>({
       return;
     }
 
-    setPreviewUrl(URL.createObjectURL(file));
+    const url = URL.createObjectURL(file);
+    setPreviewUrl(url);
 
     const data = await new Promise<ArrayBuffer>((resolve, reject) => {
       const reader = new FileReader();
@@ -195,25 +231,39 @@ export const AvatarInput = <T extends FieldValues>({
       reader.onerror = () => reject();
       reader.readAsArrayBuffer(file);
     });
-    onChange({
-      type: file.type,
-      data,
-    });
+
+    const img = new Image();
+    img.src = url;
+    img.onload = () =>
+      onChange({
+        data,
+        type: file.type,
+        height: img.height,
+        width: img.width,
+      });
   };
+
+  React.useEffect(() => {
+    const defaultValue = get(
+      controllerProps.control.defaultValuesRef.current,
+      controllerProps.name
+    ) as ImageValue;
+    if (defaultValue) {
+      const { data, type } = defaultValue;
+      setPreviewUrl(URL.createObjectURL(new Blob([data], { type })));
+    }
+  }, []);
 
   return (
     <>
       <InputError error={error} />
       <Dropzone maxSize={maxSize} multiple={false} accept="image/*" onDrop={handleDrop}>
         {({ getRootProps, getInputProps }) => (
-          <div {...getRootProps()} className="input_avatar">
+          <div {...getRootProps()} className={classNameBase}>
             {previewUrl ? (
-              <img src={previewUrl} className="input_avatar__preview" />
+              <Preview src={previewUrl} classNameBase={classNameBase} />
             ) : (
-              <div className="input_avatar__placeholder">
-                <MdAddAPhoto size={30} className="input_avatar__placeholder__icon" />
-                <span className="input_avatar__placeholder__text">upload</span>
-              </div>
+              <Placeholder classNameBase={classNameBase} />
             )}
             <input name="file" {...getInputProps()} />
           </div>

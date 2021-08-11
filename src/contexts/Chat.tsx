@@ -3,7 +3,7 @@ import clsx from "clsx";
 import React from "react";
 import { useEffect } from "react";
 
-import { CallChatClientRequest, ChatClientEvent } from "../apis/strims/chat/v1/chat";
+import { ClientEvent } from "../apis/strims/chat/v1/chat";
 import { Emote, emotes } from "../components/Chat/test-emotes";
 import stream, { messages } from "../components/Chat/test-history";
 import { useClient } from "./FrontendApi";
@@ -11,7 +11,7 @@ import { useClient } from "./FrontendApi";
 type Action =
   | {
       type: "MESSAGE_SCROLLBACK";
-      messages: ChatClientEvent.Message[];
+      messages: ClientEvent.Message[];
     }
   | {
       type: "LOAD_EMOTES";
@@ -19,11 +19,11 @@ type Action =
     }
   | {
       type: "MESSAGE";
-      message: ChatClientEvent.Message;
+      message: ClientEvent.Message;
     }
   | {
       type: "CLIENT_DATA";
-      data: ChatClientEvent;
+      data: ClientEvent;
     }
   | {
       type: "CLIENT_ERROR";
@@ -34,7 +34,7 @@ type Action =
     };
 
 interface State {
-  messages: ChatClientEvent.Message[];
+  messages: ClientEvent.Message[];
   styles: {
     [key: string]: StyleDeclarationValue;
   };
@@ -87,15 +87,15 @@ const chatReducer = (state: State, action: Action): State => {
   }
 };
 
-const chatClientDataReducer = (state: State, event: ChatClientEvent): State => {
+const chatClientDataReducer = (state: State, event: ClientEvent): State => {
   switch (event.body.case) {
-    case ChatClientEvent.BodyCase.OPEN:
+    case ClientEvent.BodyCase.OPEN:
       return {
         ...state,
         clientId: event.body.open.clientId,
         state: "open",
       };
-    case ChatClientEvent.BodyCase.MESSAGE:
+    case ClientEvent.BodyCase.MESSAGE:
       return state;
     default:
       return state;

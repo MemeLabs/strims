@@ -74,7 +74,7 @@ const JoinForm = ({
   );
 
   return (
-    <form className="invite_form" onSubmit={onSubmit}>
+    <form className="thing_form" onSubmit={onSubmit}>
       {error && <InputError error={error.message || "Error creating membership"} />}
       <TextInput
         control={control}

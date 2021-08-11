@@ -6,31 +6,31 @@ import {
   IKey as strims_type_IKey,
 } from "../../type/key";
 
-export type ICreateChatServerRequest = {
+export type ICreateServerRequest = {
   networkKey?: Uint8Array;
-  chatRoom?: IChatRoom;
+  room?: IRoom | undefined;
 }
 
-export class CreateChatServerRequest {
+export class CreateServerRequest {
   networkKey: Uint8Array;
-  chatRoom: ChatRoom | undefined;
+  room: Room | undefined;
 
-  constructor(v?: ICreateChatServerRequest) {
+  constructor(v?: ICreateServerRequest) {
     this.networkKey = v?.networkKey || new Uint8Array();
-    this.chatRoom = v?.chatRoom && new ChatRoom(v.chatRoom);
+    this.room = v?.room && new Room(v.room);
   }
 
-  static encode(m: CreateChatServerRequest, w?: Writer): Writer {
+  static encode(m: CreateServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.networkKey) w.uint32(18).bytes(m.networkKey);
-    if (m.chatRoom) ChatRoom.encode(m.chatRoom, w.uint32(26).fork()).ldelim();
+    if (m.room) Room.encode(m.room, w.uint32(26).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CreateChatServerRequest {
+  static decode(r: Reader | Uint8Array, length?: number): CreateServerRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new CreateChatServerRequest();
+    const m = new CreateServerRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -38,7 +38,7 @@ export class CreateChatServerRequest {
         m.networkKey = r.bytes();
         break;
         case 3:
-        m.chatRoom = ChatRoom.decode(r, r.uint32());
+        m.room = Room.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -49,32 +49,32 @@ export class CreateChatServerRequest {
   }
 }
 
-export type ICreateChatServerResponse = {
-  chatServer?: IChatServer;
+export type ICreateServerResponse = {
+  server?: IServer | undefined;
 }
 
-export class CreateChatServerResponse {
-  chatServer: ChatServer | undefined;
+export class CreateServerResponse {
+  server: Server | undefined;
 
-  constructor(v?: ICreateChatServerResponse) {
-    this.chatServer = v?.chatServer && new ChatServer(v.chatServer);
+  constructor(v?: ICreateServerResponse) {
+    this.server = v?.server && new Server(v.server);
   }
 
-  static encode(m: CreateChatServerResponse, w?: Writer): Writer {
+  static encode(m: CreateServerResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.chatServer) ChatServer.encode(m.chatServer, w.uint32(10).fork()).ldelim();
+    if (m.server) Server.encode(m.server, w.uint32(10).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CreateChatServerResponse {
+  static decode(r: Reader | Uint8Array, length?: number): CreateServerResponse {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new CreateChatServerResponse();
+    const m = new CreateServerResponse();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.chatServer = ChatServer.decode(r, r.uint32());
+        m.server = Server.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -85,35 +85,35 @@ export class CreateChatServerResponse {
   }
 }
 
-export type IUpdateChatServerRequest = {
+export type IUpdateServerRequest = {
   id?: bigint;
   networkKey?: Uint8Array;
-  serverKey?: IChatRoom;
+  room?: IRoom | undefined;
 }
 
-export class UpdateChatServerRequest {
+export class UpdateServerRequest {
   id: bigint;
   networkKey: Uint8Array;
-  serverKey: ChatRoom | undefined;
+  room: Room | undefined;
 
-  constructor(v?: IUpdateChatServerRequest) {
+  constructor(v?: IUpdateServerRequest) {
     this.id = v?.id || BigInt(0);
     this.networkKey = v?.networkKey || new Uint8Array();
-    this.serverKey = v?.serverKey && new ChatRoom(v.serverKey);
+    this.room = v?.room && new Room(v.room);
   }
 
-  static encode(m: UpdateChatServerRequest, w?: Writer): Writer {
+  static encode(m: UpdateServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.networkKey) w.uint32(18).bytes(m.networkKey);
-    if (m.serverKey) ChatRoom.encode(m.serverKey, w.uint32(26).fork()).ldelim();
+    if (m.room) Room.encode(m.room, w.uint32(26).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): UpdateChatServerRequest {
+  static decode(r: Reader | Uint8Array, length?: number): UpdateServerRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new UpdateChatServerRequest();
+    const m = new UpdateServerRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -124,7 +124,7 @@ export class UpdateChatServerRequest {
         m.networkKey = r.bytes();
         break;
         case 3:
-        m.serverKey = ChatRoom.decode(r, r.uint32());
+        m.room = Room.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -135,32 +135,32 @@ export class UpdateChatServerRequest {
   }
 }
 
-export type IUpdateChatServerResponse = {
-  chatServer?: IChatServer;
+export type IUpdateServerResponse = {
+  server?: IServer | undefined;
 }
 
-export class UpdateChatServerResponse {
-  chatServer: ChatServer | undefined;
+export class UpdateServerResponse {
+  server: Server | undefined;
 
-  constructor(v?: IUpdateChatServerResponse) {
-    this.chatServer = v?.chatServer && new ChatServer(v.chatServer);
+  constructor(v?: IUpdateServerResponse) {
+    this.server = v?.server && new Server(v.server);
   }
 
-  static encode(m: UpdateChatServerResponse, w?: Writer): Writer {
+  static encode(m: UpdateServerResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.chatServer) ChatServer.encode(m.chatServer, w.uint32(10).fork()).ldelim();
+    if (m.server) Server.encode(m.server, w.uint32(10).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): UpdateChatServerResponse {
+  static decode(r: Reader | Uint8Array, length?: number): UpdateServerResponse {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new UpdateChatServerResponse();
+    const m = new UpdateServerResponse();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.chatServer = ChatServer.decode(r, r.uint32());
+        m.server = Server.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -171,27 +171,27 @@ export class UpdateChatServerResponse {
   }
 }
 
-export type IDeleteChatServerRequest = {
+export type IDeleteServerRequest = {
   id?: bigint;
 }
 
-export class DeleteChatServerRequest {
+export class DeleteServerRequest {
   id: bigint;
 
-  constructor(v?: IDeleteChatServerRequest) {
+  constructor(v?: IDeleteServerRequest) {
     this.id = v?.id || BigInt(0);
   }
 
-  static encode(m: DeleteChatServerRequest, w?: Writer): Writer {
+  static encode(m: DeleteServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): DeleteChatServerRequest {
+  static decode(r: Reader | Uint8Array, length?: number): DeleteServerRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new DeleteChatServerRequest();
+    const m = new DeleteServerRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -207,47 +207,47 @@ export class DeleteChatServerRequest {
   }
 }
 
-export type IDeleteChatServerResponse = {
+export type IDeleteServerResponse = {
 }
 
-export class DeleteChatServerResponse {
+export class DeleteServerResponse {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-  constructor(v?: IDeleteChatServerResponse) {
+  constructor(v?: IDeleteServerResponse) {
   }
 
-  static encode(m: DeleteChatServerResponse, w?: Writer): Writer {
+  static encode(m: DeleteServerResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): DeleteChatServerResponse {
+  static decode(r: Reader | Uint8Array, length?: number): DeleteServerResponse {
     if (r instanceof Reader && length) r.skip(length);
-    return new DeleteChatServerResponse();
+    return new DeleteServerResponse();
   }
 }
 
-export type IGetChatServerRequest = {
+export type IGetServerRequest = {
   id?: bigint;
 }
 
-export class GetChatServerRequest {
+export class GetServerRequest {
   id: bigint;
 
-  constructor(v?: IGetChatServerRequest) {
+  constructor(v?: IGetServerRequest) {
     this.id = v?.id || BigInt(0);
   }
 
-  static encode(m: GetChatServerRequest, w?: Writer): Writer {
+  static encode(m: GetServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): GetChatServerRequest {
+  static decode(r: Reader | Uint8Array, length?: number): GetServerRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new GetChatServerRequest();
+    const m = new GetServerRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -263,32 +263,32 @@ export class GetChatServerRequest {
   }
 }
 
-export type IGetChatServerResponse = {
-  chatServer?: IChatServer;
+export type IGetServerResponse = {
+  server?: IServer | undefined;
 }
 
-export class GetChatServerResponse {
-  chatServer: ChatServer | undefined;
+export class GetServerResponse {
+  server: Server | undefined;
 
-  constructor(v?: IGetChatServerResponse) {
-    this.chatServer = v?.chatServer && new ChatServer(v.chatServer);
+  constructor(v?: IGetServerResponse) {
+    this.server = v?.server && new Server(v.server);
   }
 
-  static encode(m: GetChatServerResponse, w?: Writer): Writer {
+  static encode(m: GetServerResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.chatServer) ChatServer.encode(m.chatServer, w.uint32(10).fork()).ldelim();
+    if (m.server) Server.encode(m.server, w.uint32(10).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): GetChatServerResponse {
+  static decode(r: Reader | Uint8Array, length?: number): GetServerResponse {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new GetChatServerResponse();
+    const m = new GetServerResponse();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.chatServer = ChatServer.decode(r, r.uint32());
+        m.server = Server.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -299,52 +299,52 @@ export class GetChatServerResponse {
   }
 }
 
-export type IListChatServersRequest = {
+export type IListServersRequest = {
 }
 
-export class ListChatServersRequest {
+export class ListServersRequest {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-  constructor(v?: IListChatServersRequest) {
+  constructor(v?: IListServersRequest) {
   }
 
-  static encode(m: ListChatServersRequest, w?: Writer): Writer {
+  static encode(m: ListServersRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): ListChatServersRequest {
+  static decode(r: Reader | Uint8Array, length?: number): ListServersRequest {
     if (r instanceof Reader && length) r.skip(length);
-    return new ListChatServersRequest();
+    return new ListServersRequest();
   }
 }
 
-export type IListChatServersResponse = {
-  chatServers?: IChatServer[];
+export type IListServersResponse = {
+  servers?: IServer[];
 }
 
-export class ListChatServersResponse {
-  chatServers: ChatServer[];
+export class ListServersResponse {
+  servers: Server[];
 
-  constructor(v?: IListChatServersResponse) {
-    this.chatServers = v?.chatServers ? v.chatServers.map(v => new ChatServer(v)) : [];
+  constructor(v?: IListServersResponse) {
+    this.servers = v?.servers ? v.servers.map(v => new Server(v)) : [];
   }
 
-  static encode(m: ListChatServersResponse, w?: Writer): Writer {
+  static encode(m: ListServersResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.chatServers) ChatServer.encode(v, w.uint32(10).fork()).ldelim();
+    for (const v of m.servers) Server.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): ListChatServersResponse {
+  static decode(r: Reader | Uint8Array, length?: number): ListServersResponse {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new ListChatServersResponse();
+    const m = new ListServersResponse();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.chatServers.push(ChatServer.decode(r, r.uint32()));
+        m.servers.push(Server.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -355,32 +355,60 @@ export class ListChatServersResponse {
   }
 }
 
-export type IOpenChatServerRequest = {
-  server?: IChatServer;
+export type ICreateEmoteRequest = {
+  serverId?: bigint;
+  name?: string;
+  images?: IEmoteImage[];
+  css?: string;
+  animation?: IEmoteAnimation | undefined;
 }
 
-export class OpenChatServerRequest {
-  server: ChatServer | undefined;
+export class CreateEmoteRequest {
+  serverId: bigint;
+  name: string;
+  images: EmoteImage[];
+  css: string;
+  animation: EmoteAnimation | undefined;
 
-  constructor(v?: IOpenChatServerRequest) {
-    this.server = v?.server && new ChatServer(v.server);
+  constructor(v?: ICreateEmoteRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.name = v?.name || "";
+    this.images = v?.images ? v.images.map(v => new EmoteImage(v)) : [];
+    this.css = v?.css || "";
+    this.animation = v?.animation && new EmoteAnimation(v.animation);
   }
 
-  static encode(m: OpenChatServerRequest, w?: Writer): Writer {
+  static encode(m: CreateEmoteRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.server) ChatServer.encode(m.server, w.uint32(10).fork()).ldelim();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    if (m.name) w.uint32(18).string(m.name);
+    for (const v of m.images) EmoteImage.encode(v, w.uint32(26).fork()).ldelim();
+    if (m.css) w.uint32(34).string(m.css);
+    if (m.animation) EmoteAnimation.encode(m.animation, w.uint32(42).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): OpenChatServerRequest {
+  static decode(r: Reader | Uint8Array, length?: number): CreateEmoteRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new OpenChatServerRequest();
+    const m = new CreateEmoteRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.server = ChatServer.decode(r, r.uint32());
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        m.name = r.string();
+        break;
+        case 3:
+        m.images.push(EmoteImage.decode(r, r.uint32()));
+        break;
+        case 4:
+        m.css = r.string();
+        break;
+        case 5:
+        m.animation = EmoteAnimation.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -391,42 +419,428 @@ export class OpenChatServerRequest {
   }
 }
 
-export type IChatServerEvent = {
-  body?: ChatServerEvent.IBody
+export type ICreateEmoteResponse = {
+  emote?: IEmote | undefined;
 }
 
-export class ChatServerEvent {
-  body: ChatServerEvent.TBody;
+export class CreateEmoteResponse {
+  emote: Emote | undefined;
 
-  constructor(v?: IChatServerEvent) {
-    this.body = new ChatServerEvent.Body(v?.body);
+  constructor(v?: ICreateEmoteResponse) {
+    this.emote = v?.emote && new Emote(v.emote);
   }
 
-  static encode(m: ChatServerEvent, w?: Writer): Writer {
+  static encode(m: CreateEmoteResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.emote) Emote.encode(m.emote, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): CreateEmoteResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new CreateEmoteResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.emote = Emote.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUpdateEmoteRequest = {
+  serverId?: bigint;
+  id?: bigint;
+  name?: string;
+  images?: IEmoteImage[];
+  css?: string;
+  animation?: IEmoteAnimation | undefined;
+}
+
+export class UpdateEmoteRequest {
+  serverId: bigint;
+  id: bigint;
+  name: string;
+  images: EmoteImage[];
+  css: string;
+  animation: EmoteAnimation | undefined;
+
+  constructor(v?: IUpdateEmoteRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.id = v?.id || BigInt(0);
+    this.name = v?.name || "";
+    this.images = v?.images ? v.images.map(v => new EmoteImage(v)) : [];
+    this.css = v?.css || "";
+    this.animation = v?.animation && new EmoteAnimation(v.animation);
+  }
+
+  static encode(m: UpdateEmoteRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    if (m.id) w.uint32(16).uint64(m.id);
+    if (m.name) w.uint32(26).string(m.name);
+    for (const v of m.images) EmoteImage.encode(v, w.uint32(34).fork()).ldelim();
+    if (m.css) w.uint32(42).string(m.css);
+    if (m.animation) EmoteAnimation.encode(m.animation, w.uint32(50).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UpdateEmoteRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UpdateEmoteRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        m.id = r.uint64();
+        break;
+        case 3:
+        m.name = r.string();
+        break;
+        case 4:
+        m.images.push(EmoteImage.decode(r, r.uint32()));
+        break;
+        case 5:
+        m.css = r.string();
+        break;
+        case 6:
+        m.animation = EmoteAnimation.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUpdateEmoteResponse = {
+  emote?: IEmote | undefined;
+}
+
+export class UpdateEmoteResponse {
+  emote: Emote | undefined;
+
+  constructor(v?: IUpdateEmoteResponse) {
+    this.emote = v?.emote && new Emote(v.emote);
+  }
+
+  static encode(m: UpdateEmoteResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.emote) Emote.encode(m.emote, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UpdateEmoteResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UpdateEmoteResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.emote = Emote.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IDeleteEmoteRequest = {
+  serverId?: bigint;
+  id?: bigint;
+}
+
+export class DeleteEmoteRequest {
+  serverId: bigint;
+  id: bigint;
+
+  constructor(v?: IDeleteEmoteRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: DeleteEmoteRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    if (m.id) w.uint32(16).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DeleteEmoteRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new DeleteEmoteRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IDeleteEmoteResponse = {
+}
+
+export class DeleteEmoteResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IDeleteEmoteResponse) {
+  }
+
+  static encode(m: DeleteEmoteResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DeleteEmoteResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new DeleteEmoteResponse();
+  }
+}
+
+export type IGetEmoteRequest = {
+  id?: bigint;
+}
+
+export class GetEmoteRequest {
+  id: bigint;
+
+  constructor(v?: IGetEmoteRequest) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: GetEmoteRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetEmoteRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetEmoteRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IGetEmoteResponse = {
+  emote?: IEmote | undefined;
+}
+
+export class GetEmoteResponse {
+  emote: Emote | undefined;
+
+  constructor(v?: IGetEmoteResponse) {
+    this.emote = v?.emote && new Emote(v.emote);
+  }
+
+  static encode(m: GetEmoteResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.emote) Emote.encode(m.emote, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetEmoteResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetEmoteResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.emote = Emote.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListEmotesRequest = {
+  serverId?: bigint;
+}
+
+export class ListEmotesRequest {
+  serverId: bigint;
+
+  constructor(v?: IListEmotesRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+  }
+
+  static encode(m: ListEmotesRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListEmotesRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListEmotesRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListEmotesResponse = {
+  emotes?: IEmote[];
+}
+
+export class ListEmotesResponse {
+  emotes: Emote[];
+
+  constructor(v?: IListEmotesResponse) {
+    this.emotes = v?.emotes ? v.emotes.map(v => new Emote(v)) : [];
+  }
+
+  static encode(m: ListEmotesResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.emotes) Emote.encode(v, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListEmotesResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListEmotesResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.emotes.push(Emote.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IOpenServerRequest = {
+  server?: IServer | undefined;
+}
+
+export class OpenServerRequest {
+  server: Server | undefined;
+
+  constructor(v?: IOpenServerRequest) {
+    this.server = v?.server && new Server(v.server);
+  }
+
+  static encode(m: OpenServerRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.server) Server.encode(m.server, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): OpenServerRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new OpenServerRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.server = Server.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IServerEvent = {
+  body?: ServerEvent.IBody
+}
+
+export class ServerEvent {
+  body: ServerEvent.TBody;
+
+  constructor(v?: IServerEvent) {
+    this.body = new ServerEvent.Body(v?.body);
+  }
+
+  static encode(m: ServerEvent, w?: Writer): Writer {
     if (!w) w = new Writer();
     switch (m.body.case) {
-      case ChatServerEvent.BodyCase.OPEN:
-      ChatServerEvent.Open.encode(m.body.open, w.uint32(10).fork()).ldelim();
+      case ServerEvent.BodyCase.OPEN:
+      ServerEvent.Open.encode(m.body.open, w.uint32(10).fork()).ldelim();
       break;
-      case ChatServerEvent.BodyCase.CLOSE:
-      ChatServerEvent.Close.encode(m.body.close, w.uint32(18).fork()).ldelim();
+      case ServerEvent.BodyCase.CLOSE:
+      ServerEvent.Close.encode(m.body.close, w.uint32(18).fork()).ldelim();
       break;
     }
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): ChatServerEvent {
+  static decode(r: Reader | Uint8Array, length?: number): ServerEvent {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new ChatServerEvent();
+    const m = new ServerEvent();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new ChatServerEvent.Body({ open: ChatServerEvent.Open.decode(r, r.uint32()) });
+        m.body = new ServerEvent.Body({ open: ServerEvent.Open.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new ChatServerEvent.Body({ close: ChatServerEvent.Close.decode(r, r.uint32()) });
+        m.body = new ServerEvent.Body({ close: ServerEvent.Close.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -437,7 +851,7 @@ export class ChatServerEvent {
   }
 }
 
-export namespace ChatServerEvent {
+export namespace ServerEvent {
   export enum BodyCase {
     NOT_SET = 0,
     OPEN = 1,
@@ -446,29 +860,29 @@ export namespace ChatServerEvent {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.OPEN, open: ChatServerEvent.IOpen }
-  |{ case?: BodyCase.CLOSE, close: ChatServerEvent.IClose }
+  |{ case?: BodyCase.OPEN, open: ServerEvent.IOpen }
+  |{ case?: BodyCase.CLOSE, close: ServerEvent.IClose }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.OPEN, open: ChatServerEvent.Open }
-  |{ case: BodyCase.CLOSE, close: ChatServerEvent.Close }
+  |{ case: BodyCase.OPEN, open: ServerEvent.Open }
+  |{ case: BodyCase.CLOSE, close: ServerEvent.Close }
   >;
 
   class BodyImpl {
-    open: ChatServerEvent.Open;
-    close: ChatServerEvent.Close;
+    open: ServerEvent.Open;
+    close: ServerEvent.Close;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "open" in v) {
         this.case = BodyCase.OPEN;
-        this.open = new ChatServerEvent.Open(v.open);
+        this.open = new ServerEvent.Open(v.open);
       } else
       if (v && "close" in v) {
         this.case = BodyCase.CLOSE;
-        this.close = new ChatServerEvent.Close(v.close);
+        this.close = new ServerEvent.Close(v.close);
       }
     }
   }
@@ -476,8 +890,8 @@ export namespace ChatServerEvent {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { open: ChatServerEvent.IOpen } ? { case: BodyCase.OPEN, open: ChatServerEvent.Open } :
-    T extends { close: ChatServerEvent.IClose } ? { case: BodyCase.CLOSE, close: ChatServerEvent.Close } :
+    T extends { open: ServerEvent.IOpen } ? { case: BodyCase.OPEN, open: ServerEvent.Open } :
+    T extends { close: ServerEvent.IClose } ? { case: BodyCase.CLOSE, close: ServerEvent.Close } :
     never
     >;
   };
@@ -540,35 +954,35 @@ export namespace ChatServerEvent {
 
 }
 
-export type ICallChatServerRequest = {
+export type ICallServerRequest = {
   serverId?: bigint;
-  body?: CallChatServerRequest.IBody
+  body?: CallServerRequest.IBody
 }
 
-export class CallChatServerRequest {
+export class CallServerRequest {
   serverId: bigint;
-  body: CallChatServerRequest.TBody;
+  body: CallServerRequest.TBody;
 
-  constructor(v?: ICallChatServerRequest) {
+  constructor(v?: ICallServerRequest) {
     this.serverId = v?.serverId || BigInt(0);
-    this.body = new CallChatServerRequest.Body(v?.body);
+    this.body = new CallServerRequest.Body(v?.body);
   }
 
-  static encode(m: CallChatServerRequest, w?: Writer): Writer {
+  static encode(m: CallServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.serverId) w.uint32(8).uint64(m.serverId);
     switch (m.body.case) {
-      case CallChatServerRequest.BodyCase.CLOSE:
-      CallChatServerRequest.Close.encode(m.body.close, w.uint32(18).fork()).ldelim();
+      case CallServerRequest.BodyCase.CLOSE:
+      CallServerRequest.Close.encode(m.body.close, w.uint32(18).fork()).ldelim();
       break;
     }
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CallChatServerRequest {
+  static decode(r: Reader | Uint8Array, length?: number): CallServerRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new CallChatServerRequest();
+    const m = new CallServerRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -576,7 +990,7 @@ export class CallChatServerRequest {
         m.serverId = r.uint64();
         break;
         case 2:
-        m.body = new CallChatServerRequest.Body({ close: CallChatServerRequest.Close.decode(r, r.uint32()) });
+        m.body = new CallServerRequest.Body({ close: CallServerRequest.Close.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -587,7 +1001,7 @@ export class CallChatServerRequest {
   }
 }
 
-export namespace CallChatServerRequest {
+export namespace CallServerRequest {
   export enum BodyCase {
     NOT_SET = 0,
     CLOSE = 2,
@@ -595,22 +1009,22 @@ export namespace CallChatServerRequest {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.CLOSE, close: CallChatServerRequest.IClose }
+  |{ case?: BodyCase.CLOSE, close: CallServerRequest.IClose }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.CLOSE, close: CallChatServerRequest.Close }
+  |{ case: BodyCase.CLOSE, close: CallServerRequest.Close }
   >;
 
   class BodyImpl {
-    close: CallChatServerRequest.Close;
+    close: CallServerRequest.Close;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "close" in v) {
         this.case = BodyCase.CLOSE;
-        this.close = new CallChatServerRequest.Close(v.close);
+        this.close = new CallServerRequest.Close(v.close);
       }
     }
   }
@@ -618,7 +1032,7 @@ export namespace CallChatServerRequest {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { close: CallChatServerRequest.IClose } ? { case: BodyCase.CLOSE, close: CallChatServerRequest.Close } :
+    T extends { close: CallServerRequest.IClose } ? { case: BodyCase.CLOSE, close: CallServerRequest.Close } :
     never
     >;
   };
@@ -645,31 +1059,31 @@ export namespace CallChatServerRequest {
 
 }
 
-export type IOpenChatClientRequest = {
+export type IOpenClientRequest = {
   networkKey?: Uint8Array;
   serverKey?: Uint8Array;
 }
 
-export class OpenChatClientRequest {
+export class OpenClientRequest {
   networkKey: Uint8Array;
   serverKey: Uint8Array;
 
-  constructor(v?: IOpenChatClientRequest) {
+  constructor(v?: IOpenClientRequest) {
     this.networkKey = v?.networkKey || new Uint8Array();
     this.serverKey = v?.serverKey || new Uint8Array();
   }
 
-  static encode(m: OpenChatClientRequest, w?: Writer): Writer {
+  static encode(m: OpenClientRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.networkKey) w.uint32(10).bytes(m.networkKey);
     if (m.serverKey) w.uint32(18).bytes(m.serverKey);
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): OpenChatClientRequest {
+  static decode(r: Reader | Uint8Array, length?: number): OpenClientRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new OpenChatClientRequest();
+    const m = new OpenClientRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -688,48 +1102,48 @@ export class OpenChatClientRequest {
   }
 }
 
-export type IChatClientEvent = {
-  body?: ChatClientEvent.IBody
+export type IClientEvent = {
+  body?: ClientEvent.IBody
 }
 
-export class ChatClientEvent {
-  body: ChatClientEvent.TBody;
+export class ClientEvent {
+  body: ClientEvent.TBody;
 
-  constructor(v?: IChatClientEvent) {
-    this.body = new ChatClientEvent.Body(v?.body);
+  constructor(v?: IClientEvent) {
+    this.body = new ClientEvent.Body(v?.body);
   }
 
-  static encode(m: ChatClientEvent, w?: Writer): Writer {
+  static encode(m: ClientEvent, w?: Writer): Writer {
     if (!w) w = new Writer();
     switch (m.body.case) {
-      case ChatClientEvent.BodyCase.OPEN:
-      ChatClientEvent.Open.encode(m.body.open, w.uint32(10).fork()).ldelim();
+      case ClientEvent.BodyCase.OPEN:
+      ClientEvent.Open.encode(m.body.open, w.uint32(10).fork()).ldelim();
       break;
-      case ChatClientEvent.BodyCase.MESSAGE:
-      ChatClientEvent.Message.encode(m.body.message, w.uint32(18).fork()).ldelim();
+      case ClientEvent.BodyCase.MESSAGE:
+      ClientEvent.Message.encode(m.body.message, w.uint32(18).fork()).ldelim();
       break;
-      case ChatClientEvent.BodyCase.CLOSE:
-      ChatClientEvent.Close.encode(m.body.close, w.uint32(26).fork()).ldelim();
+      case ClientEvent.BodyCase.CLOSE:
+      ClientEvent.Close.encode(m.body.close, w.uint32(26).fork()).ldelim();
       break;
     }
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): ChatClientEvent {
+  static decode(r: Reader | Uint8Array, length?: number): ClientEvent {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new ChatClientEvent();
+    const m = new ClientEvent();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.body = new ChatClientEvent.Body({ open: ChatClientEvent.Open.decode(r, r.uint32()) });
+        m.body = new ClientEvent.Body({ open: ClientEvent.Open.decode(r, r.uint32()) });
         break;
         case 2:
-        m.body = new ChatClientEvent.Body({ message: ChatClientEvent.Message.decode(r, r.uint32()) });
+        m.body = new ClientEvent.Body({ message: ClientEvent.Message.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new ChatClientEvent.Body({ close: ChatClientEvent.Close.decode(r, r.uint32()) });
+        m.body = new ClientEvent.Body({ close: ClientEvent.Close.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -740,7 +1154,7 @@ export class ChatClientEvent {
   }
 }
 
-export namespace ChatClientEvent {
+export namespace ClientEvent {
   export enum BodyCase {
     NOT_SET = 0,
     OPEN = 1,
@@ -750,36 +1164,36 @@ export namespace ChatClientEvent {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.OPEN, open: ChatClientEvent.IOpen }
-  |{ case?: BodyCase.MESSAGE, message: ChatClientEvent.IMessage }
-  |{ case?: BodyCase.CLOSE, close: ChatClientEvent.IClose }
+  |{ case?: BodyCase.OPEN, open: ClientEvent.IOpen }
+  |{ case?: BodyCase.MESSAGE, message: ClientEvent.IMessage }
+  |{ case?: BodyCase.CLOSE, close: ClientEvent.IClose }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.OPEN, open: ChatClientEvent.Open }
-  |{ case: BodyCase.MESSAGE, message: ChatClientEvent.Message }
-  |{ case: BodyCase.CLOSE, close: ChatClientEvent.Close }
+  |{ case: BodyCase.OPEN, open: ClientEvent.Open }
+  |{ case: BodyCase.MESSAGE, message: ClientEvent.Message }
+  |{ case: BodyCase.CLOSE, close: ClientEvent.Close }
   >;
 
   class BodyImpl {
-    open: ChatClientEvent.Open;
-    message: ChatClientEvent.Message;
-    close: ChatClientEvent.Close;
+    open: ClientEvent.Open;
+    message: ClientEvent.Message;
+    close: ClientEvent.Close;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "open" in v) {
         this.case = BodyCase.OPEN;
-        this.open = new ChatClientEvent.Open(v.open);
+        this.open = new ClientEvent.Open(v.open);
       } else
       if (v && "message" in v) {
         this.case = BodyCase.MESSAGE;
-        this.message = new ChatClientEvent.Message(v.message);
+        this.message = new ClientEvent.Message(v.message);
       } else
       if (v && "close" in v) {
         this.case = BodyCase.CLOSE;
-        this.close = new ChatClientEvent.Close(v.close);
+        this.close = new ClientEvent.Close(v.close);
       }
     }
   }
@@ -787,9 +1201,9 @@ export namespace ChatClientEvent {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { open: ChatClientEvent.IOpen } ? { case: BodyCase.OPEN, open: ChatClientEvent.Open } :
-    T extends { message: ChatClientEvent.IMessage } ? { case: BodyCase.MESSAGE, message: ChatClientEvent.Message } :
-    T extends { close: ChatClientEvent.IClose } ? { case: BodyCase.CLOSE, close: ChatClientEvent.Close } :
+    T extends { open: ClientEvent.IOpen } ? { case: BodyCase.OPEN, open: ClientEvent.Open } :
+    T extends { message: ClientEvent.IMessage } ? { case: BodyCase.MESSAGE, message: ClientEvent.Message } :
+    T extends { close: ClientEvent.IClose } ? { case: BodyCase.CLOSE, close: ClientEvent.Close } :
     never
     >;
   };
@@ -835,7 +1249,7 @@ export namespace ChatClientEvent {
     serverTime?: bigint;
     nick?: string;
     body?: string;
-    entities?: IMessageEntities;
+    entities?: IMessageEntities | undefined;
   }
 
   export class Message {
@@ -916,27 +1330,27 @@ export namespace ChatClientEvent {
 
 }
 
-export type IChatRoom = {
+export type IRoom = {
   name?: string;
 }
 
-export class ChatRoom {
+export class Room {
   name: string;
 
-  constructor(v?: IChatRoom) {
+  constructor(v?: IRoom) {
     this.name = v?.name || "";
   }
 
-  static encode(m: ChatRoom, w?: Writer): Writer {
+  static encode(m: Room, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.name) w.uint32(10).string(m.name);
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): ChatRoom {
+  static decode(r: Reader | Uint8Array, length?: number): Room {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new ChatRoom();
+    const m = new Room();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -952,39 +1366,39 @@ export class ChatRoom {
   }
 }
 
-export type IChatServer = {
+export type IServer = {
   id?: bigint;
   networkKey?: Uint8Array;
-  key?: strims_type_IKey;
-  chatRoom?: IChatRoom;
+  key?: strims_type_IKey | undefined;
+  room?: IRoom | undefined;
 }
 
-export class ChatServer {
+export class Server {
   id: bigint;
   networkKey: Uint8Array;
   key: strims_type_Key | undefined;
-  chatRoom: ChatRoom | undefined;
+  room: Room | undefined;
 
-  constructor(v?: IChatServer) {
+  constructor(v?: IServer) {
     this.id = v?.id || BigInt(0);
     this.networkKey = v?.networkKey || new Uint8Array();
     this.key = v?.key && new strims_type_Key(v.key);
-    this.chatRoom = v?.chatRoom && new ChatRoom(v.chatRoom);
+    this.room = v?.room && new Room(v.room);
   }
 
-  static encode(m: ChatServer, w?: Writer): Writer {
+  static encode(m: Server, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.networkKey) w.uint32(18).bytes(m.networkKey);
     if (m.key) strims_type_Key.encode(m.key, w.uint32(26).fork()).ldelim();
-    if (m.chatRoom) ChatRoom.encode(m.chatRoom, w.uint32(34).fork()).ldelim();
+    if (m.room) Room.encode(m.room, w.uint32(34).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): ChatServer {
+  static decode(r: Reader | Uint8Array, length?: number): Server {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new ChatServer();
+    const m = new Server();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -998,7 +1412,185 @@ export class ChatServer {
         m.key = strims_type_Key.decode(r, r.uint32());
         break;
         case 4:
-        m.chatRoom = ChatRoom.decode(r, r.uint32());
+        m.room = Room.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IEmoteImage = {
+  data?: Uint8Array;
+  fileType?: EmoteFileType;
+  height?: number;
+  width?: number;
+  scale?: EmoteScale;
+}
+
+export class EmoteImage {
+  data: Uint8Array;
+  fileType: EmoteFileType;
+  height: number;
+  width: number;
+  scale: EmoteScale;
+
+  constructor(v?: IEmoteImage) {
+    this.data = v?.data || new Uint8Array();
+    this.fileType = v?.fileType || 0;
+    this.height = v?.height || 0;
+    this.width = v?.width || 0;
+    this.scale = v?.scale || 0;
+  }
+
+  static encode(m: EmoteImage, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.data) w.uint32(26).bytes(m.data);
+    if (m.fileType) w.uint32(32).uint32(m.fileType);
+    if (m.height) w.uint32(40).uint32(m.height);
+    if (m.width) w.uint32(48).uint32(m.width);
+    if (m.scale) w.uint32(56).uint32(m.scale);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): EmoteImage {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new EmoteImage();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 3:
+        m.data = r.bytes();
+        break;
+        case 4:
+        m.fileType = r.uint32();
+        break;
+        case 5:
+        m.height = r.uint32();
+        break;
+        case 6:
+        m.width = r.uint32();
+        break;
+        case 7:
+        m.scale = r.uint32();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IEmoteAnimation = {
+  frameCount?: number;
+  duration?: number;
+  iterationCount?: number;
+}
+
+export class EmoteAnimation {
+  frameCount: number;
+  duration: number;
+  iterationCount: number;
+
+  constructor(v?: IEmoteAnimation) {
+    this.frameCount = v?.frameCount || 0;
+    this.duration = v?.duration || 0;
+    this.iterationCount = v?.iterationCount || 0;
+  }
+
+  static encode(m: EmoteAnimation, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.frameCount) w.uint32(80).uint32(m.frameCount);
+    if (m.duration) w.uint32(88).uint32(m.duration);
+    if (m.iterationCount) w.uint32(96).uint32(m.iterationCount);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): EmoteAnimation {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new EmoteAnimation();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 10:
+        m.frameCount = r.uint32();
+        break;
+        case 11:
+        m.duration = r.uint32();
+        break;
+        case 12:
+        m.iterationCount = r.uint32();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IEmote = {
+  id?: bigint;
+  name?: string;
+  images?: IEmoteImage[];
+  css?: string;
+  animation?: IEmoteAnimation | undefined;
+}
+
+export class Emote {
+  id: bigint;
+  name: string;
+  images: EmoteImage[];
+  css: string;
+  animation: EmoteAnimation | undefined;
+
+  constructor(v?: IEmote) {
+    this.id = v?.id || BigInt(0);
+    this.name = v?.name || "";
+    this.images = v?.images ? v.images.map(v => new EmoteImage(v)) : [];
+    this.css = v?.css || "";
+    this.animation = v?.animation && new EmoteAnimation(v.animation);
+  }
+
+  static encode(m: Emote, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.name) w.uint32(18).string(m.name);
+    for (const v of m.images) EmoteImage.encode(v, w.uint32(26).fork()).ldelim();
+    if (m.css) w.uint32(34).string(m.css);
+    if (m.animation) EmoteAnimation.encode(m.animation, w.uint32(42).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): Emote {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new Emote();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.name = r.string();
+        break;
+        case 3:
+        m.images.push(EmoteImage.decode(r, r.uint32()));
+        break;
+        case 4:
+        m.css = r.string();
+        break;
+        case 5:
+        m.animation = EmoteAnimation.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -1016,8 +1608,8 @@ export type IMessageEntities = {
   tags?: MessageEntities.ITag[];
   codeBlocks?: MessageEntities.ICodeBlock[];
   spoilers?: MessageEntities.ISpoiler[];
-  greenText?: MessageEntities.IGenericEntity;
-  selfMessage?: MessageEntities.IGenericEntity;
+  greenText?: MessageEntities.IGenericEntity | undefined;
+  selfMessage?: MessageEntities.IGenericEntity | undefined;
 }
 
 export class MessageEntities {
@@ -1139,7 +1731,7 @@ export namespace MessageEntities {
   }
 
   export type ILink = {
-    bounds?: MessageEntities.IBounds;
+    bounds?: MessageEntities.IBounds | undefined;
     url?: string;
   }
 
@@ -1182,7 +1774,7 @@ export namespace MessageEntities {
   }
 
   export type IEmote = {
-    bounds?: MessageEntities.IBounds;
+    bounds?: MessageEntities.IBounds | undefined;
     name?: string;
     modifiers?: string[];
     combo?: number;
@@ -1239,7 +1831,7 @@ export namespace MessageEntities {
   }
 
   export type INick = {
-    bounds?: MessageEntities.IBounds;
+    bounds?: MessageEntities.IBounds | undefined;
     nick?: string;
   }
 
@@ -1282,7 +1874,7 @@ export namespace MessageEntities {
   }
 
   export type ITag = {
-    bounds?: MessageEntities.IBounds;
+    bounds?: MessageEntities.IBounds | undefined;
     name?: string;
   }
 
@@ -1325,7 +1917,7 @@ export namespace MessageEntities {
   }
 
   export type ICodeBlock = {
-    bounds?: MessageEntities.IBounds;
+    bounds?: MessageEntities.IBounds | undefined;
   }
 
   export class CodeBlock {
@@ -1361,7 +1953,7 @@ export namespace MessageEntities {
   }
 
   export type ISpoiler = {
-    bounds?: MessageEntities.IBounds;
+    bounds?: MessageEntities.IBounds | undefined;
   }
 
   export class Spoiler {
@@ -1397,7 +1989,7 @@ export namespace MessageEntities {
   }
 
   export type IGenericEntity = {
-    bounds?: MessageEntities.IBounds;
+    bounds?: MessageEntities.IBounds | undefined;
   }
 
   export class GenericEntity {
@@ -1434,38 +2026,38 @@ export namespace MessageEntities {
 
 }
 
-export type ICallChatClientRequest = {
+export type ICallClientRequest = {
   clientId?: bigint;
-  body?: CallChatClientRequest.IBody
+  body?: CallClientRequest.IBody
 }
 
-export class CallChatClientRequest {
+export class CallClientRequest {
   clientId: bigint;
-  body: CallChatClientRequest.TBody;
+  body: CallClientRequest.TBody;
 
-  constructor(v?: ICallChatClientRequest) {
+  constructor(v?: ICallClientRequest) {
     this.clientId = v?.clientId || BigInt(0);
-    this.body = new CallChatClientRequest.Body(v?.body);
+    this.body = new CallClientRequest.Body(v?.body);
   }
 
-  static encode(m: CallChatClientRequest, w?: Writer): Writer {
+  static encode(m: CallClientRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.clientId) w.uint32(8).uint64(m.clientId);
     switch (m.body.case) {
-      case CallChatClientRequest.BodyCase.MESSAGE:
-      CallChatClientRequest.Message.encode(m.body.message, w.uint32(18).fork()).ldelim();
+      case CallClientRequest.BodyCase.MESSAGE:
+      CallClientRequest.Message.encode(m.body.message, w.uint32(18).fork()).ldelim();
       break;
-      case CallChatClientRequest.BodyCase.CLOSE:
-      CallChatClientRequest.Close.encode(m.body.close, w.uint32(26).fork()).ldelim();
+      case CallClientRequest.BodyCase.CLOSE:
+      CallClientRequest.Close.encode(m.body.close, w.uint32(26).fork()).ldelim();
       break;
     }
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CallChatClientRequest {
+  static decode(r: Reader | Uint8Array, length?: number): CallClientRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new CallChatClientRequest();
+    const m = new CallClientRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -1473,10 +2065,10 @@ export class CallChatClientRequest {
         m.clientId = r.uint64();
         break;
         case 2:
-        m.body = new CallChatClientRequest.Body({ message: CallChatClientRequest.Message.decode(r, r.uint32()) });
+        m.body = new CallClientRequest.Body({ message: CallClientRequest.Message.decode(r, r.uint32()) });
         break;
         case 3:
-        m.body = new CallChatClientRequest.Body({ close: CallChatClientRequest.Close.decode(r, r.uint32()) });
+        m.body = new CallClientRequest.Body({ close: CallClientRequest.Close.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -1487,7 +2079,7 @@ export class CallChatClientRequest {
   }
 }
 
-export namespace CallChatClientRequest {
+export namespace CallClientRequest {
   export enum BodyCase {
     NOT_SET = 0,
     MESSAGE = 2,
@@ -1496,29 +2088,29 @@ export namespace CallChatClientRequest {
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.MESSAGE, message: CallChatClientRequest.IMessage }
-  |{ case?: BodyCase.CLOSE, close: CallChatClientRequest.IClose }
+  |{ case?: BodyCase.MESSAGE, message: CallClientRequest.IMessage }
+  |{ case?: BodyCase.CLOSE, close: CallClientRequest.IClose }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.MESSAGE, message: CallChatClientRequest.Message }
-  |{ case: BodyCase.CLOSE, close: CallChatClientRequest.Close }
+  |{ case: BodyCase.MESSAGE, message: CallClientRequest.Message }
+  |{ case: BodyCase.CLOSE, close: CallClientRequest.Close }
   >;
 
   class BodyImpl {
-    message: CallChatClientRequest.Message;
-    close: CallChatClientRequest.Close;
+    message: CallClientRequest.Message;
+    close: CallClientRequest.Close;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "message" in v) {
         this.case = BodyCase.MESSAGE;
-        this.message = new CallChatClientRequest.Message(v.message);
+        this.message = new CallClientRequest.Message(v.message);
       } else
       if (v && "close" in v) {
         this.case = BodyCase.CLOSE;
-        this.close = new CallChatClientRequest.Close(v.close);
+        this.close = new CallClientRequest.Close(v.close);
       }
     }
   }
@@ -1526,8 +2118,8 @@ export namespace CallChatClientRequest {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { message: CallChatClientRequest.IMessage } ? { case: BodyCase.MESSAGE, message: CallChatClientRequest.Message } :
-    T extends { close: CallChatClientRequest.IClose } ? { case: BodyCase.CLOSE, close: CallChatClientRequest.Close } :
+    T extends { message: CallClientRequest.IMessage } ? { case: BodyCase.MESSAGE, message: CallClientRequest.Message } :
+    T extends { close: CallClientRequest.IClose } ? { case: BodyCase.CLOSE, close: CallClientRequest.Close } :
     never
     >;
   };
@@ -1597,23 +2189,33 @@ export namespace CallChatClientRequest {
 
 }
 
-export type ICallChatClientResponse = {
+export type ICallClientResponse = {
 }
 
-export class CallChatClientResponse {
+export class CallClientResponse {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-  constructor(v?: ICallChatClientResponse) {
+  constructor(v?: ICallClientResponse) {
   }
 
-  static encode(m: CallChatClientResponse, w?: Writer): Writer {
+  static encode(m: CallClientResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CallChatClientResponse {
+  static decode(r: Reader | Uint8Array, length?: number): CallClientResponse {
     if (r instanceof Reader && length) r.skip(length);
-    return new CallChatClientResponse();
+    return new CallClientResponse();
   }
 }
 
+export enum EmoteFileType {
+  FILE_TYPE_UNDEFINED = 0,
+  FILE_TYPE_PNG = 1,
+  FILE_TYPE_GIF = 2,
+}
+export enum EmoteScale {
+  EMOTE_SCALE_1X = 0,
+  EMOTE_SCALE_2X = 1,
+  EMOTE_SCALE_4X = 2,
+}

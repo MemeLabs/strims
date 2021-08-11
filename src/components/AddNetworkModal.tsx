@@ -3,7 +3,7 @@ import { useForm } from "react-hook-form";
 import { MdClose } from "react-icons/md";
 
 import { CreateNetworkResponse } from "../apis/strims/network/v1/network";
-import { AvatarInput, ImageValue, InputError, TextInput } from "../components/Form";
+import { ImageInput, ImageValue, InputError, TextInput } from "../components/Form";
 import { useLazyCall } from "../contexts/FrontendApi";
 import { useProfile } from "../contexts/Profile";
 
@@ -45,7 +45,7 @@ const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) 
             </div>
             {error && <InputError error={error.message || "Error creating network"} />}
             <div className="create_network__avatar">
-              <AvatarInput name="icon" control={control} />
+              <ImageInput name="icon" classNameBase="input_avatar" control={control} />
             </div>
             <TextInput
               control={control}

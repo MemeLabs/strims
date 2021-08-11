@@ -14,6 +14,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
+	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
@@ -47,7 +48,7 @@ var swarmOptions = ppspp.SwarmOptions{
 	},
 }
 
-func newDirectoryService(logger *zap.Logger, key *key.Key, ew *EventWriter) *directoryService {
+func newDirectoryService(logger *zap.Logger, key *key.Key, ew *protoutil.ChunkStreamWriter) *directoryService {
 	return &directoryService{
 		logger:          logger,
 		done:            make(chan struct{}),
@@ -63,7 +64,7 @@ type directoryService struct {
 	done              chan struct{}
 	broadcastTicker   *time.Ticker
 	lastBroadcastTime timeutil.Time
-	eventWriter       *EventWriter
+	eventWriter       *protoutil.ChunkStreamWriter
 	lock              sync.Mutex
 	listings          lru
 	sessions          lru

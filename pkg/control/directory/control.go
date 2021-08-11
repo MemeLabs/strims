@@ -16,6 +16,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
+	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/petar/GoLLRB/llrb"
@@ -98,7 +99,10 @@ func (t *Control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 
 			for {
 				b := &networkv1.DirectoryEventBroadcast{}
-				if err := er.Read(b); err != nil {
+				err := er.Read(b)
+				if err == protoutil.ErrShortRead {
+					continue
+				} else if err != nil {
 					t.logger.Debug("error reading directory event", zap.Error(err))
 					break
 				}
@@ -200,8 +204,6 @@ func (t *Control) Part(ctx context.Context, key, networkKey []byte) error {
 	return dc.Part(ctx, &networkv1.DirectoryPartRequest{Key: key}, &networkv1.DirectoryPartResponse{})
 }
 
-var noopCancelFunc = func() {}
-
 func newRunner(ctx context.Context, logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, dialer *dialer.Control, transfer *transfer.Control, network *networkv1.Network) *runner {
 	r := &runner{
 		key:     dao.NetworkKey(network),
@@ -267,7 +269,7 @@ func (r *runner) Closed() bool {
 	return r.closed
 }
 
-func (r *runner) EventReader(ctx context.Context) (*EventReader, error) {
+func (r *runner) EventReader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 

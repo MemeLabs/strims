@@ -378,7 +378,7 @@ const VideoChannelTableItem = ({ channel, onDelete }: VideoChannelTableItemProps
   );
 };
 
-const VideoIngressPage = () => {
+const VideoIngressPage: React.FC = () => {
   // const [serversRes, getVideoIngresss] = useCall("chat", "listServers");
 
   return (

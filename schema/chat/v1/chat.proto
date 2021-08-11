@@ -8,41 +8,80 @@ option swift_prefix = "SCH";
 
 import "type/key.proto";
 
-message CreateChatServerRequest {
+message CreateServerRequest {
   bytes network_key = 2;
-  ChatRoom chat_room = 3;
+  Room room = 3;
 }
-message CreateChatServerResponse {
-  ChatServer chat_server = 1;
+message CreateServerResponse {
+  Server server = 1;
 }
-message UpdateChatServerRequest {
+message UpdateServerRequest {
   uint64 id = 1;
   bytes network_key = 2;
-  ChatRoom server_key = 3;
+  Room room = 3;
 }
-message UpdateChatServerResponse {
-  ChatServer chat_server = 1;
+message UpdateServerResponse {
+  Server server = 1;
 }
-message DeleteChatServerRequest {
+message DeleteServerRequest {
   uint64 id = 1;
 }
-message DeleteChatServerResponse {}
-message GetChatServerRequest {
+message DeleteServerResponse {}
+message GetServerRequest {
   uint64 id = 1;
 }
-message GetChatServerResponse {
-  ChatServer chat_server = 1;
+message GetServerResponse {
+  Server server = 1;
 }
-message ListChatServersRequest {}
-message ListChatServersResponse {
-  repeated ChatServer chat_servers = 1;
+message ListServersRequest {}
+message ListServersResponse {
+  repeated Server servers = 1;
 }
 
-message OpenChatServerRequest {
-  ChatServer server = 1;
+message CreateEmoteRequest {
+  uint64 server_id = 1;
+  string name = 2;
+  repeated EmoteImage images = 3;
+  string css = 4;
+  EmoteAnimation animation = 5;
+}
+message CreateEmoteResponse {
+  Emote emote = 1;
+}
+message UpdateEmoteRequest {
+  uint64 server_id = 1;
+  uint64 id = 2;
+  string name = 3;
+  repeated EmoteImage images = 4;
+  string css = 5;
+  EmoteAnimation animation = 6;
+}
+message UpdateEmoteResponse {
+  Emote emote = 1;
+}
+message DeleteEmoteRequest {
+  uint64 server_id = 1;
+  uint64 id = 2;
+}
+message DeleteEmoteResponse {}
+message GetEmoteRequest {
+  uint64 id = 1;
+}
+message GetEmoteResponse {
+  Emote emote = 1;
+}
+message ListEmotesRequest {
+  uint64 server_id = 1;
+}
+message ListEmotesResponse {
+  repeated Emote emotes = 1;
 }
 
-message ChatServerEvent {
+message OpenServerRequest {
+  Server server = 1;
+}
+
+message ServerEvent {
   message Open {
     uint64 server_id = 1;
   }
@@ -55,7 +94,7 @@ message ChatServerEvent {
   }
 }
 
-message CallChatServerRequest {
+message CallServerRequest {
   message Close {}
 
   uint64 server_id = 1;
@@ -64,12 +103,12 @@ message CallChatServerRequest {
   }
 }
 
-message OpenChatClientRequest {
+message OpenClientRequest {
   bytes network_key = 1;
   bytes server_key = 2;
 }
 
-message ChatClientEvent {
+message ClientEvent {
   message Open {
     uint64 client_id = 1;
   }
@@ -91,15 +130,49 @@ message ChatClientEvent {
   }
 }
 
-message ChatRoom {
+message Room {
   string name = 1;
 }
 
-message ChatServer {
-  uint64 id  = 1;
+message Server {
+  uint64 id = 1;
   bytes network_key = 2;
   strims.type.Key key = 3;
-  ChatRoom chat_room = 4;
+  Room room = 4;
+}
+
+enum EmoteFileType {
+  FILE_TYPE_UNDEFINED = 0;
+  FILE_TYPE_PNG = 1;
+  FILE_TYPE_GIF = 2;
+}
+
+enum EmoteScale {
+  EMOTE_SCALE_1X = 0;
+  EMOTE_SCALE_2X = 1;
+  EMOTE_SCALE_4X = 2;
+}
+
+message EmoteImage {
+  bytes data = 3;
+  EmoteFileType file_type = 4;
+  uint32 height = 5;
+  uint32 width = 6;
+  EmoteScale scale = 7;
+}
+
+message EmoteAnimation {
+  uint32 frame_count = 10;
+  uint32 Duration = 11;
+  uint32 iteration_count = 12;
+}
+
+message Emote {
+  uint64 id = 1;
+  string name = 2;
+  repeated EmoteImage images = 3;
+  string css = 4;
+  EmoteAnimation animation = 5;
 }
 
 message MessageEntities {
@@ -152,7 +225,7 @@ message MessageEntities {
   GenericEntity self_message = 8;
 }
 
-message CallChatClientRequest {
+message CallClientRequest {
   message Message {
     int64 time = 1;
     string body = 2;
@@ -167,15 +240,22 @@ message CallChatClientRequest {
   }
 }
 
-message CallChatClientResponse {}
+message CallClientResponse {}
 
 service Chat {
-  rpc CreateServer(CreateChatServerRequest) returns (CreateChatServerResponse);
-  rpc UpdateServer(UpdateChatServerRequest) returns (UpdateChatServerResponse);
-  rpc DeleteServer(DeleteChatServerRequest) returns (DeleteChatServerResponse);
-  rpc GetServer(GetChatServerRequest) returns (GetChatServerResponse);
-  rpc ListServers(ListChatServersRequest) returns (ListChatServersResponse);
-  rpc OpenServer(OpenChatServerRequest) returns (stream ChatServerEvent);
-  rpc OpenClient(OpenChatClientRequest) returns (stream ChatClientEvent);
-  rpc CallClient(CallChatClientRequest) returns (CallChatClientResponse);
+  rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
+  rpc UpdateServer(UpdateServerRequest) returns (UpdateServerResponse);
+  rpc DeleteServer(DeleteServerRequest) returns (DeleteServerResponse);
+  rpc GetServer(GetServerRequest) returns (GetServerResponse);
+  rpc ListServers(ListServersRequest) returns (ListServersResponse);
+
+  rpc CreateEmote(CreateEmoteRequest) returns (CreateEmoteResponse);
+  rpc UpdateEmote(UpdateEmoteRequest) returns (UpdateEmoteResponse);
+  rpc DeleteEmote(DeleteEmoteRequest) returns (DeleteEmoteResponse);
+  rpc GetEmote(GetEmoteRequest) returns (GetEmoteResponse);
+  rpc ListEmotes(ListEmotesRequest) returns (ListEmotesResponse);
+
+  rpc OpenServer(OpenServerRequest) returns (stream ServerEvent);
+  rpc OpenClient(OpenClientRequest) returns (stream ClientEvent);
+  rpc CallClient(CallClientRequest) returns (CallClientResponse);
 }
