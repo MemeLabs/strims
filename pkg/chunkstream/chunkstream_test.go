@@ -40,12 +40,12 @@ func TestWriter(t *testing.T) {
 		index int
 		value []byte
 	}{
-		{0, []byte{0, 0}},
-		{32, []byte{0, 0}},
-		{64, []byte{0x80, 0x11}},
+		{0, []byte{0, 0, 0, 0}},
+		{32, []byte{0, 0, 0, 0}},
+		{64, []byte{0x80, 0, 0, 0x17}},
 	}
 	for _, h := range headers {
-		oh := o[h.index : h.index+2]
+		oh := o[h.index : h.index+headerLen]
 		if !bytes.Equal(oh, h.value) {
 			t.Errorf("expected %x at %d, found %x", h.value, h.index, oh)
 		}

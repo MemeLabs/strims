@@ -2,7 +2,7 @@ import { Readable, Writable } from "stream";
 
 import Host from "@memelabs/protobuf/lib/rpc/host";
 
-import { ChatClient } from "./strims/chat/v1/chat_rpc";
+import { ChatFrontendClient } from "./strims/chat/v1/chat_rpc";
 import { DebugClient } from "./strims/debug/v1/debug_rpc";
 import { DevToolsClient as DevToolsServiceClient } from "./strims/devtools/v1/devtools_rpc";
 import { CapConnClient } from "./strims/devtools/v1/ppspp/capconn_rpc";
@@ -19,7 +19,7 @@ import { VNICFrontendClient } from "./strims/vnic/v1/vnic_rpc";
 
 export class FrontendClient {
   public bootstrap: BootstrapFrontendClient;
-  public chat: ChatClient;
+  public chat: ChatFrontendClient;
   public debug: DebugClient;
   public directory: DirectoryFrontendClient;
   public network: NetworkServiceClient;
@@ -33,7 +33,7 @@ export class FrontendClient {
   constructor(w: Writable, r: Readable) {
     const host = new Host(w, r);
     this.bootstrap = new BootstrapFrontendClient(host);
-    this.chat = new ChatClient(host);
+    this.chat = new ChatFrontendClient(host);
     this.debug = new DebugClient(host);
     this.directory = new DirectoryFrontendClient(host);
     this.network = new NetworkServiceClient(host);

@@ -4,6 +4,7 @@ go 1.13
 
 require (
 	github.com/DATA-DOG/go-sqlmock v1.5.0 // indirect
+	github.com/MemeLabs/chat-parser v1.0.3 // indirect
 	github.com/MemeLabs/protobuf v0.1.17
 	github.com/Microsoft/go-winio v0.4.14 // indirect
 	github.com/aead/ecdh v0.2.0
@@ -80,4 +81,5 @@ require (
 	google.golang.org/protobuf v1.26.0
 	gopkg.in/ini.v1 v1.62.0 // indirect
 	lukechampine.com/uint128 v1.1.1
+	mvdan.cc/xurls/v2 v2.3.0 // indirect
 )

@@ -222,8 +222,8 @@ const ChatPanel: React.FC = () => {
         <header className="home_page__chat__promo"></header>
         <div className="home_page__chat chat">
           <Provider
-            networkKey={Base64.toUint8Array("HVmKdL3JUzXvjh3BQ8tFqFCvzPp7Wxe4ak2yWbjSj/c=")}
-            serverKey={Base64.toUint8Array("laBoCbsGwcjSZk5y6qN1NEYpCxnFJZEHmNIgzV64Sc4=")}
+            networkKey={Base64.toUint8Array("ewOeQgqCCXYwVmR+nZIcbLfDszuIgV8l0Xj0OVa5Vw4=")}
+            serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
           >
             <ChatThing />
           </Provider>

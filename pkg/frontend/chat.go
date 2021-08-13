@@ -2,19 +2,24 @@ package frontend
 
 import (
 	"context"
+	"errors"
+	"sync"
 
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
 
 func init() {
 	RegisterService(func(server *rpc.Server, params *ServiceParams) {
-		chatv1.RegisterChatService(server, &chatService{
+		chatv1.RegisterChatFrontendService(server, &chatService{
 			app:   params.App,
 			store: params.Store,
+
+			clients: map[uint64]chatClientRef{},
 		})
 	})
 }
@@ -23,6 +28,15 @@ func init() {
 type chatService struct {
 	app   control.AppControl
 	store *dao.ProfileStore
+
+	lock         sync.Mutex
+	nextClientID uint64
+	clients      map[uint64]chatClientRef
+}
+
+type chatClientRef struct {
+	networkKey []byte
+	serverKey  []byte
 }
 
 // CreateServer ...
@@ -167,17 +181,81 @@ func (s *chatService) ListEmotes(ctx context.Context, req *chatv1.ListEmotesRequ
 	return &chatv1.ListEmotesResponse{Emotes: emotes}, nil
 }
 
-// OpenServer ...
-func (s *chatService) OpenServer(ctx context.Context, req *chatv1.OpenServerRequest) (<-chan *chatv1.ServerEvent, error) {
-	return nil, nil
-}
-
 // OpenClient ...
-func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequest) (<-chan *chatv1.ClientEvent, error) {
-	return nil, nil
+func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequest) (<-chan *chatv1.OpenClientResponse, error) {
+	ch := make(chan *chatv1.OpenClientResponse)
+
+	go func() {
+		serverEvents, err := s.app.Chat().ReadServerEvents(ctx, req.NetworkKey, req.ServerKey)
+		if err != nil {
+			close(ch)
+			return
+		}
+
+		s.lock.Lock()
+		s.nextClientID++
+		clientID := s.nextClientID
+
+		s.clients[clientID] = chatClientRef{
+			networkKey: req.NetworkKey,
+			serverKey:  req.ServerKey,
+		}
+		s.lock.Unlock()
+
+		defer func() {
+			close(ch)
+
+			s.lock.Lock()
+			delete(s.clients, clientID)
+			s.lock.Unlock()
+		}()
+
+		ch <- &chatv1.OpenClientResponse{
+			Body: &chatv1.OpenClientResponse_Open_{
+				Open: &chatv1.OpenClientResponse_Open{
+					ClientId: clientID,
+				},
+			},
+		}
+
+		for {
+			select {
+			case e, ok := <-serverEvents:
+				if !ok {
+					return
+				}
+
+				debug.PrintJSON(e)
+
+				switch b := e.Body.(type) {
+				case *chatv1.ServerEvent_Message:
+					ch <- &chatv1.OpenClientResponse{
+						Body: &chatv1.OpenClientResponse_Message{
+							Message: b.Message,
+						},
+					}
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	return ch, nil
 }
 
-// CallClient ...
-func (s *chatService) CallClient(ctx context.Context, req *chatv1.CallClientRequest) (*chatv1.CallClientResponse, error) {
-	return &chatv1.CallClientResponse{}, nil
+// ClientSendMessage ...
+func (s *chatService) ClientSendMessage(ctx context.Context, req *chatv1.ClientSendMessageRequest) (*chatv1.ClientSendMessageResponse, error) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	ref, ok := s.clients[req.ClientId]
+	if !ok {
+		return nil, errors.New("client id not found")
+	}
+
+	if err := s.app.Chat().SendMessage(ctx, ref.networkKey, ref.serverKey, req.Body); err != nil {
+		return nil, err
+	}
+	return &chatv1.ClientSendMessageResponse{}, nil
 }

@@ -3,7 +3,7 @@ import clsx from "clsx";
 import React from "react";
 import { useEffect } from "react";
 
-import { ClientEvent } from "../apis/strims/chat/v1/chat";
+import { Message, OpenClientResponse } from "../apis/strims/chat/v1/chat";
 import { Emote, emotes } from "../components/Chat/test-emotes";
 import stream, { messages } from "../components/Chat/test-history";
 import { useClient } from "./FrontendApi";
@@ -11,7 +11,7 @@ import { useClient } from "./FrontendApi";
 type Action =
   | {
       type: "MESSAGE_SCROLLBACK";
-      messages: ClientEvent.Message[];
+      messages: Message[];
     }
   | {
       type: "LOAD_EMOTES";
@@ -19,11 +19,11 @@ type Action =
     }
   | {
       type: "MESSAGE";
-      message: ClientEvent.Message;
+      message: Message;
     }
   | {
       type: "CLIENT_DATA";
-      data: ClientEvent;
+      data: OpenClientResponse;
     }
   | {
       type: "CLIENT_ERROR";
@@ -34,7 +34,7 @@ type Action =
     };
 
 interface State {
-  messages: ClientEvent.Message[];
+  messages: Message[];
   styles: {
     [key: string]: StyleDeclarationValue;
   };
@@ -87,16 +87,19 @@ const chatReducer = (state: State, action: Action): State => {
   }
 };
 
-const chatClientDataReducer = (state: State, event: ClientEvent): State => {
+const chatClientDataReducer = (state: State, event: OpenClientResponse): State => {
   switch (event.body.case) {
-    case ClientEvent.BodyCase.OPEN:
+    case OpenClientResponse.BodyCase.OPEN:
       return {
         ...state,
         clientId: event.body.open.clientId,
         state: "open",
       };
-    case ClientEvent.BodyCase.MESSAGE:
-      return state;
+    case OpenClientResponse.BodyCase.MESSAGE:
+      return {
+        ...state,
+        messages: [...state.messages, event.body.message],
+      };
     default:
       return state;
   }
@@ -128,14 +131,9 @@ export const useChat = () => {
   const client = useClient();
 
   const sendMessage = (body: string) =>
-    client.chat.callClient({
+    client.chat.clientSendMessage({
       clientId: state.clientId,
-      body: {
-        message: {
-          time: BigInt(Date.now()),
-          body,
-        },
-      },
+      body,
     });
 
   // TODO: open chat client (start swarm lazily?)
@@ -161,11 +159,11 @@ export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, child
 
   useEffect(() => {
     console.log({ networkKey, serverKey });
-    const chatClient = client.chat.openClient({ networkKey, serverKey });
-    chatClient.on("data", (data) => dispatch({ type: "CLIENT_DATA", data }));
-    chatClient.on("error", (error) => dispatch({ type: "CLIENT_ERROR", error }));
-    chatClient.on("close", () => dispatch({ type: "CLIENT_CLOSE" }));
-    return () => client.chat.callClient({ clientId: state.clientId, body: { close: {} } });
+    const events = client.chat.openClient({ networkKey, serverKey });
+    events.on("data", (data) => dispatch({ type: "CLIENT_DATA", data }));
+    events.on("error", (error) => dispatch({ type: "CLIENT_ERROR", error }));
+    events.on("close", () => dispatch({ type: "CLIENT_CLOSE" }));
+    return () => events.destroy();
   }, []);
 
   useEffect(() => {

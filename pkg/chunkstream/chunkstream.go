@@ -19,7 +19,7 @@ var (
 
 const (
 	// header byte length
-	headerLen = 2
+	headerLen = 4
 
 	// flag indicating an end of record in the next chunk
 	eorFlag = 0x80
@@ -27,8 +27,8 @@ const (
 
 // chunk size consts
 const (
-	MaxSize     = (math.MaxUint16 >> 1) - headerLen
-	DefaultSize = MaxSize
+	MaxSize     = math.MaxUint32>>1 - headerLen
+	DefaultSize = math.MaxUint16>>1 - headerLen
 )
 
 // NewWriter ...
@@ -84,7 +84,7 @@ func (c *Writer) Flush() (err error) {
 		return ErrHeaderWritten
 	}
 
-	binary.BigEndian.PutUint16(c.buf, uint16(c.off))
+	binary.BigEndian.PutUint32(c.buf, uint32(c.off))
 	c.buf[0] |= eorFlag
 
 	c.woff, err = c.w.Write(c.buf[:c.off])
@@ -94,6 +94,8 @@ func (c *Writer) Flush() (err error) {
 
 	c.buf[0] = 0
 	c.buf[1] = 0
+	c.buf[2] = 0
+	c.buf[3] = 0
 	return
 }
 
@@ -174,7 +176,7 @@ func (c *Reader) readHeader(p []byte) (n int) {
 
 	if c.header[0]&eorFlag != 0 {
 		c.header[0] &^= eorFlag
-		c.roff = int(binary.BigEndian.Uint16(c.header))
+		c.roff = int(binary.BigEndian.Uint32(c.header))
 	}
 
 	c.header = c.header[:0]

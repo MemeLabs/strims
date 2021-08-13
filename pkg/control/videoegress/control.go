@@ -126,7 +126,7 @@ func (r *VideoReader) initReader() error {
 
 	sr := r.swarm.Reader()
 	r.logger.Debug("got swarm reader", zap.Uint64("offset", sr.Offset()))
-	cr, err := chunkstream.NewReaderSize(sr, int64(sr.Offset()), chunkstream.MaxSize)
+	cr, err := chunkstream.NewReaderSize(sr, int64(sr.Offset()), chunkstream.DefaultSize)
 	if err != nil {
 		return err
 	}

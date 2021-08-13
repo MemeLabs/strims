@@ -503,7 +503,7 @@ const ChatEmoteCreateFormPage: React.FC = () => {
       animation: data.animated
         ? {
             frameCount: parseFloat(data.animationFrameCount),
-            duration: parseFloat(data.animationDuration),
+            durationMs: parseFloat(data.animationDuration),
             iterationCount: parseFloat(data.animationIterationCount),
           }
         : null,
@@ -577,7 +577,7 @@ const ChatEmoteEditFormPage: React.FC = () => {
       animation: data.animated
         ? {
             frameCount: parseFloat(data.animationFrameCount),
-            duration: parseFloat(data.animationDuration),
+            durationMs: parseFloat(data.animationDuration),
             iterationCount: parseFloat(data.animationIterationCount),
           }
         : null,
@@ -609,7 +609,7 @@ const ChatEmoteEditFormPage: React.FC = () => {
         css: emote.css,
         animated: !!emote.animation,
         animationFrameCount: emote.animation?.frameCount.toString(),
-        animationDuration: emote.animation?.duration.toString(),
+        animationDuration: emote.animation?.durationMs.toString(),
         animationIterationCount: emote.animation?.iterationCount.toString(),
       }}
       serverId={BigInt(serverId)}

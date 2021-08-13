@@ -90,6 +90,7 @@ type Control struct {
 // Run ...
 func (c *Control) Run(ctx context.Context) {
 	go c.ca.Run(ctx)
+	go c.chat.Run(ctx)
 	go c.directory.Run(ctx)
 	go c.network.Run(ctx)
 	go c.transfer.Run(ctx)

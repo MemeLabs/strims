@@ -142,6 +142,8 @@ type ChatControl interface {
 	RemoveServer(id uint64)
 	SyncEmote(serverID uint64, e *chatv1.Emote)
 	RemoveEmote(id uint64)
+	ReadServerEvents(ctx context.Context, networkKey, key []byte) (<-chan *chatv1.ServerEvent, error)
+	SendMessage(ctx context.Context, networkKey, key []byte, m string) error
 }
 
 // AppControl ...

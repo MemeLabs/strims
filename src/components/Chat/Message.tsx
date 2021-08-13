@@ -1,12 +1,12 @@
 import clsx from "clsx";
 import React, { ReactNode } from "react";
 
-import { ChatClientEvent, MessageEntities } from "../../apis/strims/chat/v1/chat";
+import { Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
 import Emote from "./Emote";
 
 // TODO: in app links
 interface MessageLinkProps {
-  entity: MessageEntities.Link;
+  entity: chatv1_Message.Entities.Link;
 }
 
 const MessageLink: React.FC<MessageLinkProps> = ({ children, entity }) => (
@@ -16,7 +16,7 @@ const MessageLink: React.FC<MessageLinkProps> = ({ children, entity }) => (
 );
 
 interface MessageEmoteProps {
-  entity: MessageEntities.Emote;
+  entity: chatv1_Message.Entities.Emote;
 }
 
 const MessageEmote: React.FC<MessageEmoteProps> = ({ children, entity }) => (
@@ -26,7 +26,7 @@ const MessageEmote: React.FC<MessageEmoteProps> = ({ children, entity }) => (
 );
 
 interface MessageNickProps {
-  entity: MessageEntities.Nick;
+  entity: chatv1_Message.Entities.Nick;
 }
 
 const MessageNick: React.FC<MessageNickProps> = ({ children }) => (
@@ -34,7 +34,7 @@ const MessageNick: React.FC<MessageNickProps> = ({ children }) => (
 );
 
 interface MessageTagProps {
-  entity: MessageEntities.Tag;
+  entity: chatv1_Message.Entities.Tag;
 }
 
 const MessageTag: React.FC<MessageTagProps> = ({ children }) => (
@@ -49,7 +49,7 @@ const trimSpoiler = (node: React.ReactNode, rx: RegExp) =>
   typeof node === "string" ? node.replace(rx, "") : node;
 
 interface MessageSpoilerProps {
-  entity: MessageEntities.Spoiler;
+  entity: chatv1_Message.Entities.Spoiler;
 }
 
 const MessageSpoiler: React.FC<MessageSpoilerProps> = ({ children: childrenNode }) => {
@@ -76,7 +76,7 @@ const MessageSpoiler: React.FC<MessageSpoilerProps> = ({ children: childrenNode 
 };
 
 interface MessageCodeBlockProps {
-  entity: MessageEntities.CodeBlock;
+  entity: chatv1_Message.Entities.CodeBlock;
 }
 
 const MessageCodeBlock: React.FC<MessageCodeBlockProps> = ({ children }) => (
@@ -84,7 +84,7 @@ const MessageCodeBlock: React.FC<MessageCodeBlockProps> = ({ children }) => (
 );
 
 interface MessageGreenTextProps {
-  entity: MessageEntities.GenericEntity;
+  entity: chatv1_Message.Entities.GenericEntity;
 }
 
 // TODO: optionally disable
@@ -158,7 +158,7 @@ class MessageFormatter {
 }
 
 interface MessageProps extends React.HTMLProps<HTMLDivElement> {
-  message: ChatClientEvent.Message;
+  message: chatv1_Message;
 }
 
 const Message: React.FC<MessageProps> = (props) => {

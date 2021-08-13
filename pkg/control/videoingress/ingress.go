@@ -279,7 +279,7 @@ func (s *ingressStream) openWriter() (*ppspp.Swarm, ioutil.WriteFlusher, error) 
 		return nil, nil, err
 	}
 
-	cw, err := chunkstream.NewWriterSize(w, chunkstream.MaxSize)
+	cw, err := chunkstream.NewWriterSize(w, chunkstream.DefaultSize)
 	if err != nil {
 		return nil, nil, err
 	}

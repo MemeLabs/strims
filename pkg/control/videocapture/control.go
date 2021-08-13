@@ -79,7 +79,7 @@ func (c *Control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *
 		return nil, err
 	}
 
-	cw, err := chunkstream.NewWriterSize(w, chunkstream.MaxSize)
+	cw, err := chunkstream.NewWriterSize(w, chunkstream.DefaultSize)
 	if err != nil {
 		return nil, err
 	}

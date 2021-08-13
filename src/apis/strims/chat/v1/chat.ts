@@ -769,296 +769,6 @@ export class ListEmotesResponse {
   }
 }
 
-export type IOpenServerRequest = {
-  server?: IServer | undefined;
-}
-
-export class OpenServerRequest {
-  server: Server | undefined;
-
-  constructor(v?: IOpenServerRequest) {
-    this.server = v?.server && new Server(v.server);
-  }
-
-  static encode(m: OpenServerRequest, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.server) Server.encode(m.server, w.uint32(10).fork()).ldelim();
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): OpenServerRequest {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new OpenServerRequest();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.server = Server.decode(r, r.uint32());
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
-export type IServerEvent = {
-  body?: ServerEvent.IBody
-}
-
-export class ServerEvent {
-  body: ServerEvent.TBody;
-
-  constructor(v?: IServerEvent) {
-    this.body = new ServerEvent.Body(v?.body);
-  }
-
-  static encode(m: ServerEvent, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    switch (m.body.case) {
-      case ServerEvent.BodyCase.OPEN:
-      ServerEvent.Open.encode(m.body.open, w.uint32(10).fork()).ldelim();
-      break;
-      case ServerEvent.BodyCase.CLOSE:
-      ServerEvent.Close.encode(m.body.close, w.uint32(18).fork()).ldelim();
-      break;
-    }
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): ServerEvent {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new ServerEvent();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.body = new ServerEvent.Body({ open: ServerEvent.Open.decode(r, r.uint32()) });
-        break;
-        case 2:
-        m.body = new ServerEvent.Body({ close: ServerEvent.Close.decode(r, r.uint32()) });
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
-export namespace ServerEvent {
-  export enum BodyCase {
-    NOT_SET = 0,
-    OPEN = 1,
-    CLOSE = 2,
-  }
-
-  export type IBody =
-  { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.OPEN, open: ServerEvent.IOpen }
-  |{ case?: BodyCase.CLOSE, close: ServerEvent.IClose }
-  ;
-
-  export type TBody = Readonly<
-  { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.OPEN, open: ServerEvent.Open }
-  |{ case: BodyCase.CLOSE, close: ServerEvent.Close }
-  >;
-
-  class BodyImpl {
-    open: ServerEvent.Open;
-    close: ServerEvent.Close;
-    case: BodyCase = BodyCase.NOT_SET;
-
-    constructor(v?: IBody) {
-      if (v && "open" in v) {
-        this.case = BodyCase.OPEN;
-        this.open = new ServerEvent.Open(v.open);
-      } else
-      if (v && "close" in v) {
-        this.case = BodyCase.CLOSE;
-        this.close = new ServerEvent.Close(v.close);
-      }
-    }
-  }
-
-  export const Body = BodyImpl as {
-    new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBody>(v: T): Readonly<
-    T extends { open: ServerEvent.IOpen } ? { case: BodyCase.OPEN, open: ServerEvent.Open } :
-    T extends { close: ServerEvent.IClose } ? { case: BodyCase.CLOSE, close: ServerEvent.Close } :
-    never
-    >;
-  };
-
-  export type IOpen = {
-    serverId?: bigint;
-  }
-
-  export class Open {
-    serverId: bigint;
-
-    constructor(v?: IOpen) {
-      this.serverId = v?.serverId || BigInt(0);
-    }
-
-    static encode(m: Open, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.serverId) w.uint32(8).uint64(m.serverId);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Open {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Open();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.serverId = r.uint64();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
-    }
-  }
-
-  export type IClose = {
-  }
-
-  export class Close {
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-    constructor(v?: IClose) {
-    }
-
-    static encode(m: Close, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Close {
-      if (r instanceof Reader && length) r.skip(length);
-      return new Close();
-    }
-  }
-
-}
-
-export type ICallServerRequest = {
-  serverId?: bigint;
-  body?: CallServerRequest.IBody
-}
-
-export class CallServerRequest {
-  serverId: bigint;
-  body: CallServerRequest.TBody;
-
-  constructor(v?: ICallServerRequest) {
-    this.serverId = v?.serverId || BigInt(0);
-    this.body = new CallServerRequest.Body(v?.body);
-  }
-
-  static encode(m: CallServerRequest, w?: Writer): Writer {
-    if (!w) w = new Writer();
-    if (m.serverId) w.uint32(8).uint64(m.serverId);
-    switch (m.body.case) {
-      case CallServerRequest.BodyCase.CLOSE:
-      CallServerRequest.Close.encode(m.body.close, w.uint32(18).fork()).ldelim();
-      break;
-    }
-    return w;
-  }
-
-  static decode(r: Reader | Uint8Array, length?: number): CallServerRequest {
-    r = r instanceof Reader ? r : new Reader(r);
-    const end = length === undefined ? r.len : r.pos + length;
-    const m = new CallServerRequest();
-    while (r.pos < end) {
-      const tag = r.uint32();
-      switch (tag >> 3) {
-        case 1:
-        m.serverId = r.uint64();
-        break;
-        case 2:
-        m.body = new CallServerRequest.Body({ close: CallServerRequest.Close.decode(r, r.uint32()) });
-        break;
-        default:
-        r.skipType(tag & 7);
-        break;
-      }
-    }
-    return m;
-  }
-}
-
-export namespace CallServerRequest {
-  export enum BodyCase {
-    NOT_SET = 0,
-    CLOSE = 2,
-  }
-
-  export type IBody =
-  { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.CLOSE, close: CallServerRequest.IClose }
-  ;
-
-  export type TBody = Readonly<
-  { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.CLOSE, close: CallServerRequest.Close }
-  >;
-
-  class BodyImpl {
-    close: CallServerRequest.Close;
-    case: BodyCase = BodyCase.NOT_SET;
-
-    constructor(v?: IBody) {
-      if (v && "close" in v) {
-        this.case = BodyCase.CLOSE;
-        this.close = new CallServerRequest.Close(v.close);
-      }
-    }
-  }
-
-  export const Body = BodyImpl as {
-    new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBody>(v: T): Readonly<
-    T extends { close: CallServerRequest.IClose } ? { case: BodyCase.CLOSE, close: CallServerRequest.Close } :
-    never
-    >;
-  };
-
-  export type IClose = {
-  }
-
-  export class Close {
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-    constructor(v?: IClose) {
-    }
-
-    static encode(m: Close, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Close {
-      if (r instanceof Reader && length) r.skip(length);
-      return new Close();
-    }
-  }
-
-}
-
 export type IOpenClientRequest = {
   networkKey?: Uint8Array;
   serverKey?: Uint8Array;
@@ -1102,48 +812,42 @@ export class OpenClientRequest {
   }
 }
 
-export type IClientEvent = {
-  body?: ClientEvent.IBody
+export type IOpenClientResponse = {
+  body?: OpenClientResponse.IBody
 }
 
-export class ClientEvent {
-  body: ClientEvent.TBody;
+export class OpenClientResponse {
+  body: OpenClientResponse.TBody;
 
-  constructor(v?: IClientEvent) {
-    this.body = new ClientEvent.Body(v?.body);
+  constructor(v?: IOpenClientResponse) {
+    this.body = new OpenClientResponse.Body(v?.body);
   }
 
-  static encode(m: ClientEvent, w?: Writer): Writer {
+  static encode(m: OpenClientResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     switch (m.body.case) {
-      case ClientEvent.BodyCase.OPEN:
-      ClientEvent.Open.encode(m.body.open, w.uint32(10).fork()).ldelim();
+      case OpenClientResponse.BodyCase.OPEN:
+      OpenClientResponse.Open.encode(m.body.open, w.uint32(8010).fork()).ldelim();
       break;
-      case ClientEvent.BodyCase.MESSAGE:
-      ClientEvent.Message.encode(m.body.message, w.uint32(18).fork()).ldelim();
-      break;
-      case ClientEvent.BodyCase.CLOSE:
-      ClientEvent.Close.encode(m.body.close, w.uint32(26).fork()).ldelim();
+      case OpenClientResponse.BodyCase.MESSAGE:
+      Message.encode(m.body.message, w.uint32(8018).fork()).ldelim();
       break;
     }
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): ClientEvent {
+  static decode(r: Reader | Uint8Array, length?: number): OpenClientResponse {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new ClientEvent();
+    const m = new OpenClientResponse();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
-        case 1:
-        m.body = new ClientEvent.Body({ open: ClientEvent.Open.decode(r, r.uint32()) });
+        case 1001:
+        m.body = new OpenClientResponse.Body({ open: OpenClientResponse.Open.decode(r, r.uint32()) });
         break;
-        case 2:
-        m.body = new ClientEvent.Body({ message: ClientEvent.Message.decode(r, r.uint32()) });
-        break;
-        case 3:
-        m.body = new ClientEvent.Body({ close: ClientEvent.Close.decode(r, r.uint32()) });
+        case 1002:
+        m.body = new OpenClientResponse.Body({ message: Message.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -1154,46 +858,38 @@ export class ClientEvent {
   }
 }
 
-export namespace ClientEvent {
+export namespace OpenClientResponse {
   export enum BodyCase {
     NOT_SET = 0,
-    OPEN = 1,
-    MESSAGE = 2,
-    CLOSE = 3,
+    OPEN = 1001,
+    MESSAGE = 1002,
   }
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.OPEN, open: ClientEvent.IOpen }
-  |{ case?: BodyCase.MESSAGE, message: ClientEvent.IMessage }
-  |{ case?: BodyCase.CLOSE, close: ClientEvent.IClose }
+  |{ case?: BodyCase.OPEN, open: OpenClientResponse.IOpen }
+  |{ case?: BodyCase.MESSAGE, message: IMessage }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.OPEN, open: ClientEvent.Open }
-  |{ case: BodyCase.MESSAGE, message: ClientEvent.Message }
-  |{ case: BodyCase.CLOSE, close: ClientEvent.Close }
+  |{ case: BodyCase.OPEN, open: OpenClientResponse.Open }
+  |{ case: BodyCase.MESSAGE, message: Message }
   >;
 
   class BodyImpl {
-    open: ClientEvent.Open;
-    message: ClientEvent.Message;
-    close: ClientEvent.Close;
+    open: OpenClientResponse.Open;
+    message: Message;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
       if (v && "open" in v) {
         this.case = BodyCase.OPEN;
-        this.open = new ClientEvent.Open(v.open);
+        this.open = new OpenClientResponse.Open(v.open);
       } else
       if (v && "message" in v) {
         this.case = BodyCase.MESSAGE;
-        this.message = new ClientEvent.Message(v.message);
-      } else
-      if (v && "close" in v) {
-        this.case = BodyCase.CLOSE;
-        this.close = new ClientEvent.Close(v.close);
+        this.message = new Message(v.message);
       }
     }
   }
@@ -1201,9 +897,8 @@ export namespace ClientEvent {
   export const Body = BodyImpl as {
     new (): Readonly<{ case: BodyCase.NOT_SET }>;
     new <T extends IBody>(v: T): Readonly<
-    T extends { open: ClientEvent.IOpen } ? { case: BodyCase.OPEN, open: ClientEvent.Open } :
-    T extends { message: ClientEvent.IMessage } ? { case: BodyCase.MESSAGE, message: ClientEvent.Message } :
-    T extends { close: ClientEvent.IClose } ? { case: BodyCase.CLOSE, close: ClientEvent.Close } :
+    T extends { open: OpenClientResponse.IOpen } ? { case: BodyCase.OPEN, open: OpenClientResponse.Open } :
+    T extends { message: IMessage } ? { case: BodyCase.MESSAGE, message: Message } :
     never
     >;
   };
@@ -1244,89 +939,166 @@ export namespace ClientEvent {
     }
   }
 
-  export type IMessage = {
-    sentTime?: bigint;
-    serverTime?: bigint;
-    nick?: string;
-    body?: string;
-    entities?: IMessageEntities | undefined;
+}
+
+export type IClientSendMessageRequest = {
+  clientId?: bigint;
+  body?: string;
+}
+
+export class ClientSendMessageRequest {
+  clientId: bigint;
+  body: string;
+
+  constructor(v?: IClientSendMessageRequest) {
+    this.clientId = v?.clientId || BigInt(0);
+    this.body = v?.body || "";
   }
 
-  export class Message {
-    sentTime: bigint;
-    serverTime: bigint;
-    nick: string;
-    body: string;
-    entities: MessageEntities | undefined;
+  static encode(m: ClientSendMessageRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.clientId) w.uint32(8).uint64(m.clientId);
+    if (m.body) w.uint32(18).string(m.body);
+    return w;
+  }
 
-    constructor(v?: IMessage) {
-      this.sentTime = v?.sentTime || BigInt(0);
-      this.serverTime = v?.serverTime || BigInt(0);
-      this.nick = v?.nick || "";
-      this.body = v?.body || "";
-      this.entities = v?.entities && new MessageEntities(v.entities);
-    }
-
-    static encode(m: Message, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.sentTime) w.uint32(8).int64(m.sentTime);
-      if (m.serverTime) w.uint32(16).int64(m.serverTime);
-      if (m.nick) w.uint32(26).string(m.nick);
-      if (m.body) w.uint32(34).string(m.body);
-      if (m.entities) MessageEntities.encode(m.entities, w.uint32(42).fork()).ldelim();
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Message {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Message();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.sentTime = r.int64();
-          break;
-          case 2:
-          m.serverTime = r.int64();
-          break;
-          case 3:
-          m.nick = r.string();
-          break;
-          case 4:
-          m.body = r.string();
-          break;
-          case 5:
-          m.entities = MessageEntities.decode(r, r.uint32());
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
+  static decode(r: Reader | Uint8Array, length?: number): ClientSendMessageRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ClientSendMessageRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.clientId = r.uint64();
+        break;
+        case 2:
+        m.body = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
       }
-      return m;
+    }
+    return m;
+  }
+}
+
+export type IClientSendMessageResponse = {
+}
+
+export class ClientSendMessageResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IClientSendMessageResponse) {
+  }
+
+  static encode(m: ClientSendMessageResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ClientSendMessageResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new ClientSendMessageResponse();
+  }
+}
+
+export type ICallClientResponse = {
+}
+
+export class CallClientResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: ICallClientResponse) {
+  }
+
+  static encode(m: CallClientResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): CallClientResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new CallClientResponse();
+  }
+}
+
+export type IServerEvent = {
+  body?: ServerEvent.IBody
+}
+
+export class ServerEvent {
+  body: ServerEvent.TBody;
+
+  constructor(v?: IServerEvent) {
+    this.body = new ServerEvent.Body(v?.body);
+  }
+
+  static encode(m: ServerEvent, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    switch (m.body.case) {
+      case ServerEvent.BodyCase.MESSAGE:
+      Message.encode(m.body.message, w.uint32(8010).fork()).ldelim();
+      break;
+    }
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ServerEvent {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ServerEvent();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1001:
+        m.body = new ServerEvent.Body({ message: Message.decode(r, r.uint32()) });
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace ServerEvent {
+  export enum BodyCase {
+    NOT_SET = 0,
+    MESSAGE = 1001,
+  }
+
+  export type IBody =
+  { case?: BodyCase.NOT_SET }
+  |{ case?: BodyCase.MESSAGE, message: IMessage }
+  ;
+
+  export type TBody = Readonly<
+  { case: BodyCase.NOT_SET }
+  |{ case: BodyCase.MESSAGE, message: Message }
+  >;
+
+  class BodyImpl {
+    message: Message;
+    case: BodyCase = BodyCase.NOT_SET;
+
+    constructor(v?: IBody) {
+      if (v && "message" in v) {
+        this.case = BodyCase.MESSAGE;
+        this.message = new Message(v.message);
+      }
     }
   }
 
-  export type IClose = {
-  }
-
-  export class Close {
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-    constructor(v?: IClose) {
-    }
-
-    static encode(m: Close, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Close {
-      if (r instanceof Reader && length) r.skip(length);
-      return new Close();
-    }
-  }
+  export const Body = BodyImpl as {
+    new (): Readonly<{ case: BodyCase.NOT_SET }>;
+    new <T extends IBody>(v: T): Readonly<
+    T extends { message: IMessage } ? { case: BodyCase.MESSAGE, message: Message } :
+    never
+    >;
+  };
 
 }
 
@@ -1489,26 +1261,34 @@ export class EmoteImage {
 
 export type IEmoteAnimation = {
   frameCount?: number;
-  duration?: number;
+  durationMs?: number;
   iterationCount?: number;
+  endOnLastFrame?: boolean;
+  loopForever?: boolean;
 }
 
 export class EmoteAnimation {
   frameCount: number;
-  duration: number;
+  durationMs: number;
   iterationCount: number;
+  endOnLastFrame: boolean;
+  loopForever: boolean;
 
   constructor(v?: IEmoteAnimation) {
     this.frameCount = v?.frameCount || 0;
-    this.duration = v?.duration || 0;
+    this.durationMs = v?.durationMs || 0;
     this.iterationCount = v?.iterationCount || 0;
+    this.endOnLastFrame = v?.endOnLastFrame || false;
+    this.loopForever = v?.loopForever || false;
   }
 
   static encode(m: EmoteAnimation, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.frameCount) w.uint32(80).uint32(m.frameCount);
-    if (m.duration) w.uint32(88).uint32(m.duration);
-    if (m.iterationCount) w.uint32(96).uint32(m.iterationCount);
+    if (m.frameCount) w.uint32(8).uint32(m.frameCount);
+    if (m.durationMs) w.uint32(16).uint32(m.durationMs);
+    if (m.iterationCount) w.uint32(24).uint32(m.iterationCount);
+    if (m.endOnLastFrame) w.uint32(32).bool(m.endOnLastFrame);
+    if (m.loopForever) w.uint32(40).bool(m.loopForever);
     return w;
   }
 
@@ -1519,14 +1299,20 @@ export class EmoteAnimation {
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
-        case 10:
+        case 1:
         m.frameCount = r.uint32();
         break;
-        case 11:
-        m.duration = r.uint32();
+        case 2:
+        m.durationMs = r.uint32();
         break;
-        case 12:
+        case 3:
         m.iterationCount = r.uint32();
+        break;
+        case 4:
+        m.endOnLastFrame = r.bool();
+        break;
+        case 5:
+        m.loopForever = r.bool();
         break;
         default:
         r.skipType(tag & 7);
@@ -1601,81 +1387,96 @@ export class Emote {
   }
 }
 
-export type IMessageEntities = {
-  links?: MessageEntities.ILink[];
-  emotes?: MessageEntities.IEmote[];
-  nicks?: MessageEntities.INick[];
-  tags?: MessageEntities.ITag[];
-  codeBlocks?: MessageEntities.ICodeBlock[];
-  spoilers?: MessageEntities.ISpoiler[];
-  greenText?: MessageEntities.IGenericEntity | undefined;
-  selfMessage?: MessageEntities.IGenericEntity | undefined;
+export type IAssetBundle = {
+  emotes?: IEmote[];
 }
 
-export class MessageEntities {
-  links: MessageEntities.Link[];
-  emotes: MessageEntities.Emote[];
-  nicks: MessageEntities.Nick[];
-  tags: MessageEntities.Tag[];
-  codeBlocks: MessageEntities.CodeBlock[];
-  spoilers: MessageEntities.Spoiler[];
-  greenText: MessageEntities.GenericEntity | undefined;
-  selfMessage: MessageEntities.GenericEntity | undefined;
+export class AssetBundle {
+  emotes: Emote[];
 
-  constructor(v?: IMessageEntities) {
-    this.links = v?.links ? v.links.map(v => new MessageEntities.Link(v)) : [];
-    this.emotes = v?.emotes ? v.emotes.map(v => new MessageEntities.Emote(v)) : [];
-    this.nicks = v?.nicks ? v.nicks.map(v => new MessageEntities.Nick(v)) : [];
-    this.tags = v?.tags ? v.tags.map(v => new MessageEntities.Tag(v)) : [];
-    this.codeBlocks = v?.codeBlocks ? v.codeBlocks.map(v => new MessageEntities.CodeBlock(v)) : [];
-    this.spoilers = v?.spoilers ? v.spoilers.map(v => new MessageEntities.Spoiler(v)) : [];
-    this.greenText = v?.greenText && new MessageEntities.GenericEntity(v.greenText);
-    this.selfMessage = v?.selfMessage && new MessageEntities.GenericEntity(v.selfMessage);
+  constructor(v?: IAssetBundle) {
+    this.emotes = v?.emotes ? v.emotes.map(v => new Emote(v)) : [];
   }
 
-  static encode(m: MessageEntities, w?: Writer): Writer {
+  static encode(m: AssetBundle, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.links) MessageEntities.Link.encode(v, w.uint32(10).fork()).ldelim();
-    for (const v of m.emotes) MessageEntities.Emote.encode(v, w.uint32(18).fork()).ldelim();
-    for (const v of m.nicks) MessageEntities.Nick.encode(v, w.uint32(26).fork()).ldelim();
-    for (const v of m.tags) MessageEntities.Tag.encode(v, w.uint32(34).fork()).ldelim();
-    for (const v of m.codeBlocks) MessageEntities.CodeBlock.encode(v, w.uint32(42).fork()).ldelim();
-    for (const v of m.spoilers) MessageEntities.Spoiler.encode(v, w.uint32(50).fork()).ldelim();
-    if (m.greenText) MessageEntities.GenericEntity.encode(m.greenText, w.uint32(58).fork()).ldelim();
-    if (m.selfMessage) MessageEntities.GenericEntity.encode(m.selfMessage, w.uint32(66).fork()).ldelim();
+    for (const v of m.emotes) Emote.encode(v, w.uint32(10).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): MessageEntities {
+  static decode(r: Reader | Uint8Array, length?: number): AssetBundle {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new MessageEntities();
+    const m = new AssetBundle();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.links.push(MessageEntities.Link.decode(r, r.uint32()));
+        m.emotes.push(Emote.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IMessage = {
+  serverTime?: bigint;
+  hostId?: Uint8Array;
+  nick?: string;
+  body?: string;
+  entities?: Message.IEntities | undefined;
+}
+
+export class Message {
+  serverTime: bigint;
+  hostId: Uint8Array;
+  nick: string;
+  body: string;
+  entities: Message.Entities | undefined;
+
+  constructor(v?: IMessage) {
+    this.serverTime = v?.serverTime || BigInt(0);
+    this.hostId = v?.hostId || new Uint8Array();
+    this.nick = v?.nick || "";
+    this.body = v?.body || "";
+    this.entities = v?.entities && new Message.Entities(v.entities);
+  }
+
+  static encode(m: Message, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverTime) w.uint32(8).int64(m.serverTime);
+    if (m.hostId) w.uint32(18).bytes(m.hostId);
+    if (m.nick) w.uint32(26).string(m.nick);
+    if (m.body) w.uint32(34).string(m.body);
+    if (m.entities) Message.Entities.encode(m.entities, w.uint32(42).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): Message {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new Message();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverTime = r.int64();
         break;
         case 2:
-        m.emotes.push(MessageEntities.Emote.decode(r, r.uint32()));
+        m.hostId = r.bytes();
         break;
         case 3:
-        m.nicks.push(MessageEntities.Nick.decode(r, r.uint32()));
+        m.nick = r.string();
         break;
         case 4:
-        m.tags.push(MessageEntities.Tag.decode(r, r.uint32()));
+        m.body = r.string();
         break;
         case 5:
-        m.codeBlocks.push(MessageEntities.CodeBlock.decode(r, r.uint32()));
-        break;
-        case 6:
-        m.spoilers.push(MessageEntities.Spoiler.decode(r, r.uint32()));
-        break;
-        case 7:
-        m.greenText = MessageEntities.GenericEntity.decode(r, r.uint32());
-        break;
-        case 8:
-        m.selfMessage = MessageEntities.GenericEntity.decode(r, r.uint32());
+        m.entities = Message.Entities.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -1686,140 +1487,82 @@ export class MessageEntities {
   }
 }
 
-export namespace MessageEntities {
-  export type IBounds = {
-    start?: number;
-    end?: number;
+export namespace Message {
+  export type IEntities = {
+    links?: Message.Entities.ILink[];
+    emotes?: Message.Entities.IEmote[];
+    nicks?: Message.Entities.INick[];
+    tags?: Message.Entities.ITag[];
+    codeBlocks?: Message.Entities.ICodeBlock[];
+    spoilers?: Message.Entities.ISpoiler[];
+    greenText?: Message.Entities.IGenericEntity | undefined;
+    selfMessage?: Message.Entities.IGenericEntity | undefined;
   }
 
-  export class Bounds {
-    start: number;
-    end: number;
+  export class Entities {
+    links: Message.Entities.Link[];
+    emotes: Message.Entities.Emote[];
+    nicks: Message.Entities.Nick[];
+    tags: Message.Entities.Tag[];
+    codeBlocks: Message.Entities.CodeBlock[];
+    spoilers: Message.Entities.Spoiler[];
+    greenText: Message.Entities.GenericEntity | undefined;
+    selfMessage: Message.Entities.GenericEntity | undefined;
 
-    constructor(v?: IBounds) {
-      this.start = v?.start || 0;
-      this.end = v?.end || 0;
+    constructor(v?: IEntities) {
+      this.links = v?.links ? v.links.map(v => new Message.Entities.Link(v)) : [];
+      this.emotes = v?.emotes ? v.emotes.map(v => new Message.Entities.Emote(v)) : [];
+      this.nicks = v?.nicks ? v.nicks.map(v => new Message.Entities.Nick(v)) : [];
+      this.tags = v?.tags ? v.tags.map(v => new Message.Entities.Tag(v)) : [];
+      this.codeBlocks = v?.codeBlocks ? v.codeBlocks.map(v => new Message.Entities.CodeBlock(v)) : [];
+      this.spoilers = v?.spoilers ? v.spoilers.map(v => new Message.Entities.Spoiler(v)) : [];
+      this.greenText = v?.greenText && new Message.Entities.GenericEntity(v.greenText);
+      this.selfMessage = v?.selfMessage && new Message.Entities.GenericEntity(v.selfMessage);
     }
 
-    static encode(m: Bounds, w?: Writer): Writer {
+    static encode(m: Entities, w?: Writer): Writer {
       if (!w) w = new Writer();
-      if (m.start) w.uint32(8).uint32(m.start);
-      if (m.end) w.uint32(16).uint32(m.end);
+      for (const v of m.links) Message.Entities.Link.encode(v, w.uint32(10).fork()).ldelim();
+      for (const v of m.emotes) Message.Entities.Emote.encode(v, w.uint32(18).fork()).ldelim();
+      for (const v of m.nicks) Message.Entities.Nick.encode(v, w.uint32(26).fork()).ldelim();
+      for (const v of m.tags) Message.Entities.Tag.encode(v, w.uint32(34).fork()).ldelim();
+      for (const v of m.codeBlocks) Message.Entities.CodeBlock.encode(v, w.uint32(42).fork()).ldelim();
+      for (const v of m.spoilers) Message.Entities.Spoiler.encode(v, w.uint32(50).fork()).ldelim();
+      if (m.greenText) Message.Entities.GenericEntity.encode(m.greenText, w.uint32(58).fork()).ldelim();
+      if (m.selfMessage) Message.Entities.GenericEntity.encode(m.selfMessage, w.uint32(66).fork()).ldelim();
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): Bounds {
+    static decode(r: Reader | Uint8Array, length?: number): Entities {
       r = r instanceof Reader ? r : new Reader(r);
       const end = length === undefined ? r.len : r.pos + length;
-      const m = new Bounds();
+      const m = new Entities();
       while (r.pos < end) {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1:
-          m.start = r.uint32();
+          m.links.push(Message.Entities.Link.decode(r, r.uint32()));
           break;
           case 2:
-          m.end = r.uint32();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
-    }
-  }
-
-  export type ILink = {
-    bounds?: MessageEntities.IBounds | undefined;
-    url?: string;
-  }
-
-  export class Link {
-    bounds: MessageEntities.Bounds | undefined;
-    url: string;
-
-    constructor(v?: ILink) {
-      this.bounds = v?.bounds && new MessageEntities.Bounds(v.bounds);
-      this.url = v?.url || "";
-    }
-
-    static encode(m: Link, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.bounds) MessageEntities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
-      if (m.url) w.uint32(18).string(m.url);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Link {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Link();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.bounds = MessageEntities.Bounds.decode(r, r.uint32());
-          break;
-          case 2:
-          m.url = r.string();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
-    }
-  }
-
-  export type IEmote = {
-    bounds?: MessageEntities.IBounds | undefined;
-    name?: string;
-    modifiers?: string[];
-    combo?: number;
-  }
-
-  export class Emote {
-    bounds: MessageEntities.Bounds | undefined;
-    name: string;
-    modifiers: string[];
-    combo: number;
-
-    constructor(v?: IEmote) {
-      this.bounds = v?.bounds && new MessageEntities.Bounds(v.bounds);
-      this.name = v?.name || "";
-      this.modifiers = v?.modifiers ? v.modifiers : [];
-      this.combo = v?.combo || 0;
-    }
-
-    static encode(m: Emote, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.bounds) MessageEntities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
-      if (m.name) w.uint32(18).string(m.name);
-      for (const v of m.modifiers) w.uint32(26).string(v);
-      if (m.combo) w.uint32(32).uint32(m.combo);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Emote {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Emote();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.bounds = MessageEntities.Bounds.decode(r, r.uint32());
-          break;
-          case 2:
-          m.name = r.string();
+          m.emotes.push(Message.Entities.Emote.decode(r, r.uint32()));
           break;
           case 3:
-          m.modifiers.push(r.string())
+          m.nicks.push(Message.Entities.Nick.decode(r, r.uint32()));
           break;
           case 4:
-          m.combo = r.uint32();
+          m.tags.push(Message.Entities.Tag.decode(r, r.uint32()));
+          break;
+          case 5:
+          m.codeBlocks.push(Message.Entities.CodeBlock.decode(r, r.uint32()));
+          break;
+          case 6:
+          m.spoilers.push(Message.Entities.Spoiler.decode(r, r.uint32()));
+          break;
+          case 7:
+          m.greenText = Message.Entities.GenericEntity.decode(r, r.uint32());
+          break;
+          case 8:
+          m.selfMessage = Message.Entities.GenericEntity.decode(r, r.uint32());
           break;
           default:
           r.skipType(tag & 7);
@@ -1830,245 +1573,374 @@ export namespace MessageEntities {
     }
   }
 
-  export type INick = {
-    bounds?: MessageEntities.IBounds | undefined;
-    nick?: string;
-  }
-
-  export class Nick {
-    bounds: MessageEntities.Bounds | undefined;
-    nick: string;
-
-    constructor(v?: INick) {
-      this.bounds = v?.bounds && new MessageEntities.Bounds(v.bounds);
-      this.nick = v?.nick || "";
+  export namespace Entities {
+    export type IBounds = {
+      start?: number;
+      end?: number;
     }
 
-    static encode(m: Nick, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.bounds) MessageEntities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
-      if (m.nick) w.uint32(18).string(m.nick);
-      return w;
-    }
+    export class Bounds {
+      start: number;
+      end: number;
 
-    static decode(r: Reader | Uint8Array, length?: number): Nick {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Nick();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.bounds = MessageEntities.Bounds.decode(r, r.uint32());
-          break;
-          case 2:
-          m.nick = r.string();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
+      constructor(v?: IBounds) {
+        this.start = v?.start || 0;
+        this.end = v?.end || 0;
       }
-      return m;
-    }
-  }
 
-  export type ITag = {
-    bounds?: MessageEntities.IBounds | undefined;
-    name?: string;
-  }
-
-  export class Tag {
-    bounds: MessageEntities.Bounds | undefined;
-    name: string;
-
-    constructor(v?: ITag) {
-      this.bounds = v?.bounds && new MessageEntities.Bounds(v.bounds);
-      this.name = v?.name || "";
-    }
-
-    static encode(m: Tag, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.bounds) MessageEntities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
-      if (m.name) w.uint32(18).string(m.name);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Tag {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Tag();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.bounds = MessageEntities.Bounds.decode(r, r.uint32());
-          break;
-          case 2:
-          m.name = r.string();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
+      static encode(m: Bounds, w?: Writer): Writer {
+        if (!w) w = new Writer();
+        if (m.start) w.uint32(8).uint32(m.start);
+        if (m.end) w.uint32(16).uint32(m.end);
+        return w;
       }
-      return m;
-    }
-  }
 
-  export type ICodeBlock = {
-    bounds?: MessageEntities.IBounds | undefined;
-  }
-
-  export class CodeBlock {
-    bounds: MessageEntities.Bounds | undefined;
-
-    constructor(v?: ICodeBlock) {
-      this.bounds = v?.bounds && new MessageEntities.Bounds(v.bounds);
-    }
-
-    static encode(m: CodeBlock, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.bounds) MessageEntities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): CodeBlock {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new CodeBlock();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.bounds = MessageEntities.Bounds.decode(r, r.uint32());
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
+      static decode(r: Reader | Uint8Array, length?: number): Bounds {
+        r = r instanceof Reader ? r : new Reader(r);
+        const end = length === undefined ? r.len : r.pos + length;
+        const m = new Bounds();
+        while (r.pos < end) {
+          const tag = r.uint32();
+          switch (tag >> 3) {
+            case 1:
+            m.start = r.uint32();
+            break;
+            case 2:
+            m.end = r.uint32();
+            break;
+            default:
+            r.skipType(tag & 7);
+            break;
+          }
         }
+        return m;
       }
-      return m;
-    }
-  }
-
-  export type ISpoiler = {
-    bounds?: MessageEntities.IBounds | undefined;
-  }
-
-  export class Spoiler {
-    bounds: MessageEntities.Bounds | undefined;
-
-    constructor(v?: ISpoiler) {
-      this.bounds = v?.bounds && new MessageEntities.Bounds(v.bounds);
     }
 
-    static encode(m: Spoiler, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.bounds) MessageEntities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
-      return w;
+    export type ILink = {
+      bounds?: Message.Entities.IBounds | undefined;
+      url?: string;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): Spoiler {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Spoiler();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.bounds = MessageEntities.Bounds.decode(r, r.uint32());
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
+    export class Link {
+      bounds: Message.Entities.Bounds | undefined;
+      url: string;
+
+      constructor(v?: ILink) {
+        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.url = v?.url || "";
+      }
+
+      static encode(m: Link, w?: Writer): Writer {
+        if (!w) w = new Writer();
+        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.url) w.uint32(18).string(m.url);
+        return w;
+      }
+
+      static decode(r: Reader | Uint8Array, length?: number): Link {
+        r = r instanceof Reader ? r : new Reader(r);
+        const end = length === undefined ? r.len : r.pos + length;
+        const m = new Link();
+        while (r.pos < end) {
+          const tag = r.uint32();
+          switch (tag >> 3) {
+            case 1:
+            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            break;
+            case 2:
+            m.url = r.string();
+            break;
+            default:
+            r.skipType(tag & 7);
+            break;
+          }
         }
+        return m;
       }
-      return m;
-    }
-  }
-
-  export type IGenericEntity = {
-    bounds?: MessageEntities.IBounds | undefined;
-  }
-
-  export class GenericEntity {
-    bounds: MessageEntities.Bounds | undefined;
-
-    constructor(v?: IGenericEntity) {
-      this.bounds = v?.bounds && new MessageEntities.Bounds(v.bounds);
     }
 
-    static encode(m: GenericEntity, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.bounds) MessageEntities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
-      return w;
+    export type IEmote = {
+      bounds?: Message.Entities.IBounds | undefined;
+      name?: string;
+      modifiers?: string[];
+      combo?: number;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): GenericEntity {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new GenericEntity();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.bounds = MessageEntities.Bounds.decode(r, r.uint32());
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
+    export class Emote {
+      bounds: Message.Entities.Bounds | undefined;
+      name: string;
+      modifiers: string[];
+      combo: number;
+
+      constructor(v?: IEmote) {
+        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.name = v?.name || "";
+        this.modifiers = v?.modifiers ? v.modifiers : [];
+        this.combo = v?.combo || 0;
+      }
+
+      static encode(m: Emote, w?: Writer): Writer {
+        if (!w) w = new Writer();
+        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.name) w.uint32(18).string(m.name);
+        for (const v of m.modifiers) w.uint32(26).string(v);
+        if (m.combo) w.uint32(32).uint32(m.combo);
+        return w;
+      }
+
+      static decode(r: Reader | Uint8Array, length?: number): Emote {
+        r = r instanceof Reader ? r : new Reader(r);
+        const end = length === undefined ? r.len : r.pos + length;
+        const m = new Emote();
+        while (r.pos < end) {
+          const tag = r.uint32();
+          switch (tag >> 3) {
+            case 1:
+            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            break;
+            case 2:
+            m.name = r.string();
+            break;
+            case 3:
+            m.modifiers.push(r.string())
+            break;
+            case 4:
+            m.combo = r.uint32();
+            break;
+            default:
+            r.skipType(tag & 7);
+            break;
+          }
         }
+        return m;
       }
-      return m;
     }
+
+    export type INick = {
+      bounds?: Message.Entities.IBounds | undefined;
+      nick?: string;
+    }
+
+    export class Nick {
+      bounds: Message.Entities.Bounds | undefined;
+      nick: string;
+
+      constructor(v?: INick) {
+        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.nick = v?.nick || "";
+      }
+
+      static encode(m: Nick, w?: Writer): Writer {
+        if (!w) w = new Writer();
+        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.nick) w.uint32(18).string(m.nick);
+        return w;
+      }
+
+      static decode(r: Reader | Uint8Array, length?: number): Nick {
+        r = r instanceof Reader ? r : new Reader(r);
+        const end = length === undefined ? r.len : r.pos + length;
+        const m = new Nick();
+        while (r.pos < end) {
+          const tag = r.uint32();
+          switch (tag >> 3) {
+            case 1:
+            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            break;
+            case 2:
+            m.nick = r.string();
+            break;
+            default:
+            r.skipType(tag & 7);
+            break;
+          }
+        }
+        return m;
+      }
+    }
+
+    export type ITag = {
+      bounds?: Message.Entities.IBounds | undefined;
+      name?: string;
+    }
+
+    export class Tag {
+      bounds: Message.Entities.Bounds | undefined;
+      name: string;
+
+      constructor(v?: ITag) {
+        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+        this.name = v?.name || "";
+      }
+
+      static encode(m: Tag, w?: Writer): Writer {
+        if (!w) w = new Writer();
+        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        if (m.name) w.uint32(18).string(m.name);
+        return w;
+      }
+
+      static decode(r: Reader | Uint8Array, length?: number): Tag {
+        r = r instanceof Reader ? r : new Reader(r);
+        const end = length === undefined ? r.len : r.pos + length;
+        const m = new Tag();
+        while (r.pos < end) {
+          const tag = r.uint32();
+          switch (tag >> 3) {
+            case 1:
+            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            break;
+            case 2:
+            m.name = r.string();
+            break;
+            default:
+            r.skipType(tag & 7);
+            break;
+          }
+        }
+        return m;
+      }
+    }
+
+    export type ICodeBlock = {
+      bounds?: Message.Entities.IBounds | undefined;
+    }
+
+    export class CodeBlock {
+      bounds: Message.Entities.Bounds | undefined;
+
+      constructor(v?: ICodeBlock) {
+        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+      }
+
+      static encode(m: CodeBlock, w?: Writer): Writer {
+        if (!w) w = new Writer();
+        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        return w;
+      }
+
+      static decode(r: Reader | Uint8Array, length?: number): CodeBlock {
+        r = r instanceof Reader ? r : new Reader(r);
+        const end = length === undefined ? r.len : r.pos + length;
+        const m = new CodeBlock();
+        while (r.pos < end) {
+          const tag = r.uint32();
+          switch (tag >> 3) {
+            case 1:
+            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            break;
+            default:
+            r.skipType(tag & 7);
+            break;
+          }
+        }
+        return m;
+      }
+    }
+
+    export type ISpoiler = {
+      bounds?: Message.Entities.IBounds | undefined;
+    }
+
+    export class Spoiler {
+      bounds: Message.Entities.Bounds | undefined;
+
+      constructor(v?: ISpoiler) {
+        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+      }
+
+      static encode(m: Spoiler, w?: Writer): Writer {
+        if (!w) w = new Writer();
+        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        return w;
+      }
+
+      static decode(r: Reader | Uint8Array, length?: number): Spoiler {
+        r = r instanceof Reader ? r : new Reader(r);
+        const end = length === undefined ? r.len : r.pos + length;
+        const m = new Spoiler();
+        while (r.pos < end) {
+          const tag = r.uint32();
+          switch (tag >> 3) {
+            case 1:
+            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            break;
+            default:
+            r.skipType(tag & 7);
+            break;
+          }
+        }
+        return m;
+      }
+    }
+
+    export type IGenericEntity = {
+      bounds?: Message.Entities.IBounds | undefined;
+    }
+
+    export class GenericEntity {
+      bounds: Message.Entities.Bounds | undefined;
+
+      constructor(v?: IGenericEntity) {
+        this.bounds = v?.bounds && new Message.Entities.Bounds(v.bounds);
+      }
+
+      static encode(m: GenericEntity, w?: Writer): Writer {
+        if (!w) w = new Writer();
+        if (m.bounds) Message.Entities.Bounds.encode(m.bounds, w.uint32(10).fork()).ldelim();
+        return w;
+      }
+
+      static decode(r: Reader | Uint8Array, length?: number): GenericEntity {
+        r = r instanceof Reader ? r : new Reader(r);
+        const end = length === undefined ? r.len : r.pos + length;
+        const m = new GenericEntity();
+        while (r.pos < end) {
+          const tag = r.uint32();
+          switch (tag >> 3) {
+            case 1:
+            m.bounds = Message.Entities.Bounds.decode(r, r.uint32());
+            break;
+            default:
+            r.skipType(tag & 7);
+            break;
+          }
+        }
+        return m;
+      }
+    }
+
   }
 
 }
 
-export type ICallClientRequest = {
-  clientId?: bigint;
-  body?: CallClientRequest.IBody
+export type ISendMessageRequest = {
+  body?: string;
 }
 
-export class CallClientRequest {
-  clientId: bigint;
-  body: CallClientRequest.TBody;
+export class SendMessageRequest {
+  body: string;
 
-  constructor(v?: ICallClientRequest) {
-    this.clientId = v?.clientId || BigInt(0);
-    this.body = new CallClientRequest.Body(v?.body);
+  constructor(v?: ISendMessageRequest) {
+    this.body = v?.body || "";
   }
 
-  static encode(m: CallClientRequest, w?: Writer): Writer {
+  static encode(m: SendMessageRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.clientId) w.uint32(8).uint64(m.clientId);
-    switch (m.body.case) {
-      case CallClientRequest.BodyCase.MESSAGE:
-      CallClientRequest.Message.encode(m.body.message, w.uint32(18).fork()).ldelim();
-      break;
-      case CallClientRequest.BodyCase.CLOSE:
-      CallClientRequest.Close.encode(m.body.close, w.uint32(26).fork()).ldelim();
-      break;
-    }
+    if (m.body) w.uint32(10).string(m.body);
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CallClientRequest {
+  static decode(r: Reader | Uint8Array, length?: number): SendMessageRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new CallClientRequest();
+    const m = new SendMessageRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.clientId = r.uint64();
-        break;
-        case 2:
-        m.body = new CallClientRequest.Body({ message: CallClientRequest.Message.decode(r, r.uint32()) });
-        break;
-        case 3:
-        m.body = new CallClientRequest.Body({ close: CallClientRequest.Close.decode(r, r.uint32()) });
+        m.body = r.string();
         break;
         default:
         r.skipType(tag & 7);
@@ -2079,133 +1951,23 @@ export class CallClientRequest {
   }
 }
 
-export namespace CallClientRequest {
-  export enum BodyCase {
-    NOT_SET = 0,
-    MESSAGE = 2,
-    CLOSE = 3,
-  }
-
-  export type IBody =
-  { case?: BodyCase.NOT_SET }
-  |{ case?: BodyCase.MESSAGE, message: CallClientRequest.IMessage }
-  |{ case?: BodyCase.CLOSE, close: CallClientRequest.IClose }
-  ;
-
-  export type TBody = Readonly<
-  { case: BodyCase.NOT_SET }
-  |{ case: BodyCase.MESSAGE, message: CallClientRequest.Message }
-  |{ case: BodyCase.CLOSE, close: CallClientRequest.Close }
-  >;
-
-  class BodyImpl {
-    message: CallClientRequest.Message;
-    close: CallClientRequest.Close;
-    case: BodyCase = BodyCase.NOT_SET;
-
-    constructor(v?: IBody) {
-      if (v && "message" in v) {
-        this.case = BodyCase.MESSAGE;
-        this.message = new CallClientRequest.Message(v.message);
-      } else
-      if (v && "close" in v) {
-        this.case = BodyCase.CLOSE;
-        this.close = new CallClientRequest.Close(v.close);
-      }
-    }
-  }
-
-  export const Body = BodyImpl as {
-    new (): Readonly<{ case: BodyCase.NOT_SET }>;
-    new <T extends IBody>(v: T): Readonly<
-    T extends { message: CallClientRequest.IMessage } ? { case: BodyCase.MESSAGE, message: CallClientRequest.Message } :
-    T extends { close: CallClientRequest.IClose } ? { case: BodyCase.CLOSE, close: CallClientRequest.Close } :
-    never
-    >;
-  };
-
-  export type IMessage = {
-    time?: bigint;
-    body?: string;
-  }
-
-  export class Message {
-    time: bigint;
-    body: string;
-
-    constructor(v?: IMessage) {
-      this.time = v?.time || BigInt(0);
-      this.body = v?.body || "";
-    }
-
-    static encode(m: Message, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      if (m.time) w.uint32(8).int64(m.time);
-      if (m.body) w.uint32(18).string(m.body);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Message {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Message();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1:
-          m.time = r.int64();
-          break;
-          case 2:
-          m.body = r.string();
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
-    }
-  }
-
-  export type IClose = {
-  }
-
-  export class Close {
-
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-    constructor(v?: IClose) {
-    }
-
-    static encode(m: Close, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Close {
-      if (r instanceof Reader && length) r.skip(length);
-      return new Close();
-    }
-  }
-
+export type ISendMessageResponse = {
 }
 
-export type ICallClientResponse = {
-}
-
-export class CallClientResponse {
+export class SendMessageResponse {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-  constructor(v?: ICallClientResponse) {
+  constructor(v?: ISendMessageResponse) {
   }
 
-  static encode(m: CallClientResponse, w?: Writer): Writer {
+  static encode(m: SendMessageResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CallClientResponse {
+  static decode(r: Reader | Uint8Array, length?: number): SendMessageResponse {
     if (r instanceof Reader && length) r.skip(length);
-    return new CallClientResponse();
+    return new SendMessageResponse();
   }
 }
 

@@ -77,56 +77,34 @@ message ListEmotesResponse {
   repeated Emote emotes = 1;
 }
 
-message OpenServerRequest {
-  Server server = 1;
-}
-
-message ServerEvent {
-  message Open {
-    uint64 server_id = 1;
-  }
-
-  message Close {}
-
-  oneof body {
-    Open open = 1;
-    Close close = 2;
-  }
-}
-
-message CallServerRequest {
-  message Close {}
-
-  uint64 server_id = 1;
-  oneof body {
-    Close close = 2;
-  }
-}
-
 message OpenClientRequest {
   bytes network_key = 1;
   bytes server_key = 2;
 }
 
-message ClientEvent {
+message OpenClientResponse {
   message Open {
     uint64 client_id = 1;
   }
 
-  message Message {
-    int64 sent_time = 1;
-    int64 server_time = 2;
-    string nick = 3;
-    string body = 4;
-    MessageEntities entities = 5;
-  }
-
-  message Close {}
-
   oneof body {
-    Open open = 1;
-    Message message = 2;
-    Close close = 3;
+    Open open = 1001;
+    Message message = 1002;
+  }
+}
+
+message ClientSendMessageRequest {
+  uint64 client_id = 1;
+  string body = 2;
+}
+
+message ClientSendMessageResponse {}
+
+message CallClientResponse {}
+
+message ServerEvent {
+  oneof body {
+    Message message = 1001;
   }
 }
 
@@ -162,9 +140,11 @@ message EmoteImage {
 }
 
 message EmoteAnimation {
-  uint32 frame_count = 10;
-  uint32 Duration = 11;
-  uint32 iteration_count = 12;
+  uint32 frame_count = 1;
+  uint32 duration_ms = 2;
+  uint32 iteration_count = 3;
+  bool end_on_last_frame = 4;
+  bool loop_forever = 5;
 }
 
 message Emote {
@@ -175,74 +155,71 @@ message Emote {
   EmoteAnimation animation = 5;
 }
 
-message MessageEntities {
-  message Bounds {
-    uint32 start = 1;
-    uint32 end = 2;
-  }
-
-  message Link {
-    Bounds bounds = 1;
-    string url = 2;
-  }
-
-  message Emote {
-    Bounds bounds = 1;
-    string name = 2;
-    repeated string modifiers = 3;
-    uint32 combo = 4;
-  }
-
-  message Nick {
-    Bounds bounds = 1;
-    string nick = 2;
-  }
-
-  message Tag {
-    Bounds bounds = 1;
-    string name = 2;
-  }
-
-  message CodeBlock {
-    Bounds bounds = 1;
-  }
-
-  message Spoiler {
-    Bounds bounds = 1;
-  }
-
-  message GenericEntity {
-    Bounds bounds = 1;
-  }
-
-  repeated Link links = 1;
-  repeated Emote emotes = 2;
-  repeated Nick nicks = 3;
-  repeated Tag tags = 4;
-  repeated CodeBlock code_blocks = 5;
-  repeated Spoiler spoilers = 6;
-  GenericEntity green_text = 7;
-  GenericEntity self_message = 8;
+message AssetBundle {
+  // tags
+  // modifiers
+  repeated Emote emotes = 1;
 }
 
-message CallClientRequest {
-  message Message {
-    int64 time = 1;
-    string body = 2;
+message Message {
+  message Entities {
+    message Bounds {
+      uint32 start = 1;
+      uint32 end = 2;
+    }
+
+    message Link {
+      Bounds bounds = 1;
+      string url = 2;
+    }
+
+    message Emote {
+      Bounds bounds = 1;
+      string name = 2;
+      repeated string modifiers = 3;
+      uint32 combo = 4;
+    }
+
+    message Nick {
+      Bounds bounds = 1;
+      string nick = 2;
+    }
+
+    message Tag {
+      Bounds bounds = 1;
+      string name = 2;
+    }
+
+    message CodeBlock {
+      Bounds bounds = 1;
+    }
+
+    message Spoiler {
+      Bounds bounds = 1;
+    }
+
+    message GenericEntity {
+      Bounds bounds = 1;
+    }
+
+    repeated Link links = 1;
+    repeated Emote emotes = 2;
+    repeated Nick nicks = 3;
+    repeated Tag tags = 4;
+    repeated CodeBlock code_blocks = 5;
+    repeated Spoiler spoilers = 6;
+    GenericEntity green_text = 7;
+    GenericEntity self_message = 8;
   }
 
-  message Close {}
-
-  uint64 client_id = 1;
-  oneof body {
-    Message message = 2;
-    Close close = 3;
-  }
+  int64 server_time = 1;
+  bytes host_id = 2;
+  string nick = 3;
+  string body = 4;
+  Entities entities = 5;
 }
 
-message CallClientResponse {}
-
-service Chat {
+service ChatFrontend {
   rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
   rpc UpdateServer(UpdateServerRequest) returns (UpdateServerResponse);
   rpc DeleteServer(DeleteServerRequest) returns (DeleteServerResponse);
@@ -255,7 +232,15 @@ service Chat {
   rpc GetEmote(GetEmoteRequest) returns (GetEmoteResponse);
   rpc ListEmotes(ListEmotesRequest) returns (ListEmotesResponse);
 
-  rpc OpenServer(OpenServerRequest) returns (stream ServerEvent);
-  rpc OpenClient(OpenClientRequest) returns (stream ClientEvent);
-  rpc CallClient(CallClientRequest) returns (CallClientResponse);
+  rpc OpenClient(OpenClientRequest) returns (stream OpenClientResponse);
+  rpc ClientSendMessage(ClientSendMessageRequest) returns (ClientSendMessageResponse);
+}
+
+message SendMessageRequest {
+  string body = 1;
+}
+message SendMessageResponse {}
+
+service Chat {
+  rpc SendMessage(SendMessageRequest) returns (SendMessageResponse);
 }
