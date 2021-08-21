@@ -3,7 +3,7 @@ FROM ubuntu:focal AS build
 ARG VERSION=development
 
 ARG NODE_VERSION=14.x
-ARG GO_VERSION=1.17beta1
+ARG GO_VERSION=1.17
 
 RUN mkdir /ui
 WORKDIR /ui
