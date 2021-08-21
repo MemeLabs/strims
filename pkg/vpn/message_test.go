@@ -3,7 +3,7 @@ package vpn
 import (
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/vnic"
 	"github.com/stretchr/testify/assert"

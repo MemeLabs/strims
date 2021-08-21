@@ -12,8 +12,8 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/MemeLabs/go-ppspp/internal/dao"
 	vpnv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vpn/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/randutil"

@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/hmac_drbg"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"
 	"github.com/davecgh/go-spew/spew"

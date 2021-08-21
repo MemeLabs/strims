@@ -8,8 +8,8 @@ import (
 	"io"
 	"testing"
 
+	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
-	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/blake2b"

@@ -4,11 +4,12 @@ import (
 	"testing"
 
 	"github.com/MemeLabs/go-ppspp/pkg/binmap"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/stretchr/testify/assert"
 )
 
-func assertTimeSetGetEqual(t *testing.T, s *timeSet, b binmap.Bin, expectedV int64, expectedOK bool) {
-	actualV, actualOK := s.Get(b)
+func assertTimeSetGetEqual(t *testing.T, s *timeSet, b binmap.Bin, expectedV timeutil.Time, expectedOK bool) {
+	_, actualV, actualOK := s.Get(b)
 	assert.Equal(t, expectedV, actualV, "value mismatch at bin %d", b)
 	assert.Equal(t, expectedOK, actualOK, "ok mismatch at bin %d", b)
 }
@@ -22,7 +23,7 @@ func TestTimeSetGet(t *testing.T) {
 
 	cases := []struct {
 		bin   binmap.Bin
-		value int64
+		value timeutil.Time
 		ok    bool
 	}{
 		{0, 100, true},
@@ -97,7 +98,7 @@ func BenchmarkTimeGet(b *testing.B) {
 	const m = (1 << 16) - 1
 	var n int64
 	for i := binmap.Bin(0); i < binmap.Bin(b.N*2); i += 2 {
-		nn, _ := s.Get(i & m)
+		_, nn, _ := s.Get(i & m)
 		n += nn.UnixNano()
 	}
 }

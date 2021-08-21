@@ -3,7 +3,7 @@ package ppspp
 import (
 	"testing"
 
-	"github.com/MemeLabs/go-ppspp/pkg/dao"
+	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/codec"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/integrity"
 	"github.com/stretchr/testify/assert"
