@@ -39,7 +39,10 @@ type DialerControl interface {
 }
 
 // DirectoryControl ...
-type DirectoryControl interface{}
+type DirectoryControl interface {
+	Publish(ctx context.Context, listing *networkv1.DirectoryListing, networkKey []byte) error
+	Unpublish(ctx context.Context, key, networkKey []byte) error
+}
 
 // NetworkControl ...
 type NetworkControl interface {

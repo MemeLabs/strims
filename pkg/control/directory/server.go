@@ -4,8 +4,7 @@ import (
 	"context"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
-	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"go.uber.org/zap"
@@ -48,7 +47,7 @@ type directoryServer struct {
 	cancel      context.CancelFunc
 }
 
-func (s *directoryServer) Run(ctx context.Context, dialer *dialer.Control, transfer *transfer.Control) error {
+func (s *directoryServer) Run(ctx context.Context, dialer control.DialerControl, transfer control.TransferControl) error {
 	ctx, cancel := context.WithCancel(ctx)
 	s.cancel = cancel
 

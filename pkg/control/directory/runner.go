@@ -8,8 +8,7 @@ import (
 	"sync"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
-	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
@@ -18,7 +17,14 @@ import (
 	"go.uber.org/zap"
 )
 
-func newRunner(ctx context.Context, logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, dialer *dialer.Control, transfer *transfer.Control, network *networkv1.Network) *runner {
+func newRunner(ctx context.Context,
+	logger *zap.Logger,
+	vpn *vpn.Host,
+	store *dao.ProfileStore,
+	dialer control.DialerControl,
+	transfer control.TransferControl,
+	network *networkv1.Network,
+) *runner {
 	r := &runner{
 		key:     dao.NetworkKey(network),
 		network: network,
@@ -48,8 +54,8 @@ type runner struct {
 	logger   *zap.Logger
 	vpn      *vpn.Host
 	store    *dao.ProfileStore
-	dialer   *dialer.Control
-	transfer *transfer.Control
+	dialer   control.DialerControl
+	transfer control.TransferControl
 
 	lock     sync.Mutex
 	closed   bool

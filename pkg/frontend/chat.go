@@ -3,12 +3,12 @@ package frontend
 import (
 	"context"
 	"errors"
+	"log"
 	"sync"
 
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
@@ -225,8 +225,6 @@ func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequ
 					return
 				}
 
-				debug.PrintJSON(e)
-
 				switch b := e.Body.(type) {
 				case *chatv1.ServerEvent_Message:
 					ch <- &chatv1.OpenClientResponse{
@@ -236,6 +234,7 @@ func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequ
 					}
 				}
 			case <-ctx.Done():
+				log.Println("context closed...")
 				return
 			}
 		}

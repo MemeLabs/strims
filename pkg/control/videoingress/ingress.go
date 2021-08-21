@@ -16,9 +16,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
-	"github.com/MemeLabs/go-ppspp/pkg/control/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/control/network"
-	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
@@ -34,9 +32,9 @@ const streamUpdateInterval = time.Minute
 func newIngressService(
 	logger *zap.Logger,
 	store *dao.ProfileStore,
-	transfer *transfer.Control,
-	network *network.Control,
-	directory *directory.Control,
+	transfer control.TransferControl,
+	network control.NetworkControl,
+	directory control.DirectoryControl,
 ) *ingressService {
 	return &ingressService{
 		logger:     logger,
@@ -52,9 +50,9 @@ func newIngressService(
 type ingressService struct {
 	logger     *zap.Logger
 	store      *dao.ProfileStore
-	transfer   *transfer.Control
-	network    *network.Control
-	directory  *directory.Control
+	transfer   control.TransferControl
+	network    control.NetworkControl
+	directory  control.DirectoryControl
 	transcoder *rtmpingress.Transcoder
 
 	lock    sync.Mutex
@@ -174,9 +172,9 @@ func (s *ingressService) HandlePassthruStream(a *rtmpingress.StreamAddr, c *rtmp
 func newIngressStream(
 	logger *zap.Logger,
 	store *dao.ProfileStore,
-	transfer *transfer.Control,
-	network *network.Control,
-	directory *directory.Control,
+	transfer control.TransferControl,
+	network control.NetworkControl,
+	directory control.DirectoryControl,
 	addr *rtmpingress.StreamAddr,
 	conn io.Closer,
 ) (s *ingressStream, err error) {
@@ -228,9 +226,9 @@ func newIngressStream(
 type ingressStream struct {
 	logger    *zap.Logger
 	store     *dao.ProfileStore
-	transfer  *transfer.Control
-	network   *network.Control
-	directory *directory.Control
+	transfer  control.TransferControl
+	network   control.NetworkControl
+	directory control.DirectoryControl
 
 	ctx       context.Context
 	cancelCtx context.CancelFunc

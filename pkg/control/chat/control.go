@@ -6,11 +6,9 @@ import (
 	"sync"
 
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
-	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
-	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -25,7 +23,14 @@ var (
 )
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers, dialer *dialer.Control, transfer *transfer.Control) *Control {
+func NewControl(
+	logger *zap.Logger,
+	vpn *vpn.Host,
+	store *dao.ProfileStore,
+	observers *event.Observers,
+	dialer control.DialerControl,
+	transfer control.TransferControl,
+) *Control {
 	return &Control{
 		logger:    logger,
 		vpn:       vpn,
@@ -42,8 +47,8 @@ type Control struct {
 	vpn       *vpn.Host
 	store     *dao.ProfileStore
 	observers *event.Observers
-	dialer    *dialer.Control
-	transfer  *transfer.Control
+	dialer    control.DialerControl
+	transfer  control.TransferControl
 
 	lock    sync.Mutex
 	runners llrb.LLRB
@@ -134,8 +139,6 @@ func (t *Control) ReadServerEvents(ctx context.Context, networkKey, key []byte) 
 					logger.Debug("error reading chat event", zap.Error(err))
 					break
 				}
-
-				debug.PrintJSON(e)
 
 				ch <- e
 			}

@@ -9,9 +9,7 @@ import (
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
-	"github.com/MemeLabs/go-ppspp/pkg/control/directory"
-	"github.com/MemeLabs/go-ppspp/pkg/control/network"
-	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
@@ -28,7 +26,12 @@ var (
 )
 
 // NewControl ...
-func NewControl(logger *zap.Logger, transfer *transfer.Control, directory *directory.Control, network *network.Control) *Control {
+func NewControl(
+	logger *zap.Logger,
+	transfer control.TransferControl,
+	directory control.DirectoryControl,
+	network control.NetworkControl,
+) *Control {
 	return &Control{
 		logger:    logger,
 		directory: directory,
@@ -40,9 +43,9 @@ func NewControl(logger *zap.Logger, transfer *transfer.Control, directory *direc
 // Control ...
 type Control struct {
 	logger    *zap.Logger
-	directory *directory.Control
-	network   *network.Control
-	transfer  *transfer.Control
+	directory control.DirectoryControl
+	network   control.NetworkControl
+	transfer  control.TransferControl
 
 	lock    sync.Mutex
 	streams llrb.LLRB

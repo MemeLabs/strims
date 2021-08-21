@@ -28,7 +28,7 @@ const (
 // chunk size consts
 const (
 	MaxSize     = math.MaxUint32>>1 - headerLen
-	DefaultSize = math.MaxUint16>>1 - headerLen
+	DefaultSize = math.MaxUint16 - headerLen
 )
 
 // NewWriter ...

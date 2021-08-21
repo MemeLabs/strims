@@ -3,7 +3,7 @@ package directory
 import (
 	"context"
 
-	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"go.uber.org/zap"
@@ -31,7 +31,7 @@ type directoryReader struct {
 	cancel      context.CancelFunc
 }
 
-func (d *directoryReader) Run(ctx context.Context, transfer *transfer.Control) error {
+func (d *directoryReader) Run(ctx context.Context, transfer control.TransferControl) error {
 	ctx, cancel := context.WithCancel(ctx)
 	d.cancel = cancel
 

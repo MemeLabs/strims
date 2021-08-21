@@ -7,8 +7,8 @@ import (
 	"sync"
 
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
-	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/store"
@@ -17,7 +17,7 @@ import (
 )
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers, transfer *transfer.Control) *Control {
+func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers, transfer control.TransferControl) *Control {
 	// events := make(chan interface{}, 8)
 	// observers.Notify(events)
 
@@ -36,7 +36,7 @@ type Control struct {
 	vpn       *vpn.Host
 	observers *event.Observers
 	// events    chan interface{}
-	transfer *transfer.Control
+	transfer control.TransferControl
 
 	lock sync.Mutex
 }
@@ -102,7 +102,7 @@ func (t *Control) OpenStream(swarmURI string, networkKeys [][]byte) ([]byte, io.
 // VideoReader ...
 type VideoReader struct {
 	logger     *zap.Logger
-	transfer   *transfer.Control
+	transfer   control.TransferControl
 	transferID []byte
 	swarm      *ppspp.Swarm
 	r          io.Reader

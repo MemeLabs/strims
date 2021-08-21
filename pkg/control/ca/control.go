@@ -9,7 +9,7 @@ import (
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
@@ -21,7 +21,12 @@ import (
 var ErrNetworkNotFound = errors.New("network not found")
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers, dialer *dialer.Control) *Control {
+func NewControl(logger *zap.Logger,
+	vpn *vpn.Host,
+	store *dao.ProfileStore,
+	observers *event.Observers,
+	dialer control.DialerControl,
+) *Control {
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
@@ -43,7 +48,7 @@ type Control struct {
 	lock              sync.Mutex
 	servers           map[uint64]context.CancelFunc
 	events            chan interface{}
-	dialer            *dialer.Control
+	dialer            control.DialerControl
 	certRenewTimeout  <-chan time.Time
 	lastCertRenewTime time.Time
 }

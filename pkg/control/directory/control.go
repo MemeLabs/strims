@@ -8,9 +8,8 @@ import (
 	"time"
 
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
-	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
@@ -25,7 +24,13 @@ var (
 )
 
 // NewControl ...
-func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers, dialer *dialer.Control, transfer *transfer.Control) *Control {
+func NewControl(logger *zap.Logger,
+	vpn *vpn.Host,
+	store *dao.ProfileStore,
+	observers *event.Observers,
+	dialer control.DialerControl,
+	transfer control.TransferControl,
+) *Control {
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
 
@@ -47,8 +52,8 @@ type Control struct {
 	store     *dao.ProfileStore
 	observers *event.Observers
 	events    chan interface{}
-	dialer    *dialer.Control
-	transfer  *transfer.Control
+	dialer    control.DialerControl
+	transfer  control.TransferControl
 
 	lock    sync.Mutex
 	runners llrb.LLRB

@@ -13,11 +13,8 @@ import (
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/control/dialer"
-	"github.com/MemeLabs/go-ppspp/pkg/control/directory"
+	"github.com/MemeLabs/go-ppspp/pkg/control"
 	"github.com/MemeLabs/go-ppspp/pkg/control/event"
-	"github.com/MemeLabs/go-ppspp/pkg/control/network"
-	"github.com/MemeLabs/go-ppspp/pkg/control/transfer"
 	"github.com/MemeLabs/go-ppspp/pkg/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/logutil"
 	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
@@ -40,10 +37,10 @@ func NewControl(
 	store *dao.ProfileStore,
 	profile *profilev1.Profile,
 	observers *event.Observers,
-	transfer *transfer.Control,
-	dialer *dialer.Control,
-	network *network.Control,
-	directory *directory.Control,
+	transfer control.TransferControl,
+	dialer control.DialerControl,
+	network control.NetworkControl,
+	directory control.DirectoryControl,
 ) *Control {
 	events := make(chan interface{}, 8)
 	observers.Notify(events)
@@ -75,7 +72,7 @@ type Control struct {
 	profile   *profilev1.Profile
 	observers *event.Observers
 	events    chan interface{}
-	dialer    *dialer.Control
+	dialer    control.DialerControl
 
 	ingressService *ingressService
 	lock           sync.Mutex

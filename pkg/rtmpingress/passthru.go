@@ -200,7 +200,6 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 
 			moof := &mp4.MoofBox{}
 			moof.AddChild(&mp4.MfhdBox{
-				Version:        0,
 				SequenceNumber: seq,
 			})
 			moof.AddChild(&traf[0])
@@ -238,7 +237,7 @@ func (s *PassthruServer) transmux(c *rtmp.Conn, w ioutil.WriteFlusher) error {
 			if v := vals[0].(flvio.AMFMap).Get("framerate"); v != nil {
 				timeScale[0] = (v.V.(float64) * 512.0) / float64(time.Second)
 			} else {
-				return errors.New("no framerate if amf")
+				return errors.New("no framerate in amf")
 			}
 		case av.H264DecoderConfig:
 			c, err := avc.DecodeAVCDecConfRec(bytes.NewBuffer(pkt.Data))

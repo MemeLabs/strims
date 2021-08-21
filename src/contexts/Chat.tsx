@@ -158,12 +158,16 @@ export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, child
   const client = useClient();
 
   useEffect(() => {
-    console.log({ networkKey, serverKey });
     const events = client.chat.openClient({ networkKey, serverKey });
     events.on("data", (data) => dispatch({ type: "CLIENT_DATA", data }));
     events.on("error", (error) => dispatch({ type: "CLIENT_ERROR", error }));
-    events.on("close", () => dispatch({ type: "CLIENT_CLOSE" }));
-    return () => events.destroy();
+
+    const handleClose = () => dispatch({ type: "CLIENT_CLOSE" });
+    events.on("close", handleClose);
+    return () => {
+      events.off("close", handleClose);
+      events.destroy();
+    };
   }, []);
 
   useEffect(() => {
