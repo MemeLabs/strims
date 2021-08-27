@@ -769,6 +769,92 @@ export class ListEmotesResponse {
   }
 }
 
+export type ISyncAssetsRequest = {
+  serverId?: bigint;
+  forceUnifiedUpdate?: boolean;
+}
+
+export class SyncAssetsRequest {
+  serverId: bigint;
+  forceUnifiedUpdate: boolean;
+
+  constructor(v?: ISyncAssetsRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.forceUnifiedUpdate = v?.forceUnifiedUpdate || false;
+  }
+
+  static encode(m: SyncAssetsRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    if (m.forceUnifiedUpdate) w.uint32(16).bool(m.forceUnifiedUpdate);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): SyncAssetsRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new SyncAssetsRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        m.forceUnifiedUpdate = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ISyncAssetsResponse = {
+  version?: bigint;
+  updateSize?: number;
+}
+
+export class SyncAssetsResponse {
+  version: bigint;
+  updateSize: number;
+
+  constructor(v?: ISyncAssetsResponse) {
+    this.version = v?.version || BigInt(0);
+    this.updateSize = v?.updateSize || 0;
+  }
+
+  static encode(m: SyncAssetsResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.version) w.uint32(8).uint64(m.version);
+    if (m.updateSize) w.uint32(16).uint32(m.updateSize);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): SyncAssetsResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new SyncAssetsResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.version = r.uint64();
+        break;
+        case 2:
+        m.updateSize = r.uint32();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IOpenClientRequest = {
   networkKey?: Uint8Array;
   serverKey?: Uint8Array;
@@ -832,6 +918,9 @@ export class OpenClientResponse {
       case OpenClientResponse.BodyCase.MESSAGE:
       Message.encode(m.body.message, w.uint32(8018).fork()).ldelim();
       break;
+      case OpenClientResponse.BodyCase.ASSET_BUNDLE:
+      AssetBundle.encode(m.body.assetBundle, w.uint32(8026).fork()).ldelim();
+      break;
     }
     return w;
   }
@@ -849,6 +938,9 @@ export class OpenClientResponse {
         case 1002:
         m.body = new OpenClientResponse.Body({ message: Message.decode(r, r.uint32()) });
         break;
+        case 1003:
+        m.body = new OpenClientResponse.Body({ assetBundle: AssetBundle.decode(r, r.uint32()) });
+        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -863,23 +955,27 @@ export namespace OpenClientResponse {
     NOT_SET = 0,
     OPEN = 1001,
     MESSAGE = 1002,
+    ASSET_BUNDLE = 1003,
   }
 
   export type IBody =
   { case?: BodyCase.NOT_SET }
   |{ case?: BodyCase.OPEN, open: OpenClientResponse.IOpen }
   |{ case?: BodyCase.MESSAGE, message: IMessage }
+  |{ case?: BodyCase.ASSET_BUNDLE, assetBundle: IAssetBundle }
   ;
 
   export type TBody = Readonly<
   { case: BodyCase.NOT_SET }
   |{ case: BodyCase.OPEN, open: OpenClientResponse.Open }
   |{ case: BodyCase.MESSAGE, message: Message }
+  |{ case: BodyCase.ASSET_BUNDLE, assetBundle: AssetBundle }
   >;
 
   class BodyImpl {
     open: OpenClientResponse.Open;
     message: Message;
+    assetBundle: AssetBundle;
     case: BodyCase = BodyCase.NOT_SET;
 
     constructor(v?: IBody) {
@@ -890,6 +986,10 @@ export namespace OpenClientResponse {
       if (v && "message" in v) {
         this.case = BodyCase.MESSAGE;
         this.message = new Message(v.message);
+      } else
+      if (v && "assetBundle" in v) {
+        this.case = BodyCase.ASSET_BUNDLE;
+        this.assetBundle = new AssetBundle(v.assetBundle);
       }
     }
   }
@@ -899,6 +999,7 @@ export namespace OpenClientResponse {
     new <T extends IBody>(v: T): Readonly<
     T extends { open: OpenClientResponse.IOpen } ? { case: BodyCase.OPEN, open: OpenClientResponse.Open } :
     T extends { message: IMessage } ? { case: BodyCase.MESSAGE, message: Message } :
+    T extends { assetBundle: IAssetBundle } ? { case: BodyCase.ASSET_BUNDLE, assetBundle: AssetBundle } :
     never
     >;
   };
@@ -1104,18 +1205,30 @@ export namespace ServerEvent {
 
 export type IRoom = {
   name?: string;
+  css?: string;
+  tags?: string[];
+  modifiers?: string[];
 }
 
 export class Room {
   name: string;
+  css: string;
+  tags: string[];
+  modifiers: string[];
 
   constructor(v?: IRoom) {
     this.name = v?.name || "";
+    this.css = v?.css || "";
+    this.tags = v?.tags ? v.tags : [];
+    this.modifiers = v?.modifiers ? v.modifiers : [];
   }
 
   static encode(m: Room, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.name) w.uint32(10).string(m.name);
+    if (m.css) w.uint32(18).string(m.css);
+    for (const v of m.tags) w.uint32(26).string(v);
+    for (const v of m.modifiers) w.uint32(34).string(v);
     return w;
   }
 
@@ -1128,6 +1241,15 @@ export class Room {
       switch (tag >> 3) {
         case 1:
         m.name = r.string();
+        break;
+        case 2:
+        m.css = r.string();
+        break;
+        case 3:
+        m.tags.push(r.string())
+        break;
+        case 4:
+        m.modifiers.push(r.string())
         break;
         default:
         r.skipType(tag & 7);
@@ -1388,19 +1510,31 @@ export class Emote {
 }
 
 export type IAssetBundle = {
+  isDelta?: boolean;
+  room?: IRoom | undefined;
   emotes?: IEmote[];
+  removedEmotes?: bigint[];
 }
 
 export class AssetBundle {
+  isDelta: boolean;
+  room: Room | undefined;
   emotes: Emote[];
+  removedEmotes: bigint[];
 
   constructor(v?: IAssetBundle) {
+    this.isDelta = v?.isDelta || false;
+    this.room = v?.room && new Room(v.room);
     this.emotes = v?.emotes ? v.emotes.map(v => new Emote(v)) : [];
+    this.removedEmotes = v?.removedEmotes ? v.removedEmotes : [];
   }
 
   static encode(m: AssetBundle, w?: Writer): Writer {
     if (!w) w = new Writer();
-    for (const v of m.emotes) Emote.encode(v, w.uint32(10).fork()).ldelim();
+    if (m.isDelta) w.uint32(8).bool(m.isDelta);
+    if (m.room) Room.encode(m.room, w.uint32(18).fork()).ldelim();
+    for (const v of m.emotes) Emote.encode(v, w.uint32(26).fork()).ldelim();
+    m.removedEmotes.reduce((w, v) => w.uint64(v), w.uint32(34).fork()).ldelim();
     return w;
   }
 
@@ -1412,7 +1546,16 @@ export class AssetBundle {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
+        m.isDelta = r.bool();
+        break;
+        case 2:
+        m.room = Room.decode(r, r.uint32());
+        break;
+        case 3:
         m.emotes.push(Emote.decode(r, r.uint32()));
+        break;
+        case 4:
+        for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.removedEmotes.push(r.uint64());
         break;
         default:
         r.skipType(tag & 7);

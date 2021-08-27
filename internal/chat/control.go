@@ -3,6 +3,7 @@ package chat
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 
 	control "github.com/MemeLabs/go-ppspp/internal"
@@ -15,6 +16,7 @@ import (
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
+	"golang.org/x/sync/errgroup"
 )
 
 // errors ...
@@ -31,11 +33,15 @@ func NewControl(
 	dialer control.DialerControl,
 	transfer control.TransferControl,
 ) *Control {
+	events := make(chan interface{}, 8)
+	observers.Notify(events)
+
 	return &Control{
 		logger:    logger,
 		vpn:       vpn,
 		store:     store,
 		observers: observers,
+		events:    events,
 		dialer:    dialer,
 		transfer:  transfer,
 	}
@@ -47,6 +53,7 @@ type Control struct {
 	vpn       *vpn.Host
 	store     *dao.ProfileStore
 	observers *event.Observers
+	events    chan interface{}
 	dialer    control.DialerControl
 	transfer  control.TransferControl
 
@@ -58,6 +65,19 @@ type Control struct {
 func (t *Control) Run(ctx context.Context) {
 	if err := t.startServerRunners(ctx); err != nil {
 		t.logger.Debug("starting chat server runners failed", zap.Error(err))
+	}
+
+	for {
+		select {
+		case <-t.events:
+		case e := <-t.events:
+			switch e := e.(type) {
+			case event.ChatSyncAssets:
+				t.syncAssets(e.ServerID, e.ForceUnifiedUpdate)
+			}
+		case <-ctx.Done():
+			return
+		}
 	}
 }
 
@@ -71,6 +91,28 @@ func (t *Control) startServerRunners(ctx context.Context) error {
 		t.runners.ReplaceOrInsert(newRunner(ctx, t.logger, t.vpn, t.store, t.dialer, t.transfer, config.Key.Public, config.NetworkKey, config))
 	}
 	return nil
+}
+
+func (t *Control) SyncAssets(serverID uint64, forceUnifiedUpdate bool) error {
+	t.observers.EmitGlobal(event.ChatSyncAssets{
+		ServerID:           serverID,
+		ForceUnifiedUpdate: forceUnifiedUpdate,
+	})
+	return nil
+}
+
+func (t *Control) syncAssets(serverID uint64, forceUnifiedUpdate bool) {
+	server, err := dao.GetChatServer(t.store, serverID)
+	if err != nil {
+		return
+	}
+
+	runner, ok := t.runners.Get(&runner{key: server.Key.Public}).(*runner)
+	if !ok {
+		return
+	}
+
+	runner.SyncServer()
 }
 
 // SyncServer ...
@@ -105,8 +147,8 @@ func (t *Control) client(networkKey, key []byte) (*rpc.Client, *chatv1.ChatClien
 	return client, chatv1.NewChatClient(client), nil
 }
 
-// ReadServerEvents ...
-func (t *Control) ReadServerEvents(ctx context.Context, networkKey, key []byte) (<-chan *chatv1.ServerEvent, error) {
+// ReadServer ...
+func (t *Control) ReadServer(ctx context.Context, networkKey, key []byte) (<-chan *chatv1.ServerEvent, <-chan *chatv1.AssetBundle, error) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -116,36 +158,56 @@ func (t *Control) ReadServerEvents(ctx context.Context, networkKey, key []byte) 
 		t.runners.ReplaceOrInsert(runner)
 	}
 
-	ch := make(chan *chatv1.ServerEvent)
+	events := make(chan *chatv1.ServerEvent)
+	assets := make(chan *chatv1.AssetBundle)
 
 	go func() {
+		defer close(events)
+
 		logger := t.logger.With(
 			logutil.ByteHex("chat", key),
 			logutil.ByteHex("network", networkKey),
 		)
 		for {
-			er, err := runner.EventReader(ctx)
+			eg, ctx := errgroup.WithContext(ctx)
+
+			eventReader, assetReader, err := runner.Readers(ctx)
 			if err != nil {
-				close(ch)
-				logger.Debug("chat event reader closed", zap.Error(err))
+				logger.Debug("open chat readers failed", zap.Error(err))
+				return
 			}
 
-			for {
-				e := &chatv1.ServerEvent{}
-				err := er.Read(e)
-				if err == protoutil.ErrShortRead {
-					continue
-				} else if err != nil {
-					logger.Debug("error reading chat event", zap.Error(err))
-					break
+			eg.Go(func() error {
+				for {
+					e := &chatv1.ServerEvent{}
+					err := eventReader.Read(e)
+					if err == protoutil.ErrShortRead {
+						continue
+					} else if err != nil {
+						return fmt.Errorf("reading event: %w", err)
+					}
+					events <- e
 				}
+			})
 
-				ch <- e
+			eg.Go(func() error {
+				for {
+					b := &chatv1.AssetBundle{}
+					err := assetReader.Read(b)
+					if err != nil {
+						return fmt.Errorf("reading asset bundle: %w", err)
+					}
+					assets <- b
+				}
+			})
+
+			if err := eg.Wait(); err != nil {
+				logger.Debug("chat reader closed with error", zap.Error(err))
 			}
 		}
 	}()
 
-	return ch, nil
+	return events, assets, nil
 }
 
 // SendMessage ...

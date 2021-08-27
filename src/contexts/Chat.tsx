@@ -1,9 +1,21 @@
-import { StyleDeclarationValue, StyleSheet, reset } from "aphrodite/no-important";
+import {
+  StyleDeclaration,
+  StyleDeclarationValue,
+  StyleSheet,
+  css,
+  resetInjectedStyle,
+} from "aphrodite/no-important";
 import clsx from "clsx";
 import React from "react";
 import { useEffect } from "react";
 
-import { Message, OpenClientResponse } from "../apis/strims/chat/v1/chat";
+import {
+  AssetBundle,
+  EmoteFileType,
+  EmoteScale,
+  Message,
+  OpenClientResponse,
+} from "../apis/strims/chat/v1/chat";
 import { Emote, emotes } from "../components/Chat/test-emotes";
 import stream, { messages } from "../components/Chat/test-history";
 import { useClient } from "./FrontendApi";
@@ -33,19 +45,37 @@ type Action =
       type: "CLIENT_CLOSE";
     };
 
+interface BundleMeta {
+  emoteIdObjectUrls: Map<bigint, string[]>;
+  emoteIdNames: Map<bigint, string>;
+}
+
 interface State {
+  clientId?: bigint;
   messages: Message[];
+  bundleMeta: BundleMeta;
   styles: {
     [key: string]: StyleDeclarationValue;
   };
-  clientId?: bigint;
+  emotes: string[];
+  modifiers: string[];
+  nicks: string[];
+  tags: string[];
   errors: Error[];
   state: "new" | "open" | "closed";
 }
 
 const initialState: State = {
   messages: [],
+  bundleMeta: {
+    emoteIdObjectUrls: new Map(),
+    emoteIdNames: new Map(),
+  },
   styles: {},
+  emotes: [],
+  modifiers: [],
+  nicks: [],
+  tags: [],
   errors: [],
   state: "new",
 };
@@ -76,12 +106,12 @@ const chatReducer = (state: State, action: Action): State => {
         ...state,
         state: "closed",
       };
-    case "LOAD_EMOTES":
-      reset();
-      return {
-        ...state,
-        styles: createEmoteStyles(action.emotes),
-      };
+    // case "LOAD_EMOTES":
+    //   reset();
+    //   return {
+    //     ...state,
+    //     styles: createEmoteStyles(action.emotes),
+    //   };
     default:
       return state;
   }
@@ -100,30 +130,93 @@ const chatClientDataReducer = (state: State, event: OpenClientResponse): State =
         ...state,
         messages: [...state.messages, event.body.message],
       };
+    case OpenClientResponse.BodyCase.ASSET_BUNDLE:
+      return assetBundleReducer(state, event.body.assetBundle);
     default:
       return state;
   }
 };
 
-const createEmoteStyles = (emotes: Emote[]) => {
-  const styles = {};
+const fileTypeToImageType = (fileType: EmoteFileType): string => {
+  switch (fileType) {
+    case EmoteFileType.FILE_TYPE_PNG:
+      return "image/png";
+    case EmoteFileType.FILE_TYPE_GIF:
+      return "image/gif";
+  }
+};
 
-  emotes.forEach((emote) => {
-    const imageSet = emote.versions.map(({ url, size }) => `url(${url}) ${size}`);
-    const { dimensions } = emote.versions.find(({ size }) => size === "1x");
-    styles[emote.name] = {
+const scaleToImageScale = (scale: EmoteScale): number => {
+  switch (scale) {
+    case EmoteScale.EMOTE_SCALE_1X:
+      return 1;
+    case EmoteScale.EMOTE_SCALE_2X:
+      return 2;
+    case EmoteScale.EMOTE_SCALE_4X:
+      return 4;
+  }
+};
+
+const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
+  const styles = { ...state.styles };
+  const resetIds = [...bundle.removedEmotes, ...bundle.emotes.map(({ id }) => id)];
+  const emoteIdObjectUrls = new Map(Array.from(state.bundleMeta.emoteIdObjectUrls.entries()));
+  const emoteIdNames = new Map(
+    Array.from(state.bundleMeta.emoteIdNames.entries()).filter(([id, name]) => {
+      const reset = resetIds.includes(id);
+      if (reset) {
+        resetInjectedStyle(css(styles[name]));
+        delete styles[name];
+        emoteIdObjectUrls.get(id)?.forEach((url) => URL.revokeObjectURL(url));
+        emoteIdObjectUrls.delete(id);
+      }
+      return reset;
+    })
+  );
+
+  const newStyles: { [key: string]: StyleDeclaration } = {};
+  bundle.emotes.forEach(({ id, name, images }) => {
+    const urls = images.map(({ data, fileType }) =>
+      URL.createObjectURL(new Blob([data], { type: fileTypeToImageType(fileType) }))
+    );
+    const imageSet = images.map(({ scale }, i) => `url(${urls[i]}) ${scaleToImageScale(scale)}x`);
+    const sample = images[0];
+    const sampleScale = scaleToImageScale(sample.scale);
+    const height = sample.height / sampleScale;
+    const width = sample.width / sampleScale;
+    newStyles[`e${name}`] = {
       backgroundImage: `image-set(${imageSet.join(", ")})`,
       backgroundRepeat: "no-repeat",
-      width: `${dimensions.width}px`,
-      height: `${dimensions.height}px`,
-      marginTop: `calc(0.5em - ${dimensions.height / 2}px)`,
-      marginBottom: `calc(0.5em - ${dimensions.height / 2}px)`,
+      width: `${width}px`,
+      height: `${height}px`,
+      marginTop: `calc(0.5em - ${height / 2}px)`,
+      marginBottom: `calc(0.5em - ${height / 2}px)`,
     };
+
+    emoteIdNames.set(id, name);
+    emoteIdObjectUrls.set(id, urls);
   });
 
-  console.log({ styles });
+  // console.log("ASSET BUNDLE", bundle);
 
-  return StyleSheet.create(styles);
+  console.log("emote names", Array.from(emoteIdNames.values()));
+
+  return {
+    ...state,
+    bundleMeta: {
+      emoteIdObjectUrls,
+      emoteIdNames,
+    },
+    styles: {
+      ...styles,
+      ...Object.fromEntries(
+        Object.entries(StyleSheet.create(newStyles)).map(([name, style]) => [name.substr(1), style])
+      ),
+    },
+    emotes: Array.from(emoteIdNames.values()),
+    modifiers: bundle.room.modifiers,
+    tags: bundle.room.tags,
+  };
 };
 
 export const useChat = () => {

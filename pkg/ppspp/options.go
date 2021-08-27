@@ -13,6 +13,7 @@ type SwarmOptions struct {
 	LiveWindow         int
 	Integrity          integrity.VerifierOptions
 	SchedulingMethod   SchedulingMethod
+	Scheduler          SchedulerOptions
 }
 
 // Assign ...
@@ -80,4 +81,8 @@ func NewDefaultSwarmOptions() SwarmOptions {
 		Integrity:          integrity.NewDefaultVerifierOptions(),
 		SchedulingMethod:   PeerSchedulingMethod,
 	}
+}
+
+type SchedulerOptions struct {
+	HackReadAll bool
 }

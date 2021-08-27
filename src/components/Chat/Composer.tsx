@@ -19,8 +19,6 @@ import { Editable, RenderLeafProps, Slate, withReact } from "slate-react";
 import urlRegex from "url-regex-safe";
 
 import Emote from "./Emote";
-import * as test from "./test-emotes";
-import users from "./test-users";
 
 const tags = ["nsfw", "weeb", "nsfl", "loud"];
 const commands = [
@@ -56,9 +54,13 @@ const initialValue: Descendant[] = [
 
 interface ComposerProps {
   onMessage: (message: string) => void;
+  emotes: string[];
+  modifiers: string[];
+  nicks: string[];
+  tags: string[];
 }
 
-const Composer: React.FC<ComposerProps> = ({ onMessage }) => {
+const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks, tags }) => {
   const [index, setIndex] = useState(0);
   const [currentSearch, setSearch] = useState<SearchState | null>(null);
   const [lastSearch, setLastSearch] = useState<SearchState | null>(null);
@@ -67,10 +69,10 @@ const Composer: React.FC<ComposerProps> = ({ onMessage }) => {
   const editor = useMemo(() => withReact(withNoLineBreaks(withHistory(createEditor()))), []);
   const [value, setValue] = useState<Descendant[]>(initialValue);
 
-  const emoteNames = useMemo(() => test.emotes.map(({ name }) => name), [test.emotes]);
-  const nicks = useMemo(() => users.map(({ nick }) => nick), [users]);
+  // const emoteNames = useMemo(() => test.emotes.map(({ name }) => name), [test.emotes]);
+  // const nicks = useMemo(() => users.map(({ nick }) => nick), [users]);
 
-  const searchSources = useSearchSources(nicks, tags, commands, test.emotes, test.modifiers);
+  const searchSources = useSearchSources(nicks, tags, commands, emotes, modifiers);
 
   const matches = useMemo(() => {
     if (!search) {
@@ -91,12 +93,10 @@ const Composer: React.FC<ComposerProps> = ({ onMessage }) => {
 
   const renderLeaf = useCallback((props: RenderLeafProps) => <Leaf {...props} />, []);
 
-  const grammar = useMemo(() => getGrammar(emoteNames, test.modifiers, nicks, tags), [
-    emoteNames,
-    test.modifiers,
-    nicks,
-    tags,
-  ]);
+  const grammar = useMemo(
+    () => getGrammar(emotes, modifiers, nicks, tags),
+    [emotes, modifiers, nicks, tags]
+  );
 
   const decorate = useCallback(
     ([node, path]: NodeEntry<Node>) =>
@@ -236,6 +236,8 @@ const Leaf: React.FC<RenderLeafProps> = ({ attributes, children, leaf }) => {
 
 export default Composer;
 
+const noopPattern = /_^/;
+
 const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags: string[]) => {
   const nestableEntities = {
     code: {
@@ -243,19 +245,34 @@ const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags
       greedy: true,
     },
     emote: {
-      pattern: new RegExp(`(\\W|^)((${emotes.join("|")})(:(${modifiers.join("|")}))*)(?=\\W|$)`),
+      pattern: noopPattern,
       lookbehind: true,
     },
     nick: {
-      pattern: new RegExp(`(\\W|^)(${nicks.join("|")})(?=\\W|$)`),
+      pattern: noopPattern,
       lookbehind: true,
     },
     tag: {
-      pattern: new RegExp(`(\\W|^)(${tags.join("|")})(?=\\W|$)`),
+      pattern: noopPattern,
       lookbehind: true,
     },
     url: urlRegex(),
   };
+
+  if (emotes.length !== 0 && modifiers.length !== 0) {
+    nestableEntities.emote.pattern = new RegExp(
+      `(\\W|^)((${emotes.join("|")})(:(${modifiers.join("|")}))*)(?=\\W|$)`
+    );
+  } else if (emotes.length !== 0) {
+    nestableEntities.emote.pattern = new RegExp(`(\\W|^)((${emotes.join("|")})(?=\\W|$)`);
+  }
+  if (nicks.length !== 0) {
+    nestableEntities.nick.pattern = new RegExp(`(\\W|^)(${nicks.join("|")})(?=\\W|$)`);
+  }
+  if (tags.length !== 0) {
+    nestableEntities.tag.pattern = new RegExp(`(\\W|^)(${tags.join("|")})(?=\\W|$)`);
+  }
+
   const entities = {
     spoiler: {
       pattern: /\|\|(\\\||\|(?!\|)|[^|])*(\|\||$)/,
@@ -317,7 +334,7 @@ const useSearchSources = (
   nicks: string[],
   tags: string[],
   commands: string[],
-  emotes: test.Emote[],
+  emotes: string[],
   modifiers: string[]
 ): SearchSources => {
   const sources: SearchSources = {
@@ -351,10 +368,10 @@ const useSearchSources = (
     ),
     emotes: useMemo(
       () =>
-        emotes.map(({ name }) => ({
+        emotes.map((v) => ({
           type: "emote",
-          value: name,
-          index: name.toLowerCase(),
+          value: v,
+          index: v.toLowerCase(),
         })),
       [emotes]
     ),

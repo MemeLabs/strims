@@ -168,7 +168,13 @@ const ChatThing: React.FC = () => {
         />
       </div>
       <div className="chat__footer">
-        <Composer onMessage={sendMessage} />
+        <Composer
+          emotes={state.emotes}
+          modifiers={state.modifiers}
+          tags={state.tags}
+          nicks={state.nicks}
+          onMessage={sendMessage}
+        />
       </div>
       <div className="chat__nav">
         <div className="chat__nav__left">

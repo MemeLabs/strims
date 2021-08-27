@@ -76,6 +76,14 @@ message ListEmotesRequest {
 message ListEmotesResponse {
   repeated Emote emotes = 1;
 }
+message SyncAssetsRequest {
+  uint64 server_id = 1;
+  bool force_unified_update = 2;
+}
+message SyncAssetsResponse {
+  uint64 version = 1;
+  uint32 update_size = 2;
+}
 
 message OpenClientRequest {
   bytes network_key = 1;
@@ -90,6 +98,7 @@ message OpenClientResponse {
   oneof body {
     Open open = 1001;
     Message message = 1002;
+    AssetBundle asset_bundle = 1003;
   }
 }
 
@@ -110,6 +119,9 @@ message ServerEvent {
 
 message Room {
   string name = 1;
+  string css = 2;
+  repeated string tags = 3;
+  repeated string modifiers = 4;
 }
 
 message Server {
@@ -156,9 +168,10 @@ message Emote {
 }
 
 message AssetBundle {
-  // tags
-  // modifiers
-  repeated Emote emotes = 1;
+  bool is_delta = 1;
+  Room room = 2;
+  repeated Emote emotes = 3;
+  repeated uint64 removed_emotes = 4;
 }
 
 message Message {
@@ -231,6 +244,7 @@ service ChatFrontend {
   rpc DeleteEmote(DeleteEmoteRequest) returns (DeleteEmoteResponse);
   rpc GetEmote(GetEmoteRequest) returns (GetEmoteResponse);
   rpc ListEmotes(ListEmotesRequest) returns (ListEmotesResponse);
+  rpc SyncAssets(SyncAssetsRequest) returns (SyncAssetsResponse);
 
   rpc OpenClient(OpenClientRequest) returns (stream OpenClientResponse);
   rpc ClientSendMessage(ClientSendMessageRequest) returns (ClientSendMessageResponse);

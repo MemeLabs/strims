@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 
+	"github.com/MemeLabs/go-ppspp/pkg/binaryutil"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
 	"google.golang.org/protobuf/proto"
@@ -77,6 +78,16 @@ func NewChunkStreamWriter(w ioutil.WriteFlusher, size int) (*ChunkStreamWriter, 
 type ChunkStreamWriter struct {
 	zpw *chunkstream.ZeroPadWriter
 	buf []byte
+}
+
+func (w *ChunkStreamWriter) Size(m protoreflect.ProtoMessage) int {
+	opt := proto.MarshalOptions{
+		UseCachedSize: true,
+	}
+
+	n := opt.Size(m)
+	n += binaryutil.UvarintLen(uint64(n))
+	return n + w.zpw.Overhead(n)
 }
 
 func (w *ChunkStreamWriter) Write(m protoreflect.ProtoMessage) error {

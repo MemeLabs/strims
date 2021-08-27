@@ -10,7 +10,12 @@ import (
 )
 
 func newChatReader(logger *zap.Logger, key, networkKey []byte) (*chatReader, error) {
-	s, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), eventSwarmOptions)
+	eventSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), eventSwarmOptions)
+	if err != nil {
+		return nil, err
+	}
+
+	assetSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), assetSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
@@ -19,8 +24,10 @@ func newChatReader(logger *zap.Logger, key, networkKey []byte) (*chatReader, err
 		logger:      logger,
 		key:         key,
 		networkKey:  networkKey,
-		swarm:       s,
-		eventReader: protoutil.NewChunkStreamReader(s.Reader(), eventChunkSize),
+		eventSwarm:  eventSwarm,
+		assetSwarm:  assetSwarm,
+		eventReader: protoutil.NewChunkStreamReader(eventSwarm.Reader(), eventChunkSize),
+		assetReader: protoutil.NewChunkStreamReader(assetSwarm.Reader(), assetChunkSize),
 	}, nil
 }
 
@@ -28,8 +35,10 @@ type chatReader struct {
 	logger      *zap.Logger
 	key         []byte
 	networkKey  []byte
-	swarm       *ppspp.Swarm
+	eventSwarm  *ppspp.Swarm
+	assetSwarm  *ppspp.Swarm
 	eventReader *protoutil.ChunkStreamReader
+	assetReader *protoutil.ChunkStreamReader
 	cancel      context.CancelFunc
 }
 
@@ -37,13 +46,17 @@ func (d *chatReader) Run(ctx context.Context, transfer control.TransferControl) 
 	ctx, cancel := context.WithCancel(ctx)
 	d.cancel = cancel
 
-	transferID := transfer.Add(d.swarm, EventsAddressSalt)
-	transfer.Publish(transferID, d.networkKey)
+	eventTransferID := transfer.Add(d.eventSwarm, EventsAddressSalt)
+	assetTransferID := transfer.Add(d.assetSwarm, AssetsAddressSalt)
+	transfer.Publish(eventTransferID, d.networkKey)
+	transfer.Publish(assetTransferID, d.networkKey)
 
 	<-ctx.Done()
 
-	transfer.Remove(transferID)
-	d.swarm.Close()
+	transfer.Remove(eventTransferID)
+	transfer.Remove(assetTransferID)
+	d.eventSwarm.Close()
+	d.assetSwarm.Close()
 
 	d.cancel = nil
 

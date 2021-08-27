@@ -22,3 +22,9 @@ type ChatEmoteSync struct {
 type ChatEmoteRemove struct {
 	ID uint64
 }
+
+// ChatSyncAssets ...
+type ChatSyncAssets struct {
+	ServerID           uint64
+	ForceUnifiedUpdate bool
+}

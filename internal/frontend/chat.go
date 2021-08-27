@@ -3,7 +3,6 @@ package frontend
 import (
 	"context"
 	"errors"
-	"log"
 	"sync"
 
 	control "github.com/MemeLabs/go-ppspp/internal"
@@ -181,12 +180,21 @@ func (s *chatService) ListEmotes(ctx context.Context, req *chatv1.ListEmotesRequ
 	return &chatv1.ListEmotesResponse{Emotes: emotes}, nil
 }
 
+// SyncAssets ...
+func (s *chatService) SyncAssets(ctx context.Context, req *chatv1.SyncAssetsRequest) (*chatv1.SyncAssetsResponse, error) {
+	err := s.app.Chat().SyncAssets(req.ServerId, req.ForceUnifiedUpdate)
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.SyncAssetsResponse{}, nil
+}
+
 // OpenClient ...
 func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequest) (<-chan *chatv1.OpenClientResponse, error) {
 	ch := make(chan *chatv1.OpenClientResponse)
 
 	go func() {
-		serverEvents, err := s.app.Chat().ReadServerEvents(ctx, req.NetworkKey, req.ServerKey)
+		events, assets, err := s.app.Chat().ReadServer(ctx, req.NetworkKey, req.ServerKey)
 		if err != nil {
 			close(ch)
 			return
@@ -220,7 +228,7 @@ func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequ
 
 		for {
 			select {
-			case e, ok := <-serverEvents:
+			case e, ok := <-events:
 				if !ok {
 					return
 				}
@@ -233,8 +241,17 @@ func (s *chatService) OpenClient(ctx context.Context, req *chatv1.OpenClientRequ
 						},
 					}
 				}
+			case b, ok := <-assets:
+				if !ok {
+					return
+				}
+
+				ch <- &chatv1.OpenClientResponse{
+					Body: &chatv1.OpenClientResponse_AssetBundle{
+						AssetBundle: b,
+					},
+				}
 			case <-ctx.Done():
-				log.Println("context closed...")
 				return
 			}
 		}

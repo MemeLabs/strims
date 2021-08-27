@@ -91,27 +91,26 @@ func (r *runner) Closed() bool {
 	return r.closed
 }
 
-func (r *runner) EventReader(ctx context.Context) (*protoutil.ChunkStreamReader, error) {
+func (r *runner) Readers(ctx context.Context) (events, assets *protoutil.ChunkStreamReader, err error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
 	if r.closed {
-		return nil, errors.New("cannot read from closed runner")
+		return nil, nil, errors.New("cannot read from closed runner")
 	}
 
 	if r.server != nil {
-		return r.server.eventReader, nil
+		return r.server.eventReader, r.server.assetReader, nil
 	}
 
 	r.logger.Info("chat client starting")
 
 	<-r.runnable
 
-	var err error
 	r.client, err = newChatReader(r.logger, r.key, r.networkKey)
 	if err != nil {
 		r.runnable <- struct{}{}
-		return nil, err
+		return nil, nil, err
 	}
 
 	go func() {
@@ -125,18 +124,16 @@ func (r *runner) EventReader(ctx context.Context) (*protoutil.ChunkStreamReader,
 		r.lock.Unlock()
 	}()
 
-	return r.client.eventReader, nil
+	return r.client.eventReader, r.client.assetReader, nil
 }
 
-func (r *runner) SyncServer(config *chatv1.Server) {
+func (r *runner) SyncServer() {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 
-	r.config = config
-
-	// if r.server != nil {
-	// 	r.server.SyncConfig(config)
-	// }
+	if r.server != nil {
+		r.server.Sync()
+	}
 }
 
 func (r *runner) tryStartServer(ctx context.Context) {
@@ -162,7 +159,7 @@ func (r *runner) startServer(ctx context.Context) error {
 	<-r.runnable
 
 	var err error
-	r.server, err = newChatServer(r.logger, r.config)
+	r.server, err = newChatServer(r.logger, r.store, r.config)
 	if err != nil {
 		r.runnable <- struct{}{}
 		r.lock.Unlock()

@@ -5,6 +5,7 @@ import { Controller, useForm } from "react-hook-form";
 import { MdChevronLeft, MdChevronRight } from "react-icons/md";
 import { Link, Redirect, Switch, useHistory, useParams } from "react-router-dom";
 import Select from "react-select";
+import CreatableSelect from "react-select/creatable";
 import { useAsync } from "react-use";
 
 import {
@@ -50,6 +51,14 @@ interface ChatServerFormData {
     value: string;
     label: string;
   };
+  tags: {
+    value: string;
+    label: string;
+  }[];
+  modifiers: {
+    value: string;
+    label: string;
+  }[];
 }
 
 interface ChatServerFormProps {
@@ -88,6 +97,8 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
       {
         name: config.room.name,
         networkKey: networkOptions.find(({ value }) => value === networkKey),
+        tags: config.room.tags.map((value) => ({ value, label: value })),
+        modifiers: config.room.modifiers.map((value) => ({ value, label: value })),
       },
       {
         keepDirty: false,
@@ -142,6 +153,42 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
                 classNamePrefix="react_select"
                 placeholder="Select network"
                 options={networkOptions}
+              />
+              <InputError error={error} />
+            </>
+          )}
+        />
+      </InputLabel>
+      <InputLabel text="Tags">
+        <Controller
+          name="tags"
+          control={control}
+          render={({ field, fieldState: { error } }) => (
+            <>
+              <CreatableSelect
+                {...field}
+                isMulti={true}
+                placeholder="Tags"
+                className="input_select"
+                classNamePrefix="react_select"
+              />
+              <InputError error={error} />
+            </>
+          )}
+        />
+      </InputLabel>
+      <InputLabel text="Modifiers">
+        <Controller
+          name="modifiers"
+          control={control}
+          render={({ field, fieldState: { error } }) => (
+            <>
+              <CreatableSelect
+                {...field}
+                isMulti={true}
+                placeholder="Modifiers"
+                className="input_select"
+                classNamePrefix="react_select"
               />
               <InputError error={error} />
             </>
@@ -230,6 +277,8 @@ const ChatServerCreateFormPage: React.FC = () => {
       networkKey: Base64.toUint8Array(data.networkKey.value),
       room: {
         name: data.name,
+        tags: data.tags.map(({ value }) => value),
+        modifiers: data.modifiers.map(({ value }) => value),
       },
     });
 
@@ -255,6 +304,8 @@ const ChatServerEditFormPage: React.FC = () => {
       networkKey: Base64.toUint8Array(data.networkKey.value),
       room: {
         name: data.name,
+        tags: data.tags.map(({ value }) => value),
+        modifiers: data.modifiers.map(({ value }) => value),
       },
     });
 

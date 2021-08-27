@@ -4,6 +4,7 @@ import (
 	"crypto/ed25519"
 	"encoding/binary"
 	"errors"
+	"hash/crc32"
 	"math"
 	"reflect"
 
@@ -11,6 +12,15 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"google.golang.org/protobuf/proto"
 )
+
+// CRC32Message ...
+func CRC32Message(m proto.Message) uint32 {
+	e := &signableMessageEncoder{}
+	rv := reflect.ValueOf(m)
+	b := make([]byte, e.len(rv))
+	e.encode(rv, b)
+	return crc32.ChecksumIEEE(b)
+}
 
 // SignableMessage ...
 type SignableMessage interface {

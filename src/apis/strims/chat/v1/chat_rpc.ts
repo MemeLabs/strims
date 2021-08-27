@@ -35,6 +35,9 @@ import {
   IListEmotesRequest,
   ListEmotesRequest,
   ListEmotesResponse,
+  ISyncAssetsRequest,
+  SyncAssetsRequest,
+  SyncAssetsResponse,
   IOpenClientRequest,
   OpenClientRequest,
   OpenClientResponse,
@@ -66,6 +69,8 @@ registerType("strims.chat.v1.GetEmoteRequest", GetEmoteRequest);
 registerType("strims.chat.v1.GetEmoteResponse", GetEmoteResponse);
 registerType("strims.chat.v1.ListEmotesRequest", ListEmotesRequest);
 registerType("strims.chat.v1.ListEmotesResponse", ListEmotesResponse);
+registerType("strims.chat.v1.SyncAssetsRequest", SyncAssetsRequest);
+registerType("strims.chat.v1.SyncAssetsResponse", SyncAssetsResponse);
 registerType("strims.chat.v1.OpenClientRequest", OpenClientRequest);
 registerType("strims.chat.v1.OpenClientResponse", OpenClientResponse);
 registerType("strims.chat.v1.ClientSendMessageRequest", ClientSendMessageRequest);
@@ -84,6 +89,7 @@ export interface ChatFrontendService {
   deleteEmote(req: DeleteEmoteRequest, call: strims_rpc_Call): Promise<DeleteEmoteResponse> | DeleteEmoteResponse;
   getEmote(req: GetEmoteRequest, call: strims_rpc_Call): Promise<GetEmoteResponse> | GetEmoteResponse;
   listEmotes(req: ListEmotesRequest, call: strims_rpc_Call): Promise<ListEmotesResponse> | ListEmotesResponse;
+  syncAssets(req: SyncAssetsRequest, call: strims_rpc_Call): Promise<SyncAssetsResponse> | SyncAssetsResponse;
   openClient(req: OpenClientRequest, call: strims_rpc_Call): GenericReadable<OpenClientResponse>;
   clientSendMessage(req: ClientSendMessageRequest, call: strims_rpc_Call): Promise<ClientSendMessageResponse> | ClientSendMessageResponse;
 }
@@ -99,6 +105,7 @@ export const registerChatFrontendService = (host: strims_rpc_Service, service: C
   host.registerMethod<DeleteEmoteRequest, DeleteEmoteResponse>("strims.chat.v1.ChatFrontend.DeleteEmote", service.deleteEmote.bind(service));
   host.registerMethod<GetEmoteRequest, GetEmoteResponse>("strims.chat.v1.ChatFrontend.GetEmote", service.getEmote.bind(service));
   host.registerMethod<ListEmotesRequest, ListEmotesResponse>("strims.chat.v1.ChatFrontend.ListEmotes", service.listEmotes.bind(service));
+  host.registerMethod<SyncAssetsRequest, SyncAssetsResponse>("strims.chat.v1.ChatFrontend.SyncAssets", service.syncAssets.bind(service));
   host.registerMethod<OpenClientRequest, OpenClientResponse>("strims.chat.v1.ChatFrontend.OpenClient", service.openClient.bind(service));
   host.registerMethod<ClientSendMessageRequest, ClientSendMessageResponse>("strims.chat.v1.ChatFrontend.ClientSendMessage", service.clientSendMessage.bind(service));
 }
@@ -144,6 +151,10 @@ export class ChatFrontendClient {
 
   public listEmotes(req?: IListEmotesRequest, opts?: strims_rpc_UnaryCallOptions): Promise<ListEmotesResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.ListEmotes", new ListEmotesRequest(req)), opts);
+  }
+
+  public syncAssets(req?: ISyncAssetsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<SyncAssetsResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.SyncAssets", new SyncAssetsRequest(req)), opts);
   }
 
   public openClient(req?: IOpenClientRequest): GenericReadable<OpenClientResponse> {

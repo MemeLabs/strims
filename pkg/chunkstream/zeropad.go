@@ -25,6 +25,13 @@ type ZeroPadWriter struct {
 	pad []byte
 }
 
+func (c *ZeroPadWriter) Overhead(n int) int {
+	if d := n % len(c.pad); d != 0 {
+		return len(c.pad) - d
+	}
+	return 0
+}
+
 func (c *ZeroPadWriter) Flush() (err error) {
 	if err = c.Writer.Flush(); err != nil {
 		return err

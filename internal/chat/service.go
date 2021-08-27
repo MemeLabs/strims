@@ -7,11 +7,9 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dialer"
-	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"go.uber.org/zap"
@@ -26,7 +24,7 @@ var (
 
 const broadcastInterval = 15 * time.Second
 
-func newChatService(logger *zap.Logger, key *key.Key, ew *protoutil.ChunkStreamWriter) *chatService {
+func newChatService(logger *zap.Logger, ew *protoutil.ChunkStreamWriter) *chatService {
 	return &chatService{
 		logger:          logger,
 		done:            make(chan struct{}),
@@ -37,7 +35,6 @@ func newChatService(logger *zap.Logger, key *key.Key, ew *protoutil.ChunkStreamW
 
 type chatService struct {
 	logger            *zap.Logger
-	transfer          *transfer.Control
 	closeOnce         sync.Once
 	done              chan struct{}
 	broadcastTicker   *time.Ticker
@@ -62,6 +59,12 @@ func (d *chatService) Run(ctx context.Context) error {
 			return ctx.Err()
 		}
 	}
+}
+
+func (d *chatService) Sync(config *chatv1.Server) error {
+	// update parser shit...
+
+	return nil
 }
 
 func (d *chatService) Close() {

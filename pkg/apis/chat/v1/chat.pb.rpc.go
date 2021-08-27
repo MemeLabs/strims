@@ -18,6 +18,7 @@ func RegisterChatFrontendService(host rpc.ServiceRegistry, service ChatFrontendS
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.DeleteEmote", service.DeleteEmote)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetEmote", service.GetEmote)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.ListEmotes", service.ListEmotes)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.SyncAssets", service.SyncAssets)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.OpenClient", service.OpenClient)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.ClientSendMessage", service.ClientSendMessage)
 }
@@ -64,6 +65,10 @@ type ChatFrontendService interface {
 		ctx context.Context,
 		req *ListEmotesRequest,
 	) (*ListEmotesResponse, error)
+	SyncAssets(
+		ctx context.Context,
+		req *SyncAssetsRequest,
+	) (*SyncAssetsResponse, error)
 	OpenClient(
 		ctx context.Context,
 		req *OpenClientRequest,
@@ -172,6 +177,15 @@ func (c *ChatFrontendClient) ListEmotes(
 	res *ListEmotesResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ListEmotes", req, res)
+}
+
+// SyncAssets ...
+func (c *ChatFrontendClient) SyncAssets(
+	ctx context.Context,
+	req *SyncAssetsRequest,
+	res *SyncAssetsResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.SyncAssets", req, res)
 }
 
 // OpenClient ...
