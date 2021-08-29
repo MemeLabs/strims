@@ -8,6 +8,7 @@
   padding: 1px 1px 0 1px;
 
   &__tab {
+    display: flex;
     margin: 1px 1px -1px 1px;
     border: 1px solid #bbb;
     border-bottom: #ccc;
@@ -15,10 +16,15 @@
     background: #ccc;
     padding: 0.5em;
     cursor: pointer;
+    align-items: center;
 
     &:hover {
       background: #d6d6d6;
       border-bottom: #d6d6d6;
+    }
+
+    svg {
+      margin-left: 0.2em;
     }
   }
 }

@@ -28,7 +28,7 @@ const Header: React.FC = () => {
   const [theme, { setColorScheme }] = useTheme();
   const client = useClient();
 
-  const [debuggerIsOpen, setDebuggerIsOpen] = useState(false);
+  const [debuggerIsOpen, setDebuggerIsOpen] = useState(true);
   const handleDebuggerClose = useCallback(() => setDebuggerIsOpen(false), []);
   const handleDebuggerOpen = () => setDebuggerIsOpen(true);
 

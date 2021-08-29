@@ -11,7 +11,7 @@ import {
   XYPlot,
 } from "react-vis";
 
-import { LabelPair, Metric, MetricFamily } from "../../apis/io/prometheus/client/metrics";
+import { Counter, LabelPair, Metric, MetricFamily } from "../../apis/io/prometheus/client/metrics";
 import { MetricsFormat } from "../../apis/strims/debug/v1/debug";
 import { useClient } from "../../contexts/FrontendApi";
 import { usePortletSize } from "./Portlet";
@@ -135,22 +135,27 @@ const histogramGraphValues = (series: MetricSeries) => {
   return values;
 };
 
+const seriesDomain = (v: { x: number }[], d: number = 240): [number, number] => {
+  const max = v[v.length - 1]?.x ?? 0;
+  return [max - d, max];
+};
+
 interface AbstractGraphProps {
   label: string;
   height: number;
   width: number;
 }
 
-interface BarGraphProps extends AbstractGraphProps {
+interface LineGraphProps extends AbstractGraphProps {
   values: LineSeriesPoint[][];
 }
 
-const BarGraph: React.FC<BarGraphProps> = ({ label, values, height, width }) => (
+const LineGraph: React.FC<LineGraphProps> = ({ label, values, height, width }) => (
   <>
     <div style={{ "margin": "0 5px" }}>{label}</div>
     <XYPlot width={width - 10} height={height} margin={5}>
       {values.map((data, i) => (
-        <LineSeries key={i} data={data} xDomain={[0, 240]} style={{ fill: "none" }} />
+        <LineSeries key={i} data={data} xDomain={seriesDomain(data)} style={{ fill: "none" }} />
       ))}
     </XYPlot>
   </>
@@ -163,10 +168,14 @@ interface SummaryGraphProps extends AbstractGraphProps {
 const SummaryGraph: React.FC<SummaryGraphProps> = ({ label, values, height, width }) => (
   <>
     <div style={{ "margin": "0 5px" }}>{label}</div>
-    <XYPlot width={width - 10} height={height} margin={5} axisDomain={[0, 240]}>
-      <AreaSeries data={values.range} xDomain={[0, 240]} />
-      <AreaSeries data={values.iqr} xDomain={[0, 240]} />
-      <LineSeries data={values.median} xDomain={[0, 240]} style={{ fill: "none" }} />
+    <XYPlot width={width - 10} height={height} margin={5}>
+      <AreaSeries data={values.range} xDomain={seriesDomain(values.range)} />
+      <AreaSeries data={values.iqr} xDomain={seriesDomain(values.iqr)} />
+      <LineSeries
+        data={values.median}
+        xDomain={seriesDomain(values.median)}
+        style={{ fill: "none" }}
+      />
     </XYPlot>
   </>
 );
@@ -179,7 +188,7 @@ const HeatmapGraph: React.FC<HeatmapGraphProps> = ({ label, values, height, widt
   <>
     <div style={{ "margin": "0 5px" }}>{label}</div>
     <XYPlot width={width - 10} height={height} margin={5}>
-      <HeatmapSeries data={values} xDomain={[0, 240]} />
+      <HeatmapSeries data={values} xDomain={seriesDomain(values)} />
     </XYPlot>
   </>
 );
@@ -195,9 +204,9 @@ const Graph: React.FC<GraphProps> = ({ series, ...props }) => {
 
   let graph: ReactElement;
   if (series.metrics[0][0].counter) {
-    graph = <BarGraph {...props} values={counterGraphValues(series)} />;
+    graph = <LineGraph {...props} values={counterGraphValues(series)} />;
   } else if (series.metrics[0][0].gauge) {
-    graph = <BarGraph {...props} values={gaugeGraphValues(series)} />;
+    graph = <LineGraph {...props} values={gaugeGraphValues(series)} />;
   } else if (series.metrics[0][0].summary) {
     graph = <SummaryGraph {...props} values={summaryGraphValues(series)} />;
   } else if (series.metrics[0][0].histogram) {
@@ -207,7 +216,7 @@ const Graph: React.FC<GraphProps> = ({ series, ...props }) => {
   return <div>{graph}</div>;
 };
 
-const ActivityChart: React.FC = () => {
+export const ActivityChart: React.FC = () => {
   const client = useClient();
   const [metrics, dispatch] = React.useReducer(metricsReducer, {});
 
@@ -280,4 +289,184 @@ const ActivityChart: React.FC = () => {
   );
 };
 
-export default ActivityChart;
+type PrometheusSarmMetrics = {
+  tick: number;
+  swarm: {
+    // label
+    [key: string]: {
+      // metric name
+      [key: string]: {
+        // direction
+        [key: string]: {
+          name: string;
+          metrics: Counter[];
+          tick: number;
+        };
+      };
+    };
+  };
+  peer: {
+    // label
+    [key: string]: {
+      // peerId
+      [key: string]: {
+        // metric name
+        [key: string]: {
+          // direction
+          [key: string]: {
+            name: string;
+            metrics: Counter[];
+          };
+        };
+      };
+    };
+  };
+};
+
+type SwarmMetricSeries = {
+  [key: string]: {
+    name: string;
+    metrics: Counter[];
+  };
+};
+
+const swarmGraphValues = (series: SwarmMetricSeries) => {
+  const toSeries = (series: Counter[], d: number) => {
+    let prev = series[0].value;
+    return series.map(({ value }, x) => {
+      const y = (value - prev) * d;
+      prev = value;
+      return { x, y };
+    });
+  };
+
+  return {
+    in: toSeries(series.in.metrics, 1),
+    out: toSeries(series.out.metrics, -1),
+  };
+};
+
+type SwarmSeries = {
+  in: LineSeriesPoint[];
+  out: LineSeriesPoint[];
+};
+
+interface SwarmGraphProps extends AbstractGraphProps {
+  values: SwarmSeries;
+}
+
+const SwarmGraph: React.FC<SwarmGraphProps> = ({ label, values, height, width }) => (
+  <>
+    <div style={{ "margin": "0 5px" }}>{label}</div>
+    <XYPlot width={width - 10} height={height} margin={5}>
+      <AreaSeries data={values.in} xDomain={seriesDomain(values.in)} />
+      <AreaSeries data={values.out} xDomain={seriesDomain(values.out)} />
+      <LineSeries
+        data={[
+          { x: 0, y: 0 },
+          { x: 1, y: 0 },
+        ]}
+        xDomain={[0, 1]}
+        style={{ fill: "none" }}
+      />
+    </XYPlot>
+  </>
+);
+
+type M<T> = { [key: string]: T };
+
+const unpack = <T extends M<any>>(next: M<T>, prev: M<T>, k: string): T => {
+  if (next[k] === undefined) {
+    return (next[k] = {} as T);
+  }
+  if (next[k] !== prev?.[k]) {
+    return next[k];
+  }
+  return (next[k] = { ...next[k] });
+};
+
+const swarmsReducer = (prev: PrometheusSarmMetrics, families: MetricFamily[]) => {
+  const next = {
+    tick: prev.tick + 1,
+    swarm: { ...prev.swarm },
+    peer: { ...prev.peer },
+  };
+
+  const family = families.find(({ name }) => name === "strims_ppspp_channel");
+  if (family) {
+    family.metric.forEach(({ label, counter }) => {
+      const [
+        { value: direction },
+        { value: swarmLabel },
+        { value: peerId },
+        { value: swarmId },
+        { value: name },
+      ] = label;
+      const key = swarmLabel || swarmId.substring(0, 8);
+
+      const p0 = unpack(next.peer, prev.peer, key);
+      const p1 = unpack(p0, prev.peer[key], peerId);
+      const p2 = unpack(p1, prev.peer[key]?.[peerId], name);
+      const p3 = unpack(p2, prev.peer[key]?.[peerId]?.[name], direction);
+
+      p3.name = name;
+      const prune = p3.metrics?.length == 241;
+      p3.metrics = [...(p3.metrics?.slice(prune ? 1 : 0, 241) || []), counter];
+
+      const s0 = unpack(next.swarm, prev.swarm, key);
+      const s1 = unpack(s0, prev.swarm[key], name);
+      const s2 = unpack(s1, prev.swarm[key]?.[name], direction);
+
+      s2.name = name;
+      if (s2.tick === next.tick) {
+        s2.metrics[s2.metrics.length - 1].value += counter.value;
+      } else {
+        const prune = s2.metrics?.length == 241;
+        s2.metrics = [...(s2.metrics?.slice(prune ? 1 : 0, 241) || []), counter];
+      }
+      s2.tick = next.tick;
+    });
+  }
+
+  return next;
+};
+
+const initialSwarmMetrics = {
+  tick: 0,
+  swarm: {},
+  peer: {},
+};
+
+export const SwarmChart: React.FC = () => {
+  const client = useClient();
+  const [metrics, dispatch] = React.useReducer(swarmsReducer, initialSwarmMetrics);
+
+  useInterval(async () => {
+    const { data } = await client.debug.readMetrics({
+      format: MetricsFormat.METRICS_FORMAT_PROTO_DELIM,
+    });
+
+    const families: MetricFamily[] = [];
+    for (const r = new PBReader(data); r.pos < r.len; ) {
+      families.push(MetricFamily.decode(r, r.uint32()));
+    }
+    dispatch(families);
+  }, 500);
+
+  const { width, height } = usePortletSize();
+  const graphHeight = height > 600 ? 60 : 20;
+
+  return (
+    <div style={{ height: "40px" }}>
+      {Object.entries(metrics.swarm).map(([label, metrics]) => (
+        <SwarmGraph
+          key={label}
+          label={`data_bytes ${label}`}
+          values={swarmGraphValues(metrics["data_bytes"])}
+          height={graphHeight}
+          width={width}
+        />
+      ))}
+    </div>
+  );
+};

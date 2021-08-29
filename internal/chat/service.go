@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	parser "github.com/MemeLabs/chat-parser"
 	"github.com/MemeLabs/go-ppspp/internal/dialer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
@@ -30,6 +31,7 @@ func newChatService(logger *zap.Logger, ew *protoutil.ChunkStreamWriter) *chatSe
 		done:            make(chan struct{}),
 		broadcastTicker: time.NewTicker(broadcastInterval),
 		eventWriter:     ew,
+		entityExtractor: newEntityExtractor(),
 	}
 }
 
@@ -42,6 +44,7 @@ type chatService struct {
 	eventWriter       *protoutil.ChunkStreamWriter
 	lock              sync.Mutex
 	certificate       *certificate.Certificate
+	entityExtractor   *EntityExtractor
 }
 
 func (d *chatService) Run(ctx context.Context) error {
@@ -61,8 +64,15 @@ func (d *chatService) Run(ctx context.Context) error {
 	}
 }
 
-func (d *chatService) Sync(config *chatv1.Server) error {
-	// update parser shit...
+func (d *chatService) Sync(config *chatv1.Server, emotes []*chatv1.Emote) error {
+	emoteNames := [][]rune{}
+	for _, emote := range emotes {
+		emoteNames = append(emoteNames, []rune(emote.Name))
+	}
+
+	d.entityExtractor.parserCtx.Emotes.Replace(emoteNames)
+	d.entityExtractor.parserCtx.EmoteModifiers.Replace(parser.RunesFromStrings(config.Room.Modifiers))
+	d.entityExtractor.parserCtx.Tags.Replace(parser.RunesFromStrings(config.Room.Tags))
 
 	return nil
 }
@@ -101,7 +111,7 @@ func (d *chatService) SendMessage(ctx context.Context, req *chatv1.SendMessageRe
 		HostId:     hostCert.Key,
 		Nick:       hostCert.GetParent().Subject,
 		Body:       req.Body,
-		Entities:   entities.Extract(req.Body),
+		Entities:   d.entityExtractor.Extract(req.Body),
 	}
 
 	if err := combos.Transform(m); err == ErrComboDuplicate {

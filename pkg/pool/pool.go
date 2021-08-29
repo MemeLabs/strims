@@ -1,6 +1,7 @@
 package pool
 
 import (
+	"math"
 	"math/bits"
 	"sync"
 )
@@ -31,9 +32,18 @@ type Pool struct {
 	zones []*sync.Pool
 }
 
+// MaxSize ...
+func (p *Pool) MaxSize() int {
+	return math.MaxUint16
+}
+
+var nilBytes []byte
+
 // Get ...
 func (p *Pool) Get(size int) (b *[]byte) {
-	if i := 16 - bits.Len32(uint32(size-1)); i < p.n {
+	if size == 0 {
+		return &nilBytes
+	} else if i := 16 - bits.Len32(uint32(size-1)); i < p.n {
 		b = p.zones[i].Get().(*[]byte)
 	} else {
 		b = p.zones[p.n-1].Get().(*[]byte)

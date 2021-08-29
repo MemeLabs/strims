@@ -17,7 +17,7 @@ import (
 var channelMessageCount = promauto.NewCounterVec(prometheus.CounterOpts{
 	Name: "strims_ppspp_channel",
 	Help: "The total number of ppspp messages read per channel",
-}, []string{"swarm_id", "peer_id", "direction", "type"})
+}, []string{"swarm_id", "label", "peer_id", "direction", "type"})
 
 var (
 	errNoVersionOption                    = errors.New("handshake missing VersionOption")
@@ -574,13 +574,14 @@ func (c *channelMessageHandler) HandleStreamClose(m codec.StreamClose) error {
 func newChannelReaderMetrics(s *Swarm, p *peer) channelReaderMetrics {
 	peerID := hex.EncodeToString(p.id)
 	swarmID := s.id.String()
+	label := s.options.Label
 	direction := "in"
 
 	return channelReaderMetrics{
 		channelMetrics:    newChannelMetrics(s, p, direction),
-		InvalidDataCount:  channelMessageCount.WithLabelValues(swarmID, peerID, direction, "invalid_data"),
-		InvalidChunkCount: channelMessageCount.WithLabelValues(swarmID, peerID, direction, "invalid_chunk"),
-		InvalidBytesCount: channelMessageCount.WithLabelValues(swarmID, peerID, direction, "invalid_bytes"),
+		InvalidDataCount:  channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "invalid_data"),
+		InvalidChunkCount: channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "invalid_chunk"),
+		InvalidBytesCount: channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "invalid_bytes"),
 	}
 }
 
@@ -594,12 +595,13 @@ type channelReaderMetrics struct {
 func deleteChannelReaderMetrics(s *Swarm, p *peer) {
 	peerID := hex.EncodeToString(p.id)
 	swarmID := s.id.String()
+	label := s.options.Label
 	direction := "in"
 
 	deleteChannelMetrics(s, p, direction)
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "invalid_data")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "invalid_chunk")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "invalid_bytes")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "invalid_data")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "invalid_chunk")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "invalid_bytes")
 }
 
 func newChannelWriterMetrics(s *Swarm, p *peer) channelWriterMetrics {
@@ -682,27 +684,28 @@ func deleteChannelWriterMetrics(s *Swarm, p *peer) {
 func newChannelMetrics(s *Swarm, p *peer, direction string) channelMetrics {
 	peerID := hex.EncodeToString(p.id)
 	swarmID := s.id.String()
+	label := s.options.Label
 
 	return channelMetrics{
-		HandshakeCount:       channelMessageCount.WithLabelValues(swarmID, peerID, direction, "handshake_message"),
-		DataCount:            channelMessageCount.WithLabelValues(swarmID, peerID, direction, "data_message"),
-		ChunkCount:           channelMessageCount.WithLabelValues(swarmID, peerID, direction, "chunk"),
-		IntegrityCount:       channelMessageCount.WithLabelValues(swarmID, peerID, direction, "integrity_message"),
-		SignedIntegrityCount: channelMessageCount.WithLabelValues(swarmID, peerID, direction, "signed_integrity_message"),
-		AckCount:             channelMessageCount.WithLabelValues(swarmID, peerID, direction, "ack_message"),
-		HaveCount:            channelMessageCount.WithLabelValues(swarmID, peerID, direction, "have_message"),
-		RequestCount:         channelMessageCount.WithLabelValues(swarmID, peerID, direction, "request_message"),
-		CancelCount:          channelMessageCount.WithLabelValues(swarmID, peerID, direction, "cancel_message"),
-		ChokeCount:           channelMessageCount.WithLabelValues(swarmID, peerID, direction, "choke_message"),
-		UnchokeCount:         channelMessageCount.WithLabelValues(swarmID, peerID, direction, "unchoke_message"),
-		PingCount:            channelMessageCount.WithLabelValues(swarmID, peerID, direction, "ping_message"),
-		PongCount:            channelMessageCount.WithLabelValues(swarmID, peerID, direction, "pong_message"),
-		StreamRequestCount:   channelMessageCount.WithLabelValues(swarmID, peerID, direction, "stream_request_message"),
-		StreamCancelCount:    channelMessageCount.WithLabelValues(swarmID, peerID, direction, "stream_cancel_message"),
-		StreamOpenCount:      channelMessageCount.WithLabelValues(swarmID, peerID, direction, "stream_open_message"),
-		StreamCloseCount:     channelMessageCount.WithLabelValues(swarmID, peerID, direction, "stream_close_message"),
-		DataBytesCount:       channelMessageCount.WithLabelValues(swarmID, peerID, direction, "data_bytes"),
-		OverheadBytesCount:   channelMessageCount.WithLabelValues(swarmID, peerID, direction, "overhead_bytes"),
+		HandshakeCount:       channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "handshake_message"),
+		DataCount:            channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "data_message"),
+		ChunkCount:           channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "chunk"),
+		IntegrityCount:       channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "integrity_message"),
+		SignedIntegrityCount: channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "signed_integrity_message"),
+		AckCount:             channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "ack_message"),
+		HaveCount:            channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "have_message"),
+		RequestCount:         channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "request_message"),
+		CancelCount:          channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "cancel_message"),
+		ChokeCount:           channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "choke_message"),
+		UnchokeCount:         channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "unchoke_message"),
+		PingCount:            channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "ping_message"),
+		PongCount:            channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "pong_message"),
+		StreamRequestCount:   channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "stream_request_message"),
+		StreamCancelCount:    channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "stream_cancel_message"),
+		StreamOpenCount:      channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "stream_open_message"),
+		StreamCloseCount:     channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "stream_close_message"),
+		DataBytesCount:       channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "data_bytes"),
+		OverheadBytesCount:   channelMessageCount.WithLabelValues(swarmID, label, peerID, direction, "overhead_bytes"),
 	}
 }
 
@@ -731,24 +734,25 @@ type channelMetrics struct {
 func deleteChannelMetrics(s *Swarm, p *peer, direction string) {
 	peerID := hex.EncodeToString(p.id)
 	swarmID := s.id.String()
+	label := s.options.Label
 
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "handshake_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "data_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "chunk")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "integrity_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "signed_integrity_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "ack_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "have_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "request_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "cancel_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "choke_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "unchoke_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "ping_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "pong_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "stream_request_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "stream_cancel_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "stream_open_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "stream_close_message")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "data_bytes")
-	channelMessageCount.DeleteLabelValues(swarmID, peerID, direction, "overhead_bytes")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "handshake_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "data_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "chunk")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "integrity_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "signed_integrity_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "ack_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "have_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "request_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "cancel_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "choke_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "unchoke_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "ping_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "pong_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "stream_request_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "stream_cancel_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "stream_open_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "stream_close_message")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "data_bytes")
+	channelMessageCount.DeleteLabelValues(swarmID, label, peerID, direction, "overhead_bytes")
 }

@@ -158,6 +158,8 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 		signatureLayer = bits.TrailingZeros16(uint16(s.options.ChunksPerSignature))
 	}
 
+	haveBins := s.store.Bins()
+
 	return &peerSwarmScheduler{
 		logger: logger,
 		swarm:  s,
@@ -169,9 +171,9 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 
 		peerHaveChunkRate: stats.NewSMA(15, time.Second),
 
-		haveBins: binmap.New(),
+		haveBins: haveBins,
 
-		requestBins: binmap.New(),
+		requestBins: haveBins.Clone(),
 		streams:     newPeerSchedulerStreamSubscription(s.options.StreamCount),
 		channels:    map[peerThing]*peerChannelScheduler{},
 
@@ -378,6 +380,8 @@ func (s *peerSwarmScheduler) checkStreams(t timeutil.Time) {
 			}
 		}
 	}
+
+	return
 
 	_, assignments := assigner.run()
 

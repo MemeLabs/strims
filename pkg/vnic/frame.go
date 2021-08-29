@@ -10,6 +10,9 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/vnic/qos"
 )
 
+var errClosedFrameWriter = errors.New("write on closed frameReadWriter")
+var errFrameLength = errors.New("frame length out of range")
+
 const frameHeaderLen = 4
 
 // FrameHeader ...
@@ -95,8 +98,6 @@ func (f *Frame) Free() {
 	f.body = nil
 	f.Body = nil
 }
-
-var errClosedFrameWriter = errors.New("write on closed frameReadWriter")
 
 // NewFrameReadWriter ...
 func NewFrameReadWriter(w Link, port uint16, qc *qos.Class) *FrameReadWriter {

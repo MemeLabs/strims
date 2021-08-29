@@ -1,18 +1,22 @@
 import "../../styles/debugger.scss";
 
 import PBReader from "@memelabs/protobuf/lib/pb/reader";
-import React from "react";
+import React, { useState } from "react";
+import { FiDownload } from "react-icons/fi";
 
 import { MetricFamily } from "../../apis/io/prometheus/client/metrics";
 import { MetricsFormat } from "../../apis/strims/debug/v1/debug";
 import { useClient, useLazyCall } from "../../contexts/FrontendApi";
-import ActivityChart from "./ActivityChart";
+import { ActivityChart, SwarmChart } from "./ActivityChart";
 import Portlet, { PortletProps } from "./Portlet";
+
+type Tab = "activity" | "swarms";
 
 type DebuggerProps = PortletProps;
 
 const Debugger: React.FC<DebuggerProps> = ({ onClose, isOpen }) => {
   const client = useClient();
+  const [selectedTab, setSelectedTab] = useState<Tab>("swarms");
 
   const [, pprof] = useLazyCall("debug", "pProf", {
     onComplete: ({ data, name }) => {
@@ -36,25 +40,39 @@ const Debugger: React.FC<DebuggerProps> = ({ onClose, isOpen }) => {
     console.log(metricFamilies);
   };
 
+  let content: React.ReactNode = null;
+  switch (selectedTab) {
+    case "activity":
+      content = <ActivityChart />;
+      break;
+    case "swarms":
+      content = <SwarmChart />;
+      break;
+  }
+
   return (
     <Portlet onClose={onClose} isOpen={isOpen}>
       <div className="debugger__tabs">
+        <button className="debugger__tabs__tab" onClick={() => setSelectedTab("activity")}>
+          activity
+        </button>
+        <button className="debugger__tabs__tab" onClick={() => setSelectedTab("swarms")}>
+          swarms
+        </button>
         <button className="debugger__tabs__tab" onClick={() => pprof({ name: "allocs" })}>
-          allocs profile
+          allocs <FiDownload />
         </button>
         <button className="debugger__tabs__tab" onClick={() => pprof({ name: "goroutine" })}>
-          goroutine profile
+          goroutine <FiDownload />
         </button>
         <button className="debugger__tabs__tab" onClick={() => pprof({ name: "heap" })}>
-          heap profile
+          heap <FiDownload />
         </button>
         <button className="debugger__tabs__tab" onClick={handleReadMetricsClick}>
           read metrics
         </button>
       </div>
-      <div>
-        <ActivityChart />
-      </div>
+      <div>{content}</div>
     </Portlet>
   );
 };

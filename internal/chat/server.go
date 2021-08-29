@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"fmt"
 
 	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
@@ -19,19 +20,21 @@ var ServiceAddressSalt = []byte("chat")
 var EventsAddressSalt = []byte("chat:events")
 var AssetsAddressSalt = []byte("chat:assets")
 
-var eventSwarmOptions = ppspp.SwarmOptions{
+var defaultEventSwarmOptions = ppspp.SwarmOptions{
 	ChunkSize:          256,
 	LiveWindow:         16 * 1024,
 	ChunksPerSignature: 1,
+	StreamCount:        1,
 	Integrity: integrity.VerifierOptions{
 		ProtectionMethod: integrity.ProtectionMethodSignAll,
 	},
 }
 
-var assetSwarmOptions = ppspp.SwarmOptions{
+var defaultAssetSwarmOptions = ppspp.SwarmOptions{
 	ChunkSize:          1024,
 	LiveWindow:         16 * 1024, // caps the bundle size at 16mb...
 	ChunksPerSignature: 128,
+	StreamCount:        1,
 	Integrity: integrity.VerifierOptions{
 		ProtectionMethod: integrity.ProtectionMethodMerkleTree,
 	},
@@ -40,8 +43,8 @@ var assetSwarmOptions = ppspp.SwarmOptions{
 	},
 }
 
-var eventChunkSize = eventSwarmOptions.ChunkSize
-var assetChunkSize = assetSwarmOptions.ChunkSize * assetSwarmOptions.ChunksPerSignature
+var eventChunkSize = defaultEventSwarmOptions.ChunkSize
+var assetChunkSize = defaultAssetSwarmOptions.ChunkSize * defaultAssetSwarmOptions.ChunksPerSignature
 
 func getServerConfig(store kv.Store, id uint64) (*chatv1.Server, []*chatv1.Emote, error) {
 	var config *chatv1.Server
@@ -62,11 +65,15 @@ func newChatServer(
 	store kv.Store,
 	config *chatv1.Server,
 ) (*chatServer, error) {
+	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%x_events", config.Key.Public[:8])}
+	eventSwarmOptions.Assign(defaultEventSwarmOptions)
 	eventSwarm, eventWriter, err := newWriter(config.Key, eventSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
+	assetSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%x_assets", config.Key.Public[:8])}
+	assetSwarmOptions.Assign(defaultAssetSwarmOptions)
 	assetSwarm, assetWriter, err := newWriter(config.Key, assetSwarmOptions)
 	if err != nil {
 		return nil, err
@@ -141,7 +148,7 @@ func (s *chatServer) Run(
 	if err != nil {
 		return err
 	}
-	s.service.Sync(config)
+	s.service.Sync(config, emotes)
 	s.assetPublisher.Sync(config, emotes)
 
 	eg, ctx := errgroup.WithContext(ctx)
@@ -172,7 +179,7 @@ func (s *chatServer) Sync() {
 		return
 	}
 
-	s.service.Sync(config)
+	s.service.Sync(config, emotes)
 	s.assetPublisher.Sync(config, emotes)
 }
 

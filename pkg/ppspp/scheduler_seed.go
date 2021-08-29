@@ -35,7 +35,7 @@ func newSeedSwarmScheduler(logger *zap.Logger, s *Swarm) *seedSwarmScheduler {
 		streamBits:     binmap.Bin(s.options.StreamCount) - 1,
 		signatureLayer: uint64(signatureLayer),
 
-		haveBins: binmap.New(),
+		haveBins: s.store.Bins(),
 		channels: map[peerThing]*seedChannelScheduler{},
 
 		integrityOverhead: s.options.IntegrityVerifierOptions().MaxMessageBytes(),
@@ -221,12 +221,18 @@ func (s *seedSwarmScheduler) CloseChannel(p peerThing) {
 }
 
 func (s *seedSwarmScheduler) assignChannelStreams(c *seedChannelScheduler) {
-	// if len(s.channels) == 1 {
+	// initHack := codec.Stream(atomic.AddInt32(&s.initHack, 1)) - 1
+	// sc := codec.Stream(c.s.swarm.options.StreamCount)
+	// k := (sc + 2) / 3
+	// for i := codec.Stream(0); i < sc; i++ {
+	// 	if i/k == initHack {
+	// 		s.assignChannelStream(c, codec.Stream(i))
+	// 	}
+	// }
+
 	for i := 0; i < s.swarm.options.StreamCount; i++ {
 		s.assignChannelStream(c, codec.Stream(i))
 	}
-	return
-	// }
 
 	// how do we pick the streams we want to try reassigning?
 	// * how much bandwidth do we have?

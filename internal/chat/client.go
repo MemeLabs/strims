@@ -2,6 +2,7 @@ package chat
 
 import (
 	"context"
+	"fmt"
 
 	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
@@ -10,11 +11,15 @@ import (
 )
 
 func newChatReader(logger *zap.Logger, key, networkKey []byte) (*chatReader, error) {
+	eventSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%x_events", key[:8])}
+	eventSwarmOptions.Assign(defaultEventSwarmOptions)
 	eventSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), eventSwarmOptions)
 	if err != nil {
 		return nil, err
 	}
 
+	assetSwarmOptions := ppspp.SwarmOptions{Label: fmt.Sprintf("chat_%x_assets", key[:8])}
+	assetSwarmOptions.Assign(defaultAssetSwarmOptions)
 	assetSwarm, err := ppspp.NewSwarm(ppspp.NewSwarmID(key), assetSwarmOptions)
 	if err != nil {
 		return nil, err

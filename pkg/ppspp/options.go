@@ -7,6 +7,7 @@ import (
 
 // SwarmOptions ...
 type SwarmOptions struct {
+	Label              string
 	ChunkSize          int
 	ChunksPerSignature int
 	StreamCount        int
@@ -18,6 +19,9 @@ type SwarmOptions struct {
 
 // Assign ...
 func (o *SwarmOptions) Assign(u SwarmOptions) {
+	if u.Label != "" {
+		o.Label = u.Label
+	}
 	if u.ChunkSize != 0 {
 		o.ChunkSize = u.ChunkSize
 	}

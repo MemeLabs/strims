@@ -17,6 +17,17 @@ func TestPool(t *testing.T) {
 	}
 }
 
+func TestPoolMaxSize(t *testing.T) {
+	p := New(8)
+	b := p.Get(p.MaxSize())
+	assert.Equal(t, p.MaxSize(), len(*b))
+}
+
+func TestPoolGetZero(t *testing.T) {
+	p := New(8)
+	p.Get(0)
+}
+
 func BenchmarkPool(b *testing.B) {
 	p := New(8)
 
