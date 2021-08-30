@@ -268,8 +268,7 @@ func (s *Buffer) Offset() uint64 {
 // Read ...
 func (s *Buffer) Read(p []byte) (int, error) {
 	s.lock.Lock()
-	if s.next == s.prev {
-		// HAX: sync.Cond is broken https://github.com/golang/go/issues/21165
+	for s.next == s.prev {
 		s.lock.Unlock()
 
 		if err := <-s.readable; err != nil {

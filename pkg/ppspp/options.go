@@ -39,6 +39,7 @@ func (o *SwarmOptions) Assign(u SwarmOptions) {
 	}
 
 	o.Integrity.Assign(u.Integrity)
+	o.Scheduler.Assign(u.Scheduler)
 }
 
 // IntegrityVerifierOptions ...
@@ -89,4 +90,11 @@ func NewDefaultSwarmOptions() SwarmOptions {
 
 type SchedulerOptions struct {
 	HackReadAll bool
+}
+
+// Assign ...
+func (o *SchedulerOptions) Assign(u SchedulerOptions) {
+	if u.HackReadAll {
+		o.HackReadAll = u.HackReadAll
+	}
 }

@@ -261,17 +261,17 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 	if !s.firstChunkSet && !s.haveBins.Empty() {
 		s.firstChunkSet = true
 
-		s.logger.Debug(
-			"set request offset",
-			zap.Uint64("bin", uint64(s.haveBinMax)),
-			zap.Uint64("bytes", s.haveBinMax.BaseOffset()*uint64(s.chunkSize)),
-		)
 		if s.hackReadAll {
 			s.swarm.store.SetOffset(0)
 		} else {
 			s.requestBins.FillBefore(s.haveBinMax)
 			s.swarm.store.SetOffset(s.haveBinMax)
 		}
+
+		s.logger.Debug(
+			"set request offset",
+			zap.Uint64("bin", s.swarm.store.Offset()),
+		)
 	}
 }
 

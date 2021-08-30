@@ -18,6 +18,7 @@ func TestSwarmOptions(t *testing.T) {
 		},
 		"custom options": {
 			req: SwarmOptions{
+				Label:              "test",
 				ChunkSize:          2048,
 				ChunksPerSignature: 16,
 				StreamCount:        16,
@@ -28,8 +29,12 @@ func TestSwarmOptions(t *testing.T) {
 					MerkleHashTreeFunction: integrity.MerkleHashTreeFunctionSHA256,
 					LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithmED25519,
 				},
+				Scheduler: SchedulerOptions{
+					HackReadAll: true,
+				},
 			},
 			expected: SwarmOptions{
+				Label:              "test",
 				ChunkSize:          2048,
 				ChunksPerSignature: 16,
 				StreamCount:        16,
@@ -39,6 +44,9 @@ func TestSwarmOptions(t *testing.T) {
 					ProtectionMethod:       integrity.ProtectionMethodSignAll,
 					MerkleHashTreeFunction: integrity.MerkleHashTreeFunctionSHA256,
 					LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithmED25519,
+				},
+				Scheduler: SchedulerOptions{
+					HackReadAll: true,
 				},
 			},
 		},
