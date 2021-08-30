@@ -95,6 +95,15 @@ const (
 	PeerSchedulingMethod
 )
 
+type DeliveryMode int
+
+const (
+	_ DeliveryMode = iota
+	LowLatencyDeliveryMode
+	BestEffortDeliveryMode
+	MandatoryDeliveryMode
+)
+
 func streamBinOffset(s codec.Stream) binmap.Bin {
 	return binmap.Bin(s * 2)
 }

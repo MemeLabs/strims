@@ -24,23 +24,20 @@ var defaultEventSwarmOptions = ppspp.SwarmOptions{
 	ChunkSize:          256,
 	LiveWindow:         16 * 1024,
 	ChunksPerSignature: 1,
-	StreamCount:        1,
 	Integrity: integrity.VerifierOptions{
 		ProtectionMethod: integrity.ProtectionMethodSignAll,
 	},
+	DeliveryMode: ppspp.BestEffortDeliveryMode,
 }
 
 var defaultAssetSwarmOptions = ppspp.SwarmOptions{
 	ChunkSize:          1024,
 	LiveWindow:         16 * 1024, // caps the bundle size at 16mb...
 	ChunksPerSignature: 128,
-	StreamCount:        1,
 	Integrity: integrity.VerifierOptions{
 		ProtectionMethod: integrity.ProtectionMethodMerkleTree,
 	},
-	Scheduler: ppspp.SchedulerOptions{
-		HackReadAll: true,
-	},
+	DeliveryMode: ppspp.MandatoryDeliveryMode,
 }
 
 var eventChunkSize = defaultEventSwarmOptions.ChunkSize

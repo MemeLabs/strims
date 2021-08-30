@@ -14,7 +14,7 @@ type SwarmOptions struct {
 	LiveWindow         int
 	Integrity          integrity.VerifierOptions
 	SchedulingMethod   SchedulingMethod
-	Scheduler          SchedulerOptions
+	DeliveryMode       DeliveryMode
 }
 
 // Assign ...
@@ -37,9 +37,11 @@ func (o *SwarmOptions) Assign(u SwarmOptions) {
 	if u.SchedulingMethod != 0 {
 		o.SchedulingMethod = u.SchedulingMethod
 	}
+	if u.DeliveryMode != 0 {
+		o.DeliveryMode = u.DeliveryMode
+	}
 
 	o.Integrity.Assign(u.Integrity)
-	o.Scheduler.Assign(u.Scheduler)
 }
 
 // IntegrityVerifierOptions ...
@@ -85,16 +87,6 @@ func NewDefaultSwarmOptions() SwarmOptions {
 		LiveWindow:         1 << 16,
 		Integrity:          integrity.NewDefaultVerifierOptions(),
 		SchedulingMethod:   PeerSchedulingMethod,
-	}
-}
-
-type SchedulerOptions struct {
-	HackReadAll bool
-}
-
-// Assign ...
-func (o *SchedulerOptions) Assign(u SchedulerOptions) {
-	if u.HackReadAll {
-		o.HackReadAll = u.HackReadAll
+		DeliveryMode:       LowLatencyDeliveryMode,
 	}
 }

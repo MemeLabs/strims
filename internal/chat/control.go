@@ -163,15 +163,16 @@ func (t *Control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 
 	go func() {
 		defer close(events)
+		defer close(assets)
 
 		logger := t.logger.With(
 			logutil.ByteHex("chat", key),
 			logutil.ByteHex("network", networkKey),
 		)
 		for {
-			eg, ctx := errgroup.WithContext(ctx)
+			eg, rctx := errgroup.WithContext(ctx)
 
-			eventReader, assetReader, err := runner.Readers(ctx)
+			eventReader, assetReader, err := runner.Readers(rctx)
 			if err != nil {
 				logger.Debug("open chat readers failed", zap.Error(err))
 				return
@@ -201,8 +202,16 @@ func (t *Control) ReadServer(ctx context.Context, networkKey, key []byte) (<-cha
 				}
 			})
 
-			if err := eg.Wait(); err != nil {
-				logger.Debug("chat reader closed with error", zap.Error(err))
+			err = eg.Wait()
+			done := ctx.Err() != nil
+
+			logger.Debug(
+				"chat reader closed",
+				zap.Error(err),
+				zap.Bool("done", done),
+			)
+			if done {
+				return
 			}
 		}
 	}()

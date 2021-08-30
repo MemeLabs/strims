@@ -186,8 +186,6 @@ func newPeerSwarmScheduler(logger *zap.Logger, s *Swarm) *peerSwarmScheduler {
 		// HAX
 		nextGCTime:          timeutil.Now().Add(time.Duration(rand.Intn(5000)) * time.Millisecond),
 		nextStreamCheckTime: timeutil.Now().Add(time.Duration(rand.Intn(3000)) * time.Millisecond),
-
-		hackReadAll: s.options.Scheduler.HackReadAll,
 	}
 }
 
@@ -219,7 +217,6 @@ type peerSwarmScheduler struct {
 	liveWindow        binmap.Bin
 
 	debugHack     bool
-	hackReadAll   bool
 	firstChunkSet bool
 
 	nextGCTime          timeutil.Time
@@ -261,11 +258,15 @@ func (s *peerSwarmScheduler) Run(t timeutil.Time) {
 	if !s.firstChunkSet && !s.haveBins.Empty() {
 		s.firstChunkSet = true
 
-		if s.hackReadAll {
-			s.swarm.store.SetOffset(0)
-		} else {
+		switch s.swarm.options.DeliveryMode {
+		case BestEffortDeliveryMode:
+			// TODO: start near the left of peer availability window
+			fallthrough
+		case LowLatencyDeliveryMode:
 			s.requestBins.FillBefore(s.haveBinMax)
 			s.swarm.store.SetOffset(s.haveBinMax)
+		case MandatoryDeliveryMode:
+			s.swarm.store.SetOffset(0)
 		}
 
 		s.logger.Debug(
