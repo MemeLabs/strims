@@ -84,8 +84,6 @@ func newChatServer(
 		assetSwarm:     assetSwarm,
 		service:        newChatService(logger, eventWriter),
 		assetPublisher: newAssetPublisher(logger, assetWriter),
-		eventReader:    protoutil.NewChunkStreamReader(eventSwarm.Reader(), eventChunkSize),
-		assetReader:    protoutil.NewChunkStreamReader(assetSwarm.Reader(), assetChunkSize),
 	}
 
 	return s, nil
@@ -116,8 +114,6 @@ type chatServer struct {
 	assetSwarm     *ppspp.Swarm
 	service        *chatService
 	assetPublisher *assetPublisher
-	eventReader    *protoutil.ChunkStreamReader
-	assetReader    *protoutil.ChunkStreamReader
 	cancel         context.CancelFunc
 }
 
@@ -178,6 +174,14 @@ func (s *chatServer) Sync() {
 
 	s.service.Sync(config, emotes)
 	s.assetPublisher.Sync(config, emotes)
+}
+
+func (s *chatServer) Readers() (events, assets *protoutil.ChunkStreamReader) {
+	s.eventSwarm.Reader().Unread()
+	s.assetSwarm.Reader().Unread()
+	events = protoutil.NewChunkStreamReader(s.eventSwarm.Reader(), eventChunkSize)
+	assets = protoutil.NewChunkStreamReader(s.assetSwarm.Reader(), assetChunkSize)
+	return
 }
 
 func newAssetPublisher(logger *zap.Logger, ew *protoutil.ChunkStreamWriter) *assetPublisher {

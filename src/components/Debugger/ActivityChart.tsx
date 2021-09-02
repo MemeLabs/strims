@@ -1,5 +1,5 @@
 import PBReader from "@memelabs/protobuf/lib/pb/reader";
-import React, { ReactElement } from "react";
+import React, { ReactElement, useEffect } from "react";
 import { useInterval } from "react-use";
 import {
   AreaSeries,
@@ -216,21 +216,30 @@ const Graph: React.FC<GraphProps> = ({ series, ...props }) => {
   return <div>{graph}</div>;
 };
 
-export const ActivityChart: React.FC = () => {
+const useMetrics = (dispatch: (families: MetricFamily[]) => void) => {
   const client = useClient();
-  const [metrics, dispatch] = React.useReducer(metricsReducer, {});
 
-  useInterval(async () => {
-    const { data } = await client.debug.readMetrics({
+  useEffect(() => {
+    const events = client.debug.watchMetrics({
       format: MetricsFormat.METRICS_FORMAT_PROTO_DELIM,
+      intervalMs: 500,
     });
 
-    const families: MetricFamily[] = [];
-    for (const r = new PBReader(data); r.pos < r.len; ) {
-      families.push(MetricFamily.decode(r, r.uint32()));
-    }
-    dispatch(families);
-  }, 500);
+    events.on("data", ({ data }) => {
+      const families: MetricFamily[] = [];
+      for (const r = new PBReader(data); r.pos < r.len; ) {
+        families.push(MetricFamily.decode(r, r.uint32()));
+      }
+      dispatch(families);
+    });
+
+    return () => events.destroy();
+  }, []);
+}
+
+export const ActivityChart: React.FC = () => {
+  const [metrics, dispatch] = React.useReducer(metricsReducer, {});
+  useMetrics(dispatch);
 
   const { width, height } = usePortletSize();
   const graphHeight = height > 600 ? 60 : 20;
@@ -438,20 +447,8 @@ const initialSwarmMetrics = {
 };
 
 export const SwarmChart: React.FC = () => {
-  const client = useClient();
   const [metrics, dispatch] = React.useReducer(swarmsReducer, initialSwarmMetrics);
-
-  useInterval(async () => {
-    const { data } = await client.debug.readMetrics({
-      format: MetricsFormat.METRICS_FORMAT_PROTO_DELIM,
-    });
-
-    const families: MetricFamily[] = [];
-    for (const r = new PBReader(data); r.pos < r.len; ) {
-      families.push(MetricFamily.decode(r, r.uint32()));
-    }
-    dispatch(families);
-  }, 500);
+  useMetrics(dispatch);
 
   const { width, height } = usePortletSize();
   const graphHeight = height > 600 ? 60 : 20;

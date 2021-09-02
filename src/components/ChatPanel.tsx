@@ -2,29 +2,190 @@ import clsx from "clsx";
 import { Base64 } from "js-base64";
 import React, { useCallback, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
+import { Controller, useForm } from "react-hook-form";
 import { BiConversation, BiSmile } from "react-icons/bi";
 import { BsArrowBarLeft, BsArrowBarRight } from "react-icons/bs";
 import { FiSettings } from "react-icons/fi";
 import { HiOutlineUserGroup } from "react-icons/hi";
 import { ImCircleLeft, ImCircleRight } from "react-icons/im";
 import { IconType } from "react-icons/lib";
-import { useClickAway, useToggle } from "react-use";
+import Select from "react-select";
+import { useToggle } from "react-use";
+import { useClickOutside } from "use-events";
 
 import Composer from "../components/Chat/Composer";
 import Message from "../components/Chat/Message";
 import Scroller, { MessageProps } from "../components/Chat/Scroller";
+import { InputError, InputLabel, TextAreaInput, TextInput, ToggleInput } from "../components/Form";
 import { Provider, useChat } from "../contexts/Chat";
 import Emote from "./Chat/Emote";
-import * as test from "./Chat/test-emotes";
 
 const TestEmotes: React.FC = () => {
+  const [chat] = useChat();
+
   return (
     <Scrollbars autoHide={true}>
-      {test.emotes.map((e) => (
-        <div key={e.name} style={{ margin: "1em" }}>
-          <Emote name={e.name} />
-        </div>
-      ))}
+      <div className="chat__emote_grid">
+        {chat.emotes.map((name) => (
+          <div key={name} className="chat__emote_grid__emote">
+            <Emote name={name} />
+          </div>
+        ))}
+      </div>
+    </Scrollbars>
+  );
+};
+
+interface SettingsFormData {
+  showTime: boolean;
+  showFlairIcons: boolean;
+  timestampFormat: string;
+  maxLines: number;
+  notificationWhisper: boolean;
+  soundNotificationWhisper: boolean;
+  notificationHighlight: boolean;
+  soundNotificationHighlight: boolean;
+  notificationSoundFile: {
+    fileType: string;
+    data: Uint8Array;
+  };
+  highlight: boolean;
+  customHighlight: string[];
+  highlightNicks: string[];
+  taggedNicks: string[];
+  showRemoved: {
+    value: string;
+    label: string;
+  };
+  showWhispersInChat: boolean;
+  ignoreNicks: string[];
+  focusMentioned: boolean;
+  notificationTimeout: boolean;
+  ignoreMentions: boolean;
+  autocompleteHelper: boolean;
+  autocompleteEmotePreview: boolean;
+  taggedVisibility: boolean;
+  hideNsfw: boolean;
+  animateForever: boolean;
+  formatterGreen: boolean;
+  formatterEmote: boolean;
+  formatterCombo: boolean;
+  holidayEmoteModifiers: boolean;
+  disableSpoilers: boolean;
+  viewerStateIndicator: number;
+  hiddenEmotes: string[];
+}
+
+const TestSettings: React.FC = () => {
+  // const [chat] = useChat();
+
+  const { handleSubmit, control } = useForm<SettingsFormData>({
+    mode: "onBlur",
+    defaultValues: {
+      showTime: false,
+      showFlairIcons: true,
+      timestampFormat: "HH:mm",
+      maxLines: 250,
+      notificationWhisper: true,
+      soundNotificationWhisper: false,
+      notificationHighlight: true,
+      soundNotificationHighlight: false,
+      highlight: true,
+      customHighlight: [],
+      highlightNicks: [],
+      taggedNicks: [],
+      showRemoved: {
+        value: "remove",
+        label: "Remove",
+      },
+      showWhispersInChat: true,
+      ignoreNicks: [],
+      focusMentioned: false,
+      notificationTimeout: true,
+      ignoreMentions: false,
+      autocompleteHelper: true,
+      autocompleteEmotePreview: true,
+      taggedVisibility: false,
+      hideNsfw: false,
+      animateForever: true,
+      formatterGreen: true,
+      formatterEmote: true,
+      formatterCombo: true,
+      holidayEmoteModifiers: true,
+      disableSpoilers: false,
+      viewerStateIndicator: 1,
+      hiddenEmotes: [],
+    },
+  });
+
+  const onSubmit = (data: SettingsFormData) => {
+    console.log(data);
+  };
+
+  return (
+    <Scrollbars autoHide={true}>
+      <div className="chat__settings">
+        <form className="chat__settings__form" onSubmit={handleSubmit(onSubmit)}>
+          {/* {error && <InputError error={error.message || "Error creating chat server"} />} */}
+          <ToggleInput control={control} label="Show flair" name="showFlairIcons" />
+          <ToggleInput control={control} label="Show time" name="showTime" />
+          <ToggleInput control={control} label="Harsh ignore" name="ignoreMentions" />
+          <ToggleInput
+            control={control}
+            label="Hide messages tagged nsfw or nsfl"
+            name="hideNsfw"
+          />
+          <ToggleInput
+            control={control}
+            label="Loop animated emotes forever"
+            name="animateForever"
+          />
+          <ToggleInput control={control} label="Disable spoilers" name="disableSpoilers" />
+          <InputLabel text="Banned messages">
+            <Controller
+              name="showRemoved"
+              control={control}
+              render={({ field, fieldState: { error } }) => (
+                <>
+                  <Select
+                    {...field}
+                    className="input_select"
+                    classNamePrefix="react_select"
+                    placeholder="Scale"
+                    options={[
+                      {
+                        value: "remove",
+                        label: "Remove",
+                      },
+                      {
+                        value: "censor",
+                        label: "Censor",
+                      },
+                      {
+                        value: "do nothing",
+                        label: "Do nothing",
+                      },
+                    ]}
+                  />
+                  <InputError error={error} />
+                </>
+              )}
+            />
+          </InputLabel>
+
+          <ToggleInput control={control} label="Auto-complete helper" name="autocompleteHelper" />
+          <ToggleInput
+            control={control}
+            label="Show emote preview"
+            name="autocompleteEmotePreview"
+          />
+
+          <ToggleInput control={control} label="Greentext" name="formatterGreen" />
+          <ToggleInput control={control} label="Emotes" name="formatterEmote" />
+          <ToggleInput control={control} label="Combos" name="formatterCombo" />
+          <ToggleInput control={control} label="Modifiers" name="holidayEmoteModifiers" />
+        </form>
+      </div>
     </Scrollbars>
   );
 };
@@ -43,7 +204,7 @@ interface ChatDrawerBodyProps {
 
 const ChatDrawerBody: React.FC<ChatDrawerBodyProps> = ({ onClose, children }) => {
   const ref = useRef<HTMLDivElement>(null);
-  useClickAway(ref, onClose, ["click"]);
+  useClickOutside([ref], onClose);
 
   return (
     <div className="chat__drawer__body" ref={ref}>
@@ -117,7 +278,7 @@ const TestContent: React.FC = () => (
 
 const ChatThing: React.FC = () => {
   const [state, { sendMessage }] = useChat();
-  const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
+  const [activePanel, setActivePanel] = useState(ChatDrawerRole.Settings);
 
   const closePanel = useCallback(() => setActivePanel(ChatDrawerRole.None), []);
 
@@ -149,7 +310,7 @@ const ChatThing: React.FC = () => {
           active={activePanel === ChatDrawerRole.Settings}
           onClose={closePanel}
         >
-          <TestContent />
+          <TestSettings />
         </ChatDrawer>
         <ChatDrawer
           title="Users"

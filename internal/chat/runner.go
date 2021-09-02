@@ -100,7 +100,8 @@ func (r *runner) Readers(ctx context.Context) (events, assets *protoutil.ChunkSt
 	}
 
 	if r.server != nil {
-		return r.server.eventReader, r.server.assetReader, nil
+		events, assets = r.server.Readers()
+		return
 	}
 
 	r.logger.Info("chat client starting")
@@ -124,7 +125,8 @@ func (r *runner) Readers(ctx context.Context) (events, assets *protoutil.ChunkSt
 		r.lock.Unlock()
 	}()
 
-	return r.client.eventReader, r.client.assetReader, nil
+	events, assets = r.client.Readers()
+	return
 }
 
 func (r *runner) SyncServer() {

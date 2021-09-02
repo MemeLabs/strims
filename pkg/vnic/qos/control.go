@@ -62,11 +62,11 @@ func (c *Control) Dequeue() Packet {
 }
 
 func (c *Control) run() {
-	tc, stop := timeutil.DefaultTickEmitter.Chan()
-	defer stop()
+	t := timeutil.DefaultTickEmitter.DefaultTicker()
+	defer t.Stop()
 
 	for range c.ready {
-		t := timeutil.Now()
+		now := timeutil.Now()
 		for {
 			c.lock.Lock()
 
@@ -75,9 +75,9 @@ func (c *Control) run() {
 				c.lock.Unlock()
 				break
 			}
-			if !c.hlb.CheckWithTime(float64(p.Size()), t) {
+			if !c.hlb.CheckWithTime(float64(p.Size()), now) {
 				c.lock.Unlock()
-				t = <-tc
+				now = <-t.C
 				continue
 			}
 

@@ -9,8 +9,6 @@ interface EmoteProps {
   src: string;
 }
 
-console.log(UPNG);
-
 const Emote: React.FC<EmoteProps> = () => {
   const canvas = useRef<HTMLCanvasElement>();
   const { value: img } = useAsync(async () => (await fetch(catJAM)).arrayBuffer());

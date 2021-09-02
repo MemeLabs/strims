@@ -1,17 +1,15 @@
-import React from "react";
+import React, { lazy } from "react";
 import { Route, Switch } from "react-router-dom";
 
-import Home from "../pages/Home";
 import NotFound from "../pages/NotFound";
-import Test from "../pages/Test";
-import Emotes from "../pages/Emotes";
 
-const Router = () => {
+const Router: React.FC = () => {
   return (
     <Switch>
-      <Route path="/" exact component={Home} />
-      <Route path="/test" exact component={Test} />
-      <Route path="/emotes" exact component={Emotes} />
+      <Route path="/" exact component={lazy(() => import("../pages/Home"))} />
+      <Route path="/test" exact component={lazy(() => import("../pages/Test"))} />
+      <Route path="/emotes" exact component={lazy(() => import("../pages/Emotes"))} />
+      <Route path="/chat" exact component={lazy(() => import("../pages/Chat"))} />
       <Route component={NotFound} />
     </Switch>
   );

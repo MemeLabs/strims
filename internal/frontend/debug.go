@@ -6,8 +6,10 @@ import (
 	"errors"
 	"runtime"
 	"runtime/pprof"
+	"time"
 
 	debugv1 "github.com/MemeLabs/go-ppspp/pkg/apis/debug/v1"
+	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/common/expfmt"
@@ -45,10 +47,9 @@ func (s *debugService) PProf(ctx context.Context, r *debugv1.PProfRequest) (*deb
 	return &debugv1.PProfResponse{Name: r.Name, Data: b.Bytes()}, nil
 }
 
-// ReadMetrics ...
-func (s *debugService) ReadMetrics(ctx context.Context, r *debugv1.ReadMetricsRequest) (*debugv1.ReadMetricsResponse, error) {
+func (s *debugService) gatherMetrics(f debugv1.MetricsFormat) ([]byte, error) {
 	var format expfmt.Format
-	switch r.Format {
+	switch f {
 	case debugv1.MetricsFormat_METRICS_FORMAT_TEXT:
 		format = expfmt.FmtText
 	case debugv1.MetricsFormat_METRICS_FORMAT_PROTO_DELIM:
@@ -76,5 +77,39 @@ func (s *debugService) ReadMetrics(ctx context.Context, r *debugv1.ReadMetricsRe
 		}
 	}
 
-	return &debugv1.ReadMetricsResponse{Data: b.Bytes()}, nil
+	return b.Bytes(), nil
+}
+
+// ReadMetrics ...
+func (s *debugService) ReadMetrics(ctx context.Context, r *debugv1.ReadMetricsRequest) (*debugv1.ReadMetricsResponse, error) {
+	b, err := s.gatherMetrics(r.Format)
+	if err != nil {
+		return nil, err
+	}
+	return &debugv1.ReadMetricsResponse{Data: b}, err
+}
+
+// WatchMetrics ...
+func (s *debugService) WatchMetrics(ctx context.Context, r *debugv1.WatchMetricsRequest) (<-chan *debugv1.WatchMetricsResponse, error) {
+	ch := make(chan *debugv1.WatchMetricsResponse)
+	go func() {
+		defer close(ch)
+
+		t := timeutil.DefaultTickEmitter.Ticker(time.Duration(r.IntervalMs) * time.Millisecond)
+		defer t.Stop()
+
+		for {
+			select {
+			case <-t.C:
+				b, err := s.gatherMetrics(r.Format)
+				if err != nil {
+					return
+				}
+				ch <- &debugv1.WatchMetricsResponse{Data: b}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+	return ch, nil
 }

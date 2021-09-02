@@ -167,6 +167,85 @@ export class ReadMetricsResponse {
   }
 }
 
+export type IWatchMetricsRequest = {
+  format?: MetricsFormat;
+  intervalMs?: number;
+}
+
+export class WatchMetricsRequest {
+  format: MetricsFormat;
+  intervalMs: number;
+
+  constructor(v?: IWatchMetricsRequest) {
+    this.format = v?.format || 0;
+    this.intervalMs = v?.intervalMs || 0;
+  }
+
+  static encode(m: WatchMetricsRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.format) w.uint32(8).uint32(m.format);
+    if (m.intervalMs) w.uint32(16).int32(m.intervalMs);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WatchMetricsRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new WatchMetricsRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.format = r.uint32();
+        break;
+        case 2:
+        m.intervalMs = r.int32();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IWatchMetricsResponse = {
+  data?: Uint8Array;
+}
+
+export class WatchMetricsResponse {
+  data: Uint8Array;
+
+  constructor(v?: IWatchMetricsResponse) {
+    this.data = v?.data || new Uint8Array();
+  }
+
+  static encode(m: WatchMetricsResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.data) w.uint32(10).bytes(m.data);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): WatchMetricsResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new WatchMetricsResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.data = r.bytes();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export enum MetricsFormat {
   METRICS_FORMAT_TEXT = 0,
   METRICS_FORMAT_PROTO_DELIM = 1,

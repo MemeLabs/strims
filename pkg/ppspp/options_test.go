@@ -29,9 +29,7 @@ func TestSwarmOptions(t *testing.T) {
 					MerkleHashTreeFunction: integrity.MerkleHashTreeFunctionSHA256,
 					LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithmED25519,
 				},
-				Scheduler: SchedulerOptions{
-					HackReadAll: true,
-				},
+				DeliveryMode: MandatoryDeliveryMode,
 			},
 			expected: SwarmOptions{
 				Label:              "test",
@@ -45,9 +43,7 @@ func TestSwarmOptions(t *testing.T) {
 					MerkleHashTreeFunction: integrity.MerkleHashTreeFunctionSHA256,
 					LiveSignatureAlgorithm: integrity.LiveSignatureAlgorithmED25519,
 				},
-				Scheduler: SchedulerOptions{
-					HackReadAll: true,
-				},
+				DeliveryMode: MandatoryDeliveryMode,
 			},
 		},
 	}

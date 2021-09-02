@@ -16,18 +16,12 @@ import {
   Message,
   OpenClientResponse,
 } from "../apis/strims/chat/v1/chat";
-import { Emote, emotes } from "../components/Chat/test-emotes";
-import stream, { messages } from "../components/Chat/test-history";
 import { useClient } from "./FrontendApi";
 
 type Action =
   | {
       type: "MESSAGE_SCROLLBACK";
       messages: Message[];
-    }
-  | {
-      type: "LOAD_EMOTES";
-      emotes: Emote[];
     }
   | {
       type: "MESSAGE";
@@ -106,12 +100,6 @@ const chatReducer = (state: State, action: Action): State => {
         ...state,
         state: "closed",
       };
-    // case "LOAD_EMOTES":
-    //   reset();
-    //   return {
-    //     ...state,
-    //     styles: createEmoteStyles(action.emotes),
-    //   };
     default:
       return state;
   }
@@ -197,10 +185,6 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
     emoteIdObjectUrls.set(id, urls);
   });
 
-  // console.log("ASSET BUNDLE", bundle);
-
-  console.log("emote names", Array.from(emoteIdNames.values()));
-
   return {
     ...state,
     bundleMeta: {
@@ -213,7 +197,7 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
         Object.entries(StyleSheet.create(newStyles)).map(([name, style]) => [name.substr(1), style])
       ),
     },
-    emotes: Array.from(emoteIdNames.values()),
+    emotes: Array.from(emoteIdNames.values()).sort(),
     modifiers: bundle.room.modifiers,
     tags: bundle.room.tags,
   };
@@ -262,17 +246,6 @@ export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, child
       events.destroy();
     };
   }, []);
-
-  useEffect(() => {
-    dispatch({ type: "LOAD_EMOTES", emotes });
-    // dispatch({ type: "MESSAGE_SCROLLBACK", messages });
-  }, [emotes]);
-
-  // useEffect(() => {
-  //   const handleData = (message) => dispatch({ type: "MESSAGE", message });
-  //   stream.on("data", handleData);
-  //   return () => stream.off("data", handleData);
-  // }, []);
 
   return (
     <ChatContext.Provider value={[state, dispatch]}>

@@ -172,9 +172,25 @@ func (s *Buffer) SetOffset(b binmap.Bin) {
 
 	s.next = next
 	s.prev = prev
+	s.head = prev + binmap.Bin(s.size*2)
 	s.off = binByte(prev, s.chunkSize)
 	s.bins.FillBefore(prev)
 	s.setReady()
+}
+
+func (s *Buffer) Unread() {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if s.next == binmap.None || s.prev == s.tail() {
+		return
+	}
+
+	s.prev = s.bins.FindFilledAfter(s.tail())
+	s.next = s.bins.FindEmptyAfter(s.prev)
+	s.off = binByte(s.prev, s.chunkSize)
+
+	s.swapReadable(nil)
 }
 
 // Recover ...

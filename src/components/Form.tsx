@@ -20,6 +20,7 @@ export interface InputLabelProps {
   required?: boolean;
   text: string;
   description?: string;
+  inputType?: string;
 }
 
 export const InputLabel: React.FC<InputLabelProps> = ({
@@ -27,10 +28,12 @@ export const InputLabel: React.FC<InputLabelProps> = ({
   required,
   text,
   description,
+  inputType = "default",
 }) => {
   const labelClass = clsx({
     "input_label": true,
     "input_label--required": required,
+    [`input_label--${inputType}`]: true,
   });
 
   return (
@@ -90,7 +93,12 @@ export const TextInput = <T extends FieldValues>({
   } = useController({ defaultValue: "", ...controllerProps });
 
   return (
-    <InputLabel required={isRequired(controllerProps)} text={label} description={description}>
+    <InputLabel
+      required={isRequired(controllerProps)}
+      text={label}
+      description={description}
+      inputType="text"
+    >
       <input
         {...field}
         className="input input_text"
@@ -124,7 +132,12 @@ export const TextAreaInput = <T extends FieldValues>({
   } = useController({ defaultValue: "", ...controllerProps });
 
   return (
-    <InputLabel required={isRequired(controllerProps)} text={label} description={description}>
+    <InputLabel
+      required={isRequired(controllerProps)}
+      text={label}
+      description={description}
+      inputType="textarea"
+    >
       <textarea
         {...field}
         className="input input_textarea"
@@ -154,7 +167,7 @@ export const ToggleInput = <T extends FieldValues>({
   } = useController({ defaultValue: false, ...controllerProps });
 
   return (
-    <InputLabel text={label} description={description}>
+    <InputLabel text={label} description={description} inputType="toggle">
       <input
         {...field}
         checked={value}

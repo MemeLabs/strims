@@ -26,13 +26,11 @@ func newChatReader(logger *zap.Logger, key, networkKey []byte) (*chatReader, err
 	}
 
 	return &chatReader{
-		logger:      logger,
-		key:         key,
-		networkKey:  networkKey,
-		eventSwarm:  eventSwarm,
-		assetSwarm:  assetSwarm,
-		eventReader: protoutil.NewChunkStreamReader(eventSwarm.Reader(), eventChunkSize),
-		assetReader: protoutil.NewChunkStreamReader(assetSwarm.Reader(), assetChunkSize),
+		logger:     logger,
+		key:        key,
+		networkKey: networkKey,
+		eventSwarm: eventSwarm,
+		assetSwarm: assetSwarm,
 	}, nil
 }
 
@@ -73,4 +71,10 @@ func (d *chatReader) Close() {
 		return
 	}
 	d.cancel()
+}
+
+func (d *chatReader) Readers() (events, assets *protoutil.ChunkStreamReader) {
+	events = protoutil.NewChunkStreamReader(d.eventSwarm.Reader(), eventChunkSize)
+	assets = protoutil.NewChunkStreamReader(d.assetSwarm.Reader(), assetChunkSize)
+	return
 }

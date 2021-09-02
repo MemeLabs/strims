@@ -10,6 +10,7 @@ import (
 func RegisterDebugService(host rpc.ServiceRegistry, service DebugService) {
 	host.RegisterMethod("strims.debug.v1.Debug.PProf", service.PProf)
 	host.RegisterMethod("strims.debug.v1.Debug.ReadMetrics", service.ReadMetrics)
+	host.RegisterMethod("strims.debug.v1.Debug.WatchMetrics", service.WatchMetrics)
 }
 
 // DebugService ...
@@ -22,6 +23,10 @@ type DebugService interface {
 		ctx context.Context,
 		req *ReadMetricsRequest,
 	) (*ReadMetricsResponse, error)
+	WatchMetrics(
+		ctx context.Context,
+		req *WatchMetricsRequest,
+	) (<-chan *WatchMetricsResponse, error)
 }
 
 // DebugClient ...
@@ -50,4 +55,13 @@ func (c *DebugClient) ReadMetrics(
 	res *ReadMetricsResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.debug.v1.Debug.ReadMetrics", req, res)
+}
+
+// WatchMetrics ...
+func (c *DebugClient) WatchMetrics(
+	ctx context.Context,
+	req *WatchMetricsRequest,
+	res chan *WatchMetricsResponse,
+) error {
+	return c.client.CallStreaming(ctx, "strims.debug.v1.Debug.WatchMetrics", req, res)
 }

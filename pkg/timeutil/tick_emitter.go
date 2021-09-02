@@ -8,7 +8,7 @@ import (
 var DefaultTickEmitter = NewTickEmitter(100 * time.Millisecond)
 
 func NewTickEmitter(ivl time.Duration) *TickEmitter {
-	t := &TickEmitter{}
+	t := &TickEmitter{ivl: ivl}
 	t.t = newFuncTicker(ivl, t.run)
 	return t
 }
@@ -16,6 +16,9 @@ func NewTickEmitter(ivl time.Duration) *TickEmitter {
 type TickEmitter struct {
 	lock    sync.Mutex
 	chans   []chan Time
+	ivls    []int64
+	i       int64
+	ivl     time.Duration
 	t       *funcTicker
 	logOnce sync.Once
 }
@@ -35,8 +38,12 @@ func (r *TickEmitter) Stop() {
 	r.t.Stop()
 }
 
-func (r *TickEmitter) Subscribe(fn func(t Time)) StopFunc {
-	ch, stop := r.Chan()
+func (r *TickEmitter) DefaultSubscribe(fn func(t Time)) StopFunc {
+	return r.Subscribe(fn, r.ivl)
+}
+
+func (r *TickEmitter) Subscribe(fn func(t Time), ivl time.Duration) StopFunc {
+	ch, stop := r.Chan(ivl)
 	go func() {
 		for t := range ch {
 			fn(t)
@@ -46,22 +53,36 @@ func (r *TickEmitter) Subscribe(fn func(t Time)) StopFunc {
 	return stop
 }
 
-func (r *TickEmitter) Ticker() Ticker {
+func (r *TickEmitter) DefaultTicker() Ticker {
+	return r.Ticker(r.ivl)
+}
+
+func (r *TickEmitter) Ticker(ivl time.Duration) Ticker {
 	var t Ticker
-	t.C, t.stop = r.Chan()
+	t.C, t.stop = r.Chan(ivl)
 	return t
 }
 
-func (r *TickEmitter) Chan() (<-chan Time, StopFunc) {
+func (r *TickEmitter) DefaultChan() (<-chan Time, StopFunc) {
+	return r.Chan(r.ivl)
+}
+
+func (r *TickEmitter) Chan(ivl time.Duration) (<-chan Time, StopFunc) {
 	ch := make(chan Time)
 	stop := func() {
 		r.unsubscribe(ch)
 		close(ch)
 	}
 
+	n := int64(1)
+	if ivl > r.ivl {
+		n = int64(ivl / r.ivl)
+	}
+
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	r.chans = append(r.chans, ch)
+	r.ivls = append(r.ivls, n)
 
 	if len(r.chans) == 1 {
 		r.t.Start()
@@ -73,12 +94,18 @@ func (r *TickEmitter) Chan() (<-chan Time, StopFunc) {
 func (r *TickEmitter) unsubscribe(ch chan Time) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
+
 	for i := range r.chans {
 		if r.chans[i] == ch {
 			l := len(r.chans) - 1
+
 			r.chans[i] = r.chans[l]
+			r.ivls[i] = r.ivls[l]
+
 			r.chans[l] = nil
+
 			r.chans = r.chans[:l]
+			r.ivls = r.ivls[:l]
 			return
 		}
 	}
@@ -91,10 +118,14 @@ func (r *TickEmitter) unsubscribe(ch chan Time) {
 func (r *TickEmitter) run(t Time) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	for _, ch := range r.chans {
-		select {
-		case ch <- t:
-		default:
+
+	r.i++
+	for i, ch := range r.chans {
+		if r.i%r.ivls[i] == 0 {
+			select {
+			case ch <- t:
+			default:
+			}
 		}
 	}
 }

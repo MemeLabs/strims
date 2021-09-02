@@ -24,6 +24,15 @@ message ReadMetricsResponse {
   bytes data = 1;
 }
 
+message WatchMetricsRequest {
+  MetricsFormat format = 1;
+  int32 interval_ms = 2;
+}
+
+message WatchMetricsResponse {
+  bytes data = 1;
+}
+
 enum MetricsFormat {
   METRICS_FORMAT_TEXT = 0;
   METRICS_FORMAT_PROTO_DELIM = 1;
@@ -35,4 +44,5 @@ enum MetricsFormat {
 service Debug {
   rpc PProf(PProfRequest) returns (PProfResponse);
   rpc ReadMetrics(ReadMetricsRequest) returns (ReadMetricsResponse);
+  rpc WatchMetrics(WatchMetricsRequest) returns (stream WatchMetricsResponse);
 }

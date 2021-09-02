@@ -335,4 +335,34 @@
       }
     }
   }
+
+  &__emote_grid {
+    display: flex;
+    flex-direction: row;
+    flex-flow: wrap;
+    justify-content: center;
+    margin: 0.5em;
+
+    &__emote {
+      margin: 0.8em 0.4em;
+    }
+  }
+
+  &__settings {
+    margin: 0 15px;
+
+    &__form {
+      .input_label--toggle {
+        flex-direction: row-reverse;
+
+        .input_label__body {
+          flex-basis: 30px;
+        }
+
+        .input_label__text {
+          flex: 1;
+        }
+      }
+    }
+  }
 }

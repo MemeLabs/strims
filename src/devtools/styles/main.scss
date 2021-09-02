@@ -1,3 +1,5 @@
+@import "../../styles/main.scss";
+
 body {
   background: #eee;
   margin: 0;
@@ -6,8 +8,10 @@ body {
 }
 
 .nav {
+  display: flex;
+  align-items: center;
   background: #ddd;
-  padding: 0.5em 0;
+  height: 35px;
 
   a {
     margin: 0 0.5em;
@@ -41,5 +45,21 @@ body {
 
   &__list {
     padding: 5px;
+  }
+}
+
+// ---
+
+.chat_mockup {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+
+  &__content {
+    height: calc(100vh - 35px);
+    width: 420px;
+    display: flex;
+    flex-direction: row;
+    background: $slate-200;
   }
 }

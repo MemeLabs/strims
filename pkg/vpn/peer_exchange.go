@@ -79,6 +79,10 @@ func (m *webRTCMediator) String() string {
 	return fmt.Sprintf("%s:%x/%s", vnic.WebRTCScheme, m.network.Key(), m.id)
 }
 
+func (m *webRTCMediator) HasOffer() bool {
+	return m.remoteDescription == nil
+}
+
 func (m *webRTCMediator) SetAnswer(remoteMediationID uint64, answer []byte) error {
 	if remoteMediationID == 0 {
 		return errors.New("remote mediation id must be non zero")
@@ -315,13 +319,16 @@ func (s *peerExchange) handleOffer(m *vpnv1.PeerExchangeMessage_Offer, msg *Mess
 
 func (s *peerExchange) dial(t *webRTCMediator) error {
 	if s.network.VNIC().HasPeer(t.id) {
-		return errors.New("duplicate connection attempt")
+		return errors.New("duplicate connection: existing peer link found")
 	}
 
 	s.mediatorsLock.Lock()
-	if _, ok := s.mediators[t.id]; ok {
-		s.mediatorsLock.Unlock()
-		return errors.New("duplicate connection attempt")
+	if pt, ok := s.mediators[t.id]; ok {
+		if pt.mediationID < t.remoteMediationID || !t.HasOffer() {
+			s.mediatorsLock.Unlock()
+			return errors.New("duplicate connection: mediation in progress")
+		}
+		pt.close(errors.New("duplicate connection: mediator replaced"))
 	}
 	s.mediators[t.id] = t
 	s.mediatorsLock.Unlock()

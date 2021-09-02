@@ -37,7 +37,7 @@ func NewRunner(ctx context.Context, logger *zap.Logger) *Runner {
 		swarms: map[*Swarm]*runnerSwarm{},
 		peers:  map[*peer]*ChannelReader{},
 	}
-	timeutil.DefaultTickEmitter.Subscribe(r.run)
+	timeutil.DefaultTickEmitter.DefaultSubscribe(r.run)
 	return r
 }
 
@@ -61,7 +61,7 @@ func (r *Runner) runSwarmPeer(s *Swarm, p *peer, channel, peerChannel codec.Chan
 		ss := s.options.SchedulingMethod.swarmScheduler(logger, s)
 		rs = &runnerSwarm{
 			scheduler: ss,
-			stop:      timeutil.DefaultTickEmitter.Subscribe(ss.Run),
+			stop:      timeutil.DefaultTickEmitter.DefaultSubscribe(ss.Run),
 			peers:     map[*peer]codec.Channel{},
 		}
 		s.pubSub.Subscribe(ss)
@@ -127,7 +127,7 @@ func (r *Runner) stopChannel(s *Swarm, p *peer, rs *runnerSwarm, cr *ChannelRead
 }
 
 func (r *Runner) RunPeer(id []byte, w Conn) (*ChannelReader, *RunnerPeer) {
-	p := newPeer(id, w, timeutil.DefaultTickEmitter.Ticker())
+	p := newPeer(id, w, timeutil.DefaultTickEmitter.DefaultTicker())
 	cr := newChannelReader(r.logger.With(logutil.ByteHex("peer", id)))
 
 	r.lock.Lock()
