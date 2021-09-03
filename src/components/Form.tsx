@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import { get } from "lodash";
+import { Base64 } from "js-base64";
 import React, { ReactElement } from "react";
 import Dropzone from "react-dropzone";
 import { FieldError, FieldValues, UseControllerProps, useController } from "react-hook-form";
@@ -74,8 +74,9 @@ export const InputError: React.FC<InputErrorProps> = ({ error }) => {
 export interface TextInputProps {
   label: string;
   description?: string;
-  placeholder: string;
-  type?: "text" | "password";
+  placeholder?: string;
+  type?: "text" | "password" | "number";
+  format?: "text";
   disabled?: boolean;
 }
 
@@ -83,14 +84,19 @@ export const TextInput = <T extends FieldValues>({
   label,
   description,
   placeholder,
-  type,
+  type: type,
   disabled,
   ...controllerProps
-}: TextInputProps & CompatibleUseControllerProps<T, string>): ReactElement => {
+}: TextInputProps & CompatibleUseControllerProps<T, string | number>): ReactElement => {
+  const defaultValue = type === "number" ? 0 : "";
   const {
     field,
     fieldState: { error },
-  } = useController({ defaultValue: "", ...controllerProps });
+  } = useController({
+    // @ts-ignore
+    defaultValue,
+    ...controllerProps,
+  });
 
   return (
     <InputLabel
@@ -115,7 +121,7 @@ export interface TextAreaInputProps {
   label: string;
   description?: string;
   name: string;
-  placeholder: string;
+  placeholder?: string;
   disabled?: boolean;
 }
 
@@ -129,7 +135,11 @@ export const TextAreaInput = <T extends FieldValues>({
   const {
     field,
     fieldState: { error },
-  } = useController({ defaultValue: "", ...controllerProps });
+  } = useController({
+    // @ts-ignore
+    defaultValue: "",
+    ...controllerProps,
+  });
 
   return (
     <InputLabel
@@ -164,7 +174,11 @@ export const ToggleInput = <T extends FieldValues>({
   const {
     field: { value, ...field },
     fieldState: { error },
-  } = useController({ defaultValue: false, ...controllerProps });
+  } = useController({
+    // @ts-ignore
+    defaultValue: false,
+    ...controllerProps,
+  });
 
   return (
     <InputLabel text={label} description={description} inputType="toggle">
@@ -181,7 +195,9 @@ export const ToggleInput = <T extends FieldValues>({
 };
 
 export interface ImageValue {
-  data: Uint8Array;
+  // react-hook-form schema cannot contain recursive types (Uint8Array) so we
+  // have to base64 encode binary data to use it in forms.
+  data: string;
   type: string;
   height: number;
   width: number;
@@ -225,9 +241,16 @@ export const ImageInput = <T extends FieldValues>({
   React.useEffect(() => () => URL.revokeObjectURL(previewUrl), [previewUrl]);
 
   const {
-    field: { onChange },
+    field: { onChange, value },
     fieldState: { error },
   } = useController(controllerProps);
+
+  React.useEffect(() => {
+    if (value) {
+      const { data, type } = value as ImageValue;
+      setPreviewUrl(URL.createObjectURL(new Blob([Base64.toUint8Array(data)], { type })));
+    }
+  }, []);
 
   const handleDrop = async ([file]: File[]) => {
     if (!file) {
@@ -249,23 +272,12 @@ export const ImageInput = <T extends FieldValues>({
     img.src = url;
     img.onload = () =>
       onChange({
-        data,
+        data: Base64.fromUint8Array(new Uint8Array(data)),
         type: file.type,
         height: img.height,
         width: img.width,
       });
   };
-
-  React.useEffect(() => {
-    const defaultValue = get(
-      controllerProps.control.defaultValuesRef.current,
-      controllerProps.name
-    ) as ImageValue;
-    if (defaultValue) {
-      const { data, type } = defaultValue;
-      setPreviewUrl(URL.createObjectURL(new Blob([data], { type })));
-    }
-  }, []);
 
   return (
     <>

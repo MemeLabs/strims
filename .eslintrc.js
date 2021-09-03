@@ -22,6 +22,7 @@ module.exports = {
     "@typescript-eslint/no-inferrable-types": "off",
     "@typescript-eslint/no-namespace": "off",
     "@typescript-eslint/no-explicit-any": "off",
+    "@typescript-eslint/ban-ts-comment": "off",
     "prefer-arrow/prefer-arrow-functions": "error",
     "max-classes-per-file": "off",
     "max-len": ["warn", { "code": 100, "ignoreComments": true }],

@@ -232,7 +232,7 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ servers, onDelete }) 
     return null;
   }
 
-  const rows = servers.map((server, i) => {
+  const rows = servers.map((server) => {
     const handleDelete = () => deleteChatServer({ id: server.id });
 
     return (
@@ -478,7 +478,7 @@ const ChatEmoteTable: React.FC<ChatEmoteTableProps> = ({ serverId, emotes, onDel
     return null;
   }
 
-  const rows = emotes.map((emote, i) => {
+  const rows = emotes.map((emote) => {
     const handleDelete = () => deleteChatEmote({ serverId, id: emote.id });
 
     return (
@@ -543,7 +543,7 @@ const ChatEmoteCreateFormPage: React.FC = () => {
       name: data.name,
       images: [
         {
-          data: data.image.data,
+          data: Base64.toUint8Array(data.image.data),
           fileType: mimeTypeToFileType(data.image.type),
           height: data.image.height,
           width: data.image.width,
@@ -617,7 +617,7 @@ const ChatEmoteEditFormPage: React.FC = () => {
       name: data.name,
       images: [
         {
-          data: data.image.data,
+          data: Base64.toUint8Array(data.image.data),
           fileType: mimeTypeToFileType(data.image.type),
           height: data.image.height,
           width: data.image.width,
@@ -648,7 +648,7 @@ const ChatEmoteEditFormPage: React.FC = () => {
       values={{
         name: emote.name,
         image: {
-          data: emote.images[0].data,
+          data: Base64.fromUint8Array(emote.images[0].data),
           type: fileTypeToMimeType(emote.images[0].fileType),
           height: emote.images[0].height,
           width: emote.images[0].width,

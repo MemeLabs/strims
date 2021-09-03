@@ -1,3 +1,4 @@
+import { Base64 } from "js-base64";
 import React from "react";
 import { useForm } from "react-hook-form";
 import { MdClose } from "react-icons/md";
@@ -27,7 +28,15 @@ const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) 
     mode: "onBlur",
   });
 
-  const onSubmit = handleSubmit((data) => createNetwork(data));
+  const onSubmit = handleSubmit(({ name, icon: { data, ...icon } }) =>
+    createNetwork({
+      name,
+      icon: {
+        data: Base64.toUint8Array(data),
+        ...icon,
+      },
+    })
+  );
 
   return (
     <div className="modal">

@@ -197,14 +197,20 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
         Object.entries(StyleSheet.create(newStyles)).map(([name, style]) => [name.substr(1), style])
       ),
     },
-    emotes: Array.from(emoteIdNames.values()).sort(),
+    emotes: Array.from(emoteIdNames.values()).sort((a, b) =>
+      a.toLowerCase().localeCompare(b.toLowerCase())
+    ),
     modifiers: bundle.room.modifiers,
     tags: bundle.room.tags,
   };
 };
 
-export const useChat = () => {
-  const [state, dispatch] = React.useContext(ChatContext);
+type Actions = {
+  sendMessage: (body: string) => void;
+};
+
+export const useChat = (): [State, Actions] => {
+  const [state] = React.useContext(ChatContext);
   const client = useClient();
 
   const sendMessage = (body: string) =>
@@ -222,7 +228,7 @@ export const useChat = () => {
   const actions = {
     sendMessage,
   };
-  return [state, actions] as [State, typeof actions];
+  return [state, actions];
 };
 
 interface ProviderProps {

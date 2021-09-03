@@ -10,13 +10,14 @@ import { HiOutlineUserGroup } from "react-icons/hi";
 import { ImCircleLeft, ImCircleRight } from "react-icons/im";
 import { IconType } from "react-icons/lib";
 import Select from "react-select";
+import CreatableSelect from "react-select/creatable";
 import { useToggle } from "react-use";
 import { useClickOutside } from "use-events";
 
 import Composer from "../components/Chat/Composer";
 import Message from "../components/Chat/Message";
 import Scroller, { MessageProps } from "../components/Chat/Scroller";
-import { InputError, InputLabel, TextAreaInput, TextInput, ToggleInput } from "../components/Form";
+import { InputError, InputLabel, TextInput, ToggleInput } from "../components/Form";
 import { Provider, useChat } from "../contexts/Chat";
 import Emote from "./Chat/Emote";
 
@@ -47,7 +48,7 @@ interface SettingsFormData {
   soundNotificationHighlight: boolean;
   notificationSoundFile: {
     fileType: string;
-    data: Uint8Array;
+    data: string;
   };
   highlight: boolean;
   customHighlight: string[];
@@ -72,14 +73,51 @@ interface SettingsFormData {
   formatterCombo: boolean;
   holidayEmoteModifiers: boolean;
   disableSpoilers: boolean;
-  viewerStateIndicator: number;
+  viewerStateIndicator: {
+    value: string;
+    label: string;
+  };
   hiddenEmotes: string[];
 }
+
+const stateIndicatorOptions = [
+  {
+    value: "disable",
+    label: "Disable",
+  },
+  {
+    value: "bar",
+    label: "Bar",
+  },
+  {
+    value: "dot",
+    label: "Dot",
+  },
+  {
+    value: "array",
+    label: "Array",
+  },
+];
+
+const showRemovedOptions = [
+  {
+    value: "remove",
+    label: "Remove",
+  },
+  {
+    value: "censor",
+    label: "Censor",
+  },
+  {
+    value: "do nothing",
+    label: "Do nothing",
+  },
+];
 
 const TestSettings: React.FC = () => {
   // const [chat] = useChat();
 
-  const { handleSubmit, control } = useForm<SettingsFormData>({
+  const { control } = useForm<SettingsFormData>({
     mode: "onBlur",
     defaultValues: {
       showTime: false,
@@ -94,10 +132,7 @@ const TestSettings: React.FC = () => {
       customHighlight: [],
       highlightNicks: [],
       taggedNicks: [],
-      showRemoved: {
-        value: "remove",
-        label: "Remove",
-      },
+      showRemoved: showRemovedOptions[0],
       showWhispersInChat: true,
       ignoreNicks: [],
       focusMentioned: false,
@@ -113,77 +148,141 @@ const TestSettings: React.FC = () => {
       formatterCombo: true,
       holidayEmoteModifiers: true,
       disableSpoilers: false,
-      viewerStateIndicator: 1,
+      viewerStateIndicator: stateIndicatorOptions[1],
       hiddenEmotes: [],
     },
   });
 
-  const onSubmit = (data: SettingsFormData) => {
-    console.log(data);
-  };
-
   return (
     <Scrollbars autoHide={true}>
       <div className="chat__settings">
-        <form className="chat__settings__form" onSubmit={handleSubmit(onSubmit)}>
+        <form className="chat__settings__form">
           {/* {error && <InputError error={error.message || "Error creating chat server"} />} */}
-          <ToggleInput control={control} label="Show flair" name="showFlairIcons" />
-          <ToggleInput control={control} label="Show time" name="showTime" />
-          <ToggleInput control={control} label="Harsh ignore" name="ignoreMentions" />
-          <ToggleInput
-            control={control}
-            label="Hide messages tagged nsfw or nsfl"
-            name="hideNsfw"
-          />
-          <ToggleInput
-            control={control}
-            label="Loop animated emotes forever"
-            name="animateForever"
-          />
-          <ToggleInput control={control} label="Disable spoilers" name="disableSpoilers" />
-          <InputLabel text="Banned messages">
-            <Controller
-              name="showRemoved"
+          <fieldset>
+            <legend>Messages</legend>
+            <ToggleInput control={control} label="Show flair" name="showFlairIcons" />
+            <ToggleInput control={control} label="Show time" name="showTime" />
+            <ToggleInput control={control} label="Harsh ignore" name="ignoreMentions" />
+            <ToggleInput
               control={control}
-              render={({ field, fieldState: { error } }) => (
-                <>
-                  <Select
-                    {...field}
-                    className="input_select"
-                    classNamePrefix="react_select"
-                    placeholder="Scale"
-                    options={[
-                      {
-                        value: "remove",
-                        label: "Remove",
-                      },
-                      {
-                        value: "censor",
-                        label: "Censor",
-                      },
-                      {
-                        value: "do nothing",
-                        label: "Do nothing",
-                      },
-                    ]}
-                  />
-                  <InputError error={error} />
-                </>
-              )}
+              label="Hide messages tagged nsfw or nsfl"
+              name="hideNsfw"
             />
-          </InputLabel>
+            <ToggleInput
+              control={control}
+              label="Loop animated emotes forever"
+              name="animateForever"
+            />
+            <ToggleInput control={control} label="Disable spoilers" name="disableSpoilers" />
+            <TextInput
+              control={control}
+              label="Maximum messages"
+              name="maxLines"
+              type="number"
+              rules={{
+                pattern: {
+                  value: /^\d+$/i,
+                  message: "Maximum messages must be numeric",
+                },
+              }}
+            />
+            <InputLabel text="Stream viewer indicators">
+              <Controller
+                name="viewerStateIndicator"
+                control={control}
+                render={({ field, fieldState: { error } }) => (
+                  <>
+                    <Select
+                      {...field}
+                      className="input_select"
+                      classNamePrefix="react_select"
+                      options={stateIndicatorOptions}
+                    />
+                    <InputError error={error} />
+                  </>
+                )}
+              />
+            </InputLabel>
+            <InputLabel text="Banned messages">
+              <Controller
+                name="showRemoved"
+                control={control}
+                render={({ field, fieldState: { error } }) => (
+                  <>
+                    <Select
+                      {...field}
+                      className="input_select"
+                      classNamePrefix="react_select"
+                      options={showRemovedOptions}
+                    />
+                    <InputError error={error} />
+                  </>
+                )}
+              />
+            </InputLabel>
+          </fieldset>
+          <fieldset>
+            <legend>Autocomplete</legend>
+            <ToggleInput control={control} label="Auto-complete helper" name="autocompleteHelper" />
+            <ToggleInput
+              control={control}
+              label="Show emote preview"
+              name="autocompleteEmotePreview"
+            />
+          </fieldset>
+          <fieldset>
+            <legend>Whispers</legend>
+            <ToggleInput control={control} label="In-line messages" name="showWhispersInChat" />
+          </fieldset>
 
-          <ToggleInput control={control} label="Auto-complete helper" name="autocompleteHelper" />
-          <ToggleInput
-            control={control}
-            label="Show emote preview"
-            name="autocompleteEmotePreview"
-          />
-
-          <ToggleInput control={control} label="Greentext" name="formatterGreen" />
-          <ToggleInput control={control} label="Emotes" name="formatterEmote" />
-          <ToggleInput control={control} label="Combos" name="formatterCombo" />
-          <ToggleInput control={control} label="Modifiers" name="holidayEmoteModifiers" />
+          <fieldset>
+            <legend>Highlights, focus &amp; tags</legend>
+            <ToggleInput control={control} label="Highlight when mentioned" name="highlight" />
+            <ToggleInput
+              control={control}
+              label="Include mentions when focused"
+              name="ignoreMentions"
+            />
+            <ToggleInput
+              control={control}
+              label="Increase visibility of tagged users"
+              name="taggedVisibility"
+            />
+            <InputLabel text="Custom highlights">
+              <Controller
+                name="customHighlight"
+                control={control}
+                render={({ field, fieldState: { error } }) => (
+                  <>
+                    <CreatableSelect
+                      {...field}
+                      isMulti={true}
+                      placeholder="Custom highlights"
+                      className="input_select"
+                      classNamePrefix="react_select"
+                    />
+                    <InputError error={error} />
+                  </>
+                )}
+              />
+            </InputLabel>
+          </fieldset>
+          <fieldset>
+            <legend>Autocomplete</legend>
+            <ToggleInput control={control} label="Autocomplete helper" name="autocompleteHelper" />
+            <ToggleInput
+              control={control}
+              label="Show emote previews"
+              name="autocompleteEmotePreview"
+            />
+          </fieldset>
+          <fieldset>
+            <legend>Message formatters</legend>
+            <ToggleInput control={control} label="Greentext" name="formatterGreen" />
+            <ToggleInput control={control} label="Emotes" name="formatterEmote" />
+            <ToggleInput control={control} label="Combos" name="formatterCombo" />
+            <ToggleInput control={control} label="Modifiers" name="holidayEmoteModifiers" />
+          </fieldset>
         </form>
       </div>
     </Scrollbars>

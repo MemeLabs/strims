@@ -65,11 +65,6 @@ const MainRouter: React.FC = () => (
               exact
               component={lazy(() => import("../pages/Activity"))}
             />
-            <PrivateRoute
-              path="/chat-test"
-              exact
-              component={lazy(() => import("../pages/ChatTest"))}
-            />
             <Redirect to="/404" />
           </Switch>
         </Suspense>
