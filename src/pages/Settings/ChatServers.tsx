@@ -392,7 +392,7 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
         label="Name"
         placeholder="Enter a emote name"
       />
-      <InputLabel required={true} text="Image">
+      <InputLabel required={true} text="Image" component="div">
         <ImageInput control={control} name="image" />
       </InputLabel>
       <InputLabel required={true} text="Scale">

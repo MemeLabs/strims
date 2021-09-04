@@ -2,292 +2,21 @@ import clsx from "clsx";
 import { Base64 } from "js-base64";
 import React, { useCallback, useRef, useState } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
-import { Controller, useForm } from "react-hook-form";
 import { BiConversation, BiSmile } from "react-icons/bi";
 import { BsArrowBarLeft, BsArrowBarRight } from "react-icons/bs";
 import { FiSettings } from "react-icons/fi";
 import { HiOutlineUserGroup } from "react-icons/hi";
 import { ImCircleLeft, ImCircleRight } from "react-icons/im";
 import { IconType } from "react-icons/lib";
-import Select from "react-select";
-import CreatableSelect from "react-select/creatable";
 import { useToggle } from "react-use";
-import { useClickOutside } from "use-events";
 
 import Composer from "../components/Chat/Composer";
 import Message from "../components/Chat/Message";
 import Scroller, { MessageProps } from "../components/Chat/Scroller";
-import { InputError, InputLabel, TextInput, ToggleInput } from "../components/Form";
 import { Provider, useChat } from "../contexts/Chat";
-import Emote from "./Chat/Emote";
-
-const TestEmotes: React.FC = () => {
-  const [chat] = useChat();
-
-  return (
-    <Scrollbars autoHide={true}>
-      <div className="chat__emote_grid">
-        {chat.emotes.map((name) => (
-          <div key={name} className="chat__emote_grid__emote">
-            <Emote name={name} />
-          </div>
-        ))}
-      </div>
-    </Scrollbars>
-  );
-};
-
-interface SettingsFormData {
-  showTime: boolean;
-  showFlairIcons: boolean;
-  timestampFormat: string;
-  maxLines: number;
-  notificationWhisper: boolean;
-  soundNotificationWhisper: boolean;
-  notificationHighlight: boolean;
-  soundNotificationHighlight: boolean;
-  notificationSoundFile: {
-    fileType: string;
-    data: string;
-  };
-  highlight: boolean;
-  customHighlight: string[];
-  highlightNicks: string[];
-  taggedNicks: string[];
-  showRemoved: {
-    value: string;
-    label: string;
-  };
-  showWhispersInChat: boolean;
-  ignoreNicks: string[];
-  focusMentioned: boolean;
-  notificationTimeout: boolean;
-  ignoreMentions: boolean;
-  autocompleteHelper: boolean;
-  autocompleteEmotePreview: boolean;
-  taggedVisibility: boolean;
-  hideNsfw: boolean;
-  animateForever: boolean;
-  formatterGreen: boolean;
-  formatterEmote: boolean;
-  formatterCombo: boolean;
-  holidayEmoteModifiers: boolean;
-  disableSpoilers: boolean;
-  viewerStateIndicator: {
-    value: string;
-    label: string;
-  };
-  hiddenEmotes: string[];
-}
-
-const stateIndicatorOptions = [
-  {
-    value: "disable",
-    label: "Disable",
-  },
-  {
-    value: "bar",
-    label: "Bar",
-  },
-  {
-    value: "dot",
-    label: "Dot",
-  },
-  {
-    value: "array",
-    label: "Array",
-  },
-];
-
-const showRemovedOptions = [
-  {
-    value: "remove",
-    label: "Remove",
-  },
-  {
-    value: "censor",
-    label: "Censor",
-  },
-  {
-    value: "do nothing",
-    label: "Do nothing",
-  },
-];
-
-const TestSettings: React.FC = () => {
-  // const [chat] = useChat();
-
-  const { control } = useForm<SettingsFormData>({
-    mode: "onBlur",
-    defaultValues: {
-      showTime: false,
-      showFlairIcons: true,
-      timestampFormat: "HH:mm",
-      maxLines: 250,
-      notificationWhisper: true,
-      soundNotificationWhisper: false,
-      notificationHighlight: true,
-      soundNotificationHighlight: false,
-      highlight: true,
-      customHighlight: [],
-      highlightNicks: [],
-      taggedNicks: [],
-      showRemoved: showRemovedOptions[0],
-      showWhispersInChat: true,
-      ignoreNicks: [],
-      focusMentioned: false,
-      notificationTimeout: true,
-      ignoreMentions: false,
-      autocompleteHelper: true,
-      autocompleteEmotePreview: true,
-      taggedVisibility: false,
-      hideNsfw: false,
-      animateForever: true,
-      formatterGreen: true,
-      formatterEmote: true,
-      formatterCombo: true,
-      holidayEmoteModifiers: true,
-      disableSpoilers: false,
-      viewerStateIndicator: stateIndicatorOptions[1],
-      hiddenEmotes: [],
-    },
-  });
-
-  return (
-    <Scrollbars autoHide={true}>
-      <div className="chat__settings">
-        <form className="chat__settings__form">
-          {/* {error && <InputError error={error.message || "Error creating chat server"} />} */}
-          <fieldset>
-            <legend>Messages</legend>
-            <ToggleInput control={control} label="Show flair" name="showFlairIcons" />
-            <ToggleInput control={control} label="Show time" name="showTime" />
-            <ToggleInput control={control} label="Harsh ignore" name="ignoreMentions" />
-            <ToggleInput
-              control={control}
-              label="Hide messages tagged nsfw or nsfl"
-              name="hideNsfw"
-            />
-            <ToggleInput
-              control={control}
-              label="Loop animated emotes forever"
-              name="animateForever"
-            />
-            <ToggleInput control={control} label="Disable spoilers" name="disableSpoilers" />
-            <TextInput
-              control={control}
-              label="Maximum messages"
-              name="maxLines"
-              type="number"
-              rules={{
-                pattern: {
-                  value: /^\d+$/i,
-                  message: "Maximum messages must be numeric",
-                },
-              }}
-            />
-            <InputLabel text="Stream viewer indicators">
-              <Controller
-                name="viewerStateIndicator"
-                control={control}
-                render={({ field, fieldState: { error } }) => (
-                  <>
-                    <Select
-                      {...field}
-                      className="input_select"
-                      classNamePrefix="react_select"
-                      options={stateIndicatorOptions}
-                    />
-                    <InputError error={error} />
-                  </>
-                )}
-              />
-            </InputLabel>
-            <InputLabel text="Banned messages">
-              <Controller
-                name="showRemoved"
-                control={control}
-                render={({ field, fieldState: { error } }) => (
-                  <>
-                    <Select
-                      {...field}
-                      className="input_select"
-                      classNamePrefix="react_select"
-                      options={showRemovedOptions}
-                    />
-                    <InputError error={error} />
-                  </>
-                )}
-              />
-            </InputLabel>
-          </fieldset>
-          <fieldset>
-            <legend>Autocomplete</legend>
-            <ToggleInput control={control} label="Auto-complete helper" name="autocompleteHelper" />
-            <ToggleInput
-              control={control}
-              label="Show emote preview"
-              name="autocompleteEmotePreview"
-            />
-          </fieldset>
-          <fieldset>
-            <legend>Whispers</legend>
-            <ToggleInput control={control} label="In-line messages" name="showWhispersInChat" />
-          </fieldset>
-
-          <fieldset>
-            <legend>Highlights, focus &amp; tags</legend>
-            <ToggleInput control={control} label="Highlight when mentioned" name="highlight" />
-            <ToggleInput
-              control={control}
-              label="Include mentions when focused"
-              name="ignoreMentions"
-            />
-            <ToggleInput
-              control={control}
-              label="Increase visibility of tagged users"
-              name="taggedVisibility"
-            />
-            <InputLabel text="Custom highlights">
-              <Controller
-                name="customHighlight"
-                control={control}
-                render={({ field, fieldState: { error } }) => (
-                  <>
-                    <CreatableSelect
-                      {...field}
-                      isMulti={true}
-                      placeholder="Custom highlights"
-                      className="input_select"
-                      classNamePrefix="react_select"
-                    />
-                    <InputError error={error} />
-                  </>
-                )}
-              />
-            </InputLabel>
-          </fieldset>
-          <fieldset>
-            <legend>Autocomplete</legend>
-            <ToggleInput control={control} label="Autocomplete helper" name="autocompleteHelper" />
-            <ToggleInput
-              control={control}
-              label="Show emote previews"
-              name="autocompleteEmotePreview"
-            />
-          </fieldset>
-          <fieldset>
-            <legend>Message formatters</legend>
-            <ToggleInput control={control} label="Greentext" name="formatterGreen" />
-            <ToggleInput control={control} label="Emotes" name="formatterEmote" />
-            <ToggleInput control={control} label="Combos" name="formatterCombo" />
-            <ToggleInput control={control} label="Modifiers" name="holidayEmoteModifiers" />
-          </fieldset>
-        </form>
-      </div>
-    </Scrollbars>
-  );
-};
+import useClickAway from "../hooks/useClickAway";
+import EmotesDrawer from "./Chat/EmotesDrawer";
+import SettingsDrawer from "./Chat/SettingsDrawer";
 
 enum ChatDrawerRole {
   None = "none",
@@ -303,7 +32,7 @@ interface ChatDrawerBodyProps {
 
 const ChatDrawerBody: React.FC<ChatDrawerBodyProps> = ({ onClose, children }) => {
   const ref = useRef<HTMLDivElement>(null);
-  useClickOutside([ref], onClose);
+  useClickAway(ref, onClose, ["click"]);
 
   return (
     <div className="chat__drawer__body" ref={ref}>
@@ -349,24 +78,23 @@ const ChatDrawer: React.FC<ChatDrawerProps> = ({
 
 type ChatDrawerButtonProps = {
   icon: IconType;
-  onClick: () => void;
+  onToggle: (state: boolean) => void;
   active: boolean;
 };
 
-const ChatDrawerButton: React.FC<ChatDrawerButtonProps> = ({ icon: Icon, onClick, active }) => {
+const ChatDrawerButton: React.FC<ChatDrawerButtonProps> = ({ icon: Icon, onToggle, active }) => {
   const className = clsx({
     "chat__nav__icon": true,
     "chat__nav__icon--active": active,
   });
 
-  const handleClick = (e: React.MouseEvent) => {
-    if (!active) {
-      e.stopPropagation();
-      onClick();
-    }
-  };
+  // it isn't possible to predict whether react will re-render in the event
+  // handler call stack or defer until afterward. if the click-away handler
+  // in the drawer is bound before the event finishes bubbling it will fire
+  // immediately and close the drawer.
+  const handleClick = useCallback(() => setTimeout(() => onToggle(!active)), [onToggle, active]);
 
-  return <Icon className={className} onClickCapture={handleClick} />;
+  return <Icon className={className} onClick={handleClick} />;
 };
 
 const TestContent: React.FC = () => (
@@ -381,6 +109,13 @@ const ChatThing: React.FC = () => {
 
   const closePanel = useCallback(() => setActivePanel(ChatDrawerRole.None), []);
 
+  const drawerToggler = (role: ChatDrawerRole) => (state: boolean) =>
+    setActivePanel(state ? role : ChatDrawerRole.None);
+  const toggleEmotes = useCallback(drawerToggler(ChatDrawerRole.Emotes), []);
+  const toggleWhispers = useCallback(drawerToggler(ChatDrawerRole.Whispers), []);
+  const toggleSettings = useCallback(drawerToggler(ChatDrawerRole.Settings), []);
+  const toggleUsers = useCallback(drawerToggler(ChatDrawerRole.Users), []);
+
   return (
     <>
       <div className="chat__messages">
@@ -391,7 +126,7 @@ const ChatThing: React.FC = () => {
           active={activePanel === ChatDrawerRole.Emotes}
           onClose={closePanel}
         >
-          <TestEmotes />
+          <EmotesDrawer />
         </ChatDrawer>
         <ChatDrawer
           title="Whispers"
@@ -409,7 +144,7 @@ const ChatThing: React.FC = () => {
           active={activePanel === ChatDrawerRole.Settings}
           onClose={closePanel}
         >
-          <TestSettings />
+          <SettingsDrawer />
         </ChatDrawer>
         <ChatDrawer
           title="Users"
@@ -441,24 +176,24 @@ const ChatThing: React.FC = () => {
           <ChatDrawerButton
             icon={BiSmile}
             active={activePanel === ChatDrawerRole.Emotes}
-            onClick={() => setActivePanel(ChatDrawerRole.Emotes)}
+            onToggle={toggleEmotes}
           />
           <ChatDrawerButton
             icon={BiConversation}
             active={activePanel === ChatDrawerRole.Whispers}
-            onClick={() => setActivePanel(ChatDrawerRole.Whispers)}
+            onToggle={toggleWhispers}
           />
         </div>
         <div className="chat__nav__right">
           <ChatDrawerButton
             icon={FiSettings}
             active={activePanel === ChatDrawerRole.Settings}
-            onClick={() => setActivePanel(ChatDrawerRole.Settings)}
+            onToggle={toggleSettings}
           />
           <ChatDrawerButton
             icon={HiOutlineUserGroup}
             active={activePanel === ChatDrawerRole.Users}
-            onClick={() => setActivePanel(ChatDrawerRole.Users)}
+            onToggle={toggleUsers}
           />
         </div>
       </div>

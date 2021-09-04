@@ -6,7 +6,7 @@
   padding: 0.5em 0.8em;
   margin: 0.25em 0;
   border-radius: 0.25em;
-  box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
+  box-shadow: rgba(0, 0, 0, 0.25) inset 1px 1px 1px;
   background: var(--input-bg);
   color: var(--input-color);
   flex: 1;
@@ -63,19 +63,16 @@
     display: block;
     font-size: 1em;
     text-transform: uppercase;
-
-    @include color-scheme("dark") {
-      color: $gray-500;
-    }
-    @include color-scheme("light") {
-      color: $slate-500;
-    }
   }
 
   &__body {
     display: flex;
     flex-direction: column;
   }
+}
+
+label.input_label {
+  cursor: pointer;
 }
 
 .input_buttons {
@@ -109,6 +106,40 @@
   resize: vertical;
 }
 
+.input_toggle {
+  display: none;
+
+  &__switch {
+    margin-top: 0.2em;
+    height: 1em;
+    width: 2em;
+    position: relative;
+    background: var(--input-bg);
+    border-radius: 0.5em;
+    box-shadow: rgba(0, 0, 0, 0.25) inset 1px 1px 1px;
+
+    &:after {
+      position: absolute;
+      margin: -0.15em;
+      display: block;
+      content: "";
+      height: calc(1.2em - 2px);
+      width: calc(1.2em - 2px);
+      border-radius: 0.6em;
+      background: var(--input-fg);
+      border: 1px solid var(--input-border-color);
+      box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
+    }
+  }
+
+  :checked + &__switch {
+    background: $green-200;
+    &:after {
+      right: 0;
+    }
+  }
+}
+
 .input_avatar {
   height: 80px;
   width: 80px;
@@ -117,7 +148,7 @@
   &__placeholder {
     height: 80px;
     width: 80px;
-    border: 3px dashed $slate-500;
+    border: 3px dashed var(--input-border-color);
     border-radius: 50%;
     display: flex;
     flex-direction: column;
@@ -248,7 +279,7 @@
     }
 
     &__control {
-      box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
+      box-shadow: rgba(0, 0, 0, 0.25) inset 1px 1px 1px;
       border-style: none;
       background: var(--input-bg);
       color: var(--input-color);
@@ -276,26 +307,10 @@
         color: var(--input-disabled-color);
       }
 
-      &--is-focused {
-        @include color-scheme("dark") {
-          background: $slate-500;
-          color: $gray-400;
-        }
-        @include color-scheme("light") {
-          background: $gray-400;
-          color: $slate-100;
-        }
-      }
-
+      &--is-focused,
       &--is-selected {
-        @include color-scheme("dark") {
-          background: $slate-500;
-          color: $gray-400;
-        }
-        @include color-scheme("light") {
-          background: $gray-400;
-          color: $slate-100;
-        }
+        background: var(--input-focus-bg);
+        color: var(--input-focus-color);
       }
     }
   }

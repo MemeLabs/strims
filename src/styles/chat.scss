@@ -1,4 +1,5 @@
 .chat {
+  background: var(--body-foreground);
   display: flex;
   flex-direction: column;
   flex: 1 1 500px;
@@ -25,19 +26,12 @@
     }
 
     &__author {
+      background: var(--card-bg);
       border-radius: 3px;
-      padding: 1px 8px 1px 3px;
+      border: 1px solid var(--card-outset-border-top) var(--card-outset-border-right)
+        var(--card-outset-border-bottom) var(--card-outset-border-left);
       display: inline-block;
-      border: 1px solid;
-
-      @include color-scheme("dark") {
-        background: $slate-400;
-        border-color: $slate-500 $slate-200 $slate-200 $slate-500;
-      }
-      @include color-scheme("light") {
-        background: $gray-400;
-        border-color: $gray-500 $gray-200 $gray-200 $gray-500;
-      }
+      padding: 1px 8px 1px 3px;
     }
 
     &__colon {
@@ -207,7 +201,7 @@
   &__drawer {
     $width: 350px;
 
-    background: $slate-300;
+    background: var(--body-background);
     display: flex;
     flex-direction: column;
     height: 100%;
@@ -217,12 +211,12 @@
     z-index: 1;
 
     &--left {
-      transform: translateX(-$width);
+      transform: translateX(-$width - 1);
     }
 
     &--right {
       right: 0;
-      transform: translateX($width);
+      transform: translateX($width + 1);
     }
 
     &--active {
@@ -232,8 +226,8 @@
 
     &__header {
       align-items: center;
-      border-bottom: 1px solid $slate-500;
-      color: $gray-100;
+      border-bottom: 1px solid var(--body-border-color);
+      color: (--body-color);
       display: flex;
       justify-content: space-between;
       padding: 5px 10px;
@@ -251,20 +245,12 @@
   }
 
   &__composer {
+    background: var(--input-bg);
+    border-radius: 3px;
+    border: 1px solid var(--input-border-color);
+    color: var(--input-color);
     margin: 5px;
     padding: 10px 5px;
-    border-radius: 3px;
-    border-width: 1px;
-    border-style: solid;
-
-    @include color-scheme("dark") {
-      background: $slate-300;
-      border-color: $slate-500;
-    }
-    @include color-scheme("light") {
-      background: $gray-500;
-      border-color: $gray-300;
-    }
 
     &__span {
       &--self {
@@ -348,30 +334,28 @@
     }
   }
 
-  &__settings {
+  &__settings_form {
     margin: 0 15px;
 
-    &__form {
-      fieldset {
-        margin-top: 10px;
+    fieldset {
+      margin-top: 10px;
 
-        legend {
-          color: $gray-200;
-          text-transform: uppercase;
-          font-size: 1.1em;
-        }
+      legend {
+        color: $gray-200;
+        text-transform: uppercase;
+        font-size: 1.1em;
+      }
+    }
+
+    .input_label--toggle {
+      flex-direction: row-reverse;
+
+      .input_label__body {
+        flex-basis: 2.5em;
       }
 
-      .input_label--toggle {
-        flex-direction: row-reverse;
-
-        .input_label__body {
-          flex-basis: 30px;
-        }
-
-        .input_label__text {
-          flex: 1;
-        }
+      .input_label__text {
+        flex: 1;
       }
     }
   }

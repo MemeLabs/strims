@@ -1,6 +1,6 @@
 import clsx from "clsx";
 import { Base64 } from "js-base64";
-import React, { ReactElement } from "react";
+import React, { ComponentType, ReactElement, ReactHTML } from "react";
 import Dropzone from "react-dropzone";
 import { FieldError, FieldValues, UseControllerProps, useController } from "react-hook-form";
 import { FiAlertTriangle } from "react-icons/fi";
@@ -21,6 +21,7 @@ export interface InputLabelProps {
   text: string;
   description?: string;
   inputType?: string;
+  component?: keyof ReactHTML;
 }
 
 export const InputLabel: React.FC<InputLabelProps> = ({
@@ -29,22 +30,27 @@ export const InputLabel: React.FC<InputLabelProps> = ({
   text,
   description,
   inputType = "default",
+  component = "label",
 }) => {
+  React.createElement;
   const labelClass = clsx({
     "input_label": true,
     "input_label--required": required,
     [`input_label--${inputType}`]: true,
   });
 
-  return (
-    <div className={labelClass}>
-      <div className="input_label__text">{text}</div>
-      <div className="input_label__body">
-        {children}
-        {description && <div className="input_label__description">{description}</div>}
-      </div>
-    </div>
-  );
+  return React.createElement(component, {
+    className: labelClass,
+    children: (
+      <>
+        <div className="input_label__text">{text}</div>
+        <div className="input_label__body">
+          {children}
+          {description && <div className="input_label__description">{description}</div>}
+        </div>
+      </>
+    ),
+  });
 };
 
 export interface InputErrorProps {
@@ -189,6 +195,7 @@ export const ToggleInput = <T extends FieldValues>({
         type="checkbox"
         disabled={disabled}
       />
+      <div className="input_toggle__switch"></div>
       <InputError error={error} />
     </InputLabel>
   );

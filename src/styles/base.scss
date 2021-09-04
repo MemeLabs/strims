@@ -1,7 +1,8 @@
 @import "colors.scss";
 @import "mixins.scss";
 
-html, body {
+html,
+body {
   margin: 0;
   padding: 0;
   font-family: Verdana, Geneva, Tahoma, sans-serif;
@@ -28,29 +29,41 @@ html, body {
   min-height: 100vh;
   width: 100vw;
 
-  &--dark {
-    background: $slate-400;
-  }
+  background: var(--body-background);
+  color: var(--body-color);
 }
 
 .app__menu {
-  background: $slate-300;
+  background: var(--body-foreground);
   flex: 300px 0;
   padding: 1em;
 }
 
 .app__body {
-  background: $slate-400;
+  background: var(--body-background);
   flex: 1 1;
   padding: 1em;
 }
 
 .app--dark {
+  --body-background: #{$slate-300};
+  --body-foreground: #{$slate-400};
+  --body-border-color: #{$slate-400};
+  --body-color: #{$gray-500};
+
   --card-bg: #{$slate-300};
   --card-border: #{$slate-400};
+  --card-3d-border-top: #{$slate-500};
+  --card-3d-border-right: #{$slate-200};
+  --card-3d-border-bottom: #{$slate-200};
+  --card-3d-border-left: #{$slate-500};
 
   --input-bg: #{$slate-400};
+  --input-fg: #{$slate-500};
+  --input-border-color: #{$slate-500};
   --input-color: #{$gray-400};
+  --input-focus-bg: #{$slate-500};
+  --input-focus-color: #{$gray-500};
   --input-disabled-bg: #{$slate-300};
   --input-disabled-color: #{$gray-100};
   --input-placeholder-color: #{$gray-100};
@@ -62,11 +75,24 @@ html, body {
 }
 
 .app--light {
+  --body-background: #{$gray-500};
+  --body-foreground: #{$gray-400};
+  --body-border-color: #{$gray-600};
+  --body-color: #{$slate-200};
+
   --card-bg: #{$gray-300};
   --card-border: #{$gray-500};
+  --card-3d-border-top: #{$gray-500};
+  --card-3d-border-right: #{$gray-200};
+  --card-3d-border-bottom: #{$gray-200};
+  --card-3d-border-left: #{$gray-500};
 
   --input-bg: #{$gray-400};
+  --input-fg: #{$gray-200};
+  --input-border-color: #{$gray-500};
   --input-color: #{$slate-200};
+  --input-focus-bg: #{$gray-500};
+  --input-focus-color: #{$slate-100};
   --input-disabled-bg: #{$gray-500};
   --input-disabled-color: #{$slate-500};
   --input-placeholder-color: #{$slate-400};

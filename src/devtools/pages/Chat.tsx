@@ -18,7 +18,7 @@ class MockChatSvc {
   messages: Readable<chatv1.Message>;
 
   constructor() {
-    this.messages = new MessageEmitter(5000);
+    this.messages = new MessageEmitter(2000);
   }
 
   destroy() {
@@ -120,13 +120,22 @@ const ChatPage: React.FC = () => {
   return (
     <div>
       <Nav />
-      <ApiProvider value={client}>
-        <div className="app app--dark chat_mockup">
-          <div className="chat_mockup__content">
-            <ChatPanel />
+      <div className="chat_mockup">
+        <ApiProvider value={client}>
+          <div className="app app--dark">
+            <div className="chat_mockup__content">
+              <ChatPanel />
+            </div>
           </div>
-        </div>
-      </ApiProvider>
+        </ApiProvider>
+        <ApiProvider value={client}>
+          <div className="app app--light ">
+            <div className="chat_mockup__content">
+              <ChatPanel />
+            </div>
+          </div>
+        </ApiProvider>
+      </div>
     </div>
   );
 };
