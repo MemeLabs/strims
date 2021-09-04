@@ -8,6 +8,7 @@ import {
 import clsx from "clsx";
 import React from "react";
 import { useEffect } from "react";
+import { CellMeasurerCache } from "react-virtualized";
 
 import {
   AssetBundle,
@@ -47,6 +48,7 @@ interface BundleMeta {
 interface State {
   clientId?: bigint;
   messages: Message[];
+  messageSizeCache: CellMeasurerCache;
   bundleMeta: BundleMeta;
   styles: {
     [key: string]: StyleDeclarationValue;
@@ -61,6 +63,7 @@ interface State {
 
 const initialState: State = {
   messages: [],
+  messageSizeCache: new CellMeasurerCache(),
   bundleMeta: {
     emoteIdObjectUrls: new Map(),
     emoteIdNames: new Map(),
@@ -83,11 +86,6 @@ const chatReducer = (state: State, action: Action): State => {
         ...state,
         messages: action.messages,
       };
-    case "MESSAGE":
-      return {
-        ...state,
-        messages: [...state.messages, action.message],
-      };
     case "CLIENT_DATA":
       return chatClientDataReducer(state, action.data);
     case "CLIENT_ERROR":
@@ -104,7 +102,6 @@ const chatReducer = (state: State, action: Action): State => {
       return state;
   }
 };
-
 const chatClientDataReducer = (state: State, event: OpenClientResponse): State => {
   switch (event.body.case) {
     case OpenClientResponse.BodyCase.OPEN:
@@ -114,15 +111,31 @@ const chatClientDataReducer = (state: State, event: OpenClientResponse): State =
         state: "open",
       };
     case OpenClientResponse.BodyCase.MESSAGE:
-      return {
-        ...state,
-        messages: [...state.messages, event.body.message],
-      };
+      return messageReducer(state, event.body.message);
     case OpenClientResponse.BodyCase.ASSET_BUNDLE:
       return assetBundleReducer(state, event.body.assetBundle);
     default:
       return state;
   }
+};
+
+const messageReducer = (state: State, message: Message): State => {
+  const messages = [...state.messages];
+  if (
+    messages.length !== 0 &&
+    message.entities.emotes.length === 1 &&
+    message.entities.emotes[0].combo > 0
+  ) {
+    messages[messages.length - 1] = message;
+    state.messageSizeCache.clear(messages.length - 1, 0);
+  } else {
+    messages.push(message);
+  }
+
+  return {
+    ...state,
+    messages,
+  };
 };
 
 const fileTypeToImageType = (fileType: EmoteFileType): string => {

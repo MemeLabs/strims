@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import React, { ReactNode } from "react";
+import React, { ReactNode, useEffect, useRef } from "react";
 
 import { Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
 import Emote from "./Emote";
@@ -159,12 +159,13 @@ class MessageFormatter {
 
 interface MessageProps extends React.HTMLProps<HTMLDivElement> {
   message: chatv1_Message;
+  isMostRecent?: boolean;
 }
 
-const Message: React.FC<MessageProps> = (props) => {
+const Message: React.FC<MessageProps> = ({ isMostRecent, ...props }) => {
   const { emotes } = props.message.entities;
   return emotes?.length === 1 && emotes[0].combo ? (
-    <ComboMessage {...props} />
+    <ComboMessage {...props} isMostRecent={isMostRecent} />
   ) : (
     <StandardMessage {...props} />
   );
@@ -172,20 +173,37 @@ const Message: React.FC<MessageProps> = (props) => {
 
 const ComboMessage: React.FC<MessageProps> = ({
   message: { body, entities },
-  className,
+  className: baseClassName,
+  isMostRecent,
   ...props
 }) => {
   const formatter = new MessageFormatter(body);
   entities.emotes.forEach((entity) => formatter.insertEntity(MessageEmote, entity));
 
+  const count = entities.emotes[0].combo;
+  const scale = Math.min(Math.floor(count / 5) * 5, 50);
+  const className = clsx([baseClassName, "chat__combo_message"], {
+    [`chat__combo_message--scale_${scale}`]: scale > 0,
+    "chat__combo_message--complete": !isMostRecent,
+  });
+
+  const ref = useRef<HTMLDivElement>();
+  useEffect(() => {
+    ref.current.classList.remove(`chat__combo_message--hit`);
+    const rafId = window.requestAnimationFrame(() =>
+      ref.current.classList.add(`chat__combo_message--hit`)
+    );
+    return () => window.cancelAnimationFrame(rafId);
+  }, [count]);
+
   return (
-    <div {...props} className={clsx(["chat__message", "chat__message--emote", className])}>
-      <span className="body">
+    <div {...props} className={className} ref={ref}>
+      <span className="chat__combo_message__body">
         {formatter.body}
-        <i className="count">{entities.emotes[0].combo}</i>
-        <i className="x">x</i>
-        <i className="hits">hits</i>
-        <i className="combo">c-c-c-combo</i>
+        <i className="chat__combo_message__count">{count}</i>
+        <i className="chat__combo_message__x">x</i>
+        <i className="chat__combo_message__hits">hits</i>
+        <i className="chat__combo_message__combo">c-c-c-combo</i>
       </span>
     </div>
   );

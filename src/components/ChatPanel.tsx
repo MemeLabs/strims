@@ -105,7 +105,7 @@ const TestContent: React.FC = () => (
 
 const ChatThing: React.FC = () => {
   const [state, { sendMessage }] = useChat();
-  const [activePanel, setActivePanel] = useState(ChatDrawerRole.Settings);
+  const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
   const closePanel = useCallback(() => setActivePanel(ChatDrawerRole.None), []);
 
@@ -157,9 +157,14 @@ const ChatThing: React.FC = () => {
         </ChatDrawer>
         <Scroller
           renderMessage={({ index, style }: MessageProps) => (
-            <Message message={state.messages[index]} style={style} />
+            <Message
+              message={state.messages[index]}
+              style={style}
+              isMostRecent={index === state.messages.length - 1}
+            />
           )}
           messageCount={state.messages.length}
+          messageSizeCache={state.messageSizeCache}
         />
       </div>
       <div className="chat__footer">

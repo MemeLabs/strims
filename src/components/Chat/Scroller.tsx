@@ -20,6 +20,7 @@ export interface MessageProps {
 interface ScrollerProps {
   renderMessage: (MessageProps) => React.ReactNode;
   messageCount: number;
+  messageSizeCache: CellMeasurerCache;
   autoScrollThreshold?: number;
   resizeDebounceTimeout?: number;
 }
@@ -48,18 +49,18 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
   width,
   messageCount,
   renderMessage,
+  messageSizeCache,
   autoScrollThreshold = 20,
   resizeDebounceTimeout = 100,
 }) => {
   const list = React.useRef<List & ListInternal>();
   const scrollbars = React.useRef<Scrollbars & ScrollbarsInternal>();
-  const cache = React.useMemo(() => new CellMeasurerCache({ fixedWidth: true }), []);
   const [autoScroll, setAutoScroll] = React.useState(true);
   const [scrolling, setScrolling] = React.useState(true);
   const [resizing, setResizing] = React.useState(false);
 
   React.useEffect(() => {
-    cache.clearAll();
+    messageSizeCache.clearAll();
     list.current?.recomputeRowHeights();
 
     setResizing(true);
@@ -99,7 +100,7 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
   const renderRow: ListRowRenderer = React.useCallback(
     ({ index, key, style, parent }) => (
       <CellMeasurer
-        cache={cache}
+        cache={messageSizeCache}
         columnIndex={0}
         key={key}
         parent={parent}
@@ -109,7 +110,7 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
         {renderMessage({ index, style })}
       </CellMeasurer>
     ),
-    [renderMessage, cache, width]
+    [renderMessage, messageSizeCache, width]
   );
 
   const renderScrollThumb = React.useCallback(
@@ -139,8 +140,8 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
         height={height}
         width={width}
         style={{ overflowX: "visible", overflowY: "visible" }}
-        deferredMeasurementCache={cache}
-        rowHeight={cache.rowHeight}
+        deferredMeasurementCache={messageSizeCache}
+        rowHeight={messageSizeCache.rowHeight}
         rowCount={messageCount}
         rowRenderer={renderRow}
         onScroll={handleListScroll}

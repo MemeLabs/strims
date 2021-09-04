@@ -22,30 +22,40 @@ module.exports = (env, argv) => {
   const styleModuleRule = {
     test: /\.s?css$/,
     use: [
-      "css-loader",
-      "resolve-url-loader",
+      {
+        loader: "css-loader",
+        options: {
+          url: true,
+          sourceMap: true,
+        },
+      },
+      {
+        loader: "resolve-url-loader",
+        options: {
+          sourceMap: true,
+        },
+      },
       {
         loader: "postcss-loader",
         options: {
+          sourceMap: true,
           postcssOptions: {
             plugins: ["autoprefixer"],
           },
         },
       },
-      "sass-loader",
+      {
+        loader: "sass-loader",
+        options: {
+          sourceMap: true,
+        },
+      },
     ],
   };
 
   const staticModuleRule = {
     test: /\.(png|jpg|gif|woff|woff2|eot|ttf|svg)$/i,
-    use: [
-      {
-        loader: "url-loader",
-        options: {
-          limit: 8192,
-        },
-      },
-    ],
+    type: "asset/resource",
   };
 
   const plugins = [
@@ -181,7 +191,6 @@ module.exports = (env, argv) => {
                 ws: true,
               },
             },
-            contentBase: [path.join(__dirname, "pkg"), path.join(__dirname, "assets")],
           },
           module: {
             rules: [
