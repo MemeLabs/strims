@@ -7,11 +7,11 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
+	"github.com/MemeLabs/go-ppspp/internal/dao/daotest"
 	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
-	"github.com/MemeLabs/go-ppspp/pkg/dao/daotest"
 	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/kv/kvtest"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp/ppspptest"

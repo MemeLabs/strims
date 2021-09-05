@@ -9,32 +9,32 @@ import (
 	"mvdan.cc/xurls/v2"
 )
 
-func newEntityExtractor() *EntityExtractor {
-	return &EntityExtractor{
+func newEntityExtractor() *entityExtractor {
+	return &entityExtractor{
 		parserCtx: parser.NewParserContext(parser.ParserContextValues{}),
 		urls:      xurls.Relaxed(),
 	}
 }
 
-// EntityExtractor holds active emotes, modifiers, tags and a URL regex
-type EntityExtractor struct {
+// entityExtractor holds active emotes, modifiers, tags and a URL regex
+type entityExtractor struct {
 	parserCtx *parser.ParserContext
 	urls      *regexp.Regexp
 	rareRate  float64
 }
 
 // AddNick adds a nick to the EntityExtractor
-func (x *EntityExtractor) AddNick(nick string) {
+func (x *entityExtractor) AddNick(nick string) {
 	x.parserCtx.Nicks.Insert([]rune(nick))
 }
 
 // RemoveNick removes a nick from the EntityExtractor
-func (x *EntityExtractor) RemoveNick(nick string) {
+func (x *entityExtractor) RemoveNick(nick string) {
 	x.parserCtx.Nicks.Remove([]rune(nick))
 }
 
 // Extract splits a message string into it's component entities
-func (x *EntityExtractor) Extract(msg string) *chatv1.Message_Entities {
+func (x *entityExtractor) Extract(msg string) *chatv1.Message_Entities {
 	e := &chatv1.Message_Entities{}
 
 	for _, b := range x.urls.FindAllStringIndex(msg, -1) {

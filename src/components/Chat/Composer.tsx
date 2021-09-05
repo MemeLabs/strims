@@ -117,7 +117,7 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
     (event: KeyboardEvent<HTMLDivElement>) => {
       if (event.key === "Enter") {
         event.preventDefault();
-        onMessage(ComposerEditor.text(editor));
+        onMessage(ComposerEditor.text(editor).trim());
         ComposerEditor.clear(editor);
         return;
       }

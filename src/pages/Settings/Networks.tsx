@@ -1,14 +1,13 @@
 import React from "react";
 import ReactDOM from "react-dom";
-import { Controller, useForm } from "react-hook-form";
-import Select from "react-select";
+import { useForm } from "react-hook-form";
 
 import {
   CreateNetworkFromInvitationResponse,
   CreateNetworkResponse,
   Network,
 } from "../../apis/strims/network/v1/network";
-import { InputError, InputLabel, TextInput } from "../../components/Form";
+import { InputError, SelectInput, TextInput } from "../../components/Form";
 import { useCall, useClient, useLazyCall } from "../../contexts/FrontendApi";
 import { useProfile } from "../../contexts/Profile";
 import jsonutil from "../../lib/jsonutil";
@@ -130,33 +129,22 @@ const PublishNetworkModal = ({ network, onClose }: { network: Network; onClose: 
       <div className="thing_list__modal_mask"></div>
       <div className="thing_list__modal">
         <form className="thing_form" onSubmit={onSubmit}>
-          <InputLabel required={true} text="Peer">
-            <Controller
-              name="peer"
-              control={control}
-              rules={{
-                required: {
-                  value: true,
-                  message: "Network is required",
-                },
-              }}
-              render={({ field, fieldState: { error } }) => (
-                <>
-                  <Select
-                    {...field}
-                    className="input_select"
-                    placeholder="Select peer"
-                    classNamePrefix="react_select"
-                    options={bootstrapPeersRes.value?.peers.map((p) => ({
-                      value: p.peerId,
-                      label: p.label,
-                    }))}
-                  />
-                  <InputError error={error} />
-                </>
-              )}
-            />
-          </InputLabel>
+          <SelectInput
+            control={control}
+            rules={{
+              required: {
+                value: true,
+                message: "Network is required",
+              },
+            }}
+            name="peer"
+            label="Network"
+            placeholder="Select network"
+            options={bootstrapPeersRes.value?.peers.map((p) => ({
+              value: p.peerId,
+              label: p.label,
+            }))}
+          />
           <div className="input_buttons">
             <button className="input input_button" onClick={onClose}>
               Cancel

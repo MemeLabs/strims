@@ -1,17 +1,16 @@
 import { Base64 } from "js-base64";
 import React from "react";
-import { Controller, SubmitHandler, useForm } from "react-hook-form";
+import { SubmitHandler, useForm } from "react-hook-form";
 import { MdChevronLeft, MdChevronRight } from "react-icons/md";
 import { Link, Switch } from "react-router-dom";
-import Select from "react-select";
-import CreatableSelect from "react-select/creatable";
 import { useAsync } from "react-use";
 
 import { VideoChannel } from "../../apis/strims/video/v1/channel";
 import { VideoIngressConfig } from "../../apis/strims/video/v1/ingress";
 import {
+  CreatableSelectInput,
   InputError,
-  InputLabel,
+  SelectInput,
   TextAreaInput,
   TextInput,
   ToggleInput,
@@ -135,28 +134,15 @@ const VideoIngressConfigForm = () => {
           name="publicServerAddr"
           placeholder="ex: ingress.strims.gg"
         />
-        <InputLabel
-          text="Sharing"
+        <SelectInput
+          control={control}
+          name="serviceNetworks"
+          label="Sharing"
           description="Enable the creation of streams by peers in selected networks."
-        >
-          <Controller
-            name="serviceNetworks"
-            control={control}
-            render={({ field, fieldState: { error } }) => (
-              <>
-                <Select
-                  {...field}
-                  isMulti={true}
-                  placeholder="Select network"
-                  className="input_select"
-                  classNamePrefix="react_select"
-                  options={networkOptions}
-                />
-                <InputError error={error} />
-              </>
-            )}
-          />
-        </InputLabel>
+          placeholder="Select network"
+          isMulti={true}
+          options={networkOptions}
+        />
         <label className="input_label">
           <div className="input_label__body">
             <button
@@ -254,48 +240,20 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({ onSubmit }) => {
         placeholder="Description"
         name="description"
       />
-      <InputLabel text="Tags">
-        <Controller
-          name="tags"
-          control={control}
-          render={({ field, fieldState: { error } }) => (
-            <>
-              <CreatableSelect
-                {...field}
-                isMulti={true}
-                placeholder="Tags"
-                className="input_select"
-                classNamePrefix="react_select"
-              />
-              <InputError error={error} />
-            </>
-          )}
-        />
-      </InputLabel>
-      <InputLabel text="Network">
-        <Controller
-          name="networkKey"
-          control={control}
-          rules={{
-            required: {
-              value: true,
-              message: "Network is required",
-            },
-          }}
-          render={({ field, fieldState: { error } }) => (
-            <>
-              <Select
-                {...field}
-                placeholder="Select network"
-                className="input_select"
-                classNamePrefix="react_select"
-                options={networkOptions}
-              />
-              <InputError error={error} />
-            </>
-          )}
-        />
-      </InputLabel>
+      <CreatableSelectInput control={control} name="tags" label="Tags" placeholder="Tags" />
+      <SelectInput
+        control={control}
+        rules={{
+          required: {
+            value: true,
+            message: "Network is required",
+          },
+        }}
+        name="networkKey"
+        label="Network"
+        placeholder="Select network"
+        options={networkOptions}
+      />
       <label className="input_label">
         <div className="input_label__body">
           <button

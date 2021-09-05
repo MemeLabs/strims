@@ -53,9 +53,9 @@ body {
 .chat_mockup {
   display: flex;
   flex-direction: row;
-  height: calc(100vh - 35px);
 
   &__content {
+    height: calc(100vh - 35px);
     background: var(--body-background);
     flex: 1;
     width: 420px;

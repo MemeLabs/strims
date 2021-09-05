@@ -10,14 +10,19 @@ import (
 
 var ErrComboDuplicate = errors.New("user has already participated in combo")
 
-var combos = Combos{}
-
 type comboVariant struct {
 	modifiers []string
 	count     int
 }
 
-type Combos struct {
+func newComboTransformer() *comboTransformer {
+	return &comboTransformer{
+		variants:     map[string]*comboVariant{},
+		participants: map[string]struct{}{},
+	}
+}
+
+type comboTransformer struct {
 	lock         sync.Mutex
 	emote        string
 	count        int
@@ -25,7 +30,7 @@ type Combos struct {
 	participants map[string]struct{}
 }
 
-func (c *Combos) Transform(msg *chatv1.Message) error {
+func (c *comboTransformer) Transform(msg *chatv1.Message) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -76,11 +81,15 @@ func (c *Combos) Transform(msg *chatv1.Message) error {
 	return nil
 }
 
-func (c *Combos) reset() {
+func (c *comboTransformer) reset() {
 	c.emote = ""
 	c.count = 0
-	c.variants = map[string]*comboVariant{}
-	c.participants = map[string]struct{}{}
+	for k := range c.variants {
+		delete(c.variants, k)
+	}
+	for k := range c.participants {
+		delete(c.participants, k)
+	}
 }
 
 func isEmoteMessage(msg *chatv1.Message) bool {

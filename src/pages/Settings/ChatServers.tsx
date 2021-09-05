@@ -1,11 +1,9 @@
 import { Error } from "@memelabs/protobuf/lib/apis/strims/rpc/rpc";
 import { Base64 } from "js-base64";
 import React, { useEffect, useState } from "react";
-import { Controller, useForm } from "react-hook-form";
+import { useForm } from "react-hook-form";
 import { MdChevronLeft, MdChevronRight } from "react-icons/md";
 import { Link, Redirect, Switch, useHistory, useParams } from "react-router-dom";
-import Select from "react-select";
-import CreatableSelect from "react-select/creatable";
 import { useAsync } from "react-use";
 
 import {
@@ -16,10 +14,12 @@ import {
   Server,
 } from "../../apis/strims/chat/v1/chat";
 import {
+  CreatableSelectInput,
   ImageInput,
   ImageValue,
   InputError,
   InputLabel,
+  SelectInput,
   TextAreaInput,
   TextInput,
   ToggleInput,
@@ -135,66 +135,26 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
         label="Name"
         placeholder="Enter a chat room name"
       />
-      <InputLabel required={true} text="Network">
-        <Controller
-          name="networkKey"
-          control={control}
-          rules={{
-            required: {
-              value: true,
-              message: "Network is required",
-            },
-          }}
-          render={({ field, fieldState: { error } }) => (
-            <>
-              <Select
-                {...field}
-                className="input_select"
-                classNamePrefix="react_select"
-                placeholder="Select network"
-                options={networkOptions}
-              />
-              <InputError error={error} />
-            </>
-          )}
-        />
-      </InputLabel>
-      <InputLabel text="Tags">
-        <Controller
-          name="tags"
-          control={control}
-          render={({ field, fieldState: { error } }) => (
-            <>
-              <CreatableSelect
-                {...field}
-                isMulti={true}
-                placeholder="Tags"
-                className="input_select"
-                classNamePrefix="react_select"
-              />
-              <InputError error={error} />
-            </>
-          )}
-        />
-      </InputLabel>
-      <InputLabel text="Modifiers">
-        <Controller
-          name="modifiers"
-          control={control}
-          render={({ field, fieldState: { error } }) => (
-            <>
-              <CreatableSelect
-                {...field}
-                isMulti={true}
-                placeholder="Modifiers"
-                className="input_select"
-                classNamePrefix="react_select"
-              />
-              <InputError error={error} />
-            </>
-          )}
-        />
-      </InputLabel>
+      <SelectInput
+        control={control}
+        rules={{
+          required: {
+            value: true,
+            message: "Network is required",
+          },
+        }}
+        name="networkKey"
+        label="Network"
+        placeholder="Select network"
+        options={networkOptions}
+      />
+      <CreatableSelectInput control={control} name="tags" label="Tags" placeholder="Tags" />
+      <CreatableSelectInput
+        control={control}
+        name="modifiers"
+        label="Modifiers"
+        placeholder="Modifiers"
+      />
       {config && (
         <Link
           className="input_label input_button"
@@ -395,37 +355,25 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
       <InputLabel required={true} text="Image" component="div">
         <ImageInput control={control} name="image" />
       </InputLabel>
-      <InputLabel required={true} text="Scale">
-        <Controller
-          name="scale"
-          control={control}
-          render={({ field, fieldState: { error } }) => (
-            <>
-              <Select
-                {...field}
-                className="input_select"
-                classNamePrefix="react_select"
-                placeholder="Scale"
-                options={[
-                  {
-                    value: EmoteScale.EMOTE_SCALE_1X,
-                    label: "1x",
-                  },
-                  {
-                    value: EmoteScale.EMOTE_SCALE_2X,
-                    label: "2x",
-                  },
-                  {
-                    value: EmoteScale.EMOTE_SCALE_4X,
-                    label: "4x",
-                  },
-                ]}
-              />
-              <InputError error={error} />
-            </>
-          )}
-        />
-      </InputLabel>
+      <SelectInput
+        control={control}
+        name="scale"
+        label="Scale"
+        options={[
+          {
+            value: EmoteScale.EMOTE_SCALE_1X,
+            label: "1x",
+          },
+          {
+            value: EmoteScale.EMOTE_SCALE_2X,
+            label: "2x",
+          },
+          {
+            value: EmoteScale.EMOTE_SCALE_4X,
+            label: "4x",
+          },
+        ]}
+      />
       <TextAreaInput control={control} label="css" name="css" />
       <ToggleInput control={control} label="animated" name="animated" />
       <TextInput

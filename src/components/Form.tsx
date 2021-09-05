@@ -1,10 +1,12 @@
 import clsx from "clsx";
 import { Base64 } from "js-base64";
-import React, { ComponentType, ReactElement, ReactHTML } from "react";
+import React, { ReactElement, ReactHTML } from "react";
 import Dropzone from "react-dropzone";
-import { FieldError, FieldValues, UseControllerProps, useController } from "react-hook-form";
+import { FieldError, FieldValues, Path, UseControllerProps, useController } from "react-hook-form";
 import { FiAlertTriangle } from "react-icons/fi";
 import { MdAddAPhoto } from "react-icons/md";
+import Select from "react-select";
+import CreatableSelect from "react-select/creatable";
 
 type CompatibleFieldPath<T extends FieldValues, V> = {
   [K in keyof T]: T[K] extends V ? K : never;
@@ -195,7 +197,90 @@ export const ToggleInput = <T extends FieldValues>({
         type="checkbox"
         disabled={disabled}
       />
-      <div className="input_toggle__switch"></div>
+      <div className="input_toggle__switch">
+        <div className="input_toggle__switch__track" />
+      </div>
+      <InputError error={error} />
+    </InputLabel>
+  );
+};
+
+export interface SelectOption<T> {
+  label: string;
+  value: T;
+}
+
+export interface SelectInputProps<T, M> {
+  label: string;
+  description?: string;
+  placeholder?: string;
+  isMulti?: M;
+  disabled?: boolean;
+  options: T[];
+}
+
+export const SelectInput = <T extends FieldValues, F extends SelectOption<any>, M extends boolean>({
+  label,
+  description,
+  placeholder,
+  isMulti = false as M,
+  disabled,
+  options,
+  ...controllerProps
+}: SelectInputProps<F, M> &
+  CompatibleUseControllerProps<T, M extends true ? F[] : F>): ReactElement => {
+  const {
+    field,
+    fieldState: { error },
+  } = useController(controllerProps);
+
+  return (
+    <InputLabel text={label} description={description} inputType="select">
+      <Select
+        {...field}
+        className="input_select"
+        classNamePrefix="react_select"
+        placeholder={placeholder}
+        // @ts-ignore
+        options={options}
+        isMulti={isMulti}
+        disabled={disabled}
+      />
+      <InputError error={error} />
+    </InputLabel>
+  );
+};
+
+export interface CreatableSelectInputProps {
+  label: string;
+  description?: string;
+  placeholder?: string;
+  disabled?: boolean;
+}
+
+export const CreatableSelectInput = <T extends FieldValues>({
+  label,
+  description,
+  placeholder,
+  disabled,
+  ...controllerProps
+}: CreatableSelectInputProps &
+  CompatibleUseControllerProps<T, SelectOption<string>[]>): ReactElement => {
+  const {
+    field,
+    fieldState: { error },
+  } = useController(controllerProps);
+
+  return (
+    <InputLabel text={label} description={description} inputType="select">
+      <CreatableSelect
+        {...field}
+        isMulti={true}
+        className="input_select"
+        classNamePrefix="react_select"
+        placeholder={placeholder}
+        disabled={disabled}
+      />
       <InputError error={error} />
     </InputLabel>
   );

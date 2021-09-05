@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import React from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
+import { useDebounce } from "react-use";
 import {
   AutoSizer,
   CellMeasurer,
@@ -59,10 +60,16 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
   const [scrolling, setScrolling] = React.useState(true);
   const [resizing, setResizing] = React.useState(false);
 
-  React.useEffect(() => {
-    messageSizeCache.clearAll();
-    list.current?.recomputeRowHeights();
+  useDebounce(
+    () => {
+      messageSizeCache.clearAll();
+      list.current?.recomputeRowHeights();
+    },
+    500,
+    [list, height, width]
+  );
 
+  React.useEffect(() => {
     setResizing(true);
     const id = setTimeout(() => setResizing(false), resizeDebounceTimeout);
     return () => clearTimeout(id);

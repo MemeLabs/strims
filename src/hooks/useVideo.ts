@@ -2,19 +2,6 @@ import { useRef, useState } from "react";
 
 import useReady from "./useReady";
 
-declare global {
-  interface Document {
-    pictureInPictureEnabled?: boolean;
-    pictureInPictureElement?: any;
-    exitPictureInPicture?: () => Promise<any>;
-  }
-
-  interface HTMLVideoElement {
-    disablePictureInPicture?: boolean;
-    requestPictureInPicture?: () => Promise<any>;
-  }
-}
-
 export const VideoReadyState = {
   // No information is available about the media resource.
   HAVE_NOTHING: 0,

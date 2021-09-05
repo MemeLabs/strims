@@ -32,6 +32,7 @@ func newChatService(logger *zap.Logger, ew *protoutil.ChunkStreamWriter) *chatSe
 		broadcastTicker: time.NewTicker(broadcastInterval),
 		eventWriter:     ew,
 		entityExtractor: newEntityExtractor(),
+		combos:          newComboTransformer(),
 	}
 }
 
@@ -44,7 +45,8 @@ type chatService struct {
 	eventWriter       *protoutil.ChunkStreamWriter
 	lock              sync.Mutex
 	certificate       *certificate.Certificate
-	entityExtractor   *EntityExtractor
+	entityExtractor   *entityExtractor
+	combos            *comboTransformer
 }
 
 func (d *chatService) Run(ctx context.Context) error {
@@ -114,7 +116,7 @@ func (d *chatService) SendMessage(ctx context.Context, req *chatv1.SendMessageRe
 		Entities:   d.entityExtractor.Extract(req.Body),
 	}
 
-	if err := combos.Transform(m); err == ErrComboDuplicate {
+	if err := d.combos.Transform(m); err != nil {
 		return nil, err
 	}
 

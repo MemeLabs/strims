@@ -109,34 +109,52 @@ label.input_label {
 .input_toggle {
   display: none;
 
+  &__switch,
+  &__switch__track {
+    border-radius: 0.5em;
+    height: 1em;
+    overflow: hidden;
+    position: relative;
+    width: 2em;
+  }
+
   &__switch {
     margin-top: 0.2em;
-    height: 1em;
-    width: 2em;
-    position: relative;
-    background: var(--input-bg);
-    border-radius: 0.5em;
-    box-shadow: rgba(0, 0, 0, 0.25) inset 1px 1px 1px;
 
-    &:after {
-      position: absolute;
-      margin: -0.15em;
-      display: block;
+    &:before,
+    &__track:after {
       content: "";
-      height: calc(1.2em - 2px);
-      width: calc(1.2em - 2px);
-      border-radius: 0.6em;
-      background: var(--input-fg);
-      border: 1px solid var(--input-border-color);
-      box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
+      display: block;
+      height: 1em;
+      position: absolute;
+    }
+
+    &:before {
+      background-image: linear-gradient(90deg, $green-200 0%, $green-200 50%, var(--input-bg) 50%);
+      transform: translateX(-2em);
+      transition: all 200ms ease-in-out;
+      width: 4em;
+    }
+
+    &__track {
+      box-shadow: rgba(0, 0, 0, 0.25) inset 1px 1px 1px;
+
+      &:after {
+        background: var(--input-fg);
+        border-radius: 0.5em;
+        box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
+        transform: translateX(0);
+        transition: all 200ms ease-in-out;
+        width: 1em;
+      }
     }
   }
 
-  :checked + &__switch {
-    background: $green-200;
-    &:after {
-      right: 0;
-    }
+  :checked + &__switch:before {
+    transform: translateX(-0.5em);
+  }
+  :checked + &__switch &__switch__track:after {
+    transform: translateX(1em);
   }
 }
 
@@ -219,7 +237,6 @@ label.input_label {
     border-bottom-style: none;
     padding: 10px;
     margin: 0;
-
     border-color: var(--card-border);
     background: var(--card-bg);
 

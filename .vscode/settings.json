@@ -54,19 +54,7 @@
     "staticcheck": false,
   },
   "go.languageServerExperimentalFeatures": {
-    "format": true,
-    "autoComplete": true,
-    "rename": true,
-    "goToDefinition": true,
-    "hover": true,
-    "signatureHelp": true,
-    "goToTypeDefinition": true,
-    "goToImplementation": true,
-    "documentSymbols": true,
-    "workspaceSymbols": true,
-    "findReferences": true,
     "diagnostics": true,
-    "documentLink": true,
   },
   "protoc": {
     "path": "/usr/local/bin/protoc",
@@ -82,6 +70,7 @@
       "--tsrpc_out=src/apis",
     ]
   },
+  "typescript.tsdk": "node_modules/typescript/lib",
   // "go.toolsEnvVars": {
   //   "GOOS": "js",
   //   "GOARCH": "wasm"

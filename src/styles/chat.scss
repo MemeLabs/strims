@@ -77,9 +77,15 @@
 
     &__spoiler {
       cursor: pointer;
-      background: $slate-400;
       padding: 0 3px;
       transition: color 0.2s ease-in-out;
+
+      @include color-scheme("dark") {
+        background: $slate-200;
+      }
+      @include color-scheme("light") {
+        background: $gray-800;
+      }
 
       & > .chat__emote,
       & > .chat__emote_container,

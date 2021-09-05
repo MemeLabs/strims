@@ -47,6 +47,10 @@ interface BundleMeta {
 
 interface State {
   clientId?: bigint;
+  config: {
+    messageHistorySize: number;
+    messageGCThreshold: number;
+  };
   messages: Message[];
   messageSizeCache: CellMeasurerCache;
   bundleMeta: BundleMeta;
@@ -62,6 +66,10 @@ interface State {
 }
 
 const initialState: State = {
+  config: {
+    messageHistorySize: 250,
+    messageGCThreshold: 250,
+  },
   messages: [],
   messageSizeCache: new CellMeasurerCache(),
   bundleMeta: {
@@ -132,6 +140,12 @@ const messageReducer = (state: State, message: Message): State => {
     messages.push(message);
   }
 
+  // TODO: pause gc while ui is scrolled
+  if (messages.length >= state.config.messageHistorySize + state.config.messageGCThreshold) {
+    messages.splice(0, state.config.messageGCThreshold);
+    state.messageSizeCache.clearAll();
+  }
+
   return {
     ...state,
     messages,
@@ -171,7 +185,7 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
         emoteIdObjectUrls.get(id)?.forEach((url) => URL.revokeObjectURL(url));
         emoteIdObjectUrls.delete(id);
       }
-      return reset;
+      return !reset;
     })
   );
 
