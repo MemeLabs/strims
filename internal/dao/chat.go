@@ -10,6 +10,7 @@ import (
 const chatServerPrefix = "chatServer:"
 const chatEmotePrefix = "chatEmote:"
 const chatEmoteServerPrefix = "chatEmoteServer:"
+const chatUIConfigKey = "chatUIConfig"
 
 func prefixChatServerKey(id uint64) string {
 	return chatServerPrefix + strconv.FormatUint(id, 10)
@@ -162,4 +163,20 @@ func NewChatEmote(
 		Animation: animation,
 	}
 	return network, nil
+}
+
+// SetChatUIConfig ...
+func SetChatUIConfig(s kv.RWStore, v *chat.UIConfig) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
+		return tx.Put(chatUIConfigKey, v)
+	})
+}
+
+// GetChatUIConfig ...
+func GetChatUIConfig(s kv.Store) (v *chat.UIConfig, err error) {
+	v = &chat.UIConfig{}
+	err = s.View(func(tx kv.Tx) error {
+		return tx.Get(chatUIConfigKey, v)
+	})
+	return
 }

@@ -1,3 +1,4 @@
+import { Base64 } from "js-base64";
 import { MutableRefObject, useEffect, useMemo, useState } from "react";
 
 import { EgressOpenStreamResponse } from "../apis/strims/video/v1/egress";
@@ -15,7 +16,7 @@ const decoders = {
 export type MimeType = keyof typeof decoders;
 
 export interface MediaSourceProps {
-  networkKey: Uint8Array;
+  networkKey: string;
   swarmUri: string;
   mimeType: string;
   videoRef: MutableRefObject<HTMLVideoElement>;
@@ -29,10 +30,9 @@ const useMediaSource = ({
   videoRef,
 }: MediaSourceProps): MediaSource => {
   const client = useClient();
-
   const [mediaSource, setMediaSource] = useState<MediaSource>(null);
 
-  const [clientEvents] = useState(() => {
+  useEffect(() => {
     const [fileFormat] = mimeType.split(";", 1) as [MimeType];
     const Decoder = decoders[fileFormat];
     const decoder = new Decoder();
@@ -49,7 +49,7 @@ const useMediaSource = ({
 
     const clientEvents = client.videoEgress.openStream({
       swarmUri,
-      networkKeys: [networkKey],
+      networkKeys: [Base64.toUint8Array(networkKey)],
     });
     clientEvents.on("data", ({ body }) => {
       switch (body.case) {
@@ -74,10 +74,8 @@ const useMediaSource = ({
     });
     clientEvents.on("error", (e) => console.log(e));
 
-    return clientEvents;
-  });
-
-  useEffect(() => () => clientEvents.destroy(), []);
+    return () => clientEvents.destroy();
+  }, [networkKey, swarmUri, mimeType, videoRef]);
 
   return mediaSource;
 };

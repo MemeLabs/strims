@@ -8,108 +8,6 @@ option swift_prefix = "SCH";
 
 import "type/key.proto";
 
-message CreateServerRequest {
-  bytes network_key = 2;
-  Room room = 3;
-}
-message CreateServerResponse {
-  Server server = 1;
-}
-message UpdateServerRequest {
-  uint64 id = 1;
-  bytes network_key = 2;
-  Room room = 3;
-}
-message UpdateServerResponse {
-  Server server = 1;
-}
-message DeleteServerRequest {
-  uint64 id = 1;
-}
-message DeleteServerResponse {}
-message GetServerRequest {
-  uint64 id = 1;
-}
-message GetServerResponse {
-  Server server = 1;
-}
-message ListServersRequest {}
-message ListServersResponse {
-  repeated Server servers = 1;
-}
-
-message CreateEmoteRequest {
-  uint64 server_id = 1;
-  string name = 2;
-  repeated EmoteImage images = 3;
-  string css = 4;
-  EmoteAnimation animation = 5;
-}
-message CreateEmoteResponse {
-  Emote emote = 1;
-}
-message UpdateEmoteRequest {
-  uint64 server_id = 1;
-  uint64 id = 2;
-  string name = 3;
-  repeated EmoteImage images = 4;
-  string css = 5;
-  EmoteAnimation animation = 6;
-}
-message UpdateEmoteResponse {
-  Emote emote = 1;
-}
-message DeleteEmoteRequest {
-  uint64 server_id = 1;
-  uint64 id = 2;
-}
-message DeleteEmoteResponse {}
-message GetEmoteRequest {
-  uint64 id = 1;
-}
-message GetEmoteResponse {
-  Emote emote = 1;
-}
-message ListEmotesRequest {
-  uint64 server_id = 1;
-}
-message ListEmotesResponse {
-  repeated Emote emotes = 1;
-}
-message SyncAssetsRequest {
-  uint64 server_id = 1;
-  bool force_unified_update = 2;
-}
-message SyncAssetsResponse {
-  uint64 version = 1;
-  uint32 update_size = 2;
-}
-
-message OpenClientRequest {
-  bytes network_key = 1;
-  bytes server_key = 2;
-}
-
-message OpenClientResponse {
-  message Open {
-    uint64 client_id = 1;
-  }
-
-  oneof body {
-    Open open = 1001;
-    Message message = 1002;
-    AssetBundle asset_bundle = 1003;
-  }
-}
-
-message ClientSendMessageRequest {
-  uint64 client_id = 1;
-  string body = 2;
-}
-
-message ClientSendMessageResponse {}
-
-message CallClientResponse {}
 
 message ServerEvent {
   oneof body {
@@ -232,6 +130,172 @@ message Message {
   Entities entities = 5;
 }
 
+message UIConfig {
+  enum ShowRemoved {
+    SHOW_REMOVED_REMOVE = 0;
+    SHOW_REMOVED_CENSOR = 1;
+    SHOW_REMOVED_DO_NOTHING = 2;
+  }
+
+  enum ViewerStateIndicator {
+    VIEWER_STATE_INDICATOR_DISABLED = 0;
+    VIEWER_STATE_INDICATOR_BAR = 1;
+    VIEWER_STATE_INDICATOR_DOT = 2;
+    VIEWER_STATE_INDICATOR_ARRAY = 3;
+  }
+
+  message SoundFile {
+    string file_type = 1;
+    bytes data = 2;
+  }
+
+  bool show_time = 1;
+  bool show_flair_icons = 2;
+  string timestamp_format = 3;
+  uint32 max_lines = 4;
+  bool notification_whisper = 5;
+  bool sound_notification_whisper = 6;
+  bool notification_highlight = 7;
+  bool sound_notification_highlight = 8;
+  SoundFile notification_sound_file = 9;
+  bool highlight = 10;
+  string custom_highlight = 11;
+  repeated string highlight_nicks = 12;
+  repeated string tagged_nicks = 13;
+  ShowRemoved show_removed = 14;
+  bool show_whispers_in_chat = 15;
+  repeated string ignore_nicks = 16;
+  bool focus_mentioned = 17;
+  bool notification_timeout = 18;
+  bool ignore_mentions = 19;
+  bool autocomplete_helper = 20;
+  bool autocomplete_emote_preview = 21;
+  bool tagged_visibility = 22;
+  bool hide_nsfw = 23;
+  bool animate_forever = 24;
+  bool formatter_green = 25;
+  bool formatter_emote = 26;
+  bool formatter_combo = 27;
+  bool holiday_emote_modifiers = 28;
+  bool disable_spoilers = 29;
+  ViewerStateIndicator viewer_state_indicator = 30;
+  repeated string hidden_emotes = 31;
+}
+
+
+message CreateServerRequest {
+  bytes network_key = 2;
+  Room room = 3;
+}
+message CreateServerResponse {
+  Server server = 1;
+}
+message UpdateServerRequest {
+  uint64 id = 1;
+  bytes network_key = 2;
+  Room room = 3;
+}
+message UpdateServerResponse {
+  Server server = 1;
+}
+message DeleteServerRequest {
+  uint64 id = 1;
+}
+message DeleteServerResponse {}
+message GetServerRequest {
+  uint64 id = 1;
+}
+message GetServerResponse {
+  Server server = 1;
+}
+message ListServersRequest {}
+message ListServersResponse {
+  repeated Server servers = 1;
+}
+
+message CreateEmoteRequest {
+  uint64 server_id = 1;
+  string name = 2;
+  repeated EmoteImage images = 3;
+  string css = 4;
+  EmoteAnimation animation = 5;
+}
+message CreateEmoteResponse {
+  Emote emote = 1;
+}
+message UpdateEmoteRequest {
+  uint64 server_id = 1;
+  uint64 id = 2;
+  string name = 3;
+  repeated EmoteImage images = 4;
+  string css = 5;
+  EmoteAnimation animation = 6;
+}
+message UpdateEmoteResponse {
+  Emote emote = 1;
+}
+message DeleteEmoteRequest {
+  uint64 server_id = 1;
+  uint64 id = 2;
+}
+message DeleteEmoteResponse {}
+message GetEmoteRequest {
+  uint64 id = 1;
+}
+message GetEmoteResponse {
+  Emote emote = 1;
+}
+message ListEmotesRequest {
+  uint64 server_id = 1;
+}
+message ListEmotesResponse {
+  repeated Emote emotes = 1;
+}
+message SyncAssetsRequest {
+  uint64 server_id = 1;
+  bool force_unified_update = 2;
+}
+message SyncAssetsResponse {
+  uint64 version = 1;
+  uint32 update_size = 2;
+}
+
+message OpenClientRequest {
+  bytes network_key = 1;
+  bytes server_key = 2;
+}
+
+message OpenClientResponse {
+  message Open {
+    uint64 client_id = 1;
+  }
+
+  oneof body {
+    Open open = 1001;
+    Message message = 1002;
+    AssetBundle asset_bundle = 1003;
+  }
+}
+
+message ClientSendMessageRequest {
+  uint64 client_id = 1;
+  string body = 2;
+}
+
+message ClientSendMessageResponse {}
+
+message CallClientResponse {}
+
+message SetUIConfigRequest {
+  UIConfig ui_config = 1;
+}
+message SetUIConfigResponse {}
+
+message GetUIConfigRequest {}
+message GetUIConfigResponse {
+  UIConfig ui_config = 1;
+}
+
 service ChatFrontend {
   rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
   rpc UpdateServer(UpdateServerRequest) returns (UpdateServerResponse);
@@ -248,6 +312,9 @@ service ChatFrontend {
 
   rpc OpenClient(OpenClientRequest) returns (stream OpenClientResponse);
   rpc ClientSendMessage(ClientSendMessageRequest) returns (ClientSendMessageResponse);
+
+  rpc SetUIConfig(SetUIConfigRequest) returns (SetUIConfigResponse);
+  rpc GetUIConfig(GetUIConfigRequest) returns (GetUIConfigResponse);
 }
 
 message SendMessageRequest {

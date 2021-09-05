@@ -275,3 +275,23 @@ func (s *chatService) ClientSendMessage(ctx context.Context, req *chatv1.ClientS
 	}
 	return &chatv1.ClientSendMessageResponse{}, nil
 }
+
+// SetUIConfig ...
+func (s *chatService) SetUIConfig(ctx context.Context, req *chatv1.SetUIConfigRequest) (*chatv1.SetUIConfigResponse, error) {
+	err := dao.SetChatUIConfig(s.store, req.UiConfig)
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.SetUIConfigResponse{}, nil
+}
+
+// GetUIConfig ...
+func (s *chatService) GetUIConfig(ctx context.Context, req *chatv1.GetUIConfigRequest) (*chatv1.GetUIConfigResponse, error) {
+	c, err := dao.GetChatUIConfig(s.store)
+	if err == kv.ErrRecordNotFound {
+		return &chatv1.GetUIConfigResponse{}, nil
+	} else if err != nil {
+		return nil, err
+	}
+	return &chatv1.GetUIConfigResponse{UiConfig: c}, nil
+}

@@ -28,7 +28,7 @@ export const enum PlayerMode {
 
 interface PlayerSource {
   swarmUri: string;
-  networkKey: Uint8Array;
+  networkKey: string;
   mimeType: string;
 }
 

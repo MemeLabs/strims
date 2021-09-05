@@ -23,7 +23,7 @@ const PlayerTest: React.FC = () => {
   useEffect(() => {
     setMode(PlayerMode.LARGE);
     setSource({
-      networkKey: Base64.toUint8Array(params.networkKey),
+      networkKey: params.networkKey,
       swarmUri: query.swarmUri,
       mimeType: query.mimeType,
     });

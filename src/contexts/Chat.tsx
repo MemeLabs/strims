@@ -14,19 +14,17 @@ import {
   AssetBundle,
   EmoteFileType,
   EmoteScale,
+  IUIConfig,
   Message,
   OpenClientResponse,
+  UIConfig,
 } from "../apis/strims/chat/v1/chat";
 import { useClient } from "./FrontendApi";
 
 type Action =
   | {
-      type: "MESSAGE_SCROLLBACK";
-      messages: Message[];
-    }
-  | {
-      type: "MESSAGE";
-      message: Message;
+      type: "SET_UI_CONFIG";
+      uiConfig: UIConfig;
     }
   | {
       type: "CLIENT_DATA";
@@ -47,6 +45,7 @@ interface BundleMeta {
 
 interface State {
   clientId?: bigint;
+  uiConfig: UIConfig;
   config: {
     messageHistorySize: number;
     messageGCThreshold: number;
@@ -66,6 +65,33 @@ interface State {
 }
 
 const initialState: State = {
+  uiConfig: new UIConfig({
+    showTime: false,
+    showFlairIcons: true,
+    timestampFormat: "HH:mm",
+    maxLines: 250,
+    notificationWhisper: true,
+    soundNotificationWhisper: false,
+    notificationHighlight: true,
+    soundNotificationHighlight: false,
+    highlight: true,
+    showRemoved: UIConfig.ShowRemoved.SHOW_REMOVED_REMOVE,
+    showWhispersInChat: true,
+    focusMentioned: false,
+    notificationTimeout: true,
+    ignoreMentions: false,
+    autocompleteHelper: true,
+    autocompleteEmotePreview: true,
+    taggedVisibility: false,
+    hideNsfw: false,
+    animateForever: true,
+    formatterGreen: true,
+    formatterEmote: true,
+    formatterCombo: true,
+    holidayEmoteModifiers: true,
+    disableSpoilers: false,
+    viewerStateIndicator: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR,
+  }),
   config: {
     messageHistorySize: 250,
     messageGCThreshold: 250,
@@ -89,10 +115,10 @@ const ChatContext = React.createContext<[State, (action: Action) => void]>(null)
 
 const chatReducer = (state: State, action: Action): State => {
   switch (action.type) {
-    case "MESSAGE_SCROLLBACK":
+    case "SET_UI_CONFIG":
       return {
         ...state,
-        messages: action.messages,
+        uiConfig: action.uiConfig,
       };
     case "CLIENT_DATA":
       return chatClientDataReducer(state, action.data);
@@ -234,10 +260,11 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
 
 type Actions = {
   sendMessage: (body: string) => void;
+  mergeUIConfig: (config: Partial<IUIConfig>) => void;
 };
 
 export const useChat = (): [State, Actions] => {
-  const [state] = React.useContext(ChatContext);
+  const [state, dispatch] = React.useContext(ChatContext);
   const client = useClient();
 
   const sendMessage = (body: string) =>
@@ -246,14 +273,20 @@ export const useChat = (): [State, Actions] => {
       body,
     });
 
-  // TODO: open chat client (start swarm lazily?)
-  // TODO: load backlog
+  const mergeUIConfig = (values: Partial<IUIConfig>) => {
+    const uiConfig = new UIConfig({
+      ...state.uiConfig,
+      ...values,
+    });
+    dispatch({ type: "SET_UI_CONFIG", uiConfig });
+    void client.chat.setUIConfig({ uiConfig });
+  };
+
   // TODO: load server config
-  // TDOO: load local ui config
-  // TODO: transform stream events
 
   const actions = {
     sendMessage,
+    mergeUIConfig,
   };
   return [state, actions];
 };
@@ -268,6 +301,10 @@ export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, child
   const client = useClient();
 
   useEffect(() => {
+    void client.chat
+      .getUIConfig()
+      .then(({ uiConfig }) => uiConfig && dispatch({ type: "SET_UI_CONFIG", uiConfig }));
+
     const events = client.chat.openClient({ networkKey, serverKey });
     events.on("data", (data) => dispatch({ type: "CLIENT_DATA", data }));
     events.on("error", (error) => dispatch({ type: "CLIENT_ERROR", error }));

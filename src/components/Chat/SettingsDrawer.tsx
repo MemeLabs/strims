@@ -1,34 +1,35 @@
-import React from "react";
+import { Base64 } from "js-base64";
+import React, { useEffect } from "react";
 import Scrollbars from "react-custom-scrollbars-2";
-import { Controller, useForm } from "react-hook-form";
-import Select from "react-select";
-import CreatableSelect from "react-select/creatable";
+import { useForm } from "react-hook-form";
 
-import { InputError, InputLabel, TextInput, ToggleInput } from "../../components/Form";
+import { UIConfig } from "../../apis/strims/chat/v1/chat";
+import { SelectInput, TextAreaInput, TextInput, ToggleInput } from "../../components/Form";
+import { useChat } from "../../contexts/Chat";
 
 interface SettingsFormData {
   showTime: boolean;
   showFlairIcons: boolean;
-  timestampFormat: string;
+  // timestampFormat: string;
   maxLines: number;
   notificationWhisper: boolean;
   soundNotificationWhisper: boolean;
   notificationHighlight: boolean;
   soundNotificationHighlight: boolean;
-  notificationSoundFile: {
+  notificationSoundFile?: {
     fileType: string;
     data: string;
   };
   highlight: boolean;
-  customHighlight: string[];
-  highlightNicks: string[];
-  taggedNicks: string[];
+  // customHighlight: string;
+  // highlightNicks: string[];
+  // taggedNicks: string[];
   showRemoved: {
-    value: string;
+    value: UIConfig.ShowRemoved;
     label: string;
   };
   showWhispersInChat: boolean;
-  ignoreNicks: string[];
+  // ignoreNicks: string[];
   focusMentioned: boolean;
   notificationTimeout: boolean;
   ignoreMentions: boolean;
@@ -43,84 +44,89 @@ interface SettingsFormData {
   holidayEmoteModifiers: boolean;
   disableSpoilers: boolean;
   viewerStateIndicator: {
-    value: string;
+    value: UIConfig.ViewerStateIndicator;
     label: string;
   };
-  hiddenEmotes: string[];
+  // hiddenEmotes: string[];
 }
 
-const stateIndicatorOptions = [
+const viewerStateIndicatorOptions = [
   {
-    value: "disable",
+    value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_DISABLED,
     label: "Disable",
   },
   {
-    value: "bar",
+    value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR,
     label: "Bar",
   },
   {
-    value: "dot",
+    value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_DOT,
     label: "Dot",
   },
   {
-    value: "array",
+    value: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_ARRAY,
     label: "Array",
   },
 ];
 
 const showRemovedOptions = [
   {
-    value: "remove",
+    value: UIConfig.ShowRemoved.SHOW_REMOVED_REMOVE,
     label: "Remove",
   },
   {
-    value: "censor",
+    value: UIConfig.ShowRemoved.SHOW_REMOVED_CENSOR,
     label: "Censor",
   },
   {
-    value: "do nothing",
+    value: UIConfig.ShowRemoved.SHOW_REMOVED_DO_NOTHING,
     label: "Do nothing",
   },
 ];
 
 const SettingsDrawer: React.FC = () => {
-  // const [chat] = useChat();
+  const [chat, { mergeUIConfig }] = useChat();
 
-  const { control } = useForm<SettingsFormData>({
-    mode: "onBlur",
-    defaultValues: {
-      showTime: false,
-      showFlairIcons: true,
-      timestampFormat: "HH:mm",
-      maxLines: 250,
-      notificationWhisper: true,
-      soundNotificationWhisper: false,
-      notificationHighlight: true,
-      soundNotificationHighlight: false,
-      highlight: true,
-      customHighlight: [],
-      highlightNicks: [],
-      taggedNicks: [],
-      showRemoved: showRemovedOptions[0],
-      showWhispersInChat: true,
-      ignoreNicks: [],
-      focusMentioned: false,
-      notificationTimeout: true,
-      ignoreMentions: false,
-      autocompleteHelper: true,
-      autocompleteEmotePreview: true,
-      taggedVisibility: false,
-      hideNsfw: false,
-      animateForever: true,
-      formatterGreen: true,
-      formatterEmote: true,
-      formatterCombo: true,
-      holidayEmoteModifiers: true,
-      disableSpoilers: false,
-      viewerStateIndicator: stateIndicatorOptions[1],
-      hiddenEmotes: [],
-    },
-  });
+  const { control, getValues, reset } = useForm<SettingsFormData>({ mode: "onBlur" });
+
+  useEffect(() => {
+    const { showRemoved, viewerStateIndicator, notificationSoundFile, ...values } = chat.uiConfig;
+
+    reset({
+      showRemoved: showRemovedOptions.find(({ value }) => value === showRemoved),
+      viewerStateIndicator: viewerStateIndicatorOptions.find(
+        ({ value }) => value === viewerStateIndicator
+      ),
+      notificationSoundFile: notificationSoundFile?.data
+        ? {
+            fileType: notificationSoundFile.fileType,
+            data: Base64.fromUint8Array(notificationSoundFile.data),
+          }
+        : undefined,
+      ...values,
+    });
+  }, [chat.uiConfig]);
+
+  const handleChange = () => {
+    const {
+      showRemoved: { value: showRemoved },
+      viewerStateIndicator: { value: viewerStateIndicator },
+      notificationSoundFile,
+      ...values
+    } = getValues();
+
+    mergeUIConfig({
+      showRemoved,
+      viewerStateIndicator,
+      notificationSoundFile: notificationSoundFile
+        ? new UIConfig.SoundFile({
+            fileType: notificationSoundFile.fileType,
+            data: Base64.toUint8Array(notificationSoundFile.data),
+          })
+        : undefined,
+      ...values,
+    });
+  };
 
   return (
     <Scrollbars autoHide={true}>
@@ -128,20 +134,42 @@ const SettingsDrawer: React.FC = () => {
         {/* {error && <InputError error={error.message || "Error creating chat server"} />} */}
         <fieldset>
           <legend>Messages</legend>
-          <ToggleInput control={control} label="Show flair" name="showFlairIcons" />
-          <ToggleInput control={control} label="Show time" name="showTime" />
-          <ToggleInput control={control} label="Harsh ignore" name="ignoreMentions" />
+          <ToggleInput
+            control={control}
+            label="Show flair"
+            name="showFlairIcons"
+            onChange={handleChange}
+          />
+          <ToggleInput
+            control={control}
+            label="Show time"
+            name="showTime"
+            onChange={handleChange}
+          />
+          <ToggleInput
+            control={control}
+            label="Harsh ignore"
+            name="ignoreMentions"
+            onChange={handleChange}
+          />
           <ToggleInput
             control={control}
             label="Hide messages tagged nsfw or nsfl"
             name="hideNsfw"
+            onChange={handleChange}
           />
           <ToggleInput
             control={control}
             label="Loop animated emotes forever"
             name="animateForever"
+            onChange={handleChange}
           />
-          <ToggleInput control={control} label="Disable spoilers" name="disableSpoilers" />
+          <ToggleInput
+            control={control}
+            label="Disable spoilers"
+            name="disableSpoilers"
+            onChange={handleChange}
+          />
           <TextInput
             control={control}
             label="Maximum messages"
@@ -153,103 +181,117 @@ const SettingsDrawer: React.FC = () => {
                 message: "Maximum messages must be numeric",
               },
             }}
+            onBlur={handleChange}
           />
-          <InputLabel text="Stream viewer indicators">
-            <Controller
-              name="viewerStateIndicator"
-              control={control}
-              render={({ field, fieldState: { error } }) => (
-                <>
-                  <Select
-                    {...field}
-                    className="input_select"
-                    classNamePrefix="react_select"
-                    options={stateIndicatorOptions}
-                  />
-                  <InputError error={error} />
-                </>
-              )}
-            />
-          </InputLabel>
-          <InputLabel text="Banned messages">
-            <Controller
-              name="showRemoved"
-              control={control}
-              render={({ field, fieldState: { error } }) => (
-                <>
-                  <Select
-                    {...field}
-                    className="input_select"
-                    classNamePrefix="react_select"
-                    options={showRemovedOptions}
-                  />
-                  <InputError error={error} />
-                </>
-              )}
-            />
-          </InputLabel>
+          <SelectInput
+            control={control}
+            label="Stream viewer indicators"
+            name="viewerStateIndicator"
+            options={viewerStateIndicatorOptions}
+            onChange={handleChange}
+          />
+          <SelectInput
+            control={control}
+            label="Banned messages"
+            name="showRemoved"
+            options={showRemovedOptions}
+            onChange={handleChange}
+          />
         </fieldset>
         <fieldset>
           <legend>Autocomplete</legend>
-          <ToggleInput control={control} label="Auto-complete helper" name="autocompleteHelper" />
+          <ToggleInput
+            control={control}
+            label="Auto-complete helper"
+            name="autocompleteHelper"
+            onChange={handleChange}
+          />
           <ToggleInput
             control={control}
             label="Show emote preview"
             name="autocompleteEmotePreview"
+            onChange={handleChange}
           />
         </fieldset>
         <fieldset>
           <legend>Whispers</legend>
-          <ToggleInput control={control} label="In-line messages" name="showWhispersInChat" />
+          <ToggleInput
+            control={control}
+            label="In-line messages"
+            name="showWhispersInChat"
+            onChange={handleChange}
+          />
         </fieldset>
 
         <fieldset>
           <legend>Highlights, focus &amp; tags</legend>
-          <ToggleInput control={control} label="Highlight when mentioned" name="highlight" />
+          <ToggleInput
+            control={control}
+            label="Highlight when mentioned"
+            name="highlight"
+            onChange={handleChange}
+          />
           <ToggleInput
             control={control}
             label="Include mentions when focused"
             name="ignoreMentions"
+            onChange={handleChange}
           />
           <ToggleInput
             control={control}
             label="Increase visibility of tagged users"
             name="taggedVisibility"
+            onChange={handleChange}
           />
-          <InputLabel text="Custom highlights">
-            <Controller
-              name="customHighlight"
-              control={control}
-              render={({ field, fieldState: { error } }) => (
-                <>
-                  <CreatableSelect
-                    {...field}
-                    isMulti={true}
-                    placeholder="Custom highlights"
-                    className="input_select"
-                    classNamePrefix="react_select"
-                  />
-                  <InputError error={error} />
-                </>
-              )}
-            />
-          </InputLabel>
+          <TextAreaInput
+            control={control}
+            label="Custom highlights"
+            name="customHighlight"
+            placeholder="Comma separated..."
+            onBlur={handleChange}
+          />
         </fieldset>
         <fieldset>
           <legend>Autocomplete</legend>
-          <ToggleInput control={control} label="Autocomplete helper" name="autocompleteHelper" />
+          <ToggleInput
+            control={control}
+            label="Autocomplete helper"
+            name="autocompleteHelper"
+            onChange={handleChange}
+          />
           <ToggleInput
             control={control}
             label="Show emote previews"
             name="autocompleteEmotePreview"
+            onChange={handleChange}
           />
         </fieldset>
         <fieldset>
           <legend>Message formatters</legend>
-          <ToggleInput control={control} label="Greentext" name="formatterGreen" />
-          <ToggleInput control={control} label="Emotes" name="formatterEmote" />
-          <ToggleInput control={control} label="Combos" name="formatterCombo" />
-          <ToggleInput control={control} label="Modifiers" name="holidayEmoteModifiers" />
+          <ToggleInput
+            control={control}
+            label="Greentext"
+            name="formatterGreen"
+            onChange={handleChange}
+          />
+          <ToggleInput
+            control={control}
+            label="Emotes"
+            name="formatterEmote"
+            onChange={handleChange}
+          />
+          <ToggleInput
+            control={control}
+            label="Combos"
+            name="formatterCombo"
+            onChange={handleChange}
+          />
+          <ToggleInput
+            control={control}
+            label="Modifiers"
+            name="holidayEmoteModifiers"
+            onChange={handleChange}
+          />
         </fieldset>
       </form>
     </Scrollbars>

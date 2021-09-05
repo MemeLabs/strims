@@ -1,11 +1,11 @@
 import clsx from "clsx";
 import { Base64 } from "js-base64";
-import React, { ReactElement, ReactHTML } from "react";
+import React, { ComponentProps, ReactElement, ReactHTML } from "react";
 import Dropzone from "react-dropzone";
-import { FieldError, FieldValues, Path, UseControllerProps, useController } from "react-hook-form";
+import { FieldError, FieldValues, UseControllerProps, useController } from "react-hook-form";
 import { FiAlertTriangle } from "react-icons/fi";
 import { MdAddAPhoto } from "react-icons/md";
-import Select from "react-select";
+import Select, { Props as SelectProps } from "react-select";
 import CreatableSelect from "react-select/creatable";
 
 type CompatibleFieldPath<T extends FieldValues, V> = {
@@ -15,7 +15,7 @@ type CompatibleUseControllerProps<T, V> = UseControllerProps<T> & {
   name: CompatibleFieldPath<T, V>;
 };
 
-const isRequired = <T extends FieldValues>({ rules }: UseControllerProps<T>) =>
+const isRequired = <T extends FieldValues>(rules: UseControllerProps<T>["rules"]) =>
   Boolean(rules?.required);
 
 export interface InputLabelProps {
@@ -79,125 +79,162 @@ export const InputError: React.FC<InputErrorProps> = ({ error }) => {
   );
 };
 
-export interface TextInputProps {
+export interface TextInputProps extends ComponentProps<"input"> {
   label: string;
   description?: string;
-  placeholder?: string;
   type?: "text" | "password" | "number";
   format?: "text";
-  disabled?: boolean;
 }
 
 export const TextInput = <T extends FieldValues>({
   label,
   description,
-  placeholder,
-  type: type,
-  disabled,
-  ...controllerProps
+  type,
+  className,
+  name,
+  rules,
+  shouldUnregister,
+  defaultValue,
+  control,
+  ...inputProps
 }: TextInputProps & CompatibleUseControllerProps<T, string | number>): ReactElement => {
-  const defaultValue = type === "number" ? 0 : "";
   const {
     field,
     fieldState: { error },
   } = useController({
+    name,
+    rules,
+    shouldUnregister,
     // @ts-ignore
-    defaultValue,
-    ...controllerProps,
+    defaultValue: defaultValue || (type === "number" ? 0 : ""),
+    control,
   });
 
   return (
     <InputLabel
-      required={isRequired(controllerProps)}
+      required={isRequired(rules)}
       text={label}
       description={description}
       inputType="text"
     >
       <input
+        {...inputProps}
         {...field}
-        className="input input_text"
-        placeholder={placeholder}
+        onChange={(e) => {
+          field.onChange(type === "number" ? parseFloat(e.target.value) : e.target.value);
+          inputProps.onChange?.(e);
+        }}
+        onBlur={(e) => {
+          field.onBlur();
+          inputProps.onBlur?.(e);
+        }}
         type={type}
-        disabled={disabled}
+        className={clsx(className, "input", "input_text")}
       />
       <InputError error={error} />
     </InputLabel>
   );
 };
 
-export interface TextAreaInputProps {
+export interface TextAreaInputProps extends ComponentProps<"textarea"> {
   label: string;
   description?: string;
-  name: string;
-  placeholder?: string;
-  disabled?: boolean;
 }
 
 export const TextAreaInput = <T extends FieldValues>({
   label,
   description,
-  placeholder,
-  disabled,
-  ...controllerProps
+  className,
+  name,
+  rules,
+  shouldUnregister,
+  defaultValue,
+  control,
+  ...inputProps
 }: TextAreaInputProps & CompatibleUseControllerProps<T, string>): ReactElement => {
   const {
     field,
     fieldState: { error },
   } = useController({
+    name,
+    rules,
+    shouldUnregister,
     // @ts-ignore
-    defaultValue: "",
-    ...controllerProps,
+    defaultValue: defaultValue || "",
+    control,
   });
 
   return (
     <InputLabel
-      required={isRequired(controllerProps)}
+      required={isRequired(rules)}
       text={label}
       description={description}
       inputType="textarea"
     >
       <textarea
+        {...inputProps}
         {...field}
-        className="input input_textarea"
-        placeholder={placeholder}
-        disabled={disabled}
+        onChange={(e) => {
+          field.onChange(e);
+          inputProps.onChange?.(e);
+        }}
+        onBlur={(e) => {
+          field.onBlur();
+          inputProps.onBlur?.(e);
+        }}
+        className={clsx(className, "input", "input_textarea")}
       />
       <InputError error={error} />
     </InputLabel>
   );
 };
 
-export interface ToggleInputProps {
+export interface ToggleInputProps extends ComponentProps<"input"> {
   label: string;
   description?: string;
-  disabled?: boolean;
 }
 
 export const ToggleInput = <T extends FieldValues>({
   label,
   description,
-  disabled,
-  ...controllerProps
+  className,
+  name,
+  rules,
+  shouldUnregister,
+  defaultValue,
+  control,
+  ...inputProps
 }: ToggleInputProps & CompatibleUseControllerProps<T, boolean>): ReactElement => {
   const {
     field: { value, ...field },
     fieldState: { error },
   } = useController({
+    name,
+    rules,
+    shouldUnregister,
     // @ts-ignore
-    defaultValue: false,
-    ...controllerProps,
+    defaultValue: defaultValue || false,
+    control,
   });
 
   return (
     <InputLabel text={label} description={description} inputType="toggle">
       <input
+        {...inputProps}
         {...field}
+        onChange={(e) => {
+          field.onChange(e);
+          inputProps.onChange?.(e);
+        }}
+        onBlur={(e) => {
+          field.onBlur();
+          inputProps.onBlur?.(e);
+        }}
         checked={value}
         className="input input_toggle"
         type="checkbox"
-        disabled={disabled}
       />
-      <div className="input_toggle__switch">
+      <div className={clsx(className, "input_toggle__switch")}>
         <div className="input_toggle__switch__track" />
       </div>
       <InputError error={error} />
@@ -210,76 +247,110 @@ export interface SelectOption<T> {
   value: T;
 }
 
-export interface SelectInputProps<T, M> {
+export interface SelectInputProps<T extends SelectOption<any>, M extends boolean>
+  extends SelectProps<T, M> {
   label: string;
   description?: string;
-  placeholder?: string;
-  isMulti?: M;
-  disabled?: boolean;
-  options: T[];
 }
 
 export const SelectInput = <T extends FieldValues, F extends SelectOption<any>, M extends boolean>({
   label,
   description,
-  placeholder,
-  isMulti = false as M,
-  disabled,
-  options,
-  ...controllerProps
+  className,
+  name,
+  rules,
+  shouldUnregister,
+  defaultValue,
+  control,
+  ...inputProps
 }: SelectInputProps<F, M> &
   CompatibleUseControllerProps<T, M extends true ? F[] : F>): ReactElement => {
   const {
     field,
     fieldState: { error },
-  } = useController(controllerProps);
+  } = useController({
+    name,
+    rules,
+    shouldUnregister,
+    defaultValue,
+    control,
+  });
 
   return (
-    <InputLabel text={label} description={description} inputType="select">
+    <InputLabel
+      required={isRequired(rules)}
+      text={label}
+      description={description}
+      inputType="select"
+    >
       <Select
+        {...(inputProps as unknown)}
         {...field}
-        className="input_select"
+        onChange={(value, action) => {
+          field.onChange(value);
+          inputProps.onChange?.(value, action);
+        }}
+        onBlur={(e) => {
+          field.onBlur();
+          inputProps.onBlur?.(e);
+        }}
+        className={clsx(className, "input_select")}
         classNamePrefix="react_select"
-        placeholder={placeholder}
-        // @ts-ignore
-        options={options}
-        isMulti={isMulti}
-        disabled={disabled}
       />
       <InputError error={error} />
     </InputLabel>
   );
 };
 
-export interface CreatableSelectInputProps {
+export interface CreatableSelectInputProps<T> extends SelectProps<T, true> {
   label: string;
   description?: string;
-  placeholder?: string;
-  disabled?: boolean;
 }
 
 export const CreatableSelectInput = <T extends FieldValues>({
   label,
   description,
-  placeholder,
-  disabled,
-  ...controllerProps
-}: CreatableSelectInputProps &
+  className,
+  name,
+  rules,
+  shouldUnregister,
+  defaultValue,
+  control,
+  ...inputProps
+}: CreatableSelectInputProps<T> &
   CompatibleUseControllerProps<T, SelectOption<string>[]>): ReactElement => {
   const {
     field,
     fieldState: { error },
-  } = useController(controllerProps);
+  } = useController({
+    name,
+    rules,
+    shouldUnregister,
+    defaultValue,
+    control,
+  });
 
   return (
-    <InputLabel text={label} description={description} inputType="select">
+    <InputLabel
+      required={isRequired(rules)}
+      text={label}
+      description={description}
+      inputType="select"
+    >
       <CreatableSelect
+        {...(inputProps as unknown)}
         {...field}
+        onChange={(value, action) => {
+          field.onChange(value);
+          inputProps.onChange?.(value, action);
+        }}
+        onBlur={(e) => {
+          field.onBlur();
+          inputProps.onBlur?.(e);
+        }}
         isMulti={true}
-        className="input_select"
+        className={clsx(className, "input_select")}
         classNamePrefix="react_select"
-        placeholder={placeholder}
-        disabled={disabled}
       />
       <InputError error={error} />
     </InputLabel>

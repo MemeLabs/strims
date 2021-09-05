@@ -127,12 +127,12 @@ label.input_label {
       display: block;
       height: 1em;
       position: absolute;
+      transition: all 200ms ease-in-out;
     }
 
     &:before {
       background-image: linear-gradient(90deg, $green-200 0%, $green-200 50%, var(--input-bg) 50%);
       transform: translateX(-2em);
-      transition: all 200ms ease-in-out;
       width: 4em;
     }
 
@@ -144,7 +144,6 @@ label.input_label {
         border-radius: 0.5em;
         box-shadow: rgba(0, 0, 0, 0.25) 1px 1px 1px;
         transform: translateX(0);
-        transition: all 200ms ease-in-out;
         width: 1em;
       }
     }

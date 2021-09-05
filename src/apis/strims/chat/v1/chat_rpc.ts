@@ -44,6 +44,12 @@ import {
   IClientSendMessageRequest,
   ClientSendMessageRequest,
   ClientSendMessageResponse,
+  ISetUIConfigRequest,
+  SetUIConfigRequest,
+  SetUIConfigResponse,
+  IGetUIConfigRequest,
+  GetUIConfigRequest,
+  GetUIConfigResponse,
   ISendMessageRequest,
   SendMessageRequest,
   SendMessageResponse,
@@ -75,6 +81,10 @@ registerType("strims.chat.v1.OpenClientRequest", OpenClientRequest);
 registerType("strims.chat.v1.OpenClientResponse", OpenClientResponse);
 registerType("strims.chat.v1.ClientSendMessageRequest", ClientSendMessageRequest);
 registerType("strims.chat.v1.ClientSendMessageResponse", ClientSendMessageResponse);
+registerType("strims.chat.v1.SetUIConfigRequest", SetUIConfigRequest);
+registerType("strims.chat.v1.SetUIConfigResponse", SetUIConfigResponse);
+registerType("strims.chat.v1.GetUIConfigRequest", GetUIConfigRequest);
+registerType("strims.chat.v1.GetUIConfigResponse", GetUIConfigResponse);
 registerType("strims.chat.v1.SendMessageRequest", SendMessageRequest);
 registerType("strims.chat.v1.SendMessageResponse", SendMessageResponse);
 
@@ -92,6 +102,8 @@ export interface ChatFrontendService {
   syncAssets(req: SyncAssetsRequest, call: strims_rpc_Call): Promise<SyncAssetsResponse> | SyncAssetsResponse;
   openClient(req: OpenClientRequest, call: strims_rpc_Call): GenericReadable<OpenClientResponse>;
   clientSendMessage(req: ClientSendMessageRequest, call: strims_rpc_Call): Promise<ClientSendMessageResponse> | ClientSendMessageResponse;
+  setUIConfig(req: SetUIConfigRequest, call: strims_rpc_Call): Promise<SetUIConfigResponse> | SetUIConfigResponse;
+  getUIConfig(req: GetUIConfigRequest, call: strims_rpc_Call): Promise<GetUIConfigResponse> | GetUIConfigResponse;
 }
 
 export const registerChatFrontendService = (host: strims_rpc_Service, service: ChatFrontendService): void => {
@@ -108,6 +120,8 @@ export const registerChatFrontendService = (host: strims_rpc_Service, service: C
   host.registerMethod<SyncAssetsRequest, SyncAssetsResponse>("strims.chat.v1.ChatFrontend.SyncAssets", service.syncAssets.bind(service));
   host.registerMethod<OpenClientRequest, OpenClientResponse>("strims.chat.v1.ChatFrontend.OpenClient", service.openClient.bind(service));
   host.registerMethod<ClientSendMessageRequest, ClientSendMessageResponse>("strims.chat.v1.ChatFrontend.ClientSendMessage", service.clientSendMessage.bind(service));
+  host.registerMethod<SetUIConfigRequest, SetUIConfigResponse>("strims.chat.v1.ChatFrontend.SetUIConfig", service.setUIConfig.bind(service));
+  host.registerMethod<GetUIConfigRequest, GetUIConfigResponse>("strims.chat.v1.ChatFrontend.GetUIConfig", service.getUIConfig.bind(service));
 }
 
 export class ChatFrontendClient {
@@ -163,6 +177,14 @@ export class ChatFrontendClient {
 
   public clientSendMessage(req?: IClientSendMessageRequest, opts?: strims_rpc_UnaryCallOptions): Promise<ClientSendMessageResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.ClientSendMessage", new ClientSendMessageRequest(req)), opts);
+  }
+
+  public setUIConfig(req?: ISetUIConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<SetUIConfigResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.SetUIConfig", new SetUIConfigRequest(req)), opts);
+  }
+
+  public getUIConfig(req?: IGetUIConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<GetUIConfigResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.GetUIConfig", new GetUIConfigRequest(req)), opts);
   }
 }
 

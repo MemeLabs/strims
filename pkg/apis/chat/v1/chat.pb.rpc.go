@@ -21,6 +21,8 @@ func RegisterChatFrontendService(host rpc.ServiceRegistry, service ChatFrontendS
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.SyncAssets", service.SyncAssets)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.OpenClient", service.OpenClient)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.ClientSendMessage", service.ClientSendMessage)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.SetUIConfig", service.SetUIConfig)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetUIConfig", service.GetUIConfig)
 }
 
 // ChatFrontendService ...
@@ -77,6 +79,14 @@ type ChatFrontendService interface {
 		ctx context.Context,
 		req *ClientSendMessageRequest,
 	) (*ClientSendMessageResponse, error)
+	SetUIConfig(
+		ctx context.Context,
+		req *SetUIConfigRequest,
+	) (*SetUIConfigResponse, error)
+	GetUIConfig(
+		ctx context.Context,
+		req *GetUIConfigRequest,
+	) (*GetUIConfigResponse, error)
 }
 
 // ChatFrontendClient ...
@@ -204,6 +214,24 @@ func (c *ChatFrontendClient) ClientSendMessage(
 	res *ClientSendMessageResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ClientSendMessage", req, res)
+}
+
+// SetUIConfig ...
+func (c *ChatFrontendClient) SetUIConfig(
+	ctx context.Context,
+	req *SetUIConfigRequest,
+	res *SetUIConfigResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.SetUIConfig", req, res)
+}
+
+// GetUIConfig ...
+func (c *ChatFrontendClient) GetUIConfig(
+	ctx context.Context,
+	req *GetUIConfigRequest,
+	res *GetUIConfigResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.GetUIConfig", req, res)
 }
 
 // RegisterChatService ...
