@@ -102,6 +102,14 @@ class MockChatSvc {
     );
     return new chatv1.ClientSendMessageResponse();
   }
+
+  setUIConfig(): chatv1.SetUIConfigResponse {
+    return new chatv1.SetUIConfigResponse();
+  }
+
+  getUIConfig(): chatv1.GetUIConfigResponse {
+    return new chatv1.GetUIConfigResponse();
+  }
 }
 
 const ChatPage: React.FC = () => {

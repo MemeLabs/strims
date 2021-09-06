@@ -10,7 +10,6 @@ import { useChat } from "../../contexts/Chat";
 interface SettingsFormData {
   showTime: boolean;
   showFlairIcons: boolean;
-  // timestampFormat: string;
   maxLines: number;
   notificationWhisper: boolean;
   soundNotificationWhisper: boolean;
@@ -21,15 +20,12 @@ interface SettingsFormData {
     data: string;
   };
   highlight: boolean;
-  // customHighlight: string;
-  // highlightNicks: string[];
-  // taggedNicks: string[];
+  customHighlight: string;
   showRemoved: {
     value: UIConfig.ShowRemoved;
     label: string;
   };
   showWhispersInChat: boolean;
-  // ignoreNicks: string[];
   focusMentioned: boolean;
   notificationTimeout: boolean;
   ignoreMentions: boolean;
@@ -41,13 +37,12 @@ interface SettingsFormData {
   formatterGreen: boolean;
   formatterEmote: boolean;
   formatterCombo: boolean;
-  holidayEmoteModifiers: boolean;
+  emoteModifiers: boolean;
   disableSpoilers: boolean;
   viewerStateIndicator: {
     value: UIConfig.ViewerStateIndicator;
     label: string;
   };
-  // hiddenEmotes: string[];
 }
 
 const viewerStateIndicatorOptions = [
@@ -289,7 +284,7 @@ const SettingsDrawer: React.FC = () => {
           <ToggleInput
             control={control}
             label="Modifiers"
-            name="holidayEmoteModifiers"
+            name="emoteModifiers"
             onChange={handleChange}
           />
         </fieldset>

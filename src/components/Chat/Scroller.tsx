@@ -1,5 +1,13 @@
 import clsx from "clsx";
-import React from "react";
+import React, {
+  CSSProperties,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
 import { useDebounce } from "react-use";
 import {
@@ -13,13 +21,16 @@ import {
   OnScrollParams,
 } from "react-virtualized";
 
+import { UIConfig } from "../../apis/strims/chat/v1/chat";
+
 export interface MessageProps {
-  style: React.CSSProperties;
+  style: CSSProperties;
   index: number;
 }
 
 interface ScrollerProps {
-  renderMessage: (MessageProps) => React.ReactNode;
+  uiConfig: UIConfig;
+  renderMessage: (MessageProps) => ReactNode;
   messageCount: number;
   messageSizeCache: CellMeasurerCache;
   autoScrollThreshold?: number;
@@ -37,7 +48,7 @@ const Scroller: React.FC<ScrollerProps> = (props) => {
 interface ListInternal {
   Grid: Grid & {
     _scrollingContainer: HTMLElement;
-    _onScroll: (e: React.UIEvent) => void;
+    _onScroll: (e: UIEvent) => void;
   };
 }
 
@@ -46,6 +57,7 @@ interface ScrollbarsInternal {
 }
 
 const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
+  uiConfig,
   height,
   width,
   messageCount,
@@ -54,44 +66,45 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
   autoScrollThreshold = 20,
   resizeDebounceTimeout = 100,
 }) => {
-  const list = React.useRef<List & ListInternal>();
-  const scrollbars = React.useRef<Scrollbars & ScrollbarsInternal>();
-  const [autoScroll, setAutoScroll] = React.useState(true);
-  const [scrolling, setScrolling] = React.useState(true);
-  const [resizing, setResizing] = React.useState(false);
+  const list = useRef<List & ListInternal>();
+  const scrollbars = useRef<Scrollbars & ScrollbarsInternal>();
+  const [autoScroll, setAutoScroll] = useState(true);
+  const [scrolling, setScrolling] = useState(true);
+  const [resizing, setResizing] = useState(false);
 
-  useDebounce(
-    () => {
-      messageSizeCache.clearAll();
-      list.current?.recomputeRowHeights();
-    },
-    500,
-    [list, height, width]
-  );
+  const applyAutoScroll = () => {
+    if (autoScroll) {
+      list.current?.scrollToRow(messageCount - 1);
+    }
+  };
 
-  React.useEffect(() => {
+  const recomputeRowHeights = () => {
+    messageSizeCache.clearAll();
+    list.current?.recomputeRowHeights();
+    applyAutoScroll();
+  };
+
+  useDebounce(recomputeRowHeights, 500, [width]);
+  useLayoutEffect(recomputeRowHeights, [list, uiConfig]);
+  useLayoutEffect(applyAutoScroll, [autoScroll, list, messageCount, height]);
+
+  useEffect(() => {
     setResizing(true);
     const id = setTimeout(() => setResizing(false), resizeDebounceTimeout);
     return () => clearTimeout(id);
   }, [list, height, width]);
 
-  React.useEffect(() => {
-    if (autoScroll) {
-      list.current?.scrollToRow(messageCount - 1);
-    }
-  }, [autoScroll, list, messageCount]);
-
-  React.useEffect(() => {
+  useEffect(() => {
     if (list.current && scrollbars.current) {
       list.current.Grid._scrollingContainer = scrollbars.current.view;
     }
   }, [list, scrollbars]);
 
-  const handleScroll = React.useCallback((e) => list.current?.Grid?._onScroll(e), [list]);
-  const handleScrollStart = React.useCallback(() => setScrolling(true), []);
-  const handleScrollStop = React.useCallback(() => setScrolling(false), []);
+  const handleScroll = useCallback((e) => list.current?.Grid?._onScroll(e), [list]);
+  const handleScrollStart = useCallback(() => setScrolling(true), []);
+  const handleScrollStop = useCallback(() => setScrolling(false), []);
 
-  const handleListScroll = React.useCallback(
+  const handleListScroll = useCallback(
     ({ scrollHeight, scrollTop, clientHeight }: OnScrollParams) => {
       const thresholdExceeded = scrollHeight - scrollTop - clientHeight < autoScrollThreshold;
       const enabled = resizing ? autoScroll : thresholdExceeded;
@@ -104,7 +117,7 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
     [autoScroll, list, messageCount, resizing]
   );
 
-  const renderRow: ListRowRenderer = React.useCallback(
+  const renderRow: ListRowRenderer = useCallback(
     ({ index, key, style, parent }) => (
       <CellMeasurer
         cache={messageSizeCache}
@@ -120,7 +133,7 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
     [renderMessage, messageSizeCache, width]
   );
 
-  const renderScrollThumb = React.useCallback(
+  const renderScrollThumb = useCallback(
     (props) => (
       <div
         {...props}

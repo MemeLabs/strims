@@ -967,7 +967,7 @@ export type IUIConfig = {
   formatterGreen?: boolean;
   formatterEmote?: boolean;
   formatterCombo?: boolean;
-  holidayEmoteModifiers?: boolean;
+  emoteModifiers?: boolean;
   disableSpoilers?: boolean;
   viewerStateIndicator?: UIConfig.ViewerStateIndicator;
   hiddenEmotes?: string[];
@@ -1001,7 +1001,7 @@ export class UIConfig {
   formatterGreen: boolean;
   formatterEmote: boolean;
   formatterCombo: boolean;
-  holidayEmoteModifiers: boolean;
+  emoteModifiers: boolean;
   disableSpoilers: boolean;
   viewerStateIndicator: UIConfig.ViewerStateIndicator;
   hiddenEmotes: string[];
@@ -1034,7 +1034,7 @@ export class UIConfig {
     this.formatterGreen = v?.formatterGreen || false;
     this.formatterEmote = v?.formatterEmote || false;
     this.formatterCombo = v?.formatterCombo || false;
-    this.holidayEmoteModifiers = v?.holidayEmoteModifiers || false;
+    this.emoteModifiers = v?.emoteModifiers || false;
     this.disableSpoilers = v?.disableSpoilers || false;
     this.viewerStateIndicator = v?.viewerStateIndicator || 0;
     this.hiddenEmotes = v?.hiddenEmotes ? v.hiddenEmotes : [];
@@ -1069,7 +1069,7 @@ export class UIConfig {
     if (m.formatterGreen) w.uint32(200).bool(m.formatterGreen);
     if (m.formatterEmote) w.uint32(208).bool(m.formatterEmote);
     if (m.formatterCombo) w.uint32(216).bool(m.formatterCombo);
-    if (m.holidayEmoteModifiers) w.uint32(224).bool(m.holidayEmoteModifiers);
+    if (m.emoteModifiers) w.uint32(224).bool(m.emoteModifiers);
     if (m.disableSpoilers) w.uint32(232).bool(m.disableSpoilers);
     if (m.viewerStateIndicator) w.uint32(240).uint32(m.viewerStateIndicator);
     for (const v of m.hiddenEmotes) w.uint32(250).string(v);
@@ -1165,7 +1165,7 @@ export class UIConfig {
         m.formatterCombo = r.bool();
         break;
         case 28:
-        m.holidayEmoteModifiers = r.bool();
+        m.emoteModifiers = r.bool();
         break;
         case 29:
         m.disableSpoilers = r.bool();

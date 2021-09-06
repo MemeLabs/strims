@@ -22,7 +22,6 @@
     &__time {
       white-space: nowrap;
       margin-right: 3px;
-      display: none;
     }
 
     &__author {
@@ -41,6 +40,7 @@
     &__link {
       color: #02c2ff;
       position: relative;
+      word-break: break-all;
 
       &:hover {
         text-decoration: underline;
@@ -440,6 +440,10 @@
     color: var(--input-color);
     margin: 5px;
     padding: 10px 5px;
+
+    [data-slate-string] {
+      word-break: break-word;
+    }
 
     &__span {
       &--self {

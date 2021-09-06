@@ -156,8 +156,10 @@ const ChatThing: React.FC = () => {
           <TestContent />
         </ChatDrawer>
         <Scroller
+          uiConfig={state.uiConfig}
           renderMessage={({ index, style }: MessageProps) => (
             <Message
+              uiConfig={state.uiConfig}
               message={state.messages[index]}
               style={style}
               isMostRecent={index === state.messages.length - 1}

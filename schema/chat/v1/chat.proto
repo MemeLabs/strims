@@ -176,7 +176,7 @@ message UIConfig {
   bool formatter_green = 25;
   bool formatter_emote = 26;
   bool formatter_combo = 27;
-  bool holiday_emote_modifiers = 28;
+  bool emote_modifiers = 28;
   bool disable_spoilers = 29;
   ViewerStateIndicator viewer_state_indicator = 30;
   repeated string hidden_emotes = 31;

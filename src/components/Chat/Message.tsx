@@ -1,7 +1,8 @@
 import clsx from "clsx";
+import date from "date-and-time";
 import React, { ReactNode, useEffect, useRef } from "react";
 
-import { Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
+import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
 import Emote from "./Emote";
 
 // TODO: in app links
@@ -17,10 +18,22 @@ const MessageLink: React.FC<MessageLinkProps> = ({ children, entity }) => (
 
 interface MessageEmoteProps {
   entity: chatv1_Message.Entities.Emote;
+  shouldAnimateForever: boolean;
+  shouldShowModifiers: boolean;
 }
 
-const MessageEmote: React.FC<MessageEmoteProps> = ({ children, entity }) => (
-  <Emote name={entity.name} modifiers={entity.modifiers}>
+const MessageEmote: React.FC<MessageEmoteProps> = ({
+  children,
+  entity,
+  shouldAnimateForever,
+  shouldShowModifiers,
+}) => (
+  <Emote
+    name={entity.name}
+    modifiers={entity.modifiers}
+    shouldAnimateForever={shouldAnimateForever}
+    shouldShowModifiers={shouldShowModifiers}
+  >
     {children}
   </Emote>
 );
@@ -157,7 +170,22 @@ class MessageFormatter {
   }
 }
 
+interface MessageTimeProps {
+  timestamp: bigint;
+  format: string;
+}
+
+const MessageTime: React.FC<MessageTimeProps> = ({ timestamp, format }) => {
+  const time = new Date(Number(timestamp));
+  return (
+    <time className="chat__message__time" title={time.toLocaleString()}>
+      {date.format(time, format)}
+    </time>
+  );
+};
+
 interface MessageProps extends React.HTMLProps<HTMLDivElement> {
+  uiConfig: UIConfig;
   message: chatv1_Message;
   isMostRecent?: boolean;
 }
@@ -172,7 +200,8 @@ const Message: React.FC<MessageProps> = ({ isMostRecent, ...props }) => {
 };
 
 const ComboMessage: React.FC<MessageProps> = ({
-  message: { body, entities },
+  uiConfig,
+  message: { serverTime, body, entities },
   className: baseClassName,
   isMostRecent,
   ...props
@@ -198,6 +227,9 @@ const ComboMessage: React.FC<MessageProps> = ({
 
   return (
     <div {...props} className={className} ref={ref}>
+      {uiConfig.showTime && (
+        <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
+      )}
       <span className="chat__combo_message__body">
         {formatter.body}
         <i className="chat__combo_message__count">{count}</i>
@@ -209,19 +241,36 @@ const ComboMessage: React.FC<MessageProps> = ({
   );
 };
 
+// TODO: mark sensitive tags in server config
+const sensitiveTags = ["nsfw", "nsfl"];
+
 const StandardMessage: React.FC<MessageProps> = ({
+  uiConfig,
   message: { nick, serverTime, body, entities },
   className,
   ...props
 }) => {
+  if (uiConfig.hideNsfw && entities.tags?.some(({ name }) => sensitiveTags.includes(name))) {
+    return null;
+  }
+
   const formatter = new MessageFormatter(body);
   entities.codeBlocks.forEach((entity) => formatter.insertEntity(MessageCodeBlock, entity));
   entities.links.forEach((entity) => formatter.insertEntity(MessageLink, entity));
-  entities.emotes.forEach((entity) => formatter.insertEntity(MessageEmote, entity));
+  if (uiConfig.formatterEmote) {
+    entities.emotes.forEach((entity) =>
+      formatter.insertEntity(MessageEmote, entity, {
+        shouldAnimateForever: uiConfig.animateForever,
+        shouldShowModifiers: uiConfig.emoteModifiers,
+      })
+    );
+  }
   entities.nicks.forEach((entity) => formatter.insertEntity(MessageNick, entity));
   entities.tags.forEach((entity) => formatter.insertEntity(MessageTag, entity));
-  entities.spoilers.forEach((entity) => formatter.insertEntity(MessageSpoiler, entity));
-  if (entities.greenText) {
+  if (!uiConfig.disableSpoilers) {
+    entities.spoilers.forEach((entity) => formatter.insertEntity(MessageSpoiler, entity));
+  }
+  if (uiConfig.formatterGreen && entities.greenText) {
     formatter.insertEntity(MessageGreenText, entities.greenText);
   }
 
@@ -232,13 +281,11 @@ const StandardMessage: React.FC<MessageProps> = ({
     className,
   ]);
 
-  const time = new Date(Number(serverTime));
-
   return (
     <div {...props} className={classNames}>
-      <time className="chat__message__time" title={time.toLocaleString()}>
-        {time.toLocaleTimeString()}
-      </time>
+      {uiConfig.showTime && (
+        <MessageTime timestamp={serverTime} format={uiConfig.timestampFormat} />
+      )}
       <span className="chat__message__author">{nick}</span>
       <span className="chat__message__colon">{": "}</span>
       <span className="chat__message__body">{formatter.body}</span>

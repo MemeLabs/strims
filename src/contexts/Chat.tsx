@@ -1,10 +1,4 @@
-import {
-  StyleDeclaration,
-  StyleDeclarationValue,
-  StyleSheet,
-  css,
-  resetInjectedStyle,
-} from "aphrodite/no-important";
+import { StyleDeclaration, StyleSheet, css, resetInjectedStyle } from "aphrodite/no-important";
 import clsx from "clsx";
 import React from "react";
 import { useEffect } from "react";
@@ -54,7 +48,7 @@ interface State {
   messageSizeCache: CellMeasurerCache;
   bundleMeta: BundleMeta;
   styles: {
-    [key: string]: StyleDeclarationValue;
+    [key: string]: string;
   };
   emotes: string[];
   modifiers: string[];
@@ -88,7 +82,7 @@ const initialState: State = {
     formatterGreen: true,
     formatterEmote: true,
     formatterCombo: true,
-    holidayEmoteModifiers: true,
+    emoteModifiers: true,
     disableSpoilers: false,
     viewerStateIndicator: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR,
   }),
@@ -206,7 +200,7 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
     Array.from(state.bundleMeta.emoteIdNames.entries()).filter(([id, name]) => {
       const reset = resetIds.includes(id);
       if (reset) {
-        resetInjectedStyle(css(styles[name]));
+        resetInjectedStyle(styles[name]);
         delete styles[name];
         emoteIdObjectUrls.get(id)?.forEach((url) => URL.revokeObjectURL(url));
         emoteIdObjectUrls.delete(id);
@@ -215,7 +209,7 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
     })
   );
 
-  const newStyles: { [key: string]: StyleDeclaration } = {};
+  const newStyleProps: { [key: string]: StyleDeclaration } = {};
   bundle.emotes.forEach(({ id, name, images }) => {
     const urls = images.map(({ data, fileType }) =>
       URL.createObjectURL(new Blob([data], { type: fileTypeToImageType(fileType) }))
@@ -225,7 +219,7 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
     const sampleScale = scaleToImageScale(sample.scale);
     const height = sample.height / sampleScale;
     const width = sample.width / sampleScale;
-    newStyles[`e${name}`] = {
+    newStyleProps[`e${name}`] = {
       backgroundImage: `image-set(${imageSet.join(", ")})`,
       backgroundRepeat: "no-repeat",
       width: `${width}px`,
@@ -237,6 +231,12 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
     emoteIdNames.set(id, name);
     emoteIdObjectUrls.set(id, urls);
   });
+  const newStyles = Object.fromEntries(
+    Object.entries(StyleSheet.create(newStyleProps)).map(([name, style]) => [
+      name.substr(1),
+      css(style),
+    ])
+  );
 
   return {
     ...state,
@@ -246,9 +246,7 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
     },
     styles: {
       ...styles,
-      ...Object.fromEntries(
-        Object.entries(StyleSheet.create(newStyles)).map(([name, style]) => [name.substr(1), style])
-      ),
+      ...newStyles,
     },
     emotes: Array.from(emoteIdNames.values()).sort((a, b) =>
       a.toLowerCase().localeCompare(b.toLowerCase())
@@ -256,6 +254,11 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
     modifiers: bundle.room.modifiers,
     tags: bundle.room.tags,
   };
+};
+
+const unloadAssets = (state: State) => {
+  Object.values(state.bundleMeta.emoteIdObjectUrls).forEach((url) => URL.revokeObjectURL(url));
+  Object.values(state.styles).forEach((name) => resetInjectedStyle(name));
 };
 
 type Actions = {
@@ -314,6 +317,7 @@ export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, child
     return () => {
       events.off("close", handleClose);
       events.destroy();
+      unloadAssets(state);
     };
   }, []);
 
