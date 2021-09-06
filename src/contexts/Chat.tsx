@@ -1,4 +1,3 @@
-import { StyleDeclaration, StyleSheet, css, resetInjectedStyle } from "aphrodite/no-important";
 import clsx from "clsx";
 import React from "react";
 import { useEffect } from "react";
@@ -6,8 +5,7 @@ import { CellMeasurerCache } from "react-virtualized";
 
 import {
   AssetBundle,
-  EmoteFileType,
-  EmoteScale,
+  Emote,
   IUIConfig,
   Message,
   OpenClientResponse,
@@ -32,12 +30,8 @@ type Action =
       type: "CLIENT_CLOSE";
     };
 
-interface BundleMeta {
-  emoteIdObjectUrls: Map<bigint, string[]>;
-  emoteIdNames: Map<bigint, string>;
-}
-
 interface State {
+  id: number;
   clientId?: bigint;
   uiConfig: UIConfig;
   config: {
@@ -46,7 +40,8 @@ interface State {
   };
   messages: Message[];
   messageSizeCache: CellMeasurerCache;
-  bundleMeta: BundleMeta;
+  assetBundles: AssetBundle[];
+  liveEmotes: Emote[];
   styles: {
     [key: string]: string;
   };
@@ -59,6 +54,7 @@ interface State {
 }
 
 const initialState: State = {
+  id: 0,
   uiConfig: new UIConfig({
     showTime: false,
     showFlairIcons: true,
@@ -92,10 +88,8 @@ const initialState: State = {
   },
   messages: [],
   messageSizeCache: new CellMeasurerCache(),
-  bundleMeta: {
-    emoteIdObjectUrls: new Map(),
-    emoteIdNames: new Map(),
-  },
+  assetBundles: [],
+  liveEmotes: [],
   styles: {},
   emotes: [],
   modifiers: [],
@@ -104,6 +98,12 @@ const initialState: State = {
   errors: [],
   state: "new",
 };
+
+let nextId = 0;
+const initializeState = (state: State): State => ({
+  ...state,
+  id: nextId++,
+});
 
 const ChatContext = React.createContext<[State, (action: Action) => void]>(null);
 
@@ -172,93 +172,23 @@ const messageReducer = (state: State, message: Message): State => {
   };
 };
 
-const fileTypeToImageType = (fileType: EmoteFileType): string => {
-  switch (fileType) {
-    case EmoteFileType.FILE_TYPE_PNG:
-      return "image/png";
-    case EmoteFileType.FILE_TYPE_GIF:
-      return "image/gif";
-  }
-};
-
-const scaleToImageScale = (scale: EmoteScale): number => {
-  switch (scale) {
-    case EmoteScale.EMOTE_SCALE_1X:
-      return 1;
-    case EmoteScale.EMOTE_SCALE_2X:
-      return 2;
-    case EmoteScale.EMOTE_SCALE_4X:
-      return 4;
-  }
-};
-
 const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
-  const styles = { ...state.styles };
-  const resetIds = [...bundle.removedEmotes, ...bundle.emotes.map(({ id }) => id)];
-  const emoteIdObjectUrls = new Map(Array.from(state.bundleMeta.emoteIdObjectUrls.entries()));
-  const emoteIdNames = new Map(
-    Array.from(state.bundleMeta.emoteIdNames.entries()).filter(([id, name]) => {
-      const reset = resetIds.includes(id);
-      if (reset) {
-        resetInjectedStyle(styles[name]);
-        delete styles[name];
-        emoteIdObjectUrls.get(id)?.forEach((url) => URL.revokeObjectURL(url));
-        emoteIdObjectUrls.delete(id);
-      }
-      return !reset;
-    })
-  );
-
-  const newStyleProps: { [key: string]: StyleDeclaration } = {};
-  bundle.emotes.forEach(({ id, name, images }) => {
-    const urls = images.map(({ data, fileType }) =>
-      URL.createObjectURL(new Blob([data], { type: fileTypeToImageType(fileType) }))
-    );
-    const imageSet = images.map(({ scale }, i) => `url(${urls[i]}) ${scaleToImageScale(scale)}x`);
-    const sample = images[0];
-    const sampleScale = scaleToImageScale(sample.scale);
-    const height = sample.height / sampleScale;
-    const width = sample.width / sampleScale;
-    newStyleProps[`e${name}`] = {
-      backgroundImage: `image-set(${imageSet.join(", ")})`,
-      backgroundRepeat: "no-repeat",
-      width: `${width}px`,
-      height: `${height}px`,
-      marginTop: `calc(0.5em - ${height / 2}px)`,
-      marginBottom: `calc(0.5em - ${height / 2}px)`,
-    };
-
-    emoteIdNames.set(id, name);
-    emoteIdObjectUrls.set(id, urls);
+  const assetBundles = bundle.isDelta ? [...state.assetBundles, bundle] : [bundle];
+  const liveEmoteMap = new Map<bigint, Emote>();
+  assetBundles.forEach((b) => {
+    b.removedEmotes.forEach((id) => liveEmoteMap.delete(id));
+    b.emotes.forEach((e) => liveEmoteMap.set(e.id, e));
   });
-  const newStyles = Object.fromEntries(
-    Object.entries(StyleSheet.create(newStyleProps)).map(([name, style]) => [
-      name.substr(1),
-      css(style),
-    ])
-  );
+  const liveEmotes = Array.from(liveEmoteMap.values());
+  const styles = Object.fromEntries(liveEmotes.map(({ name }) => [name, `e_${state.id}_${name}`]));
 
   return {
     ...state,
-    bundleMeta: {
-      emoteIdObjectUrls,
-      emoteIdNames,
-    },
-    styles: {
-      ...styles,
-      ...newStyles,
-    },
-    emotes: Array.from(emoteIdNames.values()).sort((a, b) =>
-      a.toLowerCase().localeCompare(b.toLowerCase())
-    ),
-    modifiers: bundle.room.modifiers,
-    tags: bundle.room.tags,
+    assetBundles,
+    liveEmotes,
+    styles,
+    emotes: Object.keys(styles),
   };
-};
-
-const unloadAssets = (state: State) => {
-  Object.values(state.bundleMeta.emoteIdObjectUrls).forEach((url) => URL.revokeObjectURL(url));
-  Object.values(state.styles).forEach((name) => resetInjectedStyle(name));
 };
 
 type Actions = {
@@ -300,13 +230,16 @@ interface ProviderProps {
 }
 
 export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, children }) => {
-  const [state, dispatch] = React.useReducer(chatReducer, initialState);
+  const [state, dispatch] = React.useReducer(chatReducer, initialState, initializeState);
   const client = useClient();
 
   useEffect(() => {
-    void client.chat
-      .getUIConfig()
-      .then(({ uiConfig }) => uiConfig && dispatch({ type: "SET_UI_CONFIG", uiConfig }));
+    void (async () => {
+      const { uiConfig } = await client.chat.getUIConfig();
+      if (uiConfig) {
+        dispatch({ type: "SET_UI_CONFIG", uiConfig });
+      }
+    })();
 
     const events = client.chat.openClient({ networkKey, serverKey });
     events.on("data", (data) => dispatch({ type: "CLIENT_DATA", data }));
@@ -317,7 +250,6 @@ export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, child
     return () => {
       events.off("close", handleClose);
       events.destroy();
-      unloadAssets(state);
     };
   }, []);
 

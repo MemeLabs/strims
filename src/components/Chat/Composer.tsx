@@ -264,7 +264,7 @@ const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags
       `(\\W|^)((${emotes.join("|")})(:(${modifiers.join("|")}))*)(?=\\W|$)`
     );
   } else if (emotes.length !== 0) {
-    nestableEntities.emote.pattern = new RegExp(`(\\W|^)((${emotes.join("|")})(?=\\W|$)`);
+    nestableEntities.emote.pattern = new RegExp(`(\\W|^)(${emotes.join("|")})(?=\\W|$)`);
   }
   if (nicks.length !== 0) {
     nestableEntities.nick.pattern = new RegExp(`(\\W|^)(${nicks.join("|")})(?=\\W|$)`);

@@ -103,12 +103,12 @@ class MockChatSvc {
     return new chatv1.ClientSendMessageResponse();
   }
 
-  setUIConfig(): chatv1.SetUIConfigResponse {
-    return new chatv1.SetUIConfigResponse();
+  setUIConfig(): Promise<chatv1.SetUIConfigResponse> {
+    return Promise.resolve(new chatv1.SetUIConfigResponse());
   }
 
-  getUIConfig(): chatv1.GetUIConfigResponse {
-    return new chatv1.GetUIConfigResponse();
+  getUIConfig(): Promise<chatv1.GetUIConfigResponse> {
+    return Promise.resolve(new chatv1.GetUIConfigResponse());
   }
 }
 

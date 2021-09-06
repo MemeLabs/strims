@@ -17,6 +17,7 @@ import { Provider, useChat } from "../contexts/Chat";
 import useClickAway from "../hooks/useClickAway";
 import EmotesDrawer from "./Chat/EmotesDrawer";
 import SettingsDrawer from "./Chat/SettingsDrawer";
+import StyleSheet from "./Chat/StyleSheet";
 
 enum ChatDrawerRole {
   None = "none",
@@ -118,6 +119,7 @@ const ChatThing: React.FC = () => {
 
   return (
     <>
+      <StyleSheet liveEmotes={state.liveEmotes} styles={state.styles} />
       <div className="chat__messages">
         <ChatDrawer
           title="Emotes"
