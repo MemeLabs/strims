@@ -16,7 +16,7 @@ const Emote: React.FC<EmoteProps> = ({
   children,
   name,
   modifiers,
-  shouldAnimateForever,
+  shouldAnimateForever = false,
   shouldShowModifiers = true,
   ...props
 }) => {

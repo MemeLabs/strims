@@ -262,60 +262,239 @@ export class EmoteImage {
   }
 }
 
-export type IEmoteAnimation = {
-  frameCount?: number;
-  durationMs?: number;
-  iterationCount?: number;
-  endOnLastFrame?: boolean;
-  loopForever?: boolean;
+export type IEmoteEffect = {
+  effect?: EmoteEffect.IEffect
 }
 
-export class EmoteAnimation {
-  frameCount: number;
-  durationMs: number;
-  iterationCount: number;
-  endOnLastFrame: boolean;
-  loopForever: boolean;
+export class EmoteEffect {
+  effect: EmoteEffect.TEffect;
 
-  constructor(v?: IEmoteAnimation) {
-    this.frameCount = v?.frameCount || 0;
-    this.durationMs = v?.durationMs || 0;
-    this.iterationCount = v?.iterationCount || 0;
-    this.endOnLastFrame = v?.endOnLastFrame || false;
-    this.loopForever = v?.loopForever || false;
+  constructor(v?: IEmoteEffect) {
+    this.effect = new EmoteEffect.Effect(v?.effect);
   }
 
-  static encode(m: EmoteAnimation, w?: Writer): Writer {
+  static encode(m: EmoteEffect, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.frameCount) w.uint32(8).uint32(m.frameCount);
-    if (m.durationMs) w.uint32(16).uint32(m.durationMs);
-    if (m.iterationCount) w.uint32(24).uint32(m.iterationCount);
-    if (m.endOnLastFrame) w.uint32(32).bool(m.endOnLastFrame);
-    if (m.loopForever) w.uint32(40).bool(m.loopForever);
+    switch (m.effect.case) {
+      case EmoteEffect.EffectCase.CUSTOM_CSS:
+      EmoteEffect.CustomCSS.encode(m.effect.customCss, w.uint32(8010).fork()).ldelim();
+      break;
+      case EmoteEffect.EffectCase.SPRITE_ANIMATION:
+      EmoteEffect.SpriteAnimation.encode(m.effect.spriteAnimation, w.uint32(8018).fork()).ldelim();
+      break;
+    }
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): EmoteAnimation {
+  static decode(r: Reader | Uint8Array, length?: number): EmoteEffect {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new EmoteAnimation();
+    const m = new EmoteEffect();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1001:
+        m.effect = new EmoteEffect.Effect({ customCss: EmoteEffect.CustomCSS.decode(r, r.uint32()) });
+        break;
+        case 1002:
+        m.effect = new EmoteEffect.Effect({ spriteAnimation: EmoteEffect.SpriteAnimation.decode(r, r.uint32()) });
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace EmoteEffect {
+  export enum EffectCase {
+    NOT_SET = 0,
+    CUSTOM_CSS = 1001,
+    SPRITE_ANIMATION = 1002,
+  }
+
+  export type IEffect =
+  { case?: EffectCase.NOT_SET }
+  |{ case?: EffectCase.CUSTOM_CSS, customCss: EmoteEffect.ICustomCSS }
+  |{ case?: EffectCase.SPRITE_ANIMATION, spriteAnimation: EmoteEffect.ISpriteAnimation }
+  ;
+
+  export type TEffect = Readonly<
+  { case: EffectCase.NOT_SET }
+  |{ case: EffectCase.CUSTOM_CSS, customCss: EmoteEffect.CustomCSS }
+  |{ case: EffectCase.SPRITE_ANIMATION, spriteAnimation: EmoteEffect.SpriteAnimation }
+  >;
+
+  class EffectImpl {
+    customCss: EmoteEffect.CustomCSS;
+    spriteAnimation: EmoteEffect.SpriteAnimation;
+    case: EffectCase = EffectCase.NOT_SET;
+
+    constructor(v?: IEffect) {
+      if (v && "customCss" in v) {
+        this.case = EffectCase.CUSTOM_CSS;
+        this.customCss = new EmoteEffect.CustomCSS(v.customCss);
+      } else
+      if (v && "spriteAnimation" in v) {
+        this.case = EffectCase.SPRITE_ANIMATION;
+        this.spriteAnimation = new EmoteEffect.SpriteAnimation(v.spriteAnimation);
+      }
+    }
+  }
+
+  export const Effect = EffectImpl as {
+    new (): Readonly<{ case: EffectCase.NOT_SET }>;
+    new <T extends IEffect>(v: T): Readonly<
+    T extends { customCss: EmoteEffect.ICustomCSS } ? { case: EffectCase.CUSTOM_CSS, customCss: EmoteEffect.CustomCSS } :
+    T extends { spriteAnimation: EmoteEffect.ISpriteAnimation } ? { case: EffectCase.SPRITE_ANIMATION, spriteAnimation: EmoteEffect.SpriteAnimation } :
+    never
+    >;
+  };
+
+  export type ICustomCSS = {
+    css?: string;
+  }
+
+  export class CustomCSS {
+    css: string;
+
+    constructor(v?: ICustomCSS) {
+      this.css = v?.css || "";
+    }
+
+    static encode(m: CustomCSS, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.css) w.uint32(10).string(m.css);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): CustomCSS {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new CustomCSS();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.css = r.string();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type ISpriteAnimation = {
+    frameCount?: number;
+    durationMs?: number;
+    iterationCount?: number;
+    endOnFrame?: number;
+    loopForever?: boolean;
+    alternateDirection?: boolean;
+  }
+
+  export class SpriteAnimation {
+    frameCount: number;
+    durationMs: number;
+    iterationCount: number;
+    endOnFrame: number;
+    loopForever: boolean;
+    alternateDirection: boolean;
+
+    constructor(v?: ISpriteAnimation) {
+      this.frameCount = v?.frameCount || 0;
+      this.durationMs = v?.durationMs || 0;
+      this.iterationCount = v?.iterationCount || 0;
+      this.endOnFrame = v?.endOnFrame || 0;
+      this.loopForever = v?.loopForever || false;
+      this.alternateDirection = v?.alternateDirection || false;
+    }
+
+    static encode(m: SpriteAnimation, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      if (m.frameCount) w.uint32(8).uint32(m.frameCount);
+      if (m.durationMs) w.uint32(16).uint32(m.durationMs);
+      if (m.iterationCount) w.uint32(24).uint32(m.iterationCount);
+      if (m.endOnFrame) w.uint32(32).uint32(m.endOnFrame);
+      if (m.loopForever) w.uint32(40).bool(m.loopForever);
+      if (m.alternateDirection) w.uint32(48).bool(m.alternateDirection);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): SpriteAnimation {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new SpriteAnimation();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.frameCount = r.uint32();
+          break;
+          case 2:
+          m.durationMs = r.uint32();
+          break;
+          case 3:
+          m.iterationCount = r.uint32();
+          break;
+          case 4:
+          m.endOnFrame = r.uint32();
+          break;
+          case 5:
+          m.loopForever = r.bool();
+          break;
+          case 6:
+          m.alternateDirection = r.bool();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+}
+
+export type IEmoteContributor = {
+  name?: string;
+  link?: string;
+}
+
+export class EmoteContributor {
+  name: string;
+  link: string;
+
+  constructor(v?: IEmoteContributor) {
+    this.name = v?.name || "";
+    this.link = v?.link || "";
+  }
+
+  static encode(m: EmoteContributor, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.name) w.uint32(10).string(m.name);
+    if (m.link) w.uint32(18).string(m.link);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): EmoteContributor {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new EmoteContributor();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.frameCount = r.uint32();
+        m.name = r.string();
         break;
         case 2:
-        m.durationMs = r.uint32();
-        break;
-        case 3:
-        m.iterationCount = r.uint32();
-        break;
-        case 4:
-        m.endOnLastFrame = r.bool();
-        break;
-        case 5:
-        m.loopForever = r.bool();
+        m.link = r.string();
         break;
         default:
         r.skipType(tag & 7);
@@ -330,23 +509,23 @@ export type IEmote = {
   id?: bigint;
   name?: string;
   images?: IEmoteImage[];
-  css?: string;
-  animation?: IEmoteAnimation | undefined;
+  effects?: IEmoteEffect[];
+  contributor?: IEmoteContributor | undefined;
 }
 
 export class Emote {
   id: bigint;
   name: string;
   images: EmoteImage[];
-  css: string;
-  animation: EmoteAnimation | undefined;
+  effects: EmoteEffect[];
+  contributor: EmoteContributor | undefined;
 
   constructor(v?: IEmote) {
     this.id = v?.id || BigInt(0);
     this.name = v?.name || "";
     this.images = v?.images ? v.images.map(v => new EmoteImage(v)) : [];
-    this.css = v?.css || "";
-    this.animation = v?.animation && new EmoteAnimation(v.animation);
+    this.effects = v?.effects ? v.effects.map(v => new EmoteEffect(v)) : [];
+    this.contributor = v?.contributor && new EmoteContributor(v.contributor);
   }
 
   static encode(m: Emote, w?: Writer): Writer {
@@ -354,8 +533,8 @@ export class Emote {
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.name) w.uint32(18).string(m.name);
     for (const v of m.images) EmoteImage.encode(v, w.uint32(26).fork()).ldelim();
-    if (m.css) w.uint32(34).string(m.css);
-    if (m.animation) EmoteAnimation.encode(m.animation, w.uint32(42).fork()).ldelim();
+    for (const v of m.effects) EmoteEffect.encode(v, w.uint32(34).fork()).ldelim();
+    if (m.contributor) EmoteContributor.encode(m.contributor, w.uint32(42).fork()).ldelim();
     return w;
   }
 
@@ -376,10 +555,10 @@ export class Emote {
         m.images.push(EmoteImage.decode(r, r.uint32()));
         break;
         case 4:
-        m.css = r.string();
+        m.effects.push(EmoteEffect.decode(r, r.uint32()));
         break;
         case 5:
-        m.animation = EmoteAnimation.decode(r, r.uint32());
+        m.contributor = EmoteContributor.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -1596,7 +1775,7 @@ export type ICreateEmoteRequest = {
   name?: string;
   images?: IEmoteImage[];
   css?: string;
-  animation?: IEmoteAnimation | undefined;
+  effects?: IEmoteEffect[];
 }
 
 export class CreateEmoteRequest {
@@ -1604,14 +1783,14 @@ export class CreateEmoteRequest {
   name: string;
   images: EmoteImage[];
   css: string;
-  animation: EmoteAnimation | undefined;
+  effects: EmoteEffect[];
 
   constructor(v?: ICreateEmoteRequest) {
     this.serverId = v?.serverId || BigInt(0);
     this.name = v?.name || "";
     this.images = v?.images ? v.images.map(v => new EmoteImage(v)) : [];
     this.css = v?.css || "";
-    this.animation = v?.animation && new EmoteAnimation(v.animation);
+    this.effects = v?.effects ? v.effects.map(v => new EmoteEffect(v)) : [];
   }
 
   static encode(m: CreateEmoteRequest, w?: Writer): Writer {
@@ -1620,7 +1799,7 @@ export class CreateEmoteRequest {
     if (m.name) w.uint32(18).string(m.name);
     for (const v of m.images) EmoteImage.encode(v, w.uint32(26).fork()).ldelim();
     if (m.css) w.uint32(34).string(m.css);
-    if (m.animation) EmoteAnimation.encode(m.animation, w.uint32(42).fork()).ldelim();
+    for (const v of m.effects) EmoteEffect.encode(v, w.uint32(42).fork()).ldelim();
     return w;
   }
 
@@ -1644,7 +1823,7 @@ export class CreateEmoteRequest {
         m.css = r.string();
         break;
         case 5:
-        m.animation = EmoteAnimation.decode(r, r.uint32());
+        m.effects.push(EmoteEffect.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -1697,7 +1876,7 @@ export type IUpdateEmoteRequest = {
   name?: string;
   images?: IEmoteImage[];
   css?: string;
-  animation?: IEmoteAnimation | undefined;
+  effects?: IEmoteEffect[];
 }
 
 export class UpdateEmoteRequest {
@@ -1706,7 +1885,7 @@ export class UpdateEmoteRequest {
   name: string;
   images: EmoteImage[];
   css: string;
-  animation: EmoteAnimation | undefined;
+  effects: EmoteEffect[];
 
   constructor(v?: IUpdateEmoteRequest) {
     this.serverId = v?.serverId || BigInt(0);
@@ -1714,7 +1893,7 @@ export class UpdateEmoteRequest {
     this.name = v?.name || "";
     this.images = v?.images ? v.images.map(v => new EmoteImage(v)) : [];
     this.css = v?.css || "";
-    this.animation = v?.animation && new EmoteAnimation(v.animation);
+    this.effects = v?.effects ? v.effects.map(v => new EmoteEffect(v)) : [];
   }
 
   static encode(m: UpdateEmoteRequest, w?: Writer): Writer {
@@ -1724,7 +1903,7 @@ export class UpdateEmoteRequest {
     if (m.name) w.uint32(26).string(m.name);
     for (const v of m.images) EmoteImage.encode(v, w.uint32(34).fork()).ldelim();
     if (m.css) w.uint32(42).string(m.css);
-    if (m.animation) EmoteAnimation.encode(m.animation, w.uint32(50).fork()).ldelim();
+    for (const v of m.effects) EmoteEffect.encode(v, w.uint32(50).fork()).ldelim();
     return w;
   }
 
@@ -1751,7 +1930,7 @@ export class UpdateEmoteRequest {
         m.css = r.string();
         break;
         case 6:
-        m.animation = EmoteAnimation.decode(r, r.uint32());
+        m.effects.push(EmoteEffect.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);

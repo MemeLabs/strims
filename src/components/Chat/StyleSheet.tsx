@@ -1,6 +1,6 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 
-import { Emote, EmoteFileType, EmoteScale } from "../../apis/strims/chat/v1/chat";
+import { Emote, EmoteEffect, EmoteFileType, EmoteScale } from "../../apis/strims/chat/v1/chat";
 
 const toMimeType = (fileType: EmoteFileType): string => {
   switch (fileType) {
@@ -32,6 +32,14 @@ interface EmoteState {
   selector: string;
 }
 
+type Prop = [string, string];
+type PropList = Prop[];
+
+const upsertProps = (prev: PropList, ...vs: Prop[]): PropList => [
+  ...prev.filter(([pp]) => !vs.some(([vp]) => pp === vp)),
+  ...vs,
+];
+
 const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
   const ref = useRef<HTMLStyleElement>(null);
   const [, setEmotes] = useState(new Map<Emote, EmoteState>());
@@ -49,6 +57,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
         for (let i = 0; i < ref.current.sheet.cssRules.length; ) {
           if (ref.current.sheet.cssRules.item(i).cssText.startsWith(selector)) {
             ref.current.sheet.deleteRule(i);
+            break;
           }
         }
       });
@@ -63,26 +72,75 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
         const height = sample.height / sampleScale;
         const width = sample.width / sampleScale;
 
-        ref.current.sheet.insertRule(
-          [
-            `${selector} {`,
-            `background-image: image-set(${imageSet.join(", ")});`,
-            `background-image: -webkit-image-set(${imageSet.join(", ")});`,
-            `background-repeat: "no-repeat";`,
-            `width: ${width}px;`,
-            `height: ${height}px;`,
-            `margin-top: calc(0.5em - ${height / 2}px);`,
-            `margin-bottom: calc(0.5em - ${height / 2}px);`,
-            `}`,
-          ].join("")
-        );
+        let rules: PropList = [
+          ["background-image", `image-set(${imageSet.join(", ")})`],
+          ["background-image", `-webkit-image-set(${imageSet.join(", ")})`],
+          ["background-repeat", `"no-repeat"`],
+          ["width", `${width}px`],
+          ["height", `${height}px`],
+          ["margin-top", `calc(0.5em - ${height / 2}px)`],
+          ["margin-bottom", `calc(0.5em - ${height / 2}px)`],
+        ];
+
+        e.effects.forEach(({ effect }) => {
+          switch (effect.case) {
+            case EmoteEffect.EffectCase.CUSTOM_CSS:
+              break;
+            case EmoteEffect.EffectCase.SPRITE_ANIMATION:
+              {
+                const {
+                  frameCount,
+                  durationMs,
+                  iterationCount,
+                  endOnFrame,
+                  loopForever,
+                  alternateDirection,
+                } = effect.spriteAnimation;
+                const frameWidth = width / frameCount;
+                const direction = alternateDirection ? "alternate" : "normal";
+                const animName = `${styles[e.name]}_anim`;
+
+                rules = upsertProps(
+                  rules,
+                  ["width", `${frameWidth}px`],
+                  ["background-position-x", `-${endOnFrame * frameWidth}px`],
+                  [
+                    "animation",
+                    `${animName} ${durationMs}ms steps(${frameCount}) ${iterationCount} ${direction}`,
+                  ]
+                );
+
+                const loopRuleSelector = [`${selector}:hover`];
+                if (loopForever) {
+                  loopRuleSelector.push(`${selector}.chat__emote--animate_forever`);
+                }
+                ref.current.sheet.insertRule(
+                  `${loopRuleSelector.join(", ")} {` +
+                    `animation: ${animName} ${durationMs}ms steps(${frameCount}) infinite ${direction}` +
+                    `}`
+                );
+
+                ref.current.sheet.insertRule(
+                  [
+                    `@keyframes ${animName} {`,
+                    `0% { background-position: 0; }`,
+                    `100% { background-position: -${width}px; }`,
+                    `}`,
+                  ].join("\n")
+                );
+              }
+              break;
+          }
+        });
+
+        ref.current.sheet.insertRule(`${selector} {${rules.map((r) => r.join(":")).join(";")}}`);
 
         next.set(e, { selector, uris });
       });
 
       return next;
     });
-  }, [liveEmotes]);
+  }, [liveEmotes, styles]);
 
   return <style ref={ref} />;
 };

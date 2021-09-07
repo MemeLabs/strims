@@ -8,9 +8,11 @@ import { useAsync } from "react-use";
 
 import {
   Emote,
+  EmoteEffect,
   EmoteFileType,
   EmoteImage,
   EmoteScale,
+  IEmoteEffect,
   Server,
 } from "../../apis/strims/chat/v1/chat";
 import {
@@ -287,12 +289,32 @@ interface ChatEmoteFormData {
     value: EmoteScale;
     label: string;
   };
+  contributor: string;
+  contributorLink: string;
   css: string;
   animated: boolean;
-  animationFrameCount: string;
-  animationDuration: string;
-  animationIterationCount: string;
+  animationFrameCount: number;
+  animationDuration: number;
+  animationIterationCount: number;
+  animationEndOnFrame: number;
+  animationLoopForever: boolean;
+  animationAlternateDirection: boolean;
 }
+
+const scaleOptions = [
+  {
+    value: EmoteScale.EMOTE_SCALE_1X,
+    label: "1x",
+  },
+  {
+    value: EmoteScale.EMOTE_SCALE_2X,
+    label: "2x",
+  },
+  {
+    value: EmoteScale.EMOTE_SCALE_4X,
+    label: "4x",
+  },
+];
 
 interface ChatEmoteFormProps {
   onSubmit: (data: ChatEmoteFormData) => void;
@@ -355,38 +377,49 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
       <InputLabel required={true} text="Image" component="div">
         <ImageInput control={control} name="image" />
       </InputLabel>
-      <SelectInput
-        control={control}
-        name="scale"
-        label="Scale"
-        options={[
-          {
-            value: EmoteScale.EMOTE_SCALE_1X,
-            label: "1x",
-          },
-          {
-            value: EmoteScale.EMOTE_SCALE_2X,
-            label: "2x",
-          },
-          {
-            value: EmoteScale.EMOTE_SCALE_4X,
-            label: "4x",
-          },
-        ]}
-      />
+      <SelectInput control={control} name="scale" label="Scale" options={scaleOptions} />
+      <TextInput control={control} label="contributor" name="contributor" />
+      <TextInput control={control} label="contributor link" name="contributorLink" />
       <TextAreaInput control={control} label="css" name="css" />
       <ToggleInput control={control} label="animated" name="animated" />
       <TextInput
         control={control}
         label="frame count"
         name="animationFrameCount"
+        type="number"
         disabled={!animated}
       />
-      <TextInput control={control} label="duration" name="animationDuration" disabled={!animated} />
+      <TextInput
+        control={control}
+        label="duration (ms)"
+        name="animationDuration"
+        type="number"
+        disabled={!animated}
+      />
       <TextInput
         control={control}
         label="loops"
         name="animationIterationCount"
+        type="number"
+        disabled={!animated}
+      />
+      <TextInput
+        control={control}
+        label="end on frame"
+        name="animationEndOnFrame"
+        type="number"
+        disabled={!animated}
+      />
+      <ToggleInput
+        control={control}
+        label="loop forever"
+        name="animationLoopForever"
+        disabled={!animated}
+      />
+      <ToggleInput
+        control={control}
+        label="alternate directions"
+        name="animationAlternateDirection"
         disabled={!animated}
       />
       <label className="input_label">
@@ -488,24 +521,7 @@ const ChatEmoteCreateFormPage: React.FC = () => {
   const onSubmit = (data: ChatEmoteFormData) =>
     createChatEmote({
       serverId: BigInt(serverId),
-      name: data.name,
-      images: [
-        {
-          data: Base64.toUint8Array(data.image.data),
-          fileType: mimeTypeToFileType(data.image.type),
-          height: data.image.height,
-          width: data.image.width,
-          scale: data.scale.value,
-        },
-      ],
-      css: data.css,
-      animation: data.animated
-        ? {
-            frameCount: parseFloat(data.animationFrameCount),
-            durationMs: parseFloat(data.animationDuration),
-            iterationCount: parseFloat(data.animationIterationCount),
-          }
-        : null,
+      ...toEmoteProps(data),
     });
 
   return (
@@ -552,6 +568,51 @@ const scaleToDOMScale = (type: EmoteScale): string => {
   }
 };
 
+const toEmoteProps = (data: ChatEmoteFormData) => {
+  const effects: IEmoteEffect[] = [];
+  if (data.animated) {
+    effects.push({
+      effect: {
+        spriteAnimation: {
+          frameCount: data.animationFrameCount,
+          durationMs: data.animationDuration,
+          iterationCount: data.animationIterationCount,
+          endOnFrame: data.animationEndOnFrame,
+          loopForever: data.animationLoopForever,
+          alternateDirection: data.animationAlternateDirection,
+        },
+      },
+    });
+  }
+  if (data.css) {
+    effects.push({
+      effect: {
+        customCss: {
+          css: data.css,
+        },
+      },
+    });
+  }
+
+  return {
+    name: data.name,
+    contributor: data.contributor && {
+      name: data.contributor,
+      link: data.contributorLink,
+    },
+    images: [
+      {
+        data: Base64.toUint8Array(data.image.data),
+        fileType: mimeTypeToFileType(data.image.type),
+        height: data.image.height,
+        width: data.image.width,
+        scale: data.scale.value,
+      },
+    ],
+    effects,
+  };
+};
+
 const ChatEmoteEditFormPage: React.FC = () => {
   const { serverId, emoteId } = useParams<{ serverId: string; emoteId: string }>();
   const [{ value, ...getRes }] = useCall("chat", "getEmote", { args: [{ id: BigInt(emoteId) }] });
@@ -562,24 +623,7 @@ const ChatEmoteEditFormPage: React.FC = () => {
     updateChatEmote({
       serverId: BigInt(serverId),
       id: BigInt(emoteId),
-      name: data.name,
-      images: [
-        {
-          data: Base64.toUint8Array(data.image.data),
-          fileType: mimeTypeToFileType(data.image.type),
-          height: data.image.height,
-          width: data.image.width,
-          scale: data.scale.value,
-        },
-      ],
-      css: data.css,
-      animation: data.animated
-        ? {
-            frameCount: parseFloat(data.animationFrameCount),
-            durationMs: parseFloat(data.animationDuration),
-            iterationCount: parseFloat(data.animationIterationCount),
-          }
-        : null,
+      ...toEmoteProps(data),
     });
 
   if (getRes.loading) {
@@ -587,30 +631,52 @@ const ChatEmoteEditFormPage: React.FC = () => {
   }
 
   const { emote } = value;
+  const data: ChatEmoteFormData = {
+    name: emote.name,
+    image: {
+      data: Base64.fromUint8Array(emote.images[0].data),
+      type: fileTypeToMimeType(emote.images[0].fileType),
+      height: emote.images[0].height,
+      width: emote.images[0].width,
+    },
+    scale: {
+      value: emote.images[0].scale,
+      label: scaleToDOMScale(emote.images[0].scale),
+    },
+    contributor: emote.contributor?.name,
+    contributorLink: emote.contributor?.link,
+    css: "",
+    animated: false,
+    animationFrameCount: 0,
+    animationDuration: 0,
+    animationIterationCount: 0,
+    animationEndOnFrame: 0,
+    animationLoopForever: false,
+    animationAlternateDirection: false,
+  };
+
+  emote.effects.forEach(({ effect }) => {
+    switch (effect.case) {
+      case EmoteEffect.EffectCase.CUSTOM_CSS:
+        data.css = effect.customCss.css;
+        break;
+      case EmoteEffect.EffectCase.SPRITE_ANIMATION:
+        data.animated = true;
+        data.animationFrameCount = effect.spriteAnimation.frameCount;
+        data.animationDuration = effect.spriteAnimation.durationMs;
+        data.animationIterationCount = effect.spriteAnimation.iterationCount;
+        data.animationEndOnFrame = effect.spriteAnimation.endOnFrame;
+        data.animationLoopForever = effect.spriteAnimation.loopForever;
+        data.animationAlternateDirection = effect.spriteAnimation.alternateDirection;
+    }
+  });
 
   return (
     <ChatEmoteForm
       onSubmit={onSubmit}
       error={getRes.error || updateRes.error}
       loading={getRes.loading || updateRes.loading}
-      values={{
-        name: emote.name,
-        image: {
-          data: Base64.fromUint8Array(emote.images[0].data),
-          type: fileTypeToMimeType(emote.images[0].fileType),
-          height: emote.images[0].height,
-          width: emote.images[0].width,
-        },
-        scale: {
-          value: emote.images[0].scale,
-          label: scaleToDOMScale(emote.images[0].scale),
-        },
-        css: emote.css,
-        animated: !!emote.animation,
-        animationFrameCount: emote.animation?.frameCount.toString(),
-        animationDuration: emote.animation?.durationMs.toString(),
-        animationIterationCount: emote.animation?.iterationCount.toString(),
-      }}
+      values={data}
       serverId={BigInt(serverId)}
       indexLinkVisible={true}
     />

@@ -1,4 +1,18 @@
 import * as chatv1 from "../../../apis/strims/chat/v1/chat";
+import imgBONK from "./emotes/animated/BONK.png";
+import imgcatJAM from "./emotes/animated/catJAM.png";
+import imgCinnabunny from "./emotes/animated/Cinnabunny.png";
+import imgComfyMoobers from "./emotes/animated/ComfyMoobers.png";
+import imgDuckJAM from "./emotes/animated/DuckJAM.png";
+import imgNODDERS from "./emotes/animated/NODDERS.png";
+import imgNOPERS from "./emotes/animated/NOPERS.png";
+import imgPeepoRun from "./emotes/animated/PeepoRun.png";
+import imgREE from "./emotes/animated/REE.png";
+import imgRIDIN from "./emotes/animated/RIDIN.png";
+import imgTANTIES from "./emotes/animated/TANTIES.png";
+import imgVroomVroom from "./emotes/animated/VroomVroom.png";
+import imgWAG from "./emotes/animated/WAG.png";
+import imgWAYTOODANK from "./emotes/animated/WAYTOODANK.png";
 import img4Head from "./emotes/static/4Head.png";
 import img4U from "./emotes/static/4U.png";
 import imgAbathur from "./emotes/static/Abathur.png";
@@ -17,7 +31,7 @@ import imgbillyWeird from "./emotes/static/billyWeird.png";
 import imgBOGGED from "./emotes/static/BOGGED.png";
 import imgBOOMER from "./emotes/static/BOOMER.png";
 import imgCampFire from "./emotes/static/CampFire.png";
-import imgCinnabunny from "./emotes/static/Cinnabunny.png";
+// import imgCinnabunny from "./emotes/static/Cinnabunny.png";
 import imgcmonBruh from "./emotes/static/cmonBruh.png";
 import imgComfyApe from "./emotes/static/ComfyApe.png";
 import imgComfyAYA from "./emotes/static/ComfyAYA.png";
@@ -127,7 +141,7 @@ import imgPOTATO from "./emotes/static/POTATO.png";
 import imgPOUT from "./emotes/static/POUT.png";
 import imgQUEEN from "./emotes/static/QUEEN.png";
 import imgRedCard from "./emotes/static/RedCard.png";
-import imgREE from "./emotes/static/REE.png";
+// import imgREE from "./emotes/static/REE.png";
 import imgRiperino from "./emotes/static/Riperino.png";
 import imgsataniaLUL from "./emotes/static/sataniaLUL.png";
 import imgSEMPAI from "./emotes/static/SEMPAI.png";
@@ -164,7 +178,7 @@ const src = {
   "isDelta": false,
   "room": {
     "name": "test server",
-    "css": "",
+    "effects": [],
     "tags": ["nsfw", "loud", "weeb", "nsfl"],
     "modifiers": [
       "mirror",
@@ -203,7 +217,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2402",
@@ -217,7 +231,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2403",
@@ -231,7 +245,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2404",
@@ -245,7 +259,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2405",
@@ -259,7 +273,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2406",
@@ -273,7 +287,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2407",
@@ -287,7 +301,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2408",
@@ -301,7 +315,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2409",
@@ -315,7 +329,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2410",
@@ -329,7 +343,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2411",
@@ -343,7 +357,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2412",
@@ -357,7 +371,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2413",
@@ -371,7 +385,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2414",
@@ -385,7 +399,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2415",
@@ -399,7 +413,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2416",
@@ -413,7 +427,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2417",
@@ -427,7 +441,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2418",
@@ -441,7 +455,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2419",
@@ -451,11 +465,22 @@ const src = {
           "src": imgCinnabunny,
           "fileType": 1,
           "height": 112,
-          "width": 112,
+          "width": 560,
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 5,
+              "durationMs": 500,
+              "iterationCount": 7,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
     },
     {
       "id": "2420",
@@ -469,7 +494,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2421",
@@ -483,7 +508,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2422",
@@ -497,7 +522,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2423",
@@ -511,7 +536,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2424",
@@ -525,7 +550,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2425",
@@ -539,7 +564,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2426",
@@ -553,7 +578,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2427",
@@ -567,7 +592,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2428",
@@ -581,7 +606,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2429",
@@ -595,7 +620,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2430",
@@ -609,7 +634,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2431",
@@ -623,7 +648,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2432",
@@ -637,7 +662,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2433",
@@ -651,7 +676,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2434",
@@ -665,7 +690,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2435",
@@ -679,7 +704,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2436",
@@ -693,7 +718,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2437",
@@ -707,7 +732,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2438",
@@ -721,7 +746,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2439",
@@ -735,7 +760,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2440",
@@ -749,7 +774,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2441",
@@ -763,7 +788,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2442",
@@ -777,7 +802,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2443",
@@ -791,7 +816,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2444",
@@ -805,7 +830,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2445",
@@ -819,7 +844,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2446",
@@ -833,7 +858,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2447",
@@ -847,7 +872,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2448",
@@ -861,7 +886,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2449",
@@ -875,7 +900,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2450",
@@ -889,7 +914,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2451",
@@ -903,7 +928,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2452",
@@ -917,7 +942,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2453",
@@ -931,7 +956,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2454",
@@ -945,7 +970,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2455",
@@ -959,7 +984,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2456",
@@ -973,7 +998,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2457",
@@ -987,7 +1012,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2458",
@@ -1001,7 +1026,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2459",
@@ -1015,7 +1040,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2460",
@@ -1029,7 +1054,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2461",
@@ -1043,7 +1068,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2462",
@@ -1057,7 +1082,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2463",
@@ -1071,7 +1096,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2464",
@@ -1085,7 +1110,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2465",
@@ -1099,7 +1124,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2466",
@@ -1113,7 +1138,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2467",
@@ -1127,7 +1152,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2468",
@@ -1141,7 +1166,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2469",
@@ -1155,7 +1180,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2470",
@@ -1169,7 +1194,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2471",
@@ -1183,7 +1208,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2472",
@@ -1197,7 +1222,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2473",
@@ -1211,7 +1236,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2474",
@@ -1225,7 +1250,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2475",
@@ -1239,7 +1264,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2476",
@@ -1253,7 +1278,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2477",
@@ -1267,7 +1292,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2478",
@@ -1281,7 +1306,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2479",
@@ -1295,7 +1320,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2480",
@@ -1309,7 +1334,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2481",
@@ -1323,7 +1348,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2484",
@@ -1337,7 +1362,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2485",
@@ -1351,7 +1376,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2486",
@@ -1365,7 +1390,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2487",
@@ -1379,7 +1404,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2488",
@@ -1393,7 +1418,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2489",
@@ -1407,7 +1432,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2490",
@@ -1421,7 +1446,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2491",
@@ -1435,7 +1460,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2492",
@@ -1449,7 +1474,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2493",
@@ -1463,7 +1488,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2494",
@@ -1477,7 +1502,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2495",
@@ -1491,7 +1516,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2496",
@@ -1505,7 +1530,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2497",
@@ -1519,7 +1544,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2498",
@@ -1533,7 +1558,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2499",
@@ -1547,7 +1572,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2500",
@@ -1561,7 +1586,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2501",
@@ -1575,7 +1600,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2502",
@@ -1589,7 +1614,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2503",
@@ -1603,7 +1628,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2504",
@@ -1617,7 +1642,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2505",
@@ -1631,7 +1656,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2506",
@@ -1645,7 +1670,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2507",
@@ -1659,7 +1684,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2508",
@@ -1673,7 +1698,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2509",
@@ -1687,7 +1712,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2510",
@@ -1701,7 +1726,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2511",
@@ -1715,7 +1740,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2512",
@@ -1729,7 +1754,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2513",
@@ -1743,7 +1768,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2514",
@@ -1757,7 +1782,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2515",
@@ -1771,7 +1796,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2516",
@@ -1785,7 +1810,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2517",
@@ -1799,7 +1824,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2518",
@@ -1813,7 +1838,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2519",
@@ -1827,7 +1852,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2520",
@@ -1841,7 +1866,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2521",
@@ -1855,7 +1880,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2522",
@@ -1869,7 +1894,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2523",
@@ -1883,7 +1908,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2524",
@@ -1897,7 +1922,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2525",
@@ -1911,7 +1936,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2526",
@@ -1925,7 +1950,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2527",
@@ -1939,7 +1964,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2528",
@@ -1953,7 +1978,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2529",
@@ -1967,7 +1992,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2530",
@@ -1981,21 +2006,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
-    },
-    {
-      "id": "2531",
-      "name": "REE",
-      "images": [
-        {
-          "src": imgREE,
-          "fileType": 1,
-          "height": 112,
-          "width": 112,
-          "scale": 2,
-        },
-      ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2532",
@@ -2009,7 +2020,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2533",
@@ -2023,7 +2034,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2534",
@@ -2037,7 +2048,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2535",
@@ -2051,7 +2062,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2536",
@@ -2065,7 +2076,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2537",
@@ -2079,7 +2090,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2538",
@@ -2093,7 +2104,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2539",
@@ -2107,7 +2118,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2540",
@@ -2121,7 +2132,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2541",
@@ -2135,7 +2146,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2542",
@@ -2149,7 +2160,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2543",
@@ -2163,7 +2174,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2544",
@@ -2177,7 +2188,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2545",
@@ -2191,7 +2202,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2546",
@@ -2205,7 +2216,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2547",
@@ -2219,7 +2230,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2548",
@@ -2233,7 +2244,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2549",
@@ -2247,7 +2258,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2550",
@@ -2261,7 +2272,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2551",
@@ -2275,7 +2286,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2552",
@@ -2289,7 +2300,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2553",
@@ -2303,7 +2314,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2554",
@@ -2317,7 +2328,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2555",
@@ -2331,7 +2342,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2556",
@@ -2345,7 +2356,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2557",
@@ -2359,7 +2370,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2558",
@@ -2373,7 +2384,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2559",
@@ -2387,7 +2398,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2560",
@@ -2401,7 +2412,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2561",
@@ -2415,7 +2426,7 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
     },
     {
       "id": "2562",
@@ -2429,7 +2440,333 @@ const src = {
           "scale": 2,
         },
       ],
-      "css": "",
+      "effects": [],
+    },
+    {
+      "id": "2563",
+      "name": "RIDIN",
+      "images": [
+        {
+          "src": imgRIDIN,
+          "fileType": 1,
+          "height": 128,
+          "width": 2560,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 8,
+              "durationMs": 2000,
+              "iterationCount": 7,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "id": "2564",
+      "name": "TANTIES",
+      "images": [
+        {
+          "src": imgTANTIES,
+          "fileType": 1,
+          "height": 112,
+          "width": 1120,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 10,
+              "durationMs": 1400,
+              "iterationCount": 5,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "id": "2565",
+      "name": "VroomVroom",
+      "images": [
+        {
+          "src": imgVroomVroom,
+          "fileType": 1,
+          "height": 112,
+          "width": 11312,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 101,
+              "durationMs": 4000,
+              "iterationCount": 2,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "id": "2566",
+      "name": "WAG",
+      "images": [
+        {
+          "src": imgWAG,
+          "fileType": 1,
+          "height": 128,
+          "width": 296,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 2,
+              "durationMs": 500,
+              "iterationCount": 10,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "id": "2567",
+      "name": "WAYTOODANK",
+      "images": [
+        {
+          "src": imgWAYTOODANK,
+          "fileType": 1,
+          "height": 112,
+          "width": 10080,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 90,
+              "durationMs": 1800,
+              "iterationCount": 2,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "id": "2568",
+      "name": "BONK",
+      "images": [
+        {
+          "src": imgBONK,
+          "fileType": 1,
+          "height": 128,
+          "width": 440,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 2,
+              "durationMs": 500,
+              "iterationCount": 10,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "id": "2569",
+      "name": "catJAM",
+      "images": [
+        {
+          "src": imgcatJAM,
+          "fileType": 1,
+          "height": 112,
+          "width": 17696,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 158,
+              "durationMs": 6500,
+              "iterationCount": 2,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "id": "2570",
+      "name": "ComfyMoobers",
+      "images": [
+        {
+          "src": imgComfyMoobers,
+          "fileType": 1,
+          "height": 128,
+          "width": 4352,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 34,
+              "durationMs": 2550,
+              "iterationCount": 2,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "id": "2571",
+      "name": "DuckJAM",
+      "images": [
+        {
+          "src": imgDuckJAM,
+          "fileType": 1,
+          "height": 112,
+          "width": 6160,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 55,
+              "durationMs": 5500,
+              "iterationCount": 1,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "id": "2572",
+      "name": "NODDERS",
+      "images": [
+        {
+          "src": imgNODDERS,
+          "fileType": 1,
+          "height": 112,
+          "width": 448,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 4,
+              "durationMs": 320,
+              "iterationCount": 16,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "id": "2573",
+      "name": "NOPERS",
+      "images": [
+        {
+          "src": imgNOPERS,
+          "fileType": 1,
+          "height": 112,
+          "width": 896,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 8,
+              "durationMs": 640,
+              "iterationCount": 16,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "id": "2574",
+      "name": "PeepoRun",
+      "images": [
+        {
+          "src": imgPeepoRun,
+          "fileType": 1,
+          "height": 112,
+          "width": 672,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 6,
+              "durationMs": 420,
+              "iterationCount": 12,
+              "loopForever": true,
+            },
+          },
+        },
+      ],
+    },
+    {
+      "id": "2531",
+      "name": "REE",
+      "images": [
+        {
+          "src": imgREE,
+          "fileType": 1,
+          "height": 112,
+          "width": 4992,
+          "scale": 2,
+        },
+      ],
+      "effects": [
+        {
+          "effect": {
+            "spriteAnimation": {
+              "frameCount": 39,
+              "durationMs": 3900,
+              "iterationCount": 2,
+              "loopForever": true,
+              "alternateDirection": true,
+            },
+          },
+        },
+      ],
     },
   ],
   "removedEmotes": [],

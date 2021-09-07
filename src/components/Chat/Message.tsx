@@ -179,7 +179,7 @@ const MessageTime: React.FC<MessageTimeProps> = ({ timestamp, format }) => {
   const time = new Date(Number(timestamp));
   return (
     <time className="chat__message__time" title={time.toLocaleString()}>
-      {date.format(time, format)}
+      {date.formatDate(time, format)}
     </time>
   );
 };

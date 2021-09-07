@@ -49,20 +49,37 @@ message EmoteImage {
   EmoteScale scale = 7;
 }
 
-message EmoteAnimation {
-  uint32 frame_count = 1;
-  uint32 duration_ms = 2;
-  uint32 iteration_count = 3;
-  bool end_on_last_frame = 4;
-  bool loop_forever = 5;
+message EmoteEffect {
+  message CustomCSS {
+    string css = 1;
+  }
+
+  message SpriteAnimation {
+    uint32 frame_count = 1;
+    uint32 duration_ms = 2;
+    uint32 iteration_count = 3;
+    uint32 end_on_frame = 4;
+    bool loop_forever = 5;
+    bool alternate_direction = 6;
+  }
+
+  oneof effect {
+    CustomCSS custom_css = 1001;
+    SpriteAnimation sprite_animation = 1002;
+  }
+}
+
+message EmoteContributor {
+  string name = 1;
+  string link = 2;
 }
 
 message Emote {
   uint64 id = 1;
   string name = 2;
   repeated EmoteImage images = 3;
-  string css = 4;
-  EmoteAnimation animation = 5;
+  repeated EmoteEffect effects = 4;
+  EmoteContributor contributor = 5;
 }
 
 message AssetBundle {
@@ -218,7 +235,7 @@ message CreateEmoteRequest {
   string name = 2;
   repeated EmoteImage images = 3;
   string css = 4;
-  EmoteAnimation animation = 5;
+  repeated EmoteEffect effects = 5;
 }
 message CreateEmoteResponse {
   Emote emote = 1;
@@ -229,7 +246,7 @@ message UpdateEmoteRequest {
   string name = 3;
   repeated EmoteImage images = 4;
   string css = 5;
-  EmoteAnimation animation = 6;
+  repeated EmoteEffect effects = 6;
 }
 message UpdateEmoteResponse {
   Emote emote = 1;

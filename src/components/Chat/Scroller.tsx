@@ -70,7 +70,7 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
   const scrollbars = useRef<Scrollbars & ScrollbarsInternal>();
   const [autoScroll, setAutoScroll] = useState(true);
   const [scrolling, setScrolling] = useState(true);
-  const [resizing, setResizing] = useState(false);
+  const [resizing, setResizing] = useState(true);
 
   const applyAutoScroll = () => {
     if (autoScroll) {

@@ -127,7 +127,7 @@ label.input_label {
       display: block;
       height: 1em;
       position: absolute;
-      transition: all 200ms ease-in-out;
+      transition: transform 200ms ease-in-out;
     }
 
     &:before {
@@ -154,6 +154,13 @@ label.input_label {
   }
   :checked + &__switch &__switch__track:after {
     transform: translateX(1em);
+  }
+
+  :disabled + &__switch:before {
+    background: var(--input-disabled-bg);
+  }
+  :disabled + &__switch &__switch__track:after {
+    background: var(--input-bg);
   }
 }
 

@@ -3,6 +3,8 @@ import { PassThrough } from "stream";
 import { Message } from "../../../apis/strims/chat/v1/chat";
 
 const history = [
+  'MSG {"nick":"Chehgo","features":[],"timestamp":1599345668528,"data":"RIDIN","entities":{"emotes":[{"name":"RIDIN","bounds":{"start":0,"end":5}}]}}',
+
   'MSG {"nick":"guwapguwapguwap","features":[],"timestamp":1599345629214,"data":"Ph4t3 I sentence you to 10 years in body shaming jail PepoBan","entities":{"emotes":[{"name":"PepoBan","bounds":{"start":54,"end":61}}],"nicks":[{"nick":"Ph4t3","bounds":{"start":0,"end":5}}]}}',
   'MSG {"nick":"Xymos","features":[],"timestamp":1599345636022,"data":"soMuchForSubtlety Jbpratt sounds like a valid reason SHRUG:fast","entities":{"emotes":[{"name":"SHRUG","bounds":{"start":53,"end":63},"modifiers":["fast"]}]}}',
   'MSG {"nick":"SoMuchForSubtlety","features":[],"timestamp":1599345648052,"data":"jbpratt  and the documentation is completely shit too PepeLaugh","entities":{"emotes":[{"name":"PepeLaugh","bounds":{"start":54,"end":63}}],"nicks":[{"nick":"jbpratt","bounds":{"start":0,"end":7}}]}}',

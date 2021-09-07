@@ -1,5 +1,5 @@
 import clsx from "clsx";
-import React from "react";
+import React, { useCallback } from "react";
 import { useEffect } from "react";
 import { CellMeasurerCache } from "react-virtualized";
 
@@ -9,6 +9,7 @@ import {
   IUIConfig,
   Message,
   OpenClientResponse,
+  Room,
   UIConfig,
 } from "../apis/strims/chat/v1/chat";
 import { useClient } from "./FrontendApi";
@@ -175,19 +176,25 @@ const messageReducer = (state: State, message: Message): State => {
 const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
   const assetBundles = bundle.isDelta ? [...state.assetBundles, bundle] : [bundle];
   const liveEmoteMap = new Map<bigint, Emote>();
+  let room: Room;
   assetBundles.forEach((b) => {
     b.removedEmotes.forEach((id) => liveEmoteMap.delete(id));
     b.emotes.forEach((e) => liveEmoteMap.set(e.id, e));
+    room = b.room || room;
   });
   const liveEmotes = Array.from(liveEmoteMap.values());
-  const styles = Object.fromEntries(liveEmotes.map(({ name }) => [name, `e_${state.id}_${name}`]));
+  const styles = Object.fromEntries(
+    liveEmotes.map(({ id, name }) => [name, `e_${name}_${state.id}_${id}`])
+  );
 
   return {
     ...state,
     assetBundles,
     liveEmotes,
     styles,
-    emotes: Object.keys(styles),
+    emotes: Object.keys(styles).sort(),
+    modifiers: room.modifiers,
+    tags: room.tags,
   };
 };
 
@@ -200,20 +207,26 @@ export const useChat = (): [State, Actions] => {
   const [state, dispatch] = React.useContext(ChatContext);
   const client = useClient();
 
-  const sendMessage = (body: string) =>
-    client.chat.clientSendMessage({
-      clientId: state.clientId,
-      body,
-    });
+  const sendMessage = useCallback(
+    (body: string) =>
+      client.chat.clientSendMessage({
+        clientId: state.clientId,
+        body,
+      }),
+    [client, state.clientId]
+  );
 
-  const mergeUIConfig = (values: Partial<IUIConfig>) => {
-    const uiConfig = new UIConfig({
-      ...state.uiConfig,
-      ...values,
-    });
-    dispatch({ type: "SET_UI_CONFIG", uiConfig });
-    void client.chat.setUIConfig({ uiConfig });
-  };
+  const mergeUIConfig = useCallback(
+    (values: Partial<IUIConfig>) => {
+      const uiConfig = new UIConfig({
+        ...state.uiConfig,
+        ...values,
+      });
+      dispatch({ type: "SET_UI_CONFIG", uiConfig });
+      void client.chat.setUIConfig({ uiConfig });
+    },
+    [client, state.uiConfig]
+  );
 
   // TODO: load server config
 

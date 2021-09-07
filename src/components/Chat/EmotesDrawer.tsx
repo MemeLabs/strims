@@ -12,7 +12,7 @@ const EmotesDrawer: React.FC = () => {
       <div className="chat__emote_grid">
         {chat.emotes.map((name) => (
           <div key={name} className="chat__emote_grid__emote">
-            <Emote name={name} />
+            <Emote name={name} shouldAnimateForever />
           </div>
         ))}
       </div>

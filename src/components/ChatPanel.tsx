@@ -104,7 +104,11 @@ const TestContent: React.FC = () => (
   </Scrollbars>
 );
 
-const ChatThing: React.FC = () => {
+interface ChatThingProps {
+  shouldHide?: boolean;
+}
+
+const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false }) => {
   const [state, { sendMessage }] = useChat();
   const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
@@ -157,19 +161,21 @@ const ChatThing: React.FC = () => {
         >
           <TestContent />
         </ChatDrawer>
-        <Scroller
-          uiConfig={state.uiConfig}
-          renderMessage={({ index, style }: MessageProps) => (
-            <Message
-              uiConfig={state.uiConfig}
-              message={state.messages[index]}
-              style={style}
-              isMostRecent={index === state.messages.length - 1}
-            />
-          )}
-          messageCount={state.messages.length}
-          messageSizeCache={state.messageSizeCache}
-        />
+        {!shouldHide && (
+          <Scroller
+            uiConfig={state.uiConfig}
+            renderMessage={({ index, style }: MessageProps) => (
+              <Message
+                uiConfig={state.uiConfig}
+                message={state.messages[index]}
+                style={style}
+                isMostRecent={index === state.messages.length - 1}
+              />
+            )}
+            messageCount={state.messages.length}
+            messageSizeCache={state.messageSizeCache}
+          />
+        )}
       </div>
       <div className="chat__footer">
         <Composer
@@ -235,7 +241,7 @@ const ChatPanel: React.FC = () => {
             networkKey={Base64.toUint8Array("ewOeQgqCCXYwVmR+nZIcbLfDszuIgV8l0Xj0OVa5Vw4=")}
             serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
           >
-            <ChatThing />
+            <ChatThing shouldHide={closed} />
           </Provider>
         </div>
       </div>
