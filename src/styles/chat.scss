@@ -317,6 +317,20 @@
         opacity: 1;
       }
     }
+
+    &__resume_autoscroll {
+      position: absolute;
+      background: var(--body-background);
+      width: calc(100% - 20px);
+      padding: 5px;
+      margin: 0 5px;
+      bottom: 0px;
+      cursor: pointer;
+      border-radius: 3px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
   }
 
   &__emote {

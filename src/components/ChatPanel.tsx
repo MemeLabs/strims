@@ -109,7 +109,7 @@ interface ChatThingProps {
 }
 
 const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false }) => {
-  const [state, { sendMessage, getMessage, getMessageCount }] = useChat();
+  const [state, { sendMessage, getMessage, getMessageCount, toggleMessageGC }] = useChat();
   const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
   const closePanel = useCallback(() => setActivePanel(ChatDrawerRole.None), []);
@@ -179,6 +179,7 @@ const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false }) => {
             renderMessage={renderMessage}
             messageCount={state.messages.length}
             messageSizeCache={state.messageSizeCache}
+            onAutoScrollChange={toggleMessageGC}
           />
         )}
       </div>

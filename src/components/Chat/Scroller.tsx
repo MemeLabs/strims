@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import React, { CSSProperties, ReactNode, useCallback, useEffect, useRef, useState } from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
+import { FiArrowDownCircle } from "react-icons/fi";
 import { useDebounce } from "react-use";
 import {
   AutoSizer,
@@ -27,6 +28,7 @@ interface ScrollerProps {
   messageSizeCache: CellMeasurerCache;
   autoScrollThreshold?: number;
   resizeDebounceTimeout?: number;
+  onAutoScrollChange?: (state: boolean) => void;
 }
 
 const Scroller: React.FC<ScrollerProps> = (props) => {
@@ -57,18 +59,22 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
   messageSizeCache,
   autoScrollThreshold = 20,
   resizeDebounceTimeout = 100,
+  onAutoScrollChange,
 }) => {
   const list = useRef<List & ListInternal>();
   const scrollbars = useRef<Scrollbars & ScrollbarsInternal>();
   const [autoScroll, setAutoScroll] = useState(true);
-  const [scrolling, setScrolling] = useState(true);
   const [resizing, setResizing] = useState(true);
-
   const autoScrollEvent = useRef(false);
+
+  const forceAutoScroll = () => {
+    autoScrollEvent.current = true;
+    list.current?.scrollToRow(list.current.props.rowCount);
+  };
+
   const applyAutoScroll = () => {
     if (autoScroll) {
-      autoScrollEvent.current = true;
-      list.current?.scrollToRow(list.current.props.rowCount);
+      forceAutoScroll();
     }
   };
 
@@ -95,15 +101,13 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
   const handleScroll = useCallback((e) => {
     // autoscroll acts on react-virtualized directly so there is no need to
     // forward the scroll event observed by react-custom-scrollbars. the list
-    // only needs to be updated in response to user scrolling events.
+    // only needs to be updated in response to user scroll events.
 
     if (!autoScrollEvent.current) {
       list.current?.Grid?._onScroll(e);
     }
     autoScrollEvent.current = false;
   }, []);
-  const handleScrollStart = useCallback(() => setScrolling(true), []);
-  const handleScrollStop = useCallback(() => setScrolling(false), []);
 
   const handleListScroll = useCallback(
     ({ scrollHeight, scrollTop, clientHeight }: OnScrollParams) => {
@@ -112,9 +116,13 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
       const enabled = !isScrolling ? autoScroll : thresholdExceeded;
 
       if (resizing && enabled) {
-        list.current?.scrollToRow(list.current.props.rowCount);
+        forceAutoScroll();
       }
-      setAutoScroll(enabled);
+
+      if (autoScroll !== enabled) {
+        setAutoScroll(enabled);
+        onAutoScrollChange?.(enabled);
+      }
     },
     [autoScroll, resizing]
   );
@@ -135,40 +143,64 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
     [renderMessage, messageSizeCache, width]
   );
 
+  const [scrolling, setScrolling] = useState(true);
+  const [hovering, setHovering] = useState(false);
+
+  const handleScrollStart = useCallback(() => setScrolling(true), []);
+  const handleScrollStop = useCallback(() => setScrolling(false), []);
+  const handleScrollMouseEnter = useCallback(() => setHovering(true), []);
+  const handleScrollMouseLeave = useCallback(() => setHovering(false), []);
+
   const renderScrollThumb = useCallback(
     (props) => (
       <div
         {...props}
         className={clsx({
           "chat__scroller__scrollbar_handle": true,
-          "chat__scroller__scrollbar_handle--scrolling": scrolling && !autoScroll,
+          "chat__scroller__scrollbar_handle--scrolling": (scrolling && !autoScroll) || hovering,
         })}
       />
     ),
-    [scrolling, autoScroll]
+    [scrolling, autoScroll, hovering]
   );
 
+  const resumeAutoScroll = useCallback(() => {
+    setAutoScroll(true);
+    onAutoScrollChange?.(true);
+    forceAutoScroll();
+  }, []);
+
   return (
-    <Scrollbars
-      ref={scrollbars}
-      onScroll={handleScroll}
-      onScrollStart={handleScrollStart}
-      onScrollStop={handleScrollStop}
-      style={{ height, width }}
-      renderThumbVertical={renderScrollThumb}
-    >
-      <List
-        ref={list}
-        height={height}
-        width={width}
-        style={{ overflowX: "visible", overflowY: "visible" }}
-        deferredMeasurementCache={messageSizeCache}
-        rowHeight={messageSizeCache.rowHeight}
-        rowCount={messageCount}
-        rowRenderer={renderRow}
-        onScroll={handleListScroll}
-      />
-    </Scrollbars>
+    <>
+      <Scrollbars
+        ref={scrollbars}
+        onScroll={handleScroll}
+        onScrollStart={handleScrollStart}
+        onScrollStop={handleScrollStop}
+        style={{ height, width }}
+        renderThumbVertical={renderScrollThumb}
+        onMouseEnter={handleScrollMouseEnter}
+        onMouseLeave={handleScrollMouseLeave}
+      >
+        <List
+          ref={list}
+          height={height}
+          width={width}
+          style={{ overflowX: "visible", overflowY: "visible" }}
+          deferredMeasurementCache={messageSizeCache}
+          rowHeight={messageSizeCache.rowHeight}
+          rowCount={messageCount}
+          rowRenderer={renderRow}
+          onScroll={handleListScroll}
+        />
+      </Scrollbars>
+      {!autoScroll && (
+        <div className="chat__scroller__resume_autoscroll" onClick={resumeAutoScroll}>
+          <span>More messages below</span>
+          <FiArrowDownCircle />
+        </div>
+      )}
+    </>
   );
 };
 

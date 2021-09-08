@@ -20,6 +20,10 @@ type Action =
       uiConfig: UIConfig;
     }
   | {
+      type: "TOGGLE_MESSAGE_GC";
+      state: boolean;
+    }
+  | {
       type: "CLIENT_DATA";
       data: OpenClientResponse;
     }
@@ -40,10 +44,10 @@ export interface State {
   clientId?: bigint;
   uiConfig: UIConfig;
   config: {
-    messageHistorySize: number;
     messageGCThreshold: number;
   };
   messages: Message[];
+  messageGCEnabled: boolean;
   messageSizeCache: ChatCellMeasurerCache;
   assetBundles: AssetBundle[];
   liveEmotes: Emote[];
@@ -86,11 +90,11 @@ const initialState: State = {
     viewerStateIndicator: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR,
   }),
   config: {
-    messageHistorySize: 250,
     messageGCThreshold: 250,
   },
   messages: [],
-  messageSizeCache: new ChatCellMeasurerCache(),
+  messageGCEnabled: true,
+  messageSizeCache: null,
   assetBundles: [],
   liveEmotes: [],
   styles: {},
@@ -106,6 +110,7 @@ let nextId = 0;
 const initializeState = (state: State): State => ({
   ...state,
   id: nextId++,
+  messageSizeCache: new ChatCellMeasurerCache(),
 });
 
 const ChatContext = React.createContext<[State, (action: Action) => void]>(null);
@@ -128,6 +133,11 @@ const chatReducer = (state: State, action: Action): State => {
       return {
         ...state,
         state: "closed",
+      };
+    case "TOGGLE_MESSAGE_GC":
+      return {
+        ...state,
+        messageGCEnabled: action.state,
       };
     default:
       return state;
@@ -163,11 +173,10 @@ const messageReducer = (state: State, message: Message): State => {
     messages.push(message);
   }
 
-  // TODO: pause gc while ui is scrolled
-  if (messages.length >= state.config.messageHistorySize + state.config.messageGCThreshold) {
-    messages.splice(0, state.config.messageGCThreshold);
-    state.messageSizeCache.prune(state.config.messageGCThreshold);
-    // state.messageSizeCache.clearAll();
+  const messageOverflow = messages.length - state.uiConfig.maxLines;
+  if (state.messageGCEnabled && messageOverflow > state.config.messageGCThreshold) {
+    messages.splice(0, messageOverflow);
+    state.messageSizeCache.prune(messageOverflow);
   }
 
   return {
@@ -206,6 +215,7 @@ type Actions = {
   mergeUIConfig: (config: Partial<IUIConfig>) => void;
   getMessage: (index: number) => Message;
   getMessageCount: () => number;
+  toggleMessageGC: (state: boolean) => void;
 };
 
 export const useChat = (): [State, Actions] => {
@@ -236,16 +246,20 @@ export const useChat = (): [State, Actions] => {
   const messages = useRef<Message[]>();
   messages.current = state.messages;
 
-  const getMessage = (index: number): Message => messages.current[index];
-  const getMessageCount = (): number => messages.current.length;
+  const getMessage = useCallback((index: number): Message => messages.current[index], []);
+  const getMessageCount = useCallback((): number => messages.current.length, []);
 
-  // TODO: load server config
+  const toggleMessageGC = useCallback(
+    (state: boolean): void => dispatch({ type: "TOGGLE_MESSAGE_GC", state }),
+    []
+  );
 
   const actions = {
     sendMessage,
     mergeUIConfig,
     getMessage,
     getMessageCount,
+    toggleMessageGC,
   };
   return [state, actions];
 };
