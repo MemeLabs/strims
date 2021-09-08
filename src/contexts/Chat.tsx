@@ -1,7 +1,6 @@
 import clsx from "clsx";
-import React, { useCallback } from "react";
+import React, { useCallback, useRef } from "react";
 import { useEffect } from "react";
-import { CellMeasurerCache } from "react-virtualized";
 
 import {
   AssetBundle,
@@ -12,6 +11,7 @@ import {
   Room,
   UIConfig,
 } from "../apis/strims/chat/v1/chat";
+import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
 import { useClient } from "./FrontendApi";
 
 type Action =
@@ -31,7 +31,11 @@ type Action =
       type: "CLIENT_CLOSE";
     };
 
-interface State {
+export type StyleMap = {
+  [key: string]: string;
+};
+
+export interface State {
   id: number;
   clientId?: bigint;
   uiConfig: UIConfig;
@@ -40,12 +44,10 @@ interface State {
     messageGCThreshold: number;
   };
   messages: Message[];
-  messageSizeCache: CellMeasurerCache;
+  messageSizeCache: ChatCellMeasurerCache;
   assetBundles: AssetBundle[];
   liveEmotes: Emote[];
-  styles: {
-    [key: string]: string;
-  };
+  styles: StyleMap;
   emotes: string[];
   modifiers: string[];
   nicks: string[];
@@ -88,7 +90,7 @@ const initialState: State = {
     messageGCThreshold: 250,
   },
   messages: [],
-  messageSizeCache: new CellMeasurerCache(),
+  messageSizeCache: new ChatCellMeasurerCache(),
   assetBundles: [],
   liveEmotes: [],
   styles: {},
@@ -164,7 +166,8 @@ const messageReducer = (state: State, message: Message): State => {
   // TODO: pause gc while ui is scrolled
   if (messages.length >= state.config.messageHistorySize + state.config.messageGCThreshold) {
     messages.splice(0, state.config.messageGCThreshold);
-    state.messageSizeCache.clearAll();
+    state.messageSizeCache.prune(state.config.messageGCThreshold);
+    // state.messageSizeCache.clearAll();
   }
 
   return {
@@ -201,6 +204,8 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
 type Actions = {
   sendMessage: (body: string) => void;
   mergeUIConfig: (config: Partial<IUIConfig>) => void;
+  getMessage: (index: number) => Message;
+  getMessageCount: () => number;
 };
 
 export const useChat = (): [State, Actions] => {
@@ -228,11 +233,19 @@ export const useChat = (): [State, Actions] => {
     [client, state.uiConfig]
   );
 
+  const messages = useRef<Message[]>();
+  messages.current = state.messages;
+
+  const getMessage = (index: number): Message => messages.current[index];
+  const getMessageCount = (): number => messages.current.length;
+
   // TODO: load server config
 
   const actions = {
     sendMessage,
     mergeUIConfig,
+    getMessage,
+    getMessageCount,
   };
   return [state, actions];
 };

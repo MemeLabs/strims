@@ -109,7 +109,7 @@ interface ChatThingProps {
 }
 
 const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false }) => {
-  const [state, { sendMessage }] = useChat();
+  const [state, { sendMessage, getMessage, getMessageCount }] = useChat();
   const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
   const closePanel = useCallback(() => setActivePanel(ChatDrawerRole.None), []);
@@ -120,6 +120,18 @@ const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false }) => {
   const toggleWhispers = useCallback(drawerToggler(ChatDrawerRole.Whispers), []);
   const toggleSettings = useCallback(drawerToggler(ChatDrawerRole.Settings), []);
   const toggleUsers = useCallback(drawerToggler(ChatDrawerRole.Users), []);
+
+  const renderMessage = useCallback(
+    ({ index, style }: MessageProps) => (
+      <Message
+        uiConfig={state.uiConfig}
+        message={getMessage(index)}
+        style={style}
+        isMostRecent={index === getMessageCount() - 1}
+      />
+    ),
+    [state.uiConfig, state.styles]
+  );
 
   return (
     <>
@@ -164,14 +176,7 @@ const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false }) => {
         {!shouldHide && (
           <Scroller
             uiConfig={state.uiConfig}
-            renderMessage={({ index, style }: MessageProps) => (
-              <Message
-                uiConfig={state.uiConfig}
-                message={state.messages[index]}
-                style={style}
-                isMostRecent={index === state.messages.length - 1}
-              />
-            )}
+            renderMessage={renderMessage}
             messageCount={state.messages.length}
             messageSizeCache={state.messageSizeCache}
           />

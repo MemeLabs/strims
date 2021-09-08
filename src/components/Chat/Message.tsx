@@ -179,7 +179,7 @@ const MessageTime: React.FC<MessageTimeProps> = ({ timestamp, format }) => {
   const time = new Date(Number(timestamp));
   return (
     <time className="chat__message__time" title={time.toLocaleString()}>
-      {date.formatDate(time, format)}
+      {date.format(time, format)}
     </time>
   );
 };
@@ -207,7 +207,10 @@ const ComboMessage: React.FC<MessageProps> = ({
   ...props
 }) => {
   const formatter = new MessageFormatter(body);
-  entities.emotes.forEach((entity) => formatter.insertEntity(MessageEmote, entity));
+  entities.emotes.forEach((entity) => formatter.insertEntity(MessageEmote, entity, {
+    shouldAnimateForever: uiConfig.animateForever,
+    shouldShowModifiers: uiConfig.emoteModifiers,
+  }));
 
   const count = entities.emotes[0].combo;
   const scale = Math.min(Math.floor(count / 5) * 5, 50);
@@ -220,7 +223,7 @@ const ComboMessage: React.FC<MessageProps> = ({
   useEffect(() => {
     ref.current.classList.remove(`chat__combo_message--hit`);
     const rafId = window.requestAnimationFrame(() =>
-      ref.current.classList.add(`chat__combo_message--hit`)
+      ref.current?.classList.add(`chat__combo_message--hit`)
     );
     return () => window.cancelAnimationFrame(rafId);
   }, [count]);
