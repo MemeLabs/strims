@@ -148,6 +148,7 @@ func NewChatEmote(
 	name string,
 	images []*chat.EmoteImage,
 	effects []*chat.EmoteEffect,
+	contributor *chat.EmoteContributor,
 ) (*chat.Emote, error) {
 	id, err := g.GenerateID()
 	if err != nil {
@@ -155,10 +156,11 @@ func NewChatEmote(
 	}
 
 	network := &chat.Emote{
-		Id:      id,
-		Name:    name,
-		Images:  images,
-		Effects: effects,
+		Id:          id,
+		Name:        name,
+		Images:      images,
+		Effects:     effects,
+		Contributor: contributor,
 	}
 	return network, nil
 }

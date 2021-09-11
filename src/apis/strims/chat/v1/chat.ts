@@ -282,6 +282,9 @@ export class EmoteEffect {
       case EmoteEffect.EffectCase.SPRITE_ANIMATION:
       EmoteEffect.SpriteAnimation.encode(m.effect.spriteAnimation, w.uint32(8018).fork()).ldelim();
       break;
+      case EmoteEffect.EffectCase.DEFAULT_MODIFIERS:
+      EmoteEffect.DefaultModifiers.encode(m.effect.defaultModifiers, w.uint32(8026).fork()).ldelim();
+      break;
     }
     return w;
   }
@@ -299,6 +302,9 @@ export class EmoteEffect {
         case 1002:
         m.effect = new EmoteEffect.Effect({ spriteAnimation: EmoteEffect.SpriteAnimation.decode(r, r.uint32()) });
         break;
+        case 1003:
+        m.effect = new EmoteEffect.Effect({ defaultModifiers: EmoteEffect.DefaultModifiers.decode(r, r.uint32()) });
+        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -313,23 +319,27 @@ export namespace EmoteEffect {
     NOT_SET = 0,
     CUSTOM_CSS = 1001,
     SPRITE_ANIMATION = 1002,
+    DEFAULT_MODIFIERS = 1003,
   }
 
   export type IEffect =
   { case?: EffectCase.NOT_SET }
   |{ case?: EffectCase.CUSTOM_CSS, customCss: EmoteEffect.ICustomCSS }
   |{ case?: EffectCase.SPRITE_ANIMATION, spriteAnimation: EmoteEffect.ISpriteAnimation }
+  |{ case?: EffectCase.DEFAULT_MODIFIERS, defaultModifiers: EmoteEffect.IDefaultModifiers }
   ;
 
   export type TEffect = Readonly<
   { case: EffectCase.NOT_SET }
   |{ case: EffectCase.CUSTOM_CSS, customCss: EmoteEffect.CustomCSS }
   |{ case: EffectCase.SPRITE_ANIMATION, spriteAnimation: EmoteEffect.SpriteAnimation }
+  |{ case: EffectCase.DEFAULT_MODIFIERS, defaultModifiers: EmoteEffect.DefaultModifiers }
   >;
 
   class EffectImpl {
     customCss: EmoteEffect.CustomCSS;
     spriteAnimation: EmoteEffect.SpriteAnimation;
+    defaultModifiers: EmoteEffect.DefaultModifiers;
     case: EffectCase = EffectCase.NOT_SET;
 
     constructor(v?: IEffect) {
@@ -340,6 +350,10 @@ export namespace EmoteEffect {
       if (v && "spriteAnimation" in v) {
         this.case = EffectCase.SPRITE_ANIMATION;
         this.spriteAnimation = new EmoteEffect.SpriteAnimation(v.spriteAnimation);
+      } else
+      if (v && "defaultModifiers" in v) {
+        this.case = EffectCase.DEFAULT_MODIFIERS;
+        this.defaultModifiers = new EmoteEffect.DefaultModifiers(v.defaultModifiers);
       }
     }
   }
@@ -349,6 +363,7 @@ export namespace EmoteEffect {
     new <T extends IEffect>(v: T): Readonly<
     T extends { customCss: EmoteEffect.ICustomCSS } ? { case: EffectCase.CUSTOM_CSS, customCss: EmoteEffect.CustomCSS } :
     T extends { spriteAnimation: EmoteEffect.ISpriteAnimation } ? { case: EffectCase.SPRITE_ANIMATION, spriteAnimation: EmoteEffect.SpriteAnimation } :
+    T extends { defaultModifiers: EmoteEffect.IDefaultModifiers } ? { case: EffectCase.DEFAULT_MODIFIERS, defaultModifiers: EmoteEffect.DefaultModifiers } :
     never
     >;
   };
@@ -450,6 +465,42 @@ export namespace EmoteEffect {
           break;
           case 6:
           m.alternateDirection = r.bool();
+          break;
+          default:
+          r.skipType(tag & 7);
+          break;
+        }
+      }
+      return m;
+    }
+  }
+
+  export type IDefaultModifiers = {
+    modifiers?: string[];
+  }
+
+  export class DefaultModifiers {
+    modifiers: string[];
+
+    constructor(v?: IDefaultModifiers) {
+      this.modifiers = v?.modifiers ? v.modifiers : [];
+    }
+
+    static encode(m: DefaultModifiers, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      for (const v of m.modifiers) w.uint32(10).string(v);
+      return w;
+    }
+
+    static decode(r: Reader | Uint8Array, length?: number): DefaultModifiers {
+      r = r instanceof Reader ? r : new Reader(r);
+      const end = length === undefined ? r.len : r.pos + length;
+      const m = new DefaultModifiers();
+      while (r.pos < end) {
+        const tag = r.uint32();
+        switch (tag >> 3) {
+          case 1:
+          m.modifiers.push(r.string())
           break;
           default:
           r.skipType(tag & 7);
@@ -1776,6 +1827,7 @@ export type ICreateEmoteRequest = {
   images?: IEmoteImage[];
   css?: string;
   effects?: IEmoteEffect[];
+  contributor?: IEmoteContributor | undefined;
 }
 
 export class CreateEmoteRequest {
@@ -1784,6 +1836,7 @@ export class CreateEmoteRequest {
   images: EmoteImage[];
   css: string;
   effects: EmoteEffect[];
+  contributor: EmoteContributor | undefined;
 
   constructor(v?: ICreateEmoteRequest) {
     this.serverId = v?.serverId || BigInt(0);
@@ -1791,6 +1844,7 @@ export class CreateEmoteRequest {
     this.images = v?.images ? v.images.map(v => new EmoteImage(v)) : [];
     this.css = v?.css || "";
     this.effects = v?.effects ? v.effects.map(v => new EmoteEffect(v)) : [];
+    this.contributor = v?.contributor && new EmoteContributor(v.contributor);
   }
 
   static encode(m: CreateEmoteRequest, w?: Writer): Writer {
@@ -1800,6 +1854,7 @@ export class CreateEmoteRequest {
     for (const v of m.images) EmoteImage.encode(v, w.uint32(26).fork()).ldelim();
     if (m.css) w.uint32(34).string(m.css);
     for (const v of m.effects) EmoteEffect.encode(v, w.uint32(42).fork()).ldelim();
+    if (m.contributor) EmoteContributor.encode(m.contributor, w.uint32(50).fork()).ldelim();
     return w;
   }
 
@@ -1824,6 +1879,9 @@ export class CreateEmoteRequest {
         break;
         case 5:
         m.effects.push(EmoteEffect.decode(r, r.uint32()));
+        break;
+        case 6:
+        m.contributor = EmoteContributor.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -1877,6 +1935,7 @@ export type IUpdateEmoteRequest = {
   images?: IEmoteImage[];
   css?: string;
   effects?: IEmoteEffect[];
+  contributor?: IEmoteContributor | undefined;
 }
 
 export class UpdateEmoteRequest {
@@ -1886,6 +1945,7 @@ export class UpdateEmoteRequest {
   images: EmoteImage[];
   css: string;
   effects: EmoteEffect[];
+  contributor: EmoteContributor | undefined;
 
   constructor(v?: IUpdateEmoteRequest) {
     this.serverId = v?.serverId || BigInt(0);
@@ -1894,6 +1954,7 @@ export class UpdateEmoteRequest {
     this.images = v?.images ? v.images.map(v => new EmoteImage(v)) : [];
     this.css = v?.css || "";
     this.effects = v?.effects ? v.effects.map(v => new EmoteEffect(v)) : [];
+    this.contributor = v?.contributor && new EmoteContributor(v.contributor);
   }
 
   static encode(m: UpdateEmoteRequest, w?: Writer): Writer {
@@ -1904,6 +1965,7 @@ export class UpdateEmoteRequest {
     for (const v of m.images) EmoteImage.encode(v, w.uint32(34).fork()).ldelim();
     if (m.css) w.uint32(42).string(m.css);
     for (const v of m.effects) EmoteEffect.encode(v, w.uint32(50).fork()).ldelim();
+    if (m.contributor) EmoteContributor.encode(m.contributor, w.uint32(58).fork()).ldelim();
     return w;
   }
 
@@ -1931,6 +1993,9 @@ export class UpdateEmoteRequest {
         break;
         case 6:
         m.effects.push(EmoteEffect.decode(r, r.uint32()));
+        break;
+        case 7:
+        m.contributor = EmoteContributor.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);

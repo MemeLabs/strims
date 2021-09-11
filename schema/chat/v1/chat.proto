@@ -63,9 +63,14 @@ message EmoteEffect {
     bool alternate_direction = 6;
   }
 
+  message DefaultModifiers {
+    repeated string modifiers = 1;
+  }
+
   oneof effect {
     CustomCSS custom_css = 1001;
     SpriteAnimation sprite_animation = 1002;
+    DefaultModifiers default_modifiers = 1003;
   }
 }
 
@@ -236,6 +241,7 @@ message CreateEmoteRequest {
   repeated EmoteImage images = 3;
   string css = 4;
   repeated EmoteEffect effects = 5;
+  EmoteContributor contributor = 6;
 }
 message CreateEmoteResponse {
   Emote emote = 1;
@@ -247,6 +253,7 @@ message UpdateEmoteRequest {
   repeated EmoteImage images = 4;
   string css = 5;
   repeated EmoteEffect effects = 6;
+  EmoteContributor contributor = 7;
 }
 message UpdateEmoteResponse {
   Emote emote = 1;

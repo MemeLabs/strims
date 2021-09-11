@@ -1,6 +1,7 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 
 import { Emote, EmoteEffect, EmoteFileType, EmoteScale } from "../../apis/strims/chat/v1/chat";
+import { StyleMap } from "../../contexts/Chat";
 
 const toMimeType = (fileType: EmoteFileType): string => {
   switch (fileType) {
@@ -24,7 +25,7 @@ const toCSSScale = (scale: EmoteScale): number => {
 
 interface StyleSheetProps {
   liveEmotes: Emote[];
-  styles: { [key: string]: string };
+  styles: StyleMap;
 }
 
 interface EmoteState {
@@ -64,7 +65,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
         const uris = e.images.map(({ data, fileType }) =>
           URL.createObjectURL(new Blob([data], { type: toMimeType(fileType) }))
         );
-        const name = styles[e.name];
+        const { name } = styles[e.name];
         const imageSet = e.images.map(({ scale }, i) => `url(${uris[i]}) ${toCSSScale(scale)}x`);
         const sample = e.images[0];
         const sampleScale = toCSSScale(sample.scale);
@@ -102,6 +103,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
                 const frameWidth = width / frameCount;
                 const direction = alternateDirection ? "alternate" : "normal";
                 const animName = `${name}_anim`;
+                const iterations = iterationCount + endOnFrame / frameCount;
 
                 rules = upsertProps(
                   rules,
@@ -109,14 +111,19 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
                   ["background-position-x", `-${endOnFrame * frameWidth}px`],
                   [
                     "animation",
-                    `${animName} ${durationMs}ms steps(${frameCount}) ${iterationCount} ${direction}`,
+                    `${animName} ${durationMs}ms steps(${frameCount}) ${iterations} ${direction}`,
                   ]
                 );
-                containerRules = upsertProps(containerRules, ["--width", `${frameWidth}px`]);
+                containerRules = upsertProps(
+                  containerRules,
+                  ["--width", `${frameWidth}px`],
+                  ["--animation-duration-ms", durationMs.toString()],
+                  ["--animation-iterations", iterations.toString()]
+                );
 
-                const loopRuleSelector = [`${name}:hover`];
+                const loopRuleSelector = [`.${name}:hover`];
                 if (loopForever) {
-                  loopRuleSelector.push(`${name}.chat__emote--animate_forever`);
+                  loopRuleSelector.push(`.${name}.chat__emote--animate_forever`);
                 }
                 ref.current.sheet.insertRule(
                   `${loopRuleSelector.join(", ")} {` +

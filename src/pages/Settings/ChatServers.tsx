@@ -22,6 +22,7 @@ import {
   InputError,
   InputLabel,
   SelectInput,
+  SelectOption,
   TextAreaInput,
   TextInput,
   ToggleInput,
@@ -49,18 +50,9 @@ const BackLink: React.FC<BackLinkProps> = ({ to, title, description }) => (
 
 interface ChatServerFormData {
   name: string;
-  networkKey: {
-    value: string;
-    label: string;
-  };
-  tags: {
-    value: string;
-    label: string;
-  }[];
-  modifiers: {
-    value: string;
-    label: string;
-  }[];
+  networkKey: SelectOption<string>;
+  tags: SelectOption<string>[];
+  modifiers: SelectOption<string>[];
 }
 
 interface ChatServerFormProps {
@@ -299,6 +291,7 @@ interface ChatEmoteFormData {
   animationEndOnFrame: number;
   animationLoopForever: boolean;
   animationAlternateDirection: boolean;
+  defaultModifiers: SelectOption<string>[];
 }
 
 const scaleOptions = [
@@ -421,6 +414,12 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
         label="alternate directions"
         name="animationAlternateDirection"
         disabled={!animated}
+      />
+      <CreatableSelectInput
+        control={control}
+        name="defaultModifiers"
+        label="Default modifiers"
+        placeholder="Modifiers"
       />
       <label className="input_label">
         <div className="input_label__body">
@@ -593,6 +592,15 @@ const toEmoteProps = (data: ChatEmoteFormData) => {
       },
     });
   }
+  if (data.defaultModifiers.length > 0) {
+    effects.push({
+      effect: {
+        defaultModifiers: {
+          modifiers: data.defaultModifiers.map(({ value }) => value),
+        },
+      },
+    });
+  }
 
   return {
     name: data.name,
@@ -631,6 +639,7 @@ const ChatEmoteEditFormPage: React.FC = () => {
   }
 
   const { emote } = value;
+  console.log(emote);
   const data: ChatEmoteFormData = {
     name: emote.name,
     image: {
@@ -653,6 +662,7 @@ const ChatEmoteEditFormPage: React.FC = () => {
     animationEndOnFrame: 0,
     animationLoopForever: false,
     animationAlternateDirection: false,
+    defaultModifiers: [],
   };
 
   emote.effects.forEach(({ effect }) => {
@@ -668,6 +678,13 @@ const ChatEmoteEditFormPage: React.FC = () => {
         data.animationEndOnFrame = effect.spriteAnimation.endOnFrame;
         data.animationLoopForever = effect.spriteAnimation.loopForever;
         data.animationAlternateDirection = effect.spriteAnimation.alternateDirection;
+        break;
+      case EmoteEffect.EffectCase.DEFAULT_MODIFIERS:
+        data.defaultModifiers = effect.defaultModifiers.modifiers.map((m) => ({
+          label: m,
+          value: m,
+        }));
+        break;
     }
   });
 

@@ -2562,6 +2562,7 @@ const src = {
               "durationMs": 1800,
               "iterationCount": 2,
               "loopForever": true,
+              "endOnFrame": 45,
             },
           },
         },
@@ -2763,6 +2764,13 @@ const src = {
               "iterationCount": 2,
               "loopForever": true,
               "alternateDirection": true,
+            },
+          },
+        },
+        {
+          "effect": {
+            "defaultModifiers": {
+              "modifiers": ["rustle"],
             },
           },
         },

@@ -136,13 +136,13 @@ const ChatPage: React.FC = () => {
             </div>
           </div>
         </ApiProvider>
-        <ApiProvider value={client}>
+        {/* <ApiProvider value={client}>
           <div className="app app--light ">
             <div className="chat_mockup__content">
               <ChatPanel />
             </div>
           </div>
-        </ApiProvider>
+        </ApiProvider> */}
       </div>
     </>
   );

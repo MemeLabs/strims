@@ -370,10 +370,10 @@
     }
 
     &--spin {
-      animation: spin linear 0.8s 3;
+      animation: spin linear 800ms 3;
 
       &:hover {
-        animation: spin linear 0.8s infinite;
+        animation: spin linear 800ms infinite;
       }
     }
 
@@ -383,6 +383,30 @@
       }
       100% {
         transform: rotate(360deg);
+      }
+    }
+
+    &--rustle {
+      animation: rustle linear 100ms 7;
+    }
+
+    &--rustle.chat__emote_container--animated {
+      animation: rustle linear 100ms
+        calc(var(--animation-duration-ms) * var(--animation-iterations) / 100);
+    }
+
+    &--rustle:hover,
+    &--rustle.chat__emote_container--animated:hover,
+    &--rustle.chat__emote_container--animate_forever {
+      animation: rustle linear 100ms infinite;
+    }
+
+    @keyframes rustle {
+      from {
+        transform: translateX(0);
+      }
+      to {
+        transform: translateX(3px);
       }
     }
   }

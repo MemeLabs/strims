@@ -112,6 +112,7 @@ func (s *chatService) CreateEmote(ctx context.Context, req *chatv1.CreateEmoteRe
 		req.Name,
 		req.Images,
 		req.Effects,
+		req.Contributor,
 	)
 	if err != nil {
 		return nil, err
@@ -136,6 +137,7 @@ func (s *chatService) UpdateEmote(ctx context.Context, req *chatv1.UpdateEmoteRe
 
 		emote.Name = req.Name
 		emote.Images = req.Images
+		emote.Contributor = req.Contributor
 		emote.Effects = req.Effects
 
 		return dao.UpdateChatEmote(tx, emote)

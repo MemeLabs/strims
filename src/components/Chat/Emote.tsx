@@ -20,12 +20,18 @@ const Emote: React.FC<EmoteProps> = ({
   ...props
 }) => {
   const [{ styles }] = useChat();
+  const style = styles[name];
+
+  if (style === undefined) {
+    return null;
+  }
 
   let emote = (
     <span
       {...props}
       title={name + (modifiers || []).map((m) => ":" + m).join()}
-      className={clsx(styles[name], "chat__emote", `chat__emote--${name}`, {
+      className={clsx(style.name, "chat__emote", `chat__emote--${name}`, {
+        "chat__emote--animated": style.animated,
         "chat__emote--animate_forever": shouldAnimateForever,
       })}
     >
@@ -33,24 +39,26 @@ const Emote: React.FC<EmoteProps> = ({
     </span>
   );
 
+  const effectiveModifiers = new Set<string>(style.modifiers);
   if (modifiers?.length > 0 && shouldShowModifiers) {
-    emote = modifiers.reduce(
-      (emote, modifier, i) => (
-        <span
-          className={clsx(
-            `${styles[name]}_container`,
-            "chat__emote_container",
-            `chat__emote_container--emote_${name}`,
-            `chat__emote_container--${modifier}`,
-            {
-              "chat__emote_container--animate_forever": shouldAnimateForever,
-            }
-          )}
-        >
-          {emote}
-        </span>
-      ),
-      emote
+    modifiers.forEach((m) => effectiveModifiers.add(m));
+  }
+  for (const modifier of effectiveModifiers) {
+    emote = (
+      <span
+        className={clsx(
+          `${style.name}_container`,
+          "chat__emote_container",
+          `chat__emote_container--emote_${name}`,
+          `chat__emote_container--${modifier}`,
+          {
+            "chat__emote_container--animated": style.animated,
+            "chat__emote_container--animate_forever": shouldAnimateForever,
+          }
+        )}
+      >
+        {emote}
+      </span>
     );
   }
 

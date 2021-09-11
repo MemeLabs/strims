@@ -5,6 +5,7 @@ import { useEffect } from "react";
 import {
   AssetBundle,
   Emote,
+  EmoteEffect,
   IUIConfig,
   Message,
   OpenClientResponse,
@@ -35,8 +36,14 @@ type Action =
       type: "CLIENT_CLOSE";
     };
 
+export interface Style {
+  name: string;
+  animated: boolean;
+  modifiers: string[];
+}
+
 export type StyleMap = {
-  [key: string]: string;
+  [key: string]: Style;
 };
 
 export interface State {
@@ -196,7 +203,24 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
   });
   const liveEmotes = Array.from(liveEmoteMap.values());
   const styles = Object.fromEntries(
-    liveEmotes.map(({ id, name }) => [name, `e_${name}_${state.id}_${id}`])
+    liveEmotes.map(({ id, name, effects }) => {
+      const style: Style = {
+        name: `e_${name}_${state.id}_${id}`,
+        animated: false,
+        modifiers: [],
+      };
+      effects.forEach((e) => {
+        switch (e.effect.case) {
+          case EmoteEffect.EffectCase.SPRITE_ANIMATION:
+            style.animated = true;
+            break;
+          case EmoteEffect.EffectCase.DEFAULT_MODIFIERS:
+            style.modifiers = e.effect.defaultModifiers.modifiers;
+            break;
+        }
+      });
+      return [name, style];
+    })
   );
 
   return {
