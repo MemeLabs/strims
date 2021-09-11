@@ -1,5 +1,12 @@
 import clsx from "clsx";
-import React, { CSSProperties, ReactNode, useCallback, useEffect, useRef, useState } from "react";
+import React, {
+  CSSProperties,
+  ReactNode,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { Scrollbars } from "react-custom-scrollbars-2";
 import { FiArrowDownCircle } from "react-icons/fi";
 import { useDebounce } from "react-use";
@@ -81,7 +88,7 @@ const ScrollerContent: React.FC<ScrollerProps & Dimensions> = ({
   const recomputeRowHeights = () => {
     messageSizeCache.clearAll();
     list.current?.recomputeRowHeights();
-    applyAutoScroll();
+    window.requestAnimationFrame(applyAutoScroll);
   };
 
   useDebounce(recomputeRowHeights, 500, [width]);

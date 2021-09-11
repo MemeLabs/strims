@@ -17,7 +17,8 @@ export default class ChatCellMeasurerCache implements CellMeasurerCacheInterface
   }
 
   prune(n: number): void {
-    this.values.splice(0, n);
+    this.values.copyWithin(0, n);
+    this.values.length -= n;
   }
 
   clear(rowIndex: number, columnIndex: number): void {
@@ -25,7 +26,7 @@ export default class ChatCellMeasurerCache implements CellMeasurerCacheInterface
   }
 
   clearAll(): void {
-    this.values = [];
+    this.values.length = 0;
   }
 
   hasFixedHeight(): boolean {
@@ -45,7 +46,7 @@ export default class ChatCellMeasurerCache implements CellMeasurerCacheInterface
   }
 
   has(rowIndex: number, columnIndex: number): boolean {
-    return this.values[rowIndex] !== undefined;
+    return rowIndex < this.values.length && this.values[rowIndex] !== undefined;
   }
 
   set(rowIndex: number, columnIndex: number, width: number, height: number): void {

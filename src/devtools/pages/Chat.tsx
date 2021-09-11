@@ -18,7 +18,7 @@ class MockChatSvc {
   messages: Readable<chatv1.Message>;
 
   constructor() {
-    this.messages = new MessageEmitter(1000);
+    this.messages = new MessageEmitter(0, 0);
   }
 
   destroy() {
@@ -126,7 +126,7 @@ const ChatPage: React.FC = () => {
   React.useEffect(() => () => chatSvc.destroy(), [chatSvc]);
 
   return (
-    <div>
+    <>
       <Nav />
       <div className="chat_mockup">
         <ApiProvider value={client}>
@@ -144,7 +144,7 @@ const ChatPage: React.FC = () => {
           </div>
         </ApiProvider>
       </div>
-    </div>
+    </>
   );
 };
 

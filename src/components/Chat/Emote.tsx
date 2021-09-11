@@ -35,9 +35,10 @@ const Emote: React.FC<EmoteProps> = ({
 
   if (modifiers?.length > 0 && shouldShowModifiers) {
     emote = modifiers.reduce(
-      (emote, modifier) => (
+      (emote, modifier, i) => (
         <span
           className={clsx(
+            `${styles[name]}_container`,
             "chat__emote_container",
             `chat__emote_container--emote_${name}`,
             `chat__emote_container--${modifier}`,

@@ -29,7 +29,7 @@ interface StyleSheetProps {
 
 interface EmoteState {
   uris: string[];
-  selector: string;
+  name: string;
 }
 
 type Prop = [string, string];
@@ -50,14 +50,13 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
       const added = liveEmotes.filter((e) => !prev.has(e));
       const removed = Array.from(prev.entries()).filter(([e]) => !liveEmotes.includes(e));
 
-      removed.forEach(([e, { selector, uris }]) => {
+      removed.forEach(([e, { name, uris }]) => {
         uris.forEach((uri) => URL.revokeObjectURL(uri));
         next.delete(e);
 
         for (let i = 0; i < ref.current.sheet.cssRules.length; ) {
-          if (ref.current.sheet.cssRules.item(i).cssText.startsWith(selector)) {
+          if (ref.current.sheet.cssRules.item(i).cssText.includes(name)) {
             ref.current.sheet.deleteRule(i);
-            break;
           }
         }
       });
@@ -65,7 +64,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
         const uris = e.images.map(({ data, fileType }) =>
           URL.createObjectURL(new Blob([data], { type: toMimeType(fileType) }))
         );
-        const selector = `.${styles[e.name]}`;
+        const name = styles[e.name];
         const imageSet = e.images.map(({ scale }, i) => `url(${uris[i]}) ${toCSSScale(scale)}x`);
         const sample = e.images[0];
         const sampleScale = toCSSScale(sample.scale);
@@ -80,6 +79,10 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
           ["height", `${height}px`],
           ["margin-top", `calc(0.5em - ${height / 2}px)`],
           ["margin-bottom", `calc(0.5em - ${height / 2}px)`],
+        ];
+        let containerRules: PropList = [
+          ["--width", `${width}px`],
+          ["--height", `${height}px`],
         ];
 
         e.effects.forEach(({ effect }) => {
@@ -98,7 +101,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
                 } = effect.spriteAnimation;
                 const frameWidth = width / frameCount;
                 const direction = alternateDirection ? "alternate" : "normal";
-                const animName = `${styles[e.name]}_anim`;
+                const animName = `${name}_anim`;
 
                 rules = upsertProps(
                   rules,
@@ -109,10 +112,11 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
                     `${animName} ${durationMs}ms steps(${frameCount}) ${iterationCount} ${direction}`,
                   ]
                 );
+                containerRules = upsertProps(containerRules, ["--width", `${frameWidth}px`]);
 
-                const loopRuleSelector = [`${selector}:hover`];
+                const loopRuleSelector = [`${name}:hover`];
                 if (loopForever) {
-                  loopRuleSelector.push(`${selector}.chat__emote--animate_forever`);
+                  loopRuleSelector.push(`${name}.chat__emote--animate_forever`);
                 }
                 ref.current.sheet.insertRule(
                   `${loopRuleSelector.join(", ")} {` +
@@ -133,9 +137,12 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
           }
         });
 
-        ref.current.sheet.insertRule(`${selector} {${rules.map((r) => r.join(":")).join(";")}}`);
+        ref.current.sheet.insertRule(`.${name} {${rules.map((r) => r.join(":")).join(";")}}`);
+        ref.current.sheet.insertRule(
+          `.${name}_container {${containerRules.map((r) => r.join(":")).join(";")}}`
+        );
 
-        next.set(e, { selector, uris });
+        next.set(e, { name, uris });
       });
 
       return next;

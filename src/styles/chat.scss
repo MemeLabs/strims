@@ -345,7 +345,20 @@
 
     &--wide {
       transform: scaleX(1.5) scaleY(0.8);
-      margin: 0 5px;
+      margin: 0 calc(var(--width) * 0.25);
+    }
+
+    &--smol {
+      transform: scaleX(0.5) scaleY(0.5);
+      margin: 0 calc(var(--width) * -0.25);
+    }
+
+    &--smol &--wide {
+      margin: 0 calc(var(--width) * 0.125);
+    }
+
+    &--wide &--smol {
+      margin: 0 calc(var(--width) * -0.375);
     }
 
     &--mirror {
@@ -354,6 +367,23 @@
 
     &--flip {
       transform: scaleY(-1);
+    }
+
+    &--spin {
+      animation: spin linear 0.8s 3;
+
+      &:hover {
+        animation: spin linear 0.8s infinite;
+      }
+    }
+
+    @keyframes spin {
+      0% {
+        transform: rotate(0deg);
+      }
+      100% {
+        transform: rotate(360deg);
+      }
     }
   }
 

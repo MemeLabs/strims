@@ -7,11 +7,17 @@ body {
   font-family: sans-serif;
 }
 
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
 .nav {
   display: flex;
   align-items: center;
   background: #ddd;
   height: 35px;
+  flex: 35px 0 0;
 
   a {
     margin: 0 0.5em;
@@ -53,9 +59,13 @@ body {
 .chat_mockup {
   display: flex;
   flex-direction: row;
+  flex: 1;
+
+  .app {
+    min-height: calc(100vh - 35px);
+  }
 
   &__content {
-    height: calc(100vh - 35px);
     background: var(--body-background);
     flex: 1;
     width: 420px;

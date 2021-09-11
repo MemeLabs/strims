@@ -207,10 +207,12 @@ const ComboMessage: React.FC<MessageProps> = ({
   ...props
 }) => {
   const formatter = new MessageFormatter(body);
-  entities.emotes.forEach((entity) => formatter.insertEntity(MessageEmote, entity, {
-    shouldAnimateForever: uiConfig.animateForever,
-    shouldShowModifiers: uiConfig.emoteModifiers,
-  }));
+  entities.emotes.forEach((entity) =>
+    formatter.insertEntity(MessageEmote, entity, {
+      shouldAnimateForever: uiConfig.animateForever,
+      shouldShowModifiers: uiConfig.emoteModifiers,
+    })
+  );
 
   const count = entities.emotes[0].combo;
   const scale = Math.min(Math.floor(count / 5) * 5, 50);

@@ -1,7 +1,7 @@
 import clsx from "clsx";
 import filterObj from "filter-obj";
 import Prism from "prismjs";
-import React, { KeyboardEvent, useCallback, useMemo, useState } from "react";
+import React, { KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 import {
   Descendant,
   Editor,
@@ -52,6 +52,16 @@ const initialValue: Descendant[] = [
   },
 ];
 
+interface SelectedMatch {
+  index: number;
+  entry: SearchSourceEntry;
+}
+
+type Match = [SearchSource[], SearchSourceEntry[]];
+
+const defaultSelectedMatch: SelectedMatch = { index: 0, entry: null };
+const defaultMatch: Match = [[], []];
+
 interface ComposerProps {
   onMessage: (message: string) => void;
   emotes: string[];
@@ -61,7 +71,8 @@ interface ComposerProps {
 }
 
 const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks, tags }) => {
-  const [index, setIndex] = useState(0);
+  const [[matchSources, matchEntries], setMatch] = useState<Match>(defaultMatch);
+  const [selectedMatch, setSelectedMatch] = useState<SelectedMatch>(defaultSelectedMatch);
   const [currentSearch, setSearch] = useState<SearchState | null>(null);
   const [lastSearch, setLastSearch] = useState<SearchState | null>(null);
   const search = lastSearch || currentSearch;
@@ -69,26 +80,31 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
   const editor = useMemo(() => withReact(withNoLineBreaks(withHistory(createEditor()))), []);
   const [value, setValue] = useState<Descendant[]>(initialValue);
 
-  // const emoteNames = useMemo(() => test.emotes.map(({ name }) => name), [test.emotes]);
-  // const nicks = useMemo(() => users.map(({ nick }) => nick), [users]);
-
   const searchSources = useSearchSources(nicks, tags, commands, emotes, modifiers);
 
-  const matches = useMemo(() => {
+  useEffect(() => {
     if (!search) {
-      return [];
+      setMatch(defaultMatch);
+      setSelectedMatch(defaultSelectedMatch);
+      return;
     }
 
     const query = search.query.toLowerCase();
     const test = {
-      "prefix": ({ index }: SearchSource) => index.startsWith(query),
-      "substring": ({ index }: SearchSource) => index.indexOf(query) !== -1,
+      "prefix": ({ index }: SearchSourceEntry) => index.startsWith(query),
+      "substring": ({ index }: SearchSourceEntry) => index.indexOf(query) !== -1,
     }[search.queryMode];
 
-    return search.sources
-      .map((s) => s.filter(test))
-      .flat()
-      .slice(0, 10);
+    const matches = search.sources
+      .map((s) => ({
+        ...s,
+        entries: s.entries.filter(test),
+      }))
+      .filter(({ entries }) => entries.length > 0);
+    const entries = matches.map(({ entries }) => entries).flat();
+
+    setMatch([matches, entries]);
+    setSelectedMatch({ index: 0, entry: entries[0] });
   }, [search]);
 
   const renderLeaf = useCallback((props: RenderLeafProps) => <Leaf {...props} />, []);
@@ -107,8 +123,7 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
   const onChange = useCallback(
     (newValue) => {
       setValue(newValue);
-      const newState = getSearchState(editor, grammar, searchSources);
-      setSearch(newState);
+      setSearch(getSearchState(editor, grammar, searchSources));
     },
     [editor, grammar, searchSources]
   );
@@ -126,35 +141,38 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
         return;
       }
 
+      const getSelectedMatch = (i: number) => ({
+        index: i,
+        entry: matchEntries[i % matchEntries.length],
+      });
+
       switch (event.key) {
         case "ArrowDown": {
           event.preventDefault();
-          const prevIndex = index >= matches.length - 1 ? 0 : index + 1;
-          setIndex(prevIndex);
+          setSelectedMatch(({ index }) => getSelectedMatch(index + 1));
           return;
         }
         case "ArrowUp": {
           event.preventDefault();
-          const nextIndex = index <= 0 ? matches.length - 1 : index - 1;
-          setIndex(nextIndex);
+          setSelectedMatch(({ index }) => getSelectedMatch(index - 1));
           return;
         }
         case "Tab": {
           event.preventDefault();
 
-          const match = matches[index];
-          if (!match) {
+          if (!selectedMatch.entry) {
             return;
           }
+          const entry = selectedMatch.entry;
 
           const target =
-            match.type === "modifier" ? currentSearch.modifierTarget : currentSearch.target;
+            entry.type === "modifier" ? currentSearch.modifierTarget : currentSearch.target;
           Transforms.select(editor, target);
           const whitespace = currentSearch.suffixSpace ? " " : "";
-          Transforms.insertText(editor, (match.substitution || match.value) + whitespace);
+          Transforms.insertText(editor, (entry.substitution || entry.value) + whitespace);
           Transforms.move(editor);
           setLastSearch(search);
-          setIndex((index + 1) % matches.length);
+          setSelectedMatch(({ index }) => getSelectedMatch(index + 1));
           return;
         }
         case "Escape": {
@@ -165,27 +183,40 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
       }
 
       setLastSearch(null);
-      setIndex(0);
+      // setSelectedMatch(defaultSelectedMatch);
     },
-    [index, search, currentSearch]
+    [matchEntries, selectedMatch, search, currentSearch]
   );
 
-  const showSuggestions = search && matches.length > (lastSearch ? 1 : 0);
+  const showSuggestions = search && matchSources.length > (lastSearch ? 1 : 0);
+
+  console.log(selectedMatch);
+  // console.log({
+  //   matchSources,
+  //   matchEntries,
+  //   selectedMatch,
+  //   search,
+  // });
 
   return (
     <div className="chat__composer">
       {showSuggestions && (
         <div className="chat__composer__autocomplete">
           <div className="chat__composer__autocomplete__list">
-            {matches.map((m, i) => (
-              <div
-                key={i}
-                className={clsx({
-                  "chat__composer__autocomplete__item": true,
-                  "chat__composer__autocomplete__item--selected": i === index,
-                })}
-              >
-                {m.value}
+            {matchSources.map((m, i) => (
+              <div key={i}>
+                <div className="chat__composer__autocomplete__label">{m.label}</div>
+                {m.entries.map((e, i) => (
+                  <div
+                    key={i}
+                    className={clsx({
+                      "chat__composer__autocomplete__item": true,
+                      "chat__composer__autocomplete__item--selected": e === selectedMatch.entry,
+                    })}
+                  >
+                    {e.value}
+                  </div>
+                ))}
               </div>
             ))}
           </div>
@@ -315,19 +346,24 @@ const getRanges = (text: string, path: Path, grammar: Prism.Grammar) => {
   return ranges;
 };
 
-interface SearchSource {
+interface SearchSourceEntry {
   type: "nick" | "tag" | "command" | "emote" | "modifier";
   value: string;
   substitution?: string;
   index: string;
 }
 
+interface SearchSource {
+  label: string;
+  entries: SearchSourceEntry[];
+}
+
 interface SearchSources {
-  nicks: SearchSource[];
-  tags: SearchSource[];
-  commands: SearchSource[];
-  emotes: SearchSource[];
-  modifiers: SearchSource[];
+  nicks: SearchSource;
+  tags: SearchSource;
+  commands: SearchSource;
+  emotes: SearchSource;
+  modifiers: SearchSource;
 }
 
 const useSearchSources = (
@@ -339,50 +375,60 @@ const useSearchSources = (
 ): SearchSources => {
   const sources: SearchSources = {
     nicks: useMemo(
-      () =>
-        nicks.map((v) => ({
+      () => ({
+        label: "members",
+        entries: nicks.map((v) => ({
           type: "nick",
           value: v,
           index: v.toLowerCase(),
         })),
+      }),
       [nicks]
     ),
     tags: useMemo(
-      () =>
-        tags.map((v) => ({
+      () => ({
+        label: "tags",
+        entries: tags.map((v) => ({
           type: "tag",
           value: v,
           index: v.toLowerCase(),
         })),
+      }),
       [tags]
     ),
     commands: useMemo(
-      () =>
-        commands.map((v) => ({
+      () => ({
+        label: "commands",
+        entries: commands.map((v) => ({
           type: "command",
           value: v,
           substitution: "/" + v,
           index: v.toLowerCase(),
         })),
+      }),
       [commands]
     ),
     emotes: useMemo(
-      () =>
-        emotes.map((v) => ({
+      () => ({
+        label: "emotes",
+        entries: emotes.map((v) => ({
           type: "emote",
           value: v,
           index: v.toLowerCase(),
         })),
+      }),
       [emotes]
     ),
     modifiers: useMemo(
-      () =>
-        modifiers.map((v) => ({
+      () => ({
+        label: "modifiers",
+        entries: modifiers.map((v) => ({
           type: "modifier",
           value: v,
           substitution: ":" + v,
           index: v.toLowerCase(),
         })),
+      }),
       [modifiers]
     ),
   };
@@ -392,7 +438,7 @@ const useSearchSources = (
 interface SearchState {
   debounceDelay: number;
   queryMode: "substring" | "prefix";
-  sources: SearchSource[][];
+  sources: SearchSource[];
   query: string;
   target: Range;
   suffixSpace: boolean;
@@ -439,7 +485,7 @@ const getSearchState = (
     (contiguousContext && !modifierContext) ||
     entityRanges.some((r) => (r.code || r.url) && Range.includes(r, selection));
 
-  const sources: SearchSource[][] = [];
+  const sources: SearchSource[] = [];
   if (punct === ":") {
     if (modifierContext) {
       sources.push(searchSources.modifiers);
