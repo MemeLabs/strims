@@ -5,7 +5,7 @@
   flex: 1 1 500px;
   height: 0;
   font-size: 0.9em;
-  line-height: 1.4em;
+  line-height: 1.6em;
   position: relative;
   overflow: hidden;
 
@@ -333,24 +333,40 @@
     }
   }
 
-  &__emote {
+  &__emote,
+  &__emote_container {
     display: inline-block;
-    margin: 0 3px;
+    position: relative;
+  }
+
+  &__emote--root,
+  &__emote_container--root {
+    margin: calc(0.5em - var(--height) / 2) 3px;
+    vertical-align: middle;
+  }
+
+  &__emote {
     overflow: hidden;
     text-indent: -10000px;
+    height: var(--height);
+    width: var(--width);
+    background-repeat: no-repeat;
+    z-index: 1;
   }
 
   &__emote_container {
-    display: inline-block;
+    // TODO: virus
 
     &--wide {
       transform: scaleX(1.5) scaleY(0.8);
-      margin: 0 calc(var(--width) * 0.25);
+      margin-left: calc(var(--width) * 0.25);
+      margin-right: calc(var(--width) * 0.25);
     }
 
     &--smol {
       transform: scaleX(0.5) scaleY(0.5);
-      margin: 0 calc(var(--width) * -0.25);
+      margin-left: calc(var(--width) * -0.25);
+      margin-right: calc(var(--width) * -0.25);
     }
 
     &--smol &--wide {
@@ -386,19 +402,17 @@
       }
     }
 
-    &--rustle {
-      animation: rustle linear 100ms 7;
-    }
+    @mixin rustle {
+      &.chat__emote_container--animated {
+        animation: rustle linear 100ms
+          calc(var(--animation-duration-ms) * var(--animation-iterations) / 100);
+      }
 
-    &--rustle.chat__emote_container--animated {
-      animation: rustle linear 100ms
-        calc(var(--animation-duration-ms) * var(--animation-iterations) / 100);
-    }
-
-    &--rustle:hover,
-    &--rustle.chat__emote_container--animated:hover,
-    &--rustle.chat__emote_container--animate_forever {
-      animation: rustle linear 100ms infinite;
+      &:hover,
+      &.chat__emote_container--animated:hover,
+      &.chat__emote_container--animate_forever {
+        animation: rustle linear 100ms infinite;
+      }
     }
 
     @keyframes rustle {
@@ -410,16 +424,17 @@
       }
     }
 
+    &--rustle {
+      animation: rustle linear 100ms 7;
+      @include rustle;
+    }
+
     &--gold {
-      box-sizing: border-box;
-      display: inline-block;
       height: var(--height);
-      margin: calc(0.5em - var(--height) / 2) 3px;
+      width: var(--width);
       mask-image: var(--background-image);
       mask-size: var(--width) var(--height);
       overflow: hidden;
-      position: relative;
-      width: var(--width);
 
       &.chat__emote_container--animated {
         mask-position: calc(-1 * var(--animation-end-on-frame) * var(--width)) 0;
@@ -471,7 +486,6 @@
         filter: contrast(125%) grayscale(100%) brightness(0.75);
         margin: 0;
         mix-blend-mode: color-burn;
-        z-index: 1;
       }
 
       &.chat__emote_container--animated .chat__emote,
@@ -495,6 +509,367 @@
       100% {
         transform: translate(-50px, 50px) scale(4);
         opacity: 0;
+      }
+    }
+
+    &--fast.chat__emote_container {
+      .chat__emote,
+      .chat__emote--animate_forever {
+        animation-duration: calc(var(--animation-duration-ms) * 0.5ms);
+      }
+
+      .chat__emote {
+        animation-iteration-count: calc(
+          var(--animation-iterations) * 2 + var(--animation-end-on-frame) /
+            var(--animation-frame-count)
+        );
+      }
+
+      .chat__emote:hover,
+      .chat__emote.chat__emote--animate_forever {
+        animation-iteration-count: infinite;
+      }
+    }
+
+    &--slow.chat__emote_container {
+      .chat__emote,
+      .chat__emote--animate_forever {
+        animation-duration: calc(var(--animation-duration-ms) * 2ms);
+      }
+
+      .chat__emote {
+        animation-iteration-count: calc(
+          var(--animation-iterations) / 2 + var(--animation-end-on-frame) /
+            var(--animation-frame-count)
+        );
+      }
+
+      .chat__emote:hover,
+      .chat__emote.chat__emote--animate_forever {
+        animation-iteration-count: infinite;
+      }
+    }
+
+    &--reverse .chat__emote.chat__emote--animated {
+      animation-direction: var(--animation-reverse-direction);
+    }
+
+    &--pause .chat__emote.chat__emote--animated {
+      animation: none;
+    }
+
+    &--lag {
+      animation: lag 4s 2;
+
+      &:hover {
+        animation-iteration-count: infinite;
+      }
+    }
+
+    @keyframes lag {
+      0% {
+        mask-image: linear-gradient(to top, transparent 100%, black 0%);
+      }
+      12% {
+        mask-image: linear-gradient(to top, transparent 87.5%, black 0%);
+      }
+      25% {
+        mask-image: linear-gradient(to top, transparent 75%, black 0%);
+      }
+      37% {
+        mask-image: linear-gradient(to top, transparent 62.5%, black 0%);
+      }
+      50% {
+        mask-image: linear-gradient(to top, transparent 50%, black 0%);
+      }
+      62% {
+        mask-image: linear-gradient(to top, transparent 37.5%, black 0%);
+      }
+      75% {
+        mask-image: linear-gradient(to top, transparent 25%, black 0%);
+      }
+      87% {
+        mask-image: linear-gradient(to top, transparent 12.5%, black 0%);
+      }
+      100% {
+        mask-image: linear-gradient(to top, transparent 0%, black 0%);
+      }
+    }
+
+    @mixin floating-particles(
+      $name,
+      $particle-image: "",
+      $particle-height: auto,
+      $particle-width: auto,
+      $particle-content: "",
+      $particle-font-size: inherit,
+      $animation-duration: 0.8s
+    ) {
+      @keyframes #{$name}_particle {
+        0%,
+        2% {
+          opacity: 0;
+        }
+        0% {
+          visibility: visible;
+          transform: scale(0);
+          bottom: -30%;
+        }
+
+        50% {
+          opacity: 1;
+          transform: scale(0.6);
+        }
+
+        100% {
+          transform: scale(0.6);
+          bottom: 50%;
+          opacity: 0;
+        }
+      }
+
+      &:before,
+      &:after,
+      & .chat__emote:before,
+      & .chat__emote:after {
+        @if $particle-image != "" {
+          background-image: url($particle-image);
+        }
+        content: $particle-content;
+        font-size: $particle-font-size;
+        background-size: cover;
+        display: block;
+        height: $particle-height;
+        width: $particle-width;
+        position: absolute;
+        bottom: 10px;
+        z-index: 3;
+        visibility: hidden;
+        animation: #{$name}_particle $animation-duration 6;
+      }
+
+      &:before {
+        /* left-outer particle */
+        left: -8px;
+        animation-delay: -($animation-duration - $animation-duration * 0.25);
+      }
+
+      &:after {
+        /* right-inner particle */
+        right: -2px;
+      }
+
+      & .chat__emote {
+        &:before {
+          /* left-inner particle */
+          left: -3px;
+          animation-delay: -($animation-duration - ($animation-duration * 0.75));
+        }
+
+        &:after {
+          /* right-outer particle */
+          right: -7px;
+          animation-delay: -($animation-duration - $animation-duration * 0.5);
+        }
+      }
+
+      &:hover,
+      &.chat__emote_container--animate_forever {
+        &:before,
+        &:after,
+        & .chat__emote:before,
+        & .chat__emote:after {
+          animation-iteration-count: infinite;
+        }
+      }
+    }
+
+    &--jam {
+      animation: jam 500ms 7;
+
+      &:hover,
+      &.chat__emote_container--animate_forever {
+        animation-iteration-count: infinite;
+      }
+
+      @include floating-particles(
+        $name: jam,
+        $particle-image:
+          "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+CjxzdmcKIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIKIGVuYWJsZS1iYWNrZ3JvdW5kPSJuZXcgMCAwIDEwMCAxMDAiCiB4bWw6c3BhY2U9InByZXNlcnZlIgogdmlld0JveD0iMCAwIDExMCAxMTAiCiB2ZXJzaW9uPSIxLjEiCj4KCTxkZWZzPgoJCTxmaWx0ZXIgaWQ9InNoYWRvdyIgeD0iMCIgeT0iMCIgd2lkdGg9IjIwMCUiIGhlaWdodD0iMjAwJSI+CgkJCTxmZU9mZnNldCByZXN1bHQ9Im9mZk91dCIgaW49IlNvdXJjZUFscGhhIiBkeD0iNSIgZHk9IjUiIC8+CgkJCTxmZUdhdXNzaWFuQmx1ciByZXN1bHQ9ImJsdXJPdXQiIGluPSJvZmZPdXQiIHN0ZERldmlhdGlvbj0iMyIgLz4KCQkJPGZlQmxlbmQgaW49IlNvdXJjZUdyYXBoaWMiIGluMj0iYmx1ck91dCIgbW9kZT0ibm9ybWFsIiAvPgoJCTwvZmlsdGVyPgoJPC9kZWZzPgoJPHBhdGgKICBkPSJtOTMuMTYxIDAuMDcxYy0zMy41MDEtMS4xMTQtNjAuOTQxIDExLjI0My02MC45NDEgMTEuMjQzbC0wLjAyIDYyLjcwOWMtMy40MTEtMS4zNTQtNy41NTktMS42NzUtMTEuNzcyLTAuNjUxLTkuMDgzIDIuMjA3LTE1LjAzMSA5LjgyLTEzLjI4NSAxNy4wMDdzMTAuNTI0IDExLjIyNSAxOS42MDYgOS4wMTljOC41NjQtMi4wODEgMTQuMzM4LTguOTY5IDEzLjUwNy0xNS43NzJ2LTQ2Ljg1NXMxOS40MDQtNi43ODQgNDQuNTczLTguNDg1djM0Ljg0OWMtMy4zNzQtMS4yOTItNy40NDMtMS41ODUtMTEuNTc5LTAuNTgtOS4wODMgMi4yMDYtMTUuMDMxIDkuODE5LTEzLjI4NSAxNy4wMDcgMS43NDUgNy4xODcgMTAuNTIzIDExLjIyNCAxOS42MDYgOS4wMTggNy45MzEtMS45MjcgMTMuNDcxLTcuOTc3IDEzLjU4Ny0xNC4yNjRsMC4wMDMgMC4wMDR2LTc0LjI0OXoiCiAgZmlsbD0iIzAwZDBmZiIKICBmaWx0ZXI9InVybCgjc2hhZG93KSIKLz4KPC9zdmc+Cg==",
+        $particle-height: 22px,
+        $particle-width: 22px
+      );
+    }
+
+    @keyframes jam {
+      0% {
+        transform: translateY(0);
+      }
+      100% {
+        transform: translateY(2px);
+      }
+    }
+
+    &--love {
+      &:hover,
+      &.chat__emote_container--animate_forever {
+        animation-iteration-count: infinite;
+      }
+
+      @include floating-particles($name: love, $particle-content: "💗", $particle-font-size: 18px);
+    }
+
+    &--banned {
+      &:after {
+        background-image: url("/assets/chat/modifiers/banned.png");
+        content: "";
+        display: block;
+        height: 32px;
+        left: calc(50% - 16px);
+        pointer-events: none;
+        position: absolute;
+        top: 0px;
+        width: 32px;
+        z-index: 2;
+      }
+    }
+
+    &--rain {
+      &:after {
+        background-image: url("/assets/chat/modifiers/rain.png");
+        content: "";
+        display: block;
+        height: 100%;
+        width: 100%;
+        pointer-events: none;
+        position: absolute;
+        top: 0;
+        z-index: 2;
+      }
+    }
+
+    &--snow {
+      &:after {
+        background-image: url("/assets/chat/modifiers/snow.png");
+        content: "";
+        display: block;
+        height: 100%;
+        width: 100%;
+        pointer-events: none;
+        position: absolute;
+        top: 0;
+        z-index: 2;
+      }
+    }
+
+    &--worth {
+      overflow: hidden;
+
+      &:before,
+      &:after {
+        content: "💰";
+        font-size: 18px;
+        position: absolute;
+        top: 0;
+        animation: worth 0.6s 8;
+        filter: drop-shadow(0px 0px 3px rgba(255, 255, 255, 0.7));
+        z-index: 3;
+      }
+
+      &:before {
+        left: -3px;
+      }
+
+      &:after {
+        right: -3px;
+        animation-delay: 0.25s;
+      }
+
+      &:hover,
+      &.chat__emote_container--animate_forever {
+        &:before,
+        &:after {
+          animation-iteration-count: infinite;
+        }
+      }
+    }
+
+    @keyframes worth {
+      0% {
+        transform: translateY(-25px);
+      }
+      99% {
+        transform: translateY(32px);
+      }
+      100% {
+        transform: translateY(-25px);
+      }
+    }
+
+    &--dank {
+      background-image: url("data:image/png;base64,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");
+      background-position: center;
+      background-repeat: no-repeat;
+      background-size: cover;
+      animation: dank 1s 2;
+
+      &:hover,
+      &.chat__emote_container--animate_forever {
+        animation-iteration-count: infinite;
+      }
+    }
+
+    @keyframes dank {
+      0%,
+      100% {
+        filter: hue-rotate(0deg);
+      }
+      50% {
+        filter: hue-rotate(360deg);
+      }
+    }
+
+    &--pride {
+      &:before {
+        position: absolute;
+        background: linear-gradient(
+          to bottom,
+          rgba(255, 0, 0, 0.8) 16%,
+          rgba(255, 165, 0, 0.8) 16% 33%,
+          rgba(255, 255, 0, 0.8) 33% 50%,
+          rgba(0, 255, 0, 0.8) 50% 66%,
+          rgba(0, 0, 255, 0.8) 66% 83%,
+          rgba(75, 0, 130, 0.8) 83%
+        );
+        width: 100%;
+        height: 100%;
+        pointer-events: none;
+        z-index: 0;
+        content: "";
+      }
+    }
+
+    &--hyper {
+      filter: drop-shadow(0px 0px 3px rgba(255, 255, 255, 0.7));
+      @include rustle;
+
+      .chat__emote:after {
+        display: block;
+        content: "";
+        position: absolute;
+        top: 0;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 2;
+
+        background-image: inherit;
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+
+        filter: opacity(0.1) drop-shadow(0px 0px 0px red) drop-shadow(0px 0px 0px red)
+          drop-shadow(0px 0px 0px red) drop-shadow(0px 0px 0px red);
+        mix-blend-mode: color-dodge;
       }
     }
   }
