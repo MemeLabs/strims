@@ -190,7 +190,7 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
 
   const showSuggestions = search && matchSources.length > (lastSearch ? 1 : 0);
 
-  console.log(selectedMatch);
+  // console.log(selectedMatch);
   // console.log({
   //   matchSources,
   //   matchEntries,
@@ -204,20 +204,7 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
         <div className="chat__composer__autocomplete">
           <div className="chat__composer__autocomplete__list">
             {matchSources.map((m, i) => (
-              <div key={i}>
-                <div className="chat__composer__autocomplete__label">{m.label}</div>
-                {m.entries.map((e, i) => (
-                  <div
-                    key={i}
-                    className={clsx({
-                      "chat__composer__autocomplete__item": true,
-                      "chat__composer__autocomplete__item--selected": e === selectedMatch.entry,
-                    })}
-                  >
-                    {e.value}
-                  </div>
-                ))}
-              </div>
+              <AutocompleteGroup {...m} selectedMatch={selectedMatch} key={i} />
             ))}
           </div>
         </div>
@@ -230,6 +217,58 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
           renderLeaf={renderLeaf}
         />
       </Slate>
+    </div>
+  );
+};
+
+interface AutocompleteGroupProps {
+  label: string;
+  entries: SearchSourceEntry[];
+  selectedMatch: SelectedMatch;
+}
+
+const AutocompleteGroup: React.FC<AutocompleteGroupProps> = ({ label, entries, selectedMatch }) => (
+  <>
+    <div className="chat__composer__autocomplete__label">{label}</div>
+    {entries.map((e, i) => (
+      <AutocompleteGroupItem entry={e} selectedMatch={selectedMatch} key={i} />
+    ))}
+  </>
+);
+
+interface AutocompleteGroupItemProps {
+  entry: SearchSourceEntry;
+  selectedMatch: SelectedMatch;
+}
+
+const AutocompleteGroupItem: React.FC<AutocompleteGroupItemProps> = ({ entry, selectedMatch }) => {
+  let content: React.ReactNode;
+  switch (entry.type) {
+    case "emote":
+      content = (
+        <>
+          <span className="chat__composer__autocomplete__item__emote">
+            <Emote name={entry.value} />
+          </span>
+          <span className="chat__composer__autocomplete__item__label">{entry.value}</span>
+        </>
+      );
+      break;
+    default:
+      content = <span className="chat__composer__autocomplete__item__label">{entry.value}</span>;
+  }
+
+  return (
+    <div
+      className={clsx(
+        "chat__composer__autocomplete__item",
+        `chat__composer__autocomplete__item--${entry.type}`,
+        {
+          "chat__composer__autocomplete__item--selected": entry === selectedMatch.entry,
+        }
+      )}
+    >
+      {content}
     </div>
   );
 };

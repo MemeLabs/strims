@@ -352,6 +352,34 @@
     width: var(--width);
     background-repeat: no-repeat;
     z-index: 1;
+
+    &--animated {
+      background-position-x: calc(var(--animation-end-on-frame) * var(--width));
+      animation-name: sprite-animation;
+      animation-duration: calc(var(--animation-duration-ms) * 1ms);
+      animation-timing-function: steps(var(--animation-frame-count));
+      animation-direction: var(--animation-direction);
+      animation-iteration-count: calc(
+        var(--animation-iterations) + var(--animation-end-on-frame) / var(--animation-frame-count)
+      );
+    }
+
+    &--animate_forever {
+      animation-iteration-count: var(--animation-max-iterations);
+    }
+
+    &:hover {
+      animation-iteration-count: infinite;
+    }
+  }
+
+  @keyframes sprite-animation {
+    0% {
+      background-position: 0;
+    }
+    100% {
+      background-position: calc(-1 * var(--animation-spritesheet-width));
+    }
   }
 
   &__emote_container {
@@ -403,6 +431,8 @@
     }
 
     @mixin rustle {
+      animation: rustle linear 100ms 7;
+
       &.chat__emote_container--animated {
         animation: rustle linear 100ms
           calc(var(--animation-duration-ms) * var(--animation-iterations) / 100);
@@ -425,7 +455,6 @@
     }
 
     &--rustle {
-      animation: rustle linear 100ms 7;
       @include rustle;
     }
 
@@ -603,31 +632,8 @@
       $particle-width: auto,
       $particle-content: "",
       $particle-font-size: inherit,
-      $animation-duration: 0.8s
+      $animation-duration: 1.2s
     ) {
-      @keyframes #{$name}_particle {
-        0%,
-        2% {
-          opacity: 0;
-        }
-        0% {
-          visibility: visible;
-          transform: scale(0);
-          bottom: -30%;
-        }
-
-        50% {
-          opacity: 1;
-          transform: scale(0.6);
-        }
-
-        100% {
-          transform: scale(0.6);
-          bottom: 50%;
-          opacity: 0;
-        }
-      }
-
       &:before,
       &:after,
       & .chat__emote:before,
@@ -642,10 +648,10 @@
         height: $particle-height;
         width: $particle-width;
         position: absolute;
-        bottom: 10px;
+        bottom: 0;
         z-index: 3;
         visibility: hidden;
-        animation: #{$name}_particle $animation-duration 6;
+        animation: floating-particle $animation-duration 6;
       }
 
       &:before {
@@ -684,6 +690,24 @@
       }
     }
 
+    @keyframes floating-particle {
+      0%,
+      2% {
+        opacity: 0;
+      }
+      0% {
+        visibility: visible;
+        transform: scale(0) translateY(calc(var(--height) * 0.5));
+      }
+      50% {
+        opacity: 1;
+      }
+      100% {
+        transform: scale(0.6) translateY(calc(var(--height) * -1.25));
+        opacity: 0;
+      }
+    }
+
     &--jam {
       animation: jam 500ms 7;
 
@@ -694,8 +718,7 @@
 
       @include floating-particles(
         $name: jam,
-        $particle-image:
-          "data:image/svg+xml;base64,PD94bWwgdmVyc2lvbj0iMS4wIiBlbmNvZGluZz0iVVRGLTgiIHN0YW5kYWxvbmU9Im5vIj8+CjxzdmcKIHhtbG5zPSJodHRwOi8vd3d3LnczLm9yZy8yMDAwL3N2ZyIKIGVuYWJsZS1iYWNrZ3JvdW5kPSJuZXcgMCAwIDEwMCAxMDAiCiB4bWw6c3BhY2U9InByZXNlcnZlIgogdmlld0JveD0iMCAwIDExMCAxMTAiCiB2ZXJzaW9uPSIxLjEiCj4KCTxkZWZzPgoJCTxmaWx0ZXIgaWQ9InNoYWRvdyIgeD0iMCIgeT0iMCIgd2lkdGg9IjIwMCUiIGhlaWdodD0iMjAwJSI+CgkJCTxmZU9mZnNldCByZXN1bHQ9Im9mZk91dCIgaW49IlNvdXJjZUFscGhhIiBkeD0iNSIgZHk9IjUiIC8+CgkJCTxmZUdhdXNzaWFuQmx1ciByZXN1bHQ9ImJsdXJPdXQiIGluPSJvZmZPdXQiIHN0ZERldmlhdGlvbj0iMyIgLz4KCQkJPGZlQmxlbmQgaW49IlNvdXJjZUdyYXBoaWMiIGluMj0iYmx1ck91dCIgbW9kZT0ibm9ybWFsIiAvPgoJCTwvZmlsdGVyPgoJPC9kZWZzPgoJPHBhdGgKICBkPSJtOTMuMTYxIDAuMDcxYy0zMy41MDEtMS4xMTQtNjAuOTQxIDExLjI0My02MC45NDEgMTEuMjQzbC0wLjAyIDYyLjcwOWMtMy40MTEtMS4zNTQtNy41NTktMS42NzUtMTEuNzcyLTAuNjUxLTkuMDgzIDIuMjA3LTE1LjAzMSA5LjgyLTEzLjI4NSAxNy4wMDdzMTAuNTI0IDExLjIyNSAxOS42MDYgOS4wMTljOC41NjQtMi4wODEgMTQuMzM4LTguOTY5IDEzLjUwNy0xNS43NzJ2LTQ2Ljg1NXMxOS40MDQtNi43ODQgNDQuNTczLTguNDg1djM0Ljg0OWMtMy4zNzQtMS4yOTItNy40NDMtMS41ODUtMTEuNTc5LTAuNTgtOS4wODMgMi4yMDYtMTUuMDMxIDkuODE5LTEzLjI4NSAxNy4wMDcgMS43NDUgNy4xODcgMTAuNTIzIDExLjIyNCAxOS42MDYgOS4wMTggNy45MzEtMS45MjcgMTMuNDcxLTcuOTc3IDEzLjU4Ny0xNC4yNjRsMC4wMDMgMC4wMDR2LTc0LjI0OXoiCiAgZmlsbD0iIzAwZDBmZiIKICBmaWx0ZXI9InVybCgjc2hhZG93KSIKLz4KPC9zdmc+Cg==",
+        $particle-image: "/assets/chat/modifiers/jam.svg",
         $particle-height: 22px,
         $particle-width: 22px
       );
@@ -773,6 +796,7 @@
         top: 0;
         animation: worth 0.6s 8;
         filter: drop-shadow(0px 0px 3px rgba(255, 255, 255, 0.7));
+        transform: translateY(-25px);
         z-index: 3;
       }
 
@@ -1012,15 +1036,21 @@
     }
 
     &__autocomplete {
+      left: 4px;
       position: absolute;
+      width: 100%;
 
       &__list {
+        box-sizing: border-box;
+        width: calc(100% - 10px);
+        display: flex;
+        flex-direction: column;
         border-radius: 3px;
         bottom: 20px;
         display: block;
         margin: 0;
-        padding: 10px;
         position: absolute;
+        overflow: hidden;
 
         @include color-scheme("dark") {
           background: $slate-200;
@@ -1030,9 +1060,35 @@
         }
       }
 
+      &__label {
+        text-transform: uppercase;
+        font-weight: bold;
+        padding: 8px 10px;
+        box-shadow: rgba(0, 0, 0, 0.25) 0 0 3px;
+        background: var(--card-bg);
+
+        &:first-child {
+          border-radius: 3px 3px 0 0;
+        }
+      }
+
       &__item {
-        padding: 2px 4px;
-        border-radius: 3px;
+        padding: 8px 4px;
+        display: flex;
+        flex-direction: row;
+
+        &:last-child {
+          border-radius: 0 0 3px 3px;
+        }
+
+        &__emote {
+          margin-right: 10px;
+        }
+
+        &__label {
+          display: flex;
+          align-content: center;
+        }
 
         &--selected {
           @include color-scheme("dark") {

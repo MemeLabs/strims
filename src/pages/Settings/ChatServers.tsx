@@ -368,7 +368,7 @@ const ChatEmoteForm: React.FC<ChatEmoteFormProps> = ({
         placeholder="Enter a emote name"
       />
       <InputLabel required={true} text="Image" component="div">
-        <ImageInput control={control} name="image" />
+        <ImageInput control={control} name="image" maxSize={10485764} />
       </InputLabel>
       <SelectInput control={control} name="scale" label="Scale" options={scaleOptions} />
       <TextInput control={control} label="contributor" name="contributor" />
@@ -592,7 +592,7 @@ const toEmoteProps = (data: ChatEmoteFormData) => {
       },
     });
   }
-  if (data.defaultModifiers.length > 0) {
+  if (data.defaultModifiers?.length > 0) {
     effects.push({
       effect: {
         defaultModifiers: {

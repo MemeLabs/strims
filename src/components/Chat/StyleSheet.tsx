@@ -72,7 +72,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
         const height = sample.height / sampleScale;
         const width = sample.width / sampleScale;
 
-        let rules: PropList = [
+        const rules: PropList = [
           ["background-image", `image-set(${imageSet.join(", ")})`],
           ["background-image", `-webkit-image-set(${imageSet.join(", ")})`],
         ];
@@ -93,50 +93,27 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
                   durationMs,
                   iterationCount,
                   endOnFrame,
-                  loopForever,
                   alternateDirection,
+                  loopForever,
                 } = effect.spriteAnimation;
                 const frameWidth = width / frameCount;
                 const direction = alternateDirection ? "alternate" : "normal";
                 const reverseDirection = alternateDirection ? "alternate-reverse" : "reverse";
-                const animName = `${name}_anim`;
-                const iterations = iterationCount + endOnFrame / frameCount;
+                const maxIterations = loopForever
+                  ? "infinite"
+                  : iterationCount + endOnFrame / frameCount;
 
-                rules = upsertProps(
-                  rules,
-                  ["background-position-x", `-${endOnFrame * frameWidth}px`],
-                  [
-                    "animation",
-                    `${animName} ${durationMs}ms steps(${frameCount}) ${iterations} ${direction}`,
-                  ]
-                );
                 containerRules = upsertProps(
                   containerRules,
                   ["--width", `${frameWidth}px`],
                   ["--animation-duration-ms", durationMs.toString()],
                   ["--animation-iterations", iterationCount.toString()],
+                  ["--animation-max-iterations", maxIterations.toString()],
                   ["--animation-spritesheet-width", `${width}px`],
                   ["--animation-end-on-frame", endOnFrame.toString()],
                   ["--animation-frame-count", frameCount.toString()],
                   ["--animation-direction", direction],
                   ["--animation-reverse-direction", reverseDirection]
-                );
-
-                const loopRuleSelector = [`.${name}:hover`];
-                if (loopForever) {
-                  loopRuleSelector.push(`.${name}.chat__emote--animate_forever`);
-                }
-                ref.current.sheet.insertRule(
-                  `${loopRuleSelector.join(", ")} {animation-iteration-count: infinite;}`
-                );
-
-                ref.current.sheet.insertRule(
-                  [
-                    `@keyframes ${animName} {`,
-                    `0% { background-position: 0; }`,
-                    `100% { background-position: -${width}px; }`,
-                    `}`,
-                  ].join("\n")
                 );
               }
               break;
