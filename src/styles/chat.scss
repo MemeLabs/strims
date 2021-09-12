@@ -409,6 +409,94 @@
         transform: translateX(3px);
       }
     }
+
+    &--gold {
+      box-sizing: border-box;
+      display: inline-block;
+      height: var(--height);
+      margin: calc(0.5em - var(--height) / 2) 3px;
+      mask-image: var(--background-image);
+      mask-size: var(--width) var(--height);
+      overflow: hidden;
+      position: relative;
+      width: var(--width);
+
+      &.chat__emote_container--animated {
+        mask-position: calc(-1 * var(--animation-end-on-frame) * var(--width)) 0;
+        mask-size: var(--animation-spritesheet-width) var(--height);
+      }
+
+      &:before,
+      &:after {
+        top: 0;
+        left: 0;
+        display: block;
+        position: absolute;
+        content: "";
+        height: 100%;
+        width: 100%;
+      }
+
+      &:before {
+        background: linear-gradient(
+          45deg,
+          hsl(44, 82%, 47%) 0%,
+          hsl(49, 82%, 60%) 30%,
+          hsl(58, 91%, 64%) 61%,
+          hsl(58, 91%, 64%) 61%,
+          hsl(57, 90%, 69%) 100%
+        );
+        filter: blur(2px);
+      }
+
+      &:after {
+        animation: glimmer 5s linear 1;
+        background: -webkit-radial-gradient(
+          center,
+          ellipse cover,
+          rgba(255, 255, 255, 1) 1%,
+          rgba(2, 2, 2, 1) 33%
+        );
+        mix-blend-mode: screen;
+        opacity: 0;
+        z-index: 2;
+      }
+
+      &:hover:after,
+      &.chat__emote_container--animate_forever:after {
+        animation: glimmer 5s linear infinite;
+      }
+
+      .chat__emote {
+        filter: contrast(125%) grayscale(100%) brightness(0.75);
+        margin: 0;
+        mix-blend-mode: color-burn;
+        z-index: 1;
+      }
+
+      &.chat__emote_container--animated .chat__emote,
+      &.chat__emote_container--animated .chat__emote--animate_forever {
+        animation: none;
+      }
+    }
+
+    @keyframes glimmer {
+      0% {
+        transform: translate(-50px, 50px) scale(4);
+        opacity: 1;
+      }
+      20% {
+        transform: translate(50px, -50px) scale(4);
+        opacity: 1;
+      }
+      21% {
+        opacity: 0;
+      }
+      100% {
+        transform: translate(-50px, 50px) scale(4);
+        opacity: 0;
+      }
+    }
   }
 
   &__footer {

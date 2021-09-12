@@ -3,7 +3,15 @@ import { PassThrough } from "stream";
 import { Message } from "../../../apis/strims/chat/v1/chat";
 
 const history = [
-  'MSG {"nick":"Chehgo","features":[],"timestamp":1599345668528,"data":"RIDIN","entities":{"emotes":[{"name":"RIDIN","bounds":{"start":0,"end":5}}]}}',
+  'MSG {"nick":"Xymos","features":[],"timestamp":1599345658816,"data":"test","entities":{}}',
+  'MSG {"nick":"Chehgo","features":[],"timestamp":1599345668528,"data":"test RIDIN test","entities":{"emotes":[{"name":"RIDIN","bounds":{"start":5,"end":10},"modifiers":["gold"]}]}}',
+  'MSG {"nick":"Xymos","features":[],"timestamp":1599345658816,"data":"test","entities":{}}',
+  'MSG {"nick":"Chehgo","features":[],"timestamp":1599345668528,"data":"test PEPE test","entities":{"emotes":[{"name":"PEPE","bounds":{"start":5,"end":9},"modifiers":["gold"]}]}}',
+  'MSG {"nick":"Xymos","features":[],"timestamp":1599345658816,"data":"test","entities":{}}',
+  'MSG {"nick":"Chehgo","features":[],"timestamp":1599345668528,"data":"test AngelThump test","entities":{"emotes":[{"name":"AngelThump","bounds":{"start":5,"end":15},"modifiers":["gold"]}]}}',
+  'MSG {"nick":"Xymos","features":[],"timestamp":1599345658816,"data":"test","entities":{}}',
+  'MSG {"nick":"Chehgo","features":[],"timestamp":1599345668528,"data":"test WAYTOODANK test","entities":{"emotes":[{"name":"WAYTOODANK","bounds":{"start":5,"end":15},"modifiers":["gold"]}]}}',
+  'MSG {"nick":"Xymos","features":[],"timestamp":1599345658816,"data":"test","entities":{}}',
 
   'MSG {"nick":"guwapguwapguwap","features":[],"timestamp":1599345629214,"data":"Ph4t3 I sentence you to 10 years in body shaming jail PepoBan","entities":{"emotes":[{"name":"PepoBan","bounds":{"start":54,"end":61}}],"nicks":[{"nick":"Ph4t3","bounds":{"start":0,"end":5}}]}}',
   'MSG {"nick":"Xymos","features":[],"timestamp":1599345636022,"data":"soMuchForSubtlety Jbpratt sounds like a valid reason SHRUG:fast","entities":{"emotes":[{"name":"SHRUG","bounds":{"start":53,"end":63},"modifiers":["fast"]}]}}',

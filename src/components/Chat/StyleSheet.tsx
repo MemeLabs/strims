@@ -84,6 +84,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
         let containerRules: PropList = [
           ["--width", `${width}px`],
           ["--height", `${height}px`],
+          ["--background-image", `url(${uris[0]})`],
         ];
 
         e.effects.forEach(({ effect }) => {
@@ -118,7 +119,9 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
                   containerRules,
                   ["--width", `${frameWidth}px`],
                   ["--animation-duration-ms", durationMs.toString()],
-                  ["--animation-iterations", iterations.toString()]
+                  ["--animation-iterations", iterations.toString()],
+                  ["--animation-spritesheet-width", `${width}px`],
+                  ["--animation-end-on-frame", endOnFrame.toString()]
                 );
 
                 const loopRuleSelector = [`.${name}:hover`];
