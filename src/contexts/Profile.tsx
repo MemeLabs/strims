@@ -1,30 +1,40 @@
 import React from "react";
 
+import { FrontendClient } from "../apis/client";
 import { Profile } from "../apis/strims/profile/v1/profile";
+import { CallHookDispatcher } from "./Api";
 import { useLazyCall } from "./FrontendApi";
 
-interface State {
+export interface UseProfileState {
   loading: boolean;
   profile: Profile | null;
   error: Error | null;
 }
 
-const initialState: State = {
+const initialState: UseProfileState = {
   loading: true,
   profile: null,
   error: null,
 };
 
-const ProfileContext = React.createContext<[State, React.Dispatch<React.SetStateAction<State>>]>(
-  null
-);
+export type UseProfileActions = {
+  createProfile: CallHookDispatcher<FrontendClient, "profile", "create">;
+  loadProfile: CallHookDispatcher<FrontendClient, "profile", "load">;
+  clearProfile: () => void;
+  clearError: () => void;
+};
+
+const ProfileContext =
+  React.createContext<[UseProfileState, React.Dispatch<React.SetStateAction<UseProfileState>>]>(
+    null
+  );
 
 interface LoginResponse {
   profile?: Profile | null;
   sessionId?: string | null;
 }
 
-export const useProfile = () => {
+export const useProfile = (): [UseProfileState, UseProfileActions] => {
   const [state, setState] = React.useContext(ProfileContext);
 
   const onComplete = ({ profile, sessionId }: LoginResponse) => {
@@ -68,7 +78,7 @@ export const useProfile = () => {
     clearProfile,
     clearError,
   };
-  return [state, actions] as [State, typeof actions];
+  return [state, actions];
 };
 
 export const Provider: React.FC = ({ children }) => {

@@ -18,8 +18,6 @@ message ServerEvent {
 message Room {
   string name = 1;
   string css = 2;
-  repeated string tags = 3;
-  repeated string modifiers = 4;
 }
 
 message Server {
@@ -87,11 +85,27 @@ message Emote {
   EmoteContributor contributor = 5;
 }
 
+message Modifier {
+  uint64 id = 1;
+  string name = 2;
+  uint32 priority = 3;
+  bool internal = 4;
+}
+
+message Tag {
+  uint64 id = 1;
+  string name = 2;
+  string color = 3;
+  bool sensitive = 4;
+}
+
 message AssetBundle {
   bool is_delta = 1;
-  Room room = 2;
-  repeated Emote emotes = 3;
-  repeated uint64 removed_emotes = 4;
+  repeated uint64 removed_ids = 2;
+  Room room = 3;
+  repeated Emote emotes = 4;
+  repeated Modifier modifiers = 5;
+  repeated Tag tags = 6;
 }
 
 message Message {
@@ -275,6 +289,81 @@ message ListEmotesRequest {
 message ListEmotesResponse {
   repeated Emote emotes = 1;
 }
+
+message CreateModifierRequest {
+  uint64 server_id = 1;
+  string name = 2;
+  uint32 priority = 3;
+  bool internal = 4;
+}
+message CreateModifierResponse {
+  Modifier modifier = 1;
+}
+message UpdateModifierRequest {
+  uint64 server_id = 1;
+  uint64 id = 2;
+  string name = 3;
+  uint32 priority = 4;
+  bool internal = 5;
+}
+message UpdateModifierResponse {
+  Modifier modifier = 1;
+}
+message DeleteModifierRequest {
+  uint64 server_id = 1;
+  uint64 id = 2;
+}
+message DeleteModifierResponse {}
+message GetModifierRequest {
+  uint64 id = 1;
+}
+message GetModifierResponse {
+  Modifier modifier = 1;
+}
+message ListModifiersRequest {
+  uint64 server_id = 1;
+}
+message ListModifiersResponse {
+  repeated Modifier modifiers = 1;
+}
+
+message CreateTagRequest {
+  uint64 server_id = 1;
+  string name = 2;
+  string color = 3;
+  bool sensitive = 4;
+}
+message CreateTagResponse {
+  Tag tag = 1;
+}
+message UpdateTagRequest {
+  uint64 server_id = 1;
+  uint64 id = 2;
+  string name = 3;
+  string color = 4;
+  bool sensitive = 5;
+}
+message UpdateTagResponse {
+  Tag tag = 1;
+}
+message DeleteTagRequest {
+  uint64 server_id = 1;
+  uint64 id = 2;
+}
+message DeleteTagResponse {}
+message GetTagRequest {
+  uint64 id = 1;
+}
+message GetTagResponse {
+  Tag tag = 1;
+}
+message ListTagsRequest {
+  uint64 server_id = 1;
+}
+message ListTagsResponse {
+  repeated Tag tags = 1;
+}
+
 message SyncAssetsRequest {
   uint64 server_id = 1;
   bool force_unified_update = 2;
@@ -332,6 +421,19 @@ service ChatFrontend {
   rpc DeleteEmote(DeleteEmoteRequest) returns (DeleteEmoteResponse);
   rpc GetEmote(GetEmoteRequest) returns (GetEmoteResponse);
   rpc ListEmotes(ListEmotesRequest) returns (ListEmotesResponse);
+
+  rpc CreateModifier(CreateModifierRequest) returns (CreateModifierResponse);
+  rpc UpdateModifier(UpdateModifierRequest) returns (UpdateModifierResponse);
+  rpc DeleteModifier(DeleteModifierRequest) returns (DeleteModifierResponse);
+  rpc GetModifier(GetModifierRequest) returns (GetModifierResponse);
+  rpc ListModifiers(ListModifiersRequest) returns (ListModifiersResponse);
+
+  rpc CreateTag(CreateTagRequest) returns (CreateTagResponse);
+  rpc UpdateTag(UpdateTagRequest) returns (UpdateTagResponse);
+  rpc DeleteTag(DeleteTagRequest) returns (DeleteTagResponse);
+  rpc GetTag(GetTagRequest) returns (GetTagResponse);
+  rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
+
   rpc SyncAssets(SyncAssetsRequest) returns (SyncAssetsResponse);
 
   rpc OpenClient(OpenClientRequest) returns (stream OpenClientResponse);

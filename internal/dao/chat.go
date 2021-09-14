@@ -7,10 +7,16 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 )
 
-const chatServerPrefix = "chatServer:"
-const chatEmotePrefix = "chatEmote:"
-const chatEmoteServerPrefix = "chatEmoteServer:"
-const chatUIConfigKey = "chatUIConfig"
+const (
+	chatServerPrefix         = "chatServer:"
+	chatEmotePrefix          = "chatEmote:"
+	chatEmoteServerPrefix    = "chatEmoteServer:"
+	chatModifierPrefix       = "chatModifier:"
+	chatModifierServerPrefix = "chatModifierServer:"
+	chatTagPrefix            = "chatTag:"
+	chatTagServerPrefix      = "chatTagServer:"
+	chatUIConfigKey          = "chatUIConfig"
+)
 
 func prefixChatServerKey(id uint64) string {
 	return chatServerPrefix + strconv.FormatUint(id, 10)
@@ -70,13 +76,13 @@ func NewChatServer(g IDGenerator, networkKey []byte, chatRoom *chat.Room) (*chat
 		return nil, err
 	}
 
-	network := &chat.Server{
+	v := &chat.Server{
 		Id:         id,
 		NetworkKey: networkKey,
 		Key:        key,
 		Room:       chatRoom,
 	}
-	return network, nil
+	return v, nil
 }
 
 func prefixChatEmoteKey(id uint64) string {
@@ -155,14 +161,182 @@ func NewChatEmote(
 		return nil, err
 	}
 
-	network := &chat.Emote{
+	v := &chat.Emote{
 		Id:          id,
 		Name:        name,
 		Images:      images,
 		Effects:     effects,
 		Contributor: contributor,
 	}
-	return network, nil
+	return v, nil
+}
+
+func prefixChatModifierKey(id uint64) string {
+	return chatModifierPrefix + strconv.FormatUint(id, 10)
+}
+
+// InsertChatModifier ...
+func InsertChatModifier(s kv.RWStore, serverID uint64, v *chat.Modifier) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
+		err = tx.Put(prefixChatModifierKey(v.Id), v)
+		if err != nil {
+			return err
+		}
+		return SetSecondaryIndex(tx, chatModifierServerPrefix, strconv.AppendUint(nil, serverID, 10), v.Id)
+	})
+}
+
+// UpdateChatModifier ...
+func UpdateChatModifier(s kv.RWStore, v *chat.Modifier) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
+		return tx.Put(prefixChatModifierKey(v.Id), v)
+	})
+}
+
+// DeleteChatModifier ...
+func DeleteChatModifier(s kv.RWStore, serverID, id uint64) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
+		err = DeleteSecondaryIndex(tx, chatModifierServerPrefix, strconv.AppendUint(nil, serverID, 10), id)
+		if err != nil {
+			return err
+		}
+		return tx.Delete(prefixChatModifierKey(id))
+	})
+}
+
+// GetChatModifier ...
+func GetChatModifier(s kv.Store, id uint64) (v *chat.Modifier, err error) {
+	v = &chat.Modifier{}
+	err = s.View(func(tx kv.Tx) error {
+		return tx.Get(prefixChatModifierKey(id), v)
+	})
+	return
+}
+
+// GetChatModifiers ...
+func GetChatModifiers(s kv.Store, serverID uint64) (v []*chat.Modifier, err error) {
+	v = []*chat.Modifier{}
+	err = s.View(func(tx kv.Tx) error {
+		ids, err := ScanSecondaryIndex(tx, chatModifierServerPrefix, strconv.AppendUint(nil, serverID, 10))
+		if err != nil {
+			return err
+		}
+
+		for _, id := range ids {
+			e, err := GetChatModifier(tx, id)
+			if err != nil {
+				return err
+			}
+			v = append(v, e)
+		}
+		return nil
+	})
+	return
+}
+
+// NewChatModifier ...
+func NewChatModifier(
+	g IDGenerator,
+	name string,
+	priority uint32,
+	internal bool,
+) (*chat.Modifier, error) {
+	id, err := g.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+
+	v := &chat.Modifier{
+		Id:       id,
+		Name:     name,
+		Priority: priority,
+		Internal: internal,
+	}
+	return v, nil
+}
+
+func prefixChatTagKey(id uint64) string {
+	return chatTagPrefix + strconv.FormatUint(id, 10)
+}
+
+// InsertChatTag ...
+func InsertChatTag(s kv.RWStore, serverID uint64, v *chat.Tag) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
+		err = tx.Put(prefixChatTagKey(v.Id), v)
+		if err != nil {
+			return err
+		}
+		return SetSecondaryIndex(tx, chatTagServerPrefix, strconv.AppendUint(nil, serverID, 10), v.Id)
+	})
+}
+
+// UpdateChatTag ...
+func UpdateChatTag(s kv.RWStore, v *chat.Tag) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
+		return tx.Put(prefixChatTagKey(v.Id), v)
+	})
+}
+
+// DeleteChatTag ...
+func DeleteChatTag(s kv.RWStore, serverID, id uint64) error {
+	return s.Update(func(tx kv.RWTx) (err error) {
+		err = DeleteSecondaryIndex(tx, chatTagServerPrefix, strconv.AppendUint(nil, serverID, 10), id)
+		if err != nil {
+			return err
+		}
+		return tx.Delete(prefixChatTagKey(id))
+	})
+}
+
+// GetChatTag ...
+func GetChatTag(s kv.Store, id uint64) (v *chat.Tag, err error) {
+	v = &chat.Tag{}
+	err = s.View(func(tx kv.Tx) error {
+		return tx.Get(prefixChatTagKey(id), v)
+	})
+	return
+}
+
+// GetChatTags ...
+func GetChatTags(s kv.Store, serverID uint64) (v []*chat.Tag, err error) {
+	v = []*chat.Tag{}
+	err = s.View(func(tx kv.Tx) error {
+		ids, err := ScanSecondaryIndex(tx, chatTagServerPrefix, strconv.AppendUint(nil, serverID, 10))
+		if err != nil {
+			return err
+		}
+
+		for _, id := range ids {
+			e, err := GetChatTag(tx, id)
+			if err != nil {
+				return err
+			}
+			v = append(v, e)
+		}
+		return nil
+	})
+	return
+}
+
+// NewChatTag ...
+func NewChatTag(
+	g IDGenerator,
+	name string,
+	color string,
+	sensitive bool,
+) (*chat.Tag, error) {
+	id, err := g.GenerateID()
+	if err != nil {
+		return nil, err
+	}
+
+	v := &chat.Tag{
+		Id:        id,
+		Name:      name,
+		Color:     color,
+		Sensitive: sensitive,
+	}
+	return v, nil
 }
 
 // SetChatUIConfig ...

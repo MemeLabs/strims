@@ -8,8 +8,10 @@ import {
   EmoteEffect,
   IUIConfig,
   Message,
+  Modifier,
   OpenClientResponse,
   Room,
+  Tag,
   UIConfig,
 } from "../apis/strims/chat/v1/chat";
 import ChatCellMeasurerCache from "../lib/ChatCellMeasurerCache";
@@ -42,9 +44,15 @@ export interface Style {
   modifiers: string[];
 }
 
-export type StyleMap = {
+export type EmoteStyleMap = {
   [key: string]: Style;
 };
+
+export interface ChatStyles {
+  emotes: EmoteStyleMap;
+  modifiers: Modifier[];
+  tags: Tag[];
+}
 
 export interface State {
   id: number;
@@ -58,7 +66,7 @@ export interface State {
   messageSizeCache: ChatCellMeasurerCache;
   assetBundles: AssetBundle[];
   liveEmotes: Emote[];
-  styles: StyleMap;
+  styles: ChatStyles;
   emotes: string[];
   modifiers: string[];
   nicks: string[];
@@ -104,7 +112,11 @@ const initialState: State = {
   messageSizeCache: null,
   assetBundles: [],
   liveEmotes: [],
-  styles: {},
+  styles: {
+    emotes: {},
+    modifiers: [],
+    tags: [],
+  },
   emotes: [],
   modifiers: [],
   nicks: [],
@@ -192,17 +204,30 @@ const messageReducer = (state: State, message: Message): State => {
   };
 };
 
+interface Named {
+  name: string;
+}
+const toNames = <T extends Named>(vs: T[]): string[] => vs.map(({ name }) => name).sort();
+
 const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
   const assetBundles = bundle.isDelta ? [...state.assetBundles, bundle] : [bundle];
   const liveEmoteMap = new Map<bigint, Emote>();
+  const liveModifierMap = new Map<bigint, Modifier>();
+  const liveTagMap = new Map<bigint, Tag>();
   let room: Room;
   assetBundles.forEach((b) => {
-    b.removedEmotes.forEach((id) => liveEmoteMap.delete(id));
+    b.removedIds.forEach((id) => {
+      liveEmoteMap.delete(id);
+      liveModifierMap.delete(id);
+      liveTagMap.delete(id);
+    });
     b.emotes.forEach((e) => liveEmoteMap.set(e.id, e));
+    b.modifiers.forEach((e) => liveModifierMap.set(e.id, e));
+    b.tags.forEach((e) => liveTagMap.set(e.id, e));
     room = b.room || room;
   });
   const liveEmotes = Array.from(liveEmoteMap.values());
-  const styles = Object.fromEntries(
+  const emoteStyles = Object.fromEntries(
     liveEmotes.map(({ id, name, effects }) => {
       const style: Style = {
         name: `e_${name}_${state.id}_${id}`,
@@ -222,15 +247,21 @@ const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
       return [name, style];
     })
   );
+  const liveModifiers = Array.from(liveModifierMap.values());
+  const liveTags = Array.from(liveTagMap.values());
 
   return {
     ...state,
     assetBundles,
     liveEmotes,
-    styles,
-    emotes: Object.keys(styles).sort(),
-    modifiers: room.modifiers,
-    tags: room.tags,
+    styles: {
+      emotes: emoteStyles,
+      modifiers: liveModifiers,
+      tags: liveTags,
+    },
+    emotes: toNames(liveEmotes),
+    modifiers: toNames(liveModifiers.filter(({ internal }) => !internal)),
+    tags: toNames(liveTags),
   };
 };
 
@@ -312,6 +343,7 @@ export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, child
     const handleClose = () => dispatch({ type: "CLIENT_CLOSE" });
     events.on("close", handleClose);
     return () => {
+      console.log("closed chat thing...");
       events.off("close", handleClose);
       events.destroy();
     };

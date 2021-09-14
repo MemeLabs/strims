@@ -18,6 +18,16 @@ func RegisterChatFrontendService(host rpc.ServiceRegistry, service ChatFrontendS
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.DeleteEmote", service.DeleteEmote)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetEmote", service.GetEmote)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.ListEmotes", service.ListEmotes)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.CreateModifier", service.CreateModifier)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.UpdateModifier", service.UpdateModifier)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.DeleteModifier", service.DeleteModifier)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetModifier", service.GetModifier)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.ListModifiers", service.ListModifiers)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.CreateTag", service.CreateTag)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.UpdateTag", service.UpdateTag)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.DeleteTag", service.DeleteTag)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetTag", service.GetTag)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.ListTags", service.ListTags)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.SyncAssets", service.SyncAssets)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.OpenClient", service.OpenClient)
 	host.RegisterMethod("strims.chat.v1.ChatFrontend.ClientSendMessage", service.ClientSendMessage)
@@ -67,6 +77,46 @@ type ChatFrontendService interface {
 		ctx context.Context,
 		req *ListEmotesRequest,
 	) (*ListEmotesResponse, error)
+	CreateModifier(
+		ctx context.Context,
+		req *CreateModifierRequest,
+	) (*CreateModifierResponse, error)
+	UpdateModifier(
+		ctx context.Context,
+		req *UpdateModifierRequest,
+	) (*UpdateModifierResponse, error)
+	DeleteModifier(
+		ctx context.Context,
+		req *DeleteModifierRequest,
+	) (*DeleteModifierResponse, error)
+	GetModifier(
+		ctx context.Context,
+		req *GetModifierRequest,
+	) (*GetModifierResponse, error)
+	ListModifiers(
+		ctx context.Context,
+		req *ListModifiersRequest,
+	) (*ListModifiersResponse, error)
+	CreateTag(
+		ctx context.Context,
+		req *CreateTagRequest,
+	) (*CreateTagResponse, error)
+	UpdateTag(
+		ctx context.Context,
+		req *UpdateTagRequest,
+	) (*UpdateTagResponse, error)
+	DeleteTag(
+		ctx context.Context,
+		req *DeleteTagRequest,
+	) (*DeleteTagResponse, error)
+	GetTag(
+		ctx context.Context,
+		req *GetTagRequest,
+	) (*GetTagResponse, error)
+	ListTags(
+		ctx context.Context,
+		req *ListTagsRequest,
+	) (*ListTagsResponse, error)
 	SyncAssets(
 		ctx context.Context,
 		req *SyncAssetsRequest,
@@ -187,6 +237,96 @@ func (c *ChatFrontendClient) ListEmotes(
 	res *ListEmotesResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ListEmotes", req, res)
+}
+
+// CreateModifier ...
+func (c *ChatFrontendClient) CreateModifier(
+	ctx context.Context,
+	req *CreateModifierRequest,
+	res *CreateModifierResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.CreateModifier", req, res)
+}
+
+// UpdateModifier ...
+func (c *ChatFrontendClient) UpdateModifier(
+	ctx context.Context,
+	req *UpdateModifierRequest,
+	res *UpdateModifierResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.UpdateModifier", req, res)
+}
+
+// DeleteModifier ...
+func (c *ChatFrontendClient) DeleteModifier(
+	ctx context.Context,
+	req *DeleteModifierRequest,
+	res *DeleteModifierResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.DeleteModifier", req, res)
+}
+
+// GetModifier ...
+func (c *ChatFrontendClient) GetModifier(
+	ctx context.Context,
+	req *GetModifierRequest,
+	res *GetModifierResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.GetModifier", req, res)
+}
+
+// ListModifiers ...
+func (c *ChatFrontendClient) ListModifiers(
+	ctx context.Context,
+	req *ListModifiersRequest,
+	res *ListModifiersResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ListModifiers", req, res)
+}
+
+// CreateTag ...
+func (c *ChatFrontendClient) CreateTag(
+	ctx context.Context,
+	req *CreateTagRequest,
+	res *CreateTagResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.CreateTag", req, res)
+}
+
+// UpdateTag ...
+func (c *ChatFrontendClient) UpdateTag(
+	ctx context.Context,
+	req *UpdateTagRequest,
+	res *UpdateTagResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.UpdateTag", req, res)
+}
+
+// DeleteTag ...
+func (c *ChatFrontendClient) DeleteTag(
+	ctx context.Context,
+	req *DeleteTagRequest,
+	res *DeleteTagResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.DeleteTag", req, res)
+}
+
+// GetTag ...
+func (c *ChatFrontendClient) GetTag(
+	ctx context.Context,
+	req *GetTagRequest,
+	res *GetTagResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.GetTag", req, res)
+}
+
+// ListTags ...
+func (c *ChatFrontendClient) ListTags(
+	ctx context.Context,
+	req *ListTagsRequest,
+	res *ListTagsResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ListTags", req, res)
 }
 
 // SyncAssets ...

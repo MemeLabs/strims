@@ -6,7 +6,6 @@ import (
 	"sync"
 	"time"
 
-	parser "github.com/MemeLabs/chat-parser"
 	"github.com/MemeLabs/go-ppspp/internal/dialer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
@@ -66,15 +65,23 @@ func (d *chatService) Run(ctx context.Context) error {
 	}
 }
 
-func (d *chatService) Sync(config *chatv1.Server, emotes []*chatv1.Emote) error {
-	emoteNames := [][]rune{}
+func (d *chatService) Sync(config *chatv1.Server, emotes []*chatv1.Emote, modifiers []*chatv1.Modifier, tags []*chatv1.Tag) error {
+	var emoteNames, modifierNames, tagNames [][]rune
 	for _, emote := range emotes {
 		emoteNames = append(emoteNames, []rune(emote.Name))
 	}
+	for _, modifier := range modifiers {
+		if !modifier.Internal {
+			modifierNames = append(modifierNames, []rune(modifier.Name))
+		}
+	}
+	for _, tag := range tags {
+		tagNames = append(tagNames, []rune(tag.Name))
+	}
 
 	d.entityExtractor.parserCtx.Emotes.Replace(emoteNames)
-	d.entityExtractor.parserCtx.EmoteModifiers.Replace(parser.RunesFromStrings(config.Room.Modifiers))
-	d.entityExtractor.parserCtx.Tags.Replace(parser.RunesFromStrings(config.Room.Tags))
+	d.entityExtractor.parserCtx.EmoteModifiers.Replace(modifierNames)
+	d.entityExtractor.parserCtx.Tags.Replace(tagNames)
 
 	return nil
 }

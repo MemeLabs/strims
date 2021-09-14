@@ -180,6 +180,152 @@ func (s *chatService) ListEmotes(ctx context.Context, req *chatv1.ListEmotesRequ
 	return &chatv1.ListEmotesResponse{Emotes: emotes}, nil
 }
 
+// CreateModifier ...
+func (s *chatService) CreateModifier(ctx context.Context, req *chatv1.CreateModifierRequest) (*chatv1.CreateModifierResponse, error) {
+	emote, err := dao.NewChatModifier(
+		s.store,
+		req.Name,
+		req.Priority,
+		req.Internal,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := dao.InsertChatModifier(s.store, req.ServerId, emote); err != nil {
+		return nil, err
+	}
+
+	// s.app.Chat().SyncModifier(req.ServerId, emote)
+
+	return &chatv1.CreateModifierResponse{Modifier: emote}, nil
+}
+
+// UpdateModifier ...
+func (s *chatService) UpdateModifier(ctx context.Context, req *chatv1.UpdateModifierRequest) (*chatv1.UpdateModifierResponse, error) {
+	var emote *chatv1.Modifier
+	err := s.store.Update(func(tx kv.RWTx) (err error) {
+		emote, err = dao.GetChatModifier(tx, req.Id)
+		if err != nil {
+			return
+		}
+
+		emote.Name = req.Name
+		emote.Priority = req.Priority
+		emote.Internal = req.Internal
+
+		return dao.UpdateChatModifier(tx, emote)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// s.app.Chat().SyncModifier(req.ServerId, emote)
+
+	return &chatv1.UpdateModifierResponse{Modifier: emote}, nil
+}
+
+// DeleteModifier ...
+func (s *chatService) DeleteModifier(ctx context.Context, req *chatv1.DeleteModifierRequest) (*chatv1.DeleteModifierResponse, error) {
+	if err := dao.DeleteChatModifier(s.store, req.ServerId, req.Id); err != nil {
+		return nil, err
+	}
+
+	// s.app.Chat().RemoveModifier(req.Id)
+
+	return &chatv1.DeleteModifierResponse{}, nil
+}
+
+// GetModifier ...
+func (s *chatService) GetModifier(ctx context.Context, req *chatv1.GetModifierRequest) (*chatv1.GetModifierResponse, error) {
+	emote, err := dao.GetChatModifier(s.store, req.Id)
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.GetModifierResponse{Modifier: emote}, nil
+}
+
+// ListModifiers ...
+func (s *chatService) ListModifiers(ctx context.Context, req *chatv1.ListModifiersRequest) (*chatv1.ListModifiersResponse, error) {
+	emotes, err := dao.GetChatModifiers(s.store, req.ServerId)
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.ListModifiersResponse{Modifiers: emotes}, nil
+}
+
+// CreateTag ...
+func (s *chatService) CreateTag(ctx context.Context, req *chatv1.CreateTagRequest) (*chatv1.CreateTagResponse, error) {
+	emote, err := dao.NewChatTag(
+		s.store,
+		req.Name,
+		req.Color,
+		req.Sensitive,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if err := dao.InsertChatTag(s.store, req.ServerId, emote); err != nil {
+		return nil, err
+	}
+
+	// s.app.Chat().SyncTag(req.ServerId, emote)
+
+	return &chatv1.CreateTagResponse{Tag: emote}, nil
+}
+
+// UpdateTag ...
+func (s *chatService) UpdateTag(ctx context.Context, req *chatv1.UpdateTagRequest) (*chatv1.UpdateTagResponse, error) {
+	var emote *chatv1.Tag
+	err := s.store.Update(func(tx kv.RWTx) (err error) {
+		emote, err = dao.GetChatTag(tx, req.Id)
+		if err != nil {
+			return
+		}
+
+		emote.Name = req.Name
+		emote.Color = req.Color
+		emote.Sensitive = req.Sensitive
+
+		return dao.UpdateChatTag(tx, emote)
+	})
+	if err != nil {
+		return nil, err
+	}
+
+	// s.app.Chat().SyncTag(req.ServerId, emote)
+
+	return &chatv1.UpdateTagResponse{Tag: emote}, nil
+}
+
+// DeleteTag ...
+func (s *chatService) DeleteTag(ctx context.Context, req *chatv1.DeleteTagRequest) (*chatv1.DeleteTagResponse, error) {
+	if err := dao.DeleteChatTag(s.store, req.ServerId, req.Id); err != nil {
+		return nil, err
+	}
+
+	// s.app.Chat().RemoveTag(req.Id)
+
+	return &chatv1.DeleteTagResponse{}, nil
+}
+
+// GetTag ...
+func (s *chatService) GetTag(ctx context.Context, req *chatv1.GetTagRequest) (*chatv1.GetTagResponse, error) {
+	emote, err := dao.GetChatTag(s.store, req.Id)
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.GetTagResponse{Tag: emote}, nil
+}
+
+// ListTags ...
+func (s *chatService) ListTags(ctx context.Context, req *chatv1.ListTagsRequest) (*chatv1.ListTagsResponse, error) {
+	emotes, err := dao.GetChatTags(s.store, req.ServerId)
+	if err != nil {
+		return nil, err
+	}
+	return &chatv1.ListTagsResponse{Tags: emotes}, nil
+}
+
 // SyncAssets ...
 func (s *chatService) SyncAssets(ctx context.Context, req *chatv1.SyncAssetsRequest) (*chatv1.SyncAssetsResponse, error) {
 	err := s.app.Chat().SyncAssets(req.ServerId, req.ForceUnifiedUpdate)

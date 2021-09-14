@@ -87,29 +87,21 @@ export namespace ServerEvent {
 export type IRoom = {
   name?: string;
   css?: string;
-  tags?: string[];
-  modifiers?: string[];
 }
 
 export class Room {
   name: string;
   css: string;
-  tags: string[];
-  modifiers: string[];
 
   constructor(v?: IRoom) {
     this.name = v?.name || "";
     this.css = v?.css || "";
-    this.tags = v?.tags ? v.tags : [];
-    this.modifiers = v?.modifiers ? v.modifiers : [];
   }
 
   static encode(m: Room, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.name) w.uint32(10).string(m.name);
     if (m.css) w.uint32(18).string(m.css);
-    for (const v of m.tags) w.uint32(26).string(v);
-    for (const v of m.modifiers) w.uint32(34).string(v);
     return w;
   }
 
@@ -125,12 +117,6 @@ export class Room {
         break;
         case 2:
         m.css = r.string();
-        break;
-        case 3:
-        m.tags.push(r.string())
-        break;
-        case 4:
-        m.modifiers.push(r.string())
         break;
         default:
         r.skipType(tag & 7);
@@ -620,32 +606,154 @@ export class Emote {
   }
 }
 
+export type IModifier = {
+  id?: bigint;
+  name?: string;
+  priority?: number;
+  internal?: boolean;
+}
+
+export class Modifier {
+  id: bigint;
+  name: string;
+  priority: number;
+  internal: boolean;
+
+  constructor(v?: IModifier) {
+    this.id = v?.id || BigInt(0);
+    this.name = v?.name || "";
+    this.priority = v?.priority || 0;
+    this.internal = v?.internal || false;
+  }
+
+  static encode(m: Modifier, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.name) w.uint32(18).string(m.name);
+    if (m.priority) w.uint32(24).uint32(m.priority);
+    if (m.internal) w.uint32(32).bool(m.internal);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): Modifier {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new Modifier();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.name = r.string();
+        break;
+        case 3:
+        m.priority = r.uint32();
+        break;
+        case 4:
+        m.internal = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ITag = {
+  id?: bigint;
+  name?: string;
+  color?: string;
+  sensitive?: boolean;
+}
+
+export class Tag {
+  id: bigint;
+  name: string;
+  color: string;
+  sensitive: boolean;
+
+  constructor(v?: ITag) {
+    this.id = v?.id || BigInt(0);
+    this.name = v?.name || "";
+    this.color = v?.color || "";
+    this.sensitive = v?.sensitive || false;
+  }
+
+  static encode(m: Tag, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.name) w.uint32(18).string(m.name);
+    if (m.color) w.uint32(26).string(m.color);
+    if (m.sensitive) w.uint32(32).bool(m.sensitive);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): Tag {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new Tag();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.name = r.string();
+        break;
+        case 3:
+        m.color = r.string();
+        break;
+        case 4:
+        m.sensitive = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type IAssetBundle = {
   isDelta?: boolean;
+  removedIds?: bigint[];
   room?: IRoom | undefined;
   emotes?: IEmote[];
-  removedEmotes?: bigint[];
+  modifiers?: IModifier[];
+  tags?: ITag[];
 }
 
 export class AssetBundle {
   isDelta: boolean;
+  removedIds: bigint[];
   room: Room | undefined;
   emotes: Emote[];
-  removedEmotes: bigint[];
+  modifiers: Modifier[];
+  tags: Tag[];
 
   constructor(v?: IAssetBundle) {
     this.isDelta = v?.isDelta || false;
+    this.removedIds = v?.removedIds ? v.removedIds : [];
     this.room = v?.room && new Room(v.room);
     this.emotes = v?.emotes ? v.emotes.map(v => new Emote(v)) : [];
-    this.removedEmotes = v?.removedEmotes ? v.removedEmotes : [];
+    this.modifiers = v?.modifiers ? v.modifiers.map(v => new Modifier(v)) : [];
+    this.tags = v?.tags ? v.tags.map(v => new Tag(v)) : [];
   }
 
   static encode(m: AssetBundle, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.isDelta) w.uint32(8).bool(m.isDelta);
-    if (m.room) Room.encode(m.room, w.uint32(18).fork()).ldelim();
-    for (const v of m.emotes) Emote.encode(v, w.uint32(26).fork()).ldelim();
-    m.removedEmotes.reduce((w, v) => w.uint64(v), w.uint32(34).fork()).ldelim();
+    m.removedIds.reduce((w, v) => w.uint64(v), w.uint32(18).fork()).ldelim();
+    if (m.room) Room.encode(m.room, w.uint32(26).fork()).ldelim();
+    for (const v of m.emotes) Emote.encode(v, w.uint32(34).fork()).ldelim();
+    for (const v of m.modifiers) Modifier.encode(v, w.uint32(42).fork()).ldelim();
+    for (const v of m.tags) Tag.encode(v, w.uint32(50).fork()).ldelim();
     return w;
   }
 
@@ -660,13 +768,19 @@ export class AssetBundle {
         m.isDelta = r.bool();
         break;
         case 2:
-        m.room = Room.decode(r, r.uint32());
+        for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.removedIds.push(r.uint64());
         break;
         case 3:
-        m.emotes.push(Emote.decode(r, r.uint32()));
+        m.room = Room.decode(r, r.uint32());
         break;
         case 4:
-        for (const flen = r.uint32(), fend = r.pos + flen; r.pos < fend;) m.removedEmotes.push(r.uint64());
+        m.emotes.push(Emote.decode(r, r.uint32()));
+        break;
+        case 5:
+        m.modifiers.push(Modifier.decode(r, r.uint32()));
+        break;
+        case 6:
+        m.tags.push(Tag.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);
@@ -2239,6 +2353,806 @@ export class ListEmotesResponse {
       switch (tag >> 3) {
         case 1:
         m.emotes.push(Emote.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ICreateModifierRequest = {
+  serverId?: bigint;
+  name?: string;
+  priority?: number;
+  internal?: boolean;
+}
+
+export class CreateModifierRequest {
+  serverId: bigint;
+  name: string;
+  priority: number;
+  internal: boolean;
+
+  constructor(v?: ICreateModifierRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.name = v?.name || "";
+    this.priority = v?.priority || 0;
+    this.internal = v?.internal || false;
+  }
+
+  static encode(m: CreateModifierRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    if (m.name) w.uint32(18).string(m.name);
+    if (m.priority) w.uint32(24).uint32(m.priority);
+    if (m.internal) w.uint32(32).bool(m.internal);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): CreateModifierRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new CreateModifierRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        m.name = r.string();
+        break;
+        case 3:
+        m.priority = r.uint32();
+        break;
+        case 4:
+        m.internal = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ICreateModifierResponse = {
+  modifier?: IModifier | undefined;
+}
+
+export class CreateModifierResponse {
+  modifier: Modifier | undefined;
+
+  constructor(v?: ICreateModifierResponse) {
+    this.modifier = v?.modifier && new Modifier(v.modifier);
+  }
+
+  static encode(m: CreateModifierResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.modifier) Modifier.encode(m.modifier, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): CreateModifierResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new CreateModifierResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.modifier = Modifier.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUpdateModifierRequest = {
+  serverId?: bigint;
+  id?: bigint;
+  name?: string;
+  priority?: number;
+  internal?: boolean;
+}
+
+export class UpdateModifierRequest {
+  serverId: bigint;
+  id: bigint;
+  name: string;
+  priority: number;
+  internal: boolean;
+
+  constructor(v?: IUpdateModifierRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.id = v?.id || BigInt(0);
+    this.name = v?.name || "";
+    this.priority = v?.priority || 0;
+    this.internal = v?.internal || false;
+  }
+
+  static encode(m: UpdateModifierRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    if (m.id) w.uint32(16).uint64(m.id);
+    if (m.name) w.uint32(26).string(m.name);
+    if (m.priority) w.uint32(32).uint32(m.priority);
+    if (m.internal) w.uint32(40).bool(m.internal);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UpdateModifierRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UpdateModifierRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        m.id = r.uint64();
+        break;
+        case 3:
+        m.name = r.string();
+        break;
+        case 4:
+        m.priority = r.uint32();
+        break;
+        case 5:
+        m.internal = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUpdateModifierResponse = {
+  modifier?: IModifier | undefined;
+}
+
+export class UpdateModifierResponse {
+  modifier: Modifier | undefined;
+
+  constructor(v?: IUpdateModifierResponse) {
+    this.modifier = v?.modifier && new Modifier(v.modifier);
+  }
+
+  static encode(m: UpdateModifierResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.modifier) Modifier.encode(m.modifier, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UpdateModifierResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UpdateModifierResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.modifier = Modifier.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IDeleteModifierRequest = {
+  serverId?: bigint;
+  id?: bigint;
+}
+
+export class DeleteModifierRequest {
+  serverId: bigint;
+  id: bigint;
+
+  constructor(v?: IDeleteModifierRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: DeleteModifierRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    if (m.id) w.uint32(16).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DeleteModifierRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new DeleteModifierRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IDeleteModifierResponse = {
+}
+
+export class DeleteModifierResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IDeleteModifierResponse) {
+  }
+
+  static encode(m: DeleteModifierResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DeleteModifierResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new DeleteModifierResponse();
+  }
+}
+
+export type IGetModifierRequest = {
+  id?: bigint;
+}
+
+export class GetModifierRequest {
+  id: bigint;
+
+  constructor(v?: IGetModifierRequest) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: GetModifierRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetModifierRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetModifierRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IGetModifierResponse = {
+  modifier?: IModifier | undefined;
+}
+
+export class GetModifierResponse {
+  modifier: Modifier | undefined;
+
+  constructor(v?: IGetModifierResponse) {
+    this.modifier = v?.modifier && new Modifier(v.modifier);
+  }
+
+  static encode(m: GetModifierResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.modifier) Modifier.encode(m.modifier, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetModifierResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetModifierResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.modifier = Modifier.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListModifiersRequest = {
+  serverId?: bigint;
+}
+
+export class ListModifiersRequest {
+  serverId: bigint;
+
+  constructor(v?: IListModifiersRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+  }
+
+  static encode(m: ListModifiersRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListModifiersRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListModifiersRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListModifiersResponse = {
+  modifiers?: IModifier[];
+}
+
+export class ListModifiersResponse {
+  modifiers: Modifier[];
+
+  constructor(v?: IListModifiersResponse) {
+    this.modifiers = v?.modifiers ? v.modifiers.map(v => new Modifier(v)) : [];
+  }
+
+  static encode(m: ListModifiersResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.modifiers) Modifier.encode(v, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListModifiersResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListModifiersResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.modifiers.push(Modifier.decode(r, r.uint32()));
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ICreateTagRequest = {
+  serverId?: bigint;
+  name?: string;
+  color?: string;
+  sensitive?: boolean;
+}
+
+export class CreateTagRequest {
+  serverId: bigint;
+  name: string;
+  color: string;
+  sensitive: boolean;
+
+  constructor(v?: ICreateTagRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.name = v?.name || "";
+    this.color = v?.color || "";
+    this.sensitive = v?.sensitive || false;
+  }
+
+  static encode(m: CreateTagRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    if (m.name) w.uint32(18).string(m.name);
+    if (m.color) w.uint32(26).string(m.color);
+    if (m.sensitive) w.uint32(32).bool(m.sensitive);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): CreateTagRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new CreateTagRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        m.name = r.string();
+        break;
+        case 3:
+        m.color = r.string();
+        break;
+        case 4:
+        m.sensitive = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type ICreateTagResponse = {
+  tag?: ITag | undefined;
+}
+
+export class CreateTagResponse {
+  tag: Tag | undefined;
+
+  constructor(v?: ICreateTagResponse) {
+    this.tag = v?.tag && new Tag(v.tag);
+  }
+
+  static encode(m: CreateTagResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.tag) Tag.encode(m.tag, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): CreateTagResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new CreateTagResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.tag = Tag.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUpdateTagRequest = {
+  serverId?: bigint;
+  id?: bigint;
+  name?: string;
+  color?: string;
+  sensitive?: boolean;
+}
+
+export class UpdateTagRequest {
+  serverId: bigint;
+  id: bigint;
+  name: string;
+  color: string;
+  sensitive: boolean;
+
+  constructor(v?: IUpdateTagRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.id = v?.id || BigInt(0);
+    this.name = v?.name || "";
+    this.color = v?.color || "";
+    this.sensitive = v?.sensitive || false;
+  }
+
+  static encode(m: UpdateTagRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    if (m.id) w.uint32(16).uint64(m.id);
+    if (m.name) w.uint32(26).string(m.name);
+    if (m.color) w.uint32(34).string(m.color);
+    if (m.sensitive) w.uint32(40).bool(m.sensitive);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UpdateTagRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UpdateTagRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        m.id = r.uint64();
+        break;
+        case 3:
+        m.name = r.string();
+        break;
+        case 4:
+        m.color = r.string();
+        break;
+        case 5:
+        m.sensitive = r.bool();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUpdateTagResponse = {
+  tag?: ITag | undefined;
+}
+
+export class UpdateTagResponse {
+  tag: Tag | undefined;
+
+  constructor(v?: IUpdateTagResponse) {
+    this.tag = v?.tag && new Tag(v.tag);
+  }
+
+  static encode(m: UpdateTagResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.tag) Tag.encode(m.tag, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UpdateTagResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UpdateTagResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.tag = Tag.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IDeleteTagRequest = {
+  serverId?: bigint;
+  id?: bigint;
+}
+
+export class DeleteTagRequest {
+  serverId: bigint;
+  id: bigint;
+
+  constructor(v?: IDeleteTagRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: DeleteTagRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    if (m.id) w.uint32(16).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DeleteTagRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new DeleteTagRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        case 2:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IDeleteTagResponse = {
+}
+
+export class DeleteTagResponse {
+
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
+  constructor(v?: IDeleteTagResponse) {
+  }
+
+  static encode(m: DeleteTagResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): DeleteTagResponse {
+    if (r instanceof Reader && length) r.skip(length);
+    return new DeleteTagResponse();
+  }
+}
+
+export type IGetTagRequest = {
+  id?: bigint;
+}
+
+export class GetTagRequest {
+  id: bigint;
+
+  constructor(v?: IGetTagRequest) {
+    this.id = v?.id || BigInt(0);
+  }
+
+  static encode(m: GetTagRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetTagRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetTagRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IGetTagResponse = {
+  tag?: ITag | undefined;
+}
+
+export class GetTagResponse {
+  tag: Tag | undefined;
+
+  constructor(v?: IGetTagResponse) {
+    this.tag = v?.tag && new Tag(v.tag);
+  }
+
+  static encode(m: GetTagResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.tag) Tag.encode(m.tag, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): GetTagResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new GetTagResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.tag = Tag.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListTagsRequest = {
+  serverId?: bigint;
+}
+
+export class ListTagsRequest {
+  serverId: bigint;
+
+  constructor(v?: IListTagsRequest) {
+    this.serverId = v?.serverId || BigInt(0);
+  }
+
+  static encode(m: ListTagsRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.serverId) w.uint32(8).uint64(m.serverId);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListTagsRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListTagsRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.serverId = r.uint64();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IListTagsResponse = {
+  tags?: ITag[];
+}
+
+export class ListTagsResponse {
+  tags: Tag[];
+
+  constructor(v?: IListTagsResponse) {
+    this.tags = v?.tags ? v.tags.map(v => new Tag(v)) : [];
+  }
+
+  static encode(m: ListTagsResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    for (const v of m.tags) Tag.encode(v, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListTagsResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListTagsResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.tags.push(Tag.decode(r, r.uint32()));
         break;
         default:
         r.skipType(tag & 7);

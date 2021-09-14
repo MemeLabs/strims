@@ -20,7 +20,7 @@ const Emote: React.FC<EmoteProps> = ({
   ...props
 }) => {
   const [{ styles }] = useChat();
-  const style = styles[name];
+  const style = styles.emotes[name];
 
   if (style === undefined) {
     return null;

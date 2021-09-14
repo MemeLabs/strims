@@ -2781,25 +2781,24 @@ const src = {
 };
 
 export default async (): Promise<chatv1.AssetBundle> => {
-  return new chatv1.AssetBundle({
-    ...src,
-    emotes: await Promise.all(
-      src.emotes.map(async ({ id, images, ...emote }) => {
-        return new chatv1.Emote({
-          ...emote,
-          id: BigInt(id),
-          images: await Promise.all(
-            images.map(async ({ src, ...image }) => {
-              const res = await fetch(src);
-              const data = await res.blob();
-              return new chatv1.EmoteImage({
-                ...image,
-                data: new Uint8Array(await data.arrayBuffer()),
-              });
-            })
-          ),
-        });
-      })
-    ),
-  });
+    return new chatv1.AssetBundle({
+      ...src,
+      emotes: await Promise.all(
+        src.emotes.map(async ({ id, images, ...emote }) => {
+          return new chatv1.Emote({
+            ...emote,
+            id: BigInt(id),
+            images: await Promise.all(
+              images.map(async ({ src, ...image }) => {
+                const res = await fetch(src);
+                return new chatv1.EmoteImage({
+                  ...image,
+                  data: new Uint8Array(await res.arrayBuffer()),
+                });
+              })
+            ),
+          });
+        })
+      ),
+    });
 };

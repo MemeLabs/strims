@@ -91,7 +91,9 @@ class MockChatSvc {
 
     return ch;
   }
-  clientSendMessage(req: chatv1.ClientSendMessageRequest): chatv1.ClientSendMessageResponse {
+  clientSendMessage(
+    req: chatv1.ClientSendMessageRequest
+  ): Promise<chatv1.ClientSendMessageResponse> {
     this.messages.push(
       new chatv1.Message({
         nick: "test_user",
@@ -100,7 +102,7 @@ class MockChatSvc {
         entities: new chatv1.Message.Entities(),
       })
     );
-    return new chatv1.ClientSendMessageResponse();
+    return Promise.resolve(new chatv1.ClientSendMessageResponse());
   }
 
   setUIConfig(): Promise<chatv1.SetUIConfigResponse> {

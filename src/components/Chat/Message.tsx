@@ -100,7 +100,6 @@ interface MessageGreenTextProps {
   entity: chatv1_Message.Entities.GenericEntity;
 }
 
-// TODO: optionally disable
 const MessageGreenText: React.FC<MessageGreenTextProps> = ({ children }) => (
   <span className="chat__message__greentext">{children}</span>
 );
@@ -123,23 +122,33 @@ class MessageFormatter {
     this.body = [body];
   }
 
-  // alignSlices cuts text spans in body to ensure they align with the bounds
+  // splitSpan cuts text spans in body to ensure they align with the bounds
   // of new entities during insertion. returns false if the index is inside a
   // node created for a previously inserted entity.
-  private alignSlices(index: number) {
-    for (let i = 0; i < this.bounds.length; i++) {
-      if (this.bounds[i] < index && this.bounds[i + 1] > index) {
-        const elem = this.body[i];
-        if (typeof elem !== "string") {
-          return false;
-        }
-
-        const splitIndex = index - this.bounds[i];
-        this.body.splice(i, 1, elem.substr(0, splitIndex), elem.substr(splitIndex));
-        this.bounds.splice(i + 1, 0, index);
-        return true;
+  private splitSpan(index: number) {
+    let l = 0;
+    let r = this.bounds.length;
+    while (l !== r) {
+      const m = (r + l) >> 1;
+      if (this.bounds[m] <= index) {
+        l = m + 1;
+      } else {
+        r = m;
       }
     }
+
+    const i = l - 1;
+    if (this.bounds[i] === index) {
+      return true;
+    }
+    const span = this.body[i];
+    if (typeof span !== "string") {
+      return false;
+    }
+
+    const splitIndex = index - this.bounds[i];
+    this.body.splice(i, 1, span.substr(0, splitIndex), span.substr(splitIndex));
+    this.bounds.splice(i + 1, 0, index);
     return true;
   }
 
@@ -151,7 +160,7 @@ class MessageFormatter {
     props?: Omit<React.ComponentProps<C>, "entity">
   ) {
     const { start, end } = entity.bounds;
-    if (!this.alignSlices(start) || !this.alignSlices(end)) {
+    if (!this.splitSpan(start) || !this.splitSpan(end)) {
       return false;
     }
 
@@ -246,19 +255,12 @@ const ComboMessage: React.FC<MessageProps> = ({
   );
 };
 
-// TODO: mark sensitive tags in server config
-const sensitiveTags = ["nsfw", "nsfl"];
-
 const StandardMessage: React.FC<MessageProps> = ({
   uiConfig,
   message: { nick, serverTime, body, entities },
   className,
   ...props
 }) => {
-  if (uiConfig.hideNsfw && entities.tags?.some(({ name }) => sensitiveTags.includes(name))) {
-    return null;
-  }
-
   const formatter = new MessageFormatter(body);
   entities.codeBlocks.forEach((entity) => formatter.insertEntity(MessageCodeBlock, entity));
   entities.links.forEach((entity) => formatter.insertEntity(MessageLink, entity));
@@ -281,7 +283,10 @@ const StandardMessage: React.FC<MessageProps> = ({
 
   const classNames = clsx([
     "chat__message",
-    entities.selfMessage && "chat__message--self",
+    {
+      "chat__message--self": entities.selfMessage,
+      "chat__message--tagged": entities.tags.length > 0,
+    },
     ...entities.tags.map(({ name }) => `chat__message--tag_${name}`),
     className,
   ]);

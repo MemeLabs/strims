@@ -50,20 +50,8 @@
         color: #a66be5;
       }
 
-      @at-root .chat__message--tag_nsfw & {
-        border-bottom: 1px dashed red;
-      }
-
-      @at-root .chat__message--tag_nsfl & {
-        border-bottom: 1px dashed yellow;
-      }
-
-      @at-root .chat__message--tag_weeb & {
-        border-bottom: 1px dashed pink;
-      }
-
-      @at-root .chat__message--tag_loud & {
-        border-bottom: 1px dashed #02c2ff;
+      @at-root .chat__message--tagged & {
+        border-bottom: 1px dashed var(--tag-color, red);
       }
     }
 
@@ -1076,6 +1064,7 @@
         padding: 8px 4px;
         display: flex;
         flex-direction: row;
+        cursor: pointer;
 
         &:last-child {
           border-radius: 0 0 3px 3px;

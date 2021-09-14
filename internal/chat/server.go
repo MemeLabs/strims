@@ -43,18 +43,27 @@ var defaultAssetSwarmOptions = ppspp.SwarmOptions{
 var eventChunkSize = defaultEventSwarmOptions.ChunkSize
 var assetChunkSize = defaultAssetSwarmOptions.ChunkSize * defaultAssetSwarmOptions.ChunksPerSignature
 
-func getServerConfig(store kv.Store, id uint64) (*chatv1.Server, []*chatv1.Emote, error) {
-	var config *chatv1.Server
-	var emotes []*chatv1.Emote
-	err := store.View(func(tx kv.Tx) (err error) {
+func getServerConfig(store kv.Store, id uint64) (config *chatv1.Server, emotes []*chatv1.Emote, modifiers []*chatv1.Modifier, tags []*chatv1.Tag, err error) {
+	err = store.View(func(tx kv.Tx) (err error) {
 		config, err = dao.GetChatServer(tx, id)
 		if err != nil {
 			return
 		}
 		emotes, err = dao.GetChatEmotes(tx, id)
+		if err != nil {
+			return
+		}
+		modifiers, err = dao.GetChatModifiers(tx, id)
+		if err != nil {
+			return
+		}
+		tags, err = dao.GetChatTags(tx, id)
+		if err != nil {
+			return
+		}
 		return
 	})
-	return config, emotes, err
+	return
 }
 
 func newChatServer(
@@ -137,12 +146,12 @@ func (s *chatServer) Run(
 
 	chatv1.RegisterChatService(server, s.service)
 
-	config, emotes, err := getServerConfig(s.store, s.config.Id)
+	config, emotes, modifiers, tags, err := getServerConfig(s.store, s.config.Id)
 	if err != nil {
 		return err
 	}
-	s.service.Sync(config, emotes)
-	s.assetPublisher.Sync(config, emotes)
+	s.service.Sync(config, emotes, modifiers, tags)
+	s.assetPublisher.Sync(config, emotes, modifiers, tags)
 
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error { return s.service.Run(ctx) })
@@ -167,13 +176,13 @@ func (s *chatServer) Close() {
 }
 
 func (s *chatServer) Sync() {
-	config, emotes, err := getServerConfig(s.store, s.config.Id)
+	config, emotes, modifiers, tags, err := getServerConfig(s.store, s.config.Id)
 	if err != nil {
 		return
 	}
 
-	s.service.Sync(config, emotes)
-	s.assetPublisher.Sync(config, emotes)
+	s.service.Sync(config, emotes, modifiers, tags)
+	s.assetPublisher.Sync(config, emotes, modifiers, tags)
 }
 
 func (s *chatServer) Readers() (events, assets *protoutil.ChunkStreamReader) {
@@ -199,7 +208,7 @@ type assetPublisher struct {
 	size        int
 }
 
-func (s *assetPublisher) Sync(config *chatv1.Server, emotes []*chatv1.Emote) error {
+func (s *assetPublisher) Sync(config *chatv1.Server, emotes []*chatv1.Emote, modifiers []*chatv1.Modifier, tags []*chatv1.Tag) error {
 	b := &chatv1.AssetBundle{
 		IsDelta: len(s.checksums) != 0,
 	}
@@ -218,6 +227,24 @@ func (s *assetPublisher) Sync(config *chatv1.Server, emotes []*chatv1.Emote) err
 		}
 	}
 
+	for _, e := range modifiers {
+		delete(removed, e.Id)
+		c := dao.CRC32Message(e)
+		if c != s.checksums[e.Id] {
+			s.checksums[e.Id] = c
+			b.Modifiers = append(b.Modifiers, e)
+		}
+	}
+
+	for _, e := range tags {
+		delete(removed, e.Id)
+		c := dao.CRC32Message(e)
+		if c != s.checksums[e.Id] {
+			s.checksums[e.Id] = c
+			b.Tags = append(b.Tags, e)
+		}
+	}
+
 	delete(removed, config.Id)
 	c := dao.CRC32Message(config)
 	if c != s.checksums[config.Id] {
@@ -226,7 +253,7 @@ func (s *assetPublisher) Sync(config *chatv1.Server, emotes []*chatv1.Emote) err
 	}
 
 	for id := range removed {
-		b.RemovedEmotes = append(b.RemovedEmotes, id)
+		b.RemovedIds = append(b.RemovedIds, id)
 	}
 
 	// TODO

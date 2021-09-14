@@ -135,7 +135,7 @@ const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false }) => {
 
   return (
     <>
-      <StyleSheet liveEmotes={state.liveEmotes} styles={state.styles} />
+      <StyleSheet liveEmotes={state.liveEmotes} styles={state.styles} uiConfig={state.uiConfig} />
       <div className="chat__messages">
         <ChatDrawer
           title="Emotes"

@@ -1,7 +1,13 @@
 import React, { useLayoutEffect, useRef, useState } from "react";
 
-import { Emote, EmoteEffect, EmoteFileType, EmoteScale } from "../../apis/strims/chat/v1/chat";
-import { StyleMap } from "../../contexts/Chat";
+import {
+  Emote,
+  EmoteEffect,
+  EmoteFileType,
+  EmoteScale,
+  UIConfig,
+} from "../../apis/strims/chat/v1/chat";
+import { ChatStyles } from "../../contexts/Chat";
 
 const toMimeType = (fileType: EmoteFileType): string => {
   switch (fileType) {
@@ -25,7 +31,8 @@ const toCSSScale = (scale: EmoteScale): number => {
 
 interface StyleSheetProps {
   liveEmotes: Emote[];
-  styles: StyleMap;
+  styles: ChatStyles;
+  uiConfig: UIConfig;
 }
 
 interface EmoteState {
@@ -41,7 +48,17 @@ const upsertProps = (prev: PropList, ...vs: Prop[]): PropList => [
   ...vs,
 ];
 
-const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
+const deleteMatchingCSSRules = (sheet: CSSStyleSheet, filter: (rule: CSSRule) => boolean): void => {
+  for (let i = 0; i < sheet.cssRules.length; ) {
+    if (filter(sheet.cssRules.item(i))) {
+      sheet.deleteRule(i);
+    } else {
+      i++;
+    }
+  }
+};
+
+const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles, uiConfig }) => {
   const ref = useRef<HTMLStyleElement>(null);
   const [, setEmotes] = useState(new Map<Emote, EmoteState>());
 
@@ -54,18 +71,13 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
       removed.forEach(([e, { name, uris }]) => {
         uris.forEach((uri) => URL.revokeObjectURL(uri));
         next.delete(e);
-
-        for (let i = 0; i < ref.current.sheet.cssRules.length; ) {
-          if (ref.current.sheet.cssRules.item(i).cssText.includes(name)) {
-            ref.current.sheet.deleteRule(i);
-          }
-        }
+        deleteMatchingCSSRules(ref.current.sheet, (r) => r.cssText.includes(name));
       });
       added.forEach((e) => {
         const uris = e.images.map(({ data, fileType }) =>
           URL.createObjectURL(new Blob([data], { type: toMimeType(fileType) }))
         );
-        const { name } = styles[e.name];
+        const { name } = styles.emotes[e.name];
         const imageSet = e.images.map(({ scale }, i) => `url(${uris[i]}) ${toCSSScale(scale)}x`);
         const sample = e.images[0];
         const sampleScale = toCSSScale(sample.scale);
@@ -133,6 +145,19 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles }) => {
       return next;
     });
   }, [liveEmotes, styles]);
+
+  useLayoutEffect(() => {
+    deleteMatchingCSSRules(ref.current.sheet, (r) => r.cssText.includes("chat__message--tag_"));
+    styles.tags.forEach(({ name, color, sensitive }) => {
+      let rules: PropList = [["--tag-color", color]];
+      if (sensitive && uiConfig.hideNsfw) {
+        rules = upsertProps(rules, ["display", "none"]);
+      }
+      ref.current.sheet.insertRule(
+        `.chat__message--tag_${name} {${rules.map((r) => r.join(":")).join(";")}}`
+      );
+    });
+  }, [styles, uiConfig]);
 
   return <style ref={ref} />;
 };

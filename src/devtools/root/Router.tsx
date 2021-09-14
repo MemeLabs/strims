@@ -10,6 +10,7 @@ const Router: React.FC = () => {
       <Route path="/test" exact component={lazy(() => import("../pages/Test"))} />
       <Route path="/emotes" exact component={lazy(() => import("../pages/Emotes"))} />
       <Route path="/chat" exact component={lazy(() => import("../pages/Chat"))} />
+      <Route path="/bridge" exact component={lazy(() => import("../pages/Bridge"))} />
       <Route component={NotFound} />
     </Switch>
   );

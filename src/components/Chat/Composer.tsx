@@ -1,7 +1,14 @@
 import clsx from "clsx";
 import filterObj from "filter-obj";
 import Prism from "prismjs";
-import React, { KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
+import React, {
+  KeyboardEvent,
+  MouseEventHandler,
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
 import {
   Descendant,
   Editor,
@@ -163,14 +170,8 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
           if (!selectedMatch.entry) {
             return;
           }
-          const entry = selectedMatch.entry;
 
-          const target =
-            entry.type === "modifier" ? currentSearch.modifierTarget : currentSearch.target;
-          Transforms.select(editor, target);
-          const whitespace = currentSearch.suffixSpace ? " " : "";
-          Transforms.insertText(editor, (entry.substitution || entry.value) + whitespace);
-          Transforms.move(editor);
+          insertAutocompleteEntry(selectedMatch.entry);
           setLastSearch(search);
           setSelectedMatch(({ index }) => getSelectedMatch(index + 1));
           return;
@@ -188,7 +189,21 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
     [matchEntries, selectedMatch, search, currentSearch]
   );
 
-  const showSuggestions = search && matchSources.length > (lastSearch ? 1 : 0);
+  const insertAutocompleteEntry = (entry: SearchSourceEntry): void => {
+    const target = entry.type === "modifier" ? currentSearch.modifierTarget : currentSearch.target;
+    Transforms.select(editor, target);
+    const whitespace = currentSearch.suffixSpace ? " " : "";
+    Transforms.insertText(editor, (entry.substitution || entry.value) + whitespace);
+    Transforms.move(editor);
+  };
+
+  const handleAutocompleteSelect = (entry: SearchSourceEntry): void => {
+    insertAutocompleteEntry(entry);
+    setLastSearch(search);
+    setSearch(null);
+  };
+
+  const showSuggestions = search && matchEntries.length > (lastSearch ? 1 : 0);
 
   // console.log(selectedMatch);
   // console.log({
@@ -204,7 +219,12 @@ const Composer: React.FC<ComposerProps> = ({ onMessage, emotes, modifiers, nicks
         <div className="chat__composer__autocomplete">
           <div className="chat__composer__autocomplete__list">
             {matchSources.map((m, i) => (
-              <AutocompleteGroup {...m} selectedMatch={selectedMatch} key={i} />
+              <AutocompleteGroup
+                {...m}
+                selectedMatch={selectedMatch}
+                onSelect={handleAutocompleteSelect}
+                key={i}
+              />
             ))}
           </div>
         </div>
@@ -225,23 +245,48 @@ interface AutocompleteGroupProps {
   label: string;
   entries: SearchSourceEntry[];
   selectedMatch: SelectedMatch;
+  onSelect: (entry: SearchSourceEntry) => void;
 }
 
-const AutocompleteGroup: React.FC<AutocompleteGroupProps> = ({ label, entries, selectedMatch }) => (
-  <>
-    <div className="chat__composer__autocomplete__label">{label}</div>
-    {entries.map((e, i) => (
-      <AutocompleteGroupItem entry={e} selectedMatch={selectedMatch} key={i} />
-    ))}
-  </>
-);
+const AutocompleteGroup: React.FC<AutocompleteGroupProps> = ({
+  label,
+  entries,
+  selectedMatch,
+  onSelect,
+}) => {
+  const clickHandler =
+    (entry: SearchSourceEntry): MouseEventHandler =>
+    (e) => {
+      e.preventDefault();
+      onSelect(entry);
+    };
+
+  return (
+    <>
+      <div className="chat__composer__autocomplete__label">{label}</div>
+      {entries.map((e, i) => (
+        <AutocompleteGroupItem
+          entry={e}
+          selectedMatch={selectedMatch}
+          onClick={clickHandler(e)}
+          key={i}
+        />
+      ))}
+    </>
+  );
+};
 
 interface AutocompleteGroupItemProps {
   entry: SearchSourceEntry;
   selectedMatch: SelectedMatch;
+  onClick: MouseEventHandler;
 }
 
-const AutocompleteGroupItem: React.FC<AutocompleteGroupItemProps> = ({ entry, selectedMatch }) => {
+const AutocompleteGroupItem: React.FC<AutocompleteGroupItemProps> = ({
+  entry,
+  selectedMatch,
+  onClick,
+}) => {
   let content: React.ReactNode;
   switch (entry.type) {
     case "emote":
@@ -267,6 +312,8 @@ const AutocompleteGroupItem: React.FC<AutocompleteGroupItemProps> = ({ entry, se
           "chat__composer__autocomplete__item--selected": entry === selectedMatch.entry,
         }
       )}
+      onClick={onClick}
+      onMouseDown={(e) => e.preventDefault()}
     >
       {content}
     </div>

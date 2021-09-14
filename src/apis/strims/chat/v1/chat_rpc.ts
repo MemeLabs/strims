@@ -35,6 +35,36 @@ import {
   IListEmotesRequest,
   ListEmotesRequest,
   ListEmotesResponse,
+  ICreateModifierRequest,
+  CreateModifierRequest,
+  CreateModifierResponse,
+  IUpdateModifierRequest,
+  UpdateModifierRequest,
+  UpdateModifierResponse,
+  IDeleteModifierRequest,
+  DeleteModifierRequest,
+  DeleteModifierResponse,
+  IGetModifierRequest,
+  GetModifierRequest,
+  GetModifierResponse,
+  IListModifiersRequest,
+  ListModifiersRequest,
+  ListModifiersResponse,
+  ICreateTagRequest,
+  CreateTagRequest,
+  CreateTagResponse,
+  IUpdateTagRequest,
+  UpdateTagRequest,
+  UpdateTagResponse,
+  IDeleteTagRequest,
+  DeleteTagRequest,
+  DeleteTagResponse,
+  IGetTagRequest,
+  GetTagRequest,
+  GetTagResponse,
+  IListTagsRequest,
+  ListTagsRequest,
+  ListTagsResponse,
   ISyncAssetsRequest,
   SyncAssetsRequest,
   SyncAssetsResponse,
@@ -75,6 +105,26 @@ registerType("strims.chat.v1.GetEmoteRequest", GetEmoteRequest);
 registerType("strims.chat.v1.GetEmoteResponse", GetEmoteResponse);
 registerType("strims.chat.v1.ListEmotesRequest", ListEmotesRequest);
 registerType("strims.chat.v1.ListEmotesResponse", ListEmotesResponse);
+registerType("strims.chat.v1.CreateModifierRequest", CreateModifierRequest);
+registerType("strims.chat.v1.CreateModifierResponse", CreateModifierResponse);
+registerType("strims.chat.v1.UpdateModifierRequest", UpdateModifierRequest);
+registerType("strims.chat.v1.UpdateModifierResponse", UpdateModifierResponse);
+registerType("strims.chat.v1.DeleteModifierRequest", DeleteModifierRequest);
+registerType("strims.chat.v1.DeleteModifierResponse", DeleteModifierResponse);
+registerType("strims.chat.v1.GetModifierRequest", GetModifierRequest);
+registerType("strims.chat.v1.GetModifierResponse", GetModifierResponse);
+registerType("strims.chat.v1.ListModifiersRequest", ListModifiersRequest);
+registerType("strims.chat.v1.ListModifiersResponse", ListModifiersResponse);
+registerType("strims.chat.v1.CreateTagRequest", CreateTagRequest);
+registerType("strims.chat.v1.CreateTagResponse", CreateTagResponse);
+registerType("strims.chat.v1.UpdateTagRequest", UpdateTagRequest);
+registerType("strims.chat.v1.UpdateTagResponse", UpdateTagResponse);
+registerType("strims.chat.v1.DeleteTagRequest", DeleteTagRequest);
+registerType("strims.chat.v1.DeleteTagResponse", DeleteTagResponse);
+registerType("strims.chat.v1.GetTagRequest", GetTagRequest);
+registerType("strims.chat.v1.GetTagResponse", GetTagResponse);
+registerType("strims.chat.v1.ListTagsRequest", ListTagsRequest);
+registerType("strims.chat.v1.ListTagsResponse", ListTagsResponse);
 registerType("strims.chat.v1.SyncAssetsRequest", SyncAssetsRequest);
 registerType("strims.chat.v1.SyncAssetsResponse", SyncAssetsResponse);
 registerType("strims.chat.v1.OpenClientRequest", OpenClientRequest);
@@ -99,6 +149,16 @@ export interface ChatFrontendService {
   deleteEmote(req: DeleteEmoteRequest, call: strims_rpc_Call): Promise<DeleteEmoteResponse> | DeleteEmoteResponse;
   getEmote(req: GetEmoteRequest, call: strims_rpc_Call): Promise<GetEmoteResponse> | GetEmoteResponse;
   listEmotes(req: ListEmotesRequest, call: strims_rpc_Call): Promise<ListEmotesResponse> | ListEmotesResponse;
+  createModifier(req: CreateModifierRequest, call: strims_rpc_Call): Promise<CreateModifierResponse> | CreateModifierResponse;
+  updateModifier(req: UpdateModifierRequest, call: strims_rpc_Call): Promise<UpdateModifierResponse> | UpdateModifierResponse;
+  deleteModifier(req: DeleteModifierRequest, call: strims_rpc_Call): Promise<DeleteModifierResponse> | DeleteModifierResponse;
+  getModifier(req: GetModifierRequest, call: strims_rpc_Call): Promise<GetModifierResponse> | GetModifierResponse;
+  listModifiers(req: ListModifiersRequest, call: strims_rpc_Call): Promise<ListModifiersResponse> | ListModifiersResponse;
+  createTag(req: CreateTagRequest, call: strims_rpc_Call): Promise<CreateTagResponse> | CreateTagResponse;
+  updateTag(req: UpdateTagRequest, call: strims_rpc_Call): Promise<UpdateTagResponse> | UpdateTagResponse;
+  deleteTag(req: DeleteTagRequest, call: strims_rpc_Call): Promise<DeleteTagResponse> | DeleteTagResponse;
+  getTag(req: GetTagRequest, call: strims_rpc_Call): Promise<GetTagResponse> | GetTagResponse;
+  listTags(req: ListTagsRequest, call: strims_rpc_Call): Promise<ListTagsResponse> | ListTagsResponse;
   syncAssets(req: SyncAssetsRequest, call: strims_rpc_Call): Promise<SyncAssetsResponse> | SyncAssetsResponse;
   openClient(req: OpenClientRequest, call: strims_rpc_Call): GenericReadable<OpenClientResponse>;
   clientSendMessage(req: ClientSendMessageRequest, call: strims_rpc_Call): Promise<ClientSendMessageResponse> | ClientSendMessageResponse;
@@ -117,6 +177,16 @@ export const registerChatFrontendService = (host: strims_rpc_Service, service: C
   host.registerMethod<DeleteEmoteRequest, DeleteEmoteResponse>("strims.chat.v1.ChatFrontend.DeleteEmote", service.deleteEmote.bind(service));
   host.registerMethod<GetEmoteRequest, GetEmoteResponse>("strims.chat.v1.ChatFrontend.GetEmote", service.getEmote.bind(service));
   host.registerMethod<ListEmotesRequest, ListEmotesResponse>("strims.chat.v1.ChatFrontend.ListEmotes", service.listEmotes.bind(service));
+  host.registerMethod<CreateModifierRequest, CreateModifierResponse>("strims.chat.v1.ChatFrontend.CreateModifier", service.createModifier.bind(service));
+  host.registerMethod<UpdateModifierRequest, UpdateModifierResponse>("strims.chat.v1.ChatFrontend.UpdateModifier", service.updateModifier.bind(service));
+  host.registerMethod<DeleteModifierRequest, DeleteModifierResponse>("strims.chat.v1.ChatFrontend.DeleteModifier", service.deleteModifier.bind(service));
+  host.registerMethod<GetModifierRequest, GetModifierResponse>("strims.chat.v1.ChatFrontend.GetModifier", service.getModifier.bind(service));
+  host.registerMethod<ListModifiersRequest, ListModifiersResponse>("strims.chat.v1.ChatFrontend.ListModifiers", service.listModifiers.bind(service));
+  host.registerMethod<CreateTagRequest, CreateTagResponse>("strims.chat.v1.ChatFrontend.CreateTag", service.createTag.bind(service));
+  host.registerMethod<UpdateTagRequest, UpdateTagResponse>("strims.chat.v1.ChatFrontend.UpdateTag", service.updateTag.bind(service));
+  host.registerMethod<DeleteTagRequest, DeleteTagResponse>("strims.chat.v1.ChatFrontend.DeleteTag", service.deleteTag.bind(service));
+  host.registerMethod<GetTagRequest, GetTagResponse>("strims.chat.v1.ChatFrontend.GetTag", service.getTag.bind(service));
+  host.registerMethod<ListTagsRequest, ListTagsResponse>("strims.chat.v1.ChatFrontend.ListTags", service.listTags.bind(service));
   host.registerMethod<SyncAssetsRequest, SyncAssetsResponse>("strims.chat.v1.ChatFrontend.SyncAssets", service.syncAssets.bind(service));
   host.registerMethod<OpenClientRequest, OpenClientResponse>("strims.chat.v1.ChatFrontend.OpenClient", service.openClient.bind(service));
   host.registerMethod<ClientSendMessageRequest, ClientSendMessageResponse>("strims.chat.v1.ChatFrontend.ClientSendMessage", service.clientSendMessage.bind(service));
@@ -165,6 +235,46 @@ export class ChatFrontendClient {
 
   public listEmotes(req?: IListEmotesRequest, opts?: strims_rpc_UnaryCallOptions): Promise<ListEmotesResponse> {
     return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.ListEmotes", new ListEmotesRequest(req)), opts);
+  }
+
+  public createModifier(req?: ICreateModifierRequest, opts?: strims_rpc_UnaryCallOptions): Promise<CreateModifierResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.CreateModifier", new CreateModifierRequest(req)), opts);
+  }
+
+  public updateModifier(req?: IUpdateModifierRequest, opts?: strims_rpc_UnaryCallOptions): Promise<UpdateModifierResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.UpdateModifier", new UpdateModifierRequest(req)), opts);
+  }
+
+  public deleteModifier(req?: IDeleteModifierRequest, opts?: strims_rpc_UnaryCallOptions): Promise<DeleteModifierResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.DeleteModifier", new DeleteModifierRequest(req)), opts);
+  }
+
+  public getModifier(req?: IGetModifierRequest, opts?: strims_rpc_UnaryCallOptions): Promise<GetModifierResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.GetModifier", new GetModifierRequest(req)), opts);
+  }
+
+  public listModifiers(req?: IListModifiersRequest, opts?: strims_rpc_UnaryCallOptions): Promise<ListModifiersResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.ListModifiers", new ListModifiersRequest(req)), opts);
+  }
+
+  public createTag(req?: ICreateTagRequest, opts?: strims_rpc_UnaryCallOptions): Promise<CreateTagResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.CreateTag", new CreateTagRequest(req)), opts);
+  }
+
+  public updateTag(req?: IUpdateTagRequest, opts?: strims_rpc_UnaryCallOptions): Promise<UpdateTagResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.UpdateTag", new UpdateTagRequest(req)), opts);
+  }
+
+  public deleteTag(req?: IDeleteTagRequest, opts?: strims_rpc_UnaryCallOptions): Promise<DeleteTagResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.DeleteTag", new DeleteTagRequest(req)), opts);
+  }
+
+  public getTag(req?: IGetTagRequest, opts?: strims_rpc_UnaryCallOptions): Promise<GetTagResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.GetTag", new GetTagRequest(req)), opts);
+  }
+
+  public listTags(req?: IListTagsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<ListTagsResponse> {
+    return this.host.expectOne(this.host.call("strims.chat.v1.ChatFrontend.ListTags", new ListTagsRequest(req)), opts);
   }
 
   public syncAssets(req?: ISyncAssetsRequest, opts?: strims_rpc_UnaryCallOptions): Promise<SyncAssetsResponse> {

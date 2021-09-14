@@ -23,7 +23,7 @@ const SettingsRouter: React.FC = () => (
       />
       <PrivateRoute
         path="/settings/chat-servers"
-        component={lazy(() => import("../pages/Settings/ChatServers"))}
+        component={lazy(() => import("../pages/Settings/Chat"))}
       />
       <PrivateRoute
         path="/settings/video-ingress"

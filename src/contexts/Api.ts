@@ -1,4 +1,4 @@
-import React from "react";
+import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef } from "react";
 
 import type { Client } from "../apis/client";
 
@@ -53,11 +53,11 @@ const defaultOptions = {
 };
 
 const create = <C extends Client>(): Api<C> => {
-  const ClientContext = React.createContext<C>(null);
+  const ClientContext = createContext<C>(null);
 
   const { Provider } = ClientContext;
 
-  const useClient = () => React.useContext(ClientContext);
+  const useClient = () => useContext(ClientContext);
 
   const useCall: CallHook<C> = <S extends keyof C, M extends FunctionPropertyNames<C[S]>>(
     serviceName: S,
@@ -66,19 +66,17 @@ const create = <C extends Client>(): Api<C> => {
   ) => {
     options = { ...defaultOptions, ...options };
 
-    const client = React.useContext(ClientContext);
+    const client = useContext(ClientContext);
     const [state, setState] = React.useState<CallHookState<C, S, M>>({
       loading: !options.skip,
       called: !options.skip,
     });
 
-    let mounted = true;
-    React.useEffect(() => {
-      return () => (mounted = false);
-    }, []);
+    const mounted = useRef(true);
+    useEffect(() => () => void (mounted.current = false), []);
 
     const handleError = (error: Error) => {
-      if (!mounted) {
+      if (!mounted.current) {
         return;
       }
       setState((prev) => ({
@@ -93,7 +91,7 @@ const create = <C extends Client>(): Api<C> => {
     };
 
     const handleComplete = (value: ResultType<C[S][M]>) => {
-      if (!mounted) {
+      if (!mounted.current) {
         return;
       }
       setState((prev) => ({
@@ -130,13 +128,13 @@ const create = <C extends Client>(): Api<C> => {
       return value as ReturnType<C[S][M]>;
     };
 
-    React.useEffect(() => {
+    useEffect(() => {
       if (!options.skip) {
         call.apply(this, options.args || []);
       }
     }, [options.skip]);
 
-    return [state, call];
+    return useMemo(() => [state, call], [serviceName, methodName, options]);
   };
 
   const useLazyCall: CallHook<C> = <S extends keyof C, M extends FunctionPropertyNames<C[S]>>(
