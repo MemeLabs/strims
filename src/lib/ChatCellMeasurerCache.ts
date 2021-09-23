@@ -17,6 +17,7 @@ export default class ChatCellMeasurerCache implements CellMeasurerCacheInterface
   }
 
   prune(n: number): void {
+    n = Math.min(n, this.values.length);
     this.values.copyWithin(0, n);
     this.values.length -= n;
   }

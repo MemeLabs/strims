@@ -14,12 +14,14 @@ import (
 
 func init() {
 	RegisterService(func(server *rpc.Server, params *ServiceParams) {
-		chatv1.RegisterChatFrontendService(server, &chatService{
+		svc := &chatService{
 			app:   params.App,
 			store: params.Store,
 
 			clients: map[uint64]chatClientRef{},
-		})
+		}
+		chatv1.RegisterChatServerFrontendService(server, svc)
+		chatv1.RegisterChatFrontendService(server, svc)
 	})
 }
 

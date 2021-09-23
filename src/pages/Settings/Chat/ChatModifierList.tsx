@@ -12,7 +12,9 @@ export interface ChatModifierTableProps {
 }
 
 const ChatModifierTable: React.FC<ChatModifierTableProps> = ({ serverId, modifiers, onDelete }) => {
-  const [, deleteChatModifier] = useLazyCall("chat", "deleteModifier", { onComplete: onDelete });
+  const [, deleteChatModifier] = useLazyCall("chatServer", "deleteModifier", {
+    onComplete: onDelete,
+  });
 
   if (!modifiers) {
     return null;
@@ -46,7 +48,7 @@ const ChatModifierTable: React.FC<ChatModifierTableProps> = ({ serverId, modifie
 
 const ChatModifierList: React.FC = () => {
   const { serverId } = useParams<{ serverId: string }>();
-  const [{ loading, value }, getModifiers] = useCall("chat", "listModifiers", {
+  const [{ loading, value }, getModifiers] = useCall("chatServer", "listModifiers", {
     args: [{ serverId: BigInt(serverId) }],
   });
 

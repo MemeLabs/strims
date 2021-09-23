@@ -6,11 +6,11 @@ import ChatModifierForm, { ChatModifierFormData } from "./ChatModifierForm";
 
 const ChatModifierCreateFormPage: React.FC = () => {
   const { serverId } = useParams<{ serverId: string }>();
-  const [{ value }] = useCall("chat", "listModifiers", {
+  const [{ value }] = useCall("chatServer", "listModifiers", {
     args: [{ serverId: BigInt(serverId) }],
   });
   const history = useHistory();
-  const [{ error, loading }, createChatModifier] = useLazyCall("chat", "createModifier", {
+  const [{ error, loading }, createChatModifier] = useLazyCall("chatServer", "createModifier", {
     onComplete: () => history.replace(`/settings/chat-servers/${serverId}/modifiers`),
   });
 

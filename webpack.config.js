@@ -1,8 +1,10 @@
 const path = require("path");
+const fs = require("fs");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const { CleanWebpackPlugin } = require("clean-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
+const WebpackPwaManifest = require("webpack-pwa-manifest");
 const webpack = require("webpack");
 
 module.exports = (env, argv) => {
@@ -58,11 +60,28 @@ module.exports = (env, argv) => {
     type: "asset/resource",
   };
 
+  const htmlWebpackPluginOptions = {
+    meta: {
+      viewport: "width=device-width, initial-scale=1, viewport-fit=cover, shrink-to-fit=no",
+      "theme:light": {
+        name: "theme-color",
+        content: "#d5d5d5",
+        media: "(prefers-color-scheme: light)",
+      },
+      "theme:dark": {
+        name: "theme-color",
+        content: "#222933",
+        media: "(prefers-color-scheme: dark)",
+      },
+    },
+  };
+
   const plugins = [
     new HtmlWebpackPlugin({
       chunks: ["index"],
       title: "Loading...",
       favicon: path.resolve(__dirname, "assets", "favicon.ico"),
+      ...htmlWebpackPluginOptions,
     }),
     new HtmlWebpackPlugin({
       filename: "test.html",
@@ -73,12 +92,29 @@ module.exports = (env, argv) => {
       filename: "devtools.html",
       chunks: ["devtools"],
       title: "devtools",
+      ...htmlWebpackPluginOptions,
     }),
     // new HtmlWebpackPlugin({
     //   filename: "funding.html",
     //   chunks: ["funding"],
     //   title: "funding",
     // }),
+    new WebpackPwaManifest({
+      name: "Strims",
+      short_name: "Strims",
+      description: "Live stream viewing with friends",
+      background_color: "#222933",
+      display: "fullscreen",
+      start_url: "/devtools.html",
+      orientation: "omit",
+      ios: true,
+      icons: [
+        {
+          src: path.resolve("assets/splat.png"),
+          sizes: [96, 128, 192, 256, 384, 512], // multiple sizes
+        },
+      ],
+    }),
     new webpack.HotModuleReplacementPlugin(),
     new webpack.ProvidePlugin({
       process: "process/browser",
@@ -139,6 +175,15 @@ module.exports = (env, argv) => {
     },
   });
 
+  const tlsCertRoot = path.join(__dirname, "hack", "tls");
+  const devServerHttps = fs.existsSync(tlsCertRoot)
+    ? {
+        key: fs.readFileSync(path.join(tlsCertRoot, "development.key")),
+        cert: fs.readFileSync(path.join(tlsCertRoot, "development.crt")),
+        cacert: fs.readFileSync(path.join(tlsCertRoot, "development-ca.crt")),
+      }
+    : true;
+
   switch (env.TARGET) {
     case "app":
       return [
@@ -161,6 +206,7 @@ module.exports = (env, argv) => {
             index: path.join(__dirname, "src", "web", "index.tsx"),
             test: path.join(__dirname, "src", "web", "test.ts"),
             devtools: path.join(__dirname, "src", "devtools", "index.tsx"),
+            sw: path.join(__dirname, "src", "devtools", "sw.ts"),
             // funding: path.join(__dirname, "src", "funding", "index.tsx"),
           },
           devtool,
@@ -171,7 +217,7 @@ module.exports = (env, argv) => {
             publicPath: "/",
           },
           devServer: {
-            https: true,
+            https: devServerHttps,
             hot: true,
             historyApiFallback: {
               index: "/",

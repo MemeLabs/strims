@@ -102,17 +102,20 @@ export type IDirectoryListingSnippet = {
   title?: string;
   description?: string;
   tags?: string[];
+  category?: string;
 }
 
 export class DirectoryListingSnippet {
   title: string;
   description: string;
   tags: string[];
+  category: string;
 
   constructor(v?: IDirectoryListingSnippet) {
     this.title = v?.title || "";
     this.description = v?.description || "";
     this.tags = v?.tags ? v.tags : [];
+    this.category = v?.category || "";
   }
 
   static encode(m: DirectoryListingSnippet, w?: Writer): Writer {
@@ -120,6 +123,7 @@ export class DirectoryListingSnippet {
     if (m.title) w.uint32(10).string(m.title);
     if (m.description) w.uint32(18).string(m.description);
     for (const v of m.tags) w.uint32(26).string(v);
+    if (m.category) w.uint32(34).string(m.category);
     return w;
   }
 
@@ -138,6 +142,9 @@ export class DirectoryListingSnippet {
         break;
         case 3:
         m.tags.push(r.string())
+        break;
+        case 4:
+        m.category = r.string();
         break;
         default:
         r.skipType(tag & 7);

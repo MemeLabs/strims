@@ -6,37 +6,33 @@ import (
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 )
 
-// RegisterChatFrontendService ...
-func RegisterChatFrontendService(host rpc.ServiceRegistry, service ChatFrontendService) {
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.CreateServer", service.CreateServer)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.UpdateServer", service.UpdateServer)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.DeleteServer", service.DeleteServer)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetServer", service.GetServer)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.ListServers", service.ListServers)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.CreateEmote", service.CreateEmote)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.UpdateEmote", service.UpdateEmote)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.DeleteEmote", service.DeleteEmote)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetEmote", service.GetEmote)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.ListEmotes", service.ListEmotes)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.CreateModifier", service.CreateModifier)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.UpdateModifier", service.UpdateModifier)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.DeleteModifier", service.DeleteModifier)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetModifier", service.GetModifier)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.ListModifiers", service.ListModifiers)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.CreateTag", service.CreateTag)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.UpdateTag", service.UpdateTag)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.DeleteTag", service.DeleteTag)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetTag", service.GetTag)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.ListTags", service.ListTags)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.SyncAssets", service.SyncAssets)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.OpenClient", service.OpenClient)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.ClientSendMessage", service.ClientSendMessage)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.SetUIConfig", service.SetUIConfig)
-	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetUIConfig", service.GetUIConfig)
+// RegisterChatServerFrontendService ...
+func RegisterChatServerFrontendService(host rpc.ServiceRegistry, service ChatServerFrontendService) {
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.CreateServer", service.CreateServer)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.UpdateServer", service.UpdateServer)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.DeleteServer", service.DeleteServer)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.GetServer", service.GetServer)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.ListServers", service.ListServers)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.CreateEmote", service.CreateEmote)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.UpdateEmote", service.UpdateEmote)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.DeleteEmote", service.DeleteEmote)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.GetEmote", service.GetEmote)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.ListEmotes", service.ListEmotes)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.CreateModifier", service.CreateModifier)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.UpdateModifier", service.UpdateModifier)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.DeleteModifier", service.DeleteModifier)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.GetModifier", service.GetModifier)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.ListModifiers", service.ListModifiers)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.CreateTag", service.CreateTag)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.UpdateTag", service.UpdateTag)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.DeleteTag", service.DeleteTag)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.GetTag", service.GetTag)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.ListTags", service.ListTags)
+	host.RegisterMethod("strims.chat.v1.ChatServerFrontend.SyncAssets", service.SyncAssets)
 }
 
-// ChatFrontendService ...
-type ChatFrontendService interface {
+// ChatServerFrontendService ...
+type ChatServerFrontendService interface {
 	CreateServer(
 		ctx context.Context,
 		req *CreateServerRequest,
@@ -121,6 +117,217 @@ type ChatFrontendService interface {
 		ctx context.Context,
 		req *SyncAssetsRequest,
 	) (*SyncAssetsResponse, error)
+}
+
+// ChatServerFrontendClient ...
+type ChatServerFrontendClient struct {
+	client rpc.Caller
+}
+
+// NewChatServerFrontendClient ...
+func NewChatServerFrontendClient(client rpc.Caller) *ChatServerFrontendClient {
+	return &ChatServerFrontendClient{client}
+}
+
+// CreateServer ...
+func (c *ChatServerFrontendClient) CreateServer(
+	ctx context.Context,
+	req *CreateServerRequest,
+	res *CreateServerResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.CreateServer", req, res)
+}
+
+// UpdateServer ...
+func (c *ChatServerFrontendClient) UpdateServer(
+	ctx context.Context,
+	req *UpdateServerRequest,
+	res *UpdateServerResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.UpdateServer", req, res)
+}
+
+// DeleteServer ...
+func (c *ChatServerFrontendClient) DeleteServer(
+	ctx context.Context,
+	req *DeleteServerRequest,
+	res *DeleteServerResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.DeleteServer", req, res)
+}
+
+// GetServer ...
+func (c *ChatServerFrontendClient) GetServer(
+	ctx context.Context,
+	req *GetServerRequest,
+	res *GetServerResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.GetServer", req, res)
+}
+
+// ListServers ...
+func (c *ChatServerFrontendClient) ListServers(
+	ctx context.Context,
+	req *ListServersRequest,
+	res *ListServersResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.ListServers", req, res)
+}
+
+// CreateEmote ...
+func (c *ChatServerFrontendClient) CreateEmote(
+	ctx context.Context,
+	req *CreateEmoteRequest,
+	res *CreateEmoteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.CreateEmote", req, res)
+}
+
+// UpdateEmote ...
+func (c *ChatServerFrontendClient) UpdateEmote(
+	ctx context.Context,
+	req *UpdateEmoteRequest,
+	res *UpdateEmoteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.UpdateEmote", req, res)
+}
+
+// DeleteEmote ...
+func (c *ChatServerFrontendClient) DeleteEmote(
+	ctx context.Context,
+	req *DeleteEmoteRequest,
+	res *DeleteEmoteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.DeleteEmote", req, res)
+}
+
+// GetEmote ...
+func (c *ChatServerFrontendClient) GetEmote(
+	ctx context.Context,
+	req *GetEmoteRequest,
+	res *GetEmoteResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.GetEmote", req, res)
+}
+
+// ListEmotes ...
+func (c *ChatServerFrontendClient) ListEmotes(
+	ctx context.Context,
+	req *ListEmotesRequest,
+	res *ListEmotesResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.ListEmotes", req, res)
+}
+
+// CreateModifier ...
+func (c *ChatServerFrontendClient) CreateModifier(
+	ctx context.Context,
+	req *CreateModifierRequest,
+	res *CreateModifierResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.CreateModifier", req, res)
+}
+
+// UpdateModifier ...
+func (c *ChatServerFrontendClient) UpdateModifier(
+	ctx context.Context,
+	req *UpdateModifierRequest,
+	res *UpdateModifierResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.UpdateModifier", req, res)
+}
+
+// DeleteModifier ...
+func (c *ChatServerFrontendClient) DeleteModifier(
+	ctx context.Context,
+	req *DeleteModifierRequest,
+	res *DeleteModifierResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.DeleteModifier", req, res)
+}
+
+// GetModifier ...
+func (c *ChatServerFrontendClient) GetModifier(
+	ctx context.Context,
+	req *GetModifierRequest,
+	res *GetModifierResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.GetModifier", req, res)
+}
+
+// ListModifiers ...
+func (c *ChatServerFrontendClient) ListModifiers(
+	ctx context.Context,
+	req *ListModifiersRequest,
+	res *ListModifiersResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.ListModifiers", req, res)
+}
+
+// CreateTag ...
+func (c *ChatServerFrontendClient) CreateTag(
+	ctx context.Context,
+	req *CreateTagRequest,
+	res *CreateTagResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.CreateTag", req, res)
+}
+
+// UpdateTag ...
+func (c *ChatServerFrontendClient) UpdateTag(
+	ctx context.Context,
+	req *UpdateTagRequest,
+	res *UpdateTagResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.UpdateTag", req, res)
+}
+
+// DeleteTag ...
+func (c *ChatServerFrontendClient) DeleteTag(
+	ctx context.Context,
+	req *DeleteTagRequest,
+	res *DeleteTagResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.DeleteTag", req, res)
+}
+
+// GetTag ...
+func (c *ChatServerFrontendClient) GetTag(
+	ctx context.Context,
+	req *GetTagRequest,
+	res *GetTagResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.GetTag", req, res)
+}
+
+// ListTags ...
+func (c *ChatServerFrontendClient) ListTags(
+	ctx context.Context,
+	req *ListTagsRequest,
+	res *ListTagsResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.ListTags", req, res)
+}
+
+// SyncAssets ...
+func (c *ChatServerFrontendClient) SyncAssets(
+	ctx context.Context,
+	req *SyncAssetsRequest,
+	res *SyncAssetsResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.chat.v1.ChatServerFrontend.SyncAssets", req, res)
+}
+
+// RegisterChatFrontendService ...
+func RegisterChatFrontendService(host rpc.ServiceRegistry, service ChatFrontendService) {
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.OpenClient", service.OpenClient)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.ClientSendMessage", service.ClientSendMessage)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.SetUIConfig", service.SetUIConfig)
+	host.RegisterMethod("strims.chat.v1.ChatFrontend.GetUIConfig", service.GetUIConfig)
+}
+
+// ChatFrontendService ...
+type ChatFrontendService interface {
 	OpenClient(
 		ctx context.Context,
 		req *OpenClientRequest,
@@ -147,195 +354,6 @@ type ChatFrontendClient struct {
 // NewChatFrontendClient ...
 func NewChatFrontendClient(client rpc.Caller) *ChatFrontendClient {
 	return &ChatFrontendClient{client}
-}
-
-// CreateServer ...
-func (c *ChatFrontendClient) CreateServer(
-	ctx context.Context,
-	req *CreateServerRequest,
-	res *CreateServerResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.CreateServer", req, res)
-}
-
-// UpdateServer ...
-func (c *ChatFrontendClient) UpdateServer(
-	ctx context.Context,
-	req *UpdateServerRequest,
-	res *UpdateServerResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.UpdateServer", req, res)
-}
-
-// DeleteServer ...
-func (c *ChatFrontendClient) DeleteServer(
-	ctx context.Context,
-	req *DeleteServerRequest,
-	res *DeleteServerResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.DeleteServer", req, res)
-}
-
-// GetServer ...
-func (c *ChatFrontendClient) GetServer(
-	ctx context.Context,
-	req *GetServerRequest,
-	res *GetServerResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.GetServer", req, res)
-}
-
-// ListServers ...
-func (c *ChatFrontendClient) ListServers(
-	ctx context.Context,
-	req *ListServersRequest,
-	res *ListServersResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ListServers", req, res)
-}
-
-// CreateEmote ...
-func (c *ChatFrontendClient) CreateEmote(
-	ctx context.Context,
-	req *CreateEmoteRequest,
-	res *CreateEmoteResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.CreateEmote", req, res)
-}
-
-// UpdateEmote ...
-func (c *ChatFrontendClient) UpdateEmote(
-	ctx context.Context,
-	req *UpdateEmoteRequest,
-	res *UpdateEmoteResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.UpdateEmote", req, res)
-}
-
-// DeleteEmote ...
-func (c *ChatFrontendClient) DeleteEmote(
-	ctx context.Context,
-	req *DeleteEmoteRequest,
-	res *DeleteEmoteResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.DeleteEmote", req, res)
-}
-
-// GetEmote ...
-func (c *ChatFrontendClient) GetEmote(
-	ctx context.Context,
-	req *GetEmoteRequest,
-	res *GetEmoteResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.GetEmote", req, res)
-}
-
-// ListEmotes ...
-func (c *ChatFrontendClient) ListEmotes(
-	ctx context.Context,
-	req *ListEmotesRequest,
-	res *ListEmotesResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ListEmotes", req, res)
-}
-
-// CreateModifier ...
-func (c *ChatFrontendClient) CreateModifier(
-	ctx context.Context,
-	req *CreateModifierRequest,
-	res *CreateModifierResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.CreateModifier", req, res)
-}
-
-// UpdateModifier ...
-func (c *ChatFrontendClient) UpdateModifier(
-	ctx context.Context,
-	req *UpdateModifierRequest,
-	res *UpdateModifierResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.UpdateModifier", req, res)
-}
-
-// DeleteModifier ...
-func (c *ChatFrontendClient) DeleteModifier(
-	ctx context.Context,
-	req *DeleteModifierRequest,
-	res *DeleteModifierResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.DeleteModifier", req, res)
-}
-
-// GetModifier ...
-func (c *ChatFrontendClient) GetModifier(
-	ctx context.Context,
-	req *GetModifierRequest,
-	res *GetModifierResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.GetModifier", req, res)
-}
-
-// ListModifiers ...
-func (c *ChatFrontendClient) ListModifiers(
-	ctx context.Context,
-	req *ListModifiersRequest,
-	res *ListModifiersResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ListModifiers", req, res)
-}
-
-// CreateTag ...
-func (c *ChatFrontendClient) CreateTag(
-	ctx context.Context,
-	req *CreateTagRequest,
-	res *CreateTagResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.CreateTag", req, res)
-}
-
-// UpdateTag ...
-func (c *ChatFrontendClient) UpdateTag(
-	ctx context.Context,
-	req *UpdateTagRequest,
-	res *UpdateTagResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.UpdateTag", req, res)
-}
-
-// DeleteTag ...
-func (c *ChatFrontendClient) DeleteTag(
-	ctx context.Context,
-	req *DeleteTagRequest,
-	res *DeleteTagResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.DeleteTag", req, res)
-}
-
-// GetTag ...
-func (c *ChatFrontendClient) GetTag(
-	ctx context.Context,
-	req *GetTagRequest,
-	res *GetTagResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.GetTag", req, res)
-}
-
-// ListTags ...
-func (c *ChatFrontendClient) ListTags(
-	ctx context.Context,
-	req *ListTagsRequest,
-	res *ListTagsResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.ListTags", req, res)
-}
-
-// SyncAssets ...
-func (c *ChatFrontendClient) SyncAssets(
-	ctx context.Context,
-	req *SyncAssetsRequest,
-	res *SyncAssetsResponse,
-) error {
-	return c.client.CallUnary(ctx, "strims.chat.v1.ChatFrontend.SyncAssets", req, res)
 }
 
 // OpenClient ...

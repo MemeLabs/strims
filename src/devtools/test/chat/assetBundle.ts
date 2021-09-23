@@ -179,30 +179,6 @@ const src = {
   "room": {
     "name": "test server",
     "effects": [],
-    "tags": ["nsfw", "loud", "weeb", "nsfl"],
-    "modifiers": [
-      "mirror",
-      "smol",
-      "flip",
-      "rain",
-      "snow",
-      "rustle",
-      "worth",
-      "dank",
-      "hyper",
-      "love",
-      "spin",
-      "wide",
-      "virus",
-      "banned",
-      "lag",
-      "pause",
-      "slow",
-      "fast",
-      "reverse",
-      "jam",
-      "pride",
-    ],
   },
   "emotes": [
     {
@@ -2777,28 +2753,140 @@ const src = {
       ],
     },
   ],
-  "removedEmotes": [],
+  "tags": [
+    {
+      "id": "4000",
+      "name": "nsfw",
+    },
+    {
+      "id": "4001",
+      "name": "loud",
+    },
+    {
+      "id": "4002",
+      "name": "weeb",
+    },
+    {
+      "id": "4003",
+      "name": "nsfl",
+    },
+  ],
+  "modifiers": [
+    {
+      "id": "3000",
+      "name": "mirror",
+    },
+    {
+      "id": "3001",
+      "name": "smol",
+    },
+    {
+      "id": "3002",
+      "name": "flip",
+    },
+    {
+      "id": "3003",
+      "name": "rain",
+    },
+    {
+      "id": "3004",
+      "name": "snow",
+    },
+    {
+      "id": "3005",
+      "name": "rustle",
+    },
+    {
+      "id": "3006",
+      "name": "worth",
+    },
+    {
+      "id": "3007",
+      "name": "dank",
+    },
+    {
+      "id": "3008",
+      "name": "hyper",
+    },
+    {
+      "id": "3009",
+      "name": "love",
+    },
+    {
+      "id": "3010",
+      "name": "spin",
+    },
+    {
+      "id": "3011",
+      "name": "wide",
+    },
+    // {
+    //   "id": "3012",
+    //   "name": "virus",
+    // },
+    {
+      "id": "3013",
+      "name": "banned",
+    },
+    {
+      "id": "3014",
+      "name": "lag",
+    },
+    {
+      "id": "3015",
+      "name": "pause",
+    },
+    {
+      "id": "3016",
+      "name": "slow",
+    },
+    {
+      "id": "3017",
+      "name": "fast",
+    },
+    {
+      "id": "3018",
+      "name": "reverse",
+    },
+    {
+      "id": "3019",
+      "name": "jam",
+    },
+    {
+      "id": "3020",
+      "name": "pride",
+    },
+  ],
+  "removedIds": [],
 };
 
 export default async (): Promise<chatv1.AssetBundle> => {
-    return new chatv1.AssetBundle({
-      ...src,
-      emotes: await Promise.all(
-        src.emotes.map(async ({ id, images, ...emote }) => {
-          return new chatv1.Emote({
-            ...emote,
-            id: BigInt(id),
-            images: await Promise.all(
-              images.map(async ({ src, ...image }) => {
-                const res = await fetch(src);
-                return new chatv1.EmoteImage({
-                  ...image,
-                  data: new Uint8Array(await res.arrayBuffer()),
-                });
-              })
-            ),
-          });
-        })
-      ),
-    });
+  return new chatv1.AssetBundle({
+    ...src,
+    emotes: await Promise.all(
+      src.emotes.map(async ({ id, images, ...emote }) => {
+        return new chatv1.Emote({
+          ...emote,
+          id: BigInt(id),
+          images: await Promise.all(
+            images.map(async ({ src, ...image }) => {
+              const res = await fetch(src);
+              return new chatv1.EmoteImage({
+                ...image,
+                data: new Uint8Array(await res.arrayBuffer()),
+              });
+            })
+          ),
+        });
+      })
+    ),
+    tags: src.tags.map(({ id, ...tag }) => ({
+      ...tag,
+      id: BigInt(id),
+    })),
+    modifiers: src.modifiers.map(({ id, ...modifier }) => ({
+      ...modifier,
+      id: BigInt(id),
+    })),
+  });
 };

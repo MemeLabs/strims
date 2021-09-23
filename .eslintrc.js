@@ -2,6 +2,7 @@ module.exports = {
   env: {
     browser: true,
     node: true,
+    worker: true,
     es2020: true,
   },
   extends: [

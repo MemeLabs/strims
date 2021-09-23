@@ -6,9 +6,9 @@ import { useCall, useLazyCall } from "../../../contexts/FrontendApi";
 import ChatServerForm, { ChatServerFormData } from "./ChatServerForm";
 
 const ChatServerCreateFormPage: React.FC = () => {
-  const [{ value }] = useCall("chat", "listServers");
+  const [{ value }] = useCall("chatServer", "listServers");
   const history = useHistory();
-  const [{ error, loading }, createChatServer] = useLazyCall("chat", "createServer", {
+  const [{ error, loading }, createChatServer] = useLazyCall("chatServer", "createServer", {
     onComplete: (res) => history.replace(`/settings/chat-servers/${res.server.id}`),
   });
 

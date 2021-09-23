@@ -447,10 +447,9 @@
     }
 
     &--gold {
-      height: var(--height);
-      width: var(--width);
       mask-image: var(--background-image);
       mask-size: var(--width) var(--height);
+      mask-repeat: no-repeat;
       overflow: hidden;
 
       &.chat__emote_container--animated {

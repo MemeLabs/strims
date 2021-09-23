@@ -12,7 +12,7 @@ export interface ChatTagTableProps {
 }
 
 const ChatTagTable: React.FC<ChatTagTableProps> = ({ serverId, tags, onDelete }) => {
-  const [, deleteChatTag] = useLazyCall("chat", "deleteTag", { onComplete: onDelete });
+  const [, deleteChatTag] = useLazyCall("chatServer", "deleteTag", { onComplete: onDelete });
 
   if (!tags) {
     return null;
@@ -44,7 +44,7 @@ const ChatTagTable: React.FC<ChatTagTableProps> = ({ serverId, tags, onDelete })
 
 const ChatTagList: React.FC = () => {
   const { serverId } = useParams<{ serverId: string }>();
-  const [{ loading, value }, getTags] = useCall("chat", "listTags", {
+  const [{ loading, value }, getTags] = useCall("chatServer", "listTags", {
     args: [{ serverId: BigInt(serverId) }],
   });
 

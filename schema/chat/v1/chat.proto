@@ -218,7 +218,6 @@ message UIConfig {
   repeated string hidden_emotes = 31;
 }
 
-
 message CreateServerRequest {
   bytes network_key = 2;
   Room room = 3;
@@ -409,7 +408,7 @@ message GetUIConfigResponse {
   UIConfig ui_config = 1;
 }
 
-service ChatFrontend {
+service ChatServerFrontend {
   rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
   rpc UpdateServer(UpdateServerRequest) returns (UpdateServerResponse);
   rpc DeleteServer(DeleteServerRequest) returns (DeleteServerResponse);
@@ -435,7 +434,9 @@ service ChatFrontend {
   rpc ListTags(ListTagsRequest) returns (ListTagsResponse);
 
   rpc SyncAssets(SyncAssetsRequest) returns (SyncAssetsResponse);
+}
 
+service ChatFrontend {
   rpc OpenClient(OpenClientRequest) returns (stream OpenClientResponse);
   rpc ClientSendMessage(ClientSendMessageRequest) returns (ClientSendMessageResponse);
 

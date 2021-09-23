@@ -9,9 +9,11 @@ import { fileTypeToMimeType, scaleToDOMScale, toEmoteProps } from "./utils";
 
 const ChatEmoteEditFormPage: React.FC = () => {
   const { serverId, emoteId } = useParams<{ serverId: string; emoteId: string }>();
-  const [{ value, ...getRes }] = useCall("chat", "getEmote", { args: [{ id: BigInt(emoteId) }] });
+  const [{ value, ...getRes }] = useCall("chatServer", "getEmote", {
+    args: [{ id: BigInt(emoteId) }],
+  });
 
-  const [updateRes, updateChatEmote] = useLazyCall("chat", "updateEmote");
+  const [updateRes, updateChatEmote] = useLazyCall("chatServer", "updateEmote");
 
   const onSubmit = (data: ChatEmoteFormData) =>
     updateChatEmote({

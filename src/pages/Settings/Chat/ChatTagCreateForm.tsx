@@ -6,11 +6,11 @@ import ChatTagForm, { ChatTagFormData } from "./ChatTagForm";
 
 const ChatTagCreateFormPage: React.FC = () => {
   const { serverId } = useParams<{ serverId: string }>();
-  const [{ value }] = useCall("chat", "listTags", {
+  const [{ value }] = useCall("chatServer", "listTags", {
     args: [{ serverId: BigInt(serverId) }],
   });
   const history = useHistory();
-  const [{ error, loading }, createChatTag] = useLazyCall("chat", "createTag", {
+  const [{ error, loading }, createChatTag] = useLazyCall("chatServer", "createTag", {
     onComplete: (res) => history.replace(`/settings/chat-servers/${serverId}/tags`),
   });
 

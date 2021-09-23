@@ -1,0 +1,375 @@
+html,
+body {
+  text-size-adjust: 100%;
+  touch-action: none;
+  overscroll-behavior-x: contain;
+}
+
+button,
+input {
+  margin: 5px;
+  display: block;
+}
+
+$chat-width-lg: 420px;
+$chat-width-sm: 260px;
+
+.root--portable:not(.root--pwa) .deadzone {
+  opacity: 0.25;
+  border-style: solid;
+  border-color: black;
+  border-width: 0 0 0 34px;
+  position: fixed;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: 100%;
+  pointer-events: none;
+  box-sizing: border-box;
+  z-index: 1000;
+}
+
+.root {
+  position: fixed;
+  height: 100%;
+  width: 100%;
+  top: 0;
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  background: green;
+  box-sizing: border-box;
+
+  &--landscape_ccw {
+    padding-left: env(safe-area-inset-left);
+  }
+  &--landscape_cw {
+    padding-right: env(safe-area-inset-right);
+  }
+}
+
+.test_input {
+  border: 1px solid black;
+  background: white;
+  padding: 4px;
+}
+
+.scroll_content_test {
+  width: 100%;
+}
+
+.test_active_link {
+  color: red;
+}
+
+.header {
+  display: none;
+}
+
+.body {
+  height: calc(100% - 100px);
+  width: 100%;
+  flex: 1;
+  display: flex;
+  flex-direction: row;
+  background: orange;
+}
+
+.foo_1 {
+  display: flex;
+  flex-direction: row;
+  flex: 1;
+  height: 100%;
+}
+
+.foo_2 {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+
+  @at-root .root--landscape_ccw &,
+    .root--landscape_cw & {
+    flex-direction: row;
+  }
+}
+
+.nav_panel {
+  background: blue;
+  display: flex;
+  flex: 60px 0 0;
+}
+
+.video_panel {
+  flex: 1;
+  max-height: calc(100vw * 9 / 16);
+  background: yellow;
+
+  @at-root .root--hide_chat & {
+    max-height: unset;
+  }
+}
+
+.chat_panel {
+  flex: 1;
+  background: teal;
+
+  @at-root .root--hide_chat & {
+    display: none;
+  }
+}
+
+.footer {
+  flex-basis: 60px;
+  background: coral;
+  z-index: 1;
+  transition: 200ms linear;
+
+  @at-root .root--portrait & {
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}
+
+.root--portable {
+  .nav_panel {
+    background: blue;
+    transition-delay: 200ms;
+    height: 100%;
+
+    @at-root .root--nav_open & {
+      display: block;
+    }
+  }
+
+  .content_panel {
+    flex: 1 0 0;
+    margin-right: 15px;
+    background: cornflowerblue;
+    position: relative;
+    transition-delay: 200ms;
+    height: 100%;
+  }
+
+  .scroll_content_test {
+    transition-delay: 200ms;
+    padding-bottom: 0;
+  }
+
+  .foo_2 {
+    position: fixed;
+    height: 100%;
+    width: 100%;
+    top: 0;
+    left: 0;
+    transform: translateX(calc(100% - max(var(--offset), 10px)));
+    transition: 200ms ease-in-out;
+
+    &--dragging {
+      transition: none;
+    }
+  }
+
+  .chat_panel__scroller {
+    pointer-events: none;
+  }
+
+  &.root--meme_open {
+    .foo_2--closing {
+      transform: translateX(var(--offset));
+    }
+
+    &.root--portrait {
+      .nav_panel,
+      .content_panel {
+        height: calc(100% + 60px + env(safe-area-inset-bottom));
+        transition-delay: 0ms;
+      }
+
+      .scroll_content_test {
+        padding-bottom: calc(60px + env(safe-area-inset-bottom));
+        transition-delay: 0ms;
+      }
+
+      .footer {
+        transform: translateY(calc(60px + env(safe-area-inset-bottom)));
+      }
+
+      .chat_panel__scroller {
+        pointer-events: unset;
+      }
+    }
+  }
+
+  &.root--portrait {
+    .chat_panel {
+      min-height: 200px;
+    }
+  }
+
+  &.root--min_aspect_ratio_1_2 {
+    flex-direction: row-reverse;
+
+    .body {
+      height: 100%;
+    }
+
+    .footer {
+      z-index: 0;
+    }
+
+    .foo_2 {
+      z-index: 1;
+    }
+
+    &.root--landscape_ccw.root--swap .chat_panel {
+      padding-left: env(safe-area-inset-left);
+    }
+
+    &.root--landscape_ccw:not(.root--swap),
+    &.root--landscape_ccw.root--hide_chat {
+      .video_panel {
+        padding-left: env(safe-area-inset-left);
+      }
+    }
+
+    &.root--landscape_ccw.root--hide_video {
+      .chat_panel {
+        padding-left: env(safe-area-inset-left);
+      }
+    }
+  }
+}
+
+.root:not(.root--portable) {
+  .content_panel {
+    display: none;
+  }
+
+  &.root--meme_open {
+    .foo_2 {
+      flex: 0;
+    }
+
+    .chat_panel {
+      display: none;
+    }
+
+    .video_panel {
+      display: block;
+      position: fixed;
+      bottom: 10px;
+      right: 10px;
+      height: 169px;
+      width: $chat-width-sm;
+    }
+
+    .content_panel {
+      display: block;
+      flex: 1;
+    }
+
+    &.root--min_width_1200 .video_panel {
+      width: $chat-width-lg;
+      height: calc(#{$chat-width-lg} * 9 / 16);
+    }
+
+    &:not(.root--hide_chat) {
+      &.root--min_width_768 {
+        .foo_2 {
+          display: flex;
+          flex-direction: column;
+          flex: $chat-width-sm 0 0;
+          background: maroon;
+        }
+
+        .video_panel {
+          flex: 1;
+          max-height: calc(#{$chat-width-sm} * 9 / 16);
+
+          position: unset;
+          bottom: unset;
+          right: unset;
+          height: unset;
+          width: unset;
+        }
+
+        .chat_panel {
+          display: block;
+          flex: 1;
+        }
+
+        &.root--swap .foo_1 {
+          flex-direction: row-reverse;
+        }
+      }
+
+      &.root--min_width_1200 {
+        .foo_2 {
+          flex: $chat-width-lg 0 0;
+        }
+
+        .video_panel {
+          max-height: calc(#{$chat-width-lg} * 9 / 16);
+        }
+      }
+    }
+  }
+
+  &.root--theater_mode {
+    .header {
+      display: none;
+    }
+
+    .nav_panel {
+      display: none;
+    }
+  }
+}
+
+.root--min_aspect_ratio_1_2 {
+  .foo_2 {
+    flex-direction: row;
+  }
+
+  .video_panel {
+    max-height: none;
+  }
+
+  .chat_panel {
+    min-height: none;
+    flex: $chat-width-sm 0 0;
+  }
+
+  &.root--hide_video .chat_panel {
+    flex-grow: 1;
+  }
+
+  &.root--min_width_1200 .chat_panel {
+    flex-basis: $chat-width-lg;
+  }
+
+  &.root--swap {
+    .foo_1,
+    .foo_2 {
+      flex-direction: row-reverse;
+    }
+  }
+}
+
+.root--min_aspect_ratio_4 {
+  .chat_panel {
+    flex-basis: $chat-width-lg;
+  }
+}
+
+.root--tv,
+.root--pc {
+  .header {
+    display: unset;
+    flex: 50px 0 0;
+    background: red;
+  }
+
+  .footer {
+    display: none;
+  }
+}

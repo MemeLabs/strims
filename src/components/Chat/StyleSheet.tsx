@@ -148,11 +148,13 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles, uiConfig })
 
   useLayoutEffect(() => {
     deleteMatchingCSSRules(ref.current.sheet, (r) => r.cssText.includes("chat__message--tag_"));
+
     styles.tags.forEach(({ name, color, sensitive }) => {
       let rules: PropList = [["--tag-color", color]];
       if (sensitive && uiConfig.hideNsfw) {
         rules = upsertProps(rules, ["display", "none"]);
       }
+
       ref.current.sheet.insertRule(
         `.chat__message--tag_${name} {${rules.map((r) => r.join(":")).join(";")}}`
       );

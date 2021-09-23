@@ -7,11 +7,11 @@ import { toEmoteProps } from "./utils";
 
 const ChatEmoteCreateFormPage: React.FC = () => {
   const { serverId } = useParams<{ serverId: string }>();
-  const [{ value }] = useCall("chat", "listEmotes", {
+  const [{ value }] = useCall("chatServer", "listEmotes", {
     args: [{ serverId: BigInt(serverId) }],
   });
   const history = useHistory();
-  const [{ error, loading }, createChatEmote] = useLazyCall("chat", "createEmote", {
+  const [{ error, loading }, createChatEmote] = useLazyCall("chatServer", "createEmote", {
     onComplete: () => history.replace(`/settings/chat-servers/${serverId}/emotes`),
   });
 

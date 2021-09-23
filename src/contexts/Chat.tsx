@@ -210,22 +210,25 @@ interface Named {
 const toNames = <T extends Named>(vs: T[]): string[] => vs.map(({ name }) => name).sort();
 
 const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
+  console.log(bundle);
+  state.messageSizeCache.clearAll();
+
   const assetBundles = bundle.isDelta ? [...state.assetBundles, bundle] : [bundle];
   const liveEmoteMap = new Map<bigint, Emote>();
   const liveModifierMap = new Map<bigint, Modifier>();
   const liveTagMap = new Map<bigint, Tag>();
   let room: Room;
-  assetBundles.forEach((b) => {
-    b.removedIds.forEach((id) => {
+  for (const b of assetBundles) {
+    for (const id of b.removedIds) {
       liveEmoteMap.delete(id);
       liveModifierMap.delete(id);
       liveTagMap.delete(id);
-    });
+    }
     b.emotes.forEach((e) => liveEmoteMap.set(e.id, e));
     b.modifiers.forEach((e) => liveModifierMap.set(e.id, e));
     b.tags.forEach((e) => liveTagMap.set(e.id, e));
     room = b.room || room;
-  });
+  }
   const liveEmotes = Array.from(liveEmoteMap.values());
   const emoteStyles = Object.fromEntries(
     liveEmotes.map(({ id, name, effects }) => {

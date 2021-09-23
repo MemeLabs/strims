@@ -11,7 +11,7 @@ interface ChatServerTableProps {
 }
 
 const ChatServerTable: React.FC<ChatServerTableProps> = ({ servers, onDelete }) => {
-  const [{ error }, deleteChatServer] = useLazyCall("chat", "deleteServer", {
+  const [{ error }, deleteChatServer] = useLazyCall("chatServer", "deleteServer", {
     onComplete: onDelete,
   });
 
@@ -36,7 +36,7 @@ const ChatServerTable: React.FC<ChatServerTableProps> = ({ servers, onDelete }) 
 };
 
 const ChatServerList: React.FC = () => {
-  const [{ loading, value }, getServers] = useCall("chat", "listServers");
+  const [{ loading, value }, getServers] = useCall("chatServer", "listServers");
 
   if (loading) {
     return null;

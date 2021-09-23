@@ -6,9 +6,9 @@ import ChatTagForm, { ChatTagFormData } from "./ChatTagForm";
 
 const ChatTagEditForm: React.FC = () => {
   const { serverId, tagId } = useParams<{ serverId: string; tagId: string }>();
-  const [getRes] = useCall("chat", "getTag", { args: [{ id: BigInt(tagId) }] });
+  const [getRes] = useCall("chatServer", "getTag", { args: [{ id: BigInt(tagId) }] });
 
-  const [updateRes, updateChatTag] = useLazyCall("chat", "updateTag");
+  const [updateRes, updateChatTag] = useLazyCall("chatServer", "updateTag");
 
   const onSubmit = (data: ChatTagFormData) =>
     updateChatTag({

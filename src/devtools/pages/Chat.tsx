@@ -25,39 +25,6 @@ class MockChatSvc {
     this.messages.destroy();
   }
 
-  createServer(): chatv1.CreateServerResponse {
-    throw new Error("not implemented");
-  }
-  updateServer(): chatv1.UpdateServerResponse {
-    throw new Error("not implemented");
-  }
-  deleteServer(): chatv1.DeleteServerResponse {
-    throw new Error("not implemented");
-  }
-  getServer(): chatv1.GetServerResponse {
-    throw new Error("not implemented");
-  }
-  listServers(): chatv1.ListServersResponse {
-    throw new Error("not implemented");
-  }
-  createEmote(): chatv1.CreateEmoteResponse {
-    throw new Error("not implemented");
-  }
-  updateEmote(): chatv1.UpdateEmoteResponse {
-    throw new Error("not implemented");
-  }
-  deleteEmote(): chatv1.DeleteEmoteResponse {
-    throw new Error("not implemented");
-  }
-  getEmote(): chatv1.GetEmoteResponse {
-    throw new Error("not implemented");
-  }
-  listEmotes(): chatv1.ListEmotesResponse {
-    throw new Error("not implemented");
-  }
-  syncAssets(): chatv1.SyncAssetsResponse {
-    throw new Error("not implemented");
-  }
   openClient(): Readable<chatv1.OpenClientResponse> {
     const ch = new PassThrough({ objectMode: true });
 

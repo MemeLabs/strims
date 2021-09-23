@@ -7,9 +7,9 @@ import ChatServerForm, { ChatServerFormData } from "./ChatServerForm";
 
 const ChatServerEditForm: React.FC = () => {
   const { serverId } = useParams<{ serverId: string }>();
-  const [getRes] = useCall("chat", "getServer", { args: [{ id: BigInt(serverId) }] });
+  const [getRes] = useCall("chatServer", "getServer", { args: [{ id: BigInt(serverId) }] });
 
-  const [updateRes, updateChatServer] = useLazyCall("chat", "updateServer");
+  const [updateRes, updateChatServer] = useLazyCall("chatServer", "updateServer");
 
   const onSubmit = (data: ChatServerFormData) =>
     updateChatServer({

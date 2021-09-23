@@ -26,7 +26,7 @@ export interface ChatEmoteTableProps {
 }
 
 const ChatEmoteTable: React.FC<ChatEmoteTableProps> = ({ serverId, emotes, onDelete }) => {
-  const [, deleteChatEmote] = useLazyCall("chat", "deleteEmote", { onComplete: onDelete });
+  const [, deleteChatEmote] = useLazyCall("chatServer", "deleteEmote", { onComplete: onDelete });
 
   if (!emotes) {
     return null;
@@ -59,7 +59,7 @@ const ChatEmoteTable: React.FC<ChatEmoteTableProps> = ({ serverId, emotes, onDel
 
 const ChatEmoteList: React.FC = () => {
   const { serverId } = useParams<{ serverId: string }>();
-  const [{ loading, value }, getEmotes] = useCall("chat", "listEmotes", {
+  const [{ loading, value }, getEmotes] = useCall("chatServer", "listEmotes", {
     args: [{ serverId: BigInt(serverId) }],
   });
 

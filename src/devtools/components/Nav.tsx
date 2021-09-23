@@ -8,6 +8,7 @@ const Nav: React.FC = () => (
     <Link to="/emotes">Emotes</Link>
     <Link to="/chat">Chat</Link>
     <Link to="/bridge">Bridge</Link>
+    <Link to="/layout">Layout</Link>
   </div>
 );
 
