@@ -5,28 +5,12 @@ ARG VERSION=development
 ARG NODE_VERSION=14.x
 ARG GO_VERSION=1.17
 
-RUN mkdir /ui
-WORKDIR /ui
-
-COPY assets ./assets
-COPY pkg ./pkg
-COPY src ./src
-COPY vendor ./vendor
-COPY \
-  .eslintrc.js \
-  go.mod \
-  go.sum \
-  package-lock.json \
-  package.json \
-  tsconfig.json \
-  webpack.config.js \
-  ./
-
 ENV GOROOT=/usr/local/go
 ENV GOPATH="/tmp/go"
 ENV GO111MODULE=auto
 ENV PATH="${GOPATH}/bin:${GOROOT}/bin:${PATH}"
 
+# install packages at the start so changing soure files doesn't taint the layer cache
 RUN \
   # Install deps
   apt-get update \
@@ -41,10 +25,34 @@ RUN \
   && chmod -R 777 "${GOPATH}" \
   # Install node.js
   && curl -sL "https://deb.nodesource.com/setup_${NODE_VERSION}" | bash - \
-  && apt-get install -y nodejs \
+  && apt-get install -y nodejs
+
+RUN mkdir /ui
+WORKDIR /ui
+
+COPY \
+  go.mod \
+  go.sum \
+  ./
+# cache go modules
+RUN go mod download
+
+COPY assets ./assets
+COPY pkg ./pkg
+COPY src ./src
+COPY vendor ./vendor
+COPY internal ./internal
+COPY \
+  .eslintrc.js \
+  package-lock.json \
+  package.json \
+  tsconfig.json \
+  webpack.config.js \
+  ./
+
+RUN \
   # Build ui
-  && go get ./... \
-  && npm install --unsafe-perm \
+  npm install --unsafe-perm \
   && npm run build \
   && find dist/web -type f | xargs gzip -k9 \
   && find dist/web -not -name "*.gz" -type f | xargs brotli
