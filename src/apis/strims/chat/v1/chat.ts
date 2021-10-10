@@ -130,8 +130,8 @@ export class Room {
 export type IServer = {
   id?: bigint;
   networkKey?: Uint8Array;
-  key?: strims_type_IKey | undefined;
-  room?: IRoom | undefined;
+  key?: strims_type_IKey;
+  room?: IRoom;
 }
 
 export class Server {
@@ -547,7 +547,7 @@ export type IEmote = {
   name?: string;
   images?: IEmoteImage[];
   effects?: IEmoteEffect[];
-  contributor?: IEmoteContributor | undefined;
+  contributor?: IEmoteContributor;
 }
 
 export class Emote {
@@ -723,7 +723,7 @@ export class Tag {
 export type IAssetBundle = {
   isDelta?: boolean;
   removedIds?: bigint[];
-  room?: IRoom | undefined;
+  room?: IRoom;
   emotes?: IEmote[];
   modifiers?: IModifier[];
   tags?: ITag[];
@@ -796,7 +796,7 @@ export type IMessage = {
   hostId?: Uint8Array;
   nick?: string;
   body?: string;
-  entities?: Message.IEntities | undefined;
+  entities?: Message.IEntities;
 }
 
 export class Message {
@@ -863,8 +863,8 @@ export namespace Message {
     tags?: Message.Entities.ITag[];
     codeBlocks?: Message.Entities.ICodeBlock[];
     spoilers?: Message.Entities.ISpoiler[];
-    greenText?: Message.Entities.IGenericEntity | undefined;
-    selfMessage?: Message.Entities.IGenericEntity | undefined;
+    greenText?: Message.Entities.IGenericEntity;
+    selfMessage?: Message.Entities.IGenericEntity;
   }
 
   export class Entities {
@@ -986,7 +986,7 @@ export namespace Message {
     }
 
     export type ILink = {
-      bounds?: Message.Entities.IBounds | undefined;
+      bounds?: Message.Entities.IBounds;
       url?: string;
     }
 
@@ -1029,7 +1029,7 @@ export namespace Message {
     }
 
     export type IEmote = {
-      bounds?: Message.Entities.IBounds | undefined;
+      bounds?: Message.Entities.IBounds;
       name?: string;
       modifiers?: string[];
       combo?: number;
@@ -1086,7 +1086,7 @@ export namespace Message {
     }
 
     export type INick = {
-      bounds?: Message.Entities.IBounds | undefined;
+      bounds?: Message.Entities.IBounds;
       nick?: string;
     }
 
@@ -1129,7 +1129,7 @@ export namespace Message {
     }
 
     export type ITag = {
-      bounds?: Message.Entities.IBounds | undefined;
+      bounds?: Message.Entities.IBounds;
       name?: string;
     }
 
@@ -1172,7 +1172,7 @@ export namespace Message {
     }
 
     export type ICodeBlock = {
-      bounds?: Message.Entities.IBounds | undefined;
+      bounds?: Message.Entities.IBounds;
     }
 
     export class CodeBlock {
@@ -1208,7 +1208,7 @@ export namespace Message {
     }
 
     export type ISpoiler = {
-      bounds?: Message.Entities.IBounds | undefined;
+      bounds?: Message.Entities.IBounds;
     }
 
     export class Spoiler {
@@ -1244,7 +1244,7 @@ export namespace Message {
     }
 
     export type IGenericEntity = {
-      bounds?: Message.Entities.IBounds | undefined;
+      bounds?: Message.Entities.IBounds;
     }
 
     export class GenericEntity {
@@ -1292,7 +1292,7 @@ export type IUIConfig = {
   soundNotificationWhisper?: boolean;
   notificationHighlight?: boolean;
   soundNotificationHighlight?: boolean;
-  notificationSoundFile?: UIConfig.ISoundFile | undefined;
+  notificationSoundFile?: UIConfig.ISoundFile;
   highlight?: boolean;
   customHighlight?: string;
   highlightNicks?: string[];
@@ -1316,6 +1316,7 @@ export type IUIConfig = {
   viewerStateIndicator?: UIConfig.ViewerStateIndicator;
   hiddenEmotes?: string[];
   shortenLinks?: boolean;
+  legacyEmoteSpacing?: boolean;
 }
 
 export class UIConfig {
@@ -1351,6 +1352,7 @@ export class UIConfig {
   viewerStateIndicator: UIConfig.ViewerStateIndicator;
   hiddenEmotes: string[];
   shortenLinks: boolean;
+  legacyEmoteSpacing: boolean;
 
   constructor(v?: IUIConfig) {
     this.showTime = v?.showTime || false;
@@ -1385,6 +1387,7 @@ export class UIConfig {
     this.viewerStateIndicator = v?.viewerStateIndicator || 0;
     this.hiddenEmotes = v?.hiddenEmotes ? v.hiddenEmotes : [];
     this.shortenLinks = v?.shortenLinks || false;
+    this.legacyEmoteSpacing = v?.legacyEmoteSpacing || false;
   }
 
   static encode(m: UIConfig, w?: Writer): Writer {
@@ -1421,6 +1424,7 @@ export class UIConfig {
     if (m.viewerStateIndicator) w.uint32(240).uint32(m.viewerStateIndicator);
     for (const v of m.hiddenEmotes) w.uint32(250).string(v);
     if (m.shortenLinks) w.uint32(256).bool(m.shortenLinks);
+    if (m.legacyEmoteSpacing) w.uint32(264).bool(m.legacyEmoteSpacing);
     return w;
   }
 
@@ -1527,6 +1531,9 @@ export class UIConfig {
         case 32:
         m.shortenLinks = r.bool();
         break;
+        case 33:
+        m.legacyEmoteSpacing = r.bool();
+        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -1595,7 +1602,7 @@ export namespace UIConfig {
 
 export type ICreateServerRequest = {
   networkKey?: Uint8Array;
-  room?: IRoom | undefined;
+  room?: IRoom;
 }
 
 export class CreateServerRequest {
@@ -1637,7 +1644,7 @@ export class CreateServerRequest {
 }
 
 export type ICreateServerResponse = {
-  server?: IServer | undefined;
+  server?: IServer;
 }
 
 export class CreateServerResponse {
@@ -1675,7 +1682,7 @@ export class CreateServerResponse {
 export type IUpdateServerRequest = {
   id?: bigint;
   networkKey?: Uint8Array;
-  room?: IRoom | undefined;
+  room?: IRoom;
 }
 
 export class UpdateServerRequest {
@@ -1723,7 +1730,7 @@ export class UpdateServerRequest {
 }
 
 export type IUpdateServerResponse = {
-  server?: IServer | undefined;
+  server?: IServer;
 }
 
 export class UpdateServerResponse {
@@ -1851,7 +1858,7 @@ export class GetServerRequest {
 }
 
 export type IGetServerResponse = {
-  server?: IServer | undefined;
+  server?: IServer;
 }
 
 export class GetServerResponse {
@@ -1948,7 +1955,7 @@ export type ICreateEmoteRequest = {
   images?: IEmoteImage[];
   css?: string;
   effects?: IEmoteEffect[];
-  contributor?: IEmoteContributor | undefined;
+  contributor?: IEmoteContributor;
 }
 
 export class CreateEmoteRequest {
@@ -2014,7 +2021,7 @@ export class CreateEmoteRequest {
 }
 
 export type ICreateEmoteResponse = {
-  emote?: IEmote | undefined;
+  emote?: IEmote;
 }
 
 export class CreateEmoteResponse {
@@ -2056,7 +2063,7 @@ export type IUpdateEmoteRequest = {
   images?: IEmoteImage[];
   css?: string;
   effects?: IEmoteEffect[];
-  contributor?: IEmoteContributor | undefined;
+  contributor?: IEmoteContributor;
 }
 
 export class UpdateEmoteRequest {
@@ -2128,7 +2135,7 @@ export class UpdateEmoteRequest {
 }
 
 export type IUpdateEmoteResponse = {
-  emote?: IEmote | undefined;
+  emote?: IEmote;
 }
 
 export class UpdateEmoteResponse {
@@ -2263,7 +2270,7 @@ export class GetEmoteRequest {
 }
 
 export type IGetEmoteResponse = {
-  emote?: IEmote | undefined;
+  emote?: IEmote;
 }
 
 export class GetEmoteResponse {
@@ -2428,7 +2435,7 @@ export class CreateModifierRequest {
 }
 
 export type ICreateModifierResponse = {
-  modifier?: IModifier | undefined;
+  modifier?: IModifier;
 }
 
 export class CreateModifierResponse {
@@ -2528,7 +2535,7 @@ export class UpdateModifierRequest {
 }
 
 export type IUpdateModifierResponse = {
-  modifier?: IModifier | undefined;
+  modifier?: IModifier;
 }
 
 export class UpdateModifierResponse {
@@ -2663,7 +2670,7 @@ export class GetModifierRequest {
 }
 
 export type IGetModifierResponse = {
-  modifier?: IModifier | undefined;
+  modifier?: IModifier;
 }
 
 export class GetModifierResponse {
@@ -2828,7 +2835,7 @@ export class CreateTagRequest {
 }
 
 export type ICreateTagResponse = {
-  tag?: ITag | undefined;
+  tag?: ITag;
 }
 
 export class CreateTagResponse {
@@ -2928,7 +2935,7 @@ export class UpdateTagRequest {
 }
 
 export type IUpdateTagResponse = {
-  tag?: ITag | undefined;
+  tag?: ITag;
 }
 
 export class UpdateTagResponse {
@@ -3063,7 +3070,7 @@ export class GetTagRequest {
 }
 
 export type IGetTagResponse = {
-  tag?: ITag | undefined;
+  tag?: ITag;
 }
 
 export class GetTagResponse {
@@ -3527,7 +3534,7 @@ export class CallClientResponse {
 }
 
 export type ISetUIConfigRequest = {
-  uiConfig?: IUIConfig | undefined;
+  uiConfig?: IUIConfig;
 }
 
 export class SetUIConfigRequest {
@@ -3603,7 +3610,7 @@ export class GetUIConfigRequest {
 }
 
 export type IGetUIConfigResponse = {
-  uiConfig?: IUIConfig | undefined;
+  uiConfig?: IUIConfig;
 }
 
 export class GetUIConfigResponse {

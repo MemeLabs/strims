@@ -40,6 +40,7 @@ interface SettingsFormData {
   emoteModifiers: boolean;
   disableSpoilers: boolean;
   shortenLinks: boolean;
+  legacyEmoteSpacing: boolean;
   viewerStateIndicator: {
     value: UIConfig.ViewerStateIndicator;
     label: string;
@@ -170,6 +171,12 @@ const SettingsDrawer: React.FC = () => {
             control={control}
             label="Shorten long links"
             name="shortenLinks"
+            onChange={handleChange}
+          />
+          <ToggleInput
+            control={control}
+            label="Legacy emote spacing"
+            name="legacyEmoteSpacing"
             onChange={handleChange}
           />
           <TextInput

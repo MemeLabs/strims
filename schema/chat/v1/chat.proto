@@ -217,6 +217,7 @@ message UIConfig {
   ViewerStateIndicator viewer_state_indicator = 30;
   repeated string hidden_emotes = 31;
   bool shorten_links = 32;
+  bool legacy_emote_spacing = 33;
 }
 
 message CreateServerRequest {

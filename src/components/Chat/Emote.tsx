@@ -8,6 +8,7 @@ type EmoteProps = {
   modifiers?: string[];
   shouldAnimateForever?: boolean;
   shouldShowModifiers?: boolean;
+  legacySpacing?: boolean;
   [key: string]: any;
 };
 
@@ -17,6 +18,7 @@ const Emote: React.FC<EmoteProps> = ({
   modifiers,
   shouldAnimateForever = false,
   shouldShowModifiers = true,
+  legacySpacing = false,
   ...props
 }) => {
   const [{ styles }] = useChat();
@@ -40,6 +42,7 @@ const Emote: React.FC<EmoteProps> = ({
       className={clsx(style.name, "chat__emote", `chat__emote--${name}`, {
         "chat__emote--animated": style.animated,
         "chat__emote--animate_forever": shouldAnimateForever,
+        "chat__emote--legacy_spacing": legacySpacing,
         "chat__emote--root": --rootDepth === 0,
       })}
     >
@@ -58,6 +61,7 @@ const Emote: React.FC<EmoteProps> = ({
           {
             "chat__emote_container--animated": style.animated,
             "chat__emote_container--animate_forever": shouldAnimateForever,
+            "chat__emote_container--legacy_spacing": legacySpacing,
             "chat__emote_container--root": --rootDepth === 0,
           }
         )}

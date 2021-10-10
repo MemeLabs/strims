@@ -103,6 +103,7 @@ const initialState: State = {
     emoteModifiers: true,
     disableSpoilers: false,
     shortenLinks: true,
+    legacyEmoteSpacing: false,
     viewerStateIndicator: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR,
   }),
   config: {
@@ -353,11 +354,7 @@ export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, child
     };
   }, []);
 
-  return (
-    <ChatContext.Provider value={[state, dispatch]}>
-      <div className={clsx("chat")}>{children}</div>
-    </ChatContext.Provider>
-  );
+  return <ChatContext.Provider value={[state, dispatch]}>{children}</ChatContext.Provider>;
 };
 
 Provider.displayName = "Chat.Provider";

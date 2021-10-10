@@ -15,29 +15,32 @@ interface MessageLinkProps {
 }
 
 const MessageLink: React.FC<MessageLinkProps> = ({ children, entity, shouldShorten }) => {
-  let nodes = React.Children.toArray(children);
-  if (shouldShorten && typeof nodes[0] === "string" && nodes[0].length > LINK_SHORTEN_THRESHOLD) {
-    nodes = [
-      nodes[0].substring(0, LINK_SHORTEN_AFFIX_LENGTH),
-      <span className="chat__message__link__ellipsis">&hellip;</span>,
-      <span className="chat__message__link__overflow">
-        {nodes[0].substring(LINK_SHORTEN_AFFIX_LENGTH, nodes[0].length - LINK_SHORTEN_AFFIX_LENGTH)}
-      </span>,
-      nodes[0].substring(nodes[0].length - LINK_SHORTEN_AFFIX_LENGTH),
-    ];
+  const [node] = React.Children.toArray(children);
+  if (shouldShorten && typeof node === "string" && node.length > LINK_SHORTEN_THRESHOLD) {
+    children = (
+      <>
+        {node.substring(0, LINK_SHORTEN_AFFIX_LENGTH)}
+        <span className="chat__message__link__ellipsis">&hellip;</span>
+        <span className="chat__message__link__overflow">
+          {node.substring(LINK_SHORTEN_AFFIX_LENGTH, node.length - LINK_SHORTEN_AFFIX_LENGTH)}
+        </span>
+        {node.substring(node.length - LINK_SHORTEN_AFFIX_LENGTH)}
+      </>
+    );
   }
 
   return (
     <a className="chat__message__link" target="_blank" rel="nofollow" href={entity.url}>
-      {nodes}
+      {children}
     </a>
   );
 };
 
 interface MessageEmoteProps {
   entity: chatv1_Message.Entities.Emote;
-  shouldAnimateForever: boolean;
-  shouldShowModifiers: boolean;
+  shouldAnimateForever?: boolean;
+  shouldShowModifiers?: boolean;
+  legacySpacing?: boolean;
 }
 
 const MessageEmote: React.FC<MessageEmoteProps> = ({
@@ -45,12 +48,14 @@ const MessageEmote: React.FC<MessageEmoteProps> = ({
   entity,
   shouldAnimateForever,
   shouldShowModifiers,
+  legacySpacing,
 }) => (
   <Emote
     name={entity.name}
     modifiers={entity.modifiers}
     shouldAnimateForever={shouldAnimateForever}
     shouldShowModifiers={shouldShowModifiers}
+    legacySpacing={legacySpacing}
   >
     {children}
   </Emote>
@@ -292,6 +297,7 @@ const StandardMessage: React.FC<MessageProps> = ({
       formatter.insertEntity(MessageEmote, entity, {
         shouldAnimateForever: uiConfig.animateForever,
         shouldShowModifiers: uiConfig.emoteModifiers,
+        legacySpacing: uiConfig.legacyEmoteSpacing,
       })
     );
   }

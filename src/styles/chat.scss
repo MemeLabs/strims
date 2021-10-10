@@ -338,9 +338,14 @@
 
   &__emote--root,
   &__emote_container--root {
-    margin: calc(-1 * var(--height)) 3px 0;
-    vertical-align: calc(-0.3 * var(--height));
+    margin: 0 3px;
+    vertical-align: middle;
     line-height: 0;
+
+    &.chat__emote--legacy_spacing,
+    &.chat__emote_container--legacy_spacing {
+      margin: calc(-0.5 * var(--height)) 3px;
+    }
   }
 
   &__emote {

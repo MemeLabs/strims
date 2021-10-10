@@ -106,9 +106,10 @@ const TestContent: React.FC = () => (
 
 interface ChatThingProps {
   shouldHide?: boolean;
+  className?: string;
 }
 
-const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false }) => {
+const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) => {
   const [state, { sendMessage, getMessage, getMessageCount, toggleMessageGC }] = useChat();
   const [activePanel, setActivePanel] = useState(ChatDrawerRole.None);
 
@@ -134,7 +135,13 @@ const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false }) => {
   );
 
   return (
-    <>
+    <div
+      className={clsx(className, {
+        "chat": true,
+        "chat--animate_forever": state.uiConfig.animateForever,
+        "chat--legacy_emote_spacing": state.uiConfig.legacyEmoteSpacing,
+      })}
+    >
       <StyleSheet liveEmotes={state.liveEmotes} styles={state.styles} uiConfig={state.uiConfig} />
       <div className="chat__messages">
         <ChatDrawer
@@ -218,7 +225,7 @@ const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false }) => {
           />
         </div>
       </div>
-    </>
+    </div>
   );
 };
 
@@ -242,14 +249,12 @@ const ChatPanel: React.FC = () => {
           </button>
         </header>
         <header className="home_page__chat__promo"></header>
-        <div className="home_page__chat chat">
-          <Provider
-            networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
-            serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
-          >
-            <ChatThing shouldHide={closed} />
-          </Provider>
-        </div>
+        <Provider
+          networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
+          serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
+        >
+          <ChatThing className="home_page__chat" shouldHide={closed} />
+        </Provider>
       </div>
     </aside>
   );

@@ -25,9 +25,9 @@ import { withHistory } from "slate-history";
 import { Editable, RenderLeafProps, Slate, withReact } from "slate-react";
 import urlRegex from "url-regex-safe";
 
+import { useChat } from "../../contexts/Chat";
 import Emote from "./Emote";
 
-const tags = ["nsfw", "weeb", "nsfl", "loud"];
 const commands = [
   "help",
   "emotes",
@@ -293,7 +293,7 @@ const AutocompleteGroupItem: React.FC<AutocompleteGroupItemProps> = ({
       content = (
         <>
           <span className="chat__composer__autocomplete__item__emote">
-            <Emote name={entry.value} />
+            <Emote name={entry.value} shouldAnimateForever />
           </span>
           <span className="chat__composer__autocomplete__item__label">{entry.value}</span>
         </>
@@ -322,10 +322,18 @@ const AutocompleteGroupItem: React.FC<AutocompleteGroupItemProps> = ({
 
 const Leaf: React.FC<RenderLeafProps> = ({ attributes, children, leaf }) => {
   if (leaf.emote) {
+    const [{ uiConfig }] = useChat();
     const [name, ...modifiers] = leaf.text.split(":");
 
     return (
-      <Emote {...attributes} name={name} modifiers={modifiers}>
+      <Emote
+        {...attributes}
+        name={name}
+        modifiers={modifiers}
+        shouldAnimateForever={uiConfig.animateForever}
+        shouldShowModifiers={uiConfig.emoteModifiers}
+        legacySpacing={uiConfig.legacyEmoteSpacing}
+      >
         {children}
       </Emote>
     );
