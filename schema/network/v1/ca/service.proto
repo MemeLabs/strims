@@ -8,6 +8,12 @@ option swift_prefix = "SNC";
 
 import "type/certificate.proto";
 
+message CertificateLog {
+  uint64 id = 1;
+  uint64 networkID = 2;
+  strims.type.Certificate certificate = 3;
+}
+
 message CARenewRequest {
   strims.type.Certificate certificate = 1;
   strims.type.CertificateRequest certificate_request = 2;
@@ -17,6 +23,17 @@ message CARenewResponse {
   strims.type.Certificate certificate = 1;
 }
 
+message CAFindRequest {
+  string subject = 1;
+  bytes serial_number = 2;
+  bool full_chain = 3;
+}
+
+message CAFindResponse {
+  strims.type.Certificate certificate = 1;
+}
+
 service CA {
   rpc Renew(CARenewRequest) returns (CARenewResponse);
+  rpc Find(CAFindRequest) returns (CAFindResponse);
 }

@@ -67,7 +67,7 @@ func TestServerTranscodesMultipleStreams(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 
-	err = sendStream(t, path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
+	err = sendStream(t, nil)
 	assert.Nil(t, err, "failed sending stream")
 
 	for _, tc := range tcs {
@@ -114,7 +114,7 @@ func TestServerClosesStreamOnCheckOriginReject(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 
-	err = sendStream(t, path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
+	err = sendStream(t, nil)
 	assert.Error(t, err, "failed to close stream on checkOrigin reject")
 }
 
@@ -154,7 +154,7 @@ func TestServerAcceptsMultipleStreams(t *testing.T) {
 
 	time.Sleep(500 * time.Millisecond)
 
-	err = sendStream(t, path.Join("testdata", "sample.mp4"), fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr))
+	err = sendStream(t, nil)
 	assert.Nil(t, err, "failed sending stream")
 
 	assert.True(t, handleCalled, "HandleStream should be called")
@@ -198,18 +198,35 @@ func probeFile(t *testing.T, filename string) *ffprobeResp {
 	return &data
 }
 
-func sendStream(t *testing.T, samplepath, addr string) error {
+type sendStreamOptions struct {
+	samplePath string
+	addr       string
+	duration   string
+}
+
+var defaultSendStreamOptions = &sendStreamOptions{
+	samplePath: path.Join("testdata", "sample.mp4"),
+	addr:       fmt.Sprintf("rtmp://%s/live/test1", rtmpServerAddr),
+	duration:   "00:00:05.0",
+}
+
+func sendStream(t *testing.T, options *sendStreamOptions) error {
 	t.Helper()
+
+	if options == nil {
+		options = defaultSendStreamOptions
+	}
+
 	_, err := exec.LookPath("ffmpeg")
 	assert.Nil(t, err, "ffmpeg is not in $PATH. %v", err)
 
 	cmd := exec.Command(
 		"ffmpeg",
 		"-re",
-		"-i", samplepath,
-		"-t", "00:00:05.0",
+		"-i", options.samplePath,
+		"-t", options.duration,
 		"-c", "copy",
-		"-f", "flv", addr,
+		"-f", "flv", options.addr,
 	)
 
 	var errb bytes.Buffer

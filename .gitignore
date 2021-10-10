@@ -9,3 +9,4 @@ dist
 **/*.sqlite
 .gradle
 **/*key.json
+*.prof

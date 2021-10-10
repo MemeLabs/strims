@@ -13,8 +13,7 @@ const SettingsRouter: React.FC = () => (
     <Switch>
       <PrivateRoute
         path="/settings/networks"
-        exact
-        component={lazy(() => import("../pages/Settings/Networks"))}
+        component={lazy(() => import("../pages/Settings/Network"))}
       />
       <PrivateRoute
         path="/settings/bootstrap-clients"
@@ -59,6 +58,11 @@ const MainRouter: React.FC = () => (
               path="/player/:networkKey"
               exact
               component={lazy(() => import("../pages/PlayerTest"))}
+            />
+            <PrivateRoute
+              path="/embed/:service/:id"
+              exact
+              component={lazy(() => import("../pages/Embed"))}
             />
             <PrivateRoute
               path="/activity"

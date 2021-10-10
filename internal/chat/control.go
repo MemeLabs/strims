@@ -24,6 +24,8 @@ var (
 	ErrNetworkNotFound = errors.New("network not found")
 )
 
+var _ control.ChatControl = &Control{}
+
 // NewControl ...
 func NewControl(
 	logger *zap.Logger,

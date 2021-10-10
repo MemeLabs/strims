@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"sync/atomic"
 	"time"
 
-	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/dialer"
 	"github.com/MemeLabs/go-ppspp/internal/transfer"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
@@ -18,6 +18,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
+	"golang.org/x/crypto/blake2b"
+	"google.golang.org/protobuf/proto"
 )
 
 const (
@@ -26,6 +28,7 @@ const (
 	pingStartupDelay  = time.Second * 30
 	minPingInterval   = time.Minute * 10
 	maxPingInterval   = time.Minute * 14
+	embedLoadInterval = time.Second * 15
 )
 
 // AddressSalt ...
@@ -48,12 +51,16 @@ var swarmOptions = ppspp.SwarmOptions{
 	},
 }
 
-func newDirectoryService(logger *zap.Logger, key *key.Key, ew *protoutil.ChunkStreamWriter) *directoryService {
+func newDirectoryService(logger *zap.Logger, key *key.Key, config *networkv1directory.ServerConfig, ew *protoutil.ChunkStreamWriter) *directoryService {
 	return &directoryService{
 		logger:          logger,
 		done:            make(chan struct{}),
-		broadcastTicker: time.NewTicker(broadcastInterval),
+		broadcastTicker: timeutil.DefaultTickEmitter.Ticker(broadcastInterval),
+		embedLoadTicker: timeutil.DefaultTickEmitter.Ticker(embedLoadInterval),
+		config:          config,
 		eventWriter:     ew,
+		embedLoader:     newEmbedLoader(logger, config.Integrations),
+		listings:        newIndexedLRU(),
 	}
 }
 
@@ -62,11 +69,15 @@ type directoryService struct {
 	transfer          *transfer.Control
 	closeOnce         sync.Once
 	done              chan struct{}
-	broadcastTicker   *time.Ticker
+	broadcastTicker   timeutil.Ticker
+	embedLoadTicker   timeutil.Ticker
 	lastBroadcastTime timeutil.Time
+	config            *networkv1directory.ServerConfig
 	eventWriter       *protoutil.ChunkStreamWriter
+	embedLoader       *embedLoader
 	lock              sync.Mutex
-	listings          lru
+	nextID            uint64
+	listings          indexedLRU
 	sessions          lru
 	users             lru
 	certificate       *certificate.Certificate
@@ -78,7 +89,11 @@ func (d *directoryService) Run(ctx context.Context) error {
 	for {
 		select {
 		case now := <-d.broadcastTicker.C:
-			if err := d.broadcast(timeutil.NewFromTime(now)); err != nil {
+			if err := d.broadcast(now); err != nil {
+				return err
+			}
+		case now := <-d.embedLoadTicker.C:
+			if err := d.loadEmbeds(ctx, now); err != nil {
 				return err
 			}
 		case <-d.done:
@@ -100,33 +115,35 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	var events []*networkv1.DirectoryEvent
+	var events []*networkv1directory.Event
 
 	for it := d.listings.PeekRecentlyTouched(d.lastBroadcastTime); it.Next(); {
 		l := it.Value().(*listing)
 
 		if l.publishers.Len() == 0 && l.viewers.Len() == 0 {
 			d.listings.Delete(l)
-			events = append(events, &networkv1.DirectoryEvent{
-				Body: &networkv1.DirectoryEvent_Unpublish_{
-					Unpublish: &networkv1.DirectoryEvent_Unpublish{
-						Key: l.listing.Key,
+			events = append(events, &networkv1directory.Event{
+				Body: &networkv1directory.Event_Unpublish_{
+					Unpublish: &networkv1directory.Event_Unpublish{
+						Id: l.id,
 					},
 				},
 			})
-		} else if l.modifiedTime.After(d.lastBroadcastTime) {
-			events = append(events, &networkv1.DirectoryEvent{
-				Body: &networkv1.DirectoryEvent_Publish_{
-					Publish: &networkv1.DirectoryEvent_Publish{
+		} else if !l.modifiedTime.Before(d.lastBroadcastTime) {
+			events = append(events, &networkv1directory.Event{
+				Body: &networkv1directory.Event_ListingChange_{
+					ListingChange: &networkv1directory.Event_ListingChange{
+						Id:      l.id,
 						Listing: l.listing,
+						Snippet: l.snippet,
 					},
 				},
 			})
 		} else {
-			events = append(events, &networkv1.DirectoryEvent{
-				Body: &networkv1.DirectoryEvent_ViewerCountChange_{
-					ViewerCountChange: &networkv1.DirectoryEvent_ViewerCountChange{
-						Key:   l.listing.Key,
+			events = append(events, &networkv1directory.Event{
+				Body: &networkv1directory.Event_ViewerCountChange_{
+					ViewerCountChange: &networkv1directory.Event_ViewerCountChange{
+						Id:    l.id,
 						Count: uint32(l.viewers.Len()),
 					},
 				},
@@ -137,21 +154,21 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 	for it := d.users.PeekRecentlyTouched(d.lastBroadcastTime); it.Next(); {
 		u := it.Value().(*user)
 
-		var keys [][]byte
+		var ids []uint64
 		u.sessions.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
 			it.(*session).viewedListings.AscendLessThan(llrb.Inf(1), func(it llrb.Item) bool {
-				keys = append(keys, it.(*listing).listing.Key)
+				ids = append(ids, it.(*listing).id)
 				return true
 			})
 			return true
 		})
 
-		events = append(events, &networkv1.DirectoryEvent{
-			Body: &networkv1.DirectoryEvent_ViewerStateChange_{
-				ViewerStateChange: &networkv1.DirectoryEvent_ViewerStateChange{
-					Subject:     u.certificate.Subject,
-					Online:      true,
-					ViewingKeys: keys,
+		events = append(events, &networkv1directory.Event{
+			Body: &networkv1directory.Event_ViewerStateChange_{
+				ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
+					Subject:    u.certificate.Subject,
+					Online:     true,
+					ViewingIds: ids,
 				},
 			},
 		})
@@ -168,9 +185,9 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 
 		d.users.Delete(u)
 
-		events = append(events, &networkv1.DirectoryEvent{
-			Body: &networkv1.DirectoryEvent_ViewerStateChange_{
-				ViewerStateChange: &networkv1.DirectoryEvent_ViewerStateChange{
+		events = append(events, &networkv1directory.Event{
+			Body: &networkv1directory.Event_ViewerStateChange_{
+				ViewerStateChange: &networkv1directory.Event_ViewerStateChange{
 					Subject: u.certificate.Subject,
 					Online:  false,
 				},
@@ -179,17 +196,17 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 	}
 
 	for l, ok := d.listings.Pop(eol).(*listing); ok; l, ok = d.listings.Pop(eol).(*listing) {
-		events = append(events, &networkv1.DirectoryEvent{
-			Body: &networkv1.DirectoryEvent_Unpublish_{
-				Unpublish: &networkv1.DirectoryEvent_Unpublish{
-					Key: l.listing.Key,
+		events = append(events, &networkv1directory.Event{
+			Body: &networkv1directory.Event_Unpublish_{
+				Unpublish: &networkv1directory.Event_Unpublish{
+					Id: l.id,
 				},
 			},
 		})
 	}
 
 	if events != nil {
-		err := d.eventWriter.Write(&networkv1.DirectoryEventBroadcast{
+		err := d.eventWriter.Write(&networkv1directory.EventBroadcast{
 			Events: events,
 		})
 		if err != nil {
@@ -201,38 +218,102 @@ func (d *directoryService) broadcast(now timeutil.Time) error {
 	return nil
 }
 
-func (d *directoryService) Publish(ctx context.Context, req *networkv1.DirectoryPublishRequest) (*networkv1.DirectoryPublishResponse, error) {
-	if err := dao.VerifyMessage(req.Listing); err != nil {
+func (d *directoryService) loadEmbeds(ctx context.Context, now timeutil.Time) error {
+	d.lock.Lock()
+	defer d.lock.Unlock()
+
+	embedIDs := map[embedService][]string{}
+
+	d.listings.Each(func(i keyer) bool {
+		l := i.(*listing)
+		switch c := l.listing.Content.(type) {
+		case *networkv1directory.Listing_Embed_:
+			svc, _ := toEmbedService(c.Embed.Service)
+			embedIDs[svc] = append(embedIDs[svc], c.Embed.Id)
+		case *networkv1directory.Listing_Media_:
+			uri, _ := ppspp.ParseURI(l.listing.GetMedia().SwarmUri)
+			embedIDs[embedServiceSwarm] = append(embedIDs[embedServiceSwarm], uri.ID.String())
+		case *networkv1directory.Listing_Service_:
+			// TODO: implement services
+		}
+		return true
+	})
+
+	go func() {
+		res := d.embedLoader.Load(ctx, embedIDs)
+		now := timeutil.Now()
+
+		d.lock.Lock()
+		defer d.lock.Unlock()
+
+		d.listings.Each(func(i keyer) bool {
+			l := i.(*listing)
+
+			var snippet *networkv1directory.ListingSnippet
+			var ok bool
+
+			switch c := l.listing.Content.(type) {
+			case *networkv1directory.Listing_Embed_:
+				svc, _ := toEmbedService(c.Embed.Service)
+				snippet, ok = res[svc][c.Embed.Id]
+			case *networkv1directory.Listing_Media_:
+				uri, _ := ppspp.ParseURI(l.listing.GetMedia().SwarmUri)
+				snippet, ok = res[embedServiceSwarm][uri.ID.String()]
+			case *networkv1directory.Listing_Service_:
+				// TODO: implement services
+			}
+
+			if ok {
+				l.snippet = snippet
+				l.modifiedTime = now
+				d.listings.Touch(i)
+			}
+			return true
+		})
+	}()
+
+	return nil
+}
+
+func (d *directoryService) Publish(ctx context.Context, req *networkv1directory.PublishRequest) (*networkv1directory.PublishResponse, error) {
+	switch c := req.Listing.Content.(type) {
+	case *networkv1directory.Listing_Embed_:
+		service, ok := toEmbedService(c.Embed.Service)
+		if !ok || !d.embedLoader.IsSupported(service) {
+			return nil, errors.New("unsupported embed service")
+		}
+	case *networkv1directory.Listing_Media_:
+		if _, err := ppspp.ParseURI(req.Listing.GetMedia().SwarmUri); err != nil {
+			return nil, errors.New("invalid swarm uri")
+		}
+	case *networkv1directory.Listing_Service_:
+		// TODO: implement services
+	}
+
+	l, err := newListing(atomic.AddUint64(&d.nextID, 1), req.Listing)
+	if err != nil {
 		return nil, err
 	}
 
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	l := d.listings.GetOrInsert(&listing{
-		listing:      req.Listing,
-		modifiedTime: timeutil.Now(),
-	}).(*listing)
+	l = d.listings.GetOrInsert(l).(*listing)
 	s := d.sessions.GetOrInsert(&session{certificate: dialer.VPNCertificate(ctx)}).(*session)
 	u := d.users.GetOrInsert(&user{certificate: dialer.VPNCertificate(ctx).GetParent()}).(*user)
-
-	if req.Listing.Timestamp > l.listing.Timestamp {
-		l.listing = req.Listing
-		l.modifiedTime = timeutil.Now()
-	}
 
 	l.publishers.ReplaceOrInsert(s)
 	s.publishedListings.ReplaceOrInsert(l)
 	u.sessions.ReplaceOrInsert(s)
 
-	return &networkv1.DirectoryPublishResponse{}, nil
+	return &networkv1directory.PublishResponse{Id: l.id}, nil
 }
 
-func (d *directoryService) Unpublish(ctx context.Context, req *networkv1.DirectoryUnpublishRequest) (*networkv1.DirectoryUnpublishResponse, error) {
+func (d *directoryService) Unpublish(ctx context.Context, req *networkv1directory.UnpublishRequest) (*networkv1directory.UnpublishResponse, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	l, ok := d.listings.Get(&lruKey{key: req.Key}).(*listing)
+	l, ok := d.listings.GetByID(req.Id).(*listing)
 	if !ok {
 		return nil, ErrListingNotFound
 	}
@@ -246,14 +327,14 @@ func (d *directoryService) Unpublish(ctx context.Context, req *networkv1.Directo
 	}
 	s.publishedListings.Delete(l)
 
-	return &networkv1.DirectoryUnpublishResponse{}, nil
+	return &networkv1directory.UnpublishResponse{}, nil
 }
 
-func (d *directoryService) Join(ctx context.Context, req *networkv1.DirectoryJoinRequest) (*networkv1.DirectoryJoinResponse, error) {
+func (d *directoryService) Join(ctx context.Context, req *networkv1directory.JoinRequest) (*networkv1directory.JoinResponse, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	l, ok := d.listings.Get(&lruKey{key: req.Key}).(*listing)
+	l, ok := d.listings.GetByID(req.Id).(*listing)
 	if !ok {
 		return nil, ErrListingNotFound
 	}
@@ -264,14 +345,14 @@ func (d *directoryService) Join(ctx context.Context, req *networkv1.DirectoryJoi
 	s.viewedListings.ReplaceOrInsert(l)
 	u.sessions.ReplaceOrInsert(s)
 
-	return &networkv1.DirectoryJoinResponse{}, nil
+	return &networkv1directory.JoinResponse{}, nil
 }
 
-func (d *directoryService) Part(ctx context.Context, req *networkv1.DirectoryPartRequest) (*networkv1.DirectoryPartResponse, error) {
+func (d *directoryService) Part(ctx context.Context, req *networkv1directory.PartRequest) (*networkv1directory.PartResponse, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	l, ok := d.listings.Get(&lruKey{key: req.Key}).(*listing)
+	l, ok := d.listings.GetByID(req.Id).(*listing)
 	if !ok {
 		return nil, ErrListingNotFound
 	}
@@ -286,10 +367,10 @@ func (d *directoryService) Part(ctx context.Context, req *networkv1.DirectoryPar
 	}
 	s.viewedListings.Delete(l)
 
-	return &networkv1.DirectoryPartResponse{}, nil
+	return &networkv1directory.PartResponse{}, nil
 }
 
-func (d *directoryService) Ping(ctx context.Context, req *networkv1.DirectoryPingRequest) (*networkv1.DirectoryPingResponse, error) {
+func (d *directoryService) Ping(ctx context.Context, req *networkv1directory.PingRequest) (*networkv1directory.PingResponse, error) {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
@@ -307,18 +388,59 @@ func (d *directoryService) Ping(ctx context.Context, req *networkv1.DirectoryPin
 		return true
 	})
 
-	return &networkv1.DirectoryPingResponse{}, nil
+	return &networkv1directory.PingResponse{}, nil
+}
+
+func listingKey(m proto.Message) ([]byte, error) {
+	opt := proto.MarshalOptions{
+		Deterministic: true,
+		UseCachedSize: true,
+	}
+	b := make([]byte, 0, opt.Size(m))
+	b, err := opt.MarshalAppend(b, m)
+	if err != nil {
+		return nil, err
+	}
+
+	h, err := blake2b.New256(nil)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := h.Write(b); err != nil {
+		return nil, err
+	}
+	return h.Sum(nil), nil
+}
+
+func newListing(id uint64, l *networkv1directory.Listing) (*listing, error) {
+	key, err := listingKey(l)
+	if err != nil {
+		return nil, err
+	}
+
+	return &listing{
+		id:           id,
+		key:          key,
+		listing:      l,
+		modifiedTime: timeutil.Now(),
+	}, nil
 }
 
 type listing struct {
-	listing      *networkv1.DirectoryListing
+	id           uint64
+	key          []byte
+	listing      *networkv1directory.Listing
+	snippet      *networkv1directory.ListingSnippet
 	modifiedTime timeutil.Time
 	publishers   llrb.LLRB
 	viewers      llrb.LLRB
 }
 
+func (l *listing) ID() uint64 {
+	return l.id
+}
 func (l *listing) Key() []byte {
-	return l.listing.Key
+	return l.key
 }
 
 func (l *listing) Less(o llrb.Item) bool {

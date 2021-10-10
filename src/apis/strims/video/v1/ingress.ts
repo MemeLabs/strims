@@ -6,9 +6,9 @@ import {
   IVideoChannel as strims_video_v1_IVideoChannel,
 } from "./channel";
 import {
-  DirectoryListingSnippet as strims_network_v1_DirectoryListingSnippet,
-  IDirectoryListingSnippet as strims_network_v1_IDirectoryListingSnippet,
-} from "../../network/v1/directory";
+  ListingSnippet as strims_network_v1_directory_ListingSnippet,
+  IListingSnippet as strims_network_v1_directory_IListingSnippet,
+} from "../../network/v1/directory/directory";
 
 export type IVideoIngressConfig = {
   enabled?: boolean;
@@ -201,7 +201,7 @@ export class VideoIngressGetConfigRequest {
 }
 
 export type IVideoIngressGetConfigResponse = {
-  config?: IVideoIngressConfig;
+  config?: IVideoIngressConfig | undefined;
 }
 
 export class VideoIngressGetConfigResponse {
@@ -237,7 +237,7 @@ export class VideoIngressGetConfigResponse {
 }
 
 export type IVideoIngressSetConfigRequest = {
-  config?: IVideoIngressConfig;
+  config?: IVideoIngressConfig | undefined;
 }
 
 export class VideoIngressSetConfigRequest {
@@ -273,7 +273,7 @@ export class VideoIngressSetConfigRequest {
 }
 
 export type IVideoIngressSetConfigResponse = {
-  config?: IVideoIngressConfig;
+  config?: IVideoIngressConfig | undefined;
 }
 
 export class VideoIngressSetConfigResponse {
@@ -451,19 +451,19 @@ export class VideoIngressGetChannelURLResponse {
 }
 
 export type IVideoIngressShareCreateChannelRequest = {
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
+  directoryListingSnippet?: strims_network_v1_directory_IListingSnippet | undefined;
 }
 
 export class VideoIngressShareCreateChannelRequest {
-  directoryListingSnippet: strims_network_v1_DirectoryListingSnippet | undefined;
+  directoryListingSnippet: strims_network_v1_directory_ListingSnippet | undefined;
 
   constructor(v?: IVideoIngressShareCreateChannelRequest) {
-    this.directoryListingSnippet = v?.directoryListingSnippet && new strims_network_v1_DirectoryListingSnippet(v.directoryListingSnippet);
+    this.directoryListingSnippet = v?.directoryListingSnippet && new strims_network_v1_directory_ListingSnippet(v.directoryListingSnippet);
   }
 
   static encode(m: VideoIngressShareCreateChannelRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.directoryListingSnippet) strims_network_v1_DirectoryListingSnippet.encode(m.directoryListingSnippet, w.uint32(10).fork()).ldelim();
+    if (m.directoryListingSnippet) strims_network_v1_directory_ListingSnippet.encode(m.directoryListingSnippet, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -475,7 +475,7 @@ export class VideoIngressShareCreateChannelRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.directoryListingSnippet = strims_network_v1_DirectoryListingSnippet.decode(r, r.uint32());
+        m.directoryListingSnippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -487,7 +487,7 @@ export class VideoIngressShareCreateChannelRequest {
 }
 
 export type IVideoIngressShareCreateChannelResponse = {
-  channel?: strims_video_v1_IVideoChannel;
+  channel?: strims_video_v1_IVideoChannel | undefined;
 }
 
 export class VideoIngressShareCreateChannelResponse {
@@ -523,19 +523,19 @@ export class VideoIngressShareCreateChannelResponse {
 }
 
 export type IVideoIngressShareUpdateChannelRequest = {
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
+  directoryListingSnippet?: strims_network_v1_directory_IListingSnippet | undefined;
 }
 
 export class VideoIngressShareUpdateChannelRequest {
-  directoryListingSnippet: strims_network_v1_DirectoryListingSnippet | undefined;
+  directoryListingSnippet: strims_network_v1_directory_ListingSnippet | undefined;
 
   constructor(v?: IVideoIngressShareUpdateChannelRequest) {
-    this.directoryListingSnippet = v?.directoryListingSnippet && new strims_network_v1_DirectoryListingSnippet(v.directoryListingSnippet);
+    this.directoryListingSnippet = v?.directoryListingSnippet && new strims_network_v1_directory_ListingSnippet(v.directoryListingSnippet);
   }
 
   static encode(m: VideoIngressShareUpdateChannelRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.directoryListingSnippet) strims_network_v1_DirectoryListingSnippet.encode(m.directoryListingSnippet, w.uint32(10).fork()).ldelim();
+    if (m.directoryListingSnippet) strims_network_v1_directory_ListingSnippet.encode(m.directoryListingSnippet, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -547,7 +547,7 @@ export class VideoIngressShareUpdateChannelRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.directoryListingSnippet = strims_network_v1_DirectoryListingSnippet.decode(r, r.uint32());
+        m.directoryListingSnippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -559,7 +559,7 @@ export class VideoIngressShareUpdateChannelRequest {
 }
 
 export type IVideoIngressShareUpdateChannelResponse = {
-  channel?: strims_video_v1_IVideoChannel;
+  channel?: strims_video_v1_IVideoChannel | undefined;
 }
 
 export class VideoIngressShareUpdateChannelResponse {

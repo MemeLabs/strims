@@ -8,27 +8,28 @@ import (
 
 // RegisterNetworkServiceService ...
 func RegisterNetworkServiceService(host rpc.ServiceRegistry, service NetworkServiceService) {
-	host.RegisterMethod("strims.network.v1.NetworkService.Create", service.Create)
-	host.RegisterMethod("strims.network.v1.NetworkService.Update", service.Update)
+	host.RegisterMethod("strims.network.v1.NetworkService.CreateServer", service.CreateServer)
+	host.RegisterMethod("strims.network.v1.NetworkService.UpdateServerConfig", service.UpdateServerConfig)
 	host.RegisterMethod("strims.network.v1.NetworkService.Delete", service.Delete)
 	host.RegisterMethod("strims.network.v1.NetworkService.Get", service.Get)
 	host.RegisterMethod("strims.network.v1.NetworkService.List", service.List)
 	host.RegisterMethod("strims.network.v1.NetworkService.CreateInvitation", service.CreateInvitation)
-	host.RegisterMethod("strims.network.v1.NetworkService.CreateFromInvitation", service.CreateFromInvitation)
+	host.RegisterMethod("strims.network.v1.NetworkService.CreateNetworkFromInvitation", service.CreateNetworkFromInvitation)
 	host.RegisterMethod("strims.network.v1.NetworkService.Watch", service.Watch)
-	host.RegisterMethod("strims.network.v1.NetworkService.SetDisplayOrder", service.SetDisplayOrder)
+	host.RegisterMethod("strims.network.v1.NetworkService.UpdateDisplayOrder", service.UpdateDisplayOrder)
+	host.RegisterMethod("strims.network.v1.NetworkService.UpdateAlias", service.UpdateAlias)
 }
 
 // NetworkServiceService ...
 type NetworkServiceService interface {
-	Create(
+	CreateServer(
 		ctx context.Context,
-		req *CreateNetworkRequest,
-	) (*CreateNetworkResponse, error)
-	Update(
+		req *CreateServerRequest,
+	) (*CreateServerResponse, error)
+	UpdateServerConfig(
 		ctx context.Context,
-		req *UpdateNetworkRequest,
-	) (*UpdateNetworkResponse, error)
+		req *UpdateServerConfigRequest,
+	) (*UpdateServerConfigResponse, error)
 	Delete(
 		ctx context.Context,
 		req *DeleteNetworkRequest,
@@ -43,9 +44,9 @@ type NetworkServiceService interface {
 	) (*ListNetworksResponse, error)
 	CreateInvitation(
 		ctx context.Context,
-		req *CreateNetworkInvitationRequest,
-	) (*CreateNetworkInvitationResponse, error)
-	CreateFromInvitation(
+		req *CreateInvitationRequest,
+	) (*CreateInvitationResponse, error)
+	CreateNetworkFromInvitation(
 		ctx context.Context,
 		req *CreateNetworkFromInvitationRequest,
 	) (*CreateNetworkFromInvitationResponse, error)
@@ -53,10 +54,14 @@ type NetworkServiceService interface {
 		ctx context.Context,
 		req *WatchNetworksRequest,
 	) (<-chan *WatchNetworksResponse, error)
-	SetDisplayOrder(
+	UpdateDisplayOrder(
 		ctx context.Context,
-		req *SetDisplayOrderRequest,
-	) (*SetDisplayOrderResponse, error)
+		req *UpdateDisplayOrderRequest,
+	) (*UpdateDisplayOrderResponse, error)
+	UpdateAlias(
+		ctx context.Context,
+		req *UpdateAliasRequest,
+	) (*UpdateAliasResponse, error)
 }
 
 // NetworkServiceClient ...
@@ -69,22 +74,22 @@ func NewNetworkServiceClient(client rpc.Caller) *NetworkServiceClient {
 	return &NetworkServiceClient{client}
 }
 
-// Create ...
-func (c *NetworkServiceClient) Create(
+// CreateServer ...
+func (c *NetworkServiceClient) CreateServer(
 	ctx context.Context,
-	req *CreateNetworkRequest,
-	res *CreateNetworkResponse,
+	req *CreateServerRequest,
+	res *CreateServerResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.Create", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.CreateServer", req, res)
 }
 
-// Update ...
-func (c *NetworkServiceClient) Update(
+// UpdateServerConfig ...
+func (c *NetworkServiceClient) UpdateServerConfig(
 	ctx context.Context,
-	req *UpdateNetworkRequest,
-	res *UpdateNetworkResponse,
+	req *UpdateServerConfigRequest,
+	res *UpdateServerConfigResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.Update", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.UpdateServerConfig", req, res)
 }
 
 // Delete ...
@@ -117,19 +122,19 @@ func (c *NetworkServiceClient) List(
 // CreateInvitation ...
 func (c *NetworkServiceClient) CreateInvitation(
 	ctx context.Context,
-	req *CreateNetworkInvitationRequest,
-	res *CreateNetworkInvitationResponse,
+	req *CreateInvitationRequest,
+	res *CreateInvitationResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.CreateInvitation", req, res)
 }
 
-// CreateFromInvitation ...
-func (c *NetworkServiceClient) CreateFromInvitation(
+// CreateNetworkFromInvitation ...
+func (c *NetworkServiceClient) CreateNetworkFromInvitation(
 	ctx context.Context,
 	req *CreateNetworkFromInvitationRequest,
 	res *CreateNetworkFromInvitationResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.CreateFromInvitation", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.CreateNetworkFromInvitation", req, res)
 }
 
 // Watch ...
@@ -141,11 +146,20 @@ func (c *NetworkServiceClient) Watch(
 	return c.client.CallStreaming(ctx, "strims.network.v1.NetworkService.Watch", req, res)
 }
 
-// SetDisplayOrder ...
-func (c *NetworkServiceClient) SetDisplayOrder(
+// UpdateDisplayOrder ...
+func (c *NetworkServiceClient) UpdateDisplayOrder(
 	ctx context.Context,
-	req *SetDisplayOrderRequest,
-	res *SetDisplayOrderResponse,
+	req *UpdateDisplayOrderRequest,
+	res *UpdateDisplayOrderResponse,
 ) error {
-	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.SetDisplayOrder", req, res)
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.UpdateDisplayOrder", req, res)
+}
+
+// UpdateAlias ...
+func (c *NetworkServiceClient) UpdateAlias(
+	ctx context.Context,
+	req *UpdateAliasRequest,
+	res *UpdateAliasResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.NetworkService.UpdateAlias", req, res)
 }

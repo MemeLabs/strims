@@ -1,0 +1,73 @@
+.directory_grid {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+
+  &__item {
+    width: calc(25% - 20px);
+    display: flex;
+    flex-direction: column;
+    margin: 10px;
+    box-shadow: rgba(0, 0, 0, 0.33) 2px 2px 4px;
+
+    &__link {
+      display: block;
+      position: relative;
+    }
+
+    &__thumbnail {
+      display: block;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      object-fit: cover;
+      background: black;
+    }
+
+    &__viewer_count {
+      position: absolute;
+      display: block;
+      bottom: 0.2em;
+      left: 0.2em;
+      background: rgba(0, 0, 0, 0.7);
+      border-radius: 4px;
+      padding: 0.1em 0.2em;
+      font-size: 0.8em;
+    }
+
+    &__channel {
+      display: flex;
+      flex-direction: row;
+      background-color: var(--body-foreground);
+      padding: 0.5em;
+
+      &__logo {
+        height: 3em;
+        width: 3em;
+        object-fit: cover;
+        border-radius: 2em;
+        margin-right: 0.5em;
+      }
+
+      &__label {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        min-width: 0;
+        font-size: 0.9em;
+
+        & span:nth-child(2) {
+          margin-top: 0.4em;
+        }
+      }
+
+      &__title,
+      &__name {
+        display: block;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+    }
+  }
+}

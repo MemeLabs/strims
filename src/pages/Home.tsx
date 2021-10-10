@@ -8,6 +8,7 @@ import { PlayerContext, PlayerMode } from "../components/PlayerEmbed";
 import { useClient, useLazyCall } from "../contexts/FrontendApi";
 import { useProfile } from "../contexts/Profile";
 import { useTheme } from "../contexts/Theme";
+import { certificateRoot } from "../lib/certificate";
 import * as fmp4 from "../lib/media/fmp4";
 import * as mpegts from "../lib/media/mpegts";
 import * as webm from "../lib/media/webm";
@@ -53,7 +54,7 @@ const HomePage: React.FC = () => {
     const [{ id }, mediaStream] = await Promise.all([
       client.videoCapture.open({
         mimeType: webm.MIME_TYPE,
-        networkKeys: networks.map((n) => n.key.public),
+        networkKeys: networks.map((n) => certificateRoot(n.certificate).key),
         directorySnippet: {
           title: "test broadcast",
           description: "broadcast from getDisplayMedia",

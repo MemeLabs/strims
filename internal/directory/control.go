@@ -11,6 +11,7 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -22,6 +23,8 @@ import (
 var (
 	ErrNetworkNotFound = errors.New("network not found")
 )
+
+var _ control.DirectoryControl = &Control{}
 
 // NewControl ...
 func NewControl(logger *zap.Logger,
@@ -99,7 +102,7 @@ func (t *Control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 			}
 
 			for {
-				b := &networkv1.DirectoryEventBroadcast{}
+				b := &networkv1directory.EventBroadcast{}
 				err := er.Read(b)
 				if err == protoutil.ErrShortRead {
 					continue
@@ -110,7 +113,7 @@ func (t *Control) handleNetworkStart(ctx context.Context, network *networkv1.Net
 
 				t.observers.EmitLocal(event.DirectoryEvent{
 					NetworkID:  network.Id,
-					NetworkKey: dao.GetRootCert(network.Certificate).Key,
+					NetworkKey: dao.CertificateRoot(network.Certificate).Key,
 					Broadcast:  b,
 				})
 			}
@@ -142,7 +145,7 @@ func (t *Control) ping(ctx context.Context) {
 		}
 
 		go func() {
-			err := dc.Ping(ctx, &networkv1.DirectoryPingRequest{}, &networkv1.DirectoryPingResponse{})
+			err := dc.Ping(ctx, &networkv1directory.PingRequest{}, &networkv1directory.PingResponse{})
 			if err != nil {
 				r.logger.Debug("directory ping failed", zap.Error(err))
 			}
@@ -152,55 +155,57 @@ func (t *Control) ping(ctx context.Context) {
 	})
 }
 
-func (t *Control) client(networkKey []byte) (*rpc.Client, *networkv1.DirectoryClient, error) {
+func (t *Control) client(networkKey []byte) (*rpc.Client, *networkv1directory.DirectoryClient, error) {
 	client, err := t.dialer.Client(networkKey, networkKey, AddressSalt)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return client, networkv1.NewDirectoryClient(client), nil
+	return client, networkv1directory.NewDirectoryClient(client), nil
 }
 
 // Publish ...
-func (t *Control) Publish(ctx context.Context, listing *networkv1.DirectoryListing, networkKey []byte) error {
+func (t *Control) Publish(ctx context.Context, listing *networkv1directory.Listing, networkKey []byte) (uint64, error) {
 	c, dc, err := t.client(networkKey)
 	if err != nil {
-		return err
+		return 0, err
 	}
 	defer c.Close()
 
-	return dc.Publish(ctx, &networkv1.DirectoryPublishRequest{Listing: listing}, &networkv1.DirectoryPublishResponse{})
+	res := &networkv1directory.PublishResponse{}
+	err = dc.Publish(ctx, &networkv1directory.PublishRequest{Listing: listing}, res)
+	return res.Id, err
 }
 
 // Unpublish ...
-func (t *Control) Unpublish(ctx context.Context, key, networkKey []byte) error {
+func (t *Control) Unpublish(ctx context.Context, id uint64, networkKey []byte) error {
 	c, dc, err := t.client(networkKey)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
 
-	return dc.Unpublish(ctx, &networkv1.DirectoryUnpublishRequest{Key: key}, &networkv1.DirectoryUnpublishResponse{})
+	return dc.Unpublish(ctx, &networkv1directory.UnpublishRequest{Id: id}, &networkv1directory.UnpublishResponse{})
 }
 
 // Join ...
-func (t *Control) Join(ctx context.Context, key, networkKey []byte) error {
+func (t *Control) Join(ctx context.Context, id uint64, networkKey []byte) error {
 	c, dc, err := t.client(networkKey)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
 
-	return dc.Join(ctx, &networkv1.DirectoryJoinRequest{Key: key}, &networkv1.DirectoryJoinResponse{})
+	return dc.Join(ctx, &networkv1directory.JoinRequest{Id: id}, &networkv1directory.JoinResponse{})
 }
 
 // Part ...
-func (t *Control) Part(ctx context.Context, key, networkKey []byte) error {
+func (t *Control) Part(ctx context.Context, id uint64, networkKey []byte) error {
 	c, dc, err := t.client(networkKey)
 	if err != nil {
 		return err
 	}
 	defer c.Close()
 
-	return dc.Part(ctx, &networkv1.DirectoryPartRequest{Key: key}, &networkv1.DirectoryPartResponse{})
+	return dc.Part(ctx, &networkv1directory.PartRequest{Id: id}, &networkv1directory.PartResponse{})
 }

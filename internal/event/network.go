@@ -1,40 +1,43 @@
 package event
 
-import "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+import (
+	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
+)
 
 // NetworkLoad ...
 type NetworkLoad struct {
-	Network *network.Network
+	Network *networkv1.Network
 }
 
 // NetworkAdd ...
 type NetworkAdd struct {
-	Network *network.Network
+	Network *networkv1.Network
 }
 
 // NetworkRemove ...
 type NetworkRemove struct {
-	Network *network.Network
+	Network *networkv1.Network
 }
 
 // NetworkStart ...
 type NetworkStart struct {
-	Network *network.Network
+	Network *networkv1.Network
 }
 
 // NetworkStop ...
 type NetworkStop struct {
-	Network *network.Network
+	Network *networkv1.Network
 }
 
 // NetworkCertUpdate ...
 type NetworkCertUpdate struct {
-	Network *network.Network
+	Network *networkv1.Network
 }
 
 // NetworkCertUpdateError ...
 type NetworkCertUpdateError struct {
-	Network *network.Network
+	Network *networkv1.Network
 	Error   error
 }
 
@@ -70,5 +73,5 @@ type NetworkNegotiationComplete struct{}
 type DirectoryEvent struct {
 	NetworkID  uint64
 	NetworkKey []byte
-	Broadcast  *network.DirectoryEventBroadcast
+	Broadcast  *networkv1directory.EventBroadcast
 }

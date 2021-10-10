@@ -7,7 +7,7 @@ option java_package = "gg.strims.video.v1";
 option swift_prefix = "SVO";
 
 import "video/v1/channel.proto";
-import "network/v1/directory.proto";
+import "network/v1/directory/directory.proto";
 
 message VideoIngressConfig {
   bool enabled = 1;
@@ -68,7 +68,7 @@ service VideoIngress {
 }
 
 message VideoIngressShareCreateChannelRequest {
-  strims.network.v1.DirectoryListingSnippet directory_listing_snippet = 1;
+  strims.network.v1.directory.ListingSnippet directory_listing_snippet = 1;
 }
 
 message VideoIngressShareCreateChannelResponse {
@@ -76,7 +76,7 @@ message VideoIngressShareCreateChannelResponse {
 }
 
 message VideoIngressShareUpdateChannelRequest {
-  strims.network.v1.DirectoryListingSnippet directory_listing_snippet = 1;
+  strims.network.v1.directory.ListingSnippet directory_listing_snippet = 1;
 }
 
 message VideoIngressShareUpdateChannelResponse {

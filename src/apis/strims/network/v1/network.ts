@@ -9,6 +9,10 @@ import {
   Certificate as strims_type_Certificate,
   ICertificate as strims_type_ICertificate,
 } from "../../type/certificate";
+import {
+  ServerConfig as strims_network_v1_directory_ServerConfig,
+  IServerConfig as strims_network_v1_directory_IServerConfig,
+} from "./directory/directory";
 
 export type INetworkIcon = {
   data?: Uint8Array;
@@ -53,31 +57,31 @@ export class NetworkIcon {
   }
 }
 
-export type ICreateNetworkRequest = {
+export type ICreateServerRequest = {
   name?: string;
-  icon?: INetworkIcon | undefined;
+  icon?: INetworkIcon;
 }
 
-export class CreateNetworkRequest {
+export class CreateServerRequest {
   name: string;
   icon: NetworkIcon | undefined;
 
-  constructor(v?: ICreateNetworkRequest) {
+  constructor(v?: ICreateServerRequest) {
     this.name = v?.name || "";
     this.icon = v?.icon && new NetworkIcon(v.icon);
   }
 
-  static encode(m: CreateNetworkRequest, w?: Writer): Writer {
+  static encode(m: CreateServerRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.name) w.uint32(10).string(m.name);
     if (m.icon) NetworkIcon.encode(m.icon, w.uint32(18).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CreateNetworkRequest {
+  static decode(r: Reader | Uint8Array, length?: number): CreateServerRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new CreateNetworkRequest();
+    const m = new CreateServerRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -96,27 +100,27 @@ export class CreateNetworkRequest {
   }
 }
 
-export type ICreateNetworkResponse = {
-  network?: INetwork | undefined;
+export type ICreateServerResponse = {
+  network?: INetwork;
 }
 
-export class CreateNetworkResponse {
+export class CreateServerResponse {
   network: Network | undefined;
 
-  constructor(v?: ICreateNetworkResponse) {
+  constructor(v?: ICreateServerResponse) {
     this.network = v?.network && new Network(v.network);
   }
 
-  static encode(m: CreateNetworkResponse, w?: Writer): Writer {
+  static encode(m: CreateServerResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.network) Network.encode(m.network, w.uint32(10).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CreateNetworkResponse {
+  static decode(r: Reader | Uint8Array, length?: number): CreateServerResponse {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new CreateNetworkResponse();
+    const m = new CreateServerResponse();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -132,39 +136,39 @@ export class CreateNetworkResponse {
   }
 }
 
-export type IUpdateNetworkRequest = {
-  id?: bigint;
-  name?: string;
+export type IUpdateServerConfigRequest = {
+  networkId?: bigint;
+  serverConfig?: IServerConfig;
 }
 
-export class UpdateNetworkRequest {
-  id: bigint;
-  name: string;
+export class UpdateServerConfigRequest {
+  networkId: bigint;
+  serverConfig: ServerConfig | undefined;
 
-  constructor(v?: IUpdateNetworkRequest) {
-    this.id = v?.id || BigInt(0);
-    this.name = v?.name || "";
+  constructor(v?: IUpdateServerConfigRequest) {
+    this.networkId = v?.networkId || BigInt(0);
+    this.serverConfig = v?.serverConfig && new ServerConfig(v.serverConfig);
   }
 
-  static encode(m: UpdateNetworkRequest, w?: Writer): Writer {
+  static encode(m: UpdateServerConfigRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.id) w.uint32(8).uint64(m.id);
-    if (m.name) w.uint32(18).string(m.name);
+    if (m.networkId) w.uint32(8).uint64(m.networkId);
+    if (m.serverConfig) ServerConfig.encode(m.serverConfig, w.uint32(18).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): UpdateNetworkRequest {
+  static decode(r: Reader | Uint8Array, length?: number): UpdateServerConfigRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new UpdateNetworkRequest();
+    const m = new UpdateServerConfigRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.id = r.uint64();
+        m.networkId = r.uint64();
         break;
         case 2:
-        m.name = r.string();
+        m.serverConfig = ServerConfig.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -175,27 +179,27 @@ export class UpdateNetworkRequest {
   }
 }
 
-export type IUpdateNetworkResponse = {
-  network?: INetwork | undefined;
+export type IUpdateServerConfigResponse = {
+  network?: INetwork;
 }
 
-export class UpdateNetworkResponse {
+export class UpdateServerConfigResponse {
   network: Network | undefined;
 
-  constructor(v?: IUpdateNetworkResponse) {
+  constructor(v?: IUpdateServerConfigResponse) {
     this.network = v?.network && new Network(v.network);
   }
 
-  static encode(m: UpdateNetworkResponse, w?: Writer): Writer {
+  static encode(m: UpdateServerConfigResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.network) Network.encode(m.network, w.uint32(10).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): UpdateNetworkResponse {
+  static decode(r: Reader | Uint8Array, length?: number): UpdateServerConfigResponse {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new UpdateNetworkResponse();
+    const m = new UpdateServerConfigResponse();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -304,7 +308,7 @@ export class GetNetworkRequest {
 }
 
 export type IGetNetworkResponse = {
-  network?: INetwork | undefined;
+  network?: INetwork;
 }
 
 export class GetNetworkResponse {
@@ -395,44 +399,108 @@ export class ListNetworksResponse {
   }
 }
 
+export type IServerConfig = {
+  name?: string;
+  key?: strims_type_IKey;
+  rootCertTtlSecs?: bigint;
+  peerCertTtlSecs?: bigint;
+  directory?: strims_network_v1_directory_IServerConfig;
+}
+
+export class ServerConfig {
+  name: string;
+  key: strims_type_Key | undefined;
+  rootCertTtlSecs: bigint;
+  peerCertTtlSecs: bigint;
+  directory: strims_network_v1_directory_ServerConfig | undefined;
+
+  constructor(v?: IServerConfig) {
+    this.name = v?.name || "";
+    this.key = v?.key && new strims_type_Key(v.key);
+    this.rootCertTtlSecs = v?.rootCertTtlSecs || BigInt(0);
+    this.peerCertTtlSecs = v?.peerCertTtlSecs || BigInt(0);
+    this.directory = v?.directory && new strims_network_v1_directory_ServerConfig(v.directory);
+  }
+
+  static encode(m: ServerConfig, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.name) w.uint32(18).string(m.name);
+    if (m.key) strims_type_Key.encode(m.key, w.uint32(26).fork()).ldelim();
+    if (m.rootCertTtlSecs) w.uint32(32).uint64(m.rootCertTtlSecs);
+    if (m.peerCertTtlSecs) w.uint32(40).uint64(m.peerCertTtlSecs);
+    if (m.directory) strims_network_v1_directory_ServerConfig.encode(m.directory, w.uint32(50).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ServerConfig {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ServerConfig();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 2:
+        m.name = r.string();
+        break;
+        case 3:
+        m.key = strims_type_Key.decode(r, r.uint32());
+        break;
+        case 4:
+        m.rootCertTtlSecs = r.uint64();
+        break;
+        case 5:
+        m.peerCertTtlSecs = r.uint64();
+        break;
+        case 6:
+        m.directory = strims_network_v1_directory_ServerConfig.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
 export type INetwork = {
   id?: bigint;
-  name?: string;
-  key?: strims_type_IKey | undefined;
-  certificate?: strims_type_ICertificate | undefined;
-  icon?: INetworkIcon | undefined;
-  altProfileName?: string;
+  certificate?: strims_type_ICertificate;
+  icon?: INetworkIcon;
+  alias?: string;
   displayOrder?: number;
+  serverConfigOneof?: Network.IServerConfigOneof
 }
 
 export class Network {
   id: bigint;
-  name: string;
-  key: strims_type_Key | undefined;
   certificate: strims_type_Certificate | undefined;
   icon: NetworkIcon | undefined;
-  altProfileName: string;
+  alias: string;
   displayOrder: number;
+  serverConfigOneof: Network.TServerConfigOneof;
 
   constructor(v?: INetwork) {
     this.id = v?.id || BigInt(0);
-    this.name = v?.name || "";
-    this.key = v?.key && new strims_type_Key(v.key);
     this.certificate = v?.certificate && new strims_type_Certificate(v.certificate);
     this.icon = v?.icon && new NetworkIcon(v.icon);
-    this.altProfileName = v?.altProfileName || "";
+    this.alias = v?.alias || "";
     this.displayOrder = v?.displayOrder || 0;
+    this.serverConfigOneof = new Network.ServerConfigOneof(v?.serverConfigOneof);
   }
 
   static encode(m: Network, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.name) w.uint32(18).string(m.name);
-    if (m.key) strims_type_Key.encode(m.key, w.uint32(26).fork()).ldelim();
-    if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(34).fork()).ldelim();
-    if (m.icon) NetworkIcon.encode(m.icon, w.uint32(42).fork()).ldelim();
-    if (m.altProfileName) w.uint32(50).string(m.altProfileName);
-    if (m.displayOrder) w.uint32(56).uint32(m.displayOrder);
+    if (m.certificate) strims_type_Certificate.encode(m.certificate, w.uint32(18).fork()).ldelim();
+    if (m.icon) NetworkIcon.encode(m.icon, w.uint32(26).fork()).ldelim();
+    if (m.alias) w.uint32(34).string(m.alias);
+    if (m.displayOrder) w.uint32(40).uint32(m.displayOrder);
+    switch (m.serverConfigOneof.case) {
+      case Network.ServerConfigOneofCase.SERVER_CONFIG:
+      ServerConfig.encode(m.serverConfigOneof.serverConfig, w.uint32(8010).fork()).ldelim();
+      break;
+    }
     return w;
   }
 
@@ -447,22 +515,19 @@ export class Network {
         m.id = r.uint64();
         break;
         case 2:
-        m.name = r.string();
-        break;
-        case 3:
-        m.key = strims_type_Key.decode(r, r.uint32());
-        break;
-        case 4:
         m.certificate = strims_type_Certificate.decode(r, r.uint32());
         break;
-        case 5:
+        case 3:
         m.icon = NetworkIcon.decode(r, r.uint32());
         break;
-        case 6:
-        m.altProfileName = r.string();
+        case 4:
+        m.alias = r.string();
         break;
-        case 7:
+        case 5:
         m.displayOrder = r.uint32();
+        break;
+        case 1001:
+        m.serverConfigOneof = new Network.ServerConfigOneof({ serverConfig: ServerConfig.decode(r, r.uint32()) });
         break;
         default:
         r.skipType(tag & 7);
@@ -473,24 +538,62 @@ export class Network {
   }
 }
 
-export type ICreateNetworkInvitationRequest = {
-  signingKey?: strims_type_IKey | undefined;
-  signingCert?: strims_type_ICertificate | undefined;
+export namespace Network {
+  export enum ServerConfigOneofCase {
+    NOT_SET = 0,
+    SERVER_CONFIG = 1001,
+  }
+
+  export type IServerConfigOneof =
+  { case?: ServerConfigOneofCase.NOT_SET }
+  |{ case?: ServerConfigOneofCase.SERVER_CONFIG, serverConfig: IServerConfig }
+  ;
+
+  export type TServerConfigOneof = Readonly<
+  { case: ServerConfigOneofCase.NOT_SET }
+  |{ case: ServerConfigOneofCase.SERVER_CONFIG, serverConfig: ServerConfig }
+  >;
+
+  class ServerConfigOneofImpl {
+    serverConfig: ServerConfig;
+    case: ServerConfigOneofCase = ServerConfigOneofCase.NOT_SET;
+
+    constructor(v?: IServerConfigOneof) {
+      if (v && "serverConfig" in v) {
+        this.case = ServerConfigOneofCase.SERVER_CONFIG;
+        this.serverConfig = new ServerConfig(v.serverConfig);
+      }
+    }
+  }
+
+  export const ServerConfigOneof = ServerConfigOneofImpl as {
+    new (): Readonly<{ case: ServerConfigOneofCase.NOT_SET }>;
+    new <T extends IServerConfigOneof>(v: T): Readonly<
+    T extends { serverConfig: IServerConfig } ? { case: ServerConfigOneofCase.SERVER_CONFIG, serverConfig: ServerConfig } :
+    never
+    >;
+  };
+
+}
+
+export type ICreateInvitationRequest = {
+  signingKey?: strims_type_IKey;
+  signingCert?: strims_type_ICertificate;
   networkName?: string;
 }
 
-export class CreateNetworkInvitationRequest {
+export class CreateInvitationRequest {
   signingKey: strims_type_Key | undefined;
   signingCert: strims_type_Certificate | undefined;
   networkName: string;
 
-  constructor(v?: ICreateNetworkInvitationRequest) {
+  constructor(v?: ICreateInvitationRequest) {
     this.signingKey = v?.signingKey && new strims_type_Key(v.signingKey);
     this.signingCert = v?.signingCert && new strims_type_Certificate(v.signingCert);
     this.networkName = v?.networkName || "";
   }
 
-  static encode(m: CreateNetworkInvitationRequest, w?: Writer): Writer {
+  static encode(m: CreateInvitationRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.signingKey) strims_type_Key.encode(m.signingKey, w.uint32(10).fork()).ldelim();
     if (m.signingCert) strims_type_Certificate.encode(m.signingCert, w.uint32(18).fork()).ldelim();
@@ -498,10 +601,10 @@ export class CreateNetworkInvitationRequest {
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CreateNetworkInvitationRequest {
+  static decode(r: Reader | Uint8Array, length?: number): CreateInvitationRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new CreateNetworkInvitationRequest();
+    const m = new CreateInvitationRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -523,24 +626,24 @@ export class CreateNetworkInvitationRequest {
   }
 }
 
-export type ICreateNetworkInvitationResponse = {
-  invitation?: IInvitation | undefined;
+export type ICreateInvitationResponse = {
+  invitation?: IInvitation;
   invitationB64?: string;
   invitationBytes?: Uint8Array;
 }
 
-export class CreateNetworkInvitationResponse {
+export class CreateInvitationResponse {
   invitation: Invitation | undefined;
   invitationB64: string;
   invitationBytes: Uint8Array;
 
-  constructor(v?: ICreateNetworkInvitationResponse) {
+  constructor(v?: ICreateInvitationResponse) {
     this.invitation = v?.invitation && new Invitation(v.invitation);
     this.invitationB64 = v?.invitationB64 || "";
     this.invitationBytes = v?.invitationBytes || new Uint8Array();
   }
 
-  static encode(m: CreateNetworkInvitationResponse, w?: Writer): Writer {
+  static encode(m: CreateInvitationResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.invitation) Invitation.encode(m.invitation, w.uint32(10).fork()).ldelim();
     if (m.invitationB64) w.uint32(18).string(m.invitationB64);
@@ -548,10 +651,10 @@ export class CreateNetworkInvitationResponse {
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): CreateNetworkInvitationResponse {
+  static decode(r: Reader | Uint8Array, length?: number): CreateInvitationResponse {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new CreateNetworkInvitationResponse();
+    const m = new CreateInvitationResponse();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -617,8 +720,8 @@ export class Invitation {
 }
 
 export type IInvitationV0 = {
-  key?: strims_type_IKey | undefined;
-  certificate?: strims_type_ICertificate | undefined;
+  key?: strims_type_IKey;
+  certificate?: strims_type_ICertificate;
   networkName?: string;
 }
 
@@ -760,7 +863,7 @@ export namespace CreateNetworkFromInvitationRequest {
 }
 
 export type ICreateNetworkFromInvitationResponse = {
-  network?: INetwork | undefined;
+  network?: INetwork;
 }
 
 export class CreateNetworkFromInvitationResponse {
@@ -902,7 +1005,7 @@ export namespace NetworkEvent {
   };
 
   export type INetworkStart = {
-    network?: INetwork | undefined;
+    network?: INetwork;
     peerCount?: number;
   }
 
@@ -1046,7 +1149,7 @@ export class WatchNetworksRequest {
 }
 
 export type IWatchNetworksResponse = {
-  event?: INetworkEvent | undefined;
+  event?: INetworkEvent;
 }
 
 export class WatchNetworksResponse {
@@ -1081,27 +1184,27 @@ export class WatchNetworksResponse {
   }
 }
 
-export type ISetDisplayOrderRequest = {
+export type IUpdateDisplayOrderRequest = {
   networkIds?: bigint[];
 }
 
-export class SetDisplayOrderRequest {
+export class UpdateDisplayOrderRequest {
   networkIds: bigint[];
 
-  constructor(v?: ISetDisplayOrderRequest) {
+  constructor(v?: IUpdateDisplayOrderRequest) {
     this.networkIds = v?.networkIds ? v.networkIds : [];
   }
 
-  static encode(m: SetDisplayOrderRequest, w?: Writer): Writer {
+  static encode(m: UpdateDisplayOrderRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     m.networkIds.reduce((w, v) => w.uint64(v), w.uint32(10).fork()).ldelim();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): SetDisplayOrderRequest {
+  static decode(r: Reader | Uint8Array, length?: number): UpdateDisplayOrderRequest {
     r = r instanceof Reader ? r : new Reader(r);
     const end = length === undefined ? r.len : r.pos + length;
-    const m = new SetDisplayOrderRequest();
+    const m = new UpdateDisplayOrderRequest();
     while (r.pos < end) {
       const tag = r.uint32();
       switch (tag >> 3) {
@@ -1117,31 +1220,102 @@ export class SetDisplayOrderRequest {
   }
 }
 
-export type ISetDisplayOrderResponse = {
+export type IUpdateDisplayOrderResponse = {
 }
 
-export class SetDisplayOrderResponse {
+export class UpdateDisplayOrderResponse {
 
   // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
-  constructor(v?: ISetDisplayOrderResponse) {
+  constructor(v?: IUpdateDisplayOrderResponse) {
   }
 
-  static encode(m: SetDisplayOrderResponse, w?: Writer): Writer {
+  static encode(m: UpdateDisplayOrderResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
     return w;
   }
 
-  static decode(r: Reader | Uint8Array, length?: number): SetDisplayOrderResponse {
+  static decode(r: Reader | Uint8Array, length?: number): UpdateDisplayOrderResponse {
     if (r instanceof Reader && length) r.skip(length);
-    return new SetDisplayOrderResponse();
+    return new UpdateDisplayOrderResponse();
   }
 }
 
-export enum KeyUsage {
-  KEY_USAGE_UNDEFINED = 0,
-  KEY_USAGE_PEER = 1,
-  KEY_USAGE_BOOTSTRAP = 2,
-  KEY_USAGE_SIGN = 4,
-  KEY_USAGE_BROKER = 8,
-  KEY_USAGE_ENCIPHERMENT = 16,
+export type IUpdateAliasRequest = {
+  id?: bigint;
+  alias?: string;
 }
+
+export class UpdateAliasRequest {
+  id: bigint;
+  alias: string;
+
+  constructor(v?: IUpdateAliasRequest) {
+    this.id = v?.id || BigInt(0);
+    this.alias = v?.alias || "";
+  }
+
+  static encode(m: UpdateAliasRequest, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.id) w.uint32(8).uint64(m.id);
+    if (m.alias) w.uint32(18).string(m.alias);
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UpdateAliasRequest {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UpdateAliasRequest();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.id = r.uint64();
+        break;
+        case 2:
+        m.alias = r.string();
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export type IUpdateAliasResponse = {
+  network?: INetwork;
+}
+
+export class UpdateAliasResponse {
+  network: Network | undefined;
+
+  constructor(v?: IUpdateAliasResponse) {
+    this.network = v?.network && new Network(v.network);
+  }
+
+  static encode(m: UpdateAliasResponse, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.network) Network.encode(m.network, w.uint32(10).fork()).ldelim();
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): UpdateAliasResponse {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new UpdateAliasResponse();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.network = Network.decode(r, r.uint32());
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+

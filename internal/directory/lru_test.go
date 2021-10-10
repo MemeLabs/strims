@@ -64,4 +64,16 @@ func TestLRUPeekRecentlyTouched(t *testing.T) {
 		keys = append(keys, string(it.Value().(*testItem).key))
 	}
 	assert.Equal(t, []string{"d", "b"}, keys)
+
+	time.Sleep(time.Millisecond)
+	start = timeutil.Now()
+
+	l.Touch(&testItem{[]byte("a")})
+	l.Touch(&testItem{[]byte("c")})
+
+	keys = []string{}
+	for it := l.PeekRecentlyTouched(start); it.Next(); {
+		keys = append(keys, string(it.Value().(*testItem).key))
+	}
+	assert.Equal(t, []string{"c", "a"}, keys)
 }

@@ -2,9 +2,11 @@ package directory
 
 import (
 	"context"
+	"errors"
 
 	control "github.com/MemeLabs/go-ppspp/internal"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"go.uber.org/zap"
@@ -15,9 +17,14 @@ func newDirectoryServer(
 	logger *zap.Logger,
 	network *networkv1.Network,
 ) (*directoryServer, error) {
+	config := network.GetServerConfig()
+	if config == nil {
+		return nil, errors.New("directory server requires network root key")
+	}
+
 	w, err := ppspp.NewWriter(ppspp.WriterOptions{
 		SwarmOptions: swarmOptions,
-		Key:          network.Key,
+		Key:          config.Key,
 	})
 	if err != nil {
 		return nil, err
@@ -30,9 +37,9 @@ func newDirectoryServer(
 
 	s := &directoryServer{
 		logger:      logger,
-		network:     network,
+		config:      config,
 		swarm:       w.Swarm(),
-		service:     newDirectoryService(logger, network.Key, ew),
+		service:     newDirectoryService(logger, config.Key, config.Directory, ew),
 		eventReader: protoutil.NewChunkStreamReader(w.Swarm().Reader(), chunkSize),
 	}
 	return s, nil
@@ -40,7 +47,7 @@ func newDirectoryServer(
 
 type directoryServer struct {
 	logger      *zap.Logger
-	network     *networkv1.Network
+	config      *networkv1.ServerConfig
 	swarm       *ppspp.Swarm
 	service     *directoryService
 	eventReader *protoutil.ChunkStreamReader
@@ -52,14 +59,14 @@ func (s *directoryServer) Run(ctx context.Context, dialer control.DialerControl,
 	s.cancel = cancel
 
 	transferID := transfer.Add(s.swarm, AddressSalt)
-	transfer.Publish(transferID, s.network.Key.Public)
+	transfer.Publish(transferID, s.config.Key.Public)
 
-	server, err := dialer.Server(s.network.Key.Public, s.network.Key, AddressSalt)
+	server, err := dialer.Server(s.config.Key.Public, s.config.Key, AddressSalt)
 	if err != nil {
 		return err
 	}
 
-	networkv1.RegisterDirectoryService(server, s.service)
+	networkv1directory.RegisterDirectoryService(server, s.service)
 
 	eg, ctx := errgroup.WithContext(ctx)
 	eg.Go(func() error { return s.service.Run(ctx) })

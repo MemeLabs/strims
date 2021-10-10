@@ -4,12 +4,15 @@ import (
 	"context"
 	"sync"
 
+	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	vnicv1 "github.com/MemeLabs/go-ppspp/pkg/apis/vnic/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
+
+var _ control.VNICControl = &Control{}
 
 // NewControl ...
 func NewControl(

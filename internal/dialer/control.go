@@ -5,6 +5,7 @@ import (
 	"errors"
 	"sync"
 
+	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
@@ -16,6 +17,8 @@ import (
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
+
+var _ control.DialerControl = &Control{}
 
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, profile *profilev1.Profile) *Control {
@@ -170,7 +173,7 @@ func (h *hostCert) Load() *certificate.Certificate {
 func (h *hostCert) Key() []byte {
 	h.lock.Lock()
 	defer h.lock.Unlock()
-	return dao.GetRootCert(h.cert).Key
+	return dao.CertificateRoot(h.cert).Key
 }
 
 func (h *hostCert) Less(o llrb.Item) bool {

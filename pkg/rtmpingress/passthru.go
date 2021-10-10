@@ -275,6 +275,7 @@ func (s *PassthruServer) Listen() error {
 	if err != nil {
 		return err
 	}
+	s.listener = listener
 
 	srv := &rtmp.Server{
 		LogEvent:         s.logEvent,

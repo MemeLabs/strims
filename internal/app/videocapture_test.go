@@ -8,7 +8,7 @@ import (
 	"time"
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
 	"github.com/stretchr/testify/assert"
 
@@ -53,7 +53,7 @@ func TestVideoCapture(t *testing.T) {
 
 	id, err := ctrl[1].VideoCapture().OpenWithSwarmWriterOptions(
 		"application/binary+noise",
-		&networkv1.DirectoryListingSnippet{},
+		&networkv1directory.ListingSnippet{},
 		[][]byte{networkKey},
 		options,
 	)

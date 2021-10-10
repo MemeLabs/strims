@@ -1315,6 +1315,7 @@ export type IUIConfig = {
   disableSpoilers?: boolean;
   viewerStateIndicator?: UIConfig.ViewerStateIndicator;
   hiddenEmotes?: string[];
+  shortenLinks?: boolean;
 }
 
 export class UIConfig {
@@ -1349,6 +1350,7 @@ export class UIConfig {
   disableSpoilers: boolean;
   viewerStateIndicator: UIConfig.ViewerStateIndicator;
   hiddenEmotes: string[];
+  shortenLinks: boolean;
 
   constructor(v?: IUIConfig) {
     this.showTime = v?.showTime || false;
@@ -1382,6 +1384,7 @@ export class UIConfig {
     this.disableSpoilers = v?.disableSpoilers || false;
     this.viewerStateIndicator = v?.viewerStateIndicator || 0;
     this.hiddenEmotes = v?.hiddenEmotes ? v.hiddenEmotes : [];
+    this.shortenLinks = v?.shortenLinks || false;
   }
 
   static encode(m: UIConfig, w?: Writer): Writer {
@@ -1417,6 +1420,7 @@ export class UIConfig {
     if (m.disableSpoilers) w.uint32(232).bool(m.disableSpoilers);
     if (m.viewerStateIndicator) w.uint32(240).uint32(m.viewerStateIndicator);
     for (const v of m.hiddenEmotes) w.uint32(250).string(v);
+    if (m.shortenLinks) w.uint32(256).bool(m.shortenLinks);
     return w;
   }
 
@@ -1519,6 +1523,9 @@ export class UIConfig {
         break;
         case 31:
         m.hiddenEmotes.push(r.string())
+        break;
+        case 32:
+        m.shortenLinks = r.bool();
         break;
         default:
         r.skipType(tag & 7);

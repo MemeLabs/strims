@@ -17,20 +17,29 @@ import { FiX } from "react-icons/fi";
 import { Link } from "react-router-dom";
 import { useResizeObserver } from "use-events";
 
+import EmbedPlayer from "./EmbedPlayer";
 import { MainLayoutContext } from "./MainLayout";
 import VideoPlayer from "./VideoPlayer";
 
 export const enum PlayerMode {
+  FULL,
   LARGE,
   PIP,
   CLOSED,
 }
 
-interface PlayerSource {
-  swarmUri: string;
-  networkKey: string;
-  mimeType: string;
-}
+type PlayerSource =
+  | {
+      type: "embed";
+      service: string;
+      id: string;
+    }
+  | {
+      type: "swarm";
+      swarmUri: string;
+      networkKey: string;
+      mimeType: string;
+    };
 
 interface PlayerState {
   path: string;
@@ -71,6 +80,7 @@ const PlayerEmbed: React.FC = ({ children }) => {
     theaterMode
       ? "player_embed--theater"
       : {
+          "player_embed--full": mode === PlayerMode.FULL,
           "player_embed--large": mode === PlayerMode.LARGE,
           "player_embed--pip": mode === PlayerMode.PIP,
           "player_embed--closed": mode === PlayerMode.CLOSED,
@@ -96,11 +106,18 @@ const PlayerEmbed: React.FC = ({ children }) => {
           {children}
         </div>
         <div className={playerEmbedClass} ref={embedRef}>
-          {source && (
+          {source?.type === "swarm" && (
             <VideoPlayer
               networkKey={source.networkKey}
               swarmUri={source.swarmUri}
               mimeType={source.mimeType}
+              disableControls={mode === PlayerMode.PIP}
+            />
+          )}
+          {source?.type === "embed" && (
+            <EmbedPlayer
+              service={source.service}
+              id={source.id}
               disableControls={mode === PlayerMode.PIP}
             />
           )}

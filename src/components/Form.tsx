@@ -15,8 +15,18 @@ type CompatibleUseControllerProps<T, V> = UseControllerProps<T> & {
   name: CompatibleFieldPath<T, V>;
 };
 
-const isRequired = <T extends FieldValues>(rules: UseControllerProps<T>["rules"]) =>
-  Boolean(rules?.required);
+const isRequired = <T extends FieldValues>(rules: UseControllerProps<T>["rules"]) => {
+  switch (typeof rules?.required) {
+    case "undefined":
+      return false;
+    case "boolean":
+      return rules.required;
+    case "string":
+      return true;
+    default:
+      return rules?.required?.value;
+  }
+};
 
 export interface InputLabelProps {
   required?: boolean;

@@ -20,6 +20,7 @@ func newDirectoryReader(logger *zap.Logger, key []byte) (*directoryReader, error
 		key:         key,
 		swarm:       s,
 		eventReader: protoutil.NewChunkStreamReader(s.Reader(), chunkSize),
+		close:       make(chan struct{}, 1),
 	}, nil
 }
 
@@ -29,6 +30,7 @@ type directoryReader struct {
 	swarm       *ppspp.Swarm
 	eventReader *protoutil.ChunkStreamReader
 	cancel      context.CancelFunc
+	close       chan struct{}
 }
 
 func (d *directoryReader) Run(ctx context.Context, transfer control.TransferControl) error {
@@ -38,7 +40,11 @@ func (d *directoryReader) Run(ctx context.Context, transfer control.TransferCont
 	transferID := transfer.Add(d.swarm, AddressSalt)
 	transfer.Publish(transferID, d.key)
 
-	<-ctx.Done()
+	select {
+	case <-ctx.Done():
+	case <-d.close:
+		d.cancel()
+	}
 
 	transfer.Remove(transferID)
 	d.swarm.Close()
@@ -49,7 +55,12 @@ func (d *directoryReader) Run(ctx context.Context, transfer control.TransferCont
 }
 
 func (d *directoryReader) Close() {
-	if d == nil || d.cancel == nil {
+	if d == nil {
+		return
+	}
+	d.close <- struct{}{}
+
+	if d.cancel == nil {
 		return
 	}
 	d.cancel()

@@ -18,7 +18,7 @@ class MockChatSvc {
   messages: Readable<chatv1.Message>;
 
   constructor() {
-    this.messages = new MessageEmitter(1000);
+    this.messages = new MessageEmitter(0, 1);
   }
 
   destroy() {

@@ -8,7 +8,7 @@ import { DevToolsClient as DevToolsServiceClient } from "./strims/devtools/v1/de
 import { CapConnClient } from "./strims/devtools/v1/ppspp/capconn_rpc";
 import { FundingClient as FundingServiceClient } from "./strims/funding/v1/funding_rpc";
 import { BootstrapFrontendClient } from "./strims/network/v1/bootstrap/bootstrap_rpc";
-import { DirectoryFrontendClient } from "./strims/network/v1/directory_rpc";
+import { DirectoryFrontendClient } from "./strims/network/v1/directory/directory_rpc";
 import { NetworkServiceClient } from "./strims/network/v1/network_rpc";
 import { ProfileServiceClient } from "./strims/profile/v1/profile_rpc";
 import { CaptureClient as VideoCaptureClient } from "./strims/video/v1/capture_rpc";

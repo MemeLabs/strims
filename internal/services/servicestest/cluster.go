@@ -120,11 +120,11 @@ func (c *Cluster) Run() error {
 	}
 
 	for _, node := range c.Hosts[1:] {
-		peerCert, err := createCert(node.Profile.Key, node.Profile.Name, network.Key, network.Certificate.GetParent())
+		peerCert, err := createCert(node.Profile.Key, node.Profile.Name, network.GetServerConfig().Key, network.Certificate.GetParent())
 		if err != nil {
 			return err
 		}
-		hostCert, err := createCert(node.Profile.Key, node.Profile.Name, network.Key, network.Certificate.GetParent())
+		hostCert, err := createCert(node.Profile.Key, node.Profile.Name, network.GetServerConfig().Key, network.Certificate.GetParent())
 		if err != nil {
 			return err
 		}

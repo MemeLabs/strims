@@ -5,12 +5,12 @@ import { Call as strims_rpc_Call } from "@memelabs/protobuf/lib/apis/strims/rpc/
 import { Readable as GenericReadable } from "@memelabs/protobuf/lib/rpc/stream";
 
 import {
-  ICreateNetworkRequest,
-  CreateNetworkRequest,
-  CreateNetworkResponse,
-  IUpdateNetworkRequest,
-  UpdateNetworkRequest,
-  UpdateNetworkResponse,
+  ICreateServerRequest,
+  CreateServerRequest,
+  CreateServerResponse,
+  IUpdateServerConfigRequest,
+  UpdateServerConfigRequest,
+  UpdateServerConfigResponse,
   IDeleteNetworkRequest,
   DeleteNetworkRequest,
   DeleteNetworkResponse,
@@ -20,72 +20,79 @@ import {
   IListNetworksRequest,
   ListNetworksRequest,
   ListNetworksResponse,
-  ICreateNetworkInvitationRequest,
-  CreateNetworkInvitationRequest,
-  CreateNetworkInvitationResponse,
+  ICreateInvitationRequest,
+  CreateInvitationRequest,
+  CreateInvitationResponse,
   ICreateNetworkFromInvitationRequest,
   CreateNetworkFromInvitationRequest,
   CreateNetworkFromInvitationResponse,
   IWatchNetworksRequest,
   WatchNetworksRequest,
   WatchNetworksResponse,
-  ISetDisplayOrderRequest,
-  SetDisplayOrderRequest,
-  SetDisplayOrderResponse,
+  IUpdateDisplayOrderRequest,
+  UpdateDisplayOrderRequest,
+  UpdateDisplayOrderResponse,
+  IUpdateAliasRequest,
+  UpdateAliasRequest,
+  UpdateAliasResponse,
 } from "./network";
 
-registerType("strims.network.v1.CreateNetworkRequest", CreateNetworkRequest);
-registerType("strims.network.v1.CreateNetworkResponse", CreateNetworkResponse);
-registerType("strims.network.v1.UpdateNetworkRequest", UpdateNetworkRequest);
-registerType("strims.network.v1.UpdateNetworkResponse", UpdateNetworkResponse);
+registerType("strims.network.v1.CreateServerRequest", CreateServerRequest);
+registerType("strims.network.v1.CreateServerResponse", CreateServerResponse);
+registerType("strims.network.v1.UpdateServerConfigRequest", UpdateServerConfigRequest);
+registerType("strims.network.v1.UpdateServerConfigResponse", UpdateServerConfigResponse);
 registerType("strims.network.v1.DeleteNetworkRequest", DeleteNetworkRequest);
 registerType("strims.network.v1.DeleteNetworkResponse", DeleteNetworkResponse);
 registerType("strims.network.v1.GetNetworkRequest", GetNetworkRequest);
 registerType("strims.network.v1.GetNetworkResponse", GetNetworkResponse);
 registerType("strims.network.v1.ListNetworksRequest", ListNetworksRequest);
 registerType("strims.network.v1.ListNetworksResponse", ListNetworksResponse);
-registerType("strims.network.v1.CreateNetworkInvitationRequest", CreateNetworkInvitationRequest);
-registerType("strims.network.v1.CreateNetworkInvitationResponse", CreateNetworkInvitationResponse);
+registerType("strims.network.v1.CreateInvitationRequest", CreateInvitationRequest);
+registerType("strims.network.v1.CreateInvitationResponse", CreateInvitationResponse);
 registerType("strims.network.v1.CreateNetworkFromInvitationRequest", CreateNetworkFromInvitationRequest);
 registerType("strims.network.v1.CreateNetworkFromInvitationResponse", CreateNetworkFromInvitationResponse);
 registerType("strims.network.v1.WatchNetworksRequest", WatchNetworksRequest);
 registerType("strims.network.v1.WatchNetworksResponse", WatchNetworksResponse);
-registerType("strims.network.v1.SetDisplayOrderRequest", SetDisplayOrderRequest);
-registerType("strims.network.v1.SetDisplayOrderResponse", SetDisplayOrderResponse);
+registerType("strims.network.v1.UpdateDisplayOrderRequest", UpdateDisplayOrderRequest);
+registerType("strims.network.v1.UpdateDisplayOrderResponse", UpdateDisplayOrderResponse);
+registerType("strims.network.v1.UpdateAliasRequest", UpdateAliasRequest);
+registerType("strims.network.v1.UpdateAliasResponse", UpdateAliasResponse);
 
 export interface NetworkServiceService {
-  create(req: CreateNetworkRequest, call: strims_rpc_Call): Promise<CreateNetworkResponse> | CreateNetworkResponse;
-  update(req: UpdateNetworkRequest, call: strims_rpc_Call): Promise<UpdateNetworkResponse> | UpdateNetworkResponse;
+  createServer(req: CreateServerRequest, call: strims_rpc_Call): Promise<CreateServerResponse> | CreateServerResponse;
+  updateServerConfig(req: UpdateServerConfigRequest, call: strims_rpc_Call): Promise<UpdateServerConfigResponse> | UpdateServerConfigResponse;
   delete(req: DeleteNetworkRequest, call: strims_rpc_Call): Promise<DeleteNetworkResponse> | DeleteNetworkResponse;
   get(req: GetNetworkRequest, call: strims_rpc_Call): Promise<GetNetworkResponse> | GetNetworkResponse;
   list(req: ListNetworksRequest, call: strims_rpc_Call): Promise<ListNetworksResponse> | ListNetworksResponse;
-  createInvitation(req: CreateNetworkInvitationRequest, call: strims_rpc_Call): Promise<CreateNetworkInvitationResponse> | CreateNetworkInvitationResponse;
-  createFromInvitation(req: CreateNetworkFromInvitationRequest, call: strims_rpc_Call): Promise<CreateNetworkFromInvitationResponse> | CreateNetworkFromInvitationResponse;
+  createInvitation(req: CreateInvitationRequest, call: strims_rpc_Call): Promise<CreateInvitationResponse> | CreateInvitationResponse;
+  createNetworkFromInvitation(req: CreateNetworkFromInvitationRequest, call: strims_rpc_Call): Promise<CreateNetworkFromInvitationResponse> | CreateNetworkFromInvitationResponse;
   watch(req: WatchNetworksRequest, call: strims_rpc_Call): GenericReadable<WatchNetworksResponse>;
-  setDisplayOrder(req: SetDisplayOrderRequest, call: strims_rpc_Call): Promise<SetDisplayOrderResponse> | SetDisplayOrderResponse;
+  updateDisplayOrder(req: UpdateDisplayOrderRequest, call: strims_rpc_Call): Promise<UpdateDisplayOrderResponse> | UpdateDisplayOrderResponse;
+  updateAlias(req: UpdateAliasRequest, call: strims_rpc_Call): Promise<UpdateAliasResponse> | UpdateAliasResponse;
 }
 
 export const registerNetworkServiceService = (host: strims_rpc_Service, service: NetworkServiceService): void => {
-  host.registerMethod<CreateNetworkRequest, CreateNetworkResponse>("strims.network.v1.NetworkService.Create", service.create.bind(service));
-  host.registerMethod<UpdateNetworkRequest, UpdateNetworkResponse>("strims.network.v1.NetworkService.Update", service.update.bind(service));
+  host.registerMethod<CreateServerRequest, CreateServerResponse>("strims.network.v1.NetworkService.CreateServer", service.createServer.bind(service));
+  host.registerMethod<UpdateServerConfigRequest, UpdateServerConfigResponse>("strims.network.v1.NetworkService.UpdateServerConfig", service.updateServerConfig.bind(service));
   host.registerMethod<DeleteNetworkRequest, DeleteNetworkResponse>("strims.network.v1.NetworkService.Delete", service.delete.bind(service));
   host.registerMethod<GetNetworkRequest, GetNetworkResponse>("strims.network.v1.NetworkService.Get", service.get.bind(service));
   host.registerMethod<ListNetworksRequest, ListNetworksResponse>("strims.network.v1.NetworkService.List", service.list.bind(service));
-  host.registerMethod<CreateNetworkInvitationRequest, CreateNetworkInvitationResponse>("strims.network.v1.NetworkService.CreateInvitation", service.createInvitation.bind(service));
-  host.registerMethod<CreateNetworkFromInvitationRequest, CreateNetworkFromInvitationResponse>("strims.network.v1.NetworkService.CreateFromInvitation", service.createFromInvitation.bind(service));
+  host.registerMethod<CreateInvitationRequest, CreateInvitationResponse>("strims.network.v1.NetworkService.CreateInvitation", service.createInvitation.bind(service));
+  host.registerMethod<CreateNetworkFromInvitationRequest, CreateNetworkFromInvitationResponse>("strims.network.v1.NetworkService.CreateNetworkFromInvitation", service.createNetworkFromInvitation.bind(service));
   host.registerMethod<WatchNetworksRequest, WatchNetworksResponse>("strims.network.v1.NetworkService.Watch", service.watch.bind(service));
-  host.registerMethod<SetDisplayOrderRequest, SetDisplayOrderResponse>("strims.network.v1.NetworkService.SetDisplayOrder", service.setDisplayOrder.bind(service));
+  host.registerMethod<UpdateDisplayOrderRequest, UpdateDisplayOrderResponse>("strims.network.v1.NetworkService.UpdateDisplayOrder", service.updateDisplayOrder.bind(service));
+  host.registerMethod<UpdateAliasRequest, UpdateAliasResponse>("strims.network.v1.NetworkService.UpdateAlias", service.updateAlias.bind(service));
 }
 
 export class NetworkServiceClient {
   constructor(private readonly host: strims_rpc_Host) {}
 
-  public create(req?: ICreateNetworkRequest, opts?: strims_rpc_UnaryCallOptions): Promise<CreateNetworkResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.Create", new CreateNetworkRequest(req)), opts);
+  public createServer(req?: ICreateServerRequest, opts?: strims_rpc_UnaryCallOptions): Promise<CreateServerResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.CreateServer", new CreateServerRequest(req)), opts);
   }
 
-  public update(req?: IUpdateNetworkRequest, opts?: strims_rpc_UnaryCallOptions): Promise<UpdateNetworkResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.Update", new UpdateNetworkRequest(req)), opts);
+  public updateServerConfig(req?: IUpdateServerConfigRequest, opts?: strims_rpc_UnaryCallOptions): Promise<UpdateServerConfigResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.UpdateServerConfig", new UpdateServerConfigRequest(req)), opts);
   }
 
   public delete(req?: IDeleteNetworkRequest, opts?: strims_rpc_UnaryCallOptions): Promise<DeleteNetworkResponse> {
@@ -100,20 +107,24 @@ export class NetworkServiceClient {
     return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.List", new ListNetworksRequest(req)), opts);
   }
 
-  public createInvitation(req?: ICreateNetworkInvitationRequest, opts?: strims_rpc_UnaryCallOptions): Promise<CreateNetworkInvitationResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.CreateInvitation", new CreateNetworkInvitationRequest(req)), opts);
+  public createInvitation(req?: ICreateInvitationRequest, opts?: strims_rpc_UnaryCallOptions): Promise<CreateInvitationResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.CreateInvitation", new CreateInvitationRequest(req)), opts);
   }
 
-  public createFromInvitation(req?: ICreateNetworkFromInvitationRequest, opts?: strims_rpc_UnaryCallOptions): Promise<CreateNetworkFromInvitationResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.CreateFromInvitation", new CreateNetworkFromInvitationRequest(req)), opts);
+  public createNetworkFromInvitation(req?: ICreateNetworkFromInvitationRequest, opts?: strims_rpc_UnaryCallOptions): Promise<CreateNetworkFromInvitationResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.CreateNetworkFromInvitation", new CreateNetworkFromInvitationRequest(req)), opts);
   }
 
   public watch(req?: IWatchNetworksRequest): GenericReadable<WatchNetworksResponse> {
     return this.host.expectMany(this.host.call("strims.network.v1.NetworkService.Watch", new WatchNetworksRequest(req)));
   }
 
-  public setDisplayOrder(req?: ISetDisplayOrderRequest, opts?: strims_rpc_UnaryCallOptions): Promise<SetDisplayOrderResponse> {
-    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.SetDisplayOrder", new SetDisplayOrderRequest(req)), opts);
+  public updateDisplayOrder(req?: IUpdateDisplayOrderRequest, opts?: strims_rpc_UnaryCallOptions): Promise<UpdateDisplayOrderResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.UpdateDisplayOrder", new UpdateDisplayOrderRequest(req)), opts);
+  }
+
+  public updateAlias(req?: IUpdateAliasRequest, opts?: strims_rpc_UnaryCallOptions): Promise<UpdateAliasResponse> {
+    return this.host.expectOne(this.host.call("strims.network.v1.NetworkService.UpdateAlias", new UpdateAliasRequest(req)), opts);
   }
 }
 

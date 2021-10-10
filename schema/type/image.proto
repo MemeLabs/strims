@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+package strims.type;
+
+option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/type/image;image";
+option java_package = "gg.strims.type";
+option swift_prefix = "STP";
+
+message Image {
+  ImageType type = 1;
+  uint32 height = 2;
+  uint32 width = 3;
+  bytes data = 4;
+}
+
+enum ImageType {
+  IMAGE_TYPE_UNDEFINED = 0;
+  IMAGE_TYPE_APNG = 1; // image/apng
+  IMAGE_TYPE_AVIF = 2; // image/avif
+  IMAGE_TYPE_GIF = 3;  // image/gif
+  IMAGE_TYPE_JPEG = 4; // image/jpeg
+  IMAGE_TYPE_PNG = 5;  // image/png
+  IMAGE_TYPE_SVG = 6;  // image/svg+xml
+  IMAGE_TYPE_WEBP = 7; // image/webp
+}

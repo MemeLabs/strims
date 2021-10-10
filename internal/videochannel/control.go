@@ -4,13 +4,15 @@ import (
 	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
-	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	video "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/kv"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
+
+var _ control.VideoChannelControl = &Control{}
 
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) *Control {
@@ -95,7 +97,7 @@ func (s channelOptionSlice) Apply(channel *video.VideoChannel) error {
 }
 
 // WithDirectorySnippet ...
-func WithDirectorySnippet(snippet *network.DirectoryListingSnippet) control.VideoChannelOption {
+func WithDirectorySnippet(snippet *networkv1directory.ListingSnippet) control.VideoChannelOption {
 	return func(channel *video.VideoChannel) error {
 		channel.DirectoryListingSnippet = snippet
 		return nil

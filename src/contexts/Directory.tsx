@@ -3,20 +3,23 @@ import { omit } from "lodash/fp";
 import React, { createContext, useMemo, useState } from "react";
 
 import {
-  DirectoryEvent,
-  DirectoryEventBroadcast,
-  DirectoryFrontendOpenResponse,
-  DirectoryListing,
-} from "../apis/strims/network/v1/directory";
+  Event,
+  EventBroadcast,
+  FrontendOpenResponse,
+  ListingSnippet,
+  Listing as directory_Listing,
+} from "../apis/strims/network/v1/directory/directory";
 import { useClient } from "./FrontendApi";
 
-interface Listing {
-  key: string;
-  listing: DirectoryListing;
+export interface DirectoryListing {
+  id: bigint;
+  listing: directory_Listing;
+  snippet: ListingSnippet;
+  viewerCount: number;
 }
 
-type State = {
-  [key: string]: Listing[];
+export type State = {
+  [key: string]: DirectoryListing[];
 };
 
 const initialState: State = {};
@@ -27,32 +30,63 @@ export const Provider: React.FC = ({ children }) => {
   const client = useClient();
   const [directories, setDirectories] = useState<State>(initialState);
 
-  const setDirectoryListings = (key: string, set: (listings: Listing[]) => Listing[]) =>
+  const setDirectoryListings = (
+    key: string,
+    set: (listings: DirectoryListing[]) => DirectoryListing[]
+  ) =>
     setDirectories((prev) => ({
       ...prev,
       [key]: set(prev[key] || []),
     }));
 
-  const dispatchDirectoryEvent = (key: string, { events }: DirectoryEventBroadcast) =>
-    setDirectoryListings(key, (listings) =>
-      events.reduce((listings, { body: event }) => {
+  const dispatchDirectoryEvent = (key: string, { events }: EventBroadcast) =>
+    setDirectoryListings(key, (listings) => {
+      const next = listings.slice();
+      for (const { body: event } of events) {
         switch (event.case) {
-          case DirectoryEvent.BodyCase.PUBLISH: {
-            const listing: Listing = {
-              key: Base64.fromUint8Array(event.publish.listing.key),
-              listing: event.publish.listing,
+          case Event.BodyCase.LISTING_CHANGE: {
+            const listing: DirectoryListing = {
+              id: event.listingChange.id,
+              listing: event.listingChange.listing,
+              snippet: event.listingChange.snippet,
+              viewerCount: 0,
             };
-            return [listing, ...listings.filter((l) => l.key !== listing.key)];
+
+            const i = next.findIndex((l) => l.id === event.listingChange.id);
+            if (i !== -1) {
+              listing.viewerCount = next[i].viewerCount;
+              next[i] = listing;
+            } else {
+              next.push(listing);
+            }
+            break;
           }
-          case DirectoryEvent.BodyCase.UNPUBLISH: {
-            const key = Base64.fromUint8Array(event.unpublish.key);
-            return listings.filter((l) => l.key !== key);
+          case Event.BodyCase.UNPUBLISH: {
+            const i = next.findIndex((l) => l.id === event.unpublish.id);
+            if (i !== -1) {
+              next.splice(i, 1);
+            }
+            break;
           }
+          case Event.BodyCase.VIEWER_COUNT_CHANGE: {
+            const i = listings.findIndex((l) => l.id === event.viewerCountChange.id);
+            if (i !== -1) {
+              next[i] = {
+                ...next[i],
+                viewerCount: event.viewerCountChange.count,
+              };
+            }
+            break;
+          }
+          case Event.BodyCase.VIEWER_STATE_CHANGE:
+            // TODO
+            break;
           default:
-            return listings;
+            break;
         }
-      }, listings)
-    );
+      }
+      return next;
+    });
 
   const deleteDirectory = (key: string) => setDirectories((prev) => omit(key, prev));
 
@@ -60,10 +94,10 @@ export const Provider: React.FC = ({ children }) => {
     const events = client.directory.open();
     events.on("data", ({ networkKey, body }) => {
       switch (body.case) {
-        case DirectoryFrontendOpenResponse.BodyCase.BROADCAST:
+        case FrontendOpenResponse.BodyCase.BROADCAST:
           dispatchDirectoryEvent(Base64.fromUint8Array(networkKey, true), body.broadcast);
           break;
-        case DirectoryFrontendOpenResponse.BodyCase.CLOSE:
+        case FrontendOpenResponse.BodyCase.CLOSE:
           deleteDirectory(Base64.fromUint8Array(networkKey, true));
           break;
       }

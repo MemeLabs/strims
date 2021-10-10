@@ -10,15 +10,15 @@ import {
   IKey as strims_type_IKey,
 } from "../../type/key";
 import {
-  DirectoryListingSnippet as strims_network_v1_DirectoryListingSnippet,
-  IDirectoryListingSnippet as strims_network_v1_IDirectoryListingSnippet,
-} from "../../network/v1/directory";
+  ListingSnippet as strims_network_v1_directory_ListingSnippet,
+  IListingSnippet as strims_network_v1_directory_IListingSnippet,
+} from "../../network/v1/directory/directory";
 
 export type IVideoChannel = {
   id?: bigint;
-  key?: strims_type_IKey;
+  key?: strims_type_IKey | undefined;
   token?: Uint8Array;
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
+  directoryListingSnippet?: strims_network_v1_directory_IListingSnippet | undefined;
   owner?: VideoChannel.IOwner
 }
 
@@ -26,14 +26,14 @@ export class VideoChannel {
   id: bigint;
   key: strims_type_Key | undefined;
   token: Uint8Array;
-  directoryListingSnippet: strims_network_v1_DirectoryListingSnippet | undefined;
+  directoryListingSnippet: strims_network_v1_directory_ListingSnippet | undefined;
   owner: VideoChannel.TOwner;
 
   constructor(v?: IVideoChannel) {
     this.id = v?.id || BigInt(0);
     this.key = v?.key && new strims_type_Key(v.key);
     this.token = v?.token || new Uint8Array();
-    this.directoryListingSnippet = v?.directoryListingSnippet && new strims_network_v1_DirectoryListingSnippet(v.directoryListingSnippet);
+    this.directoryListingSnippet = v?.directoryListingSnippet && new strims_network_v1_directory_ListingSnippet(v.directoryListingSnippet);
     this.owner = new VideoChannel.Owner(v?.owner);
   }
 
@@ -42,7 +42,7 @@ export class VideoChannel {
     if (m.id) w.uint32(8).uint64(m.id);
     if (m.key) strims_type_Key.encode(m.key, w.uint32(18).fork()).ldelim();
     if (m.token) w.uint32(26).bytes(m.token);
-    if (m.directoryListingSnippet) strims_network_v1_DirectoryListingSnippet.encode(m.directoryListingSnippet, w.uint32(34).fork()).ldelim();
+    if (m.directoryListingSnippet) strims_network_v1_directory_ListingSnippet.encode(m.directoryListingSnippet, w.uint32(34).fork()).ldelim();
     switch (m.owner.case) {
       case VideoChannel.OwnerCase.LOCAL:
       VideoChannel.Local.encode(m.owner.local, w.uint32(8010).fork()).ldelim();
@@ -83,7 +83,7 @@ export class VideoChannel {
         m.token = r.bytes();
         break;
         case 4:
-        m.directoryListingSnippet = strims_network_v1_DirectoryListingSnippet.decode(r, r.uint32());
+        m.directoryListingSnippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -192,7 +192,7 @@ export namespace VideoChannel {
   }
 
   export type ILocalShare = {
-    certificate?: strims_type_ICertificate;
+    certificate?: strims_type_ICertificate | undefined;
   }
 
   export class LocalShare {
@@ -350,22 +350,22 @@ export class VideoChannelListResponse {
 }
 
 export type IVideoChannelCreateRequest = {
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
+  directoryListingSnippet?: strims_network_v1_directory_IListingSnippet | undefined;
   networkKey?: Uint8Array;
 }
 
 export class VideoChannelCreateRequest {
-  directoryListingSnippet: strims_network_v1_DirectoryListingSnippet | undefined;
+  directoryListingSnippet: strims_network_v1_directory_ListingSnippet | undefined;
   networkKey: Uint8Array;
 
   constructor(v?: IVideoChannelCreateRequest) {
-    this.directoryListingSnippet = v?.directoryListingSnippet && new strims_network_v1_DirectoryListingSnippet(v.directoryListingSnippet);
+    this.directoryListingSnippet = v?.directoryListingSnippet && new strims_network_v1_directory_ListingSnippet(v.directoryListingSnippet);
     this.networkKey = v?.networkKey || new Uint8Array();
   }
 
   static encode(m: VideoChannelCreateRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.directoryListingSnippet) strims_network_v1_DirectoryListingSnippet.encode(m.directoryListingSnippet, w.uint32(10).fork()).ldelim();
+    if (m.directoryListingSnippet) strims_network_v1_directory_ListingSnippet.encode(m.directoryListingSnippet, w.uint32(10).fork()).ldelim();
     if (m.networkKey) w.uint32(18).bytes(m.networkKey);
     return w;
   }
@@ -378,7 +378,7 @@ export class VideoChannelCreateRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.directoryListingSnippet = strims_network_v1_DirectoryListingSnippet.decode(r, r.uint32());
+        m.directoryListingSnippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
         break;
         case 2:
         m.networkKey = r.bytes();
@@ -393,7 +393,7 @@ export class VideoChannelCreateRequest {
 }
 
 export type IVideoChannelCreateResponse = {
-  channel?: IVideoChannel;
+  channel?: IVideoChannel | undefined;
 }
 
 export class VideoChannelCreateResponse {
@@ -430,25 +430,25 @@ export class VideoChannelCreateResponse {
 
 export type IVideoChannelUpdateRequest = {
   id?: bigint;
-  directoryListingSnippet?: strims_network_v1_IDirectoryListingSnippet;
+  directoryListingSnippet?: strims_network_v1_directory_IListingSnippet | undefined;
   networkKey?: Uint8Array;
 }
 
 export class VideoChannelUpdateRequest {
   id: bigint;
-  directoryListingSnippet: strims_network_v1_DirectoryListingSnippet | undefined;
+  directoryListingSnippet: strims_network_v1_directory_ListingSnippet | undefined;
   networkKey: Uint8Array;
 
   constructor(v?: IVideoChannelUpdateRequest) {
     this.id = v?.id || BigInt(0);
-    this.directoryListingSnippet = v?.directoryListingSnippet && new strims_network_v1_DirectoryListingSnippet(v.directoryListingSnippet);
+    this.directoryListingSnippet = v?.directoryListingSnippet && new strims_network_v1_directory_ListingSnippet(v.directoryListingSnippet);
     this.networkKey = v?.networkKey || new Uint8Array();
   }
 
   static encode(m: VideoChannelUpdateRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(8).uint64(m.id);
-    if (m.directoryListingSnippet) strims_network_v1_DirectoryListingSnippet.encode(m.directoryListingSnippet, w.uint32(18).fork()).ldelim();
+    if (m.directoryListingSnippet) strims_network_v1_directory_ListingSnippet.encode(m.directoryListingSnippet, w.uint32(18).fork()).ldelim();
     if (m.networkKey) w.uint32(26).bytes(m.networkKey);
     return w;
   }
@@ -464,7 +464,7 @@ export class VideoChannelUpdateRequest {
         m.id = r.uint64();
         break;
         case 2:
-        m.directoryListingSnippet = strims_network_v1_DirectoryListingSnippet.decode(r, r.uint32());
+        m.directoryListingSnippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
         break;
         case 3:
         m.networkKey = r.bytes();
@@ -479,7 +479,7 @@ export class VideoChannelUpdateRequest {
 }
 
 export type IVideoChannelUpdateResponse = {
-  channel?: IVideoChannel;
+  channel?: IVideoChannel | undefined;
 }
 
 export class VideoChannelUpdateResponse {

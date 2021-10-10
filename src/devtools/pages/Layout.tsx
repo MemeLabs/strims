@@ -165,7 +165,7 @@ const LayoutPage: React.FC = () => {
 
   const [swap, setSwap] = useState(false);
   const [showChat, setShowChat] = useState(true);
-  const [showVideo, setShowVideo] = useState(false);
+  const [showVideo, setShowVideo] = useState(true);
   const [theaterMode, setTheaterMode] = useState(false);
 
   const style = FORCE_FIXED_SIZE

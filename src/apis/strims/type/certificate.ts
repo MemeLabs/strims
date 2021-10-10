@@ -3,7 +3,7 @@ import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
   KeyType as strims_type_KeyType,
-} from "./key";
+} from ".//key";
 
 export type ICertificateRequest = {
   key?: Uint8Array;
@@ -118,6 +118,9 @@ export class Certificate {
       case Certificate.ParentOneofCase.PARENT:
       Certificate.encode(m.parentOneof.parent, w.uint32(74).fork()).ldelim();
       break;
+      case Certificate.ParentOneofCase.PARENT_SERIAL_NUMBER:
+      w.uint32(82).bytes(m.parentOneof.parentSerialNumber);
+      break;
     }
     return w;
   }
@@ -156,6 +159,9 @@ export class Certificate {
         case 9:
         m.parentOneof = new Certificate.ParentOneof({ parent: Certificate.decode(r, r.uint32()) });
         break;
+        case 10:
+        m.parentOneof = new Certificate.ParentOneof({ parentSerialNumber: r.bytes() });
+        break;
         default:
         r.skipType(tag & 7);
         break;
@@ -169,26 +175,34 @@ export namespace Certificate {
   export enum ParentOneofCase {
     NOT_SET = 0,
     PARENT = 9,
+    PARENT_SERIAL_NUMBER = 10,
   }
 
   export type IParentOneof =
   { case?: ParentOneofCase.NOT_SET }
   |{ case?: ParentOneofCase.PARENT, parent: ICertificate }
+  |{ case?: ParentOneofCase.PARENT_SERIAL_NUMBER, parentSerialNumber: Uint8Array }
   ;
 
   export type TParentOneof = Readonly<
   { case: ParentOneofCase.NOT_SET }
   |{ case: ParentOneofCase.PARENT, parent: Certificate }
+  |{ case: ParentOneofCase.PARENT_SERIAL_NUMBER, parentSerialNumber: Uint8Array }
   >;
 
   class ParentOneofImpl {
     parent: Certificate;
+    parentSerialNumber: Uint8Array;
     case: ParentOneofCase = ParentOneofCase.NOT_SET;
 
     constructor(v?: IParentOneof) {
       if (v && "parent" in v) {
         this.case = ParentOneofCase.PARENT;
         this.parent = new Certificate(v.parent);
+      } else
+      if (v && "parentSerialNumber" in v) {
+        this.case = ParentOneofCase.PARENT_SERIAL_NUMBER;
+        this.parentSerialNumber = v.parentSerialNumber;
       }
     }
   }
@@ -197,6 +211,7 @@ export namespace Certificate {
     new (): Readonly<{ case: ParentOneofCase.NOT_SET }>;
     new <T extends IParentOneof>(v: T): Readonly<
     T extends { parent: ICertificate } ? { case: ParentOneofCase.PARENT, parent: Certificate } :
+    T extends { parentSerialNumber: Uint8Array } ? { case: ParentOneofCase.PARENT_SERIAL_NUMBER, parentSerialNumber: Uint8Array } :
     never
     >;
   };

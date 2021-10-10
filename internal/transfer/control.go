@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/api"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
@@ -20,6 +21,8 @@ import (
 	"github.com/petar/GoLLRB/llrb"
 	"go.uber.org/zap"
 )
+
+var _ control.TransferControl = &Control{}
 
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers) *Control {

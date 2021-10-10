@@ -175,7 +175,7 @@ func (n *Network) Close() {
 
 // Key ...
 func (n *Network) Key() []byte {
-	return dao.GetRootCert(n.certificate).Key
+	return dao.CertificateRoot(n.certificate).Key
 }
 
 // AddPeer ...

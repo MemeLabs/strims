@@ -68,7 +68,7 @@ func (r *TickEmitter) DefaultChan() (<-chan Time, StopFunc) {
 }
 
 func (r *TickEmitter) Chan(ivl time.Duration) (<-chan Time, StopFunc) {
-	ch := make(chan Time)
+	ch := make(chan Time, 1)
 	stop := func() {
 		r.unsubscribe(ch)
 		close(ch)

@@ -3,13 +3,13 @@ import React from "react";
 import { useForm } from "react-hook-form";
 import { MdClose } from "react-icons/md";
 
-import { CreateNetworkResponse } from "../apis/strims/network/v1/network";
+import { CreateServerResponse } from "../apis/strims/network/v1/network";
 import { ImageInput, ImageValue, InputError, TextInput } from "../components/Form";
 import { useLazyCall } from "../contexts/FrontendApi";
 import { useProfile } from "../contexts/Profile";
 
 interface AddNetworkModalProps {
-  onCreate: (res: CreateNetworkResponse) => void;
+  onCreate: (res: CreateServerResponse) => void;
   onClose: () => void;
 }
 
@@ -21,7 +21,7 @@ interface AddNetworkFormData {
 const AddNetworkModal: React.FC<AddNetworkModalProps> = ({ onCreate, onClose }) => {
   const [{ profile }] = useProfile();
 
-  const [{ error, loading }, createNetwork] = useLazyCall("network", "create", {
+  const [{ error, loading }, createNetwork] = useLazyCall("network", "createServer", {
     onComplete: onCreate,
   });
   const { control, handleSubmit } = useForm<AddNetworkFormData>({

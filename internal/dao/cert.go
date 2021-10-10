@@ -183,8 +183,8 @@ func NewSelfSignedCertificate(
 	return SignCertificateRequest(csr, validDuration, key)
 }
 
-// GetRootCert returns the root certificate for a given certificate
-func GetRootCert(cert *certificate.Certificate) *certificate.Certificate {
+// CertificateRoot returns the root certificate for a given certificate
+func CertificateRoot(cert *certificate.Certificate) *certificate.Certificate {
 	for cert.GetParent() != nil {
 		cert = cert.GetParent()
 	}

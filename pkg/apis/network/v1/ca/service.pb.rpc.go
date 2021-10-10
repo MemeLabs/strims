@@ -9,6 +9,7 @@ import (
 // RegisterCAService ...
 func RegisterCAService(host rpc.ServiceRegistry, service CAService) {
 	host.RegisterMethod("strims.network.v1.ca.CA.Renew", service.Renew)
+	host.RegisterMethod("strims.network.v1.ca.CA.Find", service.Find)
 }
 
 // CAService ...
@@ -17,6 +18,10 @@ type CAService interface {
 		ctx context.Context,
 		req *CARenewRequest,
 	) (*CARenewResponse, error)
+	Find(
+		ctx context.Context,
+		req *CAFindRequest,
+	) (*CAFindResponse, error)
 }
 
 // CAClient ...
@@ -36,4 +41,13 @@ func (c *CAClient) Renew(
 	res *CARenewResponse,
 ) error {
 	return c.client.CallUnary(ctx, "strims.network.v1.ca.CA.Renew", req, res)
+}
+
+// Find ...
+func (c *CAClient) Find(
+	ctx context.Context,
+	req *CAFindRequest,
+	res *CAFindResponse,
+) error {
+	return c.client.CallUnary(ctx, "strims.network.v1.ca.CA.Find", req, res)
 }

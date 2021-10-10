@@ -17,7 +17,7 @@ import {
 } from "../../components/Form";
 import { PrivateRoute } from "../../components/PrivateRoute";
 import { useCall, useClient, useLazyCall } from "../../contexts/FrontendApi";
-import { rootCertificate } from "../../lib/certificate";
+import { certificateRoot } from "../../lib/certificate";
 import hostRegex from "../../lib/hostRegex";
 import jsonutil from "../../lib/jsonutil";
 
@@ -50,10 +50,13 @@ const VideoIngressConfigForm = () => {
 
   const { value: networkOptions } = useAsync(async () => {
     const res = await client.network.list();
-    return res.networks.map((n) => ({
-      value: Base64.fromUint8Array(rootCertificate(n.certificate).key),
-      label: n.name,
-    }));
+    return res.networks.map((n) => {
+      const certRoot = certificateRoot(n.certificate);
+      return {
+        value: Base64.fromUint8Array(certRoot.key),
+        label: certRoot.subject,
+      };
+    });
   });
 
   const setValues = ({ config }: { config?: VideoIngressConfig }) => {
@@ -192,10 +195,13 @@ const VideoChannelForm: React.FC<VideoChannelFormProps> = ({ onSubmit }) => {
 
   const { value: networkOptions } = useAsync(async () => {
     const res = await client.network.list();
-    return res.networks.map((n) => ({
-      value: Base64.fromUint8Array(rootCertificate(n.certificate).key),
-      label: n.name,
-    }));
+    return res.networks.map((n) => {
+      const certRoot = certificateRoot(n.certificate);
+      return {
+        value: Base64.fromUint8Array(certRoot.key),
+        label: certRoot.subject,
+      };
+    });
   });
 
   return (

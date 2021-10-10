@@ -30,6 +30,8 @@ type server interface {
 	Close() error
 }
 
+var _ control.VideoIngressControl = &Control{}
+
 // NewControl ...
 func NewControl(
 	logger *zap.Logger,

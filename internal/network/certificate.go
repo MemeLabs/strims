@@ -95,7 +95,7 @@ func isCertificateExpired(cert *certificate.Certificate) bool {
 }
 
 func networkKeyForCertificate(cert *certificate.Certificate) []byte {
-	return dao.GetRootCert(cert).Key
+	return dao.CertificateRoot(cert).Key
 }
 
 func nextCertificateRenewTime(network *networkv1.Network) timeutil.Time {
@@ -106,5 +106,5 @@ func nextCertificateRenewTime(network *networkv1.Network) timeutil.Time {
 }
 
 func isCertificateSubjectMismatched(network *networkv1.Network) bool {
-	return network.AltProfileName != "" && network.AltProfileName != network.Certificate.Subject
+	return network.Alias != "" && network.Alias != network.Certificate.Subject
 }

@@ -39,6 +39,7 @@ interface SettingsFormData {
   formatterCombo: boolean;
   emoteModifiers: boolean;
   disableSpoilers: boolean;
+  shortenLinks: boolean;
   viewerStateIndicator: {
     value: UIConfig.ViewerStateIndicator;
     label: string;
@@ -163,6 +164,12 @@ const SettingsDrawer: React.FC = () => {
             control={control}
             label="Disable spoilers"
             name="disableSpoilers"
+            onChange={handleChange}
+          />
+          <ToggleInput
+            control={control}
+            label="Shorten long links"
+            name="shortenLinks"
             onChange={handleChange}
           />
           <TextInput

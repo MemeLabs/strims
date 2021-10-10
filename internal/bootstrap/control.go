@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/api"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/event"
@@ -16,6 +17,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"go.uber.org/zap"
 )
+
+var _ control.BootstrapControl = &Control{}
 
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, store *dao.ProfileStore, observers *event.Observers) *Control {
@@ -152,7 +155,12 @@ func (t *Control) Publish(ctx context.Context, peerID uint64, network *network.N
 		return errors.New("peer does not support network bootstrapping")
 	}
 
-	networkCert, err := dao.NewNetworkCertificate(network)
+	config := network.GetServerConfig()
+	if config == nil {
+		return errors.New("only managed networks can be published")
+	}
+
+	networkCert, err := dao.NewNetworkCertificate(config)
 	if err != nil {
 		return err
 	}
@@ -161,7 +169,7 @@ func (t *Control) Publish(ctx context.Context, peerID uint64, network *network.N
 		KeyType:  peer.vnic.Certificate.KeyType,
 		KeyUsage: certificate.KeyUsage_KEY_USAGE_BROKER | certificate.KeyUsage_KEY_USAGE_SIGN,
 	}
-	cert, err := dao.SignCertificateRequest(csr, validDuration, network.Key)
+	cert, err := dao.SignCertificateRequest(csr, validDuration, config.Key)
 	if err != nil {
 		return err
 	}

@@ -14,7 +14,7 @@ import (
 
 	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	videov1 "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
@@ -214,10 +214,12 @@ func newIngressStream(
 	s.transfer.Publish(s.transferID, s.channelNetworkKey())
 
 	go func() {
-		// TODO: retry/refresh periodically
-		if err := s.publishDirectoryListing(); err != nil {
+		id, err := s.publishDirectoryListing()
+		if err != nil {
 			s.logger.Debug("publishing stream to directory failed", zap.Error(err))
 		}
+		// TODO: store somewhere for use with unpublish/snippet stream
+		_ = id
 	}()
 
 	return s, nil
@@ -234,9 +236,10 @@ type ingressStream struct {
 	cancelCtx context.CancelFunc
 	closeOnce sync.Once
 
-	startTime timeutil.Time
-	channel   *videov1.VideoChannel
-	conn      io.Closer
+	startTime   timeutil.Time
+	channel     *videov1.VideoChannel
+	directoryID uint64
+	conn        io.Closer
 
 	swarm      *ppspp.Swarm
 	transferID []byte
@@ -290,7 +293,7 @@ func (s *ingressStream) channelNetworkKey() []byte {
 	case *videov1.VideoChannel_Local_:
 		return o.Local.NetworkKey
 	case *videov1.VideoChannel_LocalShare_:
-		return dao.GetRootCert(o.LocalShare.Certificate).Key
+		return dao.CertificateRoot(o.LocalShare.Certificate).Key
 	default:
 		panic("unsupported channel")
 	}
@@ -311,31 +314,19 @@ func (s *ingressStream) channelCreatorCert() (*certificate.Certificate, error) {
 	}
 }
 
-func (s *ingressStream) publishDirectoryListing() error {
-	creator, err := s.channelCreatorCert()
-	if err != nil {
-		return err
-	}
-
-	listing := &networkv1.DirectoryListing{
-		Creator:   creator,
-		Timestamp: timeutil.Now().Unix(),
-		Snippet:   s.channel.DirectoryListingSnippet,
-		Content: &networkv1.DirectoryListing_Media{
-			Media: &networkv1.DirectoryListingMedia{
-				StartedAt: s.startTime.Unix(),
-				MimeType:  rtmpingress.TranscoderMimeType,
-				SwarmUri:  s.swarm.URI().String(),
+func (s *ingressStream) publishDirectoryListing() (uint64, error) {
+	listing := &networkv1directory.Listing{
+		Content: &networkv1directory.Listing_Media_{
+			Media: &networkv1directory.Listing_Media{
+				MimeType: rtmpingress.TranscoderMimeType,
+				SwarmUri: s.swarm.URI().String(),
 			},
 		},
-	}
-	if err := dao.SignMessage(listing, s.channel.Key); err != nil {
-		return err
 	}
 
 	return s.directory.Publish(context.Background(), listing, s.channelNetworkKey())
 }
 
 func (s *ingressStream) unpublishDirectoryListing() error {
-	return s.directory.Unpublish(context.Background(), s.channel.Key.Public, s.channelNetworkKey())
+	return s.directory.Unpublish(context.Background(), s.directoryID, s.channelNetworkKey())
 }

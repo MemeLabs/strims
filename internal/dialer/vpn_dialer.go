@@ -193,7 +193,7 @@ func (t *VPNTransport) verifyMessage(msg *vpn.Message, req *rpcapi.Call, cert *c
 		return errors.New("certificate host id mismatch")
 	}
 
-	if !bytes.Equal(dao.GetRootCert(t.certificate()).Key, cert.GetParent().GetParent().GetKey()) {
+	if !bytes.Equal(dao.CertificateRoot(t.certificate()).Key, cert.GetParent().GetParent().GetKey()) {
 		return errors.New("network key mismatch")
 	}
 	if err := dao.VerifyCertificate(cert); err != nil {

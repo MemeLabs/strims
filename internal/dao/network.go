@@ -20,14 +20,14 @@ func prefixNetworkKey(id uint64) string {
 
 // UpsertNetwork ...
 func UpsertNetwork(s kv.RWStore, v *networkv1.Network) error {
-	return s.Update(func(tx kv.RWTx) (err error) {
+	return s.Update(func(tx kv.RWTx) error {
 		return tx.Put(prefixNetworkKey(v.Id), v)
 	})
 }
 
 // DeleteNetwork ...
 func DeleteNetwork(s kv.RWStore, id uint64) error {
-	return s.Update(func(tx kv.RWTx) (err error) {
+	return s.Update(func(tx kv.RWTx) error {
 		return tx.Delete(prefixNetworkKey(id))
 	})
 }
@@ -48,7 +48,7 @@ func GetNetworkByKey(s kv.Store, key []byte) (*networkv1.Network, error) {
 		return nil, err
 	}
 	for _, v := range networks {
-		if bytes.Equal(GetRootCert(v.Certificate).Key, key) {
+		if bytes.Equal(CertificateRoot(v.Certificate).Key, key) {
 			return v, nil
 		}
 	}
@@ -76,17 +76,17 @@ func NextNetworkDisplayOrder(s kv.Store) (n uint32, err error) {
 }
 
 // NewNetworkCertificate ...
-func NewNetworkCertificate(network *networkv1.Network) (*certificate.Certificate, error) {
-	return NewSelfSignedCertificate(network.Key, certificate.KeyUsage_KEY_USAGE_SIGN, defaultCertTTL, WithSubject(network.Name))
+func NewNetworkCertificate(config *networkv1.ServerConfig) (*certificate.Certificate, error) {
+	return NewSelfSignedCertificate(config.Key, certificate.KeyUsage_KEY_USAGE_SIGN, defaultCertTTL, WithSubject(config.Name))
 }
 
-func SignCertificateRequestWithNetwork(csr *certificate.CertificateRequest, network *networkv1.Network) (*certificate.Certificate, error) {
-	networkCert, err := NewNetworkCertificate(network)
+func SignCertificateRequestWithNetwork(csr *certificate.CertificateRequest, config *networkv1.ServerConfig) (*certificate.Certificate, error) {
+	networkCert, err := NewNetworkCertificate(config)
 	if err != nil {
 		return nil, err
 	}
 
-	cert, err := SignCertificateRequest(csr, defaultCertTTL, network.Key)
+	cert, err := SignCertificateRequest(csr, defaultCertTTL, config.Key)
 	if err != nil {
 		return nil, err
 	}
@@ -109,9 +109,13 @@ func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile
 
 	network := &networkv1.Network{
 		Id:   id,
-		Name: name,
-		Key:  key,
 		Icon: icon,
+		ServerConfigOneof: &networkv1.Network_ServerConfig{
+			ServerConfig: &networkv1.ServerConfig{
+				Name: name,
+				Key:  key,
+			},
+		},
 	}
 
 	csr, err := NewCertificateRequest(
@@ -123,7 +127,7 @@ func NewNetwork(g IDGenerator, name string, icon *networkv1.NetworkIcon, profile
 		return nil, err
 	}
 
-	cert, err := SignCertificateRequestWithNetwork(csr, network)
+	cert, err := SignCertificateRequestWithNetwork(csr, network.GetServerConfig())
 	if err != nil {
 		return nil, err
 	}
@@ -154,7 +158,6 @@ func NewNetworkFromInvitationV0(g IDGenerator, invitation *networkv1.InvitationV
 
 	return &networkv1.Network{
 		Id:          id,
-		Name:        GetRootCert(invitation.Certificate).Subject,
 		Certificate: peerCert,
 	}, nil
 }
@@ -172,7 +175,6 @@ func NewNetworkFromCertificate(g IDGenerator, cert *certificate.Certificate) (*n
 
 	return &networkv1.Network{
 		Id:          id,
-		Name:        GetRootCert(cert).Subject,
 		Certificate: cert,
 	}, nil
 }
@@ -204,5 +206,5 @@ func NewInvitationV0(key *key.Key, cert *certificate.Certificate) (*networkv1.In
 
 // NetworkKey ...
 func NetworkKey(network *networkv1.Network) []byte {
-	return GetRootCert(network.Certificate).Key
+	return CertificateRoot(network.Certificate).Key
 }

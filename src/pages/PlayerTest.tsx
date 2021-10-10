@@ -23,6 +23,7 @@ const PlayerTest: React.FC = () => {
   useEffect(() => {
     setMode(PlayerMode.LARGE);
     setSource({
+      type: "swarm",
       networkKey: params.networkKey,
       swarmUri: query.swarmUri,
       mimeType: query.mimeType,

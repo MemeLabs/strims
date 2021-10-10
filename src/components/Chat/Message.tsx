@@ -5,16 +5,34 @@ import React, { ReactNode, useEffect, useRef } from "react";
 import { UIConfig, Message as chatv1_Message } from "../../apis/strims/chat/v1/chat";
 import Emote from "./Emote";
 
+const LINK_SHORTEN_THRESHOLD = 75;
+const LINK_SHORTEN_AFFIX_LENGTH = 35;
+
 // TODO: in app links
 interface MessageLinkProps {
   entity: chatv1_Message.Entities.Link;
+  shouldShorten: boolean;
 }
 
-const MessageLink: React.FC<MessageLinkProps> = ({ children, entity }) => (
-  <a className="chat__message__link" target="_blank" rel="nofollow" href={entity.url}>
-    {children}
-  </a>
-);
+const MessageLink: React.FC<MessageLinkProps> = ({ children, entity, shouldShorten }) => {
+  let nodes = React.Children.toArray(children);
+  if (shouldShorten && typeof nodes[0] === "string" && nodes[0].length > LINK_SHORTEN_THRESHOLD) {
+    nodes = [
+      nodes[0].substring(0, LINK_SHORTEN_AFFIX_LENGTH),
+      <span className="chat__message__link__ellipsis">&hellip;</span>,
+      <span className="chat__message__link__overflow">
+        {nodes[0].substring(LINK_SHORTEN_AFFIX_LENGTH, nodes[0].length - LINK_SHORTEN_AFFIX_LENGTH)}
+      </span>,
+      nodes[0].substring(nodes[0].length - LINK_SHORTEN_AFFIX_LENGTH),
+    ];
+  }
+
+  return (
+    <a className="chat__message__link" target="_blank" rel="nofollow" href={entity.url}>
+      {nodes}
+    </a>
+  );
+};
 
 interface MessageEmoteProps {
   entity: chatv1_Message.Entities.Emote;
@@ -51,26 +69,31 @@ interface MessageTagProps {
 }
 
 const MessageTag: React.FC<MessageTagProps> = ({ children }) => (
-  <span className="tag">{children}</span>
+  <span className="chat__message__tag">{children}</span>
 );
 
 // TODO: extract spoiler body bounds in parser
 const spoilerPrefix = /^[|\s]+/;
 const spoilerSuffix = /[|\s]+$/;
+const codePrefix = /^[`\s]+/;
+const codeSuffix = /[`\s]+$/;
 
-const trimSpoiler = (node: React.ReactNode, rx: RegExp) =>
+const trimTextNode = (node: React.ReactNode, rx: RegExp) =>
   typeof node === "string" ? node.replace(rx, "") : node;
+
+const trimChildren = (children: React.ReactNode, prefix: RegExp, suffix: RegExp) => {
+  const nodes = React.Children.toArray(children);
+  nodes[0] = trimTextNode(nodes[0], prefix);
+  nodes[nodes.length - 1] = trimTextNode(nodes[nodes.length - 1], suffix);
+  return nodes;
+};
 
 interface MessageSpoilerProps {
   entity: chatv1_Message.Entities.Spoiler;
 }
 
-const MessageSpoiler: React.FC<MessageSpoilerProps> = ({ children: childrenNode }) => {
-  const children = React.Children.toArray(childrenNode);
-  const prefix = trimSpoiler(children.shift(), spoilerPrefix);
-  const suffix = trimSpoiler(children.pop(), spoilerSuffix);
+const MessageSpoiler: React.FC<MessageSpoilerProps> = ({ children }) => {
   const [hidden, setHidden] = React.useState(true);
-
   const handleClick = React.useCallback(() => setHidden((v) => !v), []);
 
   return (
@@ -81,9 +104,7 @@ const MessageSpoiler: React.FC<MessageSpoilerProps> = ({ children: childrenNode 
       })}
       onClick={handleClick}
     >
-      {prefix}
-      {children}
-      {suffix}
+      {trimChildren(children, spoilerPrefix, spoilerSuffix)}
     </span>
   );
 };
@@ -93,7 +114,7 @@ interface MessageCodeBlockProps {
 }
 
 const MessageCodeBlock: React.FC<MessageCodeBlockProps> = ({ children }) => (
-  <span className="chat__message__code">{children}</span>
+  <span className="chat__message__code">{trimChildren(children, codePrefix, codeSuffix)}</span>
 );
 
 interface MessageGreenTextProps {
@@ -122,15 +143,14 @@ class MessageFormatter {
     this.body = [body];
   }
 
-  // splitSpan cuts text spans in body to ensure they align with the bounds
-  // of new entities during insertion. returns false if the index is inside a
-  // node created for a previously inserted entity.
-  private splitSpan(index: number) {
+  // splitSpan splits the text span in body at the given character offset and
+  // returns the span index. returns -1 if the offset is in a non-text span.
+  private splitSpan(offset: number) {
     let l = 0;
     let r = this.bounds.length;
     while (l !== r) {
       const m = (r + l) >> 1;
-      if (this.bounds[m] <= index) {
+      if (this.bounds[m] <= offset) {
         l = m + 1;
       } else {
         r = m;
@@ -138,18 +158,18 @@ class MessageFormatter {
     }
 
     const i = l - 1;
-    if (this.bounds[i] === index) {
-      return true;
+    if (this.bounds[i] === offset) {
+      return i;
     }
     const span = this.body[i];
     if (typeof span !== "string") {
-      return false;
+      return -1;
     }
 
-    const splitIndex = index - this.bounds[i];
-    this.body.splice(i, 1, span.substr(0, splitIndex), span.substr(splitIndex));
-    this.bounds.splice(i + 1, 0, index);
-    return true;
+    const splitOffset = offset - this.bounds[i];
+    this.body.splice(i, 1, span.substr(0, splitOffset), span.substr(splitOffset));
+    this.bounds.splice(i + 1, 0, offset);
+    return i + 1;
   }
 
   // replaces the message body from the bounds in the supplied entity with a
@@ -160,22 +180,21 @@ class MessageFormatter {
     props?: Omit<React.ComponentProps<C>, "entity">
   ) {
     const { start, end } = entity.bounds;
-    if (!this.splitSpan(start) || !this.splitSpan(end)) {
+    const startIndex = this.splitSpan(start);
+    const endIndex = this.splitSpan(end);
+    if (startIndex === -1 || endIndex === -1) {
       return false;
     }
 
-    const startIndex = this.bounds.findIndex((i) => i === start);
-    const endIndex = this.bounds.findIndex((i) => i === end);
-    this.body.splice(
-      startIndex,
-      endIndex - startIndex,
-      React.createElement(component, {
-        key: `${component.name}(${start},${end})`,
-        children: this.body.slice(startIndex, endIndex),
-        entity,
-        ...props,
-      })
-    );
+    const node = React.createElement(component, {
+      key: `${component.name}(${start},${end})`,
+      children: this.body.slice(startIndex, endIndex),
+      entity,
+      ...props,
+    });
+
+    this.body.splice(startIndex, endIndex - startIndex, node);
+    this.bounds.splice(startIndex + 1, endIndex - startIndex - 1);
   }
 }
 
@@ -263,7 +282,11 @@ const StandardMessage: React.FC<MessageProps> = ({
 }) => {
   const formatter = new MessageFormatter(body);
   entities.codeBlocks.forEach((entity) => formatter.insertEntity(MessageCodeBlock, entity));
-  entities.links.forEach((entity) => formatter.insertEntity(MessageLink, entity));
+  entities.links.forEach((entity) =>
+    formatter.insertEntity(MessageLink, entity, {
+      shouldShorten: uiConfig.shortenLinks,
+    })
+  );
   if (uiConfig.formatterEmote) {
     entities.emotes.forEach((entity) =>
       formatter.insertEntity(MessageEmote, entity, {

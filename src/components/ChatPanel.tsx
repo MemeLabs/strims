@@ -244,7 +244,7 @@ const ChatPanel: React.FC = () => {
         <header className="home_page__chat__promo"></header>
         <div className="home_page__chat chat">
           <Provider
-            networkKey={Base64.toUint8Array("ewOeQgqCCXYwVmR+nZIcbLfDszuIgV8l0Xj0OVa5Vw4=")}
+            networkKey={Base64.toUint8Array("cgqhekoCTcy7OOkRdbNbYG3J4svZorYlH3KKaT660BE=")}
             serverKey={Base64.toUint8Array("fHyr7+njRTRAShsdcDB1vOz9373dtPA476Phw+DYh0Q=")}
           >
             <ChatThing shouldHide={closed} />

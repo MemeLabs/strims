@@ -34,5 +34,5 @@ func (s *bootstrapService) Publish(ctx context.Context, req *bootstrap.Bootstrap
 		return nil, err
 	}
 
-	return nil, s.App.Network().Add(network)
+	return nil, s.App.Network().Add(network, nil)
 }

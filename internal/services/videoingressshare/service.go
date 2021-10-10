@@ -50,7 +50,7 @@ func (s *videoIngressShareService) toRemoteChannel(ctx context.Context, channel 
 		Owner: &videov1.VideoChannel_RemoteShare_{
 			RemoteShare: &videov1.VideoChannel_RemoteShare{
 				Id:          channel.Id,
-				NetworkKey:  dao.GetRootCert(dialer.VPNCertificate(ctx).GetParent()).Key,
+				NetworkKey:  dao.CertificateRoot(dialer.VPNCertificate(ctx).GetParent()).Key,
 				ServiceKey:  s.profile.Key.Public,
 				ServiceSalt: videoingress.ShareAddressSalt,
 				ServerAddr:  serverAddr,

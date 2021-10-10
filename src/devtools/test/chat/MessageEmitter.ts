@@ -3,6 +3,11 @@ import { PassThrough } from "stream";
 import { Message } from "../../../apis/strims/chat/v1/chat";
 
 const history = [
+  'MSG {"nick":"Of_Odin","features":[],"timestamp":1599346334228,"data":"https://old.reddit.com/r/LivestreamFail/comments/imzqr1/clint_stevens_talks_about_his_first_time_having/ wtf there are people who plan out moves and not just spam buttons to get the higest combo BASEDWATM8","entities":{"links":[{"url":"https://old.reddit.com/r/LivestreamFail/comments/imzqr1/clint_stevens_talks_about_his_first_time_having/","bounds":{"start":0,"end":104}}],"emotes":[{"name":"BASEDWATM8","bounds":{"start":195,"end":205}}]}}',
+
+  'MSG {"nick":"guwapguwapguwap","features":[],"timestamp":1599345629214,"data":"POGGERS  POGGERS:mirror","entities":{"links":[],"emotes":[{"bounds":{"start":0,"end":7},"name":"POGGERS","modifiers":[],"combo":0},{"bounds":{"start":9,"end":23},"name":"POGGERS","modifiers":["mirror"],"combo":0}],"nicks":[],"tags":[],"codeBlocks":[],"spoilers":[]}}',
+
+  'MSG {"nick":"guwapguwapguwap","features":[],"timestamp":1599345629214,"data":"|| test `code` test || foo || test ||","entities":{"links":[],"emotes":[],"nicks":[],"tags":[],"codeBlocks":[{"bounds":{"start":8,"end":14}}],"spoilers":[{"bounds":{"start":0,"end":22}},{"bounds":{"start":27,"end":37}}]}}',
   'MSG {"nick":"guwapguwapguwap","features":[],"timestamp":1599345629214,"data":"Ph4t3 I sentence you to 10 years in body shaming jail PepoBan","entities":{"emotes":[{"name":"PepoBan","bounds":{"start":54,"end":61}}],"nicks":[{"nick":"Ph4t3","bounds":{"start":0,"end":5}}]}}',
   'MSG {"nick":"Xymos","features":[],"timestamp":1599345636022,"data":"soMuchForSubtlety Jbpratt sounds like a valid reason SHRUG:fast","entities":{"emotes":[{"name":"SHRUG","bounds":{"start":53,"end":63},"modifiers":["fast"]}]}}',
   'MSG {"nick":"SoMuchForSubtlety","features":[],"timestamp":1599345648052,"data":"jbpratt  and the documentation is completely shit too PepeLaugh","entities":{"emotes":[{"name":"PepeLaugh","bounds":{"start":54,"end":63}}],"nicks":[{"nick":"jbpratt","bounds":{"start":0,"end":7}}]}}',

@@ -9,7 +9,7 @@ import { useAsync } from "react-use";
 import { Server } from "../../../apis/strims/chat/v1/chat";
 import { InputError, SelectInput, SelectOption, TextInput } from "../../../components/Form";
 import { useClient } from "../../../contexts/FrontendApi";
-import { rootCertificate } from "../../../lib/certificate";
+import { certificateRoot } from "../../../lib/certificate";
 import BackLink from "./BackLink";
 
 export interface ChatServerFormData {
@@ -42,10 +42,13 @@ const ChatServerForm: React.FC<ChatServerFormProps> = ({
 
   const { value: networkOptions } = useAsync(async () => {
     const res = await client.network.list();
-    return res.networks.map((n) => ({
-      value: Base64.fromUint8Array(rootCertificate(n.certificate).key),
-      label: n.name,
-    }));
+    return res.networks.map((n) => {
+      const certRoot = certificateRoot(n.certificate);
+      return {
+        value: Base64.fromUint8Array(certRoot.key),
+        label: certRoot.subject,
+      };
+    });
   });
 
   const setValues = (config: Server) => {

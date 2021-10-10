@@ -1,10 +1,10 @@
-//go:build never
-// +build never
+//go:build js
+// +build js
 
 package timeutil
 
 import (
-	"syscall/js"
+	// "syscall/js"
 	"time"
 )
 
@@ -23,23 +23,53 @@ native implementation.
 implement a helper to pass the time to the tick function
 */
 
+// func newFuncTicker(ivl time.Duration, fn func(t Time)) *funcTicker {
+// 	jsfn := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
+// 		fn(Time(args[0].Float()) * Time(time.Millisecond))
+// 		return nil
+// 	})
+
+// 	id := js.Global().Call("setInterval", jsfn, js.ValueOf(int64(ivl/time.Millisecond)))
+
+// 	return &funcTicker{jsfn, id}
+// }
+
+// type funcTicker struct {
+// 	fn js.Func
+// 	id js.Value
+// }
+
+// func (f *funcTicker) Stop() {
+// 	js.Global().Call("clearInterval", f.id)
+// 	f.fn.Release()
+// }
+
 func newFuncTicker(ivl time.Duration, fn func(t Time)) *funcTicker {
-	jsfn := js.FuncOf(func(this js.Value, args []js.Value) interface{} {
-		fn(Time(args[0].Float()) * Time(time.Millisecond))
-		return nil
-	})
-
-	id := js.Global().Call("setInterval", jsfn, js.ValueOf(int64(ivl/time.Millisecond)))
-
-	return &funcTicker{jsfn, id}
+	return &funcTicker{
+		ivl: ivl,
+		fn:  fn,
+	}
 }
 
 type funcTicker struct {
-	fn js.Func
-	id js.Value
+	ivl time.Duration
+	fn  func(t Time)
+	*time.Ticker
 }
 
-func (f *funcTicker) Stop() {
-	js.Global().Call("clearInterval", f.id)
-	f.fn.Release()
+func (f *funcTicker) Start() {
+	if f.Ticker == nil {
+		f.Ticker = time.NewTicker(f.ivl)
+	} else {
+		f.Ticker.Reset(f.ivl)
+	}
+
+	go f.run(f.fn)
+}
+
+func (f *funcTicker) run(fn func(t Time)) {
+	for t := range f.Ticker.C {
+		SyncNow(t.UnixNano())
+		fn(Now())
+	}
 }

@@ -6,7 +6,7 @@ import { useClient } from "./FrontendApi";
 type State = Network[];
 
 type Ops = {
-  setDisplayOrder: (srcIndex: number, dstIndex: number) => void;
+  updateDisplayOrder: (srcIndex: number, dstIndex: number) => void;
 };
 
 const initialState: State = [];
@@ -40,13 +40,15 @@ export const Provider: React.FC = ({ children }) => {
       prev.map((item) => (item.network.id === networkId ? { ...item, peerCount: peerCount } : item))
     );
 
-  const setDisplayOrder = useCallback(
+  const updateDisplayOrder = useCallback(
     (srcIndex: number, dstIndex: number) =>
       setItems((prev) => {
         const next = Array.from(prev);
         const [target] = next.splice(srcIndex, 1);
         next.splice(dstIndex, 0, target);
-        void client.network.setDisplayOrder({ networkIds: next.map(({ network: { id } }) => id) });
+        void client.network.updateDisplayOrder({
+          networkIds: next.map(({ network: { id } }) => id),
+        });
         return next;
       }),
     []
@@ -74,7 +76,10 @@ export const Provider: React.FC = ({ children }) => {
     return () => events.destroy();
   }, []);
 
-  const value = useMemo<[State, Ops]>(() => [items, { setDisplayOrder }], [items, setDisplayOrder]);
+  const value = useMemo<[State, Ops]>(
+    () => [items, { updateDisplayOrder }],
+    [items, updateDisplayOrder]
+  );
 
   return <NetworkContext.Provider value={value}>{children}</NetworkContext.Provider>;
 };

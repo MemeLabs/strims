@@ -93,7 +93,7 @@ func (h *Host) AddNetwork(cert *certificate.Certificate) (*Node, error) {
 	h.clientsLock.Lock()
 	defer h.clientsLock.Unlock()
 
-	key := dao.GetRootCert(cert).Key
+	key := dao.CertificateRoot(cert).Key
 	if _, ok := h.nodes.Get(key); ok {
 		return nil, ErrDuplicateNetworkKey
 	}

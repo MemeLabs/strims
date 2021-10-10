@@ -9,6 +9,7 @@ import (
 	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
 	"google.golang.org/protobuf/proto"
@@ -36,23 +37,52 @@ type networkService struct {
 	app     control.AppControl
 }
 
-// Create ...
-func (s *networkService) Create(ctx context.Context, r *networkv1.CreateNetworkRequest) (*networkv1.CreateNetworkResponse, error) {
+// CreateServer ...
+func (s *networkService) CreateServer(ctx context.Context, r *networkv1.CreateServerRequest) (*networkv1.CreateServerResponse, error) {
 	network, err := dao.NewNetwork(s.store, r.Name, r.Icon, s.profile)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := s.app.Network().Add(network); err != nil {
+	var logs []*networkv1ca.CertificateLog
+	for c := network.Certificate; c != nil; c = c.GetParent() {
+		log, err := dao.NewCertificateLog(s.store, network.Id, c)
+		if err != nil {
+			return nil, err
+		}
+		logs = append(logs, log)
+	}
+
+	if err := s.app.Network().Add(network, logs); err != nil {
 		return nil, err
 	}
 
-	return &networkv1.CreateNetworkResponse{Network: network}, nil
+	return &networkv1.CreateServerResponse{Network: network}, nil
 }
 
-// Update ...
-func (s *networkService) Update(ctx context.Context, r *networkv1.UpdateNetworkRequest) (*networkv1.UpdateNetworkResponse, error) {
-	return nil, rpc.ErrNotImplemented
+// UpdateServerConfig ...
+func (s *networkService) UpdateServerConfig(ctx context.Context, r *networkv1.UpdateServerConfigRequest) (*networkv1.UpdateServerConfigResponse, error) {
+	network, err := dao.GetNetwork(s.store, r.NetworkId)
+	if err != nil {
+		return nil, err
+	}
+
+	if network.GetServerConfig() == nil {
+		return nil, errors.New("network server config not set")
+	}
+	if r.ServerConfig == nil {
+		return nil, errors.New("network server config not set")
+	}
+
+	network.ServerConfigOneof = &networkv1.Network_ServerConfig{
+		ServerConfig: r.ServerConfig,
+	}
+
+	if err := dao.UpsertNetwork(s.store, network); err != nil {
+		return nil, err
+	}
+
+	return &networkv1.UpdateServerConfigResponse{Network: network}, nil
 }
 
 // Delete ...
@@ -82,7 +112,7 @@ func (s *networkService) List(ctx context.Context, r *networkv1.ListNetworksRequ
 }
 
 // CreateInvitation ...
-func (s *networkService) CreateInvitation(ctx context.Context, r *networkv1.CreateNetworkInvitationRequest) (*networkv1.CreateNetworkInvitationResponse, error) {
+func (s *networkService) CreateInvitation(ctx context.Context, r *networkv1.CreateInvitationRequest) (*networkv1.CreateInvitationResponse, error) {
 	invitation, err := dao.NewInvitationV0(r.SigningKey, r.SigningCert)
 	if err != nil {
 		return nil, err
@@ -103,14 +133,14 @@ func (s *networkService) CreateInvitation(ctx context.Context, r *networkv1.Crea
 
 	b64 := base64.StdEncoding.WithPadding(base64.NoPadding).EncodeToString(b)
 
-	return &networkv1.CreateNetworkInvitationResponse{
+	return &networkv1.CreateInvitationResponse{
 		InvitationB64:   b64,
 		InvitationBytes: b,
 	}, nil
 }
 
-// CreateFromInvitation ...
-func (s *networkService) CreateFromInvitation(ctx context.Context, r *networkv1.CreateNetworkFromInvitationRequest) (*networkv1.CreateNetworkFromInvitationResponse, error) {
+// CreateNetworkFromInvitation ...
+func (s *networkService) CreateNetworkFromInvitation(ctx context.Context, r *networkv1.CreateNetworkFromInvitationRequest) (*networkv1.CreateNetworkFromInvitationResponse, error) {
 	var invBytes []byte
 
 	switch x := r.Invitation.(type) {
@@ -145,7 +175,7 @@ func (s *networkService) CreateFromInvitation(ctx context.Context, r *networkv1.
 		return nil, err
 	}
 
-	if err := s.app.Network().Add(network); err != nil {
+	if err := s.app.Network().Add(network, nil); err != nil {
 		return nil, err
 	}
 
@@ -167,10 +197,15 @@ func (s *networkService) Watch(ctx context.Context, r *networkv1.WatchNetworksRe
 	return ch, nil
 }
 
-// SetDisplayOrder ...
-func (s *networkService) SetDisplayOrder(ctx context.Context, r *networkv1.SetDisplayOrderRequest) (*networkv1.SetDisplayOrderResponse, error) {
-	if err := s.app.Network().SetDisplayOrder(r.NetworkIds); err != nil {
+// UpdateDisplayOrder ...
+func (s *networkService) UpdateDisplayOrder(ctx context.Context, r *networkv1.UpdateDisplayOrderRequest) (*networkv1.UpdateDisplayOrderResponse, error) {
+	if err := s.app.Network().UpdateDisplayOrder(r.NetworkIds); err != nil {
 		return nil, err
 	}
-	return &networkv1.SetDisplayOrderResponse{}, nil
+	return &networkv1.UpdateDisplayOrderResponse{}, nil
+}
+
+// UpdateAlias ...
+func (s *networkService) UpdateAlias(ctx context.Context, r *networkv1.UpdateAliasRequest) (*networkv1.UpdateAliasResponse, error) {
+	return nil, rpc.ErrNotImplemented
 }

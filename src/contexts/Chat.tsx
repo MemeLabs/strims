@@ -102,6 +102,7 @@ const initialState: State = {
     formatterCombo: true,
     emoteModifiers: true,
     disableSpoilers: false,
+    shortenLinks: true,
     viewerStateIndicator: UIConfig.ViewerStateIndicator.VIEWER_STATE_INDICATOR_BAR,
   }),
   config: {

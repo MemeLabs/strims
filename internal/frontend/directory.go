@@ -7,15 +7,14 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/directory"
 	"github.com/MemeLabs/go-ppspp/internal/event"
-	network "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	"github.com/MemeLabs/go-ppspp/pkg/rtmpingress"
-	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
+	"golang.org/x/sync/errgroup"
 )
 
 func init() {
 	RegisterService(func(server *rpc.Server, params *ServiceParams) {
-		network.RegisterDirectoryFrontendService(server, &directoryService{
+		networkv1directory.RegisterDirectoryFrontendService(server, &directoryService{
 			app: params.App,
 		})
 	})
@@ -27,8 +26,8 @@ type directoryService struct {
 }
 
 // Open ...
-func (s *directoryService) Open(ctx context.Context, r *network.DirectoryFrontendOpenRequest) (<-chan *network.DirectoryFrontendOpenResponse, error) {
-	ch := make(chan *network.DirectoryFrontendOpenResponse, 128)
+func (s *directoryService) Open(ctx context.Context, r *networkv1directory.FrontendOpenRequest) (<-chan *networkv1directory.FrontendOpenResponse, error) {
+	ch := make(chan *networkv1directory.FrontendOpenResponse, 128)
 
 	go func() {
 		raw := make(chan interface{}, 8)
@@ -39,18 +38,20 @@ func (s *directoryService) Open(ctx context.Context, r *network.DirectoryFronten
 			case e := <-raw:
 				switch e := e.(type) {
 				case event.DirectoryEvent:
-					ch <- &network.DirectoryFrontendOpenResponse{
+					ch <- &networkv1directory.FrontendOpenResponse{
 						NetworkId:  e.NetworkID,
 						NetworkKey: e.NetworkKey,
-						Body: &network.DirectoryFrontendOpenResponse_Broadcast{
+						Body: &networkv1directory.FrontendOpenResponse_Broadcast{
 							Broadcast: e.Broadcast,
 						},
 					}
 				case event.NetworkStop:
-					ch <- &network.DirectoryFrontendOpenResponse{
+					ch <- &networkv1directory.FrontendOpenResponse{
 						NetworkId:  e.Network.Id,
-						NetworkKey: e.Network.Key.Public,
-						Body:       &network.DirectoryFrontendOpenResponse_Close{},
+						NetworkKey: dao.CertificateRoot(e.Network.Certificate).Key,
+						Body: &networkv1directory.FrontendOpenResponse_Close_{
+							Close: &networkv1directory.FrontendOpenResponse_Close{},
+						},
 					}
 				}
 			case <-ctx.Done():
@@ -66,46 +67,91 @@ func (s *directoryService) Open(ctx context.Context, r *network.DirectoryFronten
 }
 
 // Test ...
-func (s *directoryService) Test(ctx context.Context, r *network.DirectoryFrontendTestRequest) (*network.DirectoryFrontendTestResponse, error) {
+func (s *directoryService) Test(ctx context.Context, r *networkv1directory.FrontendTestRequest) (*networkv1directory.FrontendTestResponse, error) {
 	client, err := s.app.Dialer().Client(r.NetworkKey, r.NetworkKey, directory.AddressSalt)
 	if err != nil {
 		return nil, err
 	}
+	directoryClient := networkv1directory.NewDirectoryClient(client)
 
-	key, err := dao.GenerateKey()
-	if err != nil {
-		return nil, err
-	}
-
-	listing := &network.DirectoryListing{
-		// Creator:   creator,
-		Timestamp: timeutil.Now().Unix(),
-		Snippet: &network.DirectoryListingSnippet{
-			Title:       "some title",
-			Description: "that test description",
-			Tags:        []string{"foo", "bar", "baz"},
+	sets := []struct {
+		service networkv1directory.Listing_Embed_Service
+		ids     []string
+	}{
+		{
+			networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_YOUTUBE,
+			[]string{"DDTGlyJVNVI", "SocSlBubzwA", "c5Z-0hkyxgo", "-IO6fpjDJY8", "nKrznsPB5t8", "PMesD2l6viA", "GTYJd2qfx5g", "i6zaVYWLTkU", "9VE7afYWzYo", "JQ4Jx8XfP_w", "oEgZeTr3Vs4", "pRpeEdMmmQ0"},
 		},
-		Content: &network.DirectoryListing_Media{
-			Media: &network.DirectoryListingMedia{
-				StartedAt: timeutil.Now().Unix(),
-				MimeType:  rtmpingress.TranscoderMimeType,
-				// SwarmUri:  s.swarm.URI().String(),
-			},
+		{
+			networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
+			[]string{"psrngafk", "bliutwo", "t4tv", "somuchforsubtlety", "erik", "windowsmoviehouse", "keyno", "eastmancolor", "feenamabob", "harkdan"},
+		},
+		{
+			networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_STREAM,
+			[]string{"namemannen", "not0like0this", "buddha", "shroud", "purgegamers", "sweetdreams", "destiny", "hannapig_", "ibabyrainbow", "tastelesstv"},
+		},
+		{
+			networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_TWITCH_VOD,
+			[]string{"1159927987", "1157956746", "1160400711"},
 		},
 	}
-	err = dao.SignMessage(listing, key)
-	if err != nil {
+
+	eg, ctx := errgroup.WithContext(ctx)
+
+	for _, set := range sets {
+		for _, id := range set.ids {
+			listing := &networkv1directory.Listing{
+				Content: &networkv1directory.Listing_Embed_{
+					Embed: &networkv1directory.Listing_Embed{
+						Service: set.service,
+						Id:      id,
+					},
+				},
+			}
+
+			eg.Go(func() error {
+				return directoryClient.Publish(
+					ctx,
+					&networkv1directory.PublishRequest{Listing: listing},
+					&networkv1directory.PublishResponse{},
+				)
+			})
+		}
+	}
+
+	if err := eg.Wait(); err != nil {
 		return nil, err
 	}
 
-	err = network.NewDirectoryClient(client).Publish(
-		context.Background(),
-		&network.DirectoryPublishRequest{Listing: listing},
-		&network.DirectoryPublishResponse{},
-	)
-	if err != nil {
-		return nil, err
-	}
+	// listing := &networkv1directory.Listing{
+	// 	// Content: &networkv1directory.Listing_Media_{
+	// 	// 	Media: &networkv1directory.Listing_Media{
+	// 	// 		MimeType: rtmpingress.TranscoderMimeType,
+	// 	// 		// SwarmUri:  s.swarm.URI().String(),
+	// 	// 	},
+	// 	// },
+	// 	Content: &networkv1directory.Listing_Embed_{
+	// 		Embed: &networkv1directory.Listing_Embed{
+	// 			Service: networkv1directory.Listing_Embed_DIRECTORY_LISTING_EMBED_SERVICE_ANGELTHUMP,
+	// 			Id:      "psrngafk",
+	// 		},
+	// 	},
+	// }
 
-	return &network.DirectoryFrontendTestResponse{}, nil
+	// res := &networkv1directory.PublishResponse{}
+	// err = directoryClient.Publish(ctx, &networkv1directory.PublishRequest{Listing: listing}, res)
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	// err = directoryClient.Join(
+	// 	ctx,
+	// 	&networkv1directory.JoinRequest{Id: res.Id},
+	// 	&networkv1directory.JoinResponse{},
+	// )
+	// if err != nil {
+	// 	return nil, err
+	// }
+
+	return &networkv1directory.FrontendTestResponse{}, nil
 }

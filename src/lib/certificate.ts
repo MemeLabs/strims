@@ -1,6 +1,6 @@
 import { Certificate } from "../apis/strims/type/certificate";
 
-export const rootCertificate = (cert: Certificate): Certificate =>
+export const certificateRoot = (cert: Certificate): Certificate =>
   cert.parentOneof.case === Certificate.ParentOneofCase.PARENT
-    ? rootCertificate(cert.parentOneof.parent)
+    ? certificateRoot(cert.parentOneof.parent)
     : cert;

@@ -8,27 +8,28 @@ option swift_prefix = "SNT";
 
 import "type/key.proto";
 import "type/certificate.proto";
+import "network/v1/directory/directory.proto";
 
 message NetworkIcon {
   bytes data = 1;
   string type = 2;
 }
 
-message CreateNetworkRequest {
+message CreateServerRequest {
   string name = 1;
   NetworkIcon icon = 2;
 }
 
-message CreateNetworkResponse {
+message CreateServerResponse {
   Network network = 1;
 }
 
-message UpdateNetworkRequest {
-  uint64 id = 1;
-  string name = 2;
+message UpdateServerConfigRequest {
+  uint64 network_id = 1;
+  ServerConfig server_config = 2;
 }
 
-message UpdateNetworkResponse {
+message UpdateServerConfigResponse {
   Network network = 1;
 }
 
@@ -52,40 +53,40 @@ message ListNetworksResponse {
   repeated Network networks = 1;
 }
 
-message Network {
-  uint64 id = 1;
+message ServerConfig {
   string name = 2;
   strims.type.Key key = 3;
-  strims.type.Certificate certificate = 4;
-  NetworkIcon icon = 5;
-  string alt_profile_name = 6;
-  uint32 display_order = 7;
+
+  uint64 root_cert_ttl_secs = 4;
+  uint64 peer_cert_ttl_secs = 5;
+
+  strims.network.v1.directory.ServerConfig directory = 6;
+
+  // per user invite limit
+  // per group invite limit
+  // groups/roles?
+  // default chat
 }
 
-enum KeyUsage {
-  KEY_USAGE_UNDEFINED = 0;
-  // PEER allows bearer to connect with members of the signator's network
-  KEY_USAGE_PEER = 1;
-  // BOOTSTRAP allows the bearer to connect to a network's signators. Invites
-  // including transient keys with bootstrap certs allow new members to request
-  // peer certs.
-  KEY_USAGE_BOOTSTRAP = 2;
-  // SIGN allows the bearer to sign certificates.
-  KEY_USAGE_SIGN = 4;
-  // BROKER allows the bearer to negotiate connections between a network's
-  // members.
-  KEY_USAGE_BROKER = 8;
-  // ENCIPHERMENT allows the key to be used for encrypting messages.
-  KEY_USAGE_ENCIPHERMENT = 16;
+message Network {
+  uint64 id = 1;
+  strims.type.Certificate certificate = 2;
+  NetworkIcon icon = 3;
+  string alias = 4;
+  uint32 display_order = 5;
+
+  oneof server_config_oneof {
+    ServerConfig server_config = 1001;
+  }
 }
 
-message CreateNetworkInvitationRequest {
+message CreateInvitationRequest {
   strims.type.Key signing_key = 1;
   strims.type.Certificate signing_cert = 2;
   string network_name = 3;
 }
 
-message CreateNetworkInvitationResponse {
+message CreateInvitationResponse {
   Invitation invitation = 1;
   string invitation_b64 = 2;
   bytes invitation_bytes = 3;
@@ -141,20 +142,30 @@ message WatchNetworksResponse {
   NetworkEvent event = 1;
 }
 
-message SetDisplayOrderRequest {
+message UpdateDisplayOrderRequest {
   repeated uint64 network_ids = 1;
 }
 
-message SetDisplayOrderResponse {}
+message UpdateDisplayOrderResponse {}
+
+message UpdateAliasRequest {
+  uint64 id = 1;
+  string alias = 2;
+}
+
+message UpdateAliasResponse {
+  Network network = 1;
+}
 
 service NetworkService {
-  rpc Create(CreateNetworkRequest) returns (CreateNetworkResponse);
-  rpc Update(UpdateNetworkRequest) returns (UpdateNetworkResponse);
+  rpc CreateServer(CreateServerRequest) returns (CreateServerResponse);
+  rpc UpdateServerConfig(UpdateServerConfigRequest) returns (UpdateServerConfigResponse);
   rpc Delete(DeleteNetworkRequest) returns (DeleteNetworkResponse);
   rpc Get(GetNetworkRequest) returns (GetNetworkResponse);
   rpc List(ListNetworksRequest) returns (ListNetworksResponse);
-  rpc CreateInvitation(CreateNetworkInvitationRequest) returns (CreateNetworkInvitationResponse);
-  rpc CreateFromInvitation(CreateNetworkFromInvitationRequest) returns (CreateNetworkFromInvitationResponse);
+  rpc CreateInvitation(CreateInvitationRequest) returns (CreateInvitationResponse);
+  rpc CreateNetworkFromInvitation(CreateNetworkFromInvitationRequest) returns (CreateNetworkFromInvitationResponse);
   rpc Watch(WatchNetworksRequest) returns (stream WatchNetworksResponse);
-  rpc SetDisplayOrder(SetDisplayOrderRequest) returns (SetDisplayOrderResponse);
+  rpc UpdateDisplayOrder(UpdateDisplayOrderRequest) returns (UpdateDisplayOrderResponse);
+  rpc UpdateAlias(UpdateAliasRequest) returns (UpdateAliasResponse);
 }

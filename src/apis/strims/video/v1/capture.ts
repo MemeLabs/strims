@@ -2,30 +2,30 @@ import Reader from "@memelabs/protobuf/lib/pb/reader";
 import Writer from "@memelabs/protobuf/lib/pb/writer";
 
 import {
-  DirectoryListingSnippet as strims_network_v1_DirectoryListingSnippet,
-  IDirectoryListingSnippet as strims_network_v1_IDirectoryListingSnippet,
-} from "../../network/v1/directory";
+  ListingSnippet as strims_network_v1_directory_ListingSnippet,
+  IListingSnippet as strims_network_v1_directory_IListingSnippet,
+} from "../../network/v1/directory/directory";
 
 export type ICaptureOpenRequest = {
-  directorySnippet?: strims_network_v1_IDirectoryListingSnippet;
+  directorySnippet?: strims_network_v1_directory_IListingSnippet | undefined;
   mimeType?: string;
   networkKeys?: Uint8Array[];
 }
 
 export class CaptureOpenRequest {
-  directorySnippet: strims_network_v1_DirectoryListingSnippet | undefined;
+  directorySnippet: strims_network_v1_directory_ListingSnippet | undefined;
   mimeType: string;
   networkKeys: Uint8Array[];
 
   constructor(v?: ICaptureOpenRequest) {
-    this.directorySnippet = v?.directorySnippet && new strims_network_v1_DirectoryListingSnippet(v.directorySnippet);
+    this.directorySnippet = v?.directorySnippet && new strims_network_v1_directory_ListingSnippet(v.directorySnippet);
     this.mimeType = v?.mimeType || "";
     this.networkKeys = v?.networkKeys ? v.networkKeys : [];
   }
 
   static encode(m: CaptureOpenRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.directorySnippet) strims_network_v1_DirectoryListingSnippet.encode(m.directorySnippet, w.uint32(10).fork()).ldelim();
+    if (m.directorySnippet) strims_network_v1_directory_ListingSnippet.encode(m.directorySnippet, w.uint32(10).fork()).ldelim();
     if (m.mimeType) w.uint32(18).string(m.mimeType);
     for (const v of m.networkKeys) w.uint32(26).bytes(v);
     return w;
@@ -39,7 +39,7 @@ export class CaptureOpenRequest {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.directorySnippet = strims_network_v1_DirectoryListingSnippet.decode(r, r.uint32());
+        m.directorySnippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
         break;
         case 2:
         m.mimeType = r.string();
@@ -94,22 +94,22 @@ export class CaptureOpenResponse {
 
 export type ICaptureUpdateRequest = {
   id?: Uint8Array;
-  directorySnippet?: strims_network_v1_IDirectoryListingSnippet;
+  directorySnippet?: strims_network_v1_directory_IListingSnippet | undefined;
 }
 
 export class CaptureUpdateRequest {
   id: Uint8Array;
-  directorySnippet: strims_network_v1_DirectoryListingSnippet | undefined;
+  directorySnippet: strims_network_v1_directory_ListingSnippet | undefined;
 
   constructor(v?: ICaptureUpdateRequest) {
     this.id = v?.id || new Uint8Array();
-    this.directorySnippet = v?.directorySnippet && new strims_network_v1_DirectoryListingSnippet(v.directorySnippet);
+    this.directorySnippet = v?.directorySnippet && new strims_network_v1_directory_ListingSnippet(v.directorySnippet);
   }
 
   static encode(m: CaptureUpdateRequest, w?: Writer): Writer {
     if (!w) w = new Writer();
     if (m.id) w.uint32(10).bytes(m.id);
-    if (m.directorySnippet) strims_network_v1_DirectoryListingSnippet.encode(m.directorySnippet, w.uint32(18).fork()).ldelim();
+    if (m.directorySnippet) strims_network_v1_directory_ListingSnippet.encode(m.directorySnippet, w.uint32(18).fork()).ldelim();
     return w;
   }
 
@@ -124,7 +124,7 @@ export class CaptureUpdateRequest {
         m.id = r.bytes();
         break;
         case 2:
-        m.directorySnippet = strims_network_v1_DirectoryListingSnippet.decode(r, r.uint32());
+        m.directorySnippet = strims_network_v1_directory_ListingSnippet.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);

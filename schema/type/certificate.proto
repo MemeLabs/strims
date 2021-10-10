@@ -27,6 +27,7 @@ message Certificate {
   bytes signature = 8;
   oneof parent_oneof {
     Certificate parent = 9;
+    bytes parent_serial_number = 10;
   }
 }
 

@@ -216,6 +216,7 @@ message UIConfig {
   bool disable_spoilers = 29;
   ViewerStateIndicator viewer_state_indicator = 30;
   repeated string hidden_emotes = 31;
+  bool shorten_links = 32;
 }
 
 message CreateServerRequest {

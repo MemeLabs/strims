@@ -11,13 +11,13 @@ import { useToggle } from "react-use";
 import usePortal from "react-useportal";
 
 import { MetricsFormat } from "../apis/strims/debug/v1/debug";
-import { CreateNetworkResponse, Network } from "../apis/strims/network/v1/network";
+import { CreateServerResponse, Network } from "../apis/strims/network/v1/network";
 import { Provider as DirectoryProvider } from "../contexts/Directory";
 import { useClient } from "../contexts/FrontendApi";
 import { NetworkContext, Provider as NetworkProvider } from "../contexts/Network";
 import { useTheme } from "../contexts/Theme";
 import useObjectURL from "../hooks/useObjectURL";
-import { rootCertificate } from "../lib/certificate";
+import { certificateRoot } from "../lib/certificate";
 import AddNetworkModal from "./AddNetworkModal";
 import Badge from "./Badge";
 import ChatPanel from "./ChatPanel";
@@ -109,8 +109,10 @@ const NetworkAddButton: React.FC<React.ComponentProps<"button">> = ({ children, 
   };
   const history = useHistory();
 
-  const handleCreate = (res: CreateNetworkResponse) => {
-    history.push(`/directory/${Base64.fromUint8Array(res.network.key.public, true)}`);
+  const handleCreate = (res: CreateServerResponse) => {
+    history.push(
+      `/directory/${Base64.fromUint8Array(certificateRoot(res.network.certificate).key, true)}`
+    );
     closePortal();
   };
 
@@ -150,7 +152,7 @@ const NetworkGem: React.FC<NetworkGemProps> = ({ network, peerCount }) => {
   const backgroundColor = "green";
   return (
     <div className={gemClassName} style={{ backgroundColor }}>
-      {network.name.substr(0, 1)}
+      {certificateRoot(network.certificate).subject.substr(0, 1)}
       <Badge count={peerCount} />
     </div>
   );
@@ -163,12 +165,12 @@ interface NetworkNavItem {
 
 const NetworkNav: React.FC = () => {
   const [expanded, toggleExpanded] = useToggle(false);
-  const [networks, { setDisplayOrder }] = useContext(NetworkContext);
+  const [networks, { updateDisplayOrder }] = useContext(NetworkContext);
   // const [state, { setNavOrder }] = useTheme();
 
   const onDragEnd = React.useCallback((result: DropResult) => {
     if (result.destination) {
-      setDisplayOrder(result.source.index, result.destination.index);
+      updateDisplayOrder(result.source.index, result.destination.index);
     }
   }, []);
 
@@ -189,29 +191,29 @@ const NetworkNav: React.FC = () => {
                   index={i}
                   key={network.id.toString()}
                 >
-                  {({ innerRef, draggableProps, dragHandleProps }) => (
-                    <div ref={innerRef} {...draggableProps} {...dragHandleProps}>
-                      <Tooltip
-                        placement="right"
-                        trigger={["hover"]}
-                        overlay={network.name}
-                        {...(expanded ? { visible: false } : {})}
-                      >
-                        <Link
-                          to={`/directory/${Base64.fromUint8Array(
-                            rootCertificate(network.certificate).key,
-                            true
-                          )}`}
-                          className="main_layout__left__link"
+                  {({ innerRef, draggableProps, dragHandleProps }) => {
+                    const certRoot = certificateRoot(network.certificate);
+                    return (
+                      <div ref={innerRef} {...draggableProps} {...dragHandleProps}>
+                        <Tooltip
+                          placement="right"
+                          trigger={["hover"]}
+                          overlay={certRoot.subject}
+                          {...(expanded ? { visible: false } : {})}
                         >
-                          <NetworkGem network={network} peerCount={peerCount} />
-                          <div className="main_layout__left__link__text">
-                            <span>{network.name}</span>
-                          </div>
-                        </Link>
-                      </Tooltip>
-                    </div>
-                  )}
+                          <Link
+                            to={`/directory/${Base64.fromUint8Array(certRoot.key, true)}`}
+                            className="main_layout__left__link"
+                          >
+                            <NetworkGem network={network} peerCount={peerCount} />
+                            <div className="main_layout__left__link__text">
+                              <span>{certRoot.subject}</span>
+                            </div>
+                          </Link>
+                        </Tooltip>
+                      </div>
+                    );
+                  }}
                 </Draggable>
               ))}
               {placeholder}

@@ -20,16 +20,16 @@ type Conn interface {
 
 // NewConnPair ...
 func NewConnPair() (Conn, Conn) {
-	ar, aw := newBufPipe()
-	br, bw := newBufPipe()
+	ar, aw := NewBufPipe()
+	br, bw := NewBufPipe()
 
 	return &conn{ar, bw}, &conn{br, aw}
 }
 
 // Conn ...
 type conn struct {
-	r *bufPipeReader
-	w *bufPipeWriter
+	r *BufPipeReader
+	w *BufPipeWriter
 }
 
 // Write ...
@@ -68,8 +68,8 @@ func (c *conn) Read(p []byte) (int, error) {
 
 // NewUnbufferedConnPair ...
 func NewUnbufferedConnPair() (Conn, Conn) {
-	ar, aw := newBufPipe()
-	br, bw := newBufPipe()
+	ar, aw := NewBufPipe()
+	br, bw := NewBufPipe()
 
 	return &unbufferedConn{conn: conn{ar, bw}}, &unbufferedConn{conn: conn{br, aw}}
 }

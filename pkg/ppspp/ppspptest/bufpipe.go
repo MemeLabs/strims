@@ -6,12 +6,12 @@ import (
 	"sync"
 )
 
-var errBufPipeClosed = errors.New("io on closed bufPipe")
+var ErrBufPipeClosed = errors.New("io on closed bufPipe")
 
-func newBufPipe() (*bufPipeReader, *bufPipeWriter) {
+func NewBufPipe() (*BufPipeReader, *BufPipeWriter) {
 	b := &bufPipe{close: make(chan struct{})}
 	ch := make(chan int, 1024)
-	return &bufPipeReader{ch: ch, buf: b}, &bufPipeWriter{ch: ch, buf: b}
+	return &BufPipeReader{ch: ch, buf: b}, &BufPipeWriter{ch: ch, buf: b}
 }
 
 type bufPipe struct {
@@ -26,7 +26,7 @@ func (b *bufPipe) Write(p []byte) (int, error) {
 	defer b.lock.Unlock()
 
 	if b.closed {
-		return 0, errBufPipeClosed
+		return 0, ErrBufPipeClosed
 	}
 
 	return b.buf.Write(p)
@@ -37,7 +37,7 @@ func (b *bufPipe) Read(p []byte) (int, error) {
 	defer b.lock.Unlock()
 
 	if b.closed {
-		return 0, errBufPipeClosed
+		return 0, ErrBufPipeClosed
 	}
 
 	return b.buf.Read(p)
@@ -48,7 +48,7 @@ func (b *bufPipe) Close() error {
 	defer b.lock.Unlock()
 
 	if b.closed {
-		return errBufPipeClosed
+		return ErrBufPipeClosed
 	}
 
 	b.closed = true
@@ -60,44 +60,44 @@ func (b *bufPipe) CloseNotify() <-chan struct{} {
 	return b.close
 }
 
-type bufPipeWriter struct {
+type BufPipeWriter struct {
 	ch  chan int
 	n   int
 	buf *bufPipe
 }
 
-func (w *bufPipeWriter) Buffered() int {
+func (w *BufPipeWriter) Buffered() int {
 	return w.n
 }
 
-func (w *bufPipeWriter) Write(p []byte) (int, error) {
+func (w *BufPipeWriter) Write(p []byte) (int, error) {
 	n, err := w.buf.Write(p)
 	w.n += n
 	return n, err
 }
 
-func (w *bufPipeWriter) Flush() error {
+func (w *BufPipeWriter) Flush() error {
 	w.ch <- w.n
 	w.n = 0
 	return nil
 }
 
-func (w *bufPipeWriter) Close() error {
+func (w *BufPipeWriter) Close() error {
 	return w.buf.Close()
 }
 
-type bufPipeReader struct {
+type BufPipeReader struct {
 	ch  <-chan int
 	n   int
 	buf *bufPipe
 }
 
-func (r *bufPipeReader) Read(p []byte) (int, error) {
+func (r *BufPipeReader) Read(p []byte) (int, error) {
 	if r.n == 0 {
 		select {
 		case r.n = <-r.ch:
 		case <-r.buf.CloseNotify():
-			return 0, errBufPipeClosed
+			return 0, ErrBufPipeClosed
 		}
 	}
 
@@ -110,6 +110,6 @@ func (r *bufPipeReader) Read(p []byte) (int, error) {
 	return n, err
 }
 
-func (r *bufPipeReader) Close() error {
+func (r *BufPipeReader) Close() error {
 	return r.buf.Close()
 }

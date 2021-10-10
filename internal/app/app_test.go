@@ -5,6 +5,7 @@ import (
 	"time"
 
 	control "github.com/MemeLabs/go-ppspp/internal"
+	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/network"
 	"github.com/MemeLabs/go-ppspp/internal/services/peer"
 	"github.com/MemeLabs/go-ppspp/internal/services/servicestest"
@@ -45,7 +46,7 @@ func NewTestControlPair(logger *zap.Logger) ([]byte, []control.AppControl, error
 
 	time.Sleep(100 * time.Millisecond)
 
-	networkKey := cluster.Hosts[0].Network.Key.Public
+	networkKey := dao.NetworkKey(cluster.Hosts[0].Network)
 
 	return networkKey, ctrl, nil
 }

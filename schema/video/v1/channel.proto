@@ -8,7 +8,7 @@ option swift_prefix = "SVO";
 
 import "type/certificate.proto";
 import "type/key.proto";
-import "network/v1/directory.proto";
+import "network/v1/directory/directory.proto";
 
 message VideoChannel {
   message Local {
@@ -36,7 +36,7 @@ message VideoChannel {
   }
   strims.type.Key key = 2;
   bytes token = 3;
-  strims.network.v1.DirectoryListingSnippet directory_listing_snippet = 4;
+  strims.network.v1.directory.ListingSnippet directory_listing_snippet = 4;
 }
 
 message VideoChannelListRequest {}
@@ -46,7 +46,7 @@ message VideoChannelListResponse {
 }
 
 message VideoChannelCreateRequest {
-  strims.network.v1.DirectoryListingSnippet directory_listing_snippet = 1;
+  strims.network.v1.directory.ListingSnippet directory_listing_snippet = 1;
   bytes network_key = 2;
 }
 
@@ -56,7 +56,7 @@ message VideoChannelCreateResponse {
 
 message VideoChannelUpdateRequest {
   uint64 id = 1;
-  strims.network.v1.DirectoryListingSnippet directory_listing_snippet = 2;
+  strims.network.v1.directory.ListingSnippet directory_listing_snippet = 2;
   bytes network_key = 3;
 }
 

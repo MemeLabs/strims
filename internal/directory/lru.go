@@ -23,6 +23,12 @@ func (l *lru) Get(u keyer) keyer {
 	return nil
 }
 
+func (l *lru) Each(it func(i keyer) bool) {
+	l.items.AscendLessThan(llrb.Inf(1), func(ii llrb.Item) bool {
+		return it(ii.(*lruItem).item)
+	})
+}
+
 func (l *lru) PeekRecentlyTouched(eol timeutil.Time) lruIterator {
 	return lruIterator{next: l.head, eol: eol}
 }
@@ -155,4 +161,55 @@ func keyerLess(h keyer, o llrb.Item) bool {
 		return bytes.Compare(h.Key(), o.Key()) == -1
 	}
 	return !o.Less(h)
+}
+
+func newIndexedLRU() indexedLRU {
+	return indexedLRU{
+		index: map[uint64]*lruItem{},
+	}
+}
+
+type indexedLRU struct {
+	lru
+	index map[uint64]*lruItem
+}
+
+func (l *indexedLRU) GetByID(id uint64) keyer {
+	if i, ok := l.index[id]; ok {
+		l.remove(i)
+		l.push(i)
+		return i.item
+	}
+	return nil
+}
+
+func (l *indexedLRU) GetOrInsert(u indexedLRUKeyer) keyer {
+	i := &lruItem{item: u}
+	if ii := l.items.Get(i); ii != nil {
+		i = ii.(*lruItem)
+		u = i.item.(indexedLRUKeyer)
+		l.remove(i)
+	} else {
+		l.index[u.ID()] = i
+		l.items.ReplaceOrInsert(i)
+	}
+	l.push(i)
+	return u
+}
+
+func (l *indexedLRU) Delete(u indexedLRUKeyer) {
+	ii := l.items.Delete(&lruItem{item: u})
+	if ii == nil {
+		return
+	}
+	delete(l.index, u.ID())
+
+	i := ii.(*lruItem)
+	l.remove(i)
+	l.head = i.next
+}
+
+type indexedLRUKeyer interface {
+	keyer
+	ID() uint64
 }

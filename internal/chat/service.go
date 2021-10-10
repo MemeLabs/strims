@@ -8,7 +8,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/dialer"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/protoutil"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
@@ -97,10 +97,10 @@ func (d *chatService) broadcast(now timeutil.Time) error {
 	d.lock.Lock()
 	defer d.lock.Unlock()
 
-	var events []*networkv1.DirectoryEvent
+	var events []*networkv1directory.Event
 
 	if events != nil {
-		err := d.eventWriter.Write(&networkv1.DirectoryEventBroadcast{
+		err := d.eventWriter.Write(&networkv1directory.EventBroadcast{
 			Events: events,
 		})
 		if err != nil {

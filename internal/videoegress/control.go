@@ -16,6 +16,8 @@ import (
 	"go.uber.org/zap"
 )
 
+var _ control.VideoEgressControl = &Control{}
+
 // NewControl ...
 func NewControl(logger *zap.Logger, vpn *vpn.Host, observers *event.Observers, transfer control.TransferControl) *Control {
 	// events := make(chan interface{}, 8)

@@ -9,6 +9,8 @@ import (
 	"github.com/MemeLabs/go-ppspp/internal/event"
 	chatv1 "github.com/MemeLabs/go-ppspp/pkg/apis/chat/v1"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
@@ -40,17 +42,17 @@ type DialerControl interface {
 
 // DirectoryControl ...
 type DirectoryControl interface {
-	Publish(ctx context.Context, listing *networkv1.DirectoryListing, networkKey []byte) error
-	Unpublish(ctx context.Context, key, networkKey []byte) error
+	Publish(ctx context.Context, listing *networkv1directory.Listing, networkKey []byte) (uint64, error)
+	Unpublish(ctx context.Context, id uint64, networkKey []byte) error
 }
 
 // NetworkControl ...
 type NetworkControl interface {
 	Certificate(networkKey []byte) (*certificate.Certificate, bool)
-	Add(network *networkv1.Network) error
+	Add(network *networkv1.Network, logs []*networkv1ca.CertificateLog) error
 	Remove(id uint64) error
 	ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
-	SetDisplayOrder(ids []uint64) error
+	UpdateDisplayOrder(ids []uint64) error
 }
 
 // TransferControl ...
@@ -63,9 +65,9 @@ type TransferControl interface {
 
 // VideoCaptureControl ...
 type VideoCaptureControl interface {
-	Open(mimeType string, directorySnippet *networkv1.DirectoryListingSnippet, networkKeys [][]byte) ([]byte, error)
-	OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1.DirectoryListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error)
-	Update(id []byte, directorySnippet *networkv1.DirectoryListingSnippet) error
+	Open(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte) ([]byte, error)
+	OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error)
+	Update(id []byte, directorySnippet *networkv1directory.ListingSnippet) error
 	Append(id []byte, b []byte, segmentEnd bool) error
 	Close(id []byte) error
 }

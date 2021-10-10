@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"errors"
-	"strconv"
 	"sync"
 
 	control "github.com/MemeLabs/go-ppspp/internal"
@@ -40,7 +39,7 @@ func newRunner(ctx context.Context,
 
 	r.runnable <- struct{}{}
 
-	if network.Key != nil {
+	if network.GetServerConfig() != nil {
 		go r.tryStartServer(ctx)
 	}
 
@@ -126,17 +125,21 @@ func (r *runner) EventReader(ctx context.Context) (*protoutil.ChunkStreamReader,
 
 func (r *runner) tryStartServer(ctx context.Context) {
 	for !r.Closed() {
-		mu := dao.NewMutex(r.logger, r.store, strconv.AppendUint([]byte("directory:"), r.network.Id, 10))
-		muctx, err := mu.Lock(ctx)
-		if err != nil {
-			return
-		}
-
 		r.logger.Info("directory server starting")
-		err = r.startServer(muctx)
+		err := r.startServer(ctx)
 		r.logger.Info("directory server closed", zap.Error(err))
 
-		mu.Release()
+		// mu := dao.NewMutex(r.logger, r.store, strconv.AppendUint([]byte("directory:"), r.network.Id, 10))
+		// muctx, err := mu.Lock(ctx)
+		// if err != nil {
+		// 	return
+		// }
+
+		// r.logger.Info("directory server starting")
+		// err = r.startServer(muctx)
+		// r.logger.Info("directory server closed", zap.Error(err))
+
+		// mu.Release()
 	}
 }
 

@@ -6,13 +6,14 @@ import (
 	"sync"
 	"time"
 
+	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/api"
+	caservice "github.com/MemeLabs/go-ppspp/internal/ca/service"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/internal/dialer"
 	"github.com/MemeLabs/go-ppspp/internal/event"
-	"github.com/MemeLabs/go-ppspp/internal/services/ca"
 	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
-	cav1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
+	networkv1ca "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/ca"
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
@@ -45,6 +46,8 @@ type Broker interface {
 	SendKeys(c ioutil.ReadWriteFlusher, keys [][]byte) error
 	ReceiveKeys(c ioutil.ReadWriteFlusher, keys [][]byte) ([][]byte, error)
 }
+
+var _ control.NetworkControl = &Control{}
 
 // NewControl ...
 func NewControl(logger *zap.Logger, broker Broker, vpn *vpn.Host, store *dao.ProfileStore, profile *profilev1.Profile, observers *event.Observers, dialer *dialer.Control) *Control {
@@ -220,8 +223,8 @@ type certificateRenewFunc func(ctx context.Context, cert *certificate.Certificat
 // renewCertificateWithRenewFunc ...
 func (t *Control) renewCertificateWithRenewFunc(network *networkv1.Network, fn certificateRenewFunc) error {
 	subject := t.profile.Name
-	if network.AltProfileName != "" {
-		subject = network.AltProfileName
+	if network.Alias != "" {
+		subject = network.Alias
 	}
 
 	csr, err := dao.NewCertificateRequest(
@@ -249,11 +252,11 @@ func (t *Control) renewCertificateWithRenewFunc(network *networkv1.Network, fn c
 
 // renewCertificate ...
 func (t *Control) renewCertificate(network *networkv1.Network) error {
-	if network.Key != nil {
+	if config := network.GetServerConfig(); config != nil {
 		return t.renewCertificateWithRenewFunc(
 			network,
 			func(ctx context.Context, _ *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
-				return dao.SignCertificateRequestWithNetwork(csr, network)
+				return dao.SignCertificateRequestWithNetwork(csr, config)
 			},
 		)
 	}
@@ -262,17 +265,17 @@ func (t *Control) renewCertificate(network *networkv1.Network) error {
 		network,
 		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
 			networkKey := networkKeyForCertificate(network.Certificate)
-			client, err := t.dialer.Client(networkKey, networkKey, ca.AddressSalt)
+			client, err := t.dialer.Client(networkKey, networkKey, caservice.AddressSalt)
 			if err != nil {
 				return nil, err
 			}
-			caClient := cav1.NewCAClient(client)
+			caClient := networkv1ca.NewCAClient(client)
 
-			renewReq := &cav1.CARenewRequest{
+			renewReq := &networkv1ca.CARenewRequest{
 				Certificate:        cert,
 				CertificateRequest: csr,
 			}
-			renewRes := &cav1.CARenewResponse{}
+			renewRes := &networkv1ca.CARenewResponse{}
 			if err := caClient.Renew(ctx, renewReq, renewRes); err != nil {
 				return nil, err
 			}
@@ -286,11 +289,11 @@ func (t *Control) renewCertificateWithPeer(ctx context.Context, network *network
 	return t.renewCertificateWithRenewFunc(
 		network,
 		func(ctx context.Context, cert *certificate.Certificate, csr *certificate.CertificateRequest) (*certificate.Certificate, error) {
-			req := &cav1.CAPeerRenewRequest{
+			req := &networkv1ca.CAPeerRenewRequest{
 				Certificate:        cert,
 				CertificateRequest: csr,
 			}
-			res := &cav1.CAPeerRenewResponse{}
+			res := &networkv1ca.CAPeerRenewResponse{}
 			if err := peer.client.CA().Renew(ctx, req, res); err != nil {
 				return nil, err
 			}
@@ -334,7 +337,7 @@ func (t *Control) startNetworks() {
 		t.certificates.Insert(n)
 		t.dialer.ReplaceOrInsertNetwork(n)
 
-		cert := dao.GetRootCert(n.Certificate)
+		cert := dao.CertificateRoot(n.Certificate)
 
 		if _, err := t.vpn.AddNetwork(n.Certificate); err != nil {
 			t.logger.Error(
@@ -343,15 +346,16 @@ func (t *Control) startNetworks() {
 				logutil.ByteHex("key", cert.Key),
 				zap.Error(err),
 			)
-		} else {
-			t.logger.Info(
-				"network started",
-				zap.String("name", cert.Subject),
-				logutil.ByteHex("key", cert.Key),
-			)
-
-			t.observers.EmitLocal(event.NetworkStart{Network: n})
+			continue
 		}
+
+		t.logger.Info(
+			"network started",
+			zap.String("name", cert.Subject),
+			logutil.ByteHex("key", cert.Key),
+		)
+
+		t.observers.EmitLocal(event.NetworkStart{Network: n})
 	}
 }
 
@@ -449,9 +453,9 @@ func (t *Control) setCertificate(id uint64, cert *certificate.Certificate) error
 	)
 }
 
-func (t *Control) setNetworkAltProfileName(id uint64, name string) error {
+func (t *Control) setNetworkAlias(id uint64, name string) error {
 	return t.mutateNetwork(id, func(network *networkv1.Network) error {
-		network.AltProfileName = name
+		network.Alias = name
 		return nil
 	})
 }
@@ -465,7 +469,7 @@ func (t *Control) Certificate(networkKey []byte) (*certificate.Certificate, bool
 }
 
 // Add ...
-func (t *Control) Add(n *networkv1.Network) error {
+func (t *Control) Add(n *networkv1.Network, certLogs []*networkv1ca.CertificateLog) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
@@ -474,6 +478,12 @@ func (t *Control) Add(n *networkv1.Network) error {
 	}
 
 	err := t.store.Update(func(tx kv.RWTx) error {
+		for _, l := range certLogs {
+			if err := dao.InsertCertificateLog(tx, l); err != nil {
+				return err
+			}
+		}
+
 		order, err := dao.NextNetworkDisplayOrder(tx)
 		if err != nil {
 			return err
@@ -511,7 +521,13 @@ func (t *Control) Remove(id uint64) error {
 	}
 	networkKey := networkKeyForCertificate(n.network.Certificate)
 
-	if err := dao.DeleteNetwork(t.store, id); err != nil {
+	err := t.store.Update(func(tx kv.RWTx) error {
+		if err := dao.DeleteCertificateLogByNetwork(tx, id); err != nil {
+			return err
+		}
+		return dao.DeleteNetwork(tx, id)
+	})
+	if err != nil {
 		return err
 	}
 
@@ -593,7 +609,7 @@ func (t *Control) ReadEvents(ctx context.Context) <-chan *networkv1.NetworkEvent
 	return ch
 }
 
-func (t *Control) SetDisplayOrder(ids []uint64) error {
+func (t *Control) UpdateDisplayOrder(ids []uint64) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 

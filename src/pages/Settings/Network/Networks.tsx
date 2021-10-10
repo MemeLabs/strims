@@ -4,16 +4,17 @@ import { useForm } from "react-hook-form";
 
 import {
   CreateNetworkFromInvitationResponse,
-  CreateNetworkResponse,
+  CreateServerResponse,
   Network,
 } from "../../apis/strims/network/v1/network";
 import { InputError, SelectInput, TextInput } from "../../components/Form";
 import { useCall, useClient, useLazyCall } from "../../contexts/FrontendApi";
 import { useProfile } from "../../contexts/Profile";
+import { certificateRoot } from "../../lib/certificate";
 import jsonutil from "../../lib/jsonutil";
 
-const NetworkForm = ({ onCreate }: { onCreate: (res: CreateNetworkResponse) => void }) => {
-  const [{ error, loading }, createNetwork] = useLazyCall("network", "create", {
+const NetworkForm = ({ onCreate }: { onCreate: (res: CreateServerResponse) => void }) => {
+  const [{ error, loading }, createNetwork] = useLazyCall("network", "createServer", {
     onComplete: onCreate,
   });
   const { control, handleSubmit } = useForm<{
@@ -57,7 +58,7 @@ const JoinForm = ({
 }: {
   onCreate: (res: CreateNetworkFromInvitationResponse) => void;
 }) => {
-  const [{ error, loading }, create] = useLazyCall("network", "createFromInvitation", {
+  const [{ error, loading }, create] = useLazyCall("network", "createNetworkFromInvitation", {
     onComplete: onCreate,
   });
   const { control, handleSubmit } = useForm<{
@@ -179,7 +180,7 @@ const NetworkTable = ({ networks, onDelete }: { networks: Network[]; onDelete: (
       const invitation = await client.network.createInvitation({
         signingKey: profile.key,
         signingCert: network.certificate,
-        networkName: network.name,
+        networkName: certificateRoot(network.certificate).subject,
       });
       void navigator.clipboard.writeText(invitation.invitationB64);
       console.log("copied invite to clipboard");
@@ -190,7 +191,7 @@ const NetworkTable = ({ networks, onDelete }: { networks: Network[]; onDelete: (
     return (
       <div className="thing_list__item" key={network.id.toString()}>
         {i}
-        <span>{network.name}</span>
+        <span>{certificateRoot(network.certificate).subject}</span>
         <button onClick={handleDelete} className="input input_button">
           delete
         </button>

@@ -58,7 +58,7 @@ func getVideoChannelUniqueKey(v *video.VideoChannel) (string, []byte, bool) {
 	var key []byte
 	switch o := v.Owner.(type) {
 	case *video.VideoChannel_LocalShare_:
-		key = append(key, GetRootCert(o.LocalShare.Certificate).Key...)
+		key = append(key, CertificateRoot(o.LocalShare.Certificate).Key...)
 		key = append(key, o.LocalShare.Certificate.Key...)
 		return videoChannelLocalShareIndexPrefix, key, true
 	case *video.VideoChannel_RemoteShare_:
@@ -110,7 +110,7 @@ func GetVideoChannelByStreamKey(s kv.Store, key string) (*video.VideoChannel, er
 // GetVideoChannelIDByOwnerCert ...
 func GetVideoChannelIDByOwnerCert(s kv.Store, cert *certificate.Certificate) (uint64, error) {
 	var key []byte
-	key = append(key, GetRootCert(cert).Key...)
+	key = append(key, CertificateRoot(cert).Key...)
 	key = append(key, cert.Key...)
 	return GetUniqueSecondaryIndex(s, videoChannelLocalShareIndexPrefix, key)
 }

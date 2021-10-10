@@ -8,7 +8,7 @@ import (
 
 	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dao"
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/chunkstream"
 	"github.com/MemeLabs/go-ppspp/pkg/ioutil"
@@ -24,6 +24,8 @@ import (
 var (
 	ErrIDNotFound = errors.New("id not found")
 )
+
+var _ control.VideoCaptureControl = &Control{}
 
 // NewControl ...
 func NewControl(
@@ -52,7 +54,7 @@ type Control struct {
 }
 
 // Open ...
-func (c *Control) Open(mimeType string, directorySnippet *networkv1.DirectoryListingSnippet, networkKeys [][]byte) ([]byte, error) {
+func (c *Control) Open(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte) ([]byte, error) {
 	key, err := dao.GenerateKey()
 	if err != nil {
 		return nil, err
@@ -76,7 +78,7 @@ func (c *Control) Open(mimeType string, directorySnippet *networkv1.DirectoryLis
 }
 
 // OpenWithSwarmWriterOptions ...
-func (c *Control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1.DirectoryListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error) {
+func (c *Control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *networkv1directory.ListingSnippet, networkKeys [][]byte, options ppspp.WriterOptions) ([]byte, error) {
 	w, err := ppspp.NewWriter(options)
 	if err != nil {
 		return nil, err
@@ -118,7 +120,7 @@ func (c *Control) OpenWithSwarmWriterOptions(mimeType string, directorySnippet *
 }
 
 // Update ...
-func (c *Control) Update(id []byte, directorySnippet *networkv1.DirectoryListingSnippet) error {
+func (c *Control) Update(id []byte, directorySnippet *networkv1directory.ListingSnippet) error {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
@@ -129,6 +131,7 @@ func (c *Control) Update(id []byte, directorySnippet *networkv1.DirectoryListing
 
 	s.directorySnippet = directorySnippet
 	c.publishStream(s)
+	// TODO: publish snippet to directory... snippet stream... need api
 
 	return nil
 }
@@ -172,50 +175,43 @@ func (c *Control) Close(id []byte) error {
 func (c *Control) publishStream(s *stream) {
 	for _, k := range s.networkKeys {
 		go func(k []byte) {
-			if err := c.publishDirectoryListing(k, s); err != nil {
+			id, err := c.publishDirectoryListing(k, s)
+			if err != nil {
 				c.logger.Debug(
 					"publishing video capture failed",
 					logutil.ByteHex("network", k),
 					zap.Error(err),
 				)
 			}
+
+			// TODO: store id in stream directoryID
+			_ = id
 		}(k)
 	}
 }
 
-func (c *Control) publishDirectoryListing(networkKey []byte, s *stream) error {
-	creator, ok := c.network.Certificate(networkKey)
-	if !ok {
-		return errors.New("network certificate not found")
-	}
-
-	listing := &networkv1.DirectoryListing{
-		Creator:   creator,
-		Timestamp: timeutil.Now().Unix(),
-		Snippet:   s.directorySnippet,
-		Content: &networkv1.DirectoryListing_Media{
-			Media: &networkv1.DirectoryListingMedia{
-				StartedAt: s.startTime.Unix(),
-				MimeType:  s.mimeType,
-				SwarmUri:  s.swarm.URI().String(),
+func (c *Control) publishDirectoryListing(networkKey []byte, s *stream) (uint64, error) {
+	listing := &networkv1directory.Listing{
+		Content: &networkv1directory.Listing_Media_{
+			Media: &networkv1directory.Listing_Media{
+				MimeType: s.mimeType,
+				SwarmUri: s.swarm.URI().String(),
 			},
 		},
-	}
-	if err := dao.SignMessage(listing, s.key); err != nil {
-		return err
 	}
 
 	return c.directory.Publish(context.Background(), listing, networkKey)
 }
 
 func (c *Control) unpublishDirectoryListing(networkKey []byte, s *stream) error {
-	return c.directory.Unpublish(context.Background(), s.key.Public, networkKey)
+	return c.directory.Unpublish(context.Background(), s.directoryID, networkKey)
 }
 
 type stream struct {
 	transferID       []byte
 	startTime        timeutil.Time
-	directorySnippet *networkv1.DirectoryListingSnippet
+	directoryID      uint64
+	directorySnippet *networkv1directory.ListingSnippet
 	mimeType         string
 	networkKeys      [][]byte
 	key              *key.Key

@@ -6,10 +6,10 @@ option go_package = "github.com/MemeLabs/go-ppspp/pkg/apis/video/v1;video";
 option java_package = "gg.strims.video.v1";
 option swift_prefix = "SVO";
 
-import "network/v1/directory.proto";
+import "network/v1/directory/directory.proto";
 
 message CaptureOpenRequest {
-  strims.network.v1.DirectoryListingSnippet directory_snippet = 1;
+  strims.network.v1.directory.ListingSnippet directory_snippet = 1;
   string mime_type = 2;
   repeated bytes network_keys = 3;
 }
@@ -20,7 +20,7 @@ message CaptureOpenResponse {
 
 message CaptureUpdateRequest {
   bytes id = 1;
-  strims.network.v1.DirectoryListingSnippet directory_snippet = 2;
+  strims.network.v1.directory.ListingSnippet directory_snippet = 2;
 }
 
 message CaptureUpdateResponse {}
