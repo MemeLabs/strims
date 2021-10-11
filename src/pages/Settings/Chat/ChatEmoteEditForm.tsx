@@ -81,7 +81,7 @@ const ChatEmoteEditFormPage: React.FC = () => {
       error={getRes.error || updateRes.error}
       loading={getRes.loading || updateRes.loading}
       values={data}
-      serverId={emote.id}
+      serverId={BigInt(serverId)}
       indexLinkVisible={true}
     />
   );

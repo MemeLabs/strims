@@ -4,7 +4,7 @@
   flex-direction: column;
   flex: 1 1 500px;
   height: 0;
-  font-size: 0.9em;
+  font-size: 0.8em;
   line-height: 1.6em;
   position: relative;
   overflow: hidden;
@@ -16,6 +16,7 @@
 
   &__message {
     box-sizing: border-box;
+    line-height: 1.4em;
     overflow-wrap: break-word;
     padding: 3px 7px;
 
@@ -30,6 +31,7 @@
       border: 1px solid var(--card-outset-border-top) var(--card-outset-border-right)
         var(--card-outset-border-bottom) var(--card-outset-border-left);
       display: inline-block;
+      margin: -1px 0;
       padding: 1px 8px 1px 3px;
     }
 
@@ -59,8 +61,9 @@
       }
 
       &__overflow {
-        font-size: 0;
         color: transparent;
+        font-size: 0;
+        vertical-align: top;
       }
     }
 
@@ -344,7 +347,7 @@
 
     &.chat__emote--legacy_spacing,
     &.chat__emote_container--legacy_spacing {
-      margin: calc(-0.5 * var(--height)) 3px;
+      margin: calc(-0.6 * var(--height)) 3px calc(-0.4 * var(--height));
     }
   }
 
@@ -899,6 +902,82 @@
         mix-blend-mode: color-dodge;
       }
     }
+
+    &--angel {
+      padding: 0 40px;
+      animation: angel-bounce 2s linear 3;
+
+      &:before,
+      &:after {
+        content: "";
+        background-image: url("/assets/chat/modifiers/angel.png");
+        background-size: 65px 27px;
+        height: 27px;
+        width: 65px;
+        position: absolute;
+        top: 0;
+
+        animation-iteration-count: 3.43;
+        animation-timing-function: linear;
+        animation-duration: 2s;
+        transform-origin: right center;
+      }
+
+      &:before {
+        animation-name: angel-wing-l;
+        transform: scaleX(0.92) rotateZ(0deg) rotateY(24deg) rotateX(0deg);
+        left: -10px;
+      }
+
+      &:after {
+        animation-name: angel-wing-r;
+        transform: scaleX(-0.92) rotateZ(0deg) rotateY(24deg) rotateX(0deg);
+        right: 55px;
+      }
+
+      &:hover,
+      &.chat__emote_container--animate_forever {
+        &,
+        &:before,
+        &:after {
+          animation-iteration-count: infinite;
+        }
+      }
+    }
+
+    @mixin angel-wing($side, $d) {
+      @keyframes angel-wing-#{$side} {
+        0% {
+          transform: scaleX($d * 0.9) rotateZ(40deg) rotateY(50deg) rotateX(60deg);
+        }
+        25% {
+          transform: scaleX($d * 1.1) rotateZ(25deg) rotateY(35deg) rotateX(50deg);
+        }
+        50% {
+          transform: scaleX($d * 0.85) rotateZ(-15deg) rotateY(20deg) rotateX(-20deg);
+        }
+        75% {
+          transform: scaleX($d * 0.6) rotateZ(10deg) rotateY(10deg) rotateX(35deg);
+        }
+        100% {
+          transform: scaleX($d * 0.9) rotateZ(40deg) rotateY(50deg) rotateX(65deg);
+        }
+      }
+    }
+    @include angel-wing("l", 1);
+    @include angel-wing("r", -1);
+
+    @keyframes angel-bounce {
+      0% {
+        top: 2px;
+      }
+      50% {
+        top: -2px;
+      }
+      100% {
+        top: 2px;
+      }
+    }
   }
 
   &__footer {
@@ -996,6 +1075,7 @@
     border-radius: 3px;
     border: 1px solid var(--input-border-color);
     color: var(--input-color);
+    line-height: 1.4em;
     margin: 5px;
     padding: 10px 5px;
 

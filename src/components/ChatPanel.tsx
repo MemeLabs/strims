@@ -135,13 +135,7 @@ const ChatThing: React.FC<ChatThingProps> = ({ shouldHide = false, className }) 
   );
 
   return (
-    <div
-      className={clsx(className, {
-        "chat": true,
-        "chat--animate_forever": state.uiConfig.animateForever,
-        "chat--legacy_emote_spacing": state.uiConfig.legacyEmoteSpacing,
-      })}
-    >
+    <div className={clsx(className, "chat")}>
       <StyleSheet liveEmotes={state.liveEmotes} styles={state.styles} uiConfig={state.uiConfig} />
       <div className="chat__messages">
         <ChatDrawer
