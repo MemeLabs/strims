@@ -2860,6 +2860,10 @@ const src = {
       "id": "3021",
       "name": "angel",
     },
+    {
+      "id": "3022",
+      "name": "gold",
+    },
   ],
   "removedIds": [],
 };

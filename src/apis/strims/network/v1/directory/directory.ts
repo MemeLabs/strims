@@ -6,12 +6,14 @@ import {
   IImage as strims_type_IImage,
 } from "../../../type/image";
 import {
-  StringValue as google_protobuf_StringValue,
-  IStringValue as google_protobuf_IStringValue,
-  UInt32Value as google_protobuf_UInt32Value,
-  IUInt32Value as google_protobuf_IUInt32Value,
   BoolValue as google_protobuf_BoolValue,
   IBoolValue as google_protobuf_IBoolValue,
+  BytesValue as google_protobuf_BytesValue,
+  IBytesValue as google_protobuf_IBytesValue,
+  StringValue as google_protobuf_StringValue,
+  IStringValue as google_protobuf_IStringValue,
+  UInt64Value as google_protobuf_UInt64Value,
+  IUInt64Value as google_protobuf_IUInt64Value,
 } from "../../../../google/protobuf/wrappers";
 
 export type IServerConfig = {
@@ -610,6 +612,99 @@ export namespace Listing {
 
 }
 
+export type IListingSnippetImage = {
+  sourceOneof?: ListingSnippetImage.ISourceOneof
+}
+
+export class ListingSnippetImage {
+  sourceOneof: ListingSnippetImage.TSourceOneof;
+
+  constructor(v?: IListingSnippetImage) {
+    this.sourceOneof = new ListingSnippetImage.SourceOneof(v?.sourceOneof);
+  }
+
+  static encode(m: ListingSnippetImage, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    switch (m.sourceOneof.case) {
+      case ListingSnippetImage.SourceOneofCase.URL:
+      w.uint32(8010).string(m.sourceOneof.url);
+      break;
+      case ListingSnippetImage.SourceOneofCase.IMAGE:
+      strims_type_Image.encode(m.sourceOneof.image, w.uint32(8018).fork()).ldelim();
+      break;
+    }
+    return w;
+  }
+
+  static decode(r: Reader | Uint8Array, length?: number): ListingSnippetImage {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListingSnippetImage();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1001:
+        m.sourceOneof = new ListingSnippetImage.SourceOneof({ url: r.string() });
+        break;
+        case 1002:
+        m.sourceOneof = new ListingSnippetImage.SourceOneof({ image: strims_type_Image.decode(r, r.uint32()) });
+        break;
+        default:
+        r.skipType(tag & 7);
+        break;
+      }
+    }
+    return m;
+  }
+}
+
+export namespace ListingSnippetImage {
+  export enum SourceOneofCase {
+    NOT_SET = 0,
+    URL = 1001,
+    IMAGE = 1002,
+  }
+
+  export type ISourceOneof =
+  { case?: SourceOneofCase.NOT_SET }
+  |{ case?: SourceOneofCase.URL, url: string }
+  |{ case?: SourceOneofCase.IMAGE, image: strims_type_IImage }
+  ;
+
+  export type TSourceOneof = Readonly<
+  { case: SourceOneofCase.NOT_SET }
+  |{ case: SourceOneofCase.URL, url: string }
+  |{ case: SourceOneofCase.IMAGE, image: strims_type_Image }
+  >;
+
+  class SourceOneofImpl {
+    url: string;
+    image: strims_type_Image;
+    case: SourceOneofCase = SourceOneofCase.NOT_SET;
+
+    constructor(v?: ISourceOneof) {
+      if (v && "url" in v) {
+        this.case = SourceOneofCase.URL;
+        this.url = v.url;
+      } else
+      if (v && "image" in v) {
+        this.case = SourceOneofCase.IMAGE;
+        this.image = new strims_type_Image(v.image);
+      }
+    }
+  }
+
+  export const SourceOneof = SourceOneofImpl as {
+    new (): Readonly<{ case: SourceOneofCase.NOT_SET }>;
+    new <T extends ISourceOneof>(v: T): Readonly<
+    T extends { url: string } ? { case: SourceOneofCase.URL, url: string } :
+    T extends { image: strims_type_IImage } ? { case: SourceOneofCase.IMAGE, image: strims_type_Image } :
+    never
+    >;
+  };
+
+}
+
 export type IListingSnippet = {
   title?: string;
   description?: string;
@@ -619,8 +714,8 @@ export type IListingSnippet = {
   viewerCount?: bigint;
   live?: boolean;
   isMature?: boolean;
-  thumbnail?: ListingSnippet.IImage;
-  channelLogo?: ListingSnippet.IImage;
+  thumbnail?: IListingSnippetImage;
+  channelLogo?: IListingSnippetImage;
   key?: Uint8Array;
   signature?: Uint8Array;
 }
@@ -634,8 +729,8 @@ export class ListingSnippet {
   viewerCount: bigint;
   live: boolean;
   isMature: boolean;
-  thumbnail: ListingSnippet.Image | undefined;
-  channelLogo: ListingSnippet.Image | undefined;
+  thumbnail: ListingSnippetImage | undefined;
+  channelLogo: ListingSnippetImage | undefined;
   key: Uint8Array;
   signature: Uint8Array;
 
@@ -648,8 +743,8 @@ export class ListingSnippet {
     this.viewerCount = v?.viewerCount || BigInt(0);
     this.live = v?.live || false;
     this.isMature = v?.isMature || false;
-    this.thumbnail = v?.thumbnail && new ListingSnippet.Image(v.thumbnail);
-    this.channelLogo = v?.channelLogo && new ListingSnippet.Image(v.channelLogo);
+    this.thumbnail = v?.thumbnail && new ListingSnippetImage(v.thumbnail);
+    this.channelLogo = v?.channelLogo && new ListingSnippetImage(v.channelLogo);
     this.key = v?.key || new Uint8Array();
     this.signature = v?.signature || new Uint8Array();
   }
@@ -664,8 +759,8 @@ export class ListingSnippet {
     if (m.viewerCount) w.uint32(48).uint64(m.viewerCount);
     if (m.live) w.uint32(56).bool(m.live);
     if (m.isMature) w.uint32(64).bool(m.isMature);
-    if (m.thumbnail) ListingSnippet.Image.encode(m.thumbnail, w.uint32(74).fork()).ldelim();
-    if (m.channelLogo) ListingSnippet.Image.encode(m.channelLogo, w.uint32(82).fork()).ldelim();
+    if (m.thumbnail) ListingSnippetImage.encode(m.thumbnail, w.uint32(74).fork()).ldelim();
+    if (m.channelLogo) ListingSnippetImage.encode(m.channelLogo, w.uint32(82).fork()).ldelim();
     if (m.key) w.uint32(80010).bytes(m.key);
     if (m.signature) w.uint32(80018).bytes(m.signature);
     return w;
@@ -703,10 +798,10 @@ export class ListingSnippet {
         m.isMature = r.bool();
         break;
         case 9:
-        m.thumbnail = ListingSnippet.Image.decode(r, r.uint32());
+        m.thumbnail = ListingSnippetImage.decode(r, r.uint32());
         break;
         case 10:
-        m.channelLogo = ListingSnippet.Image.decode(r, r.uint32());
+        m.channelLogo = ListingSnippetImage.decode(r, r.uint32());
         break;
         case 10001:
         m.key = r.bytes();
@@ -723,43 +818,263 @@ export class ListingSnippet {
   }
 }
 
-export namespace ListingSnippet {
-  export type IImage = {
-    sourceOneof?: Image.ISourceOneof
+export type IListingSnippetDelta = {
+  title?: google_protobuf_IStringValue;
+  description?: google_protobuf_IStringValue;
+  category?: google_protobuf_IStringValue;
+  channelName?: google_protobuf_IStringValue;
+  viewerCount?: google_protobuf_IUInt64Value;
+  live?: google_protobuf_IBoolValue;
+  isMature?: google_protobuf_IBoolValue;
+  key?: google_protobuf_IBytesValue;
+  signature?: google_protobuf_IBytesValue;
+  tagsOneof?: ListingSnippetDelta.ITagsOneof
+  thumbnailOneof?: ListingSnippetDelta.IThumbnailOneof
+  channelLogoOneof?: ListingSnippetDelta.IChannelLogoOneof
+}
+
+export class ListingSnippetDelta {
+  title: google_protobuf_StringValue | undefined;
+  description: google_protobuf_StringValue | undefined;
+  category: google_protobuf_StringValue | undefined;
+  channelName: google_protobuf_StringValue | undefined;
+  viewerCount: google_protobuf_UInt64Value | undefined;
+  live: google_protobuf_BoolValue | undefined;
+  isMature: google_protobuf_BoolValue | undefined;
+  key: google_protobuf_BytesValue | undefined;
+  signature: google_protobuf_BytesValue | undefined;
+  tagsOneof: ListingSnippetDelta.TTagsOneof;
+  thumbnailOneof: ListingSnippetDelta.TThumbnailOneof;
+  channelLogoOneof: ListingSnippetDelta.TChannelLogoOneof;
+
+  constructor(v?: IListingSnippetDelta) {
+    this.title = v?.title && new google_protobuf_StringValue(v.title);
+    this.description = v?.description && new google_protobuf_StringValue(v.description);
+    this.category = v?.category && new google_protobuf_StringValue(v.category);
+    this.channelName = v?.channelName && new google_protobuf_StringValue(v.channelName);
+    this.viewerCount = v?.viewerCount && new google_protobuf_UInt64Value(v.viewerCount);
+    this.live = v?.live && new google_protobuf_BoolValue(v.live);
+    this.isMature = v?.isMature && new google_protobuf_BoolValue(v.isMature);
+    this.key = v?.key && new google_protobuf_BytesValue(v.key);
+    this.signature = v?.signature && new google_protobuf_BytesValue(v.signature);
+    this.tagsOneof = new ListingSnippetDelta.TagsOneof(v?.tagsOneof);
+    this.thumbnailOneof = new ListingSnippetDelta.ThumbnailOneof(v?.thumbnailOneof);
+    this.channelLogoOneof = new ListingSnippetDelta.ChannelLogoOneof(v?.channelLogoOneof);
   }
 
-  export class Image {
-    sourceOneof: Image.TSourceOneof;
-
-    constructor(v?: IImage) {
-      this.sourceOneof = new Image.SourceOneof(v?.sourceOneof);
+  static encode(m: ListingSnippetDelta, w?: Writer): Writer {
+    if (!w) w = new Writer();
+    if (m.title) google_protobuf_StringValue.encode(m.title, w.uint32(10).fork()).ldelim();
+    if (m.description) google_protobuf_StringValue.encode(m.description, w.uint32(18).fork()).ldelim();
+    if (m.category) google_protobuf_StringValue.encode(m.category, w.uint32(26).fork()).ldelim();
+    if (m.channelName) google_protobuf_StringValue.encode(m.channelName, w.uint32(34).fork()).ldelim();
+    if (m.viewerCount) google_protobuf_UInt64Value.encode(m.viewerCount, w.uint32(42).fork()).ldelim();
+    if (m.live) google_protobuf_BoolValue.encode(m.live, w.uint32(50).fork()).ldelim();
+    if (m.isMature) google_protobuf_BoolValue.encode(m.isMature, w.uint32(58).fork()).ldelim();
+    if (m.key) google_protobuf_BytesValue.encode(m.key, w.uint32(66).fork()).ldelim();
+    if (m.signature) google_protobuf_BytesValue.encode(m.signature, w.uint32(74).fork()).ldelim();
+    switch (m.tagsOneof.case) {
+      case ListingSnippetDelta.TagsOneofCase.TAGS:
+      ListingSnippetDelta.Tags.encode(m.tagsOneof.tags, w.uint32(8010).fork()).ldelim();
+      break;
     }
+    switch (m.thumbnailOneof.case) {
+      case ListingSnippetDelta.ThumbnailOneofCase.THUMBNAIL:
+      ListingSnippetImage.encode(m.thumbnailOneof.thumbnail, w.uint32(16010).fork()).ldelim();
+      break;
+    }
+    switch (m.channelLogoOneof.case) {
+      case ListingSnippetDelta.ChannelLogoOneofCase.CHANNEL_LOGO:
+      ListingSnippetImage.encode(m.channelLogoOneof.channelLogo, w.uint32(24010).fork()).ldelim();
+      break;
+    }
+    return w;
+  }
 
-    static encode(m: Image, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      switch (m.sourceOneof.case) {
-        case Image.SourceOneofCase.URL:
-        w.uint32(8010).string(m.sourceOneof.url);
+  static decode(r: Reader | Uint8Array, length?: number): ListingSnippetDelta {
+    r = r instanceof Reader ? r : new Reader(r);
+    const end = length === undefined ? r.len : r.pos + length;
+    const m = new ListingSnippetDelta();
+    while (r.pos < end) {
+      const tag = r.uint32();
+      switch (tag >> 3) {
+        case 1:
+        m.title = google_protobuf_StringValue.decode(r, r.uint32());
         break;
-        case Image.SourceOneofCase.IMAGE:
-        strims_type_Image.encode(m.sourceOneof.image, w.uint32(8018).fork()).ldelim();
+        case 2:
+        m.description = google_protobuf_StringValue.decode(r, r.uint32());
+        break;
+        case 3:
+        m.category = google_protobuf_StringValue.decode(r, r.uint32());
+        break;
+        case 4:
+        m.channelName = google_protobuf_StringValue.decode(r, r.uint32());
+        break;
+        case 5:
+        m.viewerCount = google_protobuf_UInt64Value.decode(r, r.uint32());
+        break;
+        case 6:
+        m.live = google_protobuf_BoolValue.decode(r, r.uint32());
+        break;
+        case 7:
+        m.isMature = google_protobuf_BoolValue.decode(r, r.uint32());
+        break;
+        case 8:
+        m.key = google_protobuf_BytesValue.decode(r, r.uint32());
+        break;
+        case 9:
+        m.signature = google_protobuf_BytesValue.decode(r, r.uint32());
+        break;
+        case 1001:
+        m.tagsOneof = new ListingSnippetDelta.TagsOneof({ tags: ListingSnippetDelta.Tags.decode(r, r.uint32()) });
+        break;
+        case 2001:
+        m.thumbnailOneof = new ListingSnippetDelta.ThumbnailOneof({ thumbnail: ListingSnippetImage.decode(r, r.uint32()) });
+        break;
+        case 3001:
+        m.channelLogoOneof = new ListingSnippetDelta.ChannelLogoOneof({ channelLogo: ListingSnippetImage.decode(r, r.uint32()) });
+        break;
+        default:
+        r.skipType(tag & 7);
         break;
       }
+    }
+    return m;
+  }
+}
+
+export namespace ListingSnippetDelta {
+  export enum TagsOneofCase {
+    NOT_SET = 0,
+    TAGS = 1001,
+  }
+
+  export type ITagsOneof =
+  { case?: TagsOneofCase.NOT_SET }
+  |{ case?: TagsOneofCase.TAGS, tags: ListingSnippetDelta.ITags }
+  ;
+
+  export type TTagsOneof = Readonly<
+  { case: TagsOneofCase.NOT_SET }
+  |{ case: TagsOneofCase.TAGS, tags: ListingSnippetDelta.Tags }
+  >;
+
+  class TagsOneofImpl {
+    tags: ListingSnippetDelta.Tags;
+    case: TagsOneofCase = TagsOneofCase.NOT_SET;
+
+    constructor(v?: ITagsOneof) {
+      if (v && "tags" in v) {
+        this.case = TagsOneofCase.TAGS;
+        this.tags = new ListingSnippetDelta.Tags(v.tags);
+      }
+    }
+  }
+
+  export const TagsOneof = TagsOneofImpl as {
+    new (): Readonly<{ case: TagsOneofCase.NOT_SET }>;
+    new <T extends ITagsOneof>(v: T): Readonly<
+    T extends { tags: ListingSnippetDelta.ITags } ? { case: TagsOneofCase.TAGS, tags: ListingSnippetDelta.Tags } :
+    never
+    >;
+  };
+
+  export enum ThumbnailOneofCase {
+    NOT_SET = 0,
+    THUMBNAIL = 2001,
+  }
+
+  export type IThumbnailOneof =
+  { case?: ThumbnailOneofCase.NOT_SET }
+  |{ case?: ThumbnailOneofCase.THUMBNAIL, thumbnail: IListingSnippetImage }
+  ;
+
+  export type TThumbnailOneof = Readonly<
+  { case: ThumbnailOneofCase.NOT_SET }
+  |{ case: ThumbnailOneofCase.THUMBNAIL, thumbnail: ListingSnippetImage }
+  >;
+
+  class ThumbnailOneofImpl {
+    thumbnail: ListingSnippetImage;
+    case: ThumbnailOneofCase = ThumbnailOneofCase.NOT_SET;
+
+    constructor(v?: IThumbnailOneof) {
+      if (v && "thumbnail" in v) {
+        this.case = ThumbnailOneofCase.THUMBNAIL;
+        this.thumbnail = new ListingSnippetImage(v.thumbnail);
+      }
+    }
+  }
+
+  export const ThumbnailOneof = ThumbnailOneofImpl as {
+    new (): Readonly<{ case: ThumbnailOneofCase.NOT_SET }>;
+    new <T extends IThumbnailOneof>(v: T): Readonly<
+    T extends { thumbnail: IListingSnippetImage } ? { case: ThumbnailOneofCase.THUMBNAIL, thumbnail: ListingSnippetImage } :
+    never
+    >;
+  };
+
+  export enum ChannelLogoOneofCase {
+    NOT_SET = 0,
+    CHANNEL_LOGO = 3001,
+  }
+
+  export type IChannelLogoOneof =
+  { case?: ChannelLogoOneofCase.NOT_SET }
+  |{ case?: ChannelLogoOneofCase.CHANNEL_LOGO, channelLogo: IListingSnippetImage }
+  ;
+
+  export type TChannelLogoOneof = Readonly<
+  { case: ChannelLogoOneofCase.NOT_SET }
+  |{ case: ChannelLogoOneofCase.CHANNEL_LOGO, channelLogo: ListingSnippetImage }
+  >;
+
+  class ChannelLogoOneofImpl {
+    channelLogo: ListingSnippetImage;
+    case: ChannelLogoOneofCase = ChannelLogoOneofCase.NOT_SET;
+
+    constructor(v?: IChannelLogoOneof) {
+      if (v && "channelLogo" in v) {
+        this.case = ChannelLogoOneofCase.CHANNEL_LOGO;
+        this.channelLogo = new ListingSnippetImage(v.channelLogo);
+      }
+    }
+  }
+
+  export const ChannelLogoOneof = ChannelLogoOneofImpl as {
+    new (): Readonly<{ case: ChannelLogoOneofCase.NOT_SET }>;
+    new <T extends IChannelLogoOneof>(v: T): Readonly<
+    T extends { channelLogo: IListingSnippetImage } ? { case: ChannelLogoOneofCase.CHANNEL_LOGO, channelLogo: ListingSnippetImage } :
+    never
+    >;
+  };
+
+  export type ITags = {
+    tags?: string[];
+  }
+
+  export class Tags {
+    tags: string[];
+
+    constructor(v?: ITags) {
+      this.tags = v?.tags ? v.tags : [];
+    }
+
+    static encode(m: Tags, w?: Writer): Writer {
+      if (!w) w = new Writer();
+      for (const v of m.tags) w.uint32(8010).string(v);
       return w;
     }
 
-    static decode(r: Reader | Uint8Array, length?: number): Image {
+    static decode(r: Reader | Uint8Array, length?: number): Tags {
       r = r instanceof Reader ? r : new Reader(r);
       const end = length === undefined ? r.len : r.pos + length;
-      const m = new Image();
+      const m = new Tags();
       while (r.pos < end) {
         const tag = r.uint32();
         switch (tag >> 3) {
           case 1001:
-          m.sourceOneof = new Image.SourceOneof({ url: r.string() });
-          break;
-          case 1002:
-          m.sourceOneof = new Image.SourceOneof({ image: strims_type_Image.decode(r, r.uint32()) });
+          m.tags.push(r.string())
           break;
           default:
           r.skipType(tag & 7);
@@ -768,53 +1083,6 @@ export namespace ListingSnippet {
       }
       return m;
     }
-  }
-
-  export namespace Image {
-    export enum SourceOneofCase {
-      NOT_SET = 0,
-      URL = 1001,
-      IMAGE = 1002,
-    }
-
-    export type ISourceOneof =
-    { case?: SourceOneofCase.NOT_SET }
-    |{ case?: SourceOneofCase.URL, url: string }
-    |{ case?: SourceOneofCase.IMAGE, image: strims_type_IImage }
-    ;
-
-    export type TSourceOneof = Readonly<
-    { case: SourceOneofCase.NOT_SET }
-    |{ case: SourceOneofCase.URL, url: string }
-    |{ case: SourceOneofCase.IMAGE, image: strims_type_Image }
-    >;
-
-    class SourceOneofImpl {
-      url: string;
-      image: strims_type_Image;
-      case: SourceOneofCase = SourceOneofCase.NOT_SET;
-
-      constructor(v?: ISourceOneof) {
-        if (v && "url" in v) {
-          this.case = SourceOneofCase.URL;
-          this.url = v.url;
-        } else
-        if (v && "image" in v) {
-          this.case = SourceOneofCase.IMAGE;
-          this.image = new strims_type_Image(v.image);
-        }
-      }
-    }
-
-    export const SourceOneof = SourceOneofImpl as {
-      new (): Readonly<{ case: SourceOneofCase.NOT_SET }>;
-      new <T extends ISourceOneof>(v: T): Readonly<
-      T extends { url: string } ? { case: SourceOneofCase.URL, url: string } :
-      T extends { image: strims_type_IImage } ? { case: SourceOneofCase.IMAGE, image: strims_type_Image } :
-      never
-      >;
-    };
-
   }
 
 }
@@ -1728,67 +1996,19 @@ export class SnippetSubscribeRequest {
 }
 
 export type ISnippetSubscribeResponse = {
-  title?: google_protobuf_IStringValue;
-  description?: google_protobuf_IStringValue;
-  category?: google_protobuf_IStringValue;
-  channelName?: google_protobuf_IStringValue;
-  viewerCount?: google_protobuf_IUInt32Value;
-  live?: google_protobuf_IBoolValue;
-  isMature?: google_protobuf_IBoolValue;
-  tagsOneof?: SnippetSubscribeResponse.ITagsOneof
-  thumbnailOneof?: SnippetSubscribeResponse.IThumbnailOneof
-  channelLogoOneof?: SnippetSubscribeResponse.IChannelLogoOneof
+  snippetDelta?: IListingSnippetDelta;
 }
 
 export class SnippetSubscribeResponse {
-  title: google_protobuf_StringValue | undefined;
-  description: google_protobuf_StringValue | undefined;
-  category: google_protobuf_StringValue | undefined;
-  channelName: google_protobuf_StringValue | undefined;
-  viewerCount: google_protobuf_UInt32Value | undefined;
-  live: google_protobuf_BoolValue | undefined;
-  isMature: google_protobuf_BoolValue | undefined;
-  tagsOneof: SnippetSubscribeResponse.TTagsOneof;
-  thumbnailOneof: SnippetSubscribeResponse.TThumbnailOneof;
-  channelLogoOneof: SnippetSubscribeResponse.TChannelLogoOneof;
+  snippetDelta: ListingSnippetDelta | undefined;
 
   constructor(v?: ISnippetSubscribeResponse) {
-    this.title = v?.title && new google_protobuf_StringValue(v.title);
-    this.description = v?.description && new google_protobuf_StringValue(v.description);
-    this.category = v?.category && new google_protobuf_StringValue(v.category);
-    this.channelName = v?.channelName && new google_protobuf_StringValue(v.channelName);
-    this.viewerCount = v?.viewerCount && new google_protobuf_UInt32Value(v.viewerCount);
-    this.live = v?.live && new google_protobuf_BoolValue(v.live);
-    this.isMature = v?.isMature && new google_protobuf_BoolValue(v.isMature);
-    this.tagsOneof = new SnippetSubscribeResponse.TagsOneof(v?.tagsOneof);
-    this.thumbnailOneof = new SnippetSubscribeResponse.ThumbnailOneof(v?.thumbnailOneof);
-    this.channelLogoOneof = new SnippetSubscribeResponse.ChannelLogoOneof(v?.channelLogoOneof);
+    this.snippetDelta = v?.snippetDelta && new ListingSnippetDelta(v.snippetDelta);
   }
 
   static encode(m: SnippetSubscribeResponse, w?: Writer): Writer {
     if (!w) w = new Writer();
-    if (m.title) google_protobuf_StringValue.encode(m.title, w.uint32(10).fork()).ldelim();
-    if (m.description) google_protobuf_StringValue.encode(m.description, w.uint32(18).fork()).ldelim();
-    if (m.category) google_protobuf_StringValue.encode(m.category, w.uint32(26).fork()).ldelim();
-    if (m.channelName) google_protobuf_StringValue.encode(m.channelName, w.uint32(34).fork()).ldelim();
-    if (m.viewerCount) google_protobuf_UInt32Value.encode(m.viewerCount, w.uint32(42).fork()).ldelim();
-    if (m.live) google_protobuf_BoolValue.encode(m.live, w.uint32(50).fork()).ldelim();
-    if (m.isMature) google_protobuf_BoolValue.encode(m.isMature, w.uint32(58).fork()).ldelim();
-    switch (m.tagsOneof.case) {
-      case SnippetSubscribeResponse.TagsOneofCase.TAGS:
-      SnippetSubscribeResponse.Tags.encode(m.tagsOneof.tags, w.uint32(8010).fork()).ldelim();
-      break;
-    }
-    switch (m.thumbnailOneof.case) {
-      case SnippetSubscribeResponse.ThumbnailOneofCase.THUMBNAIL_IMAGE:
-      strims_type_Image.encode(m.thumbnailOneof.thumbnailImage, w.uint32(16010).fork()).ldelim();
-      break;
-    }
-    switch (m.channelLogoOneof.case) {
-      case SnippetSubscribeResponse.ChannelLogoOneofCase.CHANNEL_LOGO_IMAGE:
-      strims_type_Image.encode(m.channelLogoOneof.channelLogoImage, w.uint32(24010).fork()).ldelim();
-      break;
-    }
+    if (m.snippetDelta) ListingSnippetDelta.encode(m.snippetDelta, w.uint32(10).fork()).ldelim();
     return w;
   }
 
@@ -1800,34 +2020,7 @@ export class SnippetSubscribeResponse {
       const tag = r.uint32();
       switch (tag >> 3) {
         case 1:
-        m.title = google_protobuf_StringValue.decode(r, r.uint32());
-        break;
-        case 2:
-        m.description = google_protobuf_StringValue.decode(r, r.uint32());
-        break;
-        case 3:
-        m.category = google_protobuf_StringValue.decode(r, r.uint32());
-        break;
-        case 4:
-        m.channelName = google_protobuf_StringValue.decode(r, r.uint32());
-        break;
-        case 5:
-        m.viewerCount = google_protobuf_UInt32Value.decode(r, r.uint32());
-        break;
-        case 6:
-        m.live = google_protobuf_BoolValue.decode(r, r.uint32());
-        break;
-        case 7:
-        m.isMature = google_protobuf_BoolValue.decode(r, r.uint32());
-        break;
-        case 1001:
-        m.tagsOneof = new SnippetSubscribeResponse.TagsOneof({ tags: SnippetSubscribeResponse.Tags.decode(r, r.uint32()) });
-        break;
-        case 2001:
-        m.thumbnailOneof = new SnippetSubscribeResponse.ThumbnailOneof({ thumbnailImage: strims_type_Image.decode(r, r.uint32()) });
-        break;
-        case 3001:
-        m.channelLogoOneof = new SnippetSubscribeResponse.ChannelLogoOneof({ channelLogoImage: strims_type_Image.decode(r, r.uint32()) });
+        m.snippetDelta = ListingSnippetDelta.decode(r, r.uint32());
         break;
         default:
         r.skipType(tag & 7);
@@ -1836,149 +2029,5 @@ export class SnippetSubscribeResponse {
     }
     return m;
   }
-}
-
-export namespace SnippetSubscribeResponse {
-  export enum TagsOneofCase {
-    NOT_SET = 0,
-    TAGS = 1001,
-  }
-
-  export type ITagsOneof =
-  { case?: TagsOneofCase.NOT_SET }
-  |{ case?: TagsOneofCase.TAGS, tags: SnippetSubscribeResponse.ITags }
-  ;
-
-  export type TTagsOneof = Readonly<
-  { case: TagsOneofCase.NOT_SET }
-  |{ case: TagsOneofCase.TAGS, tags: SnippetSubscribeResponse.Tags }
-  >;
-
-  class TagsOneofImpl {
-    tags: SnippetSubscribeResponse.Tags;
-    case: TagsOneofCase = TagsOneofCase.NOT_SET;
-
-    constructor(v?: ITagsOneof) {
-      if (v && "tags" in v) {
-        this.case = TagsOneofCase.TAGS;
-        this.tags = new SnippetSubscribeResponse.Tags(v.tags);
-      }
-    }
-  }
-
-  export const TagsOneof = TagsOneofImpl as {
-    new (): Readonly<{ case: TagsOneofCase.NOT_SET }>;
-    new <T extends ITagsOneof>(v: T): Readonly<
-    T extends { tags: SnippetSubscribeResponse.ITags } ? { case: TagsOneofCase.TAGS, tags: SnippetSubscribeResponse.Tags } :
-    never
-    >;
-  };
-
-  export enum ThumbnailOneofCase {
-    NOT_SET = 0,
-    THUMBNAIL_IMAGE = 2001,
-  }
-
-  export type IThumbnailOneof =
-  { case?: ThumbnailOneofCase.NOT_SET }
-  |{ case?: ThumbnailOneofCase.THUMBNAIL_IMAGE, thumbnailImage: strims_type_IImage }
-  ;
-
-  export type TThumbnailOneof = Readonly<
-  { case: ThumbnailOneofCase.NOT_SET }
-  |{ case: ThumbnailOneofCase.THUMBNAIL_IMAGE, thumbnailImage: strims_type_Image }
-  >;
-
-  class ThumbnailOneofImpl {
-    thumbnailImage: strims_type_Image;
-    case: ThumbnailOneofCase = ThumbnailOneofCase.NOT_SET;
-
-    constructor(v?: IThumbnailOneof) {
-      if (v && "thumbnailImage" in v) {
-        this.case = ThumbnailOneofCase.THUMBNAIL_IMAGE;
-        this.thumbnailImage = new strims_type_Image(v.thumbnailImage);
-      }
-    }
-  }
-
-  export const ThumbnailOneof = ThumbnailOneofImpl as {
-    new (): Readonly<{ case: ThumbnailOneofCase.NOT_SET }>;
-    new <T extends IThumbnailOneof>(v: T): Readonly<
-    T extends { thumbnailImage: strims_type_IImage } ? { case: ThumbnailOneofCase.THUMBNAIL_IMAGE, thumbnailImage: strims_type_Image } :
-    never
-    >;
-  };
-
-  export enum ChannelLogoOneofCase {
-    NOT_SET = 0,
-    CHANNEL_LOGO_IMAGE = 3001,
-  }
-
-  export type IChannelLogoOneof =
-  { case?: ChannelLogoOneofCase.NOT_SET }
-  |{ case?: ChannelLogoOneofCase.CHANNEL_LOGO_IMAGE, channelLogoImage: strims_type_IImage }
-  ;
-
-  export type TChannelLogoOneof = Readonly<
-  { case: ChannelLogoOneofCase.NOT_SET }
-  |{ case: ChannelLogoOneofCase.CHANNEL_LOGO_IMAGE, channelLogoImage: strims_type_Image }
-  >;
-
-  class ChannelLogoOneofImpl {
-    channelLogoImage: strims_type_Image;
-    case: ChannelLogoOneofCase = ChannelLogoOneofCase.NOT_SET;
-
-    constructor(v?: IChannelLogoOneof) {
-      if (v && "channelLogoImage" in v) {
-        this.case = ChannelLogoOneofCase.CHANNEL_LOGO_IMAGE;
-        this.channelLogoImage = new strims_type_Image(v.channelLogoImage);
-      }
-    }
-  }
-
-  export const ChannelLogoOneof = ChannelLogoOneofImpl as {
-    new (): Readonly<{ case: ChannelLogoOneofCase.NOT_SET }>;
-    new <T extends IChannelLogoOneof>(v: T): Readonly<
-    T extends { channelLogoImage: strims_type_IImage } ? { case: ChannelLogoOneofCase.CHANNEL_LOGO_IMAGE, channelLogoImage: strims_type_Image } :
-    never
-    >;
-  };
-
-  export type ITags = {
-    tags?: string[];
-  }
-
-  export class Tags {
-    tags: string[];
-
-    constructor(v?: ITags) {
-      this.tags = v?.tags ? v.tags : [];
-    }
-
-    static encode(m: Tags, w?: Writer): Writer {
-      if (!w) w = new Writer();
-      for (const v of m.tags) w.uint32(8010).string(v);
-      return w;
-    }
-
-    static decode(r: Reader | Uint8Array, length?: number): Tags {
-      r = r instanceof Reader ? r : new Reader(r);
-      const end = length === undefined ? r.len : r.pos + length;
-      const m = new Tags();
-      while (r.pos < end) {
-        const tag = r.uint32();
-        switch (tag >> 3) {
-          case 1001:
-          m.tags.push(r.string())
-          break;
-          default:
-          r.skipType(tag & 7);
-          break;
-        }
-      }
-      return m;
-    }
-  }
-
 }
 

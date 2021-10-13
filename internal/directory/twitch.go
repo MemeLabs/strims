@@ -134,8 +134,8 @@ func (t *twitchVODEmbedLoader) Load(ctx context.Context, ids []string) ([]*embed
 				ViewerCount: uint64(video.ViewCount),
 				Title:       video.Title,
 				IsMature:    false,
-				Thumbnail: &networkv1directory.ListingSnippet_Image{
-					SourceOneof: &networkv1directory.ListingSnippet_Image_Url{
+				Thumbnail: &networkv1directory.ListingSnippetImage{
+					SourceOneof: &networkv1directory.ListingSnippetImage_Url{
 						Url: twitchVODThumbnailTokens.Replace(video.ThumbnailURL),
 					},
 				},
@@ -144,8 +144,8 @@ func (t *twitchVODEmbedLoader) Load(ctx context.Context, ids []string) ([]*embed
 
 		if user, ok := usersByLogin[video.UserLogin]; ok {
 			embed.snippet.ChannelName = user.DisplayName
-			embed.snippet.ChannelLogo = &networkv1directory.ListingSnippet_Image{
-				SourceOneof: &networkv1directory.ListingSnippet_Image_Url{
+			embed.snippet.ChannelLogo = &networkv1directory.ListingSnippetImage{
+				SourceOneof: &networkv1directory.ListingSnippetImage_Url{
 					Url: user.ProfileImageURL,
 				},
 			}
@@ -188,13 +188,13 @@ func (t *twitchStreamEmbedLoader) Load(ctx context.Context, ids []string) ([]*em
 			id: user.Login,
 			snippet: &networkv1directory.ListingSnippet{
 				ChannelName: user.DisplayName,
-				Thumbnail: &networkv1directory.ListingSnippet_Image{
-					SourceOneof: &networkv1directory.ListingSnippet_Image_Url{
+				Thumbnail: &networkv1directory.ListingSnippetImage{
+					SourceOneof: &networkv1directory.ListingSnippetImage_Url{
 						Url: user.OfflineImageURL,
 					},
 				},
-				ChannelLogo: &networkv1directory.ListingSnippet_Image{
-					SourceOneof: &networkv1directory.ListingSnippet_Image_Url{
+				ChannelLogo: &networkv1directory.ListingSnippetImage{
+					SourceOneof: &networkv1directory.ListingSnippetImage_Url{
 						Url: user.ProfileImageURL,
 					},
 				},
@@ -205,8 +205,8 @@ func (t *twitchStreamEmbedLoader) Load(ctx context.Context, ids []string) ([]*em
 			embed.snippet.Live = true
 			embed.snippet.ViewerCount = uint64(stream.ViewerCount)
 			embed.snippet.Title = stream.Title
-			embed.snippet.Thumbnail = &networkv1directory.ListingSnippet_Image{
-				SourceOneof: &networkv1directory.ListingSnippet_Image_Url{
+			embed.snippet.Thumbnail = &networkv1directory.ListingSnippetImage{
+				SourceOneof: &networkv1directory.ListingSnippetImage_Url{
 					Url: fmt.Sprintf("%s?_t=%x", twitchStreamThumbnailTokens.Replace(stream.ThumbnailURL), timeutil.Now().Unix()),
 				},
 			}

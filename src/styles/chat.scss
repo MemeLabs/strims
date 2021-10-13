@@ -763,9 +763,35 @@
       }
     }
 
-    &--rain {
+    @mixin weather($name, $duration: 6s) {
+      &:before,
       &:after {
-        background-image: url("/assets/chat/modifiers/rain.png");
+        background-image: url("/assets/chat/modifiers/#{$name}-static.png");
+        animation: #{$name} $duration 1;
+      }
+
+      @keyframes #{$name} {
+        0% {
+          background-image: url("/assets/chat/modifiers/#{$name}.png");
+        }
+        100% {
+          background-image: url("/assets/chat/modifiers/#{$name}.png");
+        }
+      }
+    }
+
+    &--rain {
+      @include weather("rain");
+    }
+
+    &--snow {
+      @include weather("snow");
+    }
+
+    &--rain,
+    &--snow {
+      &:before,
+      &:after {
         content: "";
         display: block;
         height: 100%;
@@ -775,19 +801,17 @@
         top: 0;
         z-index: 2;
       }
-    }
 
-    &--snow {
       &:after {
-        background-image: url("/assets/chat/modifiers/snow.png");
-        content: "";
-        display: block;
-        height: 100%;
-        width: 100%;
-        pointer-events: none;
-        position: absolute;
-        top: 0;
-        z-index: 2;
+        background-position: 32px 32px;
+      }
+
+      &:hover,
+      &.chat__emote_container--animate_forever {
+        &:before,
+        &:after {
+          animation-iteration-count: infinite;
+        }
       }
     }
 
@@ -842,6 +866,7 @@
       background-repeat: no-repeat;
       background-size: cover;
       animation: dank 1s 2;
+      padding: 0 calc(max(72px - var(--width), 0px) * 0.5);
 
       &:hover,
       &.chat__emote_container--animate_forever {
@@ -915,7 +940,9 @@
         height: 27px;
         width: 65px;
         position: absolute;
-        top: 0;
+        top: -5px;
+        transform-style: flat;
+        z-index: -1;
 
         animation-iteration-count: 3.43;
         animation-timing-function: linear;
@@ -925,13 +952,13 @@
 
       &:before {
         animation-name: angel-wing-l;
-        transform: scaleX(0.92) rotateZ(0deg) rotateY(24deg) rotateX(0deg);
+        transform: scaleX(0.92) translateZ(-100px) rotateZ(0deg) rotateY(24deg) rotateX(0deg);
         left: -10px;
       }
 
       &:after {
         animation-name: angel-wing-r;
-        transform: scaleX(-0.92) rotateZ(0deg) rotateY(24deg) rotateX(0deg);
+        transform: scaleX(-0.92) translateZ(-100px) rotateZ(0deg) rotateY(24deg) rotateX(0deg);
         right: 55px;
       }
 
@@ -945,22 +972,40 @@
       }
     }
 
+    &--smol &--angel {
+      margin: 0 -20px;
+    }
+
+    &--wide &--angel {
+      margin: 0 20px;
+    }
+
+    &--smol &--wide &--angel,
+    &--wide &--smol &--angel {
+      margin: 0 -10px;
+    }
+
     @mixin angel-wing($side, $d) {
       @keyframes angel-wing-#{$side} {
         0% {
-          transform: scaleX($d * 0.9) rotateZ(40deg) rotateY(50deg) rotateX(60deg);
+          transform: scaleX($d * 0.9) translateZ(-100px) rotateZ(40deg) rotateY(50deg)
+            rotateX(60deg);
         }
         25% {
-          transform: scaleX($d * 1.1) rotateZ(25deg) rotateY(35deg) rotateX(50deg);
+          transform: scaleX($d * 1.1) translateZ(-100px) rotateZ(25deg) rotateY(35deg)
+            rotateX(50deg);
         }
         50% {
-          transform: scaleX($d * 0.85) rotateZ(-15deg) rotateY(20deg) rotateX(-20deg);
+          transform: scaleX($d * 0.85) translateZ(-100px) rotateZ(-15deg) rotateY(20deg)
+            rotateX(-20deg);
         }
         75% {
-          transform: scaleX($d * 0.6) rotateZ(10deg) rotateY(10deg) rotateX(35deg);
+          transform: scaleX($d * 0.6) translateZ(-100px) rotateZ(10deg) rotateY(10deg)
+            rotateX(35deg);
         }
         100% {
-          transform: scaleX($d * 0.9) rotateZ(40deg) rotateY(50deg) rotateX(65deg);
+          transform: scaleX($d * 0.9) translateZ(-100px) rotateZ(40deg) rotateY(50deg)
+            rotateX(65deg);
         }
       }
     }
@@ -969,13 +1014,13 @@
 
     @keyframes angel-bounce {
       0% {
-        top: 2px;
+        transform: translateY(2px);
       }
       50% {
-        top: -2px;
+        transform: translateY(-2px);
       }
       100% {
-        top: 2px;
+        transform: translateY(2px);
       }
     }
   }

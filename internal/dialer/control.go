@@ -99,10 +99,12 @@ func (t *Control) ServerDialer(networkKey []byte, key *key.Key, salt []byte) (rp
 	}
 
 	return &VPNServerDialer{
-		Logger:   t.logger,
-		Node:     node,
-		Key:      key,
-		Salt:     salt,
+		Logger: t.logger,
+		Node:   node,
+		Publisher: &DHTHostAddrPublisher{
+			Key:  key,
+			Salt: salt,
+		},
 		CertFunc: cert.Load,
 	}, nil
 }
@@ -124,10 +126,12 @@ func (t *Control) ClientDialer(networkKey, key, salt []byte) (rpc.Dialer, error)
 	}
 
 	return &VPNDialer{
-		Logger:   t.logger,
-		Node:     node,
-		Key:      key,
-		Salt:     salt,
+		Logger: t.logger,
+		Node:   node,
+		Resolver: &DHTHostAddrResolver{
+			Key:  key,
+			Salt: salt,
+		},
 		CertFunc: cert.Load,
 	}, nil
 }

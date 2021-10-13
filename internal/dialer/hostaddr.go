@@ -19,17 +19,17 @@ type HostAddr struct {
 	Port   uint16
 }
 
-// PublishLocalHostAddr ...
-func PublishLocalHostAddr(ctx context.Context, node *vpn.Node, key *key.Key, salt []byte, port uint16) error {
-	addr := &HostAddr{
-		HostID: node.Host.VNIC().ID(),
-		Port:   port,
-	}
-	return PublishHostAddr(ctx, node, key, salt, addr)
+type HostAddrPublisher interface {
+	Publish(ctx context.Context, node *vpn.Node, addr *HostAddr) error
 }
 
-// PublishHostAddr ...
-func PublishHostAddr(ctx context.Context, node *vpn.Node, key *key.Key, salt []byte, addr *HostAddr) error {
+type DHTHostAddrPublisher struct {
+	Key  *key.Key
+	Salt []byte
+}
+
+// Publish ...
+func (p *DHTHostAddrPublisher) Publish(ctx context.Context, node *vpn.Node, addr *HostAddr) error {
 	b, err := proto.Marshal(&vpnv1.NetworkAddress{
 		HostId: addr.HostID.Bytes(nil),
 		Port:   uint32(addr.Port),
@@ -38,13 +38,22 @@ func PublishHostAddr(ctx context.Context, node *vpn.Node, key *key.Key, salt []b
 		return err
 	}
 
-	_, err = node.HashTable.Set(ctx, key, salt, b)
+	_, err = node.HashTable.Set(ctx, p.Key, p.Salt, b)
 	return err
 }
 
-// GetHostAddr ...
-func GetHostAddr(ctx context.Context, node *vpn.Node, key, salt []byte) (*HostAddr, error) {
-	values, err := node.HashTable.Get(ctx, key, salt)
+type HostAddrResolver interface {
+	Resolve(ctx context.Context, node *vpn.Node) (*HostAddr, error)
+}
+
+type DHTHostAddrResolver struct {
+	Key  []byte
+	Salt []byte
+}
+
+// Resolve ...
+func (r *DHTHostAddrResolver) Resolve(ctx context.Context, node *vpn.Node) (*HostAddr, error) {
+	values, err := node.HashTable.Get(ctx, r.Key, r.Salt)
 	if err != nil {
 		return nil, fmt.Errorf("address request failed: %w", ctx.Err())
 	}
@@ -69,4 +78,12 @@ func GetHostAddr(ctx context.Context, node *vpn.Node, key, salt []byte) (*HostAd
 	}
 
 	return &HostAddr{hostID, uint16(addr.Port)}, nil
+}
+
+type StaticHostAddrResolver struct {
+	HostAddr
+}
+
+func (r *StaticHostAddrResolver) Resolve(ctx context.Context, node *vpn.Node) (*HostAddr, error) {
+	return &r.HostAddr, nil
 }

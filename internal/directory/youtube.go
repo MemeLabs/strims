@@ -72,8 +72,8 @@ func (t *youTubeEmbedLoader) Load(ctx context.Context, ids []string) ([]*embedLo
 			snippet: &networkv1directory.ListingSnippet{
 				Title:    video.Snippet.Title,
 				IsMature: video.ContentDetails.ContentRating.YtRating == "ytAgeRestricted",
-				Thumbnail: &networkv1directory.ListingSnippet_Image{
-					SourceOneof: &networkv1directory.ListingSnippet_Image_Url{
+				Thumbnail: &networkv1directory.ListingSnippetImage{
+					SourceOneof: &networkv1directory.ListingSnippetImage_Url{
 						Url: video.Snippet.Thumbnails.Medium.Url,
 					},
 				},
@@ -82,8 +82,8 @@ func (t *youTubeEmbedLoader) Load(ctx context.Context, ids []string) ([]*embedLo
 
 		if channel, ok := channelsByID[video.Snippet.ChannelId]; ok {
 			embed.snippet.ChannelName = channel.Snippet.Title
-			embed.snippet.ChannelLogo = &networkv1directory.ListingSnippet_Image{
-				SourceOneof: &networkv1directory.ListingSnippet_Image_Url{
+			embed.snippet.ChannelLogo = &networkv1directory.ListingSnippetImage{
+				SourceOneof: &networkv1directory.ListingSnippetImage_Url{
 					Url: channel.Snippet.Thumbnails.Medium.Url,
 				},
 			}

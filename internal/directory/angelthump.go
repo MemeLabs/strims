@@ -53,21 +53,21 @@ func (t *angelThumpEmbedLoader) Load(ctx context.Context, ids []string) ([]*embe
 			Title:       data.User.Title,
 			IsMature:    data.User.Nsfw,
 			ChannelName: data.User.DisplayName,
-			Thumbnail: &networkv1directory.ListingSnippet_Image{
-				SourceOneof: &networkv1directory.ListingSnippet_Image_Url{
+			Thumbnail: &networkv1directory.ListingSnippetImage{
+				SourceOneof: &networkv1directory.ListingSnippetImage_Url{
 					Url: fmt.Sprintf("%s?_t=%x", data.ThumbnailURL, timeutil.Now().Unix()),
 				},
 			},
-			ChannelLogo: &networkv1directory.ListingSnippet_Image{
-				SourceOneof: &networkv1directory.ListingSnippet_Image_Url{
+			ChannelLogo: &networkv1directory.ListingSnippetImage{
+				SourceOneof: &networkv1directory.ListingSnippetImage_Url{
 					Url: data.User.ProfileLogoURL,
 				},
 			},
 		},
 	}
 	if data.ThumbnailURL == "" {
-		embed.snippet.Thumbnail = &networkv1directory.ListingSnippet_Image{
-			SourceOneof: &networkv1directory.ListingSnippet_Image_Url{
+		embed.snippet.Thumbnail = &networkv1directory.ListingSnippetImage{
+			SourceOneof: &networkv1directory.ListingSnippetImage_Url{
 				Url: data.User.OfflineBannerURL,
 			},
 		}

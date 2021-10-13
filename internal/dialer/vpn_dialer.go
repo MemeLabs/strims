@@ -9,7 +9,6 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
-	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
 	"github.com/MemeLabs/go-ppspp/pkg/pool"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	rpcapi "github.com/MemeLabs/protobuf/pkg/apis/rpc"
@@ -23,8 +22,7 @@ import (
 type VPNDialer struct {
 	Logger   *zap.Logger
 	Node     *vpn.Node
-	Key      []byte
-	Salt     []byte
+	Resolver HostAddrResolver
 	CertFunc VPNCertFunc
 }
 
@@ -39,8 +37,7 @@ func (d *VPNDialer) Dial(ctx context.Context, dispatcher rpc.Dispatcher) (rpc.Tr
 		ctx:         ctx,
 		logger:      d.Logger,
 		node:        d.Node,
-		key:         d.Key,
-		salt:        d.Salt,
+		resolver:    d.Resolver,
 		port:        port,
 		dispatcher:  dispatcher,
 		certificate: d.CertFunc,
@@ -49,37 +46,40 @@ func (d *VPNDialer) Dial(ctx context.Context, dispatcher rpc.Dispatcher) (rpc.Tr
 
 // VPNServerDialer ...
 type VPNServerDialer struct {
-	Logger   *zap.Logger
-	Node     *vpn.Node
-	Key      *key.Key
-	Salt     []byte
-	CertFunc VPNCertFunc
+	Logger    *zap.Logger
+	Node      *vpn.Node
+	Port      uint16
+	Publisher HostAddrPublisher
+	CertFunc  VPNCertFunc
 }
 
 // Dial ...
 func (d *VPNServerDialer) Dial(ctx context.Context, dispatcher rpc.Dispatcher) (rpc.Transport, error) {
-	port, err := d.Node.Network.ReservePort()
-	if err != nil {
-		return nil, err
-	}
-
 	c := &VPNTransport{
 		ctx:         ctx,
 		logger:      d.Logger,
 		node:        d.Node,
-		key:         d.Key.Public,
-		salt:        d.Salt,
-		port:        port,
+		port:        d.Port,
 		dispatcher:  dispatcher,
 		certificate: d.CertFunc,
 	}
 
-	addr := &HostAddr{
-		HostID: d.Node.Host.VNIC().ID(),
-		Port:   port,
+	if c.port == 0 {
+		port, err := d.Node.Network.ReservePort()
+		if err != nil {
+			return nil, err
+		}
+		c.port = port
 	}
-	if err := PublishHostAddr(ctx, d.Node, d.Key, d.Salt, addr); err != nil {
-		return nil, err
+
+	if d.Publisher != nil {
+		addr := &HostAddr{
+			HostID: d.Node.Host.VNIC().ID(),
+			Port:   c.port,
+		}
+		if err := d.Publisher.Publish(ctx, d.Node, addr); err != nil {
+			return nil, err
+		}
 	}
 
 	return c, nil
@@ -90,8 +90,7 @@ type VPNTransport struct {
 	ctx         context.Context
 	logger      *zap.Logger
 	node        *vpn.Node
-	key         []byte
-	salt        []byte
+	resolver    HostAddrResolver
 	certificate VPNCertFunc
 	port        uint16
 	callsIn     vpnCallMap
@@ -168,7 +167,7 @@ func (t *VPNTransport) send(ctx context.Context, call *rpcapi.Call, addr *HostAd
 
 // Call ...
 func (t *VPNTransport) Call(call *rpc.CallOut, fn rpc.ResponseFunc) error {
-	addr, err := GetHostAddr(call.Context(), t.node, t.key, t.salt)
+	addr, err := t.resolver.Resolve(call.Context(), t.node)
 	if err != nil {
 		return err
 	}

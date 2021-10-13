@@ -6,7 +6,7 @@ import React, { ComponentProps, useContext, useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 
 import monkey from "../../assets/directory/monkey.png";
-import { Listing, ListingSnippet } from "../apis/strims/network/v1/directory/directory";
+import { Listing, ListingSnippetImage } from "../apis/strims/network/v1/directory/directory";
 import { Image, ImageType } from "../apis/strims/type/image";
 import { DirectoryContext, DirectoryListing } from "../contexts/Directory";
 import { useClient } from "../contexts/FrontendApi";
@@ -67,7 +67,7 @@ const useImage = (image: Image): string => useObjectURL(toFileType(image.type), 
 
 interface DirectoryGridImageProps extends ComponentProps<"img"> {
   fallback: string;
-  source: ListingSnippet.Image;
+  source: ListingSnippetImage;
 }
 
 const DirectoryGridImage: React.FC<DirectoryGridImageProps> = ({
@@ -77,10 +77,10 @@ const DirectoryGridImage: React.FC<DirectoryGridImageProps> = ({
 }) => {
   let url = "";
   switch (source.case) {
-    case ListingSnippet.Image.SourceOneofCase.URL:
+    case ListingSnippetImage.SourceOneofCase.URL:
       url = source.url;
       break;
-    case ListingSnippet.Image.SourceOneofCase.IMAGE:
+    case ListingSnippetImage.SourceOneofCase.IMAGE:
       url = useImage(source.image);
       break;
   }
