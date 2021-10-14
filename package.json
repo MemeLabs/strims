@@ -21,10 +21,18 @@
     "dev:funding": "run-p funding web:webpack",
     "devtools": "go run -mod=readonly ./cmd/devtools",
     "dev:devtools": "nodemon --watch ./pkg --watch ./internal --watch ./cmd/devtools -e go --delay 0.1 --signal SIGINT --exec 'go run -mod=readonly ./cmd/devtools || exit 1'",
-    "build": "webpack --mode production"
+    "build": "webpack --mode production",
+    "storybook": "start-storybook -p 6006",
+    "build-storybook": "build-storybook"
   },
   "devDependencies": {
+    "@babel/core": "^7.15.8",
     "@memelabs/protobuf": "^0.1.17",
+    "@storybook/addon-actions": "^6.3.11",
+    "@storybook/addon-essentials": "^6.3.11",
+    "@storybook/addon-links": "^6.3.11",
+    "@storybook/addon-postcss": "^2.0.0",
+    "@storybook/react": "^6.3.11",
     "@types/dom-mediacapture-record": "^1.0.10",
     "@types/history": "^4.7.9",
     "@types/lodash": "^4.14.172",
@@ -45,7 +53,8 @@
     "@typescript-eslint/eslint-plugin": "^4.30.0",
     "@typescript-eslint/eslint-plugin-tslint": "^4.30.0",
     "@typescript-eslint/parser": "^4.30.0",
-    "autoprefixer": "^10.3.4",
+    "autoprefixer": "^10.3.7",
+    "babel-loader": "^8.2.2",
     "buffer": "^6.0.3",
     "classnames": "^2.3.1",
     "clean-webpack-plugin": "^4.0.0",
@@ -53,6 +62,7 @@
     "css": "^3.0.0",
     "css-loader": "^6.2.0",
     "date-and-time": "^2.0.0",
+    "dotenv-webpack": "^7.0.3",
     "electron": "^14.0.0",
     "electron-json-storage": "^4.5.0",
     "eslint": "^7.32.0",
@@ -78,6 +88,7 @@
     "npm-force-resolutions": "0.0.10",
     "npm-run-all": "^4.1.5",
     "parse-prometheus-text-format": "^1.1.1",
+    "postcss": "^8.3.9",
     "postcss-loader": "^6.1.1",
     "prettier": "^2.3.2",
     "prettier-plugin-import-sort": "0.0.7",
@@ -112,6 +123,7 @@
     "slate": "^0.65.3",
     "slate-history": "^0.65.3",
     "slate-react": "^0.65.3",
+    "storybook": "^6.3.11",
     "stream-browserify": "^3.0.0",
     "style-loader": "^3.2.1",
     "terser-webpack-plugin": "^5.2.3",
@@ -146,5 +158,6 @@
       "style": "module",
       "parser": "typescript"
     }
-  }
+  },
+  "dependencies": {}
 }

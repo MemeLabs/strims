@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"testing"
 
-	networkv1 "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1"
+	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -15,11 +15,11 @@ func TestChunkStreamReadWriter(t *testing.T) {
 	assert.NoError(t, err)
 	r := NewChunkStreamReader(b, 1024)
 
-	src := &networkv1.DirectoryEventBroadcast{
-		Events: []*networkv1.DirectoryEvent{
+	src := &networkv1directory.EventBroadcast{
+		Events: []*networkv1directory.Event{
 			{
-				Body: &networkv1.DirectoryEvent_Ping_{
-					Ping: &networkv1.DirectoryEvent_Ping{
+				Body: &networkv1directory.Event_Ping_{
+					Ping: &networkv1directory.Event_Ping{
 						Time: 1257894000000000000,
 					},
 				},
@@ -33,7 +33,7 @@ func TestChunkStreamReadWriter(t *testing.T) {
 	}
 
 	for i := 0; i < 3; i++ {
-		dst := &networkv1.DirectoryEventBroadcast{}
+		dst := &networkv1directory.EventBroadcast{}
 		err = r.Read(dst)
 		assert.NoError(t, err)
 		assert.Equal(t, src.Events[0].GetPing().Time, dst.Events[0].GetPing().Time)

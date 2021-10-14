@@ -34,9 +34,7 @@ type CAControl interface {
 
 // DialerControl ...
 type DialerControl interface {
-	ServerDialer(networkKey []byte, key *key.Key, salt []byte) (rpc.Dialer, error)
 	Server(networkKey []byte, key *key.Key, salt []byte) (*rpc.Server, error)
-	ClientDialer(networkKey, key, salt []byte) (rpc.Dialer, error)
 	Client(networkKey, key, salt []byte) (*rpc.Client, error)
 }
 

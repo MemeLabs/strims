@@ -7,6 +7,7 @@ import (
 	"sort"
 	"sync"
 
+	"github.com/MemeLabs/go-ppspp/internal/dialer"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/event"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
@@ -16,14 +17,54 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
+type snippetServer struct {
+	ctx         context.Context
+	dialer      *dialer.Control
+	serviceLock sync.Mutex
+	service     snippetService
+}
+
+func (s *snippetServer) UpdateSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet) {
+	s.serviceLock.Lock()
+	defer s.serviceLock.Unlock()
+
+	if s.service.UpdateSnippet(swarmID, snippet) == 1 {
+		s.start()
+	}
+}
+
+func (s *snippetServer) DeleteSnippet(swarmID ppspp.SwarmID) {
+	s.serviceLock.Lock()
+	defer s.serviceLock.Unlock()
+
+	if s.service.DeleteSnippet(swarmID) == 0 {
+		s.stop()
+	}
+}
+
+func (s *snippetServer) start() {
+
+}
+
+func (s *snippetServer) stop() {
+
+}
+
 var _ networkv1directory.DirectorySnippetService = &snippetService{}
 
 type snippetService struct {
 	snippetsLock sync.Mutex
 	snippets     llrb.LLRB
+	size         int
 }
 
-func (s *snippetService) UpdateSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet) {
+func (s *snippetService) Size() int {
+	s.snippetsLock.Lock()
+	defer s.snippetsLock.Unlock()
+	return s.size
+}
+
+func (s *snippetService) UpdateSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet) int {
 	s.snippetsLock.Lock()
 	defer s.snippetsLock.Unlock()
 
@@ -31,15 +72,23 @@ func (s *snippetService) UpdateSnippet(swarmID ppspp.SwarmID, snippet *networkv1
 	if !ok {
 		it = newSnippetItem(swarmID.Binary())
 		s.snippets.ReplaceOrInsert(it)
+		s.size++
 	}
 
 	it.Update(snippet)
+
+	return s.size
 }
 
-func (s *snippetService) DeleteSnippet(swarmID ppspp.SwarmID) {
+func (s *snippetService) DeleteSnippet(swarmID ppspp.SwarmID) int {
 	s.snippetsLock.Lock()
 	defer s.snippetsLock.Unlock()
-	s.snippets.Delete(&snippetItem{id: swarmID.Binary()})
+
+	if s.snippets.Delete(&snippetItem{id: swarmID.Binary()}) != nil {
+		s.size--
+	}
+
+	return s.size
 }
 
 func (s *snippetService) Subscribe(ctx context.Context, req *networkv1directory.SnippetSubscribeRequest) (<-chan *networkv1directory.SnippetSubscribeResponse, error) {

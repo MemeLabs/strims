@@ -11,6 +11,7 @@ import (
 	profilev1 "github.com/MemeLabs/go-ppspp/pkg/apis/profile/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/certificate"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/key"
+	"github.com/MemeLabs/go-ppspp/pkg/kademlia"
 	"github.com/MemeLabs/go-ppspp/pkg/timeutil"
 	"github.com/MemeLabs/go-ppspp/pkg/vpn"
 	"github.com/MemeLabs/protobuf/pkg/rpc"
@@ -92,26 +93,24 @@ func (t *Control) hostCertAndVPNNode(networkKey []byte) (*hostCert, *vpn.Node, e
 }
 
 // ServerDialer ...
-func (t *Control) ServerDialer(networkKey []byte, key *key.Key, salt []byte) (rpc.Dialer, error) {
+func (t *Control) ServerDialer(networkKey []byte, port uint16, publisher HostAddrPublisher) (rpc.Dialer, error) {
 	cert, node, err := t.hostCertAndVPNNode(networkKey)
 	if err != nil {
 		return nil, err
 	}
 
 	return &VPNServerDialer{
-		Logger: t.logger,
-		Node:   node,
-		Publisher: &DHTHostAddrPublisher{
-			Key:  key,
-			Salt: salt,
-		},
-		CertFunc: cert.Load,
+		Logger:    t.logger,
+		Node:      node,
+		Port:      port,
+		Publisher: publisher,
+		CertFunc:  cert.Load,
 	}, nil
 }
 
 // Server ...
 func (t *Control) Server(networkKey []byte, key *key.Key, salt []byte) (*rpc.Server, error) {
-	dialer, err := t.ServerDialer(networkKey, key, salt)
+	dialer, err := t.ServerDialer(networkKey, 0, &DHTHostAddrPublisher{key, salt})
 	if err != nil {
 		return nil, err
 	}
@@ -119,26 +118,32 @@ func (t *Control) Server(networkKey []byte, key *key.Key, salt []byte) (*rpc.Ser
 }
 
 // ClientDialer ...
-func (t *Control) ClientDialer(networkKey, key, salt []byte) (rpc.Dialer, error) {
+func (t *Control) ClientDialer(networkKey []byte, resolver HostAddrResolver) (rpc.Dialer, error) {
 	cert, node, err := t.hostCertAndVPNNode(networkKey)
 	if err != nil {
 		return nil, err
 	}
 
 	return &VPNDialer{
-		Logger: t.logger,
-		Node:   node,
-		Resolver: &DHTHostAddrResolver{
-			Key:  key,
-			Salt: salt,
-		},
+		Logger:   t.logger,
+		Node:     node,
+		Resolver: resolver,
 		CertFunc: cert.Load,
 	}, nil
 }
 
 // Client ...
 func (t *Control) Client(networkKey, key, salt []byte) (*rpc.Client, error) {
-	dialer, err := t.ClientDialer(networkKey, key, salt)
+	dialer, err := t.ClientDialer(networkKey, &DHTHostAddrResolver{key, salt})
+	if err != nil {
+		return nil, err
+	}
+	return rpc.NewClient(t.logger, dialer)
+}
+
+// ClientWithHostAddr ...
+func (t *Control) ClientWithHostAddr(networkKey []byte, hostID kademlia.ID, port uint16) (*rpc.Client, error) {
+	dialer, err := t.ClientDialer(networkKey, &StaticHostAddrResolver{HostAddr{hostID, port}})
 	if err != nil {
 		return nil, err
 	}
