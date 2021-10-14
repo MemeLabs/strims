@@ -17,7 +17,8 @@ export class WSReadWriter {
 
     this.ws = new Promise((resolve, reject) => {
       ws.onopen = () => resolve(ws);
-      ws.onerror = reject;
+      ws.onerror = (e) => console.log(e);
+      // ws.onerror = reject;
     });
   }
 

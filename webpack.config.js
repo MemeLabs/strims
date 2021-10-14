@@ -3,22 +3,27 @@ const fs = require("fs");
 const HtmlWebpackPlugin = require("html-webpack-plugin");
 const { CleanWebpackPlugin } = require("clean-webpack-plugin");
 const MiniCssExtractPlugin = require("mini-css-extract-plugin");
+const ReactRefreshTypeScript = require("react-refresh-typescript");
+const ReactRefreshWebpackPlugin = require("@pmmmwh/react-refresh-webpack-plugin");
 const TerserPlugin = require("terser-webpack-plugin");
 const WebpackPwaManifest = require("webpack-pwa-manifest");
 const webpack = require("webpack");
 
 module.exports = (env, argv) => {
+  const isProduction = argv.mode === "production";
+
   const scriptModuleRule = {
     test: /\.tsx?$/,
-    use: [
-      {
-        loader: "ts-loader",
-        options: {
-          transpileOnly: true,
-        },
-      },
-    ],
     exclude: /node_modules/,
+    loader: "ts-loader",
+    options: isProduction
+      ? {}
+      : {
+          getCustomTransformers: () => ({
+            before: [ReactRefreshTypeScript()],
+          }),
+          happyPackMode: true,
+        },
   };
 
   const styleModuleRule = {
@@ -122,9 +127,9 @@ module.exports = (env, argv) => {
     }),
   ];
 
-  let devtool;
+  let devtool, optimization;
 
-  if (argv.mode === "production") {
+  if (isProduction) {
     plugins.unshift(new CleanWebpackPlugin());
 
     scriptModuleRule.use = ["ts-loader"];
@@ -138,8 +143,18 @@ module.exports = (env, argv) => {
       })
     );
 
+    optimization = {
+      minimizer: [
+        new TerserPlugin({
+          parallel: true,
+        }),
+      ],
+    };
+
     devtool = "source-map";
   } else {
+    plugins.unshift(new ReactRefreshWebpackPlugin());
+
     styleModuleRule.use.unshift("style-loader");
 
     devtool = "eval-source-map";
@@ -166,13 +181,7 @@ module.exports = (env, argv) => {
       __dirname: false,
       __filename: false,
     },
-    optimization: {
-      minimizer: [
-        new TerserPlugin({
-          parallel: true,
-        }),
-      ],
-    },
+    optimization,
   });
 
   const tlsCertRoot = path.join(__dirname, "hack", "tls");
@@ -279,13 +288,7 @@ module.exports = (env, argv) => {
               "process": require.resolve("process"),
             },
           },
-          optimization: {
-            minimizer: [
-              new TerserPlugin({
-                parallel: true,
-              }),
-            ],
-          },
+          optimization,
           plugins,
         },
       ];

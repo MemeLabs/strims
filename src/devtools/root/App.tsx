@@ -5,7 +5,11 @@ import { DevToolsClient } from "../../apis/client";
 import Provider from "./Provider";
 import Router from "./Router";
 
-const App = ({ client }: { client: DevToolsClient }) => {
+interface AppProps {
+  client: DevToolsClient;
+}
+
+const App: React.FC<AppProps> = ({ client }) => {
   useTitle("DevTools");
 
   return (

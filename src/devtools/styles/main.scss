@@ -62,7 +62,8 @@ body {
   flex: 1;
 
   .app {
-    min-height: calc(100vh - 35px);
+    width: 100%;
+    min-height: calc(100vh - 60px);
   }
 
   &__content {
@@ -72,5 +73,46 @@ body {
     display: flex;
     flex-direction: row;
     justify-content: flex-end;
+  }
+}
+
+// ---
+
+.storybook {
+  display: flex;
+  height: calc(100vh - 40px);
+
+  &__nav {
+    flex: 0 0 250px;
+    display: flex;
+    flex-direction: column;
+    margin-top: 10px;
+  }
+
+  &__content {
+    flex: 1;
+    background: #fff;
+    margin: 10px 10px 10px 0;
+    box-shadow: rgba(0, 0, 0, 0.2) 0 0 5px;
+    border-radius: 4px;
+    overflow: hidden;
+  }
+}
+
+.storybook_nav {
+  &__content {
+    display: none;
+    flex-direction: column;
+    margin-left: 5px;
+    padding-left: 5px;
+    border-left: 1px solid black;
+
+    &--expanded {
+      display: flex;
+    }
+  }
+
+  &__link--active {
+    background: orange;
   }
 }
