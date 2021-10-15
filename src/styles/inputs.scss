@@ -317,6 +317,7 @@ label.input_label {
     &__menu {
       background: var(--input-bg);
       color: var(--input-color);
+      z-index: 100;
     }
 
     &__menu-list {

@@ -358,3 +358,5 @@ export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, child
 };
 
 Provider.displayName = "Chat.Provider";
+
+export const Consumer = ChatContext.Consumer;

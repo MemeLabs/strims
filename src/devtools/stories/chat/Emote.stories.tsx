@@ -3,27 +3,17 @@ import { PassThrough } from "stream";
 import Host from "@memelabs/protobuf/lib/rpc/host";
 import ServiceRegistry from "@memelabs/protobuf/lib/rpc/service";
 import React from "react";
+import { useForm } from "react-hook-form";
 
 import { FrontendClient } from "../../../apis/client";
 import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_rpc";
 import Emote from "../../../components/Chat/Emote";
 import StyleSheet from "../../../components/Chat/StyleSheet";
-import { Provider as ChatProvider, useChat } from "../../../contexts/Chat";
+import { SelectInput, SelectOption } from "../../../components/Form";
+import { Consumer as ChatConsumer, Provider as ChatProvider } from "../../../contexts/Chat";
 import { Provider as ApiProvider } from "../../../contexts/FrontendApi";
 import { emotes, modifiers } from "../../mocks/chat/assetBundle";
 import ChatService from "../../mocks/chat/service";
-import { SelectInput } from "../../../components/Form";
-import { useForm } from "react-hook-form";
-
-const ChatStylesheet: React.FC = ({ children }) => {
-  const [state] = useChat();
-  return (
-    <>
-      <StyleSheet liveEmotes={state.liveEmotes} styles={state.styles} uiConfig={state.uiConfig} />
-      {children}
-    </>
-  );
-};
 
 const Chat: React.FC = ({ children }) => {
   const [[service, client]] = React.useState((): [ChatService, FrontendClient] => {
@@ -41,48 +31,60 @@ const Chat: React.FC = ({ children }) => {
   return (
     <ApiProvider value={client}>
       <ChatProvider networkKey={new Uint8Array()} serverKey={new Uint8Array()}>
-        <ChatStylesheet>{children}</ChatStylesheet>
+        <ChatConsumer>
+          {([{ liveEmotes, styles, uiConfig }]) => (
+            <StyleSheet liveEmotes={liveEmotes} styles={styles} uiConfig={uiConfig} />
+          )}
+        </ChatConsumer>
+        {children}
       </ChatProvider>
     </ApiProvider>
   );
 };
 
-const modifierOptions = modifiers.map(m => ({value: m, label: m}));
+const modifierOptions = modifiers.map((m) => ({ value: m, label: m }));
 
-const Modifiers: React.FC =() => {
-  const {control, watch} = useForm({
+const Modifiers: React.FC = () => {
+  const { control, watch } = useForm<{
+    modifiers: SelectOption<string>[];
+  }>({
     defaultValues: {
       modifiers: [],
-    }
+    },
   });
 
   const values = watch();
 
-  console.log(values);
-
   return (
-    <div>
-      <div className="emote_grid">
+    <div className="emotes app--dark">
+      <div className="emotes__grid">
         <Chat>
           {emotes.map((emote) => (
-            <div className="emote_grid__cell">
-              <Emote key={emote} name={emote} shouldAnimateForever modifiers={values.modifiers.map(({value}) => value)}>
+            <div key={emote} className="emotes__grid__cell">
+              <Emote
+                name={emote}
+                shouldAnimateForever
+                modifiers={values.modifiers.map(({ value }) => value)}
+              >
                 {emote}
               </Emote>
             </div>
-          )}
+          ))}
         </Chat>
       </div>
-      <SelectInput
-        label="modifiers"
-        name="modifiers"
-        control={control}
-        options={modifierOptions}
-        isMulti
-      />
+      <div className="emotes__form">
+        <SelectInput
+          label="modifiers"
+          name="modifiers"
+          control={control}
+          options={modifierOptions}
+          menuPlacement="auto"
+          isMulti
+        />
+      </div>
     </div>
-  )
-}
+  );
+};
 
 export default [
   {
