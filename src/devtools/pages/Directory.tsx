@@ -41,11 +41,16 @@ const Foo: React.FC = () => {
     viewerCount: 0,
   };
 
+  const listings = [];
+  for (let i = 0; i < 10; i++) {
+    listings.push({ ...listing, id: BigInt(i) });
+  }
+
   return (
     <>
       <Nav />
       <div className="chat_mockup">
-        <DirectoryGrid networkKey="" listings={new Array(10).fill(listing)} />;
+        <DirectoryGrid networkKey="" listings={listings} />;
       </div>
     </>
   );

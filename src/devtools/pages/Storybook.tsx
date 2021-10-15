@@ -1,17 +1,18 @@
 import clsx from "clsx";
-import React, { lazy, useCallback, useEffect, useState } from "react";
+import React, { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { Redirect, Route, Switch, useHistory } from "react-router";
-import { Link, NavLink } from "react-router-dom";
-import { useAsyncFn, useToggle } from "react-use";
+import { NavLink } from "react-router-dom";
+import { useToggle } from "react-use";
 
 import Nav from "../components/Nav";
 
 const stories = require.context("../stories/", true, /\.stories\.tsx$/, "lazy");
 
-const Noop: React.FC = () => null;
-
-type StoryModule = {
-  default: React.Component;
+type StoriesModule = {
+  default: {
+    name: string;
+    component: React.ComponentType;
+  }[];
 };
 
 type Nav = {
@@ -19,10 +20,10 @@ type Nav = {
   path: string[];
   nodes: Nav[];
   module?: string;
-  component?: React.Component;
+  component?: React.ComponentType;
 };
 
-type Extend = (path: string[], mod: StoryModule) => void;
+type Extend = (path: string[], mod: StoriesModule) => void;
 
 const useStorybookNav = (): [Nav, Extend] => {
   const [root, setRoot] = useState(() => {
@@ -55,9 +56,8 @@ const useStorybookNav = (): [Nav, Extend] => {
   });
 
   const extend = useCallback(
-    (path: string[], mod: StoryModule) =>
+    (path: string[], mod: StoriesModule) =>
       setRoot((prev) => {
-        let changed = false;
         const root = { ...prev };
         let node = root;
         for (const name of path) {
@@ -69,16 +69,16 @@ const useStorybookNav = (): [Nav, Extend] => {
         }
 
         const nodes = node.nodes;
+        let changed = nodes.length !== mod.default.length;
         node.nodes = [];
         for (const story of mod.default) {
           let next = nodes.find((p) => p.component === story.component);
 
           if (!next) {
             next = {
-              name: story.name,
+              ...story,
               path: [...path, story.name],
               nodes: [],
-              component: story.component,
             };
             changed = true;
           }
@@ -93,20 +93,26 @@ const useStorybookNav = (): [Nav, Extend] => {
   return [root, extend];
 };
 
+const formatPath = (...parts: string[]) => "/storybook/" + parts.join("/");
+
 interface StorybookNavProps {
   node: Nav;
+  shouldExpand?: boolean;
   extend: Extend;
 }
 
-const StorybookNav: React.FC<StorybookNavProps> = ({ node, extend }) => {
-  const path = `/storybook/${node.path.join("/")}`;
+const StorybookNav: React.FC<StorybookNavProps> = ({ node, shouldExpand = true, extend }) => {
+  const path = formatPath(...node.path);
 
   const history = useHistory();
-  const [expanded, toggleExpanded] = useToggle(history.location.pathname.startsWith(path));
+  const [expanded, toggleExpanded] = useToggle(
+    shouldExpand || history.location.pathname.startsWith(path)
+  );
 
   useEffect(() => {
     if (expanded && node.module) {
-      stories(node.module).then((mod) => extend(node.path, mod));
+      const mod = stories(node.module) as Promise<StoriesModule>;
+      void mod.then((mod) => extend(node.path, mod));
     }
   }, [expanded, node, stories]);
 
@@ -124,7 +130,9 @@ const StorybookNav: React.FC<StorybookNavProps> = ({ node, extend }) => {
 
   return (
     <div className={"storybook_nav"}>
-      <button onClick={() => toggleExpanded()}>{node.name}</button>
+      <NavLink to={path} onClick={() => toggleExpanded()}>
+        {node.name}
+      </NavLink>
       <div
         className={clsx({
           "storybook_nav__content": true,
@@ -132,7 +140,7 @@ const StorybookNav: React.FC<StorybookNavProps> = ({ node, extend }) => {
         })}
       >
         {node.nodes.map((node) => (
-          <StorybookNav key={node.name} node={node} extend={extend} />
+          <StorybookNav key={node.name} node={node} shouldExpand={false} extend={extend} />
         ))}
       </div>
     </div>
@@ -147,25 +155,19 @@ interface StorybookRoutesProps {
 const StorybookRoutes: React.FC<StorybookRoutesProps> = ({ node, extend }) => {
   const history = useHistory();
 
-  const component = lazy(async () => {
-    if (node.module) {
-      const mod = await stories(node.module);
-      extend(node.path, mod);
-      const story = mod.default.find(
-        (p) => `/storybook/${node.path.join("/")}/${p.name}` === history.location.pathname
-      );
-      if (story) {
-        return { default: story.component };
-      }
-      const route = mod.default[0];
-      return {
-        default: () => <Redirect to={`/storybook/${node.path.join("/")}/${route.name}`} />,
-      };
+  const component = lazy(async (): Promise<{ default: React.ComponentType }> => {
+    const mod = (await stories(node.module)) as StoriesModule;
+    extend(node.path, mod);
+    const story = mod.default.find(
+      (p) => formatPath(...node.path, p.name) === history.location.pathname
+    );
+    if (story) {
+      return { default: story.component };
     }
-    if (node.component) {
-      return { default: node.component };
-    }
-    return null;
+    const route = mod.default[0];
+    return {
+      default: () => <Redirect to={formatPath(...node.path, route.name)} />,
+    };
   });
 
   return (
@@ -173,10 +175,12 @@ const StorybookRoutes: React.FC<StorybookRoutesProps> = ({ node, extend }) => {
       {node.nodes.map((node) => (
         <StorybookRoutes key={node.name} node={node} extend={extend} />
       ))}
-      {node.module && <Route path={`/storybook/${node.path.join("/")}`} component={component} />}
+      {node.module && <Route path={formatPath(...node.path)} component={component} />}
     </>
   );
 };
+
+const LoadingMessage = () => <p className="loading_message">loading</p>;
 
 const Storybook: React.FC = () => {
   const [node, extend] = useStorybookNav();
@@ -189,9 +193,11 @@ const Storybook: React.FC = () => {
           <StorybookNav node={node} extend={extend} />
         </div>
         <div className="storybook__content">
-          <Switch>
-            <StorybookRoutes node={node} extend={extend} />
-          </Switch>
+          <Suspense fallback={<LoadingMessage />}>
+            <Switch>
+              <StorybookRoutes node={node} extend={extend} />
+            </Switch>
+          </Suspense>
         </div>
       </div>
     </>

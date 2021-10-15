@@ -6,7 +6,6 @@ const Nav: React.FC = () => (
     <Link to="/">Home</Link>
     <Link to="/test">Test</Link>
     <Link to="/emotes">Emotes</Link>
-    <Link to="/chat">Chat</Link>
     <Link to="/bridge">Bridge</Link>
     <Link to="/layout">Layout</Link>
     <Link to="/directory">Directory</Link>
