@@ -8,14 +8,21 @@ import MessageEmitter from "../../mocks/chat/MessageEmitter";
 
 export default class ChatService {
   messages: Readable<chatv1.Message>;
+  assetBundles: Readable<chatv1.AssetBundle>;
 
   constructor(messages = new MessageEmitter(1000)) {
     console.log(messages);
     this.messages = messages;
+    this.assetBundles = new PassThrough({ objectMode: true });
   }
 
   destroy(): void {
     this.messages.destroy();
+    this.assetBundles.destroy();
+  }
+
+  emitAssetBundle(bundle: chatv1.AssetBundle): void {
+    this.assetBundles.push(bundle);
   }
 
   openClient(): Readable<chatv1.OpenClientResponse> {
@@ -33,13 +40,15 @@ export default class ChatService {
       )
     );
 
-    void assetBundle().then((assetBundle) =>
+    this.assetBundles.on("data", (assetBundle) =>
       ch.push(
         new chatv1.OpenClientResponse({
           body: new chatv1.OpenClientResponse.Body({ assetBundle }),
         })
       )
     );
+
+    void assetBundle().then((assetBundle) => this.assetBundles.push(assetBundle));
 
     this.messages.on("data", (message) =>
       ch.push(

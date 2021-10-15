@@ -1,4 +1,4 @@
-import React, { useLayoutEffect, useRef, useState } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
 
 import {
   Emote,
@@ -29,10 +29,13 @@ const toCSSScale = (scale: EmoteScale): number => {
   }
 };
 
-interface StyleSheetProps {
+export type ExtraEmoteRules = { [key: string]: PropList };
+
+export interface StyleSheetProps {
   liveEmotes: Emote[];
   styles: ChatStyles;
   uiConfig: UIConfig;
+  extraEmoteRules?: ExtraEmoteRules;
 }
 
 interface EmoteState {
@@ -58,7 +61,12 @@ const deleteMatchingCSSRules = (sheet: CSSStyleSheet, filter: (rule: CSSRule) =>
   }
 };
 
-const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles, uiConfig }) => {
+const StyleSheet: React.FC<StyleSheetProps> = ({
+  liveEmotes,
+  styles,
+  uiConfig,
+  extraEmoteRules = {},
+}) => {
   const ref = useRef<HTMLStyleElement>(null);
   const [, setEmotes] = useState(new Map<Emote, EmoteState>());
 
@@ -84,7 +92,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles, uiConfig })
         const height = sample.height / sampleScale;
         const width = sample.width / sampleScale;
 
-        const rules: PropList = [
+        let rules: PropList = [
           ["background-image", `image-set(${imageSet.join(", ")})`],
           ["background-image", `-webkit-image-set(${imageSet.join(", ")})`],
         ];
@@ -132,6 +140,10 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles, uiConfig })
           }
         });
 
+        if (e.name in extraEmoteRules) {
+          rules = upsertProps(rules, ...extraEmoteRules[e.name]);
+        }
+
         ref.current.sheet.insertRule(
           `.${name} {${[...rules, ...containerRules].map((r) => r.join(":")).join(";")}}`
         );
@@ -160,6 +172,16 @@ const StyleSheet: React.FC<StyleSheetProps> = ({ liveEmotes, styles, uiConfig })
       );
     });
   }, [styles, uiConfig]);
+
+  useEffect(() => {
+    return () =>
+      setEmotes((prev) => {
+        Array.from(prev.entries()).forEach(([, { uris }]) =>
+          uris.forEach((uri) => URL.revokeObjectURL(uri))
+        );
+        return prev;
+      });
+  }, []);
 
   return <style ref={ref} />;
 };

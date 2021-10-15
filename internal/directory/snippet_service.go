@@ -43,7 +43,7 @@ func (s *snippetServer) DeleteSnippet(swarmID ppspp.SwarmID) {
 }
 
 func (s *snippetServer) start() {
-
+	// s.dialer.ServerDialer(networkKey []byte, port uint16, publisher dialer.HostAddrPublisher)
 }
 
 func (s *snippetServer) stop() {

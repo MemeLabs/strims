@@ -790,15 +790,19 @@
 
     &--rain,
     &--snow {
+      min-width: 48px;
+      text-align: center;
+
       &:before,
       &:after {
         content: "";
         display: block;
         height: 100%;
-        width: 100%;
+        left: 0;
         pointer-events: none;
         position: absolute;
         top: 0;
+        width: 100%;
         z-index: 2;
       }
 
@@ -861,16 +865,30 @@
     }
 
     &--dank {
-      background-image: url("/assets/chat/modifiers/dank.png");
-      background-position: center;
-      background-repeat: no-repeat;
-      background-size: cover;
-      animation: dank 1s 2;
-      padding: 0 calc(max(72px - var(--width), 0px) * 0.5);
+      min-width: 72px;
+      text-align: center;
+
+      &:before {
+        background-image: url("/assets/chat/modifiers/dank.png");
+        background-position: center;
+        background-repeat: no-repeat;
+        background-size: cover;
+        animation: dank 1s 2;
+        width: 100%;
+        height: 100%;
+        min-height: 32px;
+        top: calc(max(32px - var(--height), 0px) * -0.5);
+        left: 0;
+        z-index: 0;
+        content: "";
+        position: absolute;
+      }
 
       &:hover,
       &.chat__emote_container--animate_forever {
-        animation-iteration-count: infinite;
+        &:before {
+          animation-iteration-count: infinite;
+        }
       }
     }
 
@@ -885,6 +903,9 @@
     }
 
     &--pride {
+      min-width: 48px;
+      text-align: center;
+
       &:before {
         position: absolute;
         background: linear-gradient(
@@ -898,6 +919,9 @@
         );
         width: 100%;
         height: 100%;
+        min-height: 32px;
+        top: calc(max(32px - var(--height), 0px) * -0.5);
+        left: 0;
         pointer-events: none;
         z-index: 0;
         content: "";
@@ -929,7 +953,8 @@
     }
 
     &--angel {
-      padding: 0 40px;
+      min-width: calc(max(110px, var(--width) + 60px));
+      text-align: center;
       animation: angel-bounce 2s linear 3;
 
       &:before,

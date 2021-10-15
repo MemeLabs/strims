@@ -2874,6 +2874,7 @@ export const emotes = src.emotes.map(({ name }) => name).sort((a, b) => a.locale
 export default async (): Promise<chatv1.AssetBundle> => {
   return new chatv1.AssetBundle({
     ...src,
+    isDelta: true,
     emotes: await Promise.all(
       src.emotes.map(async ({ id, images, ...emote }) => {
         return new chatv1.Emote({
