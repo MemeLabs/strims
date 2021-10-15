@@ -9,11 +9,12 @@ import MessageEmitter from "../../mocks/chat/MessageEmitter";
 export default class ChatService {
   messages: Readable<chatv1.Message>;
 
-  constructor() {
-    this.messages = new MessageEmitter(0, 1);
+  constructor(messages = new MessageEmitter(1000)) {
+    console.log(messages);
+    this.messages = messages;
   }
 
-  destroy() {
+  destroy(): void {
     this.messages.destroy();
   }
 

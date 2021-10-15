@@ -28,12 +28,10 @@ const Chat: React.FC<ChatProps> = ({ theme }) => {
   React.useEffect(() => () => service.destroy(), [service]);
 
   return (
-    <div className="chat_mockup">
+    <div className={`chat_mockup app app--${theme}`}>
       <ApiProvider value={client}>
-        <div className={`app app--${theme}`}>
-          <div className="chat_mockup__content">
-            <ChatPanel />
-          </div>
+        <div className="chat_mockup__content">
+          <ChatPanel />
         </div>
       </ApiProvider>
     </div>

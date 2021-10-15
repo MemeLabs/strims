@@ -267,7 +267,7 @@ type LegacyMessage = {
   entities: Message.IEntities;
 };
 
-export const messages = history
+const historyMessages = history
   .map((v) => JSON.parse(v.substr(4)) as unknown as LegacyMessage)
   .map(
     ({ nick, timestamp, data, entities }) =>
@@ -280,11 +280,13 @@ export const messages = history
       })
   );
 
+export const messages = historyMessages;
+
 class Emitter extends PassThrough {
   tid: number;
   i = 0;
 
-  constructor(ivl: number = 5000, limit: number = Infinity) {
+  constructor(ivl: number = 5000, limit: number = Infinity, messages: Message[] = historyMessages) {
     super({ objectMode: true });
     this.tid = window.setInterval(() => {
       this.push(messages[this.i++ % history.length]);

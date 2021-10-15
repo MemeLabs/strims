@@ -59,12 +59,14 @@ body {
 .app {
   width: 100%;
   min-height: calc(100vh - 60px);
+  display: block;
 }
 
 .chat_mockup {
   display: flex;
   flex-direction: row;
   flex: 1;
+  height: calc(100vh - 60px);
 
   &__content {
     background: var(--body-background);
@@ -142,5 +144,17 @@ body {
 
   &__form {
     z-index: 10;
+    padding: 0 20px;
+  }
+}
+
+.emote_tester {
+  justify-content: center;
+  display: flex;
+
+  &__messages {
+    width: 420px;
+    height: calc(100vh - 60px);
+    border: 1px solid $gray-100;
   }
 }
