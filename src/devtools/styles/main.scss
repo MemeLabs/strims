@@ -116,3 +116,24 @@ body {
     background: orange;
   }
 }
+
+.emote_grid {
+  max-height: calc(100vh - 200px);
+  width: 100%;
+  overflow: auto;
+  display: flex;
+  flex-direction: row;
+  flex-wrap: wrap;
+  background-color: #2c3542;
+
+  &__cell {
+    height: 50px;
+    width: 10%;
+    min-width: 150px;
+    text-align: center;
+    line-height: 50px;
+    border: 1px solid #888;
+    border-radius: 4px;
+    margin: 4px;
+  }
+}

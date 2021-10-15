@@ -2868,6 +2868,9 @@ const src = {
   "removedIds": [],
 };
 
+export const modifiers = src.modifiers.map(({ name }) => name).sort((a, b) => a.localeCompare(b));
+export const emotes = src.emotes.map(({ name }) => name).sort((a, b) => a.localeCompare(b));
+
 export default async (): Promise<chatv1.AssetBundle> => {
   return new chatv1.AssetBundle({
     ...src,
