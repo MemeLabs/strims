@@ -95,6 +95,9 @@ func (s *snippetService) Subscribe(ctx context.Context, req *networkv1directory.
 	s.snippetsLock.Lock()
 	defer s.snippetsLock.Unlock()
 
+	// TODO: check transfer control to make sure the requested swarm is published
+	// in the network this request came from
+
 	ch := make(chan *networkv1directory.SnippetSubscribeResponse, 16)
 
 	it, ok := s.snippets.Get(&snippetItem{id: req.SwarmId}).(*snippetItem)

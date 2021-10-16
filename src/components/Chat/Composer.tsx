@@ -423,8 +423,9 @@ const getGrammar = (emotes: string[], modifiers: string[], nicks: string[], tags
 const getRanges = (text: string, path: Path, grammar: Prism.Grammar) => {
   const ranges: Range[] = [];
 
-  const appendRanges = (tokens: (string | Prism.Token)[], start: number = 0) =>
-    tokens.reduce((offset, token) => {
+  const appendRanges = (tokens: (string | Prism.Token)[], start: number = 0) => {
+    let offset = start;
+    for (const token of tokens) {
       if (typeof token !== "string") {
         ranges.push({
           [token.type]: true,
@@ -433,8 +434,9 @@ const getRanges = (text: string, path: Path, grammar: Prism.Grammar) => {
         });
         appendRanges(Array.isArray(token.content) ? token.content : [token.content], offset);
       }
-      return offset + token.length;
-    }, start);
+      offset += token.length;
+    }
+  };
   appendRanges(Prism.tokenize(text, grammar));
 
   return ranges;

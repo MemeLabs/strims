@@ -120,7 +120,6 @@ module.exports = (env, argv) => {
         },
       ],
     }),
-    new webpack.HotModuleReplacementPlugin(),
     new webpack.ProvidePlugin({
       process: "process/browser",
       Buffer: ["buffer", "Buffer"],
@@ -153,7 +152,11 @@ module.exports = (env, argv) => {
 
     devtool = "source-map";
   } else {
-    plugins.unshift(new ReactRefreshWebpackPlugin());
+    plugins.unshift(
+      new ReactRefreshWebpackPlugin({
+        exclude: /node_modules|\.(shared-)?worker\.ts|\/src\/web\/index\.tsx$/,
+      })
+    );
 
     styleModuleRule.use.unshift("style-loader");
 

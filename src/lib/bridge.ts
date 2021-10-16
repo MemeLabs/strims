@@ -178,6 +178,7 @@ interface PortState {
 export class WindowBridge extends EventEmitter {
   private nextDataChannelPortId = 0;
   private dataChannelPorts = new Map<number, PortState>();
+  private workers: Worker[] = [];
 
   constructor(private workerConstructor: new () => Worker) {
     super();
@@ -207,7 +208,14 @@ export class WindowBridge extends EventEmitter {
       baseURI: location.origin,
       args,
     });
+    this.workers.push(worker);
     return worker;
+  }
+
+  close(): void {
+    for (const worker of this.workers) {
+      worker.terminate();
+    }
   }
 
   private openWebRTC(port: WebRTCMessagePort) {

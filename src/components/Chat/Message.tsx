@@ -78,10 +78,10 @@ const MessageTag: React.FC<MessageTagProps> = ({ children }) => (
 );
 
 // TODO: extract spoiler body bounds in parser
-const spoilerPrefix = /^[|\s]+/;
-const spoilerSuffix = /[|\s]+$/;
-const codePrefix = /^[`\s]+/;
-const codeSuffix = /[`\s]+$/;
+const SPOILER_PREFIX = /^[|\s]+/;
+const SPOILER_SUFFIX = /[|\s]+$/;
+const CODE_PREFIX = /^[`\s]+/;
+const CODE_SUFFIX = /[`\s]+$/;
 
 const trimTextNode = (node: React.ReactNode, rx: RegExp) =>
   typeof node === "string" ? node.replace(rx, "") : node;
@@ -109,7 +109,7 @@ const MessageSpoiler: React.FC<MessageSpoilerProps> = ({ children }) => {
       })}
       onClick={handleClick}
     >
-      {trimChildren(children, spoilerPrefix, spoilerSuffix)}
+      {trimChildren(children, SPOILER_PREFIX, SPOILER_SUFFIX)}
     </span>
   );
 };
@@ -119,7 +119,7 @@ interface MessageCodeBlockProps {
 }
 
 const MessageCodeBlock: React.FC<MessageCodeBlockProps> = ({ children }) => (
-  <span className="chat__message__code">{trimChildren(children, codePrefix, codeSuffix)}</span>
+  <span className="chat__message__code">{trimChildren(children, CODE_PREFIX, CODE_SUFFIX)}</span>
 );
 
 interface MessageGreenTextProps {

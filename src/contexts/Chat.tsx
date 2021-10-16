@@ -212,7 +212,6 @@ interface Named {
 const toNames = <T extends Named>(vs: T[]): string[] => vs.map(({ name }) => name).sort();
 
 const assetBundleReducer = (state: State, bundle: AssetBundle): State => {
-  console.log(bundle);
   state.messageSizeCache.clearAll();
 
   const assetBundles = bundle.isDelta ? [...state.assetBundles, bundle] : [bundle];
@@ -348,7 +347,6 @@ export const Provider: React.FC<ProviderProps> = ({ networkKey, serverKey, child
     const handleClose = () => dispatch({ type: "CLIENT_CLOSE" });
     events.on("close", handleClose);
     return () => {
-      console.log("closed chat thing...");
       events.off("close", handleClose);
       events.destroy();
     };

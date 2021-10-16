@@ -66,6 +66,5 @@ export enum ImageType {
   IMAGE_TYPE_GIF = 3,
   IMAGE_TYPE_JPEG = 4,
   IMAGE_TYPE_PNG = 5,
-  IMAGE_TYPE_SVG = 6,
-  IMAGE_TYPE_WEBP = 7,
+  IMAGE_TYPE_WEBP = 6,
 }

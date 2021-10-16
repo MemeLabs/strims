@@ -21,6 +21,7 @@ import {
   SelectInput,
   SelectOption,
   TextInput,
+  ToggleInput,
 } from "../../../components/Form";
 import {
   Consumer as ChatConsumer,
@@ -200,11 +201,19 @@ type EmoteSource =
 
 interface EmoteTesterMessagesProps {
   emoteSource?: EmoteSource;
+  legacyEmoteSpacing: boolean;
 }
 
-const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({ emoteSource }) => {
-  const [state] = useChat();
+const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({
+  emoteSource,
+  legacyEmoteSpacing,
+}) => {
+  const [state, { mergeUIConfig }] = useChat();
   const service = useContext(MockChatContext);
+
+  useEffect(() => {
+    mergeUIConfig({ legacyEmoteSpacing });
+  }, [legacyEmoteSpacing]);
 
   useEffect(() => {
     const emitImage = (image: IEmoteImage) =>
@@ -284,6 +293,7 @@ const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({ emoteSource }
 interface EmoteTesterFormProps {
   url: string;
   image: ImageValue;
+  legacyEmoteSpacing: boolean;
 }
 
 const EmoteTester: React.FC = () => {
@@ -317,7 +327,10 @@ const EmoteTester: React.FC = () => {
     <div className="emote_tester app app--dark">
       <div className="emote_tester__messages chat">
         <Chat messages={messages} shouldRenderStyleSheet={false}>
-          <EmoteTesterMessages emoteSource={emoteSource} />
+          <EmoteTesterMessages
+            emoteSource={emoteSource}
+            legacyEmoteSpacing={values.legacyEmoteSpacing}
+          />
         </Chat>
       </div>
       <div className="emote_tester__form">
@@ -325,6 +338,7 @@ const EmoteTester: React.FC = () => {
         <InputLabel component="div" text="image">
           <ImageInput name="image" control={control} />
         </InputLabel>
+        <ToggleInput label="legacy spacing" name="legacyEmoteSpacing" control={control} />
       </div>
     </div>
   );
