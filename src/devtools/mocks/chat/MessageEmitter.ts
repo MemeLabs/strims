@@ -289,10 +289,11 @@ class Emitter extends PassThrough {
   constructor(ivl: number = 5000, limit: number = Infinity, messages: Message[] = historyMessages) {
     super({ objectMode: true });
     this.tid = window.setInterval(() => {
-      this.push(messages[this.i++ % history.length]);
-      if (this.i >= limit) {
+      if (this.i === limit) {
         clearInterval(this.tid);
+        return;
       }
+      this.push(messages[this.i++ % history.length]);
     }, ivl);
   }
 

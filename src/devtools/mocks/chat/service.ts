@@ -11,7 +11,6 @@ export default class ChatService {
   assetBundles: Readable<chatv1.AssetBundle>;
 
   constructor(messages = new MessageEmitter(1000)) {
-    console.log(messages);
     this.messages = messages;
     this.assetBundles = new PassThrough({ objectMode: true });
   }
@@ -19,6 +18,10 @@ export default class ChatService {
   destroy(): void {
     this.messages.destroy();
     this.assetBundles.destroy();
+  }
+
+  emitMessage(message: chatv1.Message): void {
+    this.messages.push(message);
   }
 
   emitAssetBundle(bundle: chatv1.AssetBundle): void {

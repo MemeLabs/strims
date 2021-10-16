@@ -13,7 +13,7 @@ import { registerChatFrontendService } from "../../../apis/strims/chat/v1/chat_r
 import Emote from "../../../components/Chat/Emote";
 import ChatMessage from "../../../components/Chat/Message";
 import ChatScroller, { MessageProps } from "../../../components/Chat/Scroller";
-import StyleSheet, { ExtraEmoteRules } from "../../../components/Chat/StyleSheet";
+import StyleSheet, { ExtraRules } from "../../../components/Chat/StyleSheet";
 import {
   ImageInput,
   ImageValue,
@@ -245,12 +245,14 @@ const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({ emoteSource }
     }
   }, [service, emoteSource]);
 
-  const extraEmoteRules: ExtraEmoteRules = {};
+  const extraEmoteRules: ExtraRules = {};
+  const extraContainerRules: ExtraRules = {};
   if (emoteSource && "url" in emoteSource) {
     extraEmoteRules.test = [
       ["background-image", `image-set(url(${emoteSource.url}) 4x)`],
       ["background-image", `-webkit-image-set(url(${emoteSource.url}) 4x)`],
     ];
+    extraContainerRules.test = [["--background-image", `url(${emoteSource.url})`]];
   }
 
   return (
@@ -260,6 +262,7 @@ const EmoteTesterMessages: React.FC<EmoteTesterMessagesProps> = ({ emoteSource }
         styles={state.styles}
         uiConfig={state.uiConfig}
         extraEmoteRules={extraEmoteRules}
+        extraContainerRules={extraContainerRules}
       />
       <ChatScroller
         uiConfig={state.uiConfig}
@@ -327,6 +330,118 @@ const EmoteTester: React.FC = () => {
   );
 };
 
+interface ComboMessagesProps {
+  emote?: string;
+  count?: number;
+  interval?: number;
+}
+
+const ComboMessages: React.FC<ComboMessagesProps> = ({
+  emote = "FeelsGoodMan",
+  count = 10,
+  interval = 100,
+}) => {
+  const [state] = useChat();
+  const service = useContext(MockChatContext);
+  const [done, setDone] = useState(true);
+
+  useEffect(() => {
+    setDone(false);
+
+    let i = 0;
+    const iid = setInterval(() => {
+      service.emitMessage(
+        new Message({
+          nick: "rustler",
+          serverTime: BigInt(Date.now()),
+          body: "combo",
+          entities: {
+            emotes: [
+              {
+                name: emote,
+                bounds: {
+                  start: 0,
+                  end: 5,
+                },
+                combo: i,
+              },
+            ],
+          },
+        })
+      );
+
+      if (i++ === count) {
+        stop();
+      }
+    }, interval);
+
+    const stop = () => {
+      setDone(true);
+      clearInterval(iid);
+    };
+
+    return stop;
+  }, [emote, count, interval]);
+
+  return (
+    <ChatScroller
+      uiConfig={state.uiConfig}
+      renderMessage={({ index, style }: MessageProps) => (
+        <ChatMessage
+          uiConfig={state.uiConfig}
+          message={state.messages[index]}
+          style={style}
+          isMostRecent={!done && index === state.messages.length - 1}
+        />
+      )}
+      messageCount={state.messages.length}
+      messageSizeCache={state.messageSizeCache}
+    />
+  );
+};
+
+const emoteOptions = emotes.map((m) => ({ value: m, label: m }));
+
+interface ComboFormProps {
+  emote: SelectOption<string>;
+  count: number;
+  interval: number;
+}
+
+const defaultComboFormValues: ComboFormProps = {
+  emote: emoteOptions.find(({ value }) => value === "FeelsGoodMan"),
+  count: 10,
+  interval: 100,
+};
+
+const Combo: React.FC = () => {
+  const messages = useMemo(() => new MessageEmitter(0, 0), []);
+
+  const { control, watch } = useForm<ComboFormProps>({
+    defaultValues: defaultComboFormValues,
+  });
+  const values = watch();
+
+  return (
+    <div className="combo app app--dark">
+      <div className="combo__messages chat">
+        <Chat messages={messages}>
+          <ComboMessages
+            emote={values.emote.value}
+            count={values.count}
+            interval={values.interval}
+          />
+        </Chat>
+      </div>
+      <div className="combo__form">
+        <SelectInput label="emote" options={emoteOptions} name="emote" control={control} />
+        <TextInput label="count" type="number" name="count" control={control} />
+        <TextInput label="interval" type="number" name="interval" control={control} />
+      </div>
+    </div>
+  );
+};
+
 export default [
   {
     name: "Modifiers",
@@ -335,5 +450,9 @@ export default [
   {
     name: "EmoteTester",
     component: EmoteTester,
+  },
+  {
+    name: "Combo",
+    component: Combo,
   },
 ];

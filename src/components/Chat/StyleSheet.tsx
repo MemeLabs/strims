@@ -29,13 +29,14 @@ const toCSSScale = (scale: EmoteScale): number => {
   }
 };
 
-export type ExtraEmoteRules = { [key: string]: PropList };
+export type ExtraRules = { [key: string]: PropList };
 
 export interface StyleSheetProps {
   liveEmotes: Emote[];
   styles: ChatStyles;
   uiConfig: UIConfig;
-  extraEmoteRules?: ExtraEmoteRules;
+  extraEmoteRules?: ExtraRules;
+  extraContainerRules?: ExtraRules;
 }
 
 interface EmoteState {
@@ -66,6 +67,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
   styles,
   uiConfig,
   extraEmoteRules = {},
+  extraContainerRules = {},
 }) => {
   const ref = useRef<HTMLStyleElement>(null);
   const [, setEmotes] = useState(new Map<Emote, EmoteState>());
@@ -143,6 +145,9 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
         if (e.name in extraEmoteRules) {
           rules = upsertProps(rules, ...extraEmoteRules[e.name]);
         }
+        if (e.name in extraContainerRules) {
+          containerRules = upsertProps(containerRules, ...extraContainerRules[e.name]);
+        }
 
         ref.current.sheet.insertRule(
           `.${name} {${[...rules, ...containerRules].map((r) => r.join(":")).join(";")}}`
@@ -176,7 +181,7 @@ const StyleSheet: React.FC<StyleSheetProps> = ({
   useEffect(() => {
     return () =>
       setEmotes((prev) => {
-        Array.from(prev.entries()).forEach(([, { uris }]) =>
+        Array.from(prev.values()).forEach(({ uris }) =>
           uris.forEach((uri) => URL.revokeObjectURL(uri))
         );
         return prev;
