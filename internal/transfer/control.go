@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"hash"
 	"sync"
 	"time"
 
@@ -246,15 +247,10 @@ func (c *Control) RemovePeer(id uint64) {
 
 // Add ...
 func (c *Control) Add(swarm *ppspp.Swarm, salt []byte) []byte {
-	h := sha256.New()
-	h.Write(swarm.ID())
-	h.Write(salt)
-	id := h.Sum(nil)
-
 	ctx, close := context.WithCancel(context.Background())
 
 	t := &transfer{
-		id:    id,
+		id:    NewID(swarm.ID(), salt),
 		salt:  salt,
 		ctx:   ctx,
 		close: close,
@@ -271,7 +267,7 @@ func (c *Control) Add(swarm *ppspp.Swarm, salt []byte) []byte {
 		logutil.ByteHex("swarm", swarm.ID()),
 	)
 
-	return id
+	return t.id
 }
 
 // Remove ...
@@ -349,6 +345,18 @@ func (c *Control) Publish(id []byte, networkKey []byte) {
 	}
 }
 
+func (c *Control) IsPublished(id []byte, networkKey []byte) bool {
+	c.lock.Lock()
+	defer c.lock.Unlock()
+
+	n, ok := c.networks.Get(&network{key: networkKey}).(*network)
+	if !ok {
+		return false
+	}
+
+	return n.transfers.Has(&transfer{id: id})
+}
+
 func (c *Control) getOrInsertNetwork(networkKey []byte) *network {
 	n, ok := c.networks.Get(&network{key: networkKey}).(*network)
 	if !ok {
@@ -389,4 +397,21 @@ func (n *network) Less(o llrb.Item) bool {
 		return bytes.Compare(n.key, o.key) == -1
 	}
 	return !o.Less(n)
+}
+
+var idHashPool = &sync.Pool{
+	New: func() interface{} {
+		return sha256.New()
+	},
+}
+
+func NewID(swarmID []byte, salt []byte) []byte {
+	h := idHashPool.Get().(hash.Hash)
+	defer idHashPool.Put(h)
+
+	h.Reset()
+	h.Write(swarmID)
+	h.Write(salt)
+
+	return h.Sum(nil)
 }

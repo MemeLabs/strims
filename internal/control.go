@@ -59,6 +59,7 @@ type TransferControl interface {
 	Remove(id []byte)
 	List() []*transferv1.Transfer
 	Publish(id []byte, networkKey []byte)
+	IsPublished(id []byte, networkKey []byte) bool
 }
 
 // VideoCaptureControl ...

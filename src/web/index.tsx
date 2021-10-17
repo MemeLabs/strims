@@ -46,5 +46,8 @@ const runner = new Runner();
 void runner.start();
 
 if (import.meta.webpackHot) {
-  import.meta.webpackHot.accept("./svc.worker.ts", () => runner.restart());
+  import.meta.webpackHot.accept(
+    ["../apis/client", "../lib/bridge", "../lib/ws", "./svc.worker"],
+    () => runner.restart()
+  );
 }

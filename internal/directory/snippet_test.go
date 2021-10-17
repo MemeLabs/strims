@@ -8,6 +8,7 @@ import (
 
 	"github.com/MemeLabs/go-ppspp/internal/dao"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
+	transferv1 "github.com/MemeLabs/go-ppspp/pkg/apis/transfer/v1"
 	"github.com/MemeLabs/go-ppspp/pkg/apis/type/image"
 	"github.com/MemeLabs/go-ppspp/pkg/debug"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
@@ -16,6 +17,24 @@ import (
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap"
 )
+
+type mockTransferControl struct{}
+
+func (c *mockTransferControl) Add(swarm *ppspp.Swarm, salt []byte) []byte {
+	return nil
+}
+
+func (c *mockTransferControl) Remove(id []byte) {}
+
+func (c *mockTransferControl) List() []*transferv1.Transfer {
+	return nil
+}
+
+func (c *mockTransferControl) Publish(id []byte, networkKey []byte) {}
+
+func (c *mockTransferControl) IsPublished(id []byte, networkKey []byte) bool {
+	return true
+}
 
 func TestFoo(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -34,7 +53,11 @@ func TestFoo(t *testing.T) {
 	assert.NoError(t, err)
 	swarmID := ppspp.NewSwarmID(key.Public)
 
-	service := &snippetService{}
+	snippets := &snippetMap{}
+	service := &snippetService{
+		transfer: &mockTransferControl{},
+		snippets: snippets,
+	}
 	networkv1directory.RegisterDirectorySnippetService(rpcServer, service)
 
 	go rpcServer.Listen(ctx)
@@ -70,7 +93,7 @@ func TestFoo(t *testing.T) {
 		assert.NoError(t, err)
 
 		log.Println("calling UpdateSnippet")
-		service.UpdateSnippet(swarmID, snippet)
+		snippets.Update(swarmID, snippet)
 	}()
 
 	time.Sleep(time.Millisecond)

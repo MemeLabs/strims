@@ -10,20 +10,18 @@ const WebpackPwaManifest = require("webpack-pwa-manifest");
 const webpack = require("webpack");
 
 module.exports = (env, argv) => {
-  const isProduction = argv.mode === "production";
-
   const scriptModuleRule = {
     test: /\.tsx?$/,
     exclude: /node_modules/,
-    loader: "ts-loader",
-    options: isProduction
-      ? {}
-      : {
-          getCustomTransformers: () => ({
-            before: [ReactRefreshTypeScript()],
-          }),
-          happyPackMode: true,
-        },
+    use: {
+      loader: "ts-loader",
+      options: {
+        getCustomTransformers: () => ({
+          before: [ReactRefreshTypeScript()],
+        }),
+        happyPackMode: true,
+      },
+    },
   };
 
   const styleModuleRule = {
@@ -128,7 +126,7 @@ module.exports = (env, argv) => {
 
   let devtool, optimization;
 
-  if (isProduction) {
+  if (argv.mode === "production") {
     plugins.unshift(new CleanWebpackPlugin());
 
     scriptModuleRule.use = ["ts-loader"];
@@ -231,6 +229,7 @@ module.exports = (env, argv) => {
           devServer: {
             https: devServerHttps,
             hot: true,
+            compress: false,
             historyApiFallback: {
               index: "/",
             },

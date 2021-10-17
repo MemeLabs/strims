@@ -7,7 +7,9 @@ import (
 	"sort"
 	"sync"
 
+	control "github.com/MemeLabs/go-ppspp/internal"
 	"github.com/MemeLabs/go-ppspp/internal/dialer"
+	"github.com/MemeLabs/go-ppspp/internal/transfer"
 	networkv1directory "github.com/MemeLabs/go-ppspp/pkg/apis/network/v1/directory"
 	"github.com/MemeLabs/go-ppspp/pkg/event"
 	"github.com/MemeLabs/go-ppspp/pkg/ppspp"
@@ -18,28 +20,18 @@ import (
 )
 
 type snippetServer struct {
-	ctx         context.Context
-	dialer      *dialer.Control
-	serviceLock sync.Mutex
-	service     snippetService
+	ctx      context.Context
+	dialer   *dialer.Control
+	snippets *snippetMap
+	service  snippetService
 }
 
 func (s *snippetServer) UpdateSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet) {
-	s.serviceLock.Lock()
-	defer s.serviceLock.Unlock()
-
-	if s.service.UpdateSnippet(swarmID, snippet) == 1 {
-		s.start()
-	}
+	s.snippets.Update(swarmID, snippet)
 }
 
 func (s *snippetServer) DeleteSnippet(swarmID ppspp.SwarmID) {
-	s.serviceLock.Lock()
-	defer s.serviceLock.Unlock()
-
-	if s.service.DeleteSnippet(swarmID) == 0 {
-		s.stop()
-	}
+	s.snippets.Delete(swarmID)
 }
 
 func (s *snippetServer) start() {
@@ -53,54 +45,19 @@ func (s *snippetServer) stop() {
 var _ networkv1directory.DirectorySnippetService = &snippetService{}
 
 type snippetService struct {
-	snippetsLock sync.Mutex
-	snippets     llrb.LLRB
-	size         int
-}
-
-func (s *snippetService) Size() int {
-	s.snippetsLock.Lock()
-	defer s.snippetsLock.Unlock()
-	return s.size
-}
-
-func (s *snippetService) UpdateSnippet(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet) int {
-	s.snippetsLock.Lock()
-	defer s.snippetsLock.Unlock()
-
-	it, ok := s.snippets.Get(&snippetItem{id: swarmID.Binary()}).(*snippetItem)
-	if !ok {
-		it = newSnippetItem(swarmID.Binary())
-		s.snippets.ReplaceOrInsert(it)
-		s.size++
-	}
-
-	it.Update(snippet)
-
-	return s.size
-}
-
-func (s *snippetService) DeleteSnippet(swarmID ppspp.SwarmID) int {
-	s.snippetsLock.Lock()
-	defer s.snippetsLock.Unlock()
-
-	if s.snippets.Delete(&snippetItem{id: swarmID.Binary()}) != nil {
-		s.size--
-	}
-
-	return s.size
+	transfer   control.TransferControl
+	snippets   *snippetMap
+	networkKey []byte
 }
 
 func (s *snippetService) Subscribe(ctx context.Context, req *networkv1directory.SnippetSubscribeRequest) (<-chan *networkv1directory.SnippetSubscribeResponse, error) {
-	s.snippetsLock.Lock()
-	defer s.snippetsLock.Unlock()
-
-	// TODO: check transfer control to make sure the requested swarm is published
-	// in the network this request came from
+	if !s.transfer.IsPublished(transfer.NewID(req.SwarmId, nil), s.networkKey) {
+		return nil, errors.New("snippet not found")
+	}
 
 	ch := make(chan *networkv1directory.SnippetSubscribeResponse, 16)
 
-	it, ok := s.snippets.Get(&snippetItem{id: req.SwarmId}).(*snippetItem)
+	snippet, ok := s.snippets.Get(req.SwarmId)
 	if !ok {
 		return nil, errors.New("snippet not found")
 	}
@@ -109,8 +66,8 @@ func (s *snippetService) Subscribe(ctx context.Context, req *networkv1directory.
 		defer close(ch)
 
 		deltas := make(chan *networkv1directory.ListingSnippetDelta, 16)
-		it.Notify(deltas)
-		defer it.StopNotifying(deltas)
+		snippet.Notify(deltas)
+		defer snippet.StopNotifying(deltas)
 
 		for {
 			select {
@@ -128,6 +85,36 @@ func (s *snippetService) Subscribe(ctx context.Context, req *networkv1directory.
 	}()
 
 	return ch, nil
+}
+
+type snippetMap struct {
+	snippetsLock sync.Mutex
+	snippets     llrb.LLRB
+}
+
+func (m *snippetMap) Update(swarmID ppspp.SwarmID, snippet *networkv1directory.ListingSnippet) {
+	m.snippetsLock.Lock()
+	defer m.snippetsLock.Unlock()
+
+	it, ok := m.snippets.Get(&snippetItem{id: swarmID.Binary()}).(*snippetItem)
+	if !ok {
+		it = newSnippetItem(swarmID.Binary())
+		m.snippets.ReplaceOrInsert(it)
+	}
+
+	it.Update(snippet)
+}
+
+func (m *snippetMap) Delete(swarmID ppspp.SwarmID) {
+	m.snippetsLock.Lock()
+	defer m.snippetsLock.Unlock()
+
+	m.snippets.Delete(&snippetItem{id: swarmID.Binary()})
+}
+
+func (m *snippetMap) Get(swarmID ppspp.SwarmID) (*snippetItem, bool) {
+	it, ok := m.snippets.Get(&snippetItem{id: swarmID}).(*snippetItem)
+	return it, ok
 }
 
 func newSnippetItem(swarmID ppspp.SwarmID) *snippetItem {
